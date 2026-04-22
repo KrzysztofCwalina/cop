@@ -223,25 +223,25 @@ cop run rules.cop --format:json                 # JSON output
 
 | Package | Description |
 |---------|-------------|
-| [`csharp`](docs/packages/csharp.md) | C# coding conventions (var usage, exception handling, async patterns) |
-| [`csharp-style`](docs/packages/csharp-style.md) | C# style rules (naming, formatting) |
-| [`csharp-library`](docs/packages/csharp-library.md) | Library design conventions for .NET class libraries |
-| [`csharp-library-client`](docs/packages/csharp-library-client.md) | Patterns for .NET client libraries (retry, pagination, LROs) |
-| [`csharp-library-client-azure`](docs/packages/csharp-library-client-azure.md) | Azure SDK patterns (TokenCredential, Azure.Core integration) |
-| [`test-nunit`](docs/packages/test-nunit.md) | NUnit-specific testing patterns |
+| [`csharp`](docs/packages/dotnet/csharp.md) | C# coding conventions (var usage, exception handling, async patterns) |
+| [`csharp-style`](docs/packages/dotnet/csharp-style.md) | C# style rules (naming, formatting) |
+| [`csharp-library`](docs/packages/dotnet/csharp-library.md) | Library design conventions for .NET class libraries |
+| [`csharp-library-client`](docs/packages/dotnet/csharp-library-client.md) | Patterns for .NET client libraries (retry, pagination, LROs) |
+| [`csharp-library-client-azure`](docs/packages/dotnet/csharp-library-client-azure.md) | Azure SDK patterns (TokenCredential, Azure.Core integration) |
+| [`test-nunit`](docs/packages/dotnet/test-nunit.md) | NUnit-specific testing patterns |
 
 ### JavaScript / TypeScript
 
 | Package | Description |
 |---------|-------------|
-| [`javascript`](docs/packages/javascript.md) | JavaScript/TypeScript coding conventions and best practices |
+| [`javascript`](docs/packages/js/javascript.md) | JavaScript/TypeScript coding conventions and best practices |
 
 ### Python
 
 | Package | Description |
 |---------|-------------|
-| [`python`](docs/packages/python.md) | Python coding conventions and best practices |
-| [`python-library`](docs/packages/python-library.md) | Library design conventions for Python packages |
+| [`python`](docs/packages/python/python.md) | Python coding conventions and best practices |
+| [`python-library`](docs/packages/python/python-library.md) | Library design conventions for Python packages |
 
 ## Next Steps
 
