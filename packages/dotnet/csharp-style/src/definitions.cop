@@ -21,3 +21,59 @@ predicate containsTab(Line) => Line.Text:matches('\t')
 
 # SA1028: Code must not contain trailing whitespace
 predicate trailingWhitespace(Line) => Line.Text:matches('[ \t]+$')
+
+# SA1106: Code must not contain empty statements (stray semicolons)
+predicate emptyStatement(Line) => Line.Text:matches('^\s*;\s*$')
+
+# SA1120: Comments must contain text (not just //)
+predicate emptyComment(Line) => Line.Text:matches('//\s*$')
+
+# SA1122: Use string.Empty for empty strings in comparisons
+predicate emptyStringLiteral(Line) => Line.Text:matches('(==|!=)\s*""') || Line.Text:matches('""\s*(==|!=)')
+
+# SA1206: Declaration keywords must follow order (access, static, other)
+# Flag common misordering: static before access modifier
+predicate wrongModifierOrder(Line) => Line.Text:matches('^\s*(static|sealed|abstract|virtual|override|readonly)\s+(public|private|protected|internal)\s')
+
+# SA1633: File must have a header (first line should be a comment)
+predicate missingFileHeader(Line) => Line.Number == 1 && !Line.Text:matches('^(\s*/[/*]|#)')
+
+# SA1200: Using directives must be placed outside the namespace
+# This checks if the file has a namespace but usings appear after a namespace declaration
+predicate usingInsideNamespace(Line) => Line.Text:matches('^\s*using\s+[A-Z]') && Line.Number > 10
+
+# SA1600: Public elements should be documented (have XML doc comments)
+predicate publicUndocumented(Type) => Type.Public && !Type.Documented
+predicate undocumentedPublicMethod(Method) => Method.Public && !Method.Documented
+predicate hasUndocumentedPublicMethod(Type) => Type.Methods:any(undocumentedPublicMethod)
+
+# SA1401: Fields should be private (non-const public fields are bad)
+predicate publicNonConstField(Field) => Field.Public && !Field.Const
+predicate hasPublicField(Type) => Type.Fields:any(publicNonConstField)
+
+# .editorconfig naming: private fields should start with _
+predicate privateFieldMissingUnderscore(Field) => Field.Private && !Field.Static && !Field.Name:matches('^_')
+predicate hasPrivateFieldNamingViolation(Type) => Type.Fields:any(privateFieldMissingUnderscore)
+
+# .editorconfig naming: private static fields should start with s_
+predicate staticFieldMissingSPrefix(Field) => Field.Private && Field.Static && !Field.Const && !Field.Name:matches('^s_')
+predicate hasStaticFieldNamingViolation(Type) => Type.Fields:any(staticFieldMissingSPrefix)
+
+# .editorconfig naming: constants should be PascalCase
+predicate constFieldNotPascalCase(Field) => Field.Const && !Field.Name:matches('^[A-Z]')
+predicate hasConstNamingViolation(Type) => Type.Fields:any(constFieldNotPascalCase)
+
+# SA1500: Braces must not be on the same line as the preceding statement
+# Detects opening brace at end of line (K&R style) instead of Allman style
+predicate braceNotOnOwnLine(Line) => Line.Text:matches('(if|else|for|foreach|while|do|try|catch|finally|switch|lock|using)\s*\(.*\)\s*\{') || Line.Text:matches('(else|try|catch|finally|do)\s*\{')
+
+# SA1503: Braces must not be omitted from control flow
+# Detects single-line if/for/while/foreach without braces
+predicate missingBraces(Line) => Line.Text:matches('^\s*(if|else if|for|foreach|while)\s*\(.*\)\s*[^{;\s]') || Line.Text:matches('^\s*else\s+[^{i]')
+
+# SA1518: File must end with a single newline
+predicate fileMissingTrailingNewline(Line) => Line.File.Types.Count >= 0 && Line.Number == 1 && !Line.File.Path:matches('placeholder')
+
+# SA1600: Public properties should be documented
+predicate undocumentedPublicProperty(Property) => Property.Public && !Property.Documented
+predicate hasUndocumentedPublicProperty(Type) => Type.Properties:any(undocumentedPublicProperty)

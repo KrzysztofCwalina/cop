@@ -18,6 +18,10 @@ public record TypeDeclaration(
     public bool IsStatic => Modifiers.HasFlag(Modifier.Static);
 
     public SourceFile? File { get; init; }
+    public bool HasDocComment { get; init; }
+    public List<FieldDeclaration> Fields { get; init; } = [];
+    public List<PropertyDeclaration> Properties { get; init; } = [];
+    public List<EventDeclaration> Events { get; init; } = [];
     public string Source => Name;
 
     public bool InheritsFrom(string name) =>

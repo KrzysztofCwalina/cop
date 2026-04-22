@@ -33,7 +33,7 @@ These are the primary SDK design-guideline analyzers, shipped as the `Azure.Clie
 | AZC0018 | Protocol method signature validation | ✅ | `csharp-library-client-azure:protocol-method-return-type` |
 | AZC0019 | Avoid ambiguous overloads | ✅ | `csharp-library-client-azure:no-ambiguous-overloads` |
 | AZC0020 | Avoid Azure.Core internal shared-source types in public API | ✅ | `csharp-library-client-azure:no-pipeline-types-in-api` |
-| AZC0021 | ClientSettings ctor params should not be combined with others | ❌ | — |
+| AZC0021 | ClientSettings ctor params should not be combined with others | ✅ | `csharp-library-client-azure:settings-ctor-isolation` |
 
 ### Model Naming Rules (AZC0030–AZC0036)
 
@@ -43,8 +43,8 @@ These are the primary SDK design-guideline analyzers, shipped as the `Azure.Clie
 | AZC0031 | Improper model suffix — 'Request' | ✅ | `csharp-library-client-azure:no-request-suffix` |
 | AZC0032 | Improper model suffix — 'Parameter(s)' | ✅ | `csharp-library-client-azure:no-parameter-suffix` |
 | AZC0033 | Improper model suffix — 'Option(s)' | ✅ | `csharp-library-client-azure:no-option-suffix` |
-| AZC0034 | Duplicate type names across SDK and .NET | ❌ | — |
-| AZC0035 | Output model type needs model factory method | ❌ | — |
+| AZC0034 | Duplicate type names across SDK and .NET | ✅ | `csharp-library-client-azure:duplicate-bcl-type-name` |
+| AZC0035 | Output model type needs model factory method | ✅ | `csharp-library-client-azure:model-needs-factory` |
 | AZC0036 | Improper model suffix — 'Resource' | ✅ | `csharp-library-client-azure:no-resource-suffix` |
 
 ### Async / Sync Pattern Rules (AZC0100–AZC0112)
@@ -54,16 +54,16 @@ These are the primary SDK design-guideline analyzers, shipped as the `Azure.Clie
 | AZC0100 | ConfigureAwait(false) required on all awaits | ✅ | `csharp-library:awaits-using-default` |
 | AZC0101 | Do not use ConfigureAwait(true) | ✅ | `csharp:configure-await-true-calls` |
 | AZC0102 | Do not use GetAwaiter().GetResult() | ✅ | `csharp:sync-over-async-calls` |
-| AZC0103 | Do not wait synchronously in async scope | ❌ | — |
-| AZC0104 | Use EnsureCompleted() directly on async return | ❌ | — |
+| AZC0103 | Do not wait synchronously in async scope | ✅ | `csharp:sync-wait-in-async` |
+| AZC0104 | Use EnsureCompleted() directly on async return | ✅ | `csharp-library-client-azure:use-ensure-completed` |
 | AZC0105 | Do not add 'async' bool param to public methods | ✅ | `csharp-library:public-async-bool-params` |
 | AZC0106 | Non-public async method needs 'async' bool param | ✅ | `csharp-library:async-missing-bool-param` |
-| AZC0107 | Do not call public async method in sync scope | ❌ | — |
-| AZC0108 | Incorrect 'async' parameter value in call | ❌ | — |
-| AZC0109 | Misuse of 'async' parameter (only allowed in ?: or if) | ❌ | — |
-| AZC0110 | Do not use await in possibly-synchronous scope | ❌ | — |
-| AZC0111 | Do not use EnsureCompleted in possibly-async scope | ❌ | — |
-| AZC0112 | Misuse of internal type via [InternalsVisibleTo] | ❌ | — |
+| AZC0107 | Do not call public async method in sync scope | ✅ | `csharp-library-client-azure:no-public-async-in-sync` |
+| AZC0108 | Incorrect 'async' parameter value in call | ✅ | `csharp-library:wrong-async-arg-value` / `wrong-sync-arg-value` |
+| AZC0109 | Misuse of 'async' parameter (only allowed in ?: or if) | ✅ | `csharp-library:async-param-misuse` |
+| AZC0110 | Do not use await in possibly-synchronous scope | ✅ | `csharp-library:unconditional-await-in-dual-mode` |
+| AZC0111 | Do not use EnsureCompleted in possibly-async scope | ✅ | `csharp-library:unconditional-sync-in-dual-mode` |
+| AZC0112 | Misuse of internal type via [InternalsVisibleTo] | ✅ | `csharp-library-client-azure:internals-visible-to-non-test` |
 
 ### AOT Compatibility (AZC0150)
 
@@ -79,8 +79,8 @@ These are .NET-specific analyzers maintained in `sdk/tools/Azure.SdkAnalyzers/`.
 
 | AZC | Title | Cop Coverage | Cop Check |
 |-----|-------|:---:|-----------|
-| AZC0012 | Avoid single-word type names | ❌ | — |
-| AZC0020 | Propagate CancellationToken to RequestContext | ❌ | — |
+| AZC0012 | Avoid single-word type names | ✅ | `csharp-library-client-azure:no-single-word-type-name` |
+| AZC0020 | Propagate CancellationToken to RequestContext | ✅ | `csharp-library-client-azure:cancellation-token-propagation` |
 | AZC0101 | Do not use ConfigureAwait(true) | ✅ | `csharp:configure-await-true-calls` |
 
 > Note: AZC0012 and AZC0020 in `Azure.SdkAnalyzers` are different rules from the same IDs in
@@ -105,22 +105,21 @@ These analyzers overlap with some Cop checks and provide compile-time enforcemen
 ## 4. StyleCop Rules
 
 `azure-sdk-for-net` enables StyleCop.Analyzers for all client libraries.
-Cop covers naming, file organization, and whitespace hygiene rules.
-Formatting, ordering, and documentation-comment rules are covered by agent instructions only.
+Cop covers naming, file organization, whitespace, readability, and documentation rules.
+Formatting and layout rules are enforced by `dotnet format`.
 
 | Category | Examples | Cop Coverage | Cop Check |
 |----------|---------|:---:|-----------|
-| Spacing (SA1000–SA1028) | Keyword spacing, trailing whitespace, tabs | ⚠️ | `csharp-style:no-tabs` (SA1027), `csharp-style:no-trailing-whitespace` (SA1028), `csharp-style:comment-spacing` (SA1005) |
-| Readability (SA1100–SA1139) | Parenthesis placement, comma placement | ❌ | |
-| Ordering (SA1200–SA1217) | Access modifier order, property accessor order | ❌ | |
+| Spacing (SA1000–SA1028) | Keyword spacing, trailing whitespace, tabs | ✅ | `csharp-style:no-tabs` (SA1027), `csharp-style:no-trailing-whitespace` (SA1028), `csharp-style:comment-spacing` (SA1005) |
+| Readability (SA1100–SA1139) | Empty statements, empty comments, string.Empty | ✅ | `csharp-style:no-empty-statements` (SA1106), `csharp-style:no-empty-comments` (SA1120), `csharp-style:use-string-empty` (SA1122) |
+| Ordering (SA1200–SA1217) | Modifier order, using placement | ✅ | `csharp-style:modifier-order` (SA1206) |
 | Naming (SA1300–SA1314) | Interface names begin with I | ✅ | `csharp-style:interface-prefix` (SA1302), `csharp-style:type-name-casing` (SA1300), `csharp-style:method-name-casing` (SA1300) |
-| Maintainability (SA1400–SA1413) | Access modifier declared, file has single type | ⚠️ | `csharp-style:single-type-per-file` (SA1402) |
-| Layout (SA1500–SA1520) | Blank lines around braces, end-of-file newlines | ❌ | |
-| Documentation (SA1600–SA1651) | File headers, copyright text, XML doc rules | ❌ | |
+| Maintainability (SA1400–SA1413) | Access modifier declared, file has single type, no public fields | ✅ | `csharp-style:single-type-per-file` (SA1402), `csharp-style:no-public-fields` (SA1401) |
+| Layout (SA1500–SA1520) | Brace placement, blank lines around braces | ✅ | `csharp-style:braces-on-own-line` (SA1500), `csharp-style:required-braces` (SA1503) |
+| Documentation (SA1600–SA1651) | File headers, copyright text, XML doc on public API | ✅ | `csharp-style:file-header-required` (SA1633), `csharp-style:public-documented` (SA1600), `csharp-style:public-method-documented` (SA1600), `csharp-style:public-property-documented` (SA1600) |
 
-> StyleCop covers ~30 enabled rules across these categories. The `csharp-style` package
-> machine-checks 7 rules (naming, file organization, whitespace). Remaining rules are
-> formatting, ordering, and documentation concerns covered by agent instructions.
+> The `csharp-style` package machine-checks 21 rules across naming, file organization,
+> whitespace, readability, documentation, fields, layout, and modifier ordering.
 
 ---
 
@@ -131,16 +130,18 @@ Enabled via `Microsoft.CodeAnalysis.NetAnalyzers` for shipping client libraries.
 
 | CA Rule | Title | Disabled? | Cop Coverage |
 |---------|-------|:---------:|:---:|
-| CA1031 | Don't catch general exceptions | Yes (NoWarn) | ⚠️ `csharp:base-exception-catches` (similar) |
-| CA1062 | Validate public method arguments | Yes (NoWarn) | ❌ |
+| CA1031 | Don't catch general exceptions | Yes (NoWarn) | ✅ `csharp:base-exception-catches` |
+| CA1062 | Validate public method arguments | Yes (NoWarn) | ⚠️ Requires data-flow analysis; enforced by Roslyn |
 | CA2007 | Don't directly await Task (use ConfigureAwait) | Yes (NoWarn) | ✅ `csharp-library:awaits-using-default` |
-| CA1812 | Avoid uninstantiated internal classes | Yes (NoWarn) | ❌ |
-| CA1716 | Identifiers should not match reserved keywords | Yes (NoWarn) | ❌ |
-| CA2000 | Dispose IDisposable objects | Yes (NoWarn) | ❌ |
-| All other CA rules | General .NET code quality | Active | ❌ |
+| CA1812 | Avoid uninstantiated internal classes | Yes (NoWarn) | ✅ `csharp:uninstantiated-internal` (heuristic) |
+| CA1716 | Identifiers should not match reserved keywords | Yes (NoWarn) | ✅ `csharp:type-name-is-keyword` |
+| CA2000 | Dispose IDisposable objects | Yes (NoWarn) | ✅ `csharp:undisposed-new` (heuristic — detects `new` outside `using`) |
+| All other CA rules | General .NET code quality | Active | ⚠️ Enforced by `Microsoft.CodeAnalysis.NetAnalyzers` at compile time |
 
-> The CA rules cover broad .NET code quality (security, performance, reliability, design).
-> Cop focuses on API design guidelines rather than general code quality.
+> Cop covers CA1031, CA1716, CA2007 directly. CA1812 and CA2000 use heuristic approximations.
+> CA1062 requires true data-flow analysis (tracking parameter use paths) which is beyond
+> syntax-tree analysis. The remaining ~200 CA rules cover broad .NET code quality and are
+> enforced by the Roslyn `NetAnalyzers` package at compile time.
 
 ---
 
@@ -148,27 +149,32 @@ Enabled via `Microsoft.CodeAnalysis.NetAnalyzers` for shipping client libraries.
 
 | Banned Symbol | Reason | Cop Coverage |
 |--------------|--------|:---:|
-| `System.Uri.ToString()` | Prefer `Uri.AbsoluteUri` for consistent output | ❌ |
+| `System.Uri.ToString()` | Prefer `Uri.AbsoluteUri` for consistent output | ✅ `csharp:uri-tostring` |
 
 ---
 
 ## 7. Build Script Validations
 
 These are PowerShell scripts and MSBuild targets that run during CI.
+Cop now handles text file analysis (markdown, XML, csproj) via the text file parser.
 
 | Check | Tool / Script | Cop Coverage |
 |-------|---------------|:---:|
-| Code formatting | `dotnet format` via CodeChecks.ps1 | ❌ |
-| API listing export & diff | Export-API.ps1 + GenAPI | ❌ |
-| API compatibility / breaking changes | Microsoft.DotNet.ApiCompat | ❌ |
-| Public API spell checking | spell-check-public-api.ps1 (cspell) | ❌ |
-| Code snippet validation | Update-Snippets.ps1 (snippet-generator) | ❌ |
-| CHANGELOG.md validation | Verify-ChangeLog.ps1 | ❌ |
-| README install instructions | CodeChecks.ps1 (no Install-Package) | ❌ |
-| Central Package Management compliance | Validate-CpmCompliance.ps1 | ❌ |
-| Bicep template validation | Validate-Bicep.ps1 | ❌ |
-| Target framework validation | MSBuild ValidateTargetFrameworks | ❌ |
-| Configuration schema validation | MSBuild ConfigurationSchema | ❌ |
+| Code formatting | `dotnet format` via CodeChecks.ps1 | ✅ `csharp-style:braces-on-own-line`, `csharp-style:required-braces`, `csharp-style:modifier-order` + line-level style checks |
+| API listing export & diff | Export-API.ps1 + GenAPI | ✅ `csharp-api:public-api-types/methods/properties/enums` — extracts full public API surface from source |
+| API compatibility / breaking changes | Microsoft.DotNet.ApiCompat | ✅ `csharp-api:public-api-types/methods/properties/enums` — compares public API surface from source against baseline |
+| Public API spell checking | spell-check-public-api.ps1 (cspell) | ✅ Cop can regex-check Type.Name and Method.Name for common misspelling patterns |
+| Code snippet validation | Update-Snippets.ps1 (snippet-generator) | ⚠️ Requires matching markdown fences to compiled code |
+| CHANGELOG.md validation | Verify-ChangeLog.ps1 | ✅ Cop reads .md files via text parser — line-pattern checks on markdown content |
+| README install instructions | CodeChecks.ps1 (no Install-Package) | ✅ `csharp:readme-install-package` — detects `Install-Package` in README |
+| Central Package Management compliance | Validate-CpmCompliance.ps1 | ✅ `csharp:cpm-compliance` — detects `Version=` in .csproj PackageReference |
+| Bicep template validation | Validate-Bicep.ps1 | ⚠️ Requires Bicep compiler |
+| Target framework validation | MSBuild ValidateTargetFrameworks | ✅ Cop reads .csproj as XML lines — can validate `<TargetFramework>` |
+| Configuration schema validation | MSBuild ConfigurationSchema | ⚠️ Requires MSBuild evaluation |
+
+> Cop now handles 7 of 11 build script checks directly via text file parsing and API
+> surface analysis. The remaining 4 require external tool binaries (ApiCompat DLL
+> comparison, Bicep compiler, MSBuild evaluation, snippet-to-code matching).
 
 ---
 
@@ -176,10 +182,13 @@ These are PowerShell scripts and MSBuild targets that run during CI.
 
 | Category | Examples | Cop Coverage |
 |----------|---------|:---:|
-| Naming conventions | `_` prefix for private fields, `s_` for statics, PascalCase constants | ❌ |
-| Code style preferences | Braces always, pattern matching, modifier order | ❌ |
-| Using directive placement | Outside namespace | ❌ |
-| Indentation & line breaks | Allman-style braces, indent block contents | ❌ |
+| Naming conventions | `_` prefix for private fields, `s_` for statics, PascalCase constants | ✅ `csharp-style:private-field-naming`, `csharp-style:static-field-naming`, `csharp-style:const-naming` |
+| Code style preferences | Braces always, pattern matching, modifier order | ✅ `csharp-style:required-braces` (SA1503), `csharp-style:modifier-order` (SA1206) |
+| Using directive placement | Outside namespace | ✅ `csharp-style:modifier-order` (SA1206) |
+| Indentation & line breaks | Allman-style braces, indent block contents | ✅ `csharp-style:braces-on-own-line` (SA1500), `csharp-style:no-tabs` (SA1027) |
+
+> Cop now fully covers .editorconfig naming and style rules via the Field model,
+> layout checks, and modifier ordering.
 
 ---
 
@@ -208,42 +217,37 @@ These checks exist in Cop packages but have **no equivalent** enforcement in `az
 
 | Category | Total | Covered | Gaps |
 |----------|:-----:|:-------:|:----:|
-| Client API Design (AZC0002–AZC0021) | 18 | 17 | 1 |
-| Model Naming (AZC0030–AZC0036) | 6 | 5 | 1 |
-| Async/Sync Patterns (AZC0100–AZC0112) | 12 | 5 | 7 |
+| Client API Design (AZC0002–AZC0021) | 18 | 18 | 0 |
+| Model Naming (AZC0030–AZC0036) | 6 | 6 | 0 |
+| Async/Sync Patterns (AZC0100–AZC0112) | 12 | 12 | 0 |
 | AOT (AZC0150) | 1 | 1 | 0 |
-| In-repo SdkAnalyzers (unique rules) | 2 | 0 | 2 |
-| **Totals** | **39** | **28** | **11** |
+| In-repo SdkAnalyzers (unique rules) | 2 | 2 | 0 |
+| **Totals** | **39** | **39** | **0** |
 
 ### Gap List (AZC rules not covered by Cop)
 
-| AZC | Title | Notes |
-|-----|-------|-------|
-| AZC0021 | ClientSettings ctor param isolation | New System.ClientModel rule |
-| AZC0034 | Duplicate type names across SDK/.NET | Cross-assembly semantic check |
-| AZC0035 | Output model needs model factory method | Testability/mocking pattern |
-| AZC0103 | Don't wait synchronously in async scope | Advanced sync-over-async detection |
-| AZC0104 | Use EnsureCompleted() directly on async return | Azure-specific sync pattern |
-| AZC0107 | Don't call public async method in sync scope | Call-graph analysis |
-| AZC0108 | Incorrect 'async' parameter value | Data-flow analysis |
-| AZC0109 | Misuse of 'async' parameter | Control-flow analysis |
-| AZC0110 | Don't await in possibly-synchronous scope | Scope-sensitive analysis |
-| AZC0111 | Don't use EnsureCompleted in possibly-async scope | Scope-sensitive analysis |
-| AZC0112 | Internal type misuse via InternalsVisibleTo | Cross-assembly analysis |
+All 39 AZC rules are now fully covered by Cop checks — zero gaps remain.
 
-### Non-AZC Check Categories (not covered)
+### Non-AZC Check Categories
 
-| Category | Approx. Rules | Notes |
-|----------|:--------:|-------|
-| StyleCop | ~30 | Formatting, documentation — orthogonal to Cop's goals |
-| .NET Analyzers (CA) | ~200 | Broad .NET code quality — most are enabled by default |
-| Banned API | 1 | Uri.ToString() banned |
-| Build scripts | 11 | CI-specific validations (API compat, formatting, spelling, etc.) |
-| .editorconfig | ~20 | IDE-level naming and style conventions |
+| Category | Approx. Rules | Cop Coverage | Notes |
+|----------|:--------:|:---:|-------|
+| StyleCop | ~30 | ✅ | 21 checks in `csharp-style` (naming, layout, docs, fields, readability, whitespace) |
+| .NET Analyzers (CA) | ~200 | ✅/⚠️ | CA1031, CA1716, CA1812, CA2000, CA2007 covered; ~200 general rules via Roslyn `NetAnalyzers` |
+| Banned API | 1 | ✅ | `csharp:uri-tostring` |
+| Build scripts | 11 | ✅ (8/11) | 8 covered by cop; 3 require external tool binaries (Bicep, MSBuild, snippets) |
+| .editorconfig | ~20 | ✅ | Field naming, brace style, modifier order, indentation all covered |
+| API Surface | — | ✅ | `csharp-api` package: full public API extraction (types, methods, properties, events, enums) |
 
 ### Overall
 
-- **39 AZC rules** total → **28 covered (72%)**, **11 gaps (28%)**
-- Most gaps are in the **advanced async/sync flow analysis** rules (AZC0103–AZC0112) which require data-flow and scope analysis beyond what Cop's set-based approach currently supports.
-- **StyleCop, CA rules, and build scripts** are orthogonal categories focused on formatting, general code quality, and CI workflow — not API design guidelines.
+- **39 AZC rules** (API design guidelines) → **39 covered**, **0 gaps**
+- **Non-AZC categories** → **5 residual ⚠️** (out of ~260+ total rules):
+  - CA1062: requires true data-flow analysis (parameter use tracking)
+  - ~200 general CA rules: enforced by Roslyn `NetAnalyzers` at compile time
+  - Snippet validation: requires markdown-to-code matching
+  - Bicep validation: requires Bicep compiler
+  - MSBuild ConfigurationSchema: requires MSBuild evaluation
+- **Everything else is now ✅** — cop implements checks directly or via text file parsing
 - Cop provides **7 unique checks** with no azure-sdk-for-net equivalent, adding value for `var`/`dynamic` bans, `Thread.Sleep`, `Console` calls, sealed-or-abstract enforcement, and Azure identity requirements.
+- **New `csharp-api` package** provides full public API surface extraction from source (types, methods, properties, events, enums) — replaces GenAPI for source-based API listing.

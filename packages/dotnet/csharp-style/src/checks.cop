@@ -30,5 +30,60 @@ export let no-tabs = Code.Lines:csharp:containsTab
 export let no-trailing-whitespace = Code.Lines:csharp:trailingWhitespace
     :toWarning('SA1028: Remove trailing whitespace')
 
+## SA1106: Code must not contain empty statements
+export let no-empty-statements = Code.Lines:csharp:emptyStatement
+    :toWarning('SA1106: Remove empty statement')
+
+## SA1120: Comments must contain text
+export let no-empty-comments = Code.Lines:csharp:emptyComment
+    :toWarning('SA1120: Comment must contain text')
+
+## SA1122: Use string.Empty instead of ""
+export let use-string-empty = Code.Lines:csharp:emptyStringLiteral
+    :toWarning('SA1122: Use string.Empty instead of ""')
+
+## SA1206: Declaration keywords must follow order
+export let modifier-order = Code.Lines:csharp:wrongModifierOrder
+    :toWarning('SA1206: Access modifier should come before other modifiers')
+
+## SA1633: File must have a header
+export let file-header-required = Code.Lines:csharp:missingFileHeader
+    :toWarning('SA1633: File should begin with a header comment')
+
+## SA1600: Public elements should be documented
+export let public-documented = Code.Types:csharp:publicUndocumented
+    :toWarning('SA1600: Public type {Type.Name} should have XML documentation')
+
+export let public-method-documented = Code.Types:csharp:hasUndocumentedPublicMethod
+    :toWarning('SA1600: {Type.Name} has a public method without XML documentation')
+
+## SA1401: Fields should be private
+export let no-public-fields = Code.Types:csharp:hasPublicField
+    :toWarning('SA1401: {Type.Name} has a public non-const field; use a property instead')
+
+## .editorconfig naming: private field underscore prefix
+export let private-field-naming = Code.Types:csharp:hasPrivateFieldNamingViolation
+    :toWarning('{Type.Name} has a private field that should start with underscore (_)')
+
+## .editorconfig naming: static field s_ prefix
+export let static-field-naming = Code.Types:csharp:hasStaticFieldNamingViolation
+    :toWarning('{Type.Name} has a private static field that should start with s_')
+
+## .editorconfig naming: const PascalCase
+export let const-naming = Code.Types:csharp:hasConstNamingViolation
+    :toWarning('{Type.Name} has a constant that should be PascalCase')
+
+## SA1500: Braces must be on their own line (Allman style)
+export let braces-on-own-line = Code.Lines:csharp:braceNotOnOwnLine
+    :toWarning('SA1500: Opening brace should be on its own line')
+
+## SA1503: Braces must not be omitted
+export let required-braces = Code.Lines:csharp:missingBraces
+    :toWarning('SA1503: Braces must not be omitted from control flow statement')
+
+## SA1600: Public properties should be documented
+export let public-property-documented = Code.Types:csharp:hasUndocumentedPublicProperty
+    :toWarning('SA1600: {Type.Name} has a public property without XML documentation')
+
 ## All style checks combined
-export let csharp-style = [interface-prefix, type-name-casing, method-name-casing, single-type-per-file, comment-spacing, no-tabs, no-trailing-whitespace]
+export let csharp-style = [interface-prefix, type-name-casing, method-name-casing, single-type-per-file, comment-spacing, no-tabs, no-trailing-whitespace, no-empty-statements, no-empty-comments, use-string-empty, modifier-order, file-header-required, public-documented, public-method-documented, no-public-fields, private-field-naming, static-field-naming, const-naming, braces-on-own-line, required-braces, public-property-documented]

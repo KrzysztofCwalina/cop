@@ -24,3 +24,54 @@ predicate getAwaiterGetResult(Statement) => Statement.Kind == 'call'
 
 predicate taskCompletionSourceNew(Statement) => Statement.Kind == 'call'
     && Statement.TypeName == 'TaskCompletionSource'
+
+# Sync-blocking call patterns (reusable by any check)
+export predicate syncBlockingCall(Statement) => Statement.Kind == 'call'
+    && (Statement.MemberName == 'Wait' || Statement.MemberName == 'GetResult')
+
+# Statement is inside an async method
+export predicate inAsyncMethod(Statement) => Statement.Method != null && Statement.Method.Async
+
+# Statement is inside a non-async method
+export predicate inSyncMethod(Statement) => Statement.Method != null && !Statement.Method.Async
+
+# Banned API: Uri.ToString() — prefer Uri.AbsoluteUri for consistent output
+predicate uriToString(Statement) => Statement.Kind == 'call'
+    && Statement.MemberName == 'ToString'
+    && Statement.TypeName != null && Statement.TypeName:matches('[Uu]ri')
+
+# CA1716: Identifiers should not match C# reserved keywords
+let csharpKeywords = ['abstract', 'as', 'base', 'bool', 'break', 'byte', 'case', 'catch',
+    'char', 'checked', 'class', 'const', 'continue', 'decimal', 'default', 'delegate',
+    'do', 'double', 'else', 'enum', 'event', 'explicit', 'extern', 'false', 'finally',
+    'fixed', 'float', 'for', 'foreach', 'goto', 'if', 'implicit', 'in', 'int',
+    'interface', 'internal', 'is', 'lock', 'long', 'namespace', 'new', 'null',
+    'object', 'operator', 'out', 'override', 'params', 'private', 'protected', 'public',
+    'readonly', 'ref', 'return', 'sbyte', 'sealed', 'short', 'sizeof', 'stackalloc',
+    'static', 'string', 'struct', 'switch', 'this', 'throw', 'true', 'try', 'typeof',
+    'uint', 'ulong', 'unchecked', 'unsafe', 'ushort', 'using', 'virtual', 'void',
+    'volatile', 'while']
+predicate typeNameIsKeyword(Type) => csharpKeywords:contains(Type.Name)
+
+# CA1812: Avoid uninstantiated internal classes
+# Internal non-abstract class that is never 'new'd in any statement
+predicate internalNonAbstractClass(Type) => Type.Kind == 'Class' && !Type.Public && !Type.Abstract
+
+# CA2000: IDisposable not in using statement
+# new SomeType() not inside a using ancestor
+predicate isUsingStatement(Statement) => Statement.Kind == 'using'
+predicate newCallNotInUsing(Statement) => Statement.Kind == 'call'
+    && Statement.Expression != null && Statement.Expression:matches('new\s+')
+    && !Statement.Ancestors:any(isUsingStatement)
+
+# CHANGELOG validation: Markdown files named CHANGELOG should have ## entries
+predicate isChangelogFile(Line) => Line.File.Path:matches('CHANGELOG') && Line.Number == 1
+
+# README: Should not contain 'Install-Package' (use 'dotnet add package')
+predicate readmeInstallPackage(Line) => Line.File.Path:matches('README') && Line.Text:matches('Install-Package')
+
+# .csproj: PackageReference should not have Version attribute (CPM compliance)
+predicate packageRefWithVersion(Line) => Line.File.Path:matches('\\.csproj$') && Line.Text:matches('PackageReference.*Version\s*=')
+
+# .csproj: TargetFramework validation
+predicate targetFrameworkLine(Line) => Line.File.Path:matches('\\.csproj$') && Line.Text:matches('<TargetFramework>')

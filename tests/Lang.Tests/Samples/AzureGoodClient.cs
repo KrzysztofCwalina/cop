@@ -73,3 +73,11 @@ public class Response { }
 public class ItemData { }
 public class ItemResult { }
 public class ServiceConfiguration { }
+
+// AZC0035: ModelFactory provides factory methods for output model types
+public static class GoodServiceModelFactory
+{
+    public static ItemData ItemData(string value) => new ItemData();
+    public static ItemResult ItemResult(string value) => new ItemResult();
+    public static ServiceConfiguration ServiceConfiguration(string value) => new ServiceConfiguration();
+}

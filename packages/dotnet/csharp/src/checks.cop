@@ -38,5 +38,33 @@ export let sync-over-async-calls = Code.Statements:csharp:getAwaiterGetResult
 export let bare-task-completion-sources = Code.Statements:csharp:taskCompletionSourceNew
     :toWarning('Use TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously)')
 
+## Do not use sync-blocking calls (.Wait(), .GetResult()) inside async methods (AZC0103)
+export let sync-wait-in-async = Code.Statements:csharp:syncBlockingCall:inAsyncMethod
+    :toError('Do not use {Statement.MemberName} in async method — use await instead')
+
+## Banned API: Uri.ToString() — use Uri.AbsoluteUri for consistent output
+export let uri-tostring = Code.Statements:csharp:uriToString
+    :toWarning('Use Uri.AbsoluteUri instead of Uri.ToString()')
+
+## CA1716: Type names should not match C# reserved keywords
+export let type-name-is-keyword = Code.Types:csharp:typeNameIsKeyword
+    :toWarning('CA1716: Type name {Type.Name} matches a C# reserved keyword')
+
+## CA1812: Internal classes should be instantiated (heuristic)
+export let uninstantiated-internal = Code.Types:csharp:internalNonAbstractClass
+    :toWarning('CA1812: Internal class {Type.Name} may not be instantiated — consider making it public or removing it')
+
+## CA2000: Dispose objects before losing scope (heuristic)
+export let undisposed-new = Code.Statements:csharp:newCallNotInUsing
+    :toWarning('CA2000: New object may not be disposed — consider using a \'using\' statement')
+
+## README: Should not use Install-Package (use dotnet add package)
+export let readme-install-package = Code.Lines:markdown:readmeInstallPackage
+    :toWarning('Use \'dotnet add package\' instead of \'Install-Package\' in README')
+
+## CPM compliance: PackageReference should not have Version attribute
+export let cpm-compliance = Code.Lines:xml:packageRefWithVersion
+    :toWarning('PackageReference should not specify Version (use Central Package Management)')
+
 ## All C# checks combined
-export let csharp-checks = [var-declarations, dynamic-declarations, thread-sleep-calls, console-calls, base-exception-catches, swallowed-exceptions, configure-await-true-calls, sync-over-async-calls, bare-task-completion-sources]
+export let csharp-checks = [var-declarations, dynamic-declarations, thread-sleep-calls, console-calls, base-exception-catches, swallowed-exceptions, configure-await-true-calls, sync-over-async-calls, bare-task-completion-sources, sync-wait-in-async, uri-tostring, type-name-is-keyword, uninstantiated-internal, undisposed-new, readme-install-package, cpm-compliance]

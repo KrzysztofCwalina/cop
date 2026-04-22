@@ -36,7 +36,7 @@ internal static class TestInterpreter
                 var relativePath = Path.GetFileName(filePath);
                 var normalized = sourceFile with { Path = relativePath };
                 for (int i = 0; i < normalized.Statements.Count; i++)
-                    normalized.Statements[i] = normalized.Statements[i] with { File = normalized };
+                    normalized.Statements[i].File = normalized;
                 for (int i = 0; i < normalized.Types.Count; i++)
                     normalized.Types[i] = normalized.Types[i] with { File = normalized };
                 documents.Add(new Document(relativePath, normalized.Language, normalized));

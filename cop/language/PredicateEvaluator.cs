@@ -20,6 +20,7 @@ public class PredicateEvaluator
     private readonly string _filePath;
     private readonly TypeRegistry _registry;
     private readonly Dictionary<string, LetDeclaration>? _letDeclarations;
+    private readonly Dictionary<string, IList>? _resolvedCollections;
     private readonly HashSet<string> _evaluatingLetValues = [];
 
     public PredicateEvaluator(
@@ -27,13 +28,15 @@ public class PredicateEvaluator
         string filePath,
         TypeRegistry registry,
         Dictionary<string, LetDeclaration>? letDeclarations = null,
-        Dictionary<string, List<FunctionDefinition>>? functions = null)
+        Dictionary<string, List<FunctionDefinition>>? functions = null,
+        Dictionary<string, IList>? resolvedCollections = null)
     {
         _predicates = predicates;
         _filePath = filePath;
         _registry = registry;
         _letDeclarations = letDeclarations;
         _functions = functions ?? [];
+        _resolvedCollections = resolvedCollections;
     }
 
     public (bool result, EvaluationContext context) EvaluateAsBool(
@@ -42,6 +45,16 @@ public class PredicateEvaluator
         var ctx = new EvaluationContext();
         bool result = ToBool(Eval(expr, item, paramType, ctx));
         return (result, ctx);
+    }
+
+    /// <summary>
+    /// Evaluate an expression against an item, returning the raw value.
+    /// Used by :select() to project collection items to field values.
+    /// </summary>
+    public object? EvaluateField(Expression expr, object item, string paramType)
+    {
+        var ctx = new EvaluationContext();
+        return Eval(expr, item, paramType, ctx);
     }
 
     private object? Eval(Expression expr, object item, string paramType, EvaluationContext ctx)
@@ -125,6 +138,13 @@ public class PredicateEvaluator
             {
                 _evaluatingLetValues.Remove(name);
             }
+        }
+
+        // Resolved collection binding (e.g., let factoryTypes = Code.Types:where(isFactory))
+        if (_resolvedCollections is not null &&
+            _resolvedCollections.TryGetValue(name, out var resolvedList))
+        {
+            return resolvedList;
         }
 
         // Check ancestor scope (e.g., Type accessible from Method predicates)
@@ -554,6 +574,22 @@ public class PredicateEvaluator
             {
                 var index = ToInt(Eval(args[0], item, paramType, ctx));
                 return index >= 0 && index < collection.Count ? collection[index] : null;
+            }
+            case "select":
+            {
+                // Project each item to a string value via a field accessor expression.
+                // Returns a List<object> (of strings) suitable for use with :in() or :contains().
+                var fieldExpr = args[0];
+                var result = new List<object>();
+                foreach (var collItem in collection)
+                {
+                    if (collItem is null) continue;
+                    string itemType = InferItemType(fieldExpr, collItem);
+                    var value = Eval(fieldExpr, collItem, itemType, ctx);
+                    if (value is not null)
+                        result.Add(value.ToString()!);
+                }
+                return result;
             }
             default:
                 throw new InvalidOperationException($"Unknown collection predicate '{predicate}'");

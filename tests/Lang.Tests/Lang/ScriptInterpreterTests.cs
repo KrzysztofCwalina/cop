@@ -664,4 +664,25 @@ CHECK(var-usage)
         Assert.That(varOutputs, Is.Not.Empty, "Union should include var-decls violations");
         Assert.That(sleepOutputs, Is.Not.Empty, "Union should include sleep-calls violations");
     }
+
+    // ── Select Operation Tests ──
+
+    [Test]
+    public void Run_Select_ProjectsFieldToStringList()
+    {
+        var source = """
+            let typeNames = Code.Types:select(Type.Name)
+            predicate isInList(Type) => Type.Name:in(typeNames)
+            let listed = Code.Types:isInList
+            command CHECK = PRINT('{Type.Name} is in the list', listed)
+            """;
+        var scriptFile = ScriptParser.Parse(source, "test.cop");
+        var interpreter = TestInterpreter.Create();
+        var outputs = interpreter.Run([scriptFile],
+            TestInterpreter.ParseSourceFiles(SamplePath("GoodClient.cs"))).Outputs;
+
+        Assert.That(outputs, Is.Not.Empty, "Should produce outputs for types in list");
+        Assert.That(outputs.Any(o => o.Message.Contains("GoodClient")),
+            Is.True, "Should find GoodClient in projected list");
+    }
 }

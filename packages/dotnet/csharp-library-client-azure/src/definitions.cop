@@ -2,6 +2,7 @@
 
 import csharp-library-client
 import csharp-library
+import csharp
 
 predicate tokenCredential(Parameter) => Parameter.Type == 'TokenCredential'
 predicate tokenCredentialParam(Constructor) => Constructor.Parameters:any(tokenCredential)
@@ -40,3 +41,89 @@ predicate protocolWithSameNameConvenience(Method) => Type.Methods:where(convenie
 
 predicate internalsVisibleTo(Statement) => Statement.Kind == 'attribute'
     && Statement.TypeName == 'InternalsVisibleTo'
+
+# AZC0112: InternalsVisibleTo targeting non-test assemblies
+predicate internalsVisibleToNonTest(Statement) => internalsVisibleTo
+    && !Statement.Arguments.First:contains('Test')
+
+# AZC0021: ClientSettings constructor should not combine settings param with other params
+predicate clientSettingsParam(Parameter) => Parameter.Type:endsWith('Settings')
+predicate hasSettingsAndOtherParams(Constructor) => Constructor.Public
+    && Constructor.Parameters:any(clientSettingsParam)
+    && Constructor.Parameters.Count > 1
+predicate settingsCtorOverloaded(Type) => Type.Constructors:any(hasSettingsAndOtherParams)
+
+# AZC0034: Duplicate type names across SDK and .NET BCL
+let bclTypeNames = [
+    'Action', 'Activator', 'AppContext', 'AppDomain', 'Array', 'Attribute',
+    'BitConverter', 'Boolean', 'Buffer', 'Byte', 'Char', 'CharEnumerator',
+    'CLSCompliantAttribute', 'Console', 'Convert', 'DateTime', 'DateTimeOffset',
+    'Decimal', 'Delegate', 'Double', 'Enum', 'Environment', 'EventArgs',
+    'EventHandler', 'Exception', 'FlagsAttribute', 'FormattableString', 'Func',
+    'GC', 'Guid', 'Half', 'HashCode', 'IAsyncDisposable', 'IAsyncResult',
+    'ICloneable', 'IComparable', 'IConvertible', 'IDisposable', 'IEquatable',
+    'IFormattable', 'IFormatProvider', 'Index', 'Int16', 'Int32', 'Int64',
+    'IntPtr', 'InvalidCastException', 'InvalidOperationException',
+    'IObservable', 'IObserver', 'IProgress', 'IServiceProvider',
+    'Lazy', 'MarshalByRefObject', 'Math', 'MathF', 'Memory',
+    'MulticastDelegate', 'Nullable', 'Object', 'ObsoleteAttribute',
+    'OperatingSystem', 'OperationCanceledException', 'OutOfMemoryException',
+    'OverflowException', 'Path', 'Predicate', 'Progress',
+    'Random', 'Range', 'ReadOnlyMemory', 'ReadOnlySpan',
+    'SByte', 'Single', 'Span', 'StackOverflowException', 'Stream',
+    'String', 'StringComparer', 'StringComparison', 'StringBuilder',
+    'Task', 'TaskCompletionSource', 'TimeOnly', 'DateOnly',
+    'TimeProvider', 'TimeSpan', 'TimeZoneInfo', 'Timeout',
+    'Tuple', 'Type', 'TypeCode', 'UInt16', 'UInt32', 'UInt64',
+    'UIntPtr', 'UnauthorizedAccessException', 'Uri', 'UriBuilder',
+    'ValueTask', 'ValueTuple', 'Version', 'Void', 'WeakReference',
+    'BinaryReader', 'BinaryWriter', 'Directory', 'DirectoryInfo',
+    'File', 'FileInfo', 'FileStream', 'MemoryStream', 'StreamReader',
+    'StreamWriter', 'TextReader', 'TextWriter',
+    'Channel', 'Pipe', 'PipeReader', 'PipeWriter',
+    'CancellationToken', 'CancellationTokenSource', 'Mutex',
+    'Semaphore', 'SemaphoreSlim', 'Timer',
+    'Dictionary', 'HashSet', 'KeyValuePair', 'LinkedList', 'List',
+    'Queue', 'SortedDictionary', 'SortedList', 'SortedSet', 'Stack',
+    'HttpClient', 'HttpContent', 'HttpRequestMessage', 'HttpResponseMessage',
+    'JsonDocument', 'JsonElement', 'JsonSerializer', 'JsonSerializerOptions',
+    'Regex', 'Match', 'Group', 'Capture',
+    'Assembly', 'Module', 'FieldInfo', 'MethodInfo', 'PropertyInfo',
+    'IPAddress', 'IPEndPoint', 'Socket',
+    'Encoding', 'UTF8Encoding',
+    'BigInteger', 'Complex', 'Matrix', 'Vector',
+    'Color', 'Point', 'Rectangle', 'Size',
+    'Credential', 'Certificate',
+    'Configuration', 'Options', 'Settings', 'Policy',
+    'Expression', 'Claim', 'ClaimsIdentity', 'ClaimsPrincipal',
+    'Notification', 'Subscription', 'Message', 'Endpoint', 'Connection'
+]
+predicate duplicatesBclTypeName(Type) => bclTypeNames:contains(Type.Name)
+
+# AZC0035: Output model types need a ModelFactory method
+predicate isModelFactory(Type) => Type.Name:endsWith('ModelFactory')
+let factoryTypes = Code.Types:isModelFactory
+predicate factoryMethodReturns(Method) => Method.Static && Method.Public && Method.ReturnType.Name == Type.Name
+predicate factoryHasMethodFor(FactoryType) => FactoryType.Methods:any(factoryMethodReturns)
+predicate hasFactory(Type) => factoryTypes:any(factoryHasMethodFor)
+predicate outputModelWithoutFactory(Type) => model && !hasFactory
+
+# AZC0104: Use EnsureCompleted() instead of GetAwaiter().GetResult() in sync methods
+predicate getResultInSyncMethod(Statement) => Statement.Kind == 'call'
+    && Statement.MemberName == 'GetResult' && inSyncMethod
+
+# AZC0107: Don't call *Async methods from sync context
+predicate asyncCallInSyncMethod(Statement) => Statement.Kind == 'call'
+    && Statement.MemberName:endsWith('Async') && inSyncMethod
+
+# AZC0012: Single-word public type names are too generic
+predicate singleWordName(Type) => Type.Public && Type.Name:matches('^[A-Z][a-z]+$')
+
+# AZC0020: Async calls/awaits should propagate CancellationToken or RequestContext
+predicate methodHasCancellation(Statement) => Statement.Method != null
+    && Statement.Method.Parameters:any(cancellation)
+predicate argRefersToToken(Argument) => Argument:contains('cancellationToken')
+    || Argument:contains('cancellation') || Argument:contains('context')
+predicate asyncCallMissingToken(Statement) => Statement.Kind == 'await'
+    && methodHasCancellation
+    && !Statement.Arguments:any(argRefersToToken)

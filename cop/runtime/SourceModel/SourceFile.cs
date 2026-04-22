@@ -9,7 +9,7 @@ public record SourceFile(
 {
     private List<string>? _lines;
 
-    public List<string> Lines => _lines ??= RawText.Split('\n').ToList();
+    public List<string> Lines => _lines ??= RawText.Split('\n').Select(l => l.TrimEnd('\r')).ToList();
 
     public List<string> Usings { get; init; } = [];
 

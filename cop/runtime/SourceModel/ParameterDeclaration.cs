@@ -6,4 +6,7 @@ public record ParameterDeclaration(
     bool IsVariadic,
     bool IsKwargs,
     bool HasDefaultValue,
-    int Line);
+    int Line)
+{
+    public string? DefaultValueText { get; init; }
+}

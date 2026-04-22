@@ -113,6 +113,31 @@ export function toInfo(Folder, message: string) => Violation {
     Source = Folder.Source
 }
 
+# Api overloads
+export function toError(Api, message: string) => Violation {
+    Severity = 'error',
+    Message = message,
+    File = Api.File.Path,
+    Line = Api.Line,
+    Source = Api.Source
+}
+
+export function toWarning(Api, message: string) => Violation {
+    Severity = 'warning',
+    Message = message,
+    File = Api.File.Path,
+    Line = Api.Line,
+    Source = Api.Source
+}
+
+export function toInfo(Api, message: string) => Violation {
+    Severity = 'info',
+    Message = message,
+    File = Api.File.Path,
+    Line = Api.Line,
+    Source = Api.Source
+}
+
 # Parameterized check command — users invoke via RUN CHECK(violations)
 export command CHECK(violations) = PRINT(
     '{Violation.File@dim}({Violation.Line@dim}): {Violation.Severity@auto}: {Violation.Message}',

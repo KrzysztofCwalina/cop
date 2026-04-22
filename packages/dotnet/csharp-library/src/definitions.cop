@@ -10,3 +10,38 @@ predicate awaitUsingDefault(Statement) => Statement.Kind == 'await'
     && (Statement.MemberName != 'ConfigureAwait' || Statement.Arguments:contains('true'))
 
 export predicate publicType(Type) => Type.Public
+
+# Method uses the dual-mode async bool parameter pattern
+export predicate dualModeMethod(Method) => Method.Parameters:any(asyncBoolParam)
+
+# Statement is in a dual-mode method (has async bool parameter)
+export predicate inDualModeMethod(Statement) => Statement.Method != null
+    && Statement.Method.Parameters:any(asyncBoolParam)
+
+# Statement has an ancestor if-statement whose condition references 'async'
+predicate isAsyncGuard(Ancestor) => Ancestor.Kind == 'if' && Ancestor.Condition:contains('async')
+export predicate guardedByAsyncCheck(Statement) => Statement.Ancestors:any(isAsyncGuard)
+
+# AZC0108: Detect wrong async argument values in guarded branches
+# In if(async) branch, passing async: false is wrong
+predicate isPositiveAsyncGuard(Ancestor) => Ancestor.Kind == 'if' && Ancestor.Condition == 'async'
+predicate inPositiveAsyncGuard(Statement) => Statement.Ancestors:any(isPositiveAsyncGuard)
+# In else branch of if(async) or in if(!async), passing async: true is wrong
+predicate isNegatedAsyncGuard(Ancestor) => Ancestor.Kind == 'if' && Ancestor.Condition:contains('!async')
+predicate isElseBranch(Ancestor) => Ancestor.Kind == 'else'
+predicate inNegatedAsyncGuard(Statement) => Statement.Ancestors:any(isNegatedAsyncGuard)
+    || Statement.Ancestors:any(isElseBranch)
+predicate hasAsyncFalseArg(Argument) => Argument:contains('async: false')
+export predicate wrongAsyncFalseInAsyncGuard(Statement) => Statement.Kind == 'call'
+    && inDualModeMethod && inPositiveAsyncGuard
+    && Statement.Arguments:any(hasAsyncFalseArg)
+predicate hasAsyncTrueArg(Argument) => Argument:contains('async: true')
+export predicate wrongAsyncTrueInSyncGuard(Statement) => Statement.Kind == 'call'
+    && inDualModeMethod && inNegatedAsyncGuard
+    && Statement.Arguments:any(hasAsyncTrueArg)
+
+# AZC0109: async parameter used outside of if condition or ternary
+# Detects calls that pass the 'async' variable as an argument (misuse)
+export predicate asyncParamPassedAsArg(Statement) => Statement.Kind == 'call'
+    && inDualModeMethod && !guardedByAsyncCheck
+    && Statement.Arguments:contains('async')

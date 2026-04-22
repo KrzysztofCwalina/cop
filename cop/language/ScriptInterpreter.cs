@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Diagnostics;
 
 namespace Cop.Lang;
@@ -7,6 +8,7 @@ public class ScriptInterpreter
     private readonly TypeRegistry _typeRegistry;
     private readonly int _maxOutputsPerCommand;
     private readonly TimeSpan _timeout;
+    private Dictionary<string, IList>? _globalResolvedSelects;
 
     public ScriptInterpreter(
         TypeRegistry typeRegistry,
@@ -71,6 +73,10 @@ public class ScriptInterpreter
 
         // Compute aggregate collection counts
         var aggregateCounts = ComputeAggregateCounts(documents);
+
+        // Pre-resolve let declarations that use :select() — these need global (cross-document) data
+        _globalResolvedSelects = PreResolveGlobalSelects(
+            letDeclarations, documents, predicateGroups, functionGroups);
 
         // Build command lookup table across all script files for expanding refs
         var allCommands = new Dictionary<string, List<CommandBlock>>(StringComparer.OrdinalIgnoreCase);
@@ -300,7 +306,23 @@ public class ScriptInterpreter
         {
             if (sw.Elapsed > _timeout) break;
 
-            var evaluator = new PredicateEvaluator(predicateGroups, document.Path, _typeRegistry, letDeclarations, functionGroups);
+            // Pre-resolve collection let bindings so predicates can reference them
+            var resolvedCollections = ResolveCollectionLetBindings(
+                letDeclarations, document, predicateGroups, functionGroups);
+
+            // Merge globally-resolved collections (from :select() lets) into per-document bindings
+            // Global selects override per-document versions since they aggregate across all documents
+            if (_globalResolvedSelects is not null)
+            {
+                resolvedCollections ??= new Dictionary<string, IList>();
+                foreach (var (key, value) in _globalResolvedSelects)
+                {
+                    resolvedCollections[key] = value;
+                }
+            }
+
+            var evaluator = new PredicateEvaluator(predicateGroups, document.Path, _typeRegistry,
+                letDeclarations, functionGroups, resolvedCollections);
             var items = ResolveCollection(cmd.Collection, document, evaluator, predicateGroups, letDeclarations, functionGroups);
             items = ApplyFilters(items, itemType, cmd.Filters, evaluator, functionGroups);
 
@@ -411,6 +433,49 @@ public class ScriptInterpreter
     }
 
     /// <summary>
+    /// Pre-resolve collection let bindings (e.g., let factoryTypes = Code.Types:where(isFactory))
+    /// so they can be accessed from within predicates. Value bindings and collection unions are skipped
+    /// since they are already handled by the evaluator.
+    /// </summary>
+    private Dictionary<string, IList>? ResolveCollectionLetBindings(
+        Dictionary<string, LetDeclaration> letDeclarations,
+        Document document,
+        Dictionary<string, List<PredicateDefinition>> predicateGroups,
+        Dictionary<string, List<FunctionDefinition>> functionGroups)
+    {
+        Dictionary<string, IList>? resolved = null;
+        // Temporary evaluator without resolved collections for bootstrapping
+        var bootstrapEvaluator = new PredicateEvaluator(
+            predicateGroups, document.Path, _typeRegistry, letDeclarations, functionGroups);
+
+        foreach (var (name, letDecl) in letDeclarations)
+        {
+            // Skip value bindings and collection unions — handled by the evaluator directly
+            if (letDecl.IsValueBinding || letDecl.IsCollectionUnion) continue;
+            // Skip check-level lets (those with actions like :toWarning) — they are commands, not data
+            if (letDecl.Filters.Any(f =>
+                (f is FunctionCallExpr fc && IsActionFilter(fc.Name)) ||
+                (f is PredicateCallExpr pc && IsActionFilter(pc.Name)))) continue;
+
+            try
+            {
+                var items = ResolveCollection(
+                    name, document, bootstrapEvaluator, predicateGroups, letDeclarations, functionGroups);
+                resolved ??= new Dictionary<string, IList>();
+                resolved[name] = items;
+            }
+            catch
+            {
+                // If resolution fails (e.g., depends on unresolved bindings), skip silently
+            }
+        }
+        return resolved;
+    }
+
+    private static bool IsActionFilter(string name) =>
+        name is "toError" or "toWarning" or "toInfo" or "toOutput" or "toSave";
+
+    /// <summary>
     /// Apply a chain of filters to a list of items. Each filter is either:
     /// - A predicate (Where): keeps items matching the predicate
     /// - A function (Select/Map): transforms each item into a new typed object
@@ -427,7 +492,26 @@ public class ScriptInterpreter
         {
             // Detect if this filter is a function call
             var funcName = GetFunctionNameFromFilter(filter);
-            if (funcName != null && functionGroups.ContainsKey(funcName))
+
+            // Handle :select() — project each item to a string value
+            if (funcName == "select")
+            {
+                var fieldArgs = GetFilterArgs(filter);
+                if (fieldArgs.Count > 0)
+                {
+                    currentItems = currentItems
+                        .Where(item => item is not null)
+                        .Select(item =>
+                        {
+                            var value = evaluator.EvaluateField(fieldArgs[0], item, currentType);
+                            return (object)(value?.ToString() ?? "");
+                        })
+                        .ToList();
+                    currentType = "string";
+                    continue;
+                }
+            }
+            else if (funcName != null && functionGroups.ContainsKey(funcName))
             {
                 // Map step: transform each item using the function
                 var funcArgs = GetFilterArgs(filter);
@@ -891,6 +975,80 @@ public class ScriptInterpreter
         }
 
         return counts;
+    }
+
+    /// <summary>
+    /// Pre-resolve let declarations that use :select() across ALL documents.
+    /// These produce string lists used for cross-document comparisons (e.g., API compat).
+    /// </summary>
+    private Dictionary<string, IList>? PreResolveGlobalSelects(
+        Dictionary<string, LetDeclaration> letDeclarations,
+        List<Document> documents,
+        Dictionary<string, List<PredicateDefinition>> predicateGroups,
+        Dictionary<string, List<FunctionDefinition>> functionGroups)
+    {
+        // Find let declarations that use :select()
+        var selectLets = letDeclarations
+            .Where(kv => !kv.Value.IsValueBinding && !kv.Value.IsCollectionUnion &&
+                         kv.Value.Filters.Any(f => f is FunctionCallExpr fc && fc.Name == "select"))
+            .ToList();
+
+        if (selectLets.Count == 0) return null;
+
+        // Aggregate per-document collection items
+        var aggregated = new Dictionary<string, List<object>>();
+        foreach (var collName in _typeRegistry.GetDocumentCollectionNames())
+        {
+            var allItems = new List<object>();
+            foreach (var doc in documents)
+            {
+                var items = _typeRegistry.GetCollectionItems(collName, doc);
+                if (items is not null)
+                    allItems.AddRange(items);
+            }
+            if (allItems.Count > 0)
+                aggregated[collName] = allItems;
+        }
+
+        // Temporarily register aggregated collections as global for resolution
+        var previousGlobals = new Dictionary<string, List<object>?>();
+        foreach (var (name, items) in aggregated)
+        {
+            previousGlobals[name] = _typeRegistry.GetGlobalCollectionItems(name);
+            _typeRegistry.RegisterGlobalCollection(name, items);
+        }
+
+        try
+        {
+            var evaluator = new PredicateEvaluator(predicateGroups, "", _typeRegistry, letDeclarations, functionGroups);
+            var resolved = new Dictionary<string, IList>();
+
+            foreach (var (name, letDecl) in selectLets)
+            {
+                try
+                {
+                    var items = ResolveGlobalCollection(name, evaluator, predicateGroups, letDeclarations, functionGroups);
+                    resolved[name] = items;
+                }
+                catch
+                {
+                    // Skip if resolution fails
+                }
+            }
+
+            return resolved.Count > 0 ? resolved : null;
+        }
+        finally
+        {
+            // Restore previous global collection state
+            foreach (var (name, prev) in previousGlobals)
+            {
+                if (prev is not null)
+                    _typeRegistry.RegisterGlobalCollection(name, prev);
+                else
+                    _typeRegistry.UnregisterGlobalCollection(name);
+            }
+        }
     }
 
     private RichString ResolveAggregateTemplate(string template, Dictionary<string, int> aggregateCounts)

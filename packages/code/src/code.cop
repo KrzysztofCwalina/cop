@@ -18,7 +18,11 @@ export type Type = {
     Decorators : [string],
     Line : int,
     File : File?,
-    Source : string
+    Source : string,
+    Documented : bool,
+    Fields : [Field],
+    Properties : [Property],
+    Events : [Event]
 }
 
 export type Method = {
@@ -36,10 +40,62 @@ export type Method = {
     Parameters : [Parameter],
     Statements : [Statement],
     Decorators : [string],
-    Line : int
+    Line : int,
+    Documented : bool
 }
 
 export type Constructor = Method & {}
+
+export type Field = {
+    Name : string,
+    Type : TypeReference?,
+    Public : bool,
+    Private : bool,
+    Protected : bool,
+    Internal : bool,
+    Static : bool,
+    Readonly : bool,
+    Const : bool,
+    Line : int
+}
+
+export type Property = {
+    Name : string,
+    Type : TypeReference?,
+    Public : bool,
+    Protected : bool,
+    Private : bool,
+    Internal : bool,
+    Static : bool,
+    Abstract : bool,
+    Virtual : bool,
+    Override : bool,
+    HasGetter : bool,
+    HasSetter : bool,
+    Documented : bool,
+    Line : int
+}
+
+export type Event = {
+    Name : string,
+    Type : TypeReference?,
+    Public : bool,
+    Protected : bool,
+    Private : bool,
+    Internal : bool,
+    Static : bool,
+    Line : int
+}
+
+export type Api = {
+    Kind : string,
+    TypeName : string,
+    MemberName : string,
+    Signature : string,
+    Line : int,
+    File : File?,
+    Source : string
+}
 
 export type Parameter = {
     Name : string,
@@ -47,6 +103,7 @@ export type Parameter = {
     Variadic : bool,
     Kwargs : bool,
     Defaulted : bool,
+    DefaultValue : string?,
     Line : int
 }
 
@@ -70,7 +127,13 @@ export type Statement = {
     Generic : bool,
     ErrorHandler : bool,
     File : File?,
-    Source : string
+    Source : string,
+    Method : Method?,
+    Parent : Statement?,
+    Children : [Statement],
+    Ancestors : [Statement],
+    Condition : string?,
+    Expression : string?
 }
 
 export type Call = Statement & {

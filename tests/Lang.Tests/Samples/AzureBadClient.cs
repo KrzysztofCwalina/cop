@@ -66,6 +66,14 @@ public class BadServiceClient
         return new HttpResponseMessage();
     }
 
+    // AZC0020 violation: Async call doesn't propagate CancellationToken
+    public virtual async Task ProcessAsync(CancellationToken cancellationToken)
+    {
+        await InnerWorkAsync();
+    }
+
+    private Task InnerWorkAsync() => Task.CompletedTask;
+
     // AZC0018 violation: Protocol method returning a model type instead of Response/Operation
     public virtual Task<MyModel> GetModelAsync(RequestContext context)
     {
@@ -74,6 +82,9 @@ public class BadServiceClient
 }
 
 public class MyModel { }
+
+// AZC0012 violation: Single-word public type name
+public class Processor { }
 
 // AZC0030 violation: Model with Collection suffix
 public class ItemCollection { }

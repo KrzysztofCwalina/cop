@@ -17,7 +17,6 @@ public class CSharpSourceParser : ISourceParser
         var root = tree.GetCompilationUnitRoot();
 
         var types = new List<TypeDeclaration>();
-        var statements = new List<StatementInfo>();
 
         // Extract using directives
         var usings = root.Usings
@@ -46,19 +45,18 @@ public class CSharpSourceParser : ISourceParser
             }
         }
 
-        foreach (var method in root.DescendantNodes().OfType<BaseMethodDeclarationSyntax>())
-        {
-            if (method.Body != null)
-                ExtractStatements(method.Body, statements, isInMethod: true);
-            if (method.ExpressionBody != null)
-                ExtractExpressionStatement(method.ExpressionBody.Expression, statements,
-                    LineOf(method.ExpressionBody), isInMethod: true);
-        }
+        // Collect all statements from methods (already built as trees during type extraction)
+        // plus global and assembly-level statements
+        var allStatements = new List<StatementInfo>();
+
+        // Flatten method statements from all types (already constructed)
+        foreach (var type in types)
+            FlattenTypeStatements(type, allStatements);
 
         // Extract top-level (global) statements
         foreach (var globalStmt in root.Members.OfType<GlobalStatementSyntax>())
         {
-            ExtractStatement(globalStmt.Statement, statements, isInMethod: false);
+            ExtractStatement(globalStmt.Statement, allStatements, isInMethod: false, method: null, parent: null);
         }
 
         // Extract assembly-level attributes as statements
@@ -70,15 +68,35 @@ public class CSharpSourceParser : ISourceParser
                 var attrName = attr.Name.ToString().Replace("Attribute", "");
                 var args = attr.ArgumentList?.Arguments
                     .Select(a => a.Expression.ToString().Trim('"')).ToList() ?? [];
-                statements.Add(new StatementInfo("attribute", [], attrName, null, args, LineOf(attrList), false));
+                allStatements.Add(new StatementInfo("attribute", [], attrName, null, args, LineOf(attrList), false));
             }
         }
 
-        return new SourceFile(filePath, "csharp", types, statements, sourceText)
+        return new SourceFile(filePath, "csharp", types, allStatements, sourceText)
         {
             Usings = usings,
             Namespace = ns
         };
+    }
+
+    private static void FlattenTypeStatements(TypeDeclaration type, List<StatementInfo> allStatements)
+    {
+        foreach (var ctor in type.Constructors)
+            FlattenStatements(ctor.Statements, allStatements);
+        foreach (var method in type.Methods)
+            FlattenStatements(method.Statements, allStatements);
+        foreach (var nested in type.NestedTypes)
+            FlattenTypeStatements(nested, allStatements);
+    }
+
+    private static void FlattenStatements(List<StatementInfo> statements, List<StatementInfo> target)
+    {
+        foreach (var stmt in statements)
+        {
+            target.Add(stmt);
+            if (stmt._children.Count > 0)
+                FlattenStatements(stmt._children, target);
+        }
     }
 
     private static TypeDeclaration ExtractType(TypeDeclarationSyntax syntax)
@@ -102,6 +120,9 @@ public class CSharpSourceParser : ISourceParser
         var constructors = new List<MethodDeclaration>();
         var methods = new List<MethodDeclaration>();
         var nestedTypes = new List<TypeDeclaration>();
+        var fields = new List<FieldDeclaration>();
+        var properties = new List<PropertyDeclaration>();
+        var events = new List<EventDeclaration>();
 
         foreach (var member in syntax.Members)
         {
@@ -109,6 +130,14 @@ public class CSharpSourceParser : ISourceParser
                 constructors.Add(ExtractConstructor(ctor));
             else if (member is MethodDeclarationSyntax method)
                 methods.Add(ExtractMethod(method));
+            else if (member is FieldDeclarationSyntax field)
+                fields.AddRange(ExtractFields(field));
+            else if (member is PropertyDeclarationSyntax prop)
+                properties.Add(ExtractProperty(prop));
+            else if (member is EventFieldDeclarationSyntax eventField)
+                events.AddRange(ExtractEventFields(eventField));
+            else if (member is EventDeclarationSyntax eventDecl)
+                events.Add(ExtractEvent(eventDecl));
             else if (member is TypeDeclarationSyntax nestedType)
                 nestedTypes.Add(ExtractType(nestedType));
             else if (member is EnumDeclarationSyntax nestedEnum)
@@ -117,7 +146,13 @@ public class CSharpSourceParser : ISourceParser
 
         return new TypeDeclaration(
             syntax.Identifier.Text, kind, modifiers, baseTypes, decorators,
-            constructors, methods, nestedTypes, [], LineOf(syntax));
+            constructors, methods, nestedTypes, [], LineOf(syntax))
+        {
+            HasDocComment = HasDocComment(syntax),
+            Fields = fields,
+            Properties = properties,
+            Events = events
+        };
     }
 
     private static TypeDeclaration ExtractEnum(EnumDeclarationSyntax syntax) =>
@@ -125,40 +160,92 @@ public class CSharpSourceParser : ISourceParser
             syntax.BaseList?.Types.Select(t => t.Type.ToString()).ToList() ?? [],
             [], [], [], [],
             syntax.Members.Select(m => m.Identifier.Text).ToList(),
-            LineOf(syntax));
+            LineOf(syntax))
+        {
+            HasDocComment = HasDocComment(syntax)
+        };
 
     private static MethodDeclaration ExtractConstructor(ConstructorDeclarationSyntax syntax)
     {
+        var method = new MethodDeclaration(".ctor", ExtractModifiers(syntax.Modifiers), [],
+            null, syntax.ParameterList.Parameters.Select(ExtractParameter).ToList(),
+            LineOf(syntax))
+        {
+            HasDocComment = HasDocComment(syntax)
+        };
         var methodStatements = new List<StatementInfo>();
         if (syntax.Body != null)
-            ExtractStatements(syntax.Body, methodStatements, isInMethod: true);
+            ExtractStatements(syntax.Body, methodStatements, isInMethod: true, method: method, parent: null);
         if (syntax.ExpressionBody != null)
             ExtractExpressionStatement(syntax.ExpressionBody.Expression, methodStatements,
-                LineOf(syntax.ExpressionBody), isInMethod: true);
-        return new(".ctor", ExtractModifiers(syntax.Modifiers), [],
-            null, syntax.ParameterList.Parameters.Select(ExtractParameter).ToList(),
-            LineOf(syntax)) { Statements = methodStatements };
+                LineOf(syntax.ExpressionBody), isInMethod: true, method: method, parent: null);
+        method.Statements = methodStatements;
+        return method;
     }
 
     private static MethodDeclaration ExtractMethod(MethodDeclarationSyntax syntax)
     {
-        var methodStatements = new List<StatementInfo>();
-        if (syntax.Body != null)
-            ExtractStatements(syntax.Body, methodStatements, isInMethod: true);
-        if (syntax.ExpressionBody != null)
-            ExtractExpressionStatement(syntax.ExpressionBody.Expression, methodStatements,
-                LineOf(syntax.ExpressionBody), isInMethod: true);
-        return new(syntax.Identifier.Text, ExtractModifiers(syntax.Modifiers),
+        var method = new MethodDeclaration(syntax.Identifier.Text, ExtractModifiers(syntax.Modifiers),
             syntax.AttributeLists.SelectMany(a => a.Attributes).Select(a => a.Name.ToString()).ToList(),
             ExtractTypeReference(syntax.ReturnType),
             syntax.ParameterList.Parameters.Select(ExtractParameter).ToList(),
-            LineOf(syntax)) { Statements = methodStatements };
+            LineOf(syntax))
+        {
+            HasDocComment = HasDocComment(syntax)
+        };
+        var methodStatements = new List<StatementInfo>();
+        if (syntax.Body != null)
+            ExtractStatements(syntax.Body, methodStatements, isInMethod: true, method: method, parent: null);
+        if (syntax.ExpressionBody != null)
+            ExtractExpressionStatement(syntax.ExpressionBody.Expression, methodStatements,
+                LineOf(syntax.ExpressionBody), isInMethod: true, method: method, parent: null);
+        method.Statements = methodStatements;
+        return method;
+    }
+
+    private static List<FieldDeclaration> ExtractFields(FieldDeclarationSyntax syntax)
+    {
+        var modifiers = ExtractModifiers(syntax.Modifiers);
+        var type = ExtractTypeReference(syntax.Declaration.Type);
+        return syntax.Declaration.Variables.Select(v =>
+            new FieldDeclaration(v.Identifier.Text, type, modifiers, LineOf(v))
+        ).ToList();
+    }
+
+    private static PropertyDeclaration ExtractProperty(PropertyDeclarationSyntax syntax)
+    {
+        var hasGetter = syntax.AccessorList?.Accessors.Any(a => a.IsKind(SyntaxKind.GetAccessorDeclaration)) ?? syntax.ExpressionBody != null;
+        var hasSetter = syntax.AccessorList?.Accessors.Any(a => a.IsKind(SyntaxKind.SetAccessorDeclaration) || a.IsKind(SyntaxKind.InitAccessorDeclaration)) ?? false;
+        return new PropertyDeclaration(
+            syntax.Identifier.Text, ExtractTypeReference(syntax.Type),
+            ExtractModifiers(syntax.Modifiers), LineOf(syntax))
+        {
+            HasGetter = hasGetter,
+            HasSetter = hasSetter,
+            HasDocComment = HasDocComment(syntax)
+        };
+    }
+
+    private static EventDeclaration ExtractEvent(EventDeclarationSyntax syntax) =>
+        new(syntax.Identifier.Text, ExtractTypeReference(syntax.Type),
+            ExtractModifiers(syntax.Modifiers), LineOf(syntax));
+
+    private static List<EventDeclaration> ExtractEventFields(EventFieldDeclarationSyntax syntax)
+    {
+        var modifiers = ExtractModifiers(syntax.Modifiers);
+        var type = syntax.Declaration.Type is not null ? ExtractTypeReference(syntax.Declaration.Type) : null;
+        return syntax.Declaration.Variables.Select(v =>
+            new EventDeclaration(v.Identifier.Text, type, modifiers, LineOf(v))
+        ).ToList();
     }
 
     private static ParameterDeclaration ExtractParameter(ParameterSyntax syntax) =>
         new(syntax.Identifier.Text, syntax.Type is not null ? ExtractTypeReference(syntax.Type) : null,
             syntax.Modifiers.Any(SyntaxKind.ParamsKeyword), false,
-            syntax.Default is not null, LineOf(syntax));
+            syntax.Default is not null, LineOf(syntax))
+        {
+            DefaultValueText = syntax.Default?.Value.ToString()
+        };
 
     private static TypeReference ExtractTypeReference(TypeSyntax typeSyntax)
     {
@@ -221,19 +308,34 @@ public class CSharpSourceParser : ISourceParser
                 SyntaxKind.AsyncKeyword => Modifier.Async,
                 SyntaxKind.OverrideKeyword => Modifier.Override,
                 SyntaxKind.ReadOnlyKeyword => Modifier.Readonly,
+                SyntaxKind.ConstKeyword => Modifier.Const,
                 _ => Modifier.None
             };
         }
         return result;
     }
 
-    private static void ExtractStatements(BlockSyntax block, List<StatementInfo> results, bool isInMethod = true)
+    private static void ExtractStatements(BlockSyntax block, List<StatementInfo> results,
+        bool isInMethod = true, MethodDeclaration? method = null, StatementInfo? parent = null)
     {
         foreach (var stmt in block.Statements)
-            ExtractStatement(stmt, results, isInMethod);
+            ExtractStatement(stmt, results, isInMethod, method, parent);
     }
 
-    private static void ExtractStatement(StatementSyntax stmt, List<StatementInfo> results, bool isInMethod = true)
+    /// <summary>
+    /// Extract a statement body — handles both block and single-statement (non-block) bodies.
+    /// </summary>
+    private static void ExtractStatementBody(StatementSyntax body, List<StatementInfo> results,
+        bool isInMethod, MethodDeclaration? method, StatementInfo? parent)
+    {
+        if (body is BlockSyntax block)
+            ExtractStatements(block, results, isInMethod, method, parent);
+        else
+            ExtractStatement(body, results, isInMethod, method, parent);
+    }
+
+    private static void ExtractStatement(StatementSyntax stmt, List<StatementInfo> results,
+        bool isInMethod = true, MethodDeclaration? method = null, StatementInfo? parent = null)
     {
         int line = LineOf(stmt);
         switch (stmt)
@@ -246,65 +348,158 @@ public class CSharpSourceParser : ISourceParser
                 if (typeName == "dynamic") keywords.Add("dynamic");
                 foreach (var v in decl.Declaration.Variables)
                 {
-                    results.Add(new StatementInfo("declaration", keywords, typeName, v.Identifier.Text, [], line, isInMethod));
+                    var declStmt = new StatementInfo("declaration", keywords, typeName, v.Identifier.Text, [], line, isInMethod)
+                    {
+                        Method = method, Parent = parent,
+                        Expression = v.Initializer?.Value.ToString()
+                    };
+                    results.Add(declStmt);
+                    parent?._children.Add(declStmt);
                     // Also extract expressions from initializers (e.g., await, invocations)
                     if (v.Initializer?.Value != null)
-                        ExtractExpressionStatement(v.Initializer.Value, results, line, isInMethod);
+                        ExtractExpressionStatement(v.Initializer.Value, results, line, isInMethod, method, parent);
                 }
                 break;
             }
             case ExpressionStatementSyntax exprStmt:
-                ExtractExpressionStatement(exprStmt.Expression, results, line, isInMethod);
+                ExtractExpressionStatement(exprStmt.Expression, results, line, isInMethod, method, parent);
                 break;
             case ThrowStatementSyntax throwStmt:
             {
                 string? typeName = throwStmt.Expression is ObjectCreationExpressionSyntax creation
                     ? creation.Type.ToString() : null;
-                results.Add(new StatementInfo("throw", [], typeName, null, [], line, isInMethod));
+                var throwInfo = new StatementInfo("throw", [], typeName, null, [], line, isInMethod)
+                    { Method = method, Parent = parent };
+                results.Add(throwInfo);
+                parent?._children.Add(throwInfo);
                 break;
             }
             case ReturnStatementSyntax returnStmt:
-                results.Add(new StatementInfo("return", [], null, null, [], line, isInMethod));
+            {
+                var retInfo = new StatementInfo("return", [], null, null, [], line, isInMethod)
+                {
+                    Method = method, Parent = parent,
+                    Expression = returnStmt.Expression?.ToString()
+                };
+                results.Add(retInfo);
+                parent?._children.Add(retInfo);
                 if (returnStmt.Expression != null)
-                    ExtractExpressionStatement(returnStmt.Expression, results, line, isInMethod);
+                    ExtractExpressionStatement(returnStmt.Expression, results, line, isInMethod, method, parent);
                 break;
+            }
             case UsingStatementSyntax usingStmt:
-                results.Add(new StatementInfo("using", [], null, null, [], line, isInMethod));
-                if (usingStmt.Statement is BlockSyntax ub) ExtractStatements(ub, results, isInMethod);
+            {
+                var usingInfo = new StatementInfo("using", [], null, null, [], line, isInMethod)
+                    { Method = method, Parent = parent };
+                results.Add(usingInfo);
+                parent?._children.Add(usingInfo);
+                if (usingStmt.Statement != null)
+                    ExtractStatementBody(usingStmt.Statement, usingInfo._children, isInMethod, method, usingInfo);
                 break;
+            }
             case ForEachStatementSyntax forEach:
-                results.Add(new StatementInfo("foreach", [], forEach.Type.ToString(),
-                    forEach.Identifier.Text, [], line, isInMethod));
-                if (forEach.Statement is BlockSyntax fb) ExtractStatements(fb, results, isInMethod);
+            {
+                var feInfo = new StatementInfo("foreach", [], forEach.Type.ToString(),
+                    forEach.Identifier.Text, [], line, isInMethod)
+                    { Method = method, Parent = parent, Condition = forEach.Expression.ToString() };
+                results.Add(feInfo);
+                parent?._children.Add(feInfo);
+                ExtractStatementBody(forEach.Statement, feInfo._children, isInMethod, method, feInfo);
                 break;
+            }
             case TryStatementSyntax tryStmt:
-                if (tryStmt.Block != null) ExtractStatements(tryStmt.Block, results, isInMethod);
+            {
+                var tryInfo = new StatementInfo("try", [], null, null, [], line, isInMethod)
+                    { Method = method, Parent = parent };
+                results.Add(tryInfo);
+                parent?._children.Add(tryInfo);
+                if (tryStmt.Block != null)
+                    ExtractStatements(tryStmt.Block, tryInfo._children, isInMethod, method, tryInfo);
                 foreach (var c in tryStmt.Catches)
                 {
                     string? caughtType = c.Declaration?.Type.ToString();
                     bool hasRethrow = c.Block != null && c.Block.DescendantNodes().OfType<ThrowStatementSyntax>().Any();
                     bool isGeneric = caughtType is null or "Exception" or "System.Exception";
-                    results.Add(new StatementInfo("catch", [], caughtType, null, [], LineOf(c), isInMethod) { HasRethrow = hasRethrow, IsErrorHandler = true, IsGenericErrorHandler = isGeneric });
-                    if (c.Block != null) ExtractStatements(c.Block, results, isInMethod);
+                    var catchInfo = new StatementInfo("catch", [], caughtType, null, [], LineOf(c), isInMethod)
+                    {
+                        HasRethrow = hasRethrow, IsErrorHandler = true, IsGenericErrorHandler = isGeneric,
+                        Method = method, Parent = parent
+                    };
+                    results.Add(catchInfo);
+                    parent?._children.Add(catchInfo);
+                    if (c.Block != null)
+                        ExtractStatements(c.Block, catchInfo._children, isInMethod, method, catchInfo);
                 }
                 break;
+            }
             case IfStatementSyntax ifStmt:
-                if (ifStmt.Statement is BlockSyntax ib) ExtractStatements(ib, results, isInMethod);
-                if (ifStmt.Else?.Statement is BlockSyntax eb) ExtractStatements(eb, results, isInMethod);
+            {
+                var ifInfo = new StatementInfo("if", [], null, null, [], line, isInMethod)
+                {
+                    Method = method, Parent = parent,
+                    Condition = ifStmt.Condition.ToString()
+                };
+                results.Add(ifInfo);
+                parent?._children.Add(ifInfo);
+                ExtractStatementBody(ifStmt.Statement, ifInfo._children, isInMethod, method, ifInfo);
+                if (ifStmt.Else != null)
+                {
+                    // else is a child of the if-statement so that statements inside else
+                    // have the if (with its Condition) as an ancestor — enables guard checks
+                    var elseInfo = new StatementInfo("else", [], null, null, [], LineOf(ifStmt.Else), isInMethod)
+                        { Method = method, Parent = ifInfo };
+                    results.Add(elseInfo);
+                    ifInfo._children.Add(elseInfo);
+                    ExtractStatementBody(ifStmt.Else.Statement, elseInfo._children, isInMethod, method, elseInfo);
+                }
                 break;
+            }
             case WhileStatementSyntax ws:
-                if (ws.Statement is BlockSyntax wb) ExtractStatements(wb, results, isInMethod);
+            {
+                var whileInfo = new StatementInfo("while", [], null, null, [], line, isInMethod)
+                {
+                    Method = method, Parent = parent,
+                    Condition = ws.Condition.ToString()
+                };
+                results.Add(whileInfo);
+                parent?._children.Add(whileInfo);
+                ExtractStatementBody(ws.Statement, whileInfo._children, isInMethod, method, whileInfo);
                 break;
+            }
             case ForStatementSyntax fs:
-                if (fs.Statement is BlockSyntax forb) ExtractStatements(forb, results, isInMethod);
+            {
+                var forInfo = new StatementInfo("for", [], null, null, [], line, isInMethod)
+                {
+                    Method = method, Parent = parent,
+                    Condition = fs.Condition?.ToString()
+                };
+                results.Add(forInfo);
+                parent?._children.Add(forInfo);
+                ExtractStatementBody(fs.Statement, forInfo._children, isInMethod, method, forInfo);
                 break;
+            }
+            case SwitchStatementSyntax sw:
+            {
+                var switchInfo = new StatementInfo("switch", [], null, null, [], line, isInMethod)
+                {
+                    Method = method, Parent = parent,
+                    Expression = sw.Expression.ToString()
+                };
+                results.Add(switchInfo);
+                parent?._children.Add(switchInfo);
+                foreach (var section in sw.Sections)
+                    foreach (var sectionStmt in section.Statements)
+                        ExtractStatement(sectionStmt, switchInfo._children, isInMethod, method, switchInfo);
+                break;
+            }
             case BlockSyntax nested:
-                ExtractStatements(nested, results, isInMethod);
+                ExtractStatements(nested, results, isInMethod, method, parent);
                 break;
         }
     }
 
-    private static void ExtractExpressionStatement(ExpressionSyntax expr, List<StatementInfo> results, int line, bool isInMethod = true)
+    private static void ExtractExpressionStatement(ExpressionSyntax expr, List<StatementInfo> results,
+        int line, bool isInMethod = true, MethodDeclaration? method = null, StatementInfo? parent = null)
     {
         switch (expr)
         {
@@ -323,23 +518,43 @@ public class CSharpSourceParser : ISourceParser
                 }
                 var args = invocation.ArgumentList.Arguments
                     .Select(a => a.ToString()).ToList();
-                results.Add(new StatementInfo("call", [], typeName, memberName, args, line, isInMethod));
+                var callInfo = new StatementInfo("call", [], typeName, memberName, args, line, isInMethod)
+                {
+                    Method = method, Parent = parent,
+                    Expression = invocation.ToString()
+                };
+                results.Add(callInfo);
+                parent?._children.Add(callInfo);
                 break;
             }
             case AwaitExpressionSyntax awaitExpr:
+            {
                 var (awaitType, awaitMember, awaitArgs) = ExtractInvocationParts(awaitExpr.Expression);
-                results.Add(new StatementInfo("await", [], awaitType, awaitMember, awaitArgs, line, isInMethod));
-                ExtractExpressionStatement(awaitExpr.Expression, results, line, isInMethod);
+                var awaitInfo = new StatementInfo("await", [], awaitType, awaitMember, awaitArgs, line, isInMethod)
+                {
+                    Method = method, Parent = parent,
+                    Expression = awaitExpr.Expression.ToString()
+                };
+                results.Add(awaitInfo);
+                parent?._children.Add(awaitInfo);
+                ExtractExpressionStatement(awaitExpr.Expression, results, line, isInMethod, method, parent);
                 break;
+            }
             case AssignmentExpressionSyntax assignment:
-                ExtractExpressionStatement(assignment.Right, results, line, isInMethod);
+                ExtractExpressionStatement(assignment.Right, results, line, isInMethod, method, parent);
                 break;
             case ObjectCreationExpressionSyntax objCreate:
             {
                 var ctorType = ExtractBaseTypeName(objCreate.Type);
                 var args = objCreate.ArgumentList?.Arguments
                     .Select(a => a.ToString()).ToList() ?? [];
-                results.Add(new StatementInfo("call", [], ctorType, null, args, line, isInMethod));
+                var ctorInfo = new StatementInfo("call", [], ctorType, null, args, line, isInMethod)
+                {
+                    Method = method, Parent = parent,
+                    Expression = objCreate.ToString()
+                };
+                results.Add(ctorInfo);
+                parent?._children.Add(ctorInfo);
                 break;
             }
         }
@@ -372,6 +587,10 @@ public class CSharpSourceParser : ISourceParser
 
     private static int LineOf(SyntaxNodeOrToken node) =>
         node.GetLocation()!.GetLineSpan().StartLinePosition.Line + 1;
+
+    private static bool HasDocComment(SyntaxNode node) =>
+        node.GetLeadingTrivia().Any(t => t.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia)
+            || t.IsKind(SyntaxKind.MultiLineDocumentationCommentTrivia));
 
     private static string ExtractBaseTypeName(TypeSyntax type) =>
         type is GenericNameSyntax generic ? generic.Identifier.Text : type.ToString();

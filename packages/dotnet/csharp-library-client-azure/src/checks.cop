@@ -161,9 +161,41 @@ export let protocol-method-return-type = Clients:protocolWithInvalidReturn
 export let no-ambiguous-overloads = Clients:ambiguousOverload
     :toWarning('{Type.Name} may have ambiguous protocol/convenience overloads')
 
+## InternalsVisibleTo targeting non-test assemblies (AZC0112)
+export let internals-visible-to-non-test = Code.Statements:csharp:internalsVisibleToNonTest
+    :toWarning('InternalsVisibleTo should only target test assemblies')
+
 ## InternalsVisibleTo — export for project-level filtering
 export let internals-visible-to = Code.Statements:csharp:internalsVisibleTo
     :toWarning('InternalsVisibleTo targets non-test assembly — internal APIs become public surface')
 
+## ClientSettings constructor should not combine settings param with other params (AZC0021)
+export let settings-ctor-isolation = Clients:settingsCtorOverloaded
+    :toWarning('{Type.Name} constructor should not combine ClientSettings with other parameters')
+
+## Model type name duplicates a common .NET BCL type name (AZC0034)
+export let duplicate-bcl-type-name = Models:duplicatesBclTypeName
+    :toWarning('{Type.Name} duplicates a common .NET type name — use a more specific name')
+
+## Output model types should have a corresponding ModelFactory method (AZC0035)
+export let model-needs-factory = Models:outputModelWithoutFactory
+    :toWarning('{Type.Name} has no corresponding ModelFactory method — add one for testability')
+
+## Use EnsureCompleted() instead of GetAwaiter().GetResult() in sync methods (AZC0104)
+export let use-ensure-completed = Code.Statements:csharp:getResultInSyncMethod
+    :toWarning('Use EnsureCompleted() instead of GetAwaiter().GetResult()')
+
+## Don't call *Async methods from sync context (AZC0107)
+export let no-public-async-in-sync = Code.Statements:csharp:asyncCallInSyncMethod
+    :toWarning('Do not call {Statement.MemberName} from sync method')
+
+## Avoid single-word public type names — too generic (AZC0012)
+export let no-single-word-type-name = Code.Types:csharp:publicType:singleWordName
+    :toWarning('{Type.Name} is a single-word type name — use a more descriptive multi-word name')
+
+## Async calls should propagate CancellationToken or RequestContext (AZC0020)
+export let cancellation-token-propagation = Code.Statements:csharp:asyncCallMissingToken
+    :toWarning('Async call should propagate CancellationToken or RequestContext')
+
 ## All Azure client library checks combined
-export let csharp-library-client-azure = [client-needs-token-credential, client-needs-mocking-ctor, options-inherits-base, client-needs-options-ctor, client-needs-simple-ctor, no-request-content-in-convenience, options-single-ctor-param, no-collection-suffix, no-request-suffix, no-parameter-suffix, no-option-suffix, no-resource-suffix, options-first-param-service-version, options-needs-service-version-enum, service-version-naming, service-version-default-value, service-method-needs-cancellation, no-banned-internal-types, no-raw-http-return-types, no-pipeline-types-in-api, model-reader-writer-context, protocol-method-return-type, no-ambiguous-overloads, internals-visible-to]
+export let csharp-library-client-azure = [client-needs-token-credential, client-needs-mocking-ctor, options-inherits-base, client-needs-options-ctor, client-needs-simple-ctor, no-request-content-in-convenience, options-single-ctor-param, no-collection-suffix, no-request-suffix, no-parameter-suffix, no-option-suffix, no-resource-suffix, options-first-param-service-version, options-needs-service-version-enum, service-version-naming, service-version-default-value, service-method-needs-cancellation, no-banned-internal-types, no-raw-http-return-types, no-pipeline-types-in-api, model-reader-writer-context, protocol-method-return-type, no-ambiguous-overloads, internals-visible-to, internals-visible-to-non-test, settings-ctor-isolation, duplicate-bcl-type-name, model-needs-factory, use-ensure-completed, no-public-async-in-sync, no-single-word-type-name, cancellation-token-propagation]

@@ -111,6 +111,11 @@ public class TypeRegistry
     /// </summary>
     public bool IsGlobalCollection(string name) => _globalCollections.ContainsKey(name);
 
+    /// <summary>
+    /// Removes a global collection registration.
+    /// </summary>
+    public void UnregisterGlobalCollection(string name) => _globalCollections.Remove(name);
+
     public bool HasType(string name) => _types.ContainsKey(name);
 
     public bool HasCollection(string name) => _collections.ContainsKey(name);

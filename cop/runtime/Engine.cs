@@ -355,10 +355,14 @@ public static class Engine
     private static List<Document> ParseSourceFiles(string codebasePath)
     {
         var parserRegistry = SourceParserRegistry.CreateDefault();
-        var extensions = new[] { ".cs", ".py" };
-        var filePaths = extensions
-            .SelectMany(ext => Directory.GetFiles(codebasePath, $"*{ext}", SearchOption.AllDirectories))
-            .Where(f => !f.Replace('\\', '/').Contains("/bin/") && !f.Replace('\\', '/').Contains("/obj/"))
+        var filePaths = Directory.GetFiles(codebasePath, "*.*", SearchOption.AllDirectories)
+            .Where(f =>
+            {
+                var normalized = f.Replace('\\', '/');
+                if (normalized.Contains("/bin/") || normalized.Contains("/obj/")) return false;
+                var ext = Path.GetExtension(f);
+                return parserRegistry.GetParser(ext) != null;
+            })
             .ToList();
 
         var documents = new List<Document>();
@@ -384,10 +388,10 @@ public static class Engine
             var relativePath = Path.GetRelativePath(codebasePath, filePath).Replace('\\', '/');
             var normalizedFile = sourceFile with { Path = relativePath };
 
-            // Pre-stamp StatementInfo.File references
+            // Pre-stamp StatementInfo.File references (in-place, no cloning)
             for (int i = 0; i < normalizedFile.Statements.Count; i++)
             {
-                normalizedFile.Statements[i] = normalizedFile.Statements[i] with { File = normalizedFile };
+                normalizedFile.Statements[i].File = normalizedFile;
             }
 
             // Pre-stamp TypeDeclaration.File references

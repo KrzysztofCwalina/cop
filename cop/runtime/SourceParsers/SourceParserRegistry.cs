@@ -19,6 +19,7 @@ public class SourceParserRegistry
         registry.Register(new CSharpSourceParser());
         registry.Register(new PythonSourceParser());
         registry.Register(new JavaScriptSourceParser());
+        registry.Register(new TextFileParser());
         return registry;
     }
 }

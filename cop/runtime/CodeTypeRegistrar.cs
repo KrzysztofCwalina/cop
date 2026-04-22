@@ -44,6 +44,10 @@ public static class CodeTypeRegistrar
                 ("Line", "int", false, false),
                 ("File", "File", true, false),
                 ("Source", "string", false, false),
+                ("Documented", "bool", false, false),
+                ("Fields", "Field", false, true),
+                ("Properties", "Property", false, true),
+                ("Events", "Event", false, true),
             ]);
         }
 
@@ -61,6 +65,7 @@ public static class CodeTypeRegistrar
                 ("Statements", "Statement", false, true),
                 ("Decorators", "string", false, true),
                 ("Line", "int", false, false),
+                ("Documented", "bool", false, false),
             ]);
         }
 
@@ -78,6 +83,47 @@ public static class CodeTypeRegistrar
                 ("Type", "TypeReference", true, false),
                 ("Variadic", "bool", false, false), ("Kwargs", "bool", false, false),
                 ("Defaulted", "bool", false, false),
+                ("DefaultValue", "string", true, false),
+            ]);
+        }
+
+        if (!registry.HasType("Field"))
+        {
+            RegisterType(registry, "Field", [
+                ("Name", "string", false, false),
+                ("Type", "TypeReference", true, false),
+                ("Public", "bool", false, false), ("Private", "bool", false, false),
+                ("Protected", "bool", false, false), ("Internal", "bool", false, false),
+                ("Static", "bool", false, false), ("Readonly", "bool", false, false),
+                ("Const", "bool", false, false),
+                ("Line", "int", false, false),
+            ]);
+        }
+
+        if (!registry.HasType("Property"))
+        {
+            RegisterType(registry, "Property", [
+                ("Name", "string", false, false),
+                ("Type", "TypeReference", true, false),
+                ("Public", "bool", false, false), ("Protected", "bool", false, false),
+                ("Private", "bool", false, false), ("Internal", "bool", false, false),
+                ("Static", "bool", false, false), ("Abstract", "bool", false, false),
+                ("Virtual", "bool", false, false), ("Override", "bool", false, false),
+                ("HasGetter", "bool", false, false), ("HasSetter", "bool", false, false),
+                ("Documented", "bool", false, false),
+                ("Line", "int", false, false),
+            ]);
+        }
+
+        if (!registry.HasType("Event"))
+        {
+            RegisterType(registry, "Event", [
+                ("Name", "string", false, false),
+                ("Type", "TypeReference", true, false),
+                ("Public", "bool", false, false), ("Protected", "bool", false, false),
+                ("Private", "bool", false, false), ("Internal", "bool", false, false),
+                ("Static", "bool", false, false),
+                ("Line", "int", false, false),
             ]);
         }
 
@@ -104,6 +150,12 @@ public static class CodeTypeRegistrar
                 ("ErrorHandler", "bool", false, false),
                 ("File", "File", true, false),
                 ("Source", "string", false, false),
+                ("Method", "Method", true, false),
+                ("Parent", "Statement", true, false),
+                ("Children", "Statement", false, true),
+                ("Ancestors", "Statement", false, true),
+                ("Condition", "string", true, false),
+                ("Expression", "string", true, false),
             ]);
         }
 
@@ -125,6 +177,20 @@ public static class CodeTypeRegistrar
             ]);
         }
 
+        if (!registry.HasType("Api"))
+        {
+            RegisterType(registry, "Api", [
+                ("Kind", "string", false, false),
+                ("TypeName", "string", false, false),
+                ("MemberName", "string", false, false),
+                ("Signature", "string", false, false),
+                ("Line", "int", false, false),
+                ("File", "File", true, false),
+                ("Source", "string", false, false),
+            ]);
+            registry.GetType("Api").TextConverter = o => ((ApiEntry)o).Signature;
+        }
+
         // Register built-in collections
         if (!registry.HasCollection("Types"))
             registry.RegisterCollection(new CollectionDeclaration("Types", "Type", 0));
@@ -136,6 +202,8 @@ public static class CodeTypeRegistrar
             registry.RegisterCollection(new CollectionDeclaration("Files", "File", 0));
         if (!registry.HasCollection("Members"))
             registry.RegisterCollection(new CollectionDeclaration("Members", "Member", 0));
+        if (!registry.HasCollection("Api"))
+            registry.RegisterCollection(new CollectionDeclaration("Api", "Api", 0));
 
         if (!registry.HasType("Member"))
         {
@@ -166,6 +234,10 @@ public static class CodeTypeRegistrar
         registry.RegisterClrType(typeof(LineInfo), "Line");
         registry.RegisterClrType(typeof(SourceFile), "File");
         registry.RegisterClrType(typeof(MemberInfo), "Member");
+        registry.RegisterClrType(typeof(ApiEntry), "Api");
+        registry.RegisterClrType(typeof(FieldDeclaration), "Field");
+        registry.RegisterClrType(typeof(PropertyDeclaration), "Property");
+        registry.RegisterClrType(typeof(EventDeclaration), "Event");
     }
 
     private static void RegisterPropertyAccessors(TypeRegistry registry)
@@ -188,6 +260,10 @@ public static class CodeTypeRegistrar
             ["MethodNames"] = o => (object)((TypeDeclaration)o).Methods.Select(m => m.Name).ToList(),
             ["File"] = o => ((TypeDeclaration)o).File,
             ["Source"] = o => ((TypeDeclaration)o).Source,
+            ["Documented"] = o => (object)((TypeDeclaration)o).HasDocComment,
+            ["Fields"] = o => (object)((TypeDeclaration)o).Fields,
+            ["Properties"] = o => (object)((TypeDeclaration)o).Properties,
+            ["Events"] = o => (object)((TypeDeclaration)o).Events,
         });
 
         registry.RegisterAccessors("Method", new()
@@ -207,6 +283,7 @@ public static class CodeTypeRegistrar
             ["Decorators"] = o => (object)((MethodDeclaration)o).Decorators,
             ["ReturnType"] = o => (object?)((MethodDeclaration)o).ReturnType,
             ["Line"] = o => (object)((MethodDeclaration)o).Line,
+            ["Documented"] = o => (object)((MethodDeclaration)o).HasDocComment,
         });
 
         registry.RegisterAccessors("Parameter", new()
@@ -216,6 +293,51 @@ public static class CodeTypeRegistrar
             ["Variadic"] = o => (object)((ParameterDeclaration)o).IsVariadic,
             ["Kwargs"] = o => (object)((ParameterDeclaration)o).IsKwargs,
             ["Defaulted"] = o => (object)((ParameterDeclaration)o).HasDefaultValue,
+            ["DefaultValue"] = o => ((ParameterDeclaration)o).DefaultValueText,
+        });
+
+        registry.RegisterAccessors("Field", new()
+        {
+            ["Name"] = o => ((FieldDeclaration)o).Name,
+            ["Type"] = o => (object?)((FieldDeclaration)o).Type,
+            ["Public"] = o => (object)((FieldDeclaration)o).IsPublic,
+            ["Private"] = o => (object)((FieldDeclaration)o).IsPrivate,
+            ["Protected"] = o => (object)((FieldDeclaration)o).IsProtected,
+            ["Internal"] = o => (object)((FieldDeclaration)o).IsInternal,
+            ["Static"] = o => (object)((FieldDeclaration)o).IsStatic,
+            ["Readonly"] = o => (object)((FieldDeclaration)o).IsReadonly,
+            ["Const"] = o => (object)((FieldDeclaration)o).IsConst,
+            ["Line"] = o => (object)((FieldDeclaration)o).Line,
+        });
+
+        registry.RegisterAccessors("Property", new()
+        {
+            ["Name"] = o => ((PropertyDeclaration)o).Name,
+            ["Type"] = o => (object?)((PropertyDeclaration)o).Type,
+            ["Public"] = o => (object)((PropertyDeclaration)o).IsPublic,
+            ["Protected"] = o => (object)((PropertyDeclaration)o).IsProtected,
+            ["Private"] = o => (object)((PropertyDeclaration)o).IsPrivate,
+            ["Internal"] = o => (object)((PropertyDeclaration)o).IsInternal,
+            ["Static"] = o => (object)((PropertyDeclaration)o).IsStatic,
+            ["Abstract"] = o => (object)((PropertyDeclaration)o).IsAbstract,
+            ["Virtual"] = o => (object)((PropertyDeclaration)o).IsVirtual,
+            ["Override"] = o => (object)((PropertyDeclaration)o).IsOverride,
+            ["HasGetter"] = o => (object)((PropertyDeclaration)o).HasGetter,
+            ["HasSetter"] = o => (object)((PropertyDeclaration)o).HasSetter,
+            ["Documented"] = o => (object)((PropertyDeclaration)o).HasDocComment,
+            ["Line"] = o => (object)((PropertyDeclaration)o).Line,
+        });
+
+        registry.RegisterAccessors("Event", new()
+        {
+            ["Name"] = o => ((EventDeclaration)o).Name,
+            ["Type"] = o => (object?)((EventDeclaration)o).Type,
+            ["Public"] = o => (object)((EventDeclaration)o).IsPublic,
+            ["Protected"] = o => (object)((EventDeclaration)o).IsProtected,
+            ["Private"] = o => (object)((EventDeclaration)o).IsPrivate,
+            ["Internal"] = o => (object)((EventDeclaration)o).IsInternal,
+            ["Static"] = o => (object)((EventDeclaration)o).IsStatic,
+            ["Line"] = o => (object)((EventDeclaration)o).Line,
         });
 
         registry.RegisterAccessors("TypeReference", new()
@@ -241,6 +363,12 @@ public static class CodeTypeRegistrar
             ["ErrorHandler"] = o => (object)((StatementInfo)o).IsErrorHandler,
             ["File"] = o => ((StatementInfo)o).File,
             ["Source"] = o => ((StatementInfo)o).Source,
+            ["Method"] = o => ((StatementInfo)o).Method,
+            ["Parent"] = o => ((StatementInfo)o).Parent,
+            ["Children"] = o => (object)((StatementInfo)o)._children,
+            ["Ancestors"] = o => (object)((StatementInfo)o).GetAncestors(),
+            ["Condition"] = o => ((StatementInfo)o).Condition,
+            ["Expression"] = o => ((StatementInfo)o).Expression,
         });
 
         registry.RegisterAccessors("Line", new()
@@ -266,6 +394,17 @@ public static class CodeTypeRegistrar
             ["DeclaringType"] = o => ((MemberInfo)o).DeclaringType,
             ["Line"] = o => (object)((MemberInfo)o).Line,
         });
+
+        registry.RegisterAccessors("Api", new()
+        {
+            ["Kind"] = o => ((ApiEntry)o).Kind,
+            ["TypeName"] = o => ((ApiEntry)o).TypeName,
+            ["MemberName"] = o => ((ApiEntry)o).MemberName,
+            ["Signature"] = o => ((ApiEntry)o).Signature,
+            ["Line"] = o => (object)((ApiEntry)o).Line,
+            ["File"] = o => ((ApiEntry)o).File,
+            ["Source"] = o => ((ApiEntry)o).Source,
+        });
     }
 
     private static void RegisterCollectionExtractors(TypeRegistry registry)
@@ -287,8 +426,65 @@ public static class CodeTypeRegistrar
 
         registry.RegisterCollectionExtractor("Members",
             doc => doc.As<SourceFile>().Types.SelectMany(t =>
-                t.Methods.Select(m => (object)new MemberInfo(m.Name, t.Name, m.Line))
-            ).ToList());
+            {
+                var members = new List<object>();
+                members.AddRange(t.Methods.Select(m => new MemberInfo(m.Name, t.Name, m.Line)));
+                members.AddRange(t.Properties.Select(p => new MemberInfo(p.Name, t.Name, p.Line)));
+                members.AddRange(t.Events.Select(e => new MemberInfo(e.Name, t.Name, e.Line)));
+                members.AddRange(t.Fields.Select(f => new MemberInfo(f.Name, t.Name, f.Line)));
+                return members;
+            }).ToList());
+
+        registry.RegisterCollectionExtractor("Api",
+            doc =>
+            {
+                var file = doc.As<SourceFile>();
+                var entries = new List<object>();
+                foreach (var type in file.Types)
+                {
+                    if (!type.IsPublic) continue;
+
+                    // Type-level entry
+                    entries.Add(ApiEntry.ForType(type));
+
+                    // Enum values
+                    if (type.Kind == TypeKind.Enum)
+                    {
+                        foreach (var value in type.EnumValues)
+                            entries.Add(ApiEntry.ForEnumValue(type, value));
+                        continue;
+                    }
+
+                    // Constructors
+                    foreach (var ctor in type.Constructors)
+                    {
+                        if (ctor.IsPublic || ctor.IsProtected)
+                            entries.Add(ApiEntry.ForConstructor(type, ctor));
+                    }
+
+                    // Methods
+                    foreach (var method in type.Methods)
+                    {
+                        if (method.IsPublic || method.IsProtected)
+                            entries.Add(ApiEntry.ForMethod(type, method));
+                    }
+
+                    // Properties
+                    foreach (var prop in type.Properties)
+                    {
+                        if (prop.IsPublic || prop.IsProtected)
+                            entries.Add(ApiEntry.ForProperty(type, prop));
+                    }
+
+                    // Events
+                    foreach (var evt in type.Events)
+                    {
+                        if (evt.IsPublic || evt.IsProtected)
+                            entries.Add(ApiEntry.ForEvent(type, evt));
+                    }
+                }
+                return entries;
+            });
     }
 
     private static void RegisterMethodEvaluators(TypeRegistry registry)

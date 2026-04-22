@@ -28,6 +28,13 @@ public class BadLibraryService
         // AZC0013 violation: TaskCompletionSource without RunContinuationsAsynchronously
         var tcs = new TaskCompletionSource<int>();
     }
+
+    public void UseUri()
+    {
+        // Banned API violation: Uri.ToString()
+        var uri = new Uri("https://example.com");
+        string s = uri.ToString();
+    }
 }
 
 public class GoodLibraryService

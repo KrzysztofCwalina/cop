@@ -20,7 +20,10 @@ public class AzureSdkRuleTests
         return Path.Combine(packageDir, "src");
     }
 
-    private static List<PrintOutput> RunPackageChecks(string package, string sourceFile)
+    private static List<PrintOutput> RunPackageChecks(string package, string sourceFile) =>
+        RunPackageChecks(package, [sourceFile]);
+
+    private static List<PrintOutput> RunPackageChecks(string package, string[] sourceFiles)
     {
         var srcDir = ApmSrcDir(package);
         var apmRoot = PackagesRoot;
@@ -66,7 +69,7 @@ public class AzureSdkRuleTests
         }
 
         var interpreter = TestInterpreter.Create();
-        var documents = TestInterpreter.ParseSourceFiles(sourceFile);
+        var documents = TestInterpreter.ParseSourceFiles(sourceFiles);
         return interpreter.Run(scriptFiles, documents).Outputs;
     }
 
@@ -190,6 +193,32 @@ public class AzureSdkRuleTests
         Assert.That(diags.Any(d => d.Message.Contains("BadServiceClient")
             && d.Message.Contains("protocol method")),
             Is.True, "Should flag protocol method returning Task<MyModel>");
+    }
+
+    // ── AZC0012: Single-word type names ──
+
+    [Test]
+    public void AzureChecks_BadClient_SingleWordTypeName()
+    {
+        var diags = RunPackageChecks("csharp-library-client-azure",
+            SamplePath("AzureBadClient.cs"));
+
+        Assert.That(diags.Any(d => d.Message.Contains("Processor")
+            && d.Message.Contains("single-word")),
+            Is.True, "Should flag Processor as single-word type name");
+    }
+
+    // ── AZC0020: CancellationToken propagation ──
+
+    [Test]
+    public void AzureChecks_BadClient_MissingTokenPropagation()
+    {
+        var diags = RunPackageChecks("csharp-library-client-azure",
+            SamplePath("AzureBadClient.cs"));
+
+        Assert.That(diags.Any(d => d.Message.Contains("propagate")
+            && d.Message.Contains("CancellationToken")),
+            Is.True, "Should flag async call not propagating CancellationToken");
     }
 
     // ── Client checks: Async/sync pairing and virtual methods ──
@@ -318,9 +347,154 @@ public class AzureSdkRuleTests
             SamplePath("AssemblyAttributes.cs"));
 
         var ivtDiags = diags.Where(d => d.Message.Contains("InternalsVisibleTo")).ToList();
-        // Policy-free: package flags all InternalsVisibleTo; project filters by test keywords
-        Assert.That(ivtDiags.Count, Is.EqualTo(4),
-            $"Expected 4 IVT diagnostics (all assemblies) but got {ivtDiags.Count}:\n{string.Join("\n", ivtDiags)}");
+        // Two checks fire: internals-visible-to flags all 4 attributes;
+        // internals-visible-to-non-test flags the 3 non-test targets
+        Assert.That(ivtDiags.Count, Is.EqualTo(7),
+            $"Expected 7 IVT diagnostics (4 all + 3 non-test) but got {ivtDiags.Count}:\n{string.Join("\n", ivtDiags)}");
+    }
+
+    // ── AZC0103: Sync-blocking in async methods ──
+
+    [Test]
+    public void CSharpChecks_AsyncSyncBad_SyncWaitInAsync()
+    {
+        var diags = RunPackageChecks("csharp",
+            SamplePath("AsyncSyncBad.cs"));
+
+        var syncInAsync = diags.Where(d =>
+            d.Message.Contains("async method") &&
+            (d.Message.Contains("Wait") || d.Message.Contains("GetResult"))).ToList();
+
+        Assert.That(syncInAsync.Count, Is.EqualTo(2),
+            $"Expected 2 sync-in-async violations but got {syncInAsync.Count}:\n{string.Join("\n", syncInAsync)}");
+    }
+
+    // ── AZC0110: Unconditional await in dual-mode method ──
+
+    [Test]
+    public void LibraryChecks_AsyncSyncBad_UnconditionalAwait()
+    {
+        var diags = RunPackageChecks("csharp-library",
+            SamplePath("AsyncSyncBad.cs"));
+
+        var unconditional = diags.Where(d =>
+            d.Message.Contains("guarded") && d.Message.Contains("Await")).ToList();
+
+        Assert.That(unconditional.Count, Is.EqualTo(1),
+            $"Expected 1 unconditional await violation but got {unconditional.Count}:\n{string.Join("\n", unconditional)}");
+    }
+
+    // ── AZC0111: Unconditional EnsureCompleted in dual-mode method ──
+
+    [Test]
+    public void LibraryChecks_AsyncSyncBad_UnconditionalEnsureCompleted()
+    {
+        var diags = RunPackageChecks("csharp-library",
+            SamplePath("AsyncSyncBad.cs"));
+
+        var unconditional = diags.Where(d =>
+            d.Message.Contains("EnsureCompleted") && d.Message.Contains("guarded")).ToList();
+
+        Assert.That(unconditional.Count, Is.EqualTo(1),
+            $"Expected 1 unconditional EnsureCompleted violation but got {unconditional.Count}:\n{string.Join("\n", unconditional)}");
+    }
+
+    // ── AZC0110/0111: Properly guarded dual-mode should NOT be flagged ──
+
+    [Test]
+    public void LibraryChecks_AsyncSyncBad_GuardedDualModeNoDiagnostic()
+    {
+        var diags = RunPackageChecks("csharp-library",
+            SamplePath("AsyncSyncBad.cs"));
+
+        // DualModeGood has guards — should not trigger unconditional-await or unconditional-sync
+        var guardedDiags = diags.Where(d =>
+            d.Message.Contains("guarded") && d.Message.Contains("DualModeGood")).ToList();
+
+        Assert.That(guardedDiags, Is.Empty,
+            $"DualModeGood should not trigger guard violations but got:\n{string.Join("\n", guardedDiags)}");
+    }
+
+    // ── AZC0104: Use EnsureCompleted instead of GetResult in sync methods ──
+
+    [Test]
+    public void AzureChecks_AsyncSyncBad_UseEnsureCompleted()
+    {
+        var diags = RunPackageChecks("csharp-library-client-azure",
+            SamplePath("AsyncSyncBad.cs"));
+
+        Assert.That(diags.Any(d => d.Message.Contains("EnsureCompleted")
+            && d.Message.Contains("instead")),
+            Is.True, "Should flag GetResult() in sync method");
+    }
+
+    // ── AZC0107: Don't call *Async from sync context ──
+
+    [Test]
+    public void AzureChecks_AsyncSyncBad_NoAsyncInSync()
+    {
+        var diags = RunPackageChecks("csharp-library-client-azure",
+            SamplePath("AsyncSyncBad.cs"));
+
+        Assert.That(diags.Any(d => d.Message.Contains("DoWorkAsync")
+            && d.Message.Contains("sync")),
+            Is.True, "Should flag DoWorkAsync() called from sync method");
+    }
+
+    // ── AZC0108: Wrong async argument value in guarded branches ──
+
+    [Test]
+    public void LibraryChecks_AsyncSyncBad_WrongAsyncArgValue()
+    {
+        var diags = RunPackageChecks("csharp-library",
+            SamplePath("AsyncSyncBad.cs"));
+
+        var wrongArgs = diags.Where(d =>
+            d.Message.Contains("async:") && d.Message.Contains("guard")).ToList();
+
+        Assert.That(wrongArgs.Count, Is.EqualTo(2),
+            $"Expected 2 wrong async arg violations (one false, one true) but got {wrongArgs.Count}:\n{string.Join("\n", wrongArgs)}");
+    }
+
+    [Test]
+    public void LibraryChecks_AsyncSyncBad_CorrectAsyncArgNoDiagnostic()
+    {
+        var diags = RunPackageChecks("csharp-library",
+            SamplePath("AsyncSyncBad.cs"));
+
+        // DualModeGoodAsyncArg passes correct values — should not trigger
+        var goodDiags = diags.Where(d =>
+            d.Message.Contains("async:") && d.Message.Contains("guard")
+            && d.Message.Contains("DualModeGoodAsyncArg")).ToList();
+
+        Assert.That(goodDiags, Is.Empty,
+            $"DualModeGoodAsyncArg should not trigger but got:\n{string.Join("\n", goodDiags)}");
+    }
+
+    // ── AZC0109: Misuse of async parameter ──
+
+    [Test]
+    public void LibraryChecks_AsyncSyncBad_AsyncParamMisuse()
+    {
+        var diags = RunPackageChecks("csharp-library",
+            SamplePath("AsyncSyncBad.cs"));
+
+        Assert.That(diags.Any(d => d.Message.Contains("async parameter")
+            && d.Message.Contains("argument")),
+            Is.True, "Should flag async parameter passed as argument");
+    }
+
+    // ── Phase 1 & 2: Banned API + CA Rules ──
+
+    [Test]
+    public void CodeChecks_BadCode_UriToString()
+    {
+        var diags = RunPackageChecks("csharp",
+            SamplePath("LibraryBad.cs"));
+
+        Assert.That(diags.Any(d => d.Message.Contains("Uri.AbsoluteUri")
+            && d.Message.Contains("ToString")),
+            Is.True, "Should flag Uri.ToString() and suggest AbsoluteUri");
     }
 
     // ── Python package checks ──
@@ -399,5 +573,218 @@ public class AzureSdkRuleTests
 
         Assert.That(clientDiags, Is.Empty,
             $"Expected no outputs for GoodClient but got:\n{string.Join("\n", clientDiags)}");
+    }
+
+    // ── Inline cop helper: simulates per-repo .cop files that import packages ──
+
+    private static InterpreterResult RunInlineCop(string inlineCop, string[] sourceFiles, string? commandName = null)
+    {
+        var apmRoot = PackagesRoot;
+        var inlineScript = ScriptParser.Parse(inlineCop, "repo-policy.cop");
+
+        // Resolve imports transitively
+        var importResolver = new ImportResolver(apmRoot);
+        var resolved = new HashSet<string>();
+        var scriptFiles = new List<ScriptFile>();
+        var queue = new Queue<string>(inlineScript.Imports);
+        while (queue.Count > 0)
+        {
+            var imp = queue.Dequeue();
+            if (!resolved.Add(imp)) continue;
+            var errors = new List<string>();
+            var pkg = importResolver.Resolve(imp, errors);
+            if (pkg != null)
+            {
+                scriptFiles.Add(pkg);
+                foreach (var transitive in pkg.Imports)
+                    queue.Enqueue(transitive);
+            }
+        }
+        scriptFiles.Add(inlineScript);
+
+        var interpreter = TestInterpreter.Create();
+        var documents = TestInterpreter.ParseSourceFiles(sourceFiles);
+        return interpreter.Run(scriptFiles, documents, commandName: commandName);
+    }
+
+    private static List<PrintOutput> RunInlineCopChecks(string inlineCop, string[] sourceFiles)
+    {
+        // Collect exported let names for RUN CHECK(name) wrapper
+        var inlineScript = ScriptParser.Parse(inlineCop, "temp.cop");
+        var exportedLets = inlineScript.LetDeclarations
+            .Where(l => l.IsExported && !l.IsValueBinding && !l.IsRuntime)
+            .Select(l => l.Name)
+            .ToList();
+
+        if (exportedLets.Count > 0)
+        {
+            var runStatements = string.Join("\n", exportedLets.Select(name => $"RUN CHECK({name})"));
+            inlineCop += $"\n{runStatements}";
+        }
+
+        return RunInlineCop(inlineCop, sourceFiles).Outputs;
+    }
+
+    // ── API Compat: Export generates canonical entries ──
+
+    private const string ApiExportPolicy = @"
+import csharp-api
+import code-analysis
+
+predicate baselineLine(Line) => Line.File.Path:matches('api-baseline') && Line.Text:matches('\\S')
+export command api-export = SAVE('api-baseline.txt', '{Api.Signature}', Code.Api:csharp:publicApi)
+";
+
+    private const string ApiCompatPolicy = @"
+import csharp-api
+import code-analysis
+
+predicate baselineLine(Line) => Line.File.Path:matches('api-baseline') && Line.Text:matches('\\S')
+export command api-export = SAVE('api-baseline.txt', '{Api.Signature}', Code.Api:csharp:publicApi)
+
+let currentSignatures = Code.Api:csharp:publicApi:select(Api.Signature)
+let baselineSignatures = Code.Lines:baselineLine:select(Line.Text)
+
+predicate removedApi(Line) => baselineLine && !Line.Text:in(currentSignatures)
+predicate addedApi(Api) => publicApi && !Api.Signature:in(baselineSignatures)
+
+export let api-removed = Code.Lines:removedApi:toError('API REMOVED (breaking): {Line.Text}')
+export let api-added = Code.Api:csharp:addedApi:toInfo('API ADDED: {Api.Signature}')
+export let csharp-api = [api-removed, api-added]
+";
+
+    [Test]
+    public void ApiCompat_Export_GeneratesCanonicalEntries()
+    {
+        var result = RunInlineCop(ApiExportPolicy,
+            [SamplePath("GoodClient.cs")], commandName: "api-export");
+
+        var fileOutput = result.FileOutputs.FirstOrDefault();
+        Assert.That(fileOutput, Is.Not.Null, "Should produce file output from api-export");
+
+        var lines = fileOutput!.Content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.That(lines.Any(l => l.StartsWith("class GoodClient")),
+            Is.True, $"Should have GoodClient class entry. Lines:\n{string.Join("\n", lines)}");
+        Assert.That(lines.Any(l => l.StartsWith("class GoodClientOptions")),
+            Is.True, "Should have GoodClientOptions entry");
+        Assert.That(lines.Any(l => l.StartsWith("class TokenCredential")),
+            Is.True, "Should have TokenCredential entry");
+        Assert.That(lines.Any(l => l.StartsWith("method GoodClient.GetItemAsync")),
+            Is.True, "Should have GetItemAsync method entry");
+        Assert.That(lines.Any(l => l.StartsWith("method GoodClient.DeleteItemAsync")),
+            Is.True, "Should have DeleteItemAsync method entry");
+        Assert.That(lines.Any(l => l.StartsWith("ctor GoodClient(")),
+            Is.True, "Should have GoodClient constructor entry");
+    }
+
+    // ── API Compat: Detect removed API ──
+
+    [Test]
+    public void ApiCompat_DetectsRemovedApi()
+    {
+        var baselinePath = Path.Combine(Path.GetTempPath(), $"api-baseline-{Guid.NewGuid()}.txt");
+        try
+        {
+            File.WriteAllLines(baselinePath, [
+                "class GoodClient",
+                "class GoodClientOptions",
+                "class TokenCredential",
+                "method GoodClient.GetItemAsync(string, CancellationToken) : Task<string>",
+                "method GoodClient.OldMethod(string) : void",  // removed!
+                "class OldService",  // removed!
+            ]);
+
+            var diags = RunInlineCopChecks(ApiCompatPolicy,
+                [SamplePath("GoodClient.cs"), baselinePath]);
+
+            var removed = diags.Where(d => d.Message.Contains("REMOVED")).ToList();
+            Assert.That(removed.Count, Is.EqualTo(2),
+                $"Expected 2 removed API entries but got {removed.Count}:\n{string.Join("\n", removed)}");
+            Assert.That(removed.Any(d => d.Message.Contains("OldMethod")),
+                Is.True, "Should detect removed OldMethod");
+            Assert.That(removed.Any(d => d.Message.Contains("OldService")),
+                Is.True, "Should detect removed OldService");
+        }
+        finally
+        {
+            File.Delete(baselinePath);
+        }
+    }
+
+    // ── API Compat: Detect added API ──
+
+    [Test]
+    public void ApiCompat_DetectsAddedApi()
+    {
+        var baselinePath = Path.Combine(Path.GetTempPath(), $"api-baseline-{Guid.NewGuid()}.txt");
+        try
+        {
+            File.WriteAllLines(baselinePath, [
+                "class GoodClient",
+            ]);
+
+            var diags = RunInlineCopChecks(ApiCompatPolicy,
+                [SamplePath("GoodClient.cs"), baselinePath]);
+
+            var added = diags.Where(d => d.Message.Contains("ADDED")).ToList();
+            Assert.That(added.Count, Is.GreaterThan(3),
+                $"Expected multiple added API entries but got {added.Count}:\n{string.Join("\n", added)}");
+            Assert.That(added.Any(d => d.Message.Contains("GoodClientOptions")),
+                Is.True, "Should detect GoodClientOptions as added");
+            Assert.That(added.Any(d => d.Message.Contains("GetItemAsync")),
+                Is.True, "Should detect GetItemAsync as added");
+        }
+        finally
+        {
+            File.Delete(baselinePath);
+        }
+    }
+
+    // ── API Compat: No baseline = no removed, all added ──
+
+    [Test]
+    public void ApiCompat_NoBaseline_NoRemovedDiagnostics()
+    {
+        var diags = RunInlineCopChecks(ApiCompatPolicy,
+            [SamplePath("GoodClient.cs")]);
+
+        var removed = diags.Where(d => d.Message.Contains("REMOVED")).ToList();
+        Assert.That(removed, Is.Empty,
+            $"No baseline file means no removed APIs, but got:\n{string.Join("\n", removed)}");
+    }
+
+    // ── API Compat: Matching baseline = no diagnostics ──
+
+    [Test]
+    public void ApiCompat_MatchingBaseline_NoDiagnostics()
+    {
+        // Generate full baseline from GoodClient.cs
+        var result = RunInlineCop(ApiExportPolicy,
+            [SamplePath("GoodClient.cs")], commandName: "api-export");
+        var baselineLines = result.FileOutputs.First().Content
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        // Write baseline and run compat check
+        var baselinePath = Path.Combine(Path.GetTempPath(), $"api-baseline-{Guid.NewGuid()}.txt");
+        try
+        {
+            File.WriteAllLines(baselinePath, baselineLines);
+
+            var diags = RunInlineCopChecks(ApiCompatPolicy,
+                [SamplePath("GoodClient.cs"), baselinePath]);
+
+            var removed = diags.Where(d => d.Message.Contains("REMOVED")).ToList();
+            var added = diags.Where(d => d.Message.Contains("ADDED")).ToList();
+
+            Assert.That(removed, Is.Empty,
+                $"Matching baseline should produce no REMOVED, but got:\n{string.Join("\n", removed)}");
+            Assert.That(added, Is.Empty,
+                $"Matching baseline should produce no ADDED, but got:\n{string.Join("\n", added)}");
+        }
+        finally
+        {
+            File.Delete(baselinePath);
+        }
     }
 }

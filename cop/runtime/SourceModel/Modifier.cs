@@ -14,5 +14,6 @@ public enum Modifier
     Virtual = 128,
     Async = 256,
     Override = 512,
-    Readonly = 1024
+    Readonly = 1024,
+    Const = 2048
 }
