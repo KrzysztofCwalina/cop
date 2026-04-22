@@ -1,0 +1,18 @@
+# General Python source code style checks
+
+import code-analysis
+
+## Avoid print() — use logging instead
+export let print-calls = Code.Statements:python:printCall
+    :toWarning('Avoid print() — use logging instead')
+
+## Do not use bare except — catch a specific exception type
+export let bare-except-clauses = Code.Statements:python:bareExcept
+    :toWarning('Do not use bare except — catch a specific exception type')
+
+## Do not silence Exception — reraise or catch a specific type
+export let silenced-exceptions = Code.Statements:python:swallowsException
+    :toWarning('Do not silence Exception — reraise or catch a specific type')
+
+## All Python checks combined
+export let python-checks = [print-calls, bare-except-clauses, silenced-exceptions]

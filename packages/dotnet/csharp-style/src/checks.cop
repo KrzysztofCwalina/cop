@@ -1,0 +1,34 @@
+# StyleCop checks for C#
+
+import code-analysis
+
+## SA1302: Interface names must begin with 'I' followed by an uppercase letter
+export let interface-prefix = Code.Types:csharp:interfaceMissingIPrefix
+    :toWarning('SA1302: Interface {Type.Name} should begin with \'I\' followed by an uppercase letter')
+
+## SA1300: Type names must begin with an uppercase letter (PascalCase)
+export let type-name-casing = Code.Types:csharp:lowercaseTypeName
+    :toWarning('SA1300: Type {Type.Name} should begin with an uppercase letter')
+
+## SA1300: Public method names must begin with an uppercase letter (PascalCase)
+export let method-name-casing = Code.Types:csharp:hasLowercasePublicMethod
+    :toWarning('SA1300: {Type.Name} has a public method that should begin with an uppercase letter')
+
+## SA1402: A file may only contain a single type
+export let single-type-per-file = Code.Types:csharp:multipleTypesInFile
+    :toWarning('SA1402: {Type.Name} — file should contain only a single type')
+
+## SA1005: Single-line comment must begin with a space after //
+export let comment-spacing = Code.Lines:csharp:commentMissingSpace
+    :toWarning('SA1005: Single-line comment should begin with a space')
+
+## SA1027: Code must not contain tabs
+export let no-tabs = Code.Lines:csharp:containsTab
+    :toWarning('SA1027: Use spaces instead of tabs')
+
+## SA1028: Code must not contain trailing whitespace
+export let no-trailing-whitespace = Code.Lines:csharp:trailingWhitespace
+    :toWarning('SA1028: Remove trailing whitespace')
+
+## All style checks combined
+export let csharp-style = [interface-prefix, type-name-casing, method-name-casing, single-type-per-file, comment-spacing, no-tabs, no-trailing-whitespace]

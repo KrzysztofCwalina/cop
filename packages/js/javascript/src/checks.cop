@@ -1,0 +1,30 @@
+# General JavaScript/TypeScript source code style checks
+
+import code-analysis
+
+## Avoid console output in production code
+export let console-calls = Code.Statements:javascript:consoleCall
+    :toWarning('Avoid console.{Statement.MemberName} in production code')
+
+## Do not use alert()
+export let alert-calls = Code.Statements:javascript:alertCall
+    :toError('Do not use alert()')
+
+## Do not use eval()
+export let eval-calls = Code.Statements:javascript:evalCall
+    :toError('Do not use eval() — it is a security risk')
+
+## Remove debugger statements
+export let debugger-statements = Code.Statements:javascript:debuggerStatement
+    :toError('Remove debugger statement')
+
+## Use const or let instead of var
+export let var-declarations = Code.Statements:javascript:usesVar
+    :toWarning('Use const or let instead of var')
+
+## Catch blocks should rethrow or handle errors explicitly
+export let swallowed-exceptions = Code.Statements:javascript:catchWithoutRethrow
+    :toWarning('Do not swallow errors — rethrow or handle explicitly')
+
+## All JavaScript checks combined
+export let javascript-checks = [console-calls, alert-calls, eval-calls, debugger-statements, var-declarations, swallowed-exceptions]

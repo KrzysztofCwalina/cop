@@ -1,0 +1,12 @@
+import code
+
+predicate printStats(Program) => Program.Args:contains('/s')
+
+command TYPE-COUNT = PRINT('{Code.Types.Count} types')
+command NAMESPACE-COUNT = PRINT('{Code.Files.Count} files')
+command MEMBER-COUNT = PRINT('{Members.Count} members')
+command STATISTICS = TYPE-COUNT & NAMESPACE-COUNT & MEMBER-COUNT
+
+command LIST-TYPES = foreach Types => PRINT('{item.Name}') & TYPE-COUNT:printStats
+command LIST-NAMESPACES = foreach Files => PRINT('{item.Namespace}') & NAMESPACE-COUNT:printStats
+command LIST-MEMBERS = foreach Members => PRINT('{item.Name}') & MEMBER-COUNT:printStats

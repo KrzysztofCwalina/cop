@@ -1,0 +1,169 @@
+# Azure SDK client library checks for C#
+
+import code-analysis
+
+predicate missingTokenCredential(Type) => Type.Constructors:!any(tokenCredentialParam)
+
+predicate missingBaseClass(Type) => !inheritsClientOptions
+
+predicate missingCtorWithOptions(Type) => !ctorWithOptions
+predicate missingCtorWithoutOptions(Type) => ctorWithOptions && !ctorWithoutOptions
+
+predicate convenienceWithRequestContent(Type) => Type.Methods:where(convenience):any(usesRequestContent)
+
+predicate tooManyCtorParams(Constructor) => Constructor.Public && Constructor.Parameters.Count > 1
+predicate optionsCtorOverloaded(Type) => Type.Constructors:any(tooManyCtorParams)
+
+predicate firstParamNotServiceVersion(Constructor) => Constructor.Public
+    && Constructor.Parameters.Count > 0
+    && !Constructor.Parameters.First.Type:endsWith('ServiceVersion')
+predicate optionsCtorBadFirstParam(Type) => Type.Constructors:any(firstParamNotServiceVersion)
+
+predicate missingServiceVersionEnum(Type) => Type.NestedTypes:!any(serviceVersionEnum)
+
+predicate badVersionMemberName(Name) => !Name:matches('^V\\d+(_\\d+)*$')
+predicate serviceVersionWithBadNames(Type) => Type.Kind == 'Enum' && Type.Name == 'ServiceVersion'
+    && Type.EnumValues:any(badVersionMemberName)
+predicate badServiceVersionNames(Type) => Type.NestedTypes:any(serviceVersionWithBadNames)
+
+predicate serviceVersionParamNoDefault(Constructor) => Constructor.Public
+    && Constructor.Parameters.Count > 0
+    && Constructor.Parameters.First.Type:endsWith('ServiceVersion')
+    && !Constructor.Parameters.First.Defaulted
+predicate optionsCtorMissingDefault(Type) => Type.Constructors:any(serviceVersionParamNoDefault)
+
+predicate missingCancellation(Method) => Method.Parameters:!any(cancellation)
+predicate cancellationNotOptional(Method) => Method.Parameters:any(cancellation)
+    && !Method.Parameters.Last.Defaulted
+    && (Method.Parameters.Last.Type == 'CancellationToken' || Method.Parameters.Last.Type == 'RequestContext')
+predicate methodMissingCancellation(Type) => Type.Methods:where(publicServiceMethod):any(missingCancellation)
+
+predicate bannedReturnType(Method) => Method.Public
+    && Method.ReturnType != null
+    && (Method.ReturnType.Name == 'HttpResponseMessage'
+        || Method.ReturnType.Name == 'HttpRequestMessage'
+        || Method.ReturnType.Name == 'HttpClient')
+predicate bannedReturn(Type) => Type.Methods:any(bannedReturnType)
+
+predicate bannedAzureCoreType(Parameter) => Parameter.Type.Namespace == 'Azure.Core.Pipeline'
+predicate bannedAzureCoreParam(Method) => Method.Public && Method.Parameters:any(bannedAzureCoreType)
+predicate bannedAzureCoreParams(Type) => Type.Methods:any(bannedAzureCoreParam)
+
+predicate missingContextArg(Statement) => Statement.Arguments.Count < 3
+
+let AllowedProtocolReturns = [
+    'Response', 'Task<Response>',
+    'Response<bool>', 'Task<Response<bool>>',
+    'Operation', 'Task<Operation>',
+    'Operation<BinaryData>', 'Task<Operation<BinaryData>>',
+    'Pageable<BinaryData>', 'AsyncPageable<BinaryData>',
+    'Operation<Pageable<BinaryData>>',
+    'Task<Operation<AsyncPageable<BinaryData>>>',
+    'Task<Operation<Pageable<BinaryData>>>'
+]
+
+predicate allowedProtocolReturn(Method) => Method.ReturnType:in(AllowedProtocolReturns)
+
+predicate invalidProtocolReturn(Method) => protocolMethodByContext && !allowedProtocolReturn
+predicate protocolWithInvalidReturn(Type) => Type.Methods:any(invalidProtocolReturn)
+
+predicate ambiguousOverload(Type) => Type.Methods:where(protocolMethod):any(protocolWithSameNameConvenience)
+
+## Azure clients must accept TokenCredential for authentication
+export let client-needs-token-credential = Clients:missingTokenCredential
+    :toWarning('{Type.Name} must accept TokenCredential')
+
+## Client types must provide a protected parameterless constructor for mocking
+export let client-needs-mocking-ctor = Clients:missingMockingConstructor
+    :toWarning('{Type.Name} must provide a protected parameterless constructor')
+
+## Options types must inherit from ClientOptions or ClientPipelineOptions
+export let options-inherits-base = ClientOptions:missingBaseClass
+    :toWarning('{Type.Name} must inherit from ClientOptions or ClientPipelineOptions')
+
+## Client types should have a constructor that accepts ClientOptions
+export let client-needs-options-ctor = Clients:missingCtorWithOptions
+    :toWarning('{Type.Name} should have a constructor that accepts options')
+
+## Client types should have a constructor without ClientOptions for simple scenarios
+export let client-needs-simple-ctor = Clients:missingCtorWithoutOptions
+    :toWarning('{Type.Name} should have a constructor without options for simple usage')
+
+## Convenience methods should not take RequestContent or RequestBody parameters
+export let no-request-content-in-convenience = Clients:convenienceWithRequestContent
+    :toWarning('{Type.Name} convenience method should not have RequestContent parameter')
+
+## ClientOptions constructors should not take more than one parameter
+export let options-single-ctor-param = ClientOptions:optionsCtorOverloaded
+    :toWarning('{Type.Name} constructor should only accept an optional ServiceVersion parameter')
+
+## Model types should not use 'Collection' suffix
+export let no-collection-suffix = Models:collectionSuffix
+    :toWarning('{Type.Name} should not use \'Collection\' suffix for model types')
+
+## Model types should not use 'Request' suffix
+export let no-request-suffix = Models:requestSuffix
+    :toWarning('{Type.Name} should not use \'Request\' suffix for model types')
+
+## Model types should not use 'Parameter' or 'Parameters' suffix
+export let no-parameter-suffix = Models:parameterSuffix
+    :toWarning('{Type.Name} should not use \'Parameter(s)\' suffix for model types')
+
+## Model types should not use 'Option' or 'Options' suffix (unless ClientOptions)
+export let no-option-suffix = Models:optionSuffix
+    :toWarning('{Type.Name} should not use \'Option(s)\' suffix for model types')
+
+## Model types should not use 'Resource' suffix
+export let no-resource-suffix = Models:resourceSuffix
+    :toWarning('{Type.Name} should not use \'Resource\' suffix for model types')
+
+## ClientOptions constructor first parameter should be ServiceVersion
+export let options-first-param-service-version = ClientOptions:optionsCtorBadFirstParam
+    :toWarning('{Type.Name} constructor first parameter should be ServiceVersion')
+
+## ClientOptions types should contain a nested ServiceVersion enum
+export let options-needs-service-version-enum = ClientOptions:missingServiceVersionEnum
+    :toWarning('{Type.Name} should contain a nested ServiceVersion enum')
+
+## ServiceVersion enum members should follow 'V{major}_{minor}' naming pattern
+export let service-version-naming = ClientOptions:badServiceVersionNames
+    :toWarning('{Type.Name} ServiceVersion member names should follow pattern V1_0')
+
+## ServiceVersion parameter should have a default value (latest version)
+export let service-version-default-value = ClientOptions:optionsCtorMissingDefault
+    :toWarning('{Type.Name} ServiceVersion parameter should default to the latest version')
+
+## Public virtual service methods must accept CancellationToken or RequestContext
+export let service-method-needs-cancellation = Clients:methodMissingCancellation
+    :toWarning('{Type.Name} must accept CancellationToken or RequestContext')
+
+## Public API should not expose types from banned internal namespaces
+export let no-banned-internal-types = Code.Types:csharp:publicType:bannedParams
+    :toWarning('{Type.Name} uses types from banned namespace in public API')
+
+## Client methods should return azure-specific types, not raw HTTP types
+export let no-raw-http-return-types = Clients:bannedReturn
+    :toWarning('{Type.Name} should not return raw HTTP types')
+
+## Public API should not expose Azure.Core.Pipeline internal types
+export let no-pipeline-types-in-api = Code.Types:csharp:publicType:bannedAzureCoreParams
+    :toWarning('{Type.Name} uses banned Azure.Core.Pipeline type in public API')
+
+## ModelReaderWriter.Read should include the ModelReaderWriterOptions context parameter
+export let model-reader-writer-context = Code.Statements:csharp:modelReaderWriterRead:missingContextArg
+    :toWarning('ModelReaderWriter.Read should pass ModelReaderWriterOptions context')
+
+## Protocol methods (with RequestContext) must return allowed types only
+export let protocol-method-return-type = Clients:protocolWithInvalidReturn
+    :toWarning('{Type.Name} protocol method has invalid return type')
+
+## Avoid ambiguous overloads between protocol and convenience methods
+export let no-ambiguous-overloads = Clients:ambiguousOverload
+    :toWarning('{Type.Name} may have ambiguous protocol/convenience overloads')
+
+## InternalsVisibleTo — export for project-level filtering
+export let internals-visible-to = Code.Statements:csharp:internalsVisibleTo
+    :toWarning('InternalsVisibleTo targets non-test assembly — internal APIs become public surface')
+
+## All Azure client library checks combined
+export let csharp-library-client-azure = [client-needs-token-credential, client-needs-mocking-ctor, options-inherits-base, client-needs-options-ctor, client-needs-simple-ctor, no-request-content-in-convenience, options-single-ctor-param, no-collection-suffix, no-request-suffix, no-parameter-suffix, no-option-suffix, no-resource-suffix, options-first-param-service-version, options-needs-service-version-enum, service-version-naming, service-version-default-value, service-method-needs-cancellation, no-banned-internal-types, no-raw-http-return-types, no-pipeline-types-in-api, model-reader-writer-context, protocol-method-return-type, no-ambiguous-overloads, internals-visible-to]

@@ -1,0 +1,124 @@
+# alan Code Package v1.0
+# Defines types and collections for source code structural analysis.
+# Import with: import code
+
+export type Type = {
+    Name : string,
+    Kind : string,
+    Public : bool,
+    Sealed : bool,
+    Abstract : bool,
+    Static : bool,
+    BaseTypes : [string],
+    Constructors : [Method],
+    Methods : [Method],
+    MethodNames : [string],
+    NestedTypes : [Type],
+    EnumValues : [string],
+    Decorators : [string],
+    Line : int,
+    File : File?,
+    Source : string
+}
+
+export type Method = {
+    Name : string,
+    Public : bool,
+    Protected : bool,
+    Private : bool,
+    Internal : bool,
+    Async : bool,
+    Static : bool,
+    Abstract : bool,
+    Virtual : bool,
+    Override : bool,
+    ReturnType : TypeReference?,
+    Parameters : [Parameter],
+    Statements : [Statement],
+    Decorators : [string],
+    Line : int
+}
+
+export type Constructor = Method & {}
+
+export type Parameter = {
+    Name : string,
+    Type : TypeReference?,
+    Variadic : bool,
+    Kwargs : bool,
+    Defaulted : bool,
+    Line : int
+}
+
+export type TypeReference = {
+    Name : string,
+    Namespace : string?,
+    Generic : bool,
+    GenericArguments : [TypeReference],
+    Length : int
+}
+
+export type Statement = {
+    Kind : string,
+    Keywords : [string],
+    TypeName : string?,
+    MemberName : string?,
+    Arguments : [string],
+    Line : int,
+    InMethod : bool,
+    Rethrows : bool,
+    Generic : bool,
+    ErrorHandler : bool,
+    File : File?,
+    Source : string
+}
+
+export type Call = Statement & {
+    Signature : string
+}
+
+export type Declaration = Statement & {}
+
+export type ErrorHandler = Statement & {}
+
+export type Attribute = Statement & {}
+
+# Narrowing predicates — filter Statements and narrow to subtypes
+export predicate call(Statement) : Call => Statement.Kind == 'call'
+export predicate declaration(Statement) : Declaration => Statement.Kind == 'declaration'
+export predicate errorHandler(Statement) : ErrorHandler => Statement.ErrorHandler == true
+export predicate attribute(Statement) : Attribute => Statement.Kind == 'attribute'
+
+# ErrorHandler predicates
+export predicate generic(ErrorHandler) => ErrorHandler.Generic == true
+
+# Convenience collections
+export let Calls = Code.Statements:call
+export let Declarations = Code.Statements:declaration
+export let ErrorHandlers = Code.Statements:errorHandler
+export let Attributes = Code.Statements:attribute
+
+export type Line = {
+    Text : string,
+    Number : int,
+    File : File?,
+    Source : string
+}
+
+export type File = {
+    Path : string,
+    Language : string?,
+    Namespace : string?,
+    Usings : [string],
+    Types : [Type]
+}
+
+export type Codebase = {
+    Files : [File],
+    Types : [Type],
+    Statements : [Statement],
+    Lines : [Line]
+}
+
+# Built-in value — implementation is provided by the runtime engine
+export let Code = runtime::Codebase

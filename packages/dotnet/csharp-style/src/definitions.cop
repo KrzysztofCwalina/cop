@@ -1,0 +1,23 @@
+# StyleCop predicate definitions for C#
+
+# SA1302: Interface names must begin with 'I' followed by an uppercase letter
+predicate interfaceMissingIPrefix(Type) => Type.Kind == 'Interface' && !Type.Name:matches('^I[A-Z]')
+
+# SA1300: Type names must begin with an uppercase letter (PascalCase)
+predicate lowercaseTypeName(Type) => Type.Name:matches('^[a-z]')
+
+# SA1300: Public method names must begin with an uppercase letter (PascalCase)
+predicate lowercasePublicMethod(Method) => Method.Public && Method.Name:matches('^[a-z]')
+predicate hasLowercasePublicMethod(Type) => Type.Methods:any(lowercasePublicMethod)
+
+# SA1402: File may only contain a single type
+predicate multipleTypesInFile(Type) => Type.File.Types.Count > 1
+
+# SA1005: Single-line comment must begin with a space after //
+predicate commentMissingSpace(Line) => Line.Text:matches('//[^ /!]')
+
+# SA1027: Code must not contain tabs
+predicate containsTab(Line) => Line.Text:matches('\t')
+
+# SA1028: Code must not contain trailing whitespace
+predicate trailingWhitespace(Line) => Line.Text:matches('[ \t]+$')

@@ -1,0 +1,2 @@
+- no empty folders
+- one type per file

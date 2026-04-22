@@ -1,0 +1,42 @@
+# Azure SDK client library definitions for C#
+
+import csharp-library-client
+import csharp-library
+
+predicate tokenCredential(Parameter) => Parameter.Type == 'TokenCredential'
+predicate tokenCredentialParam(Constructor) => Constructor.Parameters:any(tokenCredential)
+
+predicate inheritsClientOptions(Type) => Type:inheritsFrom('ClientOptions') || Type:inheritsFrom('ClientPipelineOptions')
+
+predicate optionsParameter(Parameter) => Parameter.Type:endsWith('Options')
+predicate ctorWithOptions(Type) => Type.Constructors:any(ctorHasOptions)
+predicate ctorHasOptions(Constructor) => Constructor.Public && Constructor.Parameters:any(optionsParameter)
+predicate ctorWithoutOptions(Type) => Type.Constructors:any(ctorLacksOptions)
+predicate ctorLacksOptions(Constructor) => Constructor.Public && Constructor.Parameters:!any(optionsParameter)
+    && Constructor.Parameters.Count > 0
+
+predicate requestContent(Parameter) => Parameter.Type == 'RequestContent' || Parameter.Type == 'RequestBody'
+predicate usesRequestContent(Method) => Method.Parameters:any(requestContent)
+predicate convenience(Method) => Method.Public && Method.Virtual
+
+predicate resourceSuffix(Type) => Type.Name:endsWith('Resource')
+
+predicate serviceVersionEnum(Type) => Type.Kind == 'Enum' && Type.Name == 'ServiceVersion'
+
+predicate cancellation(Parameter) => Parameter.Type == 'CancellationToken' || Parameter.Type == 'RequestContext'
+predicate publicServiceMethod(Method) => Method.Public && Method.Virtual && !Method.Static
+
+predicate modelReaderWriterRead(Statement) => Statement.Kind == 'call'
+    && Statement.TypeName == 'ModelReaderWriter' && Statement.MemberName == 'Read'
+
+predicate requestContextParam(Parameter) => Parameter.Type == 'RequestContext'
+predicate protocolMethodByContext(Method) => Method.Public && Method.Virtual
+    && Method.Parameters:any(requestContextParam)
+
+predicate protocolMethod(Method) => Method.Public && Method.Virtual && Method.Parameters:any(requestContent)
+predicate convenienceMethod(Method) => Method.Public && Method.Virtual && Method.Parameters:!any(requestContent)
+predicate sameNameMethod(Method2) => Method2.Name == Method.Name
+predicate protocolWithSameNameConvenience(Method) => Type.Methods:where(convenienceMethod):any(sameNameMethod)
+
+predicate internalsVisibleTo(Statement) => Statement.Kind == 'attribute'
+    && Statement.TypeName == 'InternalsVisibleTo'

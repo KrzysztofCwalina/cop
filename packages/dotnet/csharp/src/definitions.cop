@@ -1,0 +1,26 @@
+# General C# source code style definitions
+
+predicate varDeclaration(Statement) => Statement.Kind == 'declaration' && Statement.Keywords:contains('var')
+
+predicate dynamicDeclaration(Statement) => Statement.Kind == 'declaration' && Statement.Keywords:contains('dynamic')
+
+predicate threadSleep(Statement) => Statement.Kind == 'call'
+    && Statement.TypeName == 'Thread' && Statement.MemberName == 'Sleep'
+
+predicate consoleCall(Statement) => Statement.Kind == 'call'
+    && Statement.TypeName == 'Console'
+
+predicate catchesBaseException(Statement) => Statement.ErrorHandler == true
+    && Statement.Generic == true
+
+predicate swallowsBaseException(Statement) => Statement.ErrorHandler == true
+    && Statement.Generic == true && !Statement.Rethrows
+
+predicate configureAwaitTrue(Statement) => Statement.Kind == 'call'
+    && Statement.MemberName == 'ConfigureAwait' && Statement.Arguments:contains('true')
+
+predicate getAwaiterGetResult(Statement) => Statement.Kind == 'call'
+    && Statement.MemberName == 'GetResult'
+
+predicate taskCompletionSourceNew(Statement) => Statement.Kind == 'call'
+    && Statement.TypeName == 'TaskCompletionSource'

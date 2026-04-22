@@ -1,0 +1,14 @@
+# Library API design checks for Python
+
+import code-analysis
+
+## Public methods should have type hints on all parameters
+export let untyped-public-params = Code.Types:python:untypedParams
+    :toWarning('{Type.Name} has public methods with missing parameter type hints')
+
+## Public methods should declare a return type
+export let missing-return-types = Code.Types:python:missingReturnTypes
+    :toWarning('{Type.Name} has public methods without return type annotations')
+
+## All Python library checks combined
+export let python-library = [untyped-public-params, missing-return-types]

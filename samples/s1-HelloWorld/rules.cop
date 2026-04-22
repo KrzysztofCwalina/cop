@@ -1,0 +1,5 @@
+import code
+
+predicate usesVar([Statement]) => Statement.Keywords:contains('var')
+let StatementsUsingVar = Code.Statements:usesVar
+foreach StatementsUsingVar => PRINT('ERROR: {item.File.Path}:{item.Line} uses \'var\'')

@@ -1,0 +1,42 @@
+# Azure SDK Python client library checks
+
+predicate client(Type) => Type.Name:endsWith('Client')
+predicate PythonClients(Types) => client
+
+predicate init(Method) => Method.Name == '__init__'
+predicate credentialParam(Parameter) => Parameter.Name == 'credential'
+predicate hasCredentialParam(Method) => Method.Parameters:any(credentialParam)
+predicate missingCredential(Method) => !hasCredentialParam
+predicate initMissingCredential(Type) => Type.Methods:where(init):any(missingCredential)
+
+predicate fromConnectionString(Method) => Method.Name == 'from_connection_string'
+predicate classmethod(Method) => Method.Decorators:contains('classmethod')
+predicate fromConnStrClassmethod(Method) => fromConnectionString && classmethod
+predicate missingFromConnStr(Type) => Type.Methods:!any(fromConnStrClassmethod)
+
+predicate kwargsParam(Parameter) => Parameter.Kwargs
+predicate hasKwargs(Method) => Method.Parameters:any(kwargsParam)
+predicate publicService(Method) => Method.Public && !Method.Name:startsWith('_')
+predicate publicWithoutKwargs(Method) => publicService && !hasKwargs
+predicate methodWithoutKwargs(Type) => Type.Methods:any(publicWithoutKwargs)
+
+predicate standardPrefix(Method) =>
+    Method.Name:startsWith('get_') || Method.Name:startsWith('list_') ||
+    Method.Name:startsWith('create_') || Method.Name:startsWith('delete_') ||
+    Method.Name:startsWith('update_') || Method.Name:startsWith('set_') ||
+    Method.Name:startsWith('begin_') || Method.Name == 'close' ||
+    Method.Name:startsWith('from_')
+predicate badMethodName(Method) => publicService && !standardPrefix
+predicate typeBadMethodName(Type) => Type.Methods:any(badMethodName)
+
+## Python clients must accept a credential parameter in __init__
+foreach PythonClients:python:initMissingCredential => PRINT('{warning:@yellow} {item.Name} must accept credential in __init__')
+
+## Python clients must provide a from_connection_string classmethod
+foreach PythonClients:python:missingFromConnStr => PRINT('{warning:@yellow} {item.Name} must have a from_connection_string classmethod')
+
+## Public service methods must accept **kwargs
+foreach PythonClients:python:methodWithoutKwargs => PRINT('{warning:@yellow} {item.Name} is missing **kwargs')
+
+## Public service methods should use standard verb prefixes (get_, list_, create_, etc.)
+foreach PythonClients:python:typeBadMethodName => PRINT('{info:@cyan} {item.Name} doesn\'t use a standard verb prefix')

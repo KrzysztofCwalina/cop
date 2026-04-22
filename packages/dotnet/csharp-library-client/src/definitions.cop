@@ -1,0 +1,26 @@
+# Client library design definitions for C#
+
+export predicate client(Type) => Type.Name:endsWith('Client')
+export predicate clientOptionsType(Type) => Type.Name:endsWith('ClientOptions')
+export predicate Clients(Types) => csharp && client && !clientOptionsType
+
+predicate optionsParam(Parameter) => Parameter.Type:endsWith('Options')
+predicate constructorAcceptsOptions(Constructor) => Constructor.Parameters:any(optionsParam)
+
+predicate cancellationToken(Parameter) => Parameter.Type == 'CancellationToken'
+predicate publicAsync(Method) => Method.Public && Method.Async
+
+predicate publicInstance(Method) => Method.Public && !Method.Static
+
+predicate asyncServiceMethod(Method) => Method.Public && Method.Virtual && Method.Name:endsWith('Async')
+
+export predicate model(Type) => Type.Kind == 'Class' && Type.Public && !client && !clientOptionsType
+export predicate Models(Types) => csharp && model
+export predicate ClientOptions(Types) => csharp && clientOptionsType
+
+export predicate protectedParameterless(Constructor) => Constructor.Protected && Constructor.Parameters.Count == 0
+
+export predicate collectionSuffix(Type) => Type.Name:endsWith('Collection')
+export predicate requestSuffix(Type) => Type.Name:endsWith('Request')
+export predicate parameterSuffix(Type) => Type.Name:endsWith('Parameter') || Type.Name:endsWith('Parameters')
+export predicate optionSuffix(Type) => Type.Name:endsWith('Option') || Type.Name:endsWith('Options')

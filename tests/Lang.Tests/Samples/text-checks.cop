@@ -1,0 +1,2 @@
+## No print() calls in production Python code
+foreach Lines:python:Matches('\bprint\s*\('):!Path('**/tests/**') => PRINT('{warning:@yellow} print() should not be used in production code')

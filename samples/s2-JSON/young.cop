@@ -1,0 +1,11 @@
+import json
+
+type Person = {
+    name : string,
+    age : integer
+}
+let Persons = Parse('data.json', [Person])
+
+predicate young(Person) => Person.age < 30
+let YoungPeople = Persons:young
+foreach YongPeople => PRINT('{item.Name}')

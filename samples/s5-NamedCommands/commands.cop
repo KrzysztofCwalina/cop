@@ -1,0 +1,3 @@
+import code
+
+command LIST-TYPES = foreach Types => PRINT('{item.Name}')

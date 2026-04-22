@@ -1,0 +1,19 @@
+# General JavaScript/TypeScript source code style definitions
+
+predicate consoleCall(Statement) => Statement.Kind == 'call'
+    && Statement.TypeName == 'console'
+
+predicate alertCall(Statement) => Statement.Kind == 'call'
+    && Statement.MemberName == 'alert'
+
+predicate evalCall(Statement) => Statement.Kind == 'call'
+    && Statement.MemberName == 'eval'
+
+predicate debuggerStatement(Statement) => Statement.Kind == 'call'
+    && Statement.MemberName == 'debugger'
+
+predicate usesVar(Statement) => Statement.Kind == 'declaration'
+    && Statement.Keywords:contains('var')
+
+predicate catchWithoutRethrow(Statement) => Statement.ErrorHandler == true
+    && Statement.Generic == true && !Statement.Rethrows

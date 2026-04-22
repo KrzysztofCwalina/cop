@@ -1,0 +1,12 @@
+# Library API design definitions for C#
+
+predicate asyncBoolParam(Parameter) => Parameter.Name == 'async' && Parameter.Type == 'bool'
+predicate publicWithAsyncBool(Method) => Method.Public && Method.Parameters:any(asyncBoolParam)
+predicate exposesAsyncBool(Type) => Type.Methods:any(publicWithAsyncBool)
+
+predicate nonPublicAsync(Method) => !Method.Public && Method.Async
+
+predicate awaitUsingDefault(Statement) => Statement.Kind == 'await'
+    && (Statement.MemberName != 'ConfigureAwait' || Statement.Arguments:contains('true'))
+
+export predicate publicType(Type) => Type.Public

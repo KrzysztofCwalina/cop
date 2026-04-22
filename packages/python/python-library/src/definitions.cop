@@ -1,0 +1,14 @@
+# Library API design definitions for Python
+
+predicate untypedParam(Parameter) => Parameter.Type == null
+    && !Parameter.Variadic && !Parameter.Kwargs
+
+predicate publicMethodMissingParamTypes(Method) => Method.Public
+    && Method.Parameters:any(untypedParam)
+
+predicate untypedParams(Type) => Type.Methods:any(publicMethodMissingParamTypes)
+
+predicate publicMethodMissingReturnType(Method) => Method.Public
+    && Method.ReturnType == null
+
+predicate missingReturnTypes(Type) => Type.Methods:any(publicMethodMissingReturnType)

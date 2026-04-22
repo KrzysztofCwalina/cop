@@ -1,0 +1,35 @@
+{
+    "name": "cop-language",
+    "displayName": "cop Check Language",
+    "description": "Syntax highlighting for cop check (.cop) files",
+    "version": "0.1.0",
+    "publisher": "cop",
+    "engines": {
+        "vscode": "^1.80.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [
+            {
+                "id": "cop",
+                "aliases": [
+                    "cop",
+                    "Cop Check"
+                ],
+                "extensions": [
+                    ".cop"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "cop",
+                "scopeName": "source.cop",
+                "path": "./syntaxes/cop.tmLanguage.json"
+            }
+        ]
+    }
+}

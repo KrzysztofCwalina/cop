@@ -1,0 +1,42 @@
+# General C# source code style checks
+
+import code-analysis
+
+## Disallow implicit typing with var — use explicit types
+export let var-declarations = Code.Statements:csharp:varDeclaration
+    :toError('Do not use \'var\' for {Statement.MemberName}')
+
+## Disallow dynamic typing
+export let dynamic-declarations = Code.Statements:csharp:dynamicDeclaration
+    :toError('Do not use \'dynamic\'')
+
+## Use Task.Delay instead of blocking Thread.Sleep
+export let thread-sleep-calls = Code.Statements:csharp:threadSleep
+    :toError('Use Task.Delay instead of Thread.Sleep')
+
+## Avoid Console output in library code
+export let console-calls = Code.Statements:csharp:consoleCall
+    :toWarning('Don\'t use Console.{Statement.MemberName} in library code')
+
+## Catch specific exception types instead of bare Exception
+export let base-exception-catches = Code.Statements:csharp:catchesBaseException
+    :toWarning('Catch a specific exception type instead of Exception')
+
+## Do not swallow base exceptions — always rethrow
+export let swallowed-exceptions = Code.Statements:csharp:swallowsBaseException
+    :toWarning('Do not swallow Exception — rethrow or catch a specific type')
+
+## ConfigureAwait(true) is the default and should not be used explicitly
+export let configure-await-true-calls = Code.Statements:csharp:configureAwaitTrue
+    :toWarning('Do not use ConfigureAwait(true) — it is the default')
+
+## Do not block on async code with GetAwaiter().GetResult()
+export let sync-over-async-calls = Code.Statements:csharp:getAwaiterGetResult
+    :toWarning('Do not use GetAwaiter().GetResult() — use await instead')
+
+## TaskCompletionSource should be created with RunContinuationsAsynchronously
+export let bare-task-completion-sources = Code.Statements:csharp:taskCompletionSourceNew
+    :toWarning('Use TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously)')
+
+## All C# checks combined
+export let csharp-checks = [var-declarations, dynamic-declarations, thread-sleep-calls, console-calls, base-exception-catches, swallowed-exceptions, configure-await-true-calls, sync-over-async-calls, bare-task-completion-sources]

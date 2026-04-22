@@ -1,0 +1,33 @@
+# General C# source code style checks
+
+predicate varDeclaration(Statement) => Statement.Kind == 'declaration' && Statement.Keywords:contains('var')
+predicate dynamicDeclaration(Statement) => Statement.Kind == 'declaration' && Statement.Keywords:contains('dynamic')
+
+predicate threadSleep(Statement) => Statement.Kind == 'call'
+    && Statement.TypeName == 'Thread' && Statement.MemberName == 'Sleep'
+predicate consoleCall(Statement) => Statement.Kind == 'call'
+    && Statement.TypeName == 'Console'
+
+predicate bareExceptionCatch(Statement) => Statement.Kind == 'catch'
+    && Statement.TypeName == 'Exception'
+
+predicate swallowsBaseException(Statement) => Statement.Kind == 'catch'
+    && Statement.TypeName == 'Exception' && !Statement.Rethrows
+
+## Disallow implicit typing with var — use explicit types
+foreach Statements:csharp:varDeclaration:!Path('**/Tests/**') => PRINT('{error:@red} Do not use \'var\' for {item.MemberName}')
+
+## Disallow dynamic typing
+foreach Statements:csharp:dynamicDeclaration => PRINT('{error:@red} Do not use \'dynamic\'')
+
+## Use Task.Delay instead of blocking Thread.Sleep
+foreach Statements:csharp:threadSleep => PRINT('{error:@red} Use Task.Delay instead of Thread.Sleep')
+
+## Avoid Console output in library code
+foreach Statements:csharp:consoleCall:!Path('**/Tests/**') => PRINT('{warning:@yellow} Don\'t use Console.{item.MemberName} in library code')
+
+## Catch specific exception types instead of bare Exception
+foreach Statements:csharp:bareExceptionCatch => PRINT('{warning:@yellow} Catch a specific exception type instead of Exception')
+
+## Do not swallow base exceptions
+foreach Statements:csharp:swallowsBaseException => PRINT('{warning:@yellow} Do not swallow Exception')

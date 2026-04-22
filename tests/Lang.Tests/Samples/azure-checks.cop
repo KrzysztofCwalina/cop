@@ -1,0 +1,24 @@
+# Azure SDK client library checks for C#
+
+predicate client(Type) => Type.Name:endsWith('Client')
+predicate clientOptionsType(Type) => Type.Name:endsWith('ClientOptions')
+predicate Clients(Types) => client && !clientOptionsType
+
+predicate tokenCredential(Parameter) => Parameter.Type == 'TokenCredential'
+predicate tokenCredentialParam(Constructor) => Constructor.Parameters:any(tokenCredential)
+predicate missingTokenCredential(Type) => Type.Constructors:!any(tokenCredentialParam)
+
+predicate protectedParameterless(Constructor) => Constructor.Protected && Constructor.Parameters.Count == 0
+predicate missingMockingConstructor(Type) => Type.Constructors:!any(protectedParameterless)
+
+predicate inheritsClientOptions(Type) => Type:inheritsFrom('ClientOptions') || Type:inheritsFrom('ClientPipelineOptions')
+predicate missingBaseClass(Type) => !inheritsClientOptions
+
+## Azure clients must accept TokenCredential for authentication
+foreach Clients:csharp:missingTokenCredential => PRINT('{warning:@yellow} {item.Name} must accept TokenCredential')
+
+## Client types must provide a protected parameterless constructor for mocking
+foreach Clients:csharp:missingMockingConstructor => PRINT('{warning:@yellow} {item.Name} must provide a protected parameterless constructor')
+
+## Options types must inherit from ClientOptions or ClientPipelineOptions
+foreach Types:csharp:clientOptionsType:missingBaseClass => PRINT('{warning:@yellow} {item.Name} must inherit from ClientOptions or ClientPipelineOptions')

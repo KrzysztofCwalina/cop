@@ -1,0 +1,120 @@
+# alan Code Analysis Package v1.0
+# Defines Violation type and severity functions for structured analysis results.
+# Import with: import code-analysis
+
+import code
+import filesystem
+
+export type Violation = {
+    Severity : string,
+    Message : string,
+    File : string,
+    Line : int,
+    Source : string
+}
+
+# Statement overloads
+export function toError(Statement, message: string) => Violation {
+    Severity = 'error',
+    Message = message,
+    File = Statement.File.Path,
+    Line = Statement.Line,
+    Source = Statement.Source
+}
+
+export function toWarning(Statement, message: string) => Violation {
+    Severity = 'warning',
+    Message = message,
+    File = Statement.File.Path,
+    Line = Statement.Line,
+    Source = Statement.Source
+}
+
+export function toInfo(Statement, message: string) => Violation {
+    Severity = 'info',
+    Message = message,
+    File = Statement.File.Path,
+    Line = Statement.Line,
+    Source = Statement.Source
+}
+
+# Type overloads
+export function toError(Type, message: string) => Violation {
+    Severity = 'error',
+    Message = message,
+    File = Type.File.Path,
+    Line = Type.Line,
+    Source = Type.Source
+}
+
+export function toWarning(Type, message: string) => Violation {
+    Severity = 'warning',
+    Message = message,
+    File = Type.File.Path,
+    Line = Type.Line,
+    Source = Type.Source
+}
+
+export function toInfo(Type, message: string) => Violation {
+    Severity = 'info',
+    Message = message,
+    File = Type.File.Path,
+    Line = Type.Line,
+    Source = Type.Source
+}
+
+# Line overloads
+export function toError(Line, message: string) => Violation {
+    Severity = 'error',
+    Message = message,
+    File = Line.File.Path,
+    Line = Line.Number,
+    Source = Line.Source
+}
+
+export function toWarning(Line, message: string) => Violation {
+    Severity = 'warning',
+    Message = message,
+    File = Line.File.Path,
+    Line = Line.Number,
+    Source = Line.Source
+}
+
+export function toInfo(Line, message: string) => Violation {
+    Severity = 'info',
+    Message = message,
+    File = Line.File.Path,
+    Line = Line.Number,
+    Source = Line.Source
+}
+
+# Folder overloads
+export function toError(Folder, message: string) => Violation {
+    Severity = 'error',
+    Message = message,
+    File = Folder.Path,
+    Line = 0,
+    Source = Folder.Source
+}
+
+export function toWarning(Folder, message: string) => Violation {
+    Severity = 'warning',
+    Message = message,
+    File = Folder.Path,
+    Line = 0,
+    Source = Folder.Source
+}
+
+export function toInfo(Folder, message: string) => Violation {
+    Severity = 'info',
+    Message = message,
+    File = Folder.Path,
+    Line = 0,
+    Source = Folder.Source
+}
+
+# Parameterized check command — users invoke via RUN CHECK(violations)
+export command CHECK(violations) = PRINT(
+    '{Violation.File@dim}({Violation.Line@dim}): {Violation.Severity@auto}: {Violation.Message}',
+    violations
+)

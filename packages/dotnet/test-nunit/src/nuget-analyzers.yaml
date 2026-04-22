@@ -1,0 +1,3 @@
+analyzers:
+  - package: NUnit.Analyzers
+    version: 4.5.0

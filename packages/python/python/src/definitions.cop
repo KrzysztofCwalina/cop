@@ -1,0 +1,11 @@
+# General Python source code style definitions
+
+predicate printCall(Statement) => Statement.Kind == 'call' && Statement.MemberName == 'print'
+
+predicate bareExcept(Statement) => Statement.ErrorHandler == true && Statement.TypeName == null
+
+predicate catchesException(Statement) => Statement.ErrorHandler == true
+    && Statement.Generic == true
+
+predicate swallowsException(Statement) => Statement.ErrorHandler == true
+    && Statement.Generic == true && !Statement.Rethrows
