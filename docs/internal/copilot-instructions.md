@@ -2,19 +2,18 @@
 
 ## Overview
 
-Cop is a governed agentic software development system. It provides a custom scripting language (`.cop` files) for defining analysis rules over source code and filesystems, a CLI for package management and agent orchestration, and a web driver service for managing agent tasks.
+Cop is a governed agentic software development system. It provides a custom scripting language (`.cop` files) for defining analysis rules over source code and filesystems, and a CLI for package management.
 
-The system has three main deliverables:
+The system has two main deliverables:
 
 - **cop.exe** (CLI) — Package management, rule evaluation, lock/unlock enforcement
-- **copweb.exe** (Driver) — Web service for agent task orchestration with local and cloud backends
 - **packages/** — Repository-based package distribution (directories, not zips)
 
 ## Directory Structure
 
 ```
-cop/cli/            CLI (.NET 10, System.CommandLine). 17 commands for
-                    package management and agent orchestration.
+cop/cli/            CLI (.NET 10, System.CommandLine). Commands for
+                    package management.
 
 cop/language/       Cop language (namespace Cop.Lang). Parser, interpreter,
                     evaluator, type system. General-purpose language features only.
@@ -27,10 +26,6 @@ cop/shared/         Core library (namespace Cop.Core). Package models,
                     GitHub/local package sources, feed manager, dependency
                     resolver, restore engine, checksum/lock file manager.
 
-copweb/             Web driver service (namespace Cop.Driver). ASP.NET minimal
-                    API on port 5100. Manages agent tasks, web dashboard,
-                    package directory.
-
 packages/           Seed packages organized by language. General packages are at
                     the root; language-specific packages are in group folders
                     (dotnet/, js/, python/). Each package contains metadata,
@@ -40,7 +35,7 @@ tests/Cop.Tests/    NUnit 4.x tests for core library
 tests/Lang.Tests/   NUnit 4.x tests for language runtime
 
 install/            Publish script and platform subfolders for self-contained binaries
-                      install/publish.ps1 builds cop.exe and copweb.exe for all platforms
+                      install/publish.ps1 builds cop.exe for all platforms
                       install/vscode-cop/ — VS Code syntax highlighting extension
 docs/               Documentation
 samples/            Example .cop scripts (s1-HelloWorld through s6-Strings)
@@ -112,14 +107,14 @@ dotnet test tests/Cop.Tests/Cop.Tests.csproj
 # Run language runtime tests (281 tests)
 dotnet test tests/Lang.Tests/Lang.Tests.csproj
 
-# Publish self-contained cop.exe and copweb.exe for all platforms
+# Publish self-contained cop.exe for all platforms
 install/publish.ps1
 
 # Or publish for a single platform
 install/publish.ps1 -Runtimes win-x64
 ```
 
-**After any code change** to `cop/`, `copweb/`, or related projects, rebuild:
+**After any code change** to `cop/` or related projects, rebuild:
 
 ```bash
 install/publish.ps1 -Runtimes win-x64        # single platform (fast)

@@ -1,3 +1,4 @@
+# Run with: cop run LIST-TYPES
 import code
 
 command LIST-TYPES = foreach Types => PRINT('{item.Name}')

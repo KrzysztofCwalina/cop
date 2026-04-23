@@ -1,4 +1,4 @@
-# Publish cop and copweb as self-contained single-file executables
+# Publish cop as a self-contained single-file executable
 # Builds for all supported platforms into install/<rid>/ subfolders
 param(
     [string[]]$Runtimes = @("win-x64", "win-arm64", "linux-x64", "linux-arm64", "osx-x64", "osx-arm64")
@@ -14,9 +14,6 @@ foreach ($rid in $Runtimes) {
     Write-Host "Publishing cop for $rid..."
     dotnet publish "$RepoRoot\cop\cli\cop.csproj" -c Release -r $rid --self-contained -o $outDir
     
-    Write-Host "Publishing copweb for $rid..."
-    dotnet publish "$RepoRoot\copweb\copweb.csproj" -c Release -r $rid --self-contained -o $outDir
-
     # Clean up build artifacts
     Remove-Item -Force "$outDir\*.pdb" -ErrorAction SilentlyContinue
     Remove-Item -Force "$outDir\*.json" -ErrorAction SilentlyContinue

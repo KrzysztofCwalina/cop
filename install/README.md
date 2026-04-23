@@ -10,7 +10,7 @@ Run the publish script from the repo root:
 install/publish.ps1
 ```
 
-This builds `cop` and `copweb` for all supported platforms:
+This builds `cop` for all supported platforms:
 
 | Subfolder | OS | Architecture |
 |---|---|---|

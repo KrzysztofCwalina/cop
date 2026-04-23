@@ -10,7 +10,7 @@ namespace Cop.Core
     /// <summary>
     /// Manages the list of package feeds (GitHub repos) for package discovery.
     /// Default feed is the cop repo itself. Users can add additional feeds.
-    /// Feeds are for discovery only (cop search, copweb UI) — cop restore uses fully-qualified paths directly.
+    /// Feeds are for discovery only (cop search) — cop restore uses fully-qualified paths directly.
     /// </summary>
     public class FeedManager
     {
