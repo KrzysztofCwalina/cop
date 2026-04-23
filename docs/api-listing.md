@@ -9,7 +9,7 @@ Create a file called `api-listing.cop` in your project:
 ```ruby
 import csharp-api
 
-export command api-listing = foreach Code.Api:csharp:publicApi => PRINT('{Api.StubLine}')
+export command api-listing = foreach Code.Api:csharp:publicApi => PRINT('{Api.ApiAsText}')
 ```
 
 ```bash
@@ -55,7 +55,7 @@ Use `:text()` to flatten the collection into a single text block, then `save()` 
 ```ruby
 import csharp-api
 
-let apiText = Code.Api:csharp:publicApi:text('{Api.StubLine}')
+let apiText = Code.Api:csharp:publicApi:text('{Api.ApiAsText}')
 export command save-api = save('api-surface.txt', apiText)
 ```
 
@@ -74,7 +74,7 @@ import csharp-api
 
 let dll = Code.Load('bin/Release/net8.0/MyPackage.dll')
 
-export command list-dll = foreach dll.Api:publicApi => PRINT('{Api.StubLine}')
+export command list-dll = foreach dll.Api:publicApi => PRINT('{Api.ApiAsText}')
 ```
 
 To save assembly API to a file:
@@ -83,7 +83,7 @@ To save assembly API to a file:
 import csharp-api
 
 let dll = Code.Load('bin/Release/net8.0/MyPackage.dll')
-let apiText = dll.Api:publicApi:text('{Api.StubLine}')
+let apiText = dll.Api:publicApi:text('{Api.ApiAsText}')
 export command save-dll = save('api-surface.txt', apiText)
 ```
 
@@ -104,7 +104,7 @@ This is useful for:
 
 ## Signature Format (for Diff)
 
-For API diff comparison, use `Api.Signature` instead of `Api.StubLine`. Signatures are compact canonical keys:
+For API diff comparison, use `Api.Signature` instead of `Api.ApiAsText`. Signatures are compact canonical keys:
 
 ```ruby
 import csharp-api
@@ -137,7 +137,7 @@ The `ApiLine` type has these fields:
 
 | Field | Type | Description |
 |---|---|---|
-| `ApiLine.Text` | string | The `StubLine` text (C# stub representation) |
+| `ApiLine.Text` | string | The `ApiAsText` text (C# stub representation) |
 | `ApiLine.Kind` | string | API kind (`class`, `method`, `property`, etc.) |
 | `ApiLine.TypeName` | string | Declaring type name |
 | `ApiLine.MemberName` | string | Member name (empty for type-level entries) |
@@ -198,13 +198,13 @@ Each entry in `Code.Api` (or from `Code.Load().Api`) has these fields:
 | `Api.TypeName` | string | Declaring type name |
 | `Api.MemberName` | string | Member name (empty for type-level entries) |
 | `Api.Signature` | string | Canonical signature (stable comparison key) |
-| `Api.StubLine` | string | C# stub declaration (for listings) |
+| `Api.ApiAsText` | string | C# stub declaration (for listings) |
 | `Api.Line` | int | Source line number (0 for assembly-loaded entries) |
 | `Api.File` | File | Source file |
 
-### StubLine Format
+### ApiAsText Format
 
-Each `StubLine` is a single C# declaration line with stub bodies (indentation added by the generator based on nesting):
+Each `ApiAsText` is a single C# declaration line with stub bodies (indentation added by the generator based on nesting):
 
 | Kind | Example |
 |---|---|

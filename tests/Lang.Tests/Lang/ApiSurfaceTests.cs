@@ -9,28 +9,28 @@ namespace Cop.Tests.Lang;
 [TestFixture]
 public class ApiSurfaceTests
 {
-    // ── StubLine formatting ──
+    // ── ApiAsText formatting ──
 
     [Test]
-    public void StubLine_Method_ReturnsVoid_UsesEmptyBraces()
+    public void ApiAsText_Method_ReturnsVoid_UsesEmptyBraces()
     {
         var type = CreateType("MyClass");
         var method = new MethodDeclaration("DoWork", Modifier.Public, [], TR("void"), [], 10);
         var entry = ApiEntry.ForMethod(type, method);
-        Assert.That(entry.StubLine, Is.EqualTo("public void DoWork() { }"));
+        Assert.That(entry.ApiAsText, Is.EqualTo("public void DoWork() { }"));
     }
 
     [Test]
-    public void StubLine_Method_ReturnsValue_UsesThrowNull()
+    public void ApiAsText_Method_ReturnsValue_UsesThrowNull()
     {
         var type = CreateType("MyClass");
         var method = new MethodDeclaration("GetName", Modifier.Public | Modifier.Virtual, [], TR("string"), [], 10);
         var entry = ApiEntry.ForMethod(type, method);
-        Assert.That(entry.StubLine, Is.EqualTo("public virtual string GetName() { throw null; }"));
+        Assert.That(entry.ApiAsText, Is.EqualTo("public virtual string GetName() { throw null; }"));
     }
 
     [Test]
-    public void StubLine_Method_WithParameters()
+    public void ApiAsText_Method_WithParameters()
     {
         var type = CreateType("MyClass");
         var method = new MethodDeclaration("Add", Modifier.Public | Modifier.Static, [], TR("int"), [
@@ -38,11 +38,11 @@ public class ApiSurfaceTests
             Param("b", "int")
         ], 10);
         var entry = ApiEntry.ForMethod(type, method);
-        Assert.That(entry.StubLine, Is.EqualTo("public static int Add(int a, int b) { throw null; }"));
+        Assert.That(entry.ApiAsText, Is.EqualTo("public static int Add(int a, int b) { throw null; }"));
     }
 
     [Test]
-    public void StubLine_Property_GetSet()
+    public void ApiAsText_Property_GetSet()
     {
         var type = CreateType("MyClass");
         var prop = new PropertyDeclaration("Name", TR("string"), Modifier.Public, 10)
@@ -51,11 +51,11 @@ public class ApiSurfaceTests
             HasSetter = true
         };
         var entry = ApiEntry.ForProperty(type, prop);
-        Assert.That(entry.StubLine, Is.EqualTo("public string Name { get { throw null; } set { } }"));
+        Assert.That(entry.ApiAsText, Is.EqualTo("public string Name { get { throw null; } set { } }"));
     }
 
     [Test]
-    public void StubLine_Property_GetOnly()
+    public void ApiAsText_Property_GetOnly()
     {
         var type = CreateType("MyClass");
         var prop = new PropertyDeclaration("Count", TR("int"), Modifier.Public, 10)
@@ -64,69 +64,69 @@ public class ApiSurfaceTests
             HasSetter = false
         };
         var entry = ApiEntry.ForProperty(type, prop);
-        Assert.That(entry.StubLine, Is.EqualTo("public int Count { get { throw null; } }"));
+        Assert.That(entry.ApiAsText, Is.EqualTo("public int Count { get { throw null; } }"));
     }
 
     [Test]
-    public void StubLine_Constructor()
+    public void ApiAsText_Constructor()
     {
         var type = CreateType("MyClass");
         var ctor = new MethodDeclaration(".ctor", Modifier.Public, [], null, [
             Param("name", "string")
         ], 10);
         var entry = ApiEntry.ForConstructor(type, ctor);
-        Assert.That(entry.StubLine, Is.EqualTo("public MyClass(string name) { }"));
+        Assert.That(entry.ApiAsText, Is.EqualTo("public MyClass(string name) { }"));
     }
 
     [Test]
-    public void StubLine_EnumValue()
+    public void ApiAsText_EnumValue()
     {
         var type = CreateType("Colors", TypeKind.Enum);
         var entry = ApiEntry.ForEnumValue(type, "Red");
-        Assert.That(entry.StubLine, Is.EqualTo("Red,"));
+        Assert.That(entry.ApiAsText, Is.EqualTo("Red,"));
     }
 
     [Test]
-    public void StubLine_Event()
+    public void ApiAsText_Event()
     {
         var type = CreateType("MyClass");
         var evt = new EventDeclaration("Changed", TR("EventHandler"), Modifier.Public, 10);
         var entry = ApiEntry.ForEvent(type, evt);
-        Assert.That(entry.StubLine, Is.EqualTo("public event EventHandler Changed { add { } remove { } }"));
+        Assert.That(entry.ApiAsText, Is.EqualTo("public event EventHandler Changed { add { } remove { } }"));
     }
 
     [Test]
-    public void StubLine_Field_Static_Readonly()
+    public void ApiAsText_Field_Static_Readonly()
     {
         var type = CreateType("MyClass");
         var field = new FieldDeclaration("Empty", TR("string"),
             Modifier.Public | Modifier.Static | Modifier.Readonly, 10);
         var entry = ApiEntry.ForField(type, field);
-        Assert.That(entry.StubLine, Is.EqualTo("public static readonly string Empty;"));
+        Assert.That(entry.ApiAsText, Is.EqualTo("public static readonly string Empty;"));
     }
 
     [Test]
-    public void StubLine_Type_ClassWithBaseType()
+    public void ApiAsText_Type_ClassWithBaseType()
     {
         var type = CreateType("MyClient") with { BaseTypes = ["ClientBase", "IDisposable"] };
         var entry = ApiEntry.ForType(type);
-        Assert.That(entry.StubLine, Is.EqualTo("public partial class MyClient : ClientBase, IDisposable"));
+        Assert.That(entry.ApiAsText, Is.EqualTo("public partial class MyClient : ClientBase, IDisposable"));
     }
 
     [Test]
-    public void StubLine_Type_Interface()
+    public void ApiAsText_Type_Interface()
     {
         var type = CreateType("IMyService", TypeKind.Interface);
         var entry = ApiEntry.ForType(type);
-        Assert.That(entry.StubLine, Is.EqualTo("public partial interface IMyService"));
+        Assert.That(entry.ApiAsText, Is.EqualTo("public partial interface IMyService"));
     }
 
     [Test]
-    public void StubLine_Type_Enum()
+    public void ApiAsText_Type_Enum()
     {
         var type = CreateType("Colors", TypeKind.Enum);
         var entry = ApiEntry.ForType(type);
-        Assert.That(entry.StubLine, Is.EqualTo("public enum Colors"));
+        Assert.That(entry.ApiAsText, Is.EqualTo("public enum Colors"));
     }
 
     // ── AssemblyApiReader ──

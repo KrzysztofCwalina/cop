@@ -118,7 +118,7 @@ When you intentionally change the API, update the baseline stub file to match th
 ```ruby
 import csharp-api
 
-let apiText = Code.Api:csharp:publicApi:text('{Api.StubLine}')
+let apiText = Code.Api:csharp:publicApi:text('{Api.ApiAsText}')
 export command api-export = save('api/MyPackage.cs', apiText)
 ```
 

@@ -78,7 +78,7 @@ public static class ApiStubGenerator
 
         // Type declaration line
         var entry = ApiEntry.ForType(type);
-        sb.AppendLine($"{pad}{entry.StubLine}");
+        sb.AppendLine($"{pad}{entry.ApiAsText}");
         sb.AppendLine($"{pad}{{");
 
         if (type.Kind == TypeKind.Enum)
@@ -102,30 +102,30 @@ public static class ApiStubGenerator
 
     private static List<string> CollectMembers(TypeDeclaration type)
     {
-        var members = new List<(string SortKey, string StubLine)>();
+        var members = new List<(string SortKey, string ApiAsText)>();
 
         // Fields (sorted by name)
         foreach (var field in type.Fields.Where(f => f.IsPublic).OrderBy(f => f.Name))
-            members.Add(($"0_field_{field.Name}", ApiEntry.ForField(type, field).StubLine));
+            members.Add(($"0_field_{field.Name}", ApiEntry.ForField(type, field).ApiAsText));
 
         // Constructors (sorted by parameter count)
         foreach (var ctor in type.Constructors.Where(c => c.IsPublic || c.IsProtected)
             .OrderBy(c => c.Parameters.Count))
-            members.Add(($"1_ctor_{ctor.Parameters.Count}", ApiEntry.ForConstructor(type, ctor).StubLine));
+            members.Add(($"1_ctor_{ctor.Parameters.Count}", ApiEntry.ForConstructor(type, ctor).ApiAsText));
 
         // Properties (sorted by name)
         foreach (var prop in type.Properties.Where(p => p.IsPublic || p.IsProtected).OrderBy(p => p.Name))
-            members.Add(($"2_prop_{prop.Name}", ApiEntry.ForProperty(type, prop).StubLine));
+            members.Add(($"2_prop_{prop.Name}", ApiEntry.ForProperty(type, prop).ApiAsText));
 
         // Events (sorted by name)
         foreach (var evt in type.Events.Where(e => e.IsPublic || e.IsProtected).OrderBy(e => e.Name))
-            members.Add(($"3_event_{evt.Name}", ApiEntry.ForEvent(type, evt).StubLine));
+            members.Add(($"3_event_{evt.Name}", ApiEntry.ForEvent(type, evt).ApiAsText));
 
         // Methods (sorted by name, then parameter count)
         foreach (var method in type.Methods.Where(m => m.IsPublic || m.IsProtected)
             .OrderBy(m => m.Name).ThenBy(m => m.Parameters.Count))
-            members.Add(($"4_method_{method.Name}_{method.Parameters.Count}", ApiEntry.ForMethod(type, method).StubLine));
+            members.Add(($"4_method_{method.Name}_{method.Parameters.Count}", ApiEntry.ForMethod(type, method).ApiAsText));
 
-        return members.Select(m => m.StubLine).ToList();
+        return members.Select(m => m.ApiAsText).ToList();
     }
 }

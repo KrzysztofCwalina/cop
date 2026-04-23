@@ -22,7 +22,7 @@ export type ApiLine = {
 }
 
 export function toApiLine(Api) => ApiLine {
-    Text = Api.StubLine,
+    Text = Api.ApiAsText,
     Kind = Api.Kind,
     TypeName = Api.TypeName,
     MemberName = Api.MemberName,

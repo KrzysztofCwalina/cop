@@ -4,7 +4,7 @@ namespace Cop.Providers.SourceModel;
 /// A flat, canonical public API entry for API surface comparison.
 /// Each entry represents one API element (type, method, property, event, enum value, constructor).
 /// The Signature property is the stable comparison key.
-/// The StubLine property is the C# stub representation for API listing output.
+/// The ApiAsText property is the C# stub representation for API listing output.
 /// </summary>
 public record ApiEntry(
     string Kind,
@@ -21,7 +21,7 @@ public record ApiEntry(
     /// The C# stub line for this API entry (e.g., "public virtual string Name { get { throw null; } }").
     /// Does NOT include indentation — the generator adds that based on nesting level.
     /// </summary>
-    public string StubLine { get; init; } = "";
+    public string ApiAsText { get; init; } = "";
 
     /// <summary>
     /// Build a canonical signature for a type-level entry.
@@ -35,7 +35,7 @@ public record ApiEntry(
         Line: type.Line)
     {
         File = type.File,
-        StubLine = FormatTypeStub(type)
+        ApiAsText = FormatTypeStub(type)
     };
 
     /// <summary>
@@ -50,7 +50,7 @@ public record ApiEntry(
         Line: enumType.Line)
     {
         File = enumType.File,
-        StubLine = $"{value},"
+        ApiAsText = $"{value},"
     };
 
     /// <summary>
@@ -65,7 +65,7 @@ public record ApiEntry(
         Line: ctor.Line)
     {
         File = type.File,
-        StubLine = $"{FormatModifiers(ctor.Modifiers)}{type.Name}({FormatParametersFull(ctor.Parameters)}) {{ }}"
+        ApiAsText = $"{FormatModifiers(ctor.Modifiers)}{type.Name}({FormatParametersFull(ctor.Parameters)}) {{ }}"
     };
 
     /// <summary>
@@ -80,7 +80,7 @@ public record ApiEntry(
         Line: method.Line)
     {
         File = type.File,
-        StubLine = FormatMethodStub(method)
+        ApiAsText = FormatMethodStub(method)
     };
 
     /// <summary>
@@ -95,7 +95,7 @@ public record ApiEntry(
         Line: prop.Line)
     {
         File = type.File,
-        StubLine = FormatPropertyStub(prop)
+        ApiAsText = FormatPropertyStub(prop)
     };
 
     /// <summary>
@@ -110,7 +110,7 @@ public record ApiEntry(
         Line: evt.Line)
     {
         File = type.File,
-        StubLine = $"{FormatModifiers(evt.Modifiers)}event {evt.Type?.OriginalText ?? "EventHandler"} {evt.Name} {{ add {{ }} remove {{ }} }}"
+        ApiAsText = $"{FormatModifiers(evt.Modifiers)}event {evt.Type?.OriginalText ?? "EventHandler"} {evt.Name} {{ add {{ }} remove {{ }} }}"
     };
 
     /// <summary>
@@ -125,7 +125,7 @@ public record ApiEntry(
         Line: field.Line)
     {
         File = type.File,
-        StubLine = $"{FormatModifiers(field.Modifiers)}{field.Type?.OriginalText ?? "object"} {field.Name};"
+        ApiAsText = $"{FormatModifiers(field.Modifiers)}{field.Type?.OriginalText ?? "object"} {field.Name};"
     };
 
     // --- Signature helpers (types only, for comparison key) ---
@@ -142,7 +142,7 @@ public record ApiEntry(
             _ => ""
         };
 
-    // --- StubLine helpers (full C# stub representation) ---
+    // --- ApiAsText helpers (full C# stub representation) ---
 
     private static string FormatModifiers(Modifier mods)
     {
