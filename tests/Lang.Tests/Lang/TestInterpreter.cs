@@ -21,6 +21,11 @@ internal static class TestInterpreter
 
     public static List<Document> ParseSourceFiles(params string[] filePaths)
     {
+        // Find common root to compute relative paths that preserve directory structure
+        var commonRoot = filePaths.Length > 1
+            ? FindCommonRoot(filePaths)
+            : Path.GetDirectoryName(filePaths[0]) ?? "";
+
         var parserRegistry = SourceParserRegistry.CreateDefault();
         var documents = new List<Document>();
         foreach (var filePath in filePaths)
@@ -33,7 +38,9 @@ internal static class TestInterpreter
                 var text = File.ReadAllText(filePath);
                 var sourceFile = parser.Parse(filePath, text);
                 if (sourceFile == null) continue;
-                var relativePath = Path.GetFileName(filePath);
+                var relativePath = string.IsNullOrEmpty(commonRoot)
+                    ? Path.GetFileName(filePath)
+                    : Path.GetRelativePath(commonRoot, filePath);
                 var normalized = sourceFile with { Path = relativePath };
                 for (int i = 0; i < normalized.Statements.Count; i++)
                     normalized.Statements[i].File = normalized;
@@ -44,5 +51,20 @@ internal static class TestInterpreter
             catch { }
         }
         return documents;
+    }
+
+    private static string FindCommonRoot(string[] paths)
+    {
+        var dirs = paths.Select(p => Path.GetDirectoryName(Path.GetFullPath(p)) ?? "").ToArray();
+        if (dirs.Length == 0) return "";
+        var common = dirs[0];
+        foreach (var dir in dirs.Skip(1))
+        {
+            while (!dir.StartsWith(common, StringComparison.OrdinalIgnoreCase) && common.Length > 0)
+            {
+                common = Path.GetDirectoryName(common) ?? "";
+            }
+        }
+        return common;
     }
 }

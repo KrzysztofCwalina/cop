@@ -11,7 +11,7 @@ import csharp-api
 import code-analysis
 
 export let api-listing = Code.Api:csharp:publicApi
-    :toOutput('{Api.Signature}')
+    :toInfo('{Api.Signature}')
 ```
 
 ## Run
@@ -55,7 +55,7 @@ import csharp-api
 import code-analysis
 
 export let methods = Code.Api:csharp:apiMethod
-    :toOutput('{Api.Signature}')
+    :toInfo('{Api.Signature}')
 ```
 
 List only types:
@@ -65,7 +65,7 @@ import csharp-api
 import code-analysis
 
 export let types = Code.Api:csharp:apiType
-    :toOutput('{Api.Signature}')
+    :toInfo('{Api.Signature}')
 ```
 
 ## Save to File

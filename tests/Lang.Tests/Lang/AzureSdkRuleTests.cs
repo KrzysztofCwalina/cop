@@ -627,36 +627,38 @@ public class AzureSdkRuleTests
 
     // ── API Compat: Export generates canonical entries ──
 
-    private const string ApiExportPolicy = @"
-import csharp-api
-import code-analysis
-
-predicate baselineLine(Line) => Line.File.Path:matches('api-baseline') && Line.Text:matches('\\S')
-export command api-export = SAVE('api-baseline.txt', '{Api.Signature}', Code.Api:csharp:publicApi)
-";
-
+    // Api-to-Api comparison: baseline is a C# stub file (like Azure SDK's api/*.cs)
+    // Both sides parsed through the same C# parser, so signatures match naturally.
     private const string ApiCompatPolicy = @"
 import csharp-api
 import code-analysis
 
-predicate baselineLine(Line) => Line.File.Path:matches('api-baseline') && Line.Text:matches('\\S')
-export command api-export = SAVE('api-baseline.txt', '{Api.Signature}', Code.Api:csharp:publicApi)
+# Baseline: C# stub files in api/ directory (Azure SDK convention)
+predicate baselineApi(Api) => publicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')
+# Source: everything NOT in api/
+predicate sourceApi(Api) => publicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')
 
-let currentSignatures = Code.Api:csharp:publicApi:select(Api.Signature)
-let baselineSignatures = Code.Lines:baselineLine:select(Line.Text)
+let baselineSignatures = Code.Api:csharp:baselineApi:select(Api.Signature)
+let currentSignatures = Code.Api:csharp:sourceApi:select(Api.Signature)
 
-predicate removedApi(Line) => baselineLine && !Line.Text:in(currentSignatures)
-predicate addedApi(Api) => publicApi && !Api.Signature:in(baselineSignatures)
+predicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)
+predicate addedApi(Api) => sourceApi && !Api.Signature:in(baselineSignatures)
 
-export let api-removed = Code.Lines:removedApi:toError('API REMOVED (breaking): {Line.Text}')
-export let api-added = Code.Api:csharp:addedApi:toInfo('API ADDED: {Api.Signature}')
-export let csharp-api = [api-removed, api-added]
+export let api-removed = Code.Api:removedApi:toError('API REMOVED (breaking): {Api.Signature}')
+export let api-added = Code.Api:addedApi:toInfo('API ADDED: {Api.Signature}')
+export let api-compat = [api-removed, api-added]
 ";
 
     [Test]
     public void ApiCompat_Export_GeneratesCanonicalEntries()
     {
-        var result = RunInlineCop(ApiExportPolicy,
+        // Use a simple export policy to verify Api collection works
+        var exportPolicy = @"
+import csharp-api
+import code-analysis
+export command api-export = SAVE('api-baseline.txt', '{Api.Signature}', Code.Api:csharp:publicApi)
+";
+        var result = RunInlineCop(exportPolicy,
             [SamplePath("GoodClient.cs")], commandName: "api-export");
 
         var fileOutput = result.FileOutputs.FirstOrDefault();
@@ -678,25 +680,35 @@ export let csharp-api = [api-removed, api-added]
             Is.True, "Should have GoodClient constructor entry");
     }
 
-    // ── API Compat: Detect removed API ──
+    // ── API Compat: Detect removed API (C# stub baseline) ──
 
     [Test]
     public void ApiCompat_DetectsRemovedApi()
     {
-        var baselinePath = Path.Combine(Path.GetTempPath(), $"api-baseline-{Guid.NewGuid()}.txt");
+        // Baseline stub has an extra type and method that don't exist in source
+        var baselineDir = Path.Combine(Path.GetTempPath(), $"api-compat-{Guid.NewGuid()}");
+        var apiDir = Path.Combine(baselineDir, "api");
+        Directory.CreateDirectory(apiDir);
         try
         {
-            File.WriteAllLines(baselinePath, [
-                "class GoodClient",
-                "class GoodClientOptions",
-                "class TokenCredential",
-                "method GoodClient.GetItemAsync(string, CancellationToken) : Task<string>",
-                "method GoodClient.OldMethod(string) : void",  // removed!
-                "class OldService",  // removed!
-            ]);
+            var stubPath = Path.Combine(apiDir, "Baseline.cs");
+            File.WriteAllText(stubPath, @"
+public sealed class GoodClient
+{
+    public GoodClient(GoodClientOptions options, TokenCredential credential) { }
+    protected GoodClient() { }
+    public Task<string> GetItemAsync(string id, CancellationToken cancellationToken) { throw null; }
+    public Task DeleteItemAsync(string id, CancellationToken cancellationToken) { throw null; }
+    public void OldMethod(string id) { throw null; }
+}
+public class GoodClientOptions : ClientOptions { }
+public abstract class ClientOptions { }
+public class TokenCredential { }
+public class OldService { }
+");
 
             var diags = RunInlineCopChecks(ApiCompatPolicy,
-                [SamplePath("GoodClient.cs"), baselinePath]);
+                [SamplePath("GoodClient.cs"), stubPath]);
 
             var removed = diags.Where(d => d.Message.Contains("REMOVED")).ToList();
             Assert.That(removed.Count, Is.EqualTo(2),
@@ -708,24 +720,28 @@ export let csharp-api = [api-removed, api-added]
         }
         finally
         {
-            File.Delete(baselinePath);
+            Directory.Delete(baselineDir, true);
         }
     }
 
-    // ── API Compat: Detect added API ──
+    // ── API Compat: Detect added API (C# stub baseline) ──
 
     [Test]
     public void ApiCompat_DetectsAddedApi()
     {
-        var baselinePath = Path.Combine(Path.GetTempPath(), $"api-baseline-{Guid.NewGuid()}.txt");
+        // Baseline stub has only GoodClient class — everything else is "added"
+        var baselineDir = Path.Combine(Path.GetTempPath(), $"api-compat-{Guid.NewGuid()}");
+        var apiDir = Path.Combine(baselineDir, "api");
+        Directory.CreateDirectory(apiDir);
         try
         {
-            File.WriteAllLines(baselinePath, [
-                "class GoodClient",
-            ]);
+            var stubPath = Path.Combine(apiDir, "Baseline.cs");
+            File.WriteAllText(stubPath, @"
+public sealed class GoodClient { }
+");
 
             var diags = RunInlineCopChecks(ApiCompatPolicy,
-                [SamplePath("GoodClient.cs"), baselinePath]);
+                [SamplePath("GoodClient.cs"), stubPath]);
 
             var added = diags.Where(d => d.Message.Contains("ADDED")).ToList();
             Assert.That(added.Count, Is.GreaterThan(3),
@@ -737,15 +753,16 @@ export let csharp-api = [api-removed, api-added]
         }
         finally
         {
-            File.Delete(baselinePath);
+            Directory.Delete(baselineDir, true);
         }
     }
 
-    // ── API Compat: No baseline = no removed, all added ──
+    // ── API Compat: No baseline = no removed ──
 
     [Test]
     public void ApiCompat_NoBaseline_NoRemovedDiagnostics()
     {
+        // No api/ directory files — no baseline entries, so nothing "removed"
         var diags = RunInlineCopChecks(ApiCompatPolicy,
             [SamplePath("GoodClient.cs")]);
 
@@ -759,20 +776,28 @@ export let csharp-api = [api-removed, api-added]
     [Test]
     public void ApiCompat_MatchingBaseline_NoDiagnostics()
     {
-        // Generate full baseline from GoodClient.cs
-        var result = RunInlineCop(ApiExportPolicy,
-            [SamplePath("GoodClient.cs")], commandName: "api-export");
-        var baselineLines = result.FileOutputs.First().Content
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-        // Write baseline and run compat check
-        var baselinePath = Path.Combine(Path.GetTempPath(), $"api-baseline-{Guid.NewGuid()}.txt");
+        // Baseline stub matches the source exactly
+        var baselineDir = Path.Combine(Path.GetTempPath(), $"api-compat-{Guid.NewGuid()}");
+        var apiDir = Path.Combine(baselineDir, "api");
+        Directory.CreateDirectory(apiDir);
         try
         {
-            File.WriteAllLines(baselinePath, baselineLines);
+            var stubPath = Path.Combine(apiDir, "Baseline.cs");
+            File.WriteAllText(stubPath, @"
+public abstract class ClientOptions { }
+public class GoodClientOptions : ClientOptions { }
+public sealed class GoodClient
+{
+    public GoodClient(GoodClientOptions options, TokenCredential credential) { }
+    protected GoodClient() { }
+    public Task<string> GetItemAsync(string id, CancellationToken cancellationToken) { throw null; }
+    public Task DeleteItemAsync(string id, CancellationToken cancellationToken) { throw null; }
+}
+public class TokenCredential { }
+");
 
             var diags = RunInlineCopChecks(ApiCompatPolicy,
-                [SamplePath("GoodClient.cs"), baselinePath]);
+                [SamplePath("GoodClient.cs"), stubPath]);
 
             var removed = diags.Where(d => d.Message.Contains("REMOVED")).ToList();
             var added = diags.Where(d => d.Message.Contains("ADDED")).ToList();
@@ -784,7 +809,7 @@ export let csharp-api = [api-removed, api-added]
         }
         finally
         {
-            File.Delete(baselinePath);
+            Directory.Delete(baselineDir, true);
         }
     }
 }
