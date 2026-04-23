@@ -1,3 +1,4 @@
+using Cop.Core;
 using Cop.Lang;
 using Cop.Providers.SourceModel;
 using Cop.Providers.SourceParsers;
@@ -54,8 +55,15 @@ public static class Engine
         // Fatal errors (e.g. failed imports) prevent execution
         var fatalErrors = new List<string>();
 
-        // Create type registry and resolve imports
-        var typeRegistry = CreateTypeRegistry(scriptFiles, scriptsDir, parseErrors, fatalErrors);
+        // Create type registry, resolve imports, and detect provider packages
+        var providerPackages = new List<(string Dir, PackageMetadata Meta)>();
+        var typeRegistry = CreateTypeRegistry(scriptFiles, scriptsDir, parseErrors, fatalErrors, providerPackages: providerPackages);
+
+        if (fatalErrors.Count > 0)
+            return new EngineResult([], parseErrors, fatalErrors, commandName);
+
+        // Load external providers (schema registration + data query)
+        LoadExternalProviders(typeRegistry, providerPackages, codebasePath, parseErrors, fatalErrors);
 
         if (fatalErrors.Count > 0)
             return new EngineResult([], parseErrors, fatalErrors, commandName);
@@ -63,8 +71,17 @@ public static class Engine
         // Scan filesystem and register global collections
         FilesystemTypeRegistrar.Scan(typeRegistry, codebasePath);
 
-        // Parse source files into documents
-        var documents = ParseSourceFiles(codebasePath);
+        // Parse source files only if code collections are referenced
+        List<Document> documents;
+        if (NeedsSourceParsing(scriptFiles))
+        {
+            var requiredLanguages = DetectRequiredLanguages(scriptFiles);
+            documents = ParseSourceFiles(codebasePath, requiredLanguages);
+        }
+        else
+        {
+            documents = [];
+        }
 
         // Validate command name if specified
         if (commandName != null)
@@ -95,7 +112,7 @@ public static class Engine
     /// <summary>
     /// Creates and populates a TypeRegistry with type definitions from imports and script files.
     /// </summary>
-    private static TypeRegistry CreateTypeRegistry(List<ScriptFile> scriptFiles, string scriptsDir, List<string> errors, List<string> fatalErrors)
+    private static TypeRegistry CreateTypeRegistry(List<ScriptFile> scriptFiles, string scriptsDir, List<string> errors, List<string> fatalErrors, List<(string Dir, PackageMetadata Meta)>? providerPackages = null)
     {
         var feedPaths = FindFeedPaths(scriptsDir);
 
@@ -114,7 +131,7 @@ public static class Engine
             }
         }
 
-        return CreateTypeRegistry(scriptFiles, feedPaths, errors, fatalErrors);
+        return CreateTypeRegistry(scriptFiles, feedPaths, errors, fatalErrors, providerPackages: providerPackages);
     }
 
     /// <summary>
@@ -202,7 +219,14 @@ public static class Engine
 
         // Create type registry using feed paths for import resolution
         // Pre-register directly-loaded packages to prevent re-resolution via transitive imports
-        var typeRegistry = CreateTypeRegistry(scriptFiles, feedPaths, parseErrors, fatalErrors, packageNames);
+        var providerPackages = new List<(string Dir, PackageMetadata Meta)>();
+        var typeRegistry = CreateTypeRegistry(scriptFiles, feedPaths, parseErrors, fatalErrors, packageNames, providerPackages: providerPackages);
+
+        if (fatalErrors.Count > 0)
+            return new EngineResult([], parseErrors, fatalErrors);
+
+        // Load external providers
+        LoadExternalProviders(typeRegistry, providerPackages, codebasePath, parseErrors, fatalErrors);
 
         if (fatalErrors.Count > 0)
             return new EngineResult([], parseErrors, fatalErrors);
@@ -210,8 +234,17 @@ public static class Engine
         // Scan filesystem from codebasePath
         FilesystemTypeRegistrar.Scan(typeRegistry, codebasePath);
 
-        // Parse source files into documents
-        var documents = ParseSourceFiles(codebasePath);
+        // Parse source files only if code collections are referenced
+        List<Document> documents;
+        if (NeedsSourceParsing(scriptFiles))
+        {
+            var requiredLanguages = DetectRequiredLanguages(scriptFiles);
+            documents = ParseSourceFiles(codebasePath, requiredLanguages);
+        }
+        else
+        {
+            documents = [];
+        }
 
         // Run each command, or all non-SAVE if no rules specified
         var allOutputs = new List<PrintOutput>();
@@ -280,7 +313,7 @@ public static class Engine
     /// <summary>
     /// Creates a TypeRegistry from script files using the given feed paths for import resolution.
     /// </summary>
-    private static TypeRegistry CreateTypeRegistry(List<ScriptFile> scriptFiles, List<string> feedPaths, List<string> errors, List<string> fatalErrors, List<string>? preloadedPackages = null)
+    private static TypeRegistry CreateTypeRegistry(List<ScriptFile> scriptFiles, List<string> feedPaths, List<string> errors, List<string> fatalErrors, List<string>? preloadedPackages = null, List<(string Dir, PackageMetadata Meta)>? providerPackages = null)
     {
         var typeRegistry = new TypeRegistry();
         var importResolver = new ImportResolver([.. feedPaths]);
@@ -324,6 +357,10 @@ public static class Engine
 
             importedFiles.Add(packageFile);
 
+            // Detect provider packages: check for package metadata with provider:clr
+            if (providerPackages != null)
+                DetectProviderPackage(packageFile.FilePath, import, feedPaths, providerPackages);
+
             // Enqueue the package's own imports for transitive resolution
             foreach (var subImport in packageFile.Imports)
                 importQueue.Enqueue(subImport);
@@ -351,59 +388,226 @@ public static class Engine
     /// <summary>
     /// Discovers and parses source files into Documents.
     /// Normalizes paths, pre-stamps StatementInfo.File references.
+    /// When requiredLanguages is provided, only files matching those languages are parsed.
+    /// Uses recursive directory walk with early pruning of excluded directories.
     /// </summary>
-    private static List<Document> ParseSourceFiles(string codebasePath)
+    private static List<Document> ParseSourceFiles(string codebasePath, HashSet<string>? requiredLanguages = null)
     {
         var parserRegistry = SourceParserRegistry.CreateDefault();
-        var filePaths = Directory.GetFiles(codebasePath, "*.*", SearchOption.AllDirectories)
-            .Where(f =>
-            {
-                var normalized = f.Replace('\\', '/');
-                if (normalized.Contains("/bin/") || normalized.Contains("/obj/")) return false;
-                var ext = Path.GetExtension(f);
-                return parserRegistry.GetParser(ext) != null;
-            })
-            .ToList();
+        var filePaths = new List<string>();
+        CollectSourceFiles(codebasePath, parserRegistry, requiredLanguages, filePaths);
 
-        var documents = new List<Document>();
-        foreach (var filePath in filePaths)
+        // Parse files in parallel — Roslyn parsing is CPU-bound and embarrassingly parallel
+        var documents = new System.Collections.Concurrent.ConcurrentBag<Document>();
+        Parallel.ForEach(filePaths,
+            new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
+            filePath =>
+            {
+                var ext = Path.GetExtension(filePath);
+                var parser = parserRegistry.GetParser(ext);
+                if (parser == null) return;
+
+                SourceFile? sourceFile;
+                try
+                {
+                    var text = File.ReadAllText(filePath);
+                    sourceFile = parser.Parse(filePath, text);
+                }
+                catch
+                {
+                    return;
+                }
+
+                if (sourceFile == null) return;
+
+                var relativePath = Path.GetRelativePath(codebasePath, filePath).Replace('\\', '/');
+                var normalizedFile = sourceFile with { Path = relativePath };
+
+                // Pre-stamp StatementInfo.File references (in-place, no cloning)
+                for (int i = 0; i < normalizedFile.Statements.Count; i++)
+                {
+                    normalizedFile.Statements[i].File = normalizedFile;
+                }
+
+                // Pre-stamp TypeDeclaration.File references
+                for (int i = 0; i < normalizedFile.Types.Count; i++)
+                {
+                    normalizedFile.Types[i] = normalizedFile.Types[i] with { File = normalizedFile };
+                }
+
+                documents.Add(new Document(relativePath, normalizedFile.Language, normalizedFile));
+            });
+
+        // Sort by path for deterministic order across runs
+        return documents.OrderBy(d => d.Path, StringComparer.Ordinal).ToList();
+    }
+
+    /// <summary>
+    /// Directories excluded from both filesystem scanning and source parsing.
+    /// These are build artifacts, VCS metadata, and package caches that contain
+    /// no user-authored source code worth analyzing.
+    /// </summary>
+    private static readonly HashSet<string> ExcludedDirectoryNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "bin", "obj", ".git", ".vs", ".idea", "node_modules",
+        ".nuget", ".dotnet", "packages", "TestResults",
+        "__pycache__", ".mypy_cache", ".pytest_cache",
+        "dist", "build", "out", ".next", ".cache"
+    };
+
+    /// <summary>
+    /// Recursively collects source file paths, pruning excluded directories early
+    /// to avoid walking massive subtrees (e.g., node_modules, .git).
+    /// </summary>
+    private static void CollectSourceFiles(string dir, SourceParserRegistry parserRegistry, HashSet<string>? requiredLanguages, List<string> result)
+    {
+        try
         {
-            var ext = Path.GetExtension(filePath);
-            var parser = parserRegistry.GetParser(ext);
-            if (parser == null) continue;
-
-            SourceFile? sourceFile;
-            try
+            foreach (var file in Directory.GetFiles(dir))
             {
-                var text = File.ReadAllText(filePath);
-                sourceFile = parser.Parse(filePath, text);
-            }
-            catch
-            {
-                continue;
+                var ext = Path.GetExtension(file);
+                var parser = parserRegistry.GetParser(ext);
+                if (parser == null) continue;
+                if (requiredLanguages is not null && !requiredLanguages.Contains(parser.Language))
+                    continue;
+                result.Add(file);
             }
 
-            if (sourceFile == null) continue;
-
-            var relativePath = Path.GetRelativePath(codebasePath, filePath).Replace('\\', '/');
-            var normalizedFile = sourceFile with { Path = relativePath };
-
-            // Pre-stamp StatementInfo.File references (in-place, no cloning)
-            for (int i = 0; i < normalizedFile.Statements.Count; i++)
+            foreach (var subDir in Directory.GetDirectories(dir))
             {
-                normalizedFile.Statements[i].File = normalizedFile;
+                var dirName = Path.GetFileName(subDir);
+                if (ExcludedDirectoryNames.Contains(dirName)) continue;
+                CollectSourceFiles(subDir, parserRegistry, requiredLanguages, result);
+            }
+        }
+        catch (UnauthorizedAccessException) { }
+        catch (IOException) { }
+    }
+
+    /// <summary>
+    /// Analyzes script files to determine which source languages are actually needed.
+    /// Scans filter chains, predicate constraints, and predicate bodies for known language identifiers.
+    /// Returns null if all languages are needed (no language filters found).
+    /// </summary>
+    public static HashSet<string>? DetectRequiredLanguages(List<ScriptFile> scriptFiles)
+    {
+        // Known language names that map to source parsers
+        var knownLanguages = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            { "csharp", "python", "javascript" };
+
+        var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var identifiers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Collect all identifiers from filter chains and expressions
+        foreach (var sf in scriptFiles)
+        {
+            // Let declaration filters
+            foreach (var let in sf.LetDeclarations)
+            {
+                foreach (var filter in let.Filters)
+                    CollectIdentifiers(filter, identifiers);
             }
 
-            // Pre-stamp TypeDeclaration.File references
-            for (int i = 0; i < normalizedFile.Types.Count; i++)
+            // Command collection filters
+            foreach (var cmd in sf.Commands)
             {
-                normalizedFile.Types[i] = normalizedFile.Types[i] with { File = normalizedFile };
+                foreach (var filter in cmd.Filters)
+                    CollectIdentifiers(filter, identifiers);
             }
 
-            documents.Add(new Document(relativePath, normalizedFile.Language, normalizedFile));
+            // Predicate constraints and bodies
+            foreach (var pred in sf.Predicates)
+            {
+                if (pred.Constraint is not null)
+                    identifiers.Add(pred.Constraint);
+                CollectIdentifiers(pred.Body, identifiers);
+            }
         }
 
-        return documents;
+        // Intersect with known languages
+        foreach (var id in identifiers)
+        {
+            if (knownLanguages.Contains(id))
+                found.Add(id);
+        }
+
+        // If no language identifiers found, all languages are needed
+        // Also always include "text" since text files don't depend on language filters
+        return found.Count > 0 ? found : null;
+    }
+
+    /// <summary>
+    /// Recursively collects all identifier names from an expression tree.
+    /// </summary>
+    private static void CollectIdentifiers(Expression expr, HashSet<string> identifiers)
+    {
+        switch (expr)
+        {
+            case IdentifierExpr id:
+                identifiers.Add(id.Name);
+                break;
+            case PredicateCallExpr pc:
+                identifiers.Add(pc.Name);
+                CollectIdentifiers(pc.Target, identifiers);
+                foreach (var arg in pc.Args) CollectIdentifiers(arg, identifiers);
+                break;
+            case FunctionCallExpr fc:
+                foreach (var arg in fc.Args) CollectIdentifiers(arg, identifiers);
+                break;
+            case MemberAccessExpr ma:
+                CollectIdentifiers(ma.Target, identifiers);
+                break;
+            case BinaryExpr bin:
+                CollectIdentifiers(bin.Left, identifiers);
+                CollectIdentifiers(bin.Right, identifiers);
+                break;
+            case UnaryExpr un:
+                CollectIdentifiers(un.Operand, identifiers);
+                break;
+            case ListLiteralExpr list:
+                foreach (var elem in list.Elements) CollectIdentifiers(elem, identifiers);
+                break;
+            case ObjectLiteralExpr obj:
+                foreach (var (_, val) in obj.Fields) CollectIdentifiers(val, identifiers);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Checks whether any script references code-level collections that require source parsing.
+    /// Returns false if only filesystem collections (DiskFiles, Folders) are used.
+    /// </summary>
+    public static bool NeedsSourceParsing(List<ScriptFile> scriptFiles)
+    {
+        var codeCollections = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            { "Types", "Statements", "Lines", "Files", "Members", "Api" };
+
+        foreach (var sf in scriptFiles)
+        {
+            // If the script imports the code package, parsing is needed
+            foreach (var import in sf.Imports)
+            {
+                if (import.Equals("code", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            // Check let base collections (commands reference lets transitively)
+            foreach (var let in sf.LetDeclarations)
+            {
+                if (IsCodeCollection(let.BaseCollection, codeCollections))
+                    return true;
+            }
+        }
+
+        return false;
+
+        static bool IsCodeCollection(string name, HashSet<string> codeCollections)
+        {
+            // Match exact name (e.g., "Types") or dotted suffix (e.g., "Code.Types")
+            if (codeCollections.Contains(name)) return true;
+            var dotIdx = name.LastIndexOf('.');
+            return dotIdx >= 0 && codeCollections.Contains(name[(dotIdx + 1)..]);
+        }
     }
 
     /// <summary>
@@ -425,6 +629,50 @@ public static class Engine
 
             return [new Document(path, sourceFile.Language, sourceFile)];
         };
+    }
+
+    /// <summary>
+    /// Detects if a resolved package is a CLR provider package and adds it to the list.
+    /// </summary>
+    private static void DetectProviderPackage(string copDirPath, string packageName, List<string> feedPaths, List<(string Dir, PackageMetadata Meta)> providerPackages)
+    {
+        // copDirPath is the package's src/ or types/ directory.
+        // The package root is its parent directory.
+        var packageDir = Path.GetDirectoryName(copDirPath);
+        if (packageDir is null) return;
+
+        var metadataFile = Path.Combine(packageDir, $"{packageName}.md");
+        if (!File.Exists(metadataFile)) return;
+
+        try
+        {
+            var metadata = PackageMetadata.ParseFromFile(metadataFile);
+            if (metadata.IsClrProvider)
+                providerPackages.Add((packageDir, metadata));
+        }
+        catch
+        {
+            // Metadata parse error — not a provider package
+        }
+    }
+
+    /// <summary>
+    /// Loads external CLR providers: registers their schemas into the type registry
+    /// and queries them for collection data.
+    /// </summary>
+    private static void LoadExternalProviders(TypeRegistry typeRegistry, List<(string Dir, PackageMetadata Meta)> providerPackages, string codebasePath, List<string> errors, List<string> fatalErrors)
+    {
+        foreach (var (dir, meta) in providerPackages)
+        {
+            var loaded = ProviderLoader.Load(dir, meta, fatalErrors);
+            if (loaded is null) continue;
+
+            // Register types and collections from the provider schema
+            JsonCollectionDeserializer.RegisterSchema(typeRegistry, loaded.Schema);
+
+            // Query for data and register global collections
+            ProviderLoader.QueryAndRegister(loaded, typeRegistry, codebasePath, errors);
+        }
     }
 }
 

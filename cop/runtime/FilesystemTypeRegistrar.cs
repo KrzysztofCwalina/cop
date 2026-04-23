@@ -108,6 +108,18 @@ public static class FilesystemTypeRegistrar
         ScanDirectory(dir, root, folders, diskFiles, now);
     }
 
+    /// <summary>
+    /// Directories excluded from filesystem scanning. Build artifacts, VCS metadata,
+    /// and package caches that contain no user-authored source code.
+    /// </summary>
+    private static readonly HashSet<string> ExcludedDirectoryNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "bin", "obj", ".git", ".vs", ".idea", "node_modules",
+        ".nuget", ".dotnet", "TestResults",
+        "__pycache__", ".mypy_cache", ".pytest_cache",
+        "dist", ".next", ".cache"
+    };
+
     private static void ScanDirectory(string dir, string root, List<object> folders, List<object> diskFiles, DateTime now)
     {
         string[] childDirs;
@@ -157,9 +169,11 @@ public static class FilesystemTypeRegistrar
                 MinutesSinceModified: minutesSinceModified));
         }
 
-        // Recurse
+        // Recurse, pruning excluded directories
         foreach (var childDir in childDirs)
         {
+            var dirName = Path.GetFileName(childDir);
+            if (ExcludedDirectoryNames.Contains(dirName)) continue;
             ScanDirectory(childDir, root, folders, diskFiles, now);
         }
     }

@@ -60,6 +60,26 @@ public class PackageMetadata
     public string Language { get; set; } = string.Empty;
 
     /// <summary>
+    /// Provider type. When set to "clr", this package contains a CLR assembly
+    /// that implements <see cref="CopProvider"/>. Defaults to empty (no provider).
+    /// </summary>
+    [YamlMember(Alias = "provider")]
+    public string Provider { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Fully-qualified class name of the <see cref="CopProvider"/> subclass.
+    /// Required when <see cref="Provider"/> is "clr". The engine instantiates
+    /// exactly this class from the provider assembly.
+    /// </summary>
+    [YamlMember(Alias = "providerEntry")]
+    public string ProviderEntry { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Returns true if this package contains a CLR provider assembly.
+    /// </summary>
+    public bool IsClrProvider => string.Equals(Provider, "clr", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// List of dependencies. Each entry is a fully-qualified package path with optional version,
     /// e.g., "github.com/org/repo/test: 1.0.0" or "github.com/org/repo/test".
     /// Defaults to empty list.

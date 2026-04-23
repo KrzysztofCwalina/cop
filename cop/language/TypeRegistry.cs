@@ -11,6 +11,7 @@ public class TypeRegistry
     private readonly Dictionary<Type, string> _clrTypeMappings = new();
     private readonly Dictionary<string, Func<Document, List<object>>> _collectionExtractors = new();
     private readonly Dictionary<string, List<object>> _globalCollections = new();
+    private readonly Dictionary<(string, string), List<object>> _extractorCache = new();
 
     public TypeRegistry()
     {
@@ -81,13 +82,22 @@ public class TypeRegistry
 
     /// <summary>
     /// Gets collection items from a document using a registered extractor.
+    /// Results are cached per (collectionName, documentPath) so extractors
+    /// run at most once per document per collection.
     /// Returns null if no extractor is registered for this collection.
     /// </summary>
     public List<object>? GetCollectionItems(string collectionName, Document document)
     {
-        return _collectionExtractors.TryGetValue(collectionName, out var extractor)
-            ? extractor(document)
-            : null;
+        if (!_collectionExtractors.TryGetValue(collectionName, out var extractor))
+            return null;
+
+        var cacheKey = (collectionName, document.Path);
+        if (_extractorCache.TryGetValue(cacheKey, out var cached))
+            return cached;
+
+        var result = extractor(document);
+        _extractorCache[cacheKey] = result;
+        return result;
     }
 
     /// <summary>

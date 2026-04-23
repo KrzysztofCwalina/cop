@@ -12,6 +12,12 @@ public class ScriptInterpreter
     private Dictionary<string, IList>? _globalResolvedSelects;
     private Dictionary<string, List<Document>>? _codeLoadDocuments;
 
+    // Per-document cache for resolved let bindings — shared across all commands
+    private readonly Dictionary<string, Dictionary<string, IList>> _documentLetCache = new();
+    // Fingerprint-based cache for resolved filtered collections (order-independent).
+    // Bounded to prevent unbounded memory growth on large repos with many unique queries.
+    private readonly BoundedCache<string, List<object>> _queryCache = new(capacity: 2048);
+
     public ScriptInterpreter(
         TypeRegistry typeRegistry,
         int maxOutputsPerCommand = 1000,
@@ -300,9 +306,19 @@ public class ScriptInterpreter
         {
             if (sw.Elapsed > _timeout) break;
 
-            // Pre-resolve collection let bindings so predicates can reference them
-            var resolvedCollections = ResolveCollectionLetBindings(
-                letDeclarations, document, predicateGroups, functionGroups);
+            // Pre-resolve collection let bindings — cached per document across commands
+            Dictionary<string, IList>? resolvedCollections;
+            if (_documentLetCache.TryGetValue(document.Path, out var cachedLets))
+            {
+                resolvedCollections = new Dictionary<string, IList>(cachedLets);
+            }
+            else
+            {
+                resolvedCollections = ResolveCollectionLetBindings(
+                    letDeclarations, document, predicateGroups, functionGroups);
+                if (resolvedCollections is not null)
+                    _documentLetCache[document.Path] = new Dictionary<string, IList>(resolvedCollections);
+            }
 
             // Merge globally-resolved collections (from :select() lets) into per-document bindings
             // Global selects override per-document versions since they aggregate across all documents
@@ -354,7 +370,8 @@ public class ScriptInterpreter
         Dictionary<string, List<PredicateDefinition>> predicateGroups,
         Dictionary<string, LetDeclaration> letDeclarations,
         Dictionary<string, List<FunctionDefinition>> functionGroups,
-        HashSet<string>? visited = null)
+        HashSet<string>? visited = null,
+        bool useQueryCache = true)
     {
         // Code.Load dotted access (e.g., "dll.Api", "dll.Types") — resolve from loaded documents
         var codeLoadItems = TryResolveCodeLoadCollection(collection, letDeclarations);
@@ -381,7 +398,7 @@ public class ScriptInterpreter
                 foreach (var elem in ((ListLiteralExpr)letDecl.ValueExpression!).Elements)
                 {
                     var name = ((IdentifierExpr)elem).Name;
-                    unionItems.AddRange(ResolveCollection(name, document, evaluator, predicateGroups, letDeclarations, functionGroups, new(visited)));
+                    unionItems.AddRange(ResolveCollection(name, document, evaluator, predicateGroups, letDeclarations, functionGroups, new(visited), useQueryCache));
                 }
                 return unionItems;
             }
@@ -398,20 +415,46 @@ public class ScriptInterpreter
                 throw new InvalidOperationException($"'{collection}' is a value binding, not a collection");
 
             var baseItems = ResolveCollection(
-                letDecl.BaseCollection, document, evaluator, predicateGroups, letDeclarations, functionGroups, visited);
+                letDecl.BaseCollection, document, evaluator, predicateGroups, letDeclarations, functionGroups, visited, useQueryCache);
             var baseItemType = ResolveItemType(letDecl.BaseCollection, predicateGroups, letDeclarations, functionGroups);
 
-            // Apply inline filters (may include function map steps)
-            var result = ApplyFilters(baseItems, baseItemType, letDecl.Filters, evaluator, functionGroups);
-
-            // Apply set subtraction if exclusions are specified
-            if (letDecl.Exclusions != null)
+            // Fingerprint-based cache: order-independent dedup for filter chains
+            if (useQueryCache)
             {
-                var finalType = ResolveItemTypeAfterFilters(baseItemType, letDecl.Filters, functionGroups);
-                result = ApplyExclusions(result, finalType, letDecl.Exclusions, evaluator, letDeclarations);
+                var functionNameSet = functionGroups.Count > 0 ? new HashSet<string>(functionGroups.Keys) : null;
+                var fingerprint = QueryFingerprint.Compute(letDecl.BaseCollection, letDecl.Filters, document.Path, functionNameSet);
+                if (letDecl.Exclusions != null)
+                    fingerprint += "|!" + QueryFingerprint.Serialize(letDecl.Exclusions);
+
+                if (_queryCache.TryGetValue(fingerprint, out var cached))
+                    return cached;
+
+                // Apply inline filters (may include function map steps)
+                var result = ApplyFilters(baseItems, baseItemType, letDecl.Filters, evaluator, functionGroups);
+
+                // Apply set subtraction if exclusions are specified
+                if (letDecl.Exclusions != null)
+                {
+                    var finalType = ResolveItemTypeAfterFilters(baseItemType, letDecl.Filters, functionGroups);
+                    result = ApplyExclusions(result, finalType, letDecl.Exclusions, evaluator, letDeclarations);
+                }
+
+                _queryCache.Set(fingerprint, result);
+                return result;
             }
 
-            return result;
+            // No caching — resolve directly
+            {
+                var result = ApplyFilters(baseItems, baseItemType, letDecl.Filters, evaluator, functionGroups);
+
+                if (letDecl.Exclusions != null)
+                {
+                    var finalType = ResolveItemTypeAfterFilters(baseItemType, letDecl.Filters, functionGroups);
+                    result = ApplyExclusions(result, finalType, letDecl.Exclusions, evaluator, letDeclarations);
+                }
+
+                return result;
+            }
         }
 
         // Derived collection from predicate
@@ -460,8 +503,11 @@ public class ScriptInterpreter
 
             try
             {
+                // Bootstrap uses no query cache — the bootstrap evaluator may produce
+                // incorrect results for filters that reference unresolved collections
+                // (the language-filter fallback returns false instead of throwing).
                 var items = ResolveCollection(
-                    name, document, bootstrapEvaluator, predicateGroups, letDeclarations, functionGroups);
+                    name, document, bootstrapEvaluator, predicateGroups, letDeclarations, functionGroups, useQueryCache: false);
                 resolved ??= new Dictionary<string, IList>();
                 resolved[name] = items;
             }
@@ -486,7 +532,7 @@ public class ScriptInterpreter
         PredicateEvaluator evaluator,
         Dictionary<string, List<FunctionDefinition>> functionGroups)
     {
-        var currentItems = items;
+        IEnumerable<object> current = items;
         var currentType = itemType;
 
         foreach (var filter in filters)
@@ -500,14 +546,13 @@ public class ScriptInterpreter
                 var fieldArgs = GetFilterArgs(filter);
                 if (fieldArgs.Count > 0)
                 {
-                    currentItems = currentItems
-                        .Where(item => item is not null)
-                        .Select(item =>
-                        {
-                            var value = evaluator.EvaluateField(fieldArgs[0], item, currentType);
-                            return (object)(value?.ToString() ?? "");
-                        })
-                        .ToList();
+                    // Barrier: materialize before projection (type changes)
+                    var materialized = current.Where(item => item is not null).ToList();
+                    current = materialized.Select(item =>
+                    {
+                        var value = evaluator.EvaluateField(fieldArgs[0], item, currentType);
+                        return (object)(value?.ToString() ?? "");
+                    }).ToList();
                     currentType = "string";
                     continue;
                 }
@@ -518,8 +563,8 @@ public class ScriptInterpreter
                 var templateArgs = GetFilterArgs(filter);
                 if (templateArgs.Count > 0 && templateArgs[0] is LiteralExpr litExpr && litExpr.Value is string template)
                 {
-                    var lines = currentItems
-                        .Where(item => item is not null)
+                    // Barrier: materialize before text join
+                    var lines = current.Where(item => item is not null)
                         .Select(item =>
                         {
                             var ctx = new EvaluationContext();
@@ -530,31 +575,35 @@ public class ScriptInterpreter
                             return ResolveTemplate(template, ctx).ToPlainText();
                         })
                         .ToList();
-                    currentItems = [(object)string.Join(Environment.NewLine, lines)];
+                    current = [(object)string.Join(Environment.NewLine, lines)];
                     currentType = "string";
                     continue;
                 }
             }
             else if (funcName != null && functionGroups.ContainsKey(funcName))
             {
-                // Map step: transform each item using the function
+                // Barrier: function map transforms items (type changes)
                 var funcArgs = GetFilterArgs(filter);
-                currentItems = currentItems.Select(item =>
-                    (object)evaluator.ApplyFunction(funcName, item, currentType, funcArgs)).ToList();
+                var capturedType = currentType;
+                current = current.Select(item =>
+                    (object)evaluator.ApplyFunction(funcName, item, capturedType, funcArgs)).ToList();
                 currentType = evaluator.GetFunctionReturnType(funcName) ?? currentType;
             }
             else
             {
-                // Filter step: keep items where expression evaluates to true
-                currentItems = currentItems.Where(item =>
+                // Predicate filter: compose lazily — no materialization
+                var capturedType = currentType;
+                var capturedFilter = filter;
+                current = current.Where(item =>
                 {
-                    var (result, _) = evaluator.EvaluateAsBool(filter, item, currentType);
+                    var (result, _) = evaluator.EvaluateAsBool(capturedFilter, item, capturedType);
                     return result;
-                }).ToList();
+                });
             }
         }
 
-        return currentItems;
+        // Single materialization point for the entire filter chain
+        return current as List<object> ?? current.ToList();
     }
 
     /// <summary>
@@ -772,6 +821,15 @@ public class ScriptInterpreter
                 letDecl.BaseCollection, evaluator, predicateGroups, letDeclarations, functionGroups, visited);
             var baseItemType = ResolveItemType(letDecl.BaseCollection, predicateGroups, letDeclarations, functionGroups);
 
+            // Fingerprint-based cache for global collections (docPath = null for globals)
+            var functionNameSet = functionGroups.Count > 0 ? new HashSet<string>(functionGroups.Keys) : null;
+            var fingerprint = QueryFingerprint.Compute(letDecl.BaseCollection, letDecl.Filters, null, functionNameSet);
+            if (letDecl.Exclusions != null)
+                fingerprint += "|!" + QueryFingerprint.Serialize(letDecl.Exclusions);
+
+            if (_queryCache.TryGetValue(fingerprint, out var cached))
+                return cached;
+
             var result = ApplyFilters(baseItems, baseItemType, letDecl.Filters, evaluator, functionGroups);
 
             if (letDecl.Exclusions != null)
@@ -780,6 +838,7 @@ public class ScriptInterpreter
                 result = ApplyExclusions(result, finalType, letDecl.Exclusions, evaluator, letDeclarations);
             }
 
+            _queryCache.Set(fingerprint, result);
             return result;
         }
 

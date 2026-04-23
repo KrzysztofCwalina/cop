@@ -1,0 +1,45 @@
+# TypeSpec HTTP protocol graph types
+
+export type HttpParameter = {
+    Name : string,
+    Type : string,
+    In : string,
+    Optional : bool,
+    Style : string?
+}
+
+export type HttpHeader = {
+    Name : string,
+    Type : string
+}
+
+export type HttpResponse = {
+    StatusCode : string,
+    Description : string?,
+    Body : string?,
+    Headers : [HttpHeader]
+}
+
+export type HttpOperation = {
+    Name : string,
+    Verb : string,
+    Path : string,
+    UriTemplate : string,
+    Parameters : [HttpParameter],
+    Responses : [HttpResponse],
+    Interface : string?
+}
+
+export type HttpService = {
+    Name : string,
+    Namespace : string,
+    Operations : [HttpOperation],
+    Auth : string?
+}
+
+# Common HTTP predicates
+export predicate isGet(HttpOperation) => HttpOperation.Verb == 'get'
+export predicate isPut(HttpOperation) => HttpOperation.Verb == 'put'
+export predicate isPost(HttpOperation) => HttpOperation.Verb == 'post'
+export predicate isPatch(HttpOperation) => HttpOperation.Verb == 'patch'
+export predicate isDelete(HttpOperation) => HttpOperation.Verb == 'delete'

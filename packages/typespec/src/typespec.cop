@@ -1,0 +1,76 @@
+# TypeSpec raw type graph types
+
+export type TspDecorator = {
+    Name : string,
+    Arguments : [string]
+}
+
+export type TspProperty = {
+    Name : string,
+    Type : string,
+    Optional : bool,
+    Default : string?,
+    Decorators : [TspDecorator]
+}
+
+export type TspModel = {
+    Name : string,
+    Namespace : string?,
+    Properties : [TspProperty],
+    BaseModel : string?,
+    Decorators : [TspDecorator]
+}
+
+export type TspOperation = {
+    Name : string,
+    Namespace : string?,
+    Interface : string?,
+    Parameters : [TspProperty],
+    ReturnType : string,
+    Decorators : [TspDecorator]
+}
+
+export type TspInterface = {
+    Name : string,
+    Namespace : string?,
+    Operations : [TspOperation],
+    Decorators : [TspDecorator]
+}
+
+export type TspEnumMember = {
+    Name : string,
+    Value : string?,
+    Decorators : [TspDecorator]
+}
+
+export type TspEnum = {
+    Name : string,
+    Namespace : string?,
+    Members : [TspEnumMember],
+    Decorators : [TspDecorator]
+}
+
+export type TspUnionVariant = {
+    Name : string,
+    Type : string
+}
+
+export type TspUnion = {
+    Name : string,
+    Namespace : string?,
+    Variants : [TspUnionVariant],
+    Decorators : [TspDecorator]
+}
+
+export type TspScalar = {
+    Name : string,
+    Namespace : string?,
+    BaseScalar : string?,
+    Decorators : [TspDecorator]
+}
+
+export type TspNamespace = {
+    Name : string,
+    FullName : string,
+    Decorators : [TspDecorator]
+}
