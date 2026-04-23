@@ -1,5 +1,8 @@
-# Named commands let you define reusable operations that can be invoked by name.
+# Named commands let you define reusable operations
+# that can be invoked by name.
 # Run with: cop run LIST-TYPES
+# Run with: cop run LIST-PUBLIC-TYPES
 import code
 
 command LIST-TYPES = foreach Types => PRINT('{item.Name}')
+command LIST-PUBLIC-TYPES = foreach Types:Public => PRINT('{item.Name}')
