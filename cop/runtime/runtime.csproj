@@ -6,22 +6,14 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <!-- Provider source files (compiled into runtime but isolated in top-level providers/) -->
-  <ItemGroup>
-    <Compile Include="..\..\providers\code-provider\src\**\*.cs" LinkBase="providers\code" />
-    <Compile Include="..\..\providers\filesystem-provider\src\**\*.cs" LinkBase="providers\filesystem" />
-    <Compile Include="..\..\providers\python-provider\src\**\*.cs" LinkBase="providers\python" />
-    <Compile Include="..\..\providers\javascript-provider\src\**\*.cs" LinkBase="providers\javascript" />
-  </ItemGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\language\language.csproj" />
     <ProjectReference Include="..\shared\Cop.Core.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0" />
-    <PackageReference Include="System.Reflection.MetadataLoadContext" Version="9.0.0" />
+    <ProjectReference Include="..\..\providers\code-provider\code-provider.csproj" />
+    <ProjectReference Include="..\..\providers\csharp-provider\csharp-provider.csproj" />
+    <ProjectReference Include="..\..\providers\python-provider\python-provider.csproj" />
+    <ProjectReference Include="..\..\providers\javascript-provider\javascript-provider.csproj" />
+    <ProjectReference Include="..\..\providers\filesystem-provider\filesystem-provider.csproj" />
   </ItemGroup>
 
 </Project>

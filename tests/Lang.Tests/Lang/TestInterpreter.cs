@@ -26,7 +26,11 @@ internal static class TestInterpreter
             ? FindCommonRoot(filePaths)
             : Path.GetDirectoryName(filePaths[0]) ?? "";
 
-        var parserRegistry = SourceParserRegistry.CreateDefault();
+        var parserRegistry = new SourceParserRegistry();
+        parserRegistry.Register(new CSharpSourceParser());
+        parserRegistry.Register(new TextFileParser());
+        parserRegistry.Register(new PythonSourceParser());
+        parserRegistry.Register(new JavaScriptSourceParser());
         var documents = new List<Document>();
         foreach (var filePath in filePaths)
         {

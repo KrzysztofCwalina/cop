@@ -386,6 +386,20 @@ public static class Engine
     }
 
     /// <summary>
+    /// Creates a parser registry with all available language parsers.
+    /// This is the composition root — individual parsers live in separate provider projects.
+    /// </summary>
+    private static SourceParserRegistry CreateParserRegistry()
+    {
+        var registry = new SourceParserRegistry();
+        registry.Register(new CSharpSourceParser());
+        registry.Register(new TextFileParser());
+        registry.Register(new PythonSourceParser());
+        registry.Register(new JavaScriptSourceParser());
+        return registry;
+    }
+
+    /// <summary>
     /// Discovers and parses source files into Documents.
     /// Normalizes paths, pre-stamps StatementInfo.File references.
     /// When requiredLanguages is provided, only files matching those languages are parsed.
@@ -393,7 +407,7 @@ public static class Engine
     /// </summary>
     private static List<Document> ParseSourceFiles(string codebasePath, HashSet<string>? requiredLanguages = null)
     {
-        var parserRegistry = SourceParserRegistry.CreateDefault();
+        var parserRegistry = CreateParserRegistry();
         var filePaths = new List<string>();
         CollectSourceFiles(codebasePath, parserRegistry, requiredLanguages, filePaths);
 
