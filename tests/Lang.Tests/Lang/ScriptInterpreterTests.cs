@@ -163,8 +163,8 @@ public class CheckInterpreterTests
     public void Run_CommandName_RunsOnlyMatchingCommand()
     {
         var source = """
-            let list-types = foreach Types => PRINT('{Type.Name}')
-            let check-sealed = foreach Types:csharp => PRINT('{warning:@yellow} {Type.Name} not sealed')
+            let list-types = foreach Types => PRINT('{item.Name}')
+            let check-sealed = foreach Types:csharp => PRINT('{warning:@yellow} {item.Name} not sealed')
             foreach Types => PRINT('unnamed check')
             """;
         var ScriptFile = ScriptParser.Parse(source, "test.cop");
@@ -182,7 +182,7 @@ public class CheckInterpreterTests
     public void Run_NoCommandName_RunsAll()
     {
         var source = """
-            let list-types = foreach Types => PRINT('{Type.Name}')
+            let list-types = foreach Types => PRINT('{item.Name}')
             foreach Types => PRINT('unnamed')
             """;
         var ScriptFile = ScriptParser.Parse(source, "test.cop");
@@ -199,7 +199,7 @@ public class CheckInterpreterTests
     public void Run_UnknownCommandName_ReturnsEmpty()
     {
         var source = """
-            let list-types = foreach Types => PRINT('{Type.Name}')
+            let list-types = foreach Types => PRINT('{item.Name}')
             """;
         var ScriptFile = ScriptParser.Parse(source, "test.cop");
 
@@ -223,7 +223,7 @@ public class CheckInterpreterTests
                 Line = Statement.Line
             }
             let VarErrors = Statements:csharp:isVar:error('Do not use var')
-            foreach VarErrors => PRINT('{Violation.Severity}:{Violation.Line} {Violation.Message}')
+            foreach VarErrors => PRINT('{item.Severity}:{item.Line} {item.Message}')
             """;
         var ScriptFile = ScriptParser.Parse(source, "test.cop");
 
@@ -253,7 +253,7 @@ public class CheckInterpreterTests
                 Severity = 'warning',
                 Message = message
             }
-            foreach Statements:csharp:isVar:warning('Avoid var usage') => PRINT('{Violation.Severity}: {Violation.Message}')
+            foreach Statements:csharp:isVar:warning('Avoid var usage') => PRINT('{item.Severity}: {item.Message}')
             """;
         var ScriptFile = ScriptParser.Parse(source, "test.cop");
 
@@ -273,14 +273,14 @@ public class CheckInterpreterTests
     [Test]
     public void Run_FunctionWithStringTemplate_ResolvesPerItem()
     {
-        // Function string arguments with {Type.Prop} should resolve per-item
+        // Function string arguments with {item.Prop} should resolve per-item
         var source = """
             predicate isVar(Statement) => Statement.Kind == 'declaration' && Statement.Keywords:contains('var')
             function error(Statement, message: string) => Violation {
                 Severity = 'error',
                 Message = message
             }
-            foreach Statements:csharp:isVar:error('Var used for {Statement.MemberName}') => PRINT('{Violation.Message}')
+            foreach Statements:csharp:isVar:error('Var used for {item.MemberName}') => PRINT('{item.Message}')
             """;
         var ScriptFile = ScriptParser.Parse(source, "test.cop");
 
@@ -289,10 +289,10 @@ public class CheckInterpreterTests
         var outputs = interpreter.Run([ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
 
         Assert.That(outputs, Is.Not.Empty);
-        // The template {Statement.MemberName} should NOT remain unresolved
+        // The template {item.MemberName} should NOT remain unresolved
         foreach (var output in outputs)
         {
-            Assert.That(output.Message, Does.Not.Contain("{Statement.MemberName}"),
+            Assert.That(output.Message, Does.Not.Contain("{item.MemberName}"),
                 $"Template should be resolved but got: {output.Message}");
         }
     }
@@ -309,8 +309,8 @@ import code-analysis
 
 let Accepted = ['BadClient.cs:x']
 
-command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'var\' for {Statement.MemberName}') - Accepted => PRINT(
-    '{Violation.Message}'
+command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'var\' for {item.MemberName}') - Accepted => PRINT(
+    '{item.Message}'
 )";
         var allFiles = ParseWithImports(source);
 
@@ -333,8 +333,8 @@ import code-analysis
 
 let Accepted = ['BadClient.cs:nonExistentMember']
 
-command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'var\' for {Statement.MemberName}') - Accepted => PRINT(
-    '{Violation.Message}'
+command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'var\' for {item.MemberName}') - Accepted => PRINT(
+    '{item.Message}'
 )";
         var allFiles = ParseWithImports(source);
 
@@ -354,8 +354,8 @@ import code-analysis
 
 let Accepted = []
 
-command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'var\' for {Statement.MemberName}') - Accepted => PRINT(
-    '{Violation.Message}'
+command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'var\' for {item.MemberName}') - Accepted => PRINT(
+    '{item.Message}'
 )";
         var allFiles = ParseWithImports(source);
 
@@ -374,8 +374,8 @@ command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'
         var source = @"
 import code-analysis
 
-command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'var\' for {Statement.MemberName}') - ['BadClient.cs:x', 'BadClient.cs:result'] => PRINT(
-    '{Violation.Message}'
+command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'var\' for {item.MemberName}') - ['BadClient.cs:x', 'BadClient.cs:result'] => PRINT(
+    '{item.Message}'
 )";
         var allFiles = ParseWithImports(source);
 
@@ -394,11 +394,11 @@ command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'
 import code-analysis
 
 export command CHECK(violations) = PRINT(
-    '{Violation.Message}',
+    '{item.Message}',
     violations
 )
 
-export let var-usage = Statements:csharp:varDeclaration:toError('Do not use var for {Statement.MemberName}')
+export let var-usage = Statements:csharp:varDeclaration:toError('Do not use var for {item.MemberName}')
 
 RUN CHECK(var-usage)
 ";
@@ -417,11 +417,11 @@ RUN CHECK(var-usage)
 import code-analysis
 
 export command CHECK(violations) = PRINT(
-    '{Violation.Message}',
+    '{item.Message}',
     violations
 )
 
-export let var-usage = Statements:csharp:varDeclaration:toError('Do not use var for {Statement.MemberName}')
+export let var-usage = Statements:csharp:varDeclaration:toError('Do not use var for {item.MemberName}')
 
 let Accepted = ['BadClient.cs:x', 'BadClient.cs:result']
 RUN CHECK(var-usage - Accepted)
@@ -459,11 +459,11 @@ RUN GREET()
 import code-analysis
 
 export command CHECK(violations) = PRINT(
-    '{Violation.Message}',
+    '{item.Message}',
     violations
 )
 
-export let var-usage = Statements:csharp:varDeclaration:toError('Do not use var for {Statement.MemberName}')
+export let var-usage = Statements:csharp:varDeclaration:toError('Do not use var for {item.MemberName}')
 
 CHECK(var-usage)
 ";
@@ -482,11 +482,11 @@ CHECK(var-usage)
 import code-analysis
 
 export command CHECK(violations) = PRINT(
-    '{Violation.Message}',
+    '{item.Message}',
     violations
 )
 
-export let var-usage = Statements:csharp:varDeclaration:toError('Do not use var for {Statement.MemberName}')
+export let var-usage = Statements:csharp:varDeclaration:toError('Do not use var for {item.MemberName}')
 
 let Accepted = ['BadClient.cs:x', 'BadClient.cs:result']
 CHECK(var-usage - Accepted)
@@ -506,7 +506,7 @@ CHECK(var-usage - Accepted)
 import code-analysis
 
 export command CHECK(violations) = PRINT(
-    '{Violation.Message}',
+    '{item.Message}',
     violations
 )
 
@@ -651,7 +651,7 @@ CHECK(var-usage)
             export let sleep-calls = Statements:csharp:threadSleep:toWarning('no sleep')
             export let all-checks = [var-decls, sleep-calls]
 
-            command CHECK(violations) = PRINT('{Violation.Message}', violations)
+            command CHECK(violations) = PRINT('{item.Message}', violations)
             RUN CHECK(all-checks)
             """;
         var scriptFile = ScriptParser.Parse(source, "test.cop");
@@ -671,10 +671,10 @@ CHECK(var-usage)
     public void Run_Select_ProjectsFieldToStringList()
     {
         var source = """
-            let typeNames = Code.Types:select(Type.Name)
+            let typeNames = Code.Types:select(item.Name)
             predicate isInList(Type) => Type.Name:in(typeNames)
             let listed = Code.Types:isInList
-            command CHECK = PRINT('{Type.Name} is in the list', listed)
+            command CHECK = PRINT('{item.Name} is in the list', listed)
             """;
         var scriptFile = ScriptParser.Parse(source, "test.cop");
         var interpreter = TestInterpreter.Create();

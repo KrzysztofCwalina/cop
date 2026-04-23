@@ -43,11 +43,11 @@ Defined in `checks.cop`:
 
 | Check | Severity | Message |
 |---|---|---|
-| `client-needs-options-ctor` | warning | {Type.Name} should accept an options parameter |
-| `client-sealed-or-abstract` | warning | {Type.Name} should be sealed or abstract |
-| `async-needs-cancellation-token` | warning | {Type.Name} is async without CancellationToken |
-| `client-methods-virtual` | warning | {Type.Name} has non-virtual service method |
-| `async-needs-sync-counterpart` | warning | {Type.Name} has async method without sync counterpart |
+| `client-needs-options-ctor` | warning | {item.Name} should accept an options parameter |
+| `client-sealed-or-abstract` | warning | {item.Name} should be sealed or abstract |
+| `async-needs-cancellation-token` | warning | {item.Name} is async without CancellationToken |
+| `client-methods-virtual` | warning | {item.Name} has non-virtual service method |
+| `async-needs-sync-counterpart` | warning | {item.Name} has async method without sync counterpart |
 
 All checks are combined into the `csharp-library-client` array.
 

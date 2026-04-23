@@ -33,7 +33,7 @@ public class CheckFileParserTests
     public void Parse_PrintWithAllParts()
     {
         var source = """
-            foreach Statements:csharp:isVar:!Path('**/Tests/**') => PRINT('ERROR: Don\'t use var for {Statement.MemberName}')
+            foreach Statements:csharp:isVar:!Path('**/Tests/**') => PRINT('ERROR: Don\'t use var for {item.MemberName}')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         Assert.That(file.Commands, Has.Count.EqualTo(1));
@@ -42,7 +42,7 @@ public class CheckFileParserTests
         Assert.That(check.Collection, Is.EqualTo("Statements"));
         Assert.That(check.Filters, Has.Count.EqualTo(3)); // csharp, isVar, !Path(...)
         Assert.That(check.ActionName, Is.EqualTo("PRINT"));
-        Assert.That(check.MessageTemplate, Is.EqualTo("ERROR: Don't use var for {Statement.MemberName}"));
+        Assert.That(check.MessageTemplate, Is.EqualTo("ERROR: Don't use var for {item.MemberName}"));
     }
 
     [Test]
@@ -239,7 +239,7 @@ public class CheckFileParserTests
     {
         var source = """
             predicate notSealed(Type) => !Type.Sealed
-            foreach Types:csharp:notSealed => PRINT('WARNING: {Type.Name} should be sealed')
+            foreach Types:csharp:notSealed => PRINT('WARNING: {item.Name} should be sealed')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         var check = file.Commands[0];
@@ -507,14 +507,14 @@ public class CheckFileParserTests
     public void Parse_LetCommand_BasicNamedPrint()
     {
         var source = """
-            let list-types = foreach Types => PRINT('{Type.Name}')
+            let list-types = foreach Types => PRINT('{item.Name}')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         Assert.That(file.Commands, Has.Count.EqualTo(1));
         Assert.That(file.Commands[0].Name, Is.EqualTo("list-types"));
         Assert.That(file.Commands[0].IsCommand, Is.True);
         Assert.That(file.Commands[0].Collection, Is.EqualTo("Types"));
-        Assert.That(file.Commands[0].MessageTemplate, Is.EqualTo("{Type.Name}"));
+        Assert.That(file.Commands[0].MessageTemplate, Is.EqualTo("{item.Name}"));
     }
 
     [Test]
@@ -522,7 +522,7 @@ public class CheckFileParserTests
     {
         var source = """
             predicate isClient(Type) => Type.Name:endsWith('Client')
-            let check-clients = foreach Types:isClient => PRINT('WARNING: {Type.Name}')
+            let check-clients = foreach Types:isClient => PRINT('WARNING: {item.Name}')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         Assert.That(file.Predicates, Has.Count.EqualTo(1));
@@ -536,7 +536,7 @@ public class CheckFileParserTests
     public void Parse_LetCommand_CoexistsWithUnnamedPrint()
     {
         var source = """
-            let list-types = foreach Types => PRINT('{Type.Name}')
+            let list-types = foreach Types => PRINT('{item.Name}')
             foreach Types:csharp => PRINT('WARNING: check')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
@@ -551,7 +551,7 @@ public class CheckFileParserTests
     {
         var source = """
             ## Lists all types in the codebase
-            let list-types = foreach Types => PRINT('{Type.Name}')
+            let list-types = foreach Types => PRINT('{item.Name}')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         Assert.That(file.Commands[0].DocComment, Is.EqualTo("Lists all types in the codebase"));
@@ -650,7 +650,7 @@ public class CheckFileParserTests
                 Message = message
             }
             predicate isVar(Statement) => Statement.MemberName == 'var'
-            foreach Statements:isVar:error('Don\'t use var') => PRINT('{Violation.Message}')
+            foreach Statements:isVar:error('Don\'t use var') => PRINT('{item.Message}')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         Assert.That(file.Functions, Has.Count.EqualTo(1));
@@ -665,7 +665,7 @@ public class CheckFileParserTests
     {
         var source = """
             let Accepted = ['foo', 'bar']
-            foreach Statements:isVar:toError('msg') - Accepted => PRINT('{Violation.Message}')
+            foreach Statements:isVar:toError('msg') - Accepted => PRINT('{item.Message}')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         Assert.That(file.Commands, Has.Count.EqualTo(1));
@@ -747,11 +747,11 @@ public class CheckFileParserTests
     [Test]
     public void TemplateParser_StyledExpression()
     {
-        var segments = TemplateParser.Parse("{Type.Name@bold}");
+        var segments = TemplateParser.Parse("{item.Name@bold}");
         Assert.That(segments, Has.Count.EqualTo(1));
         Assert.That(segments[0], Is.TypeOf<ExpressionSegment>());
         var expr = (ExpressionSegment)segments[0];
-        Assert.That(expr.PropertyPath, Is.EqualTo(new[] { "Type", "Name" }));
+        Assert.That(expr.PropertyPath, Is.EqualTo(new[] { "item", "Name" }));
         Assert.That(expr.Annotation, Is.EqualTo("bold"));
     }
 
@@ -784,11 +784,11 @@ public class CheckFileParserTests
     [Test]
     public void TemplateParser_PlainExpression()
     {
-        var segments = TemplateParser.Parse("{Type.Name}");
+        var segments = TemplateParser.Parse("{item.Name}");
         Assert.That(segments, Has.Count.EqualTo(1));
         Assert.That(segments[0], Is.TypeOf<ExpressionSegment>());
         var expr = (ExpressionSegment)segments[0];
-        Assert.That(expr.PropertyPath, Is.EqualTo(new[] { "Type", "Name" }));
+        Assert.That(expr.PropertyPath, Is.EqualTo(new[] { "item", "Name" }));
         Assert.That(expr.Annotation, Is.Null);
     }
 
@@ -830,7 +830,7 @@ public class CheckFileParserTests
     [Test]
     public void Parse_ParameterizedCommand()
     {
-        var file = ScriptParser.Parse("command CHECK(violations) = PRINT('{Violation.Message}', violations)", "test.cop");
+        var file = ScriptParser.Parse("command CHECK(violations) = PRINT('{item.Message}', violations)", "test.cop");
         Assert.That(file.Commands, Has.Count.EqualTo(1));
         Assert.That(file.Commands[0].Parameters, Has.Count.EqualTo(1));
         Assert.That(file.Commands[0].Parameters![0], Is.EqualTo("violations"));
@@ -839,7 +839,7 @@ public class CheckFileParserTests
     [Test]
     public void Parse_ExportParameterizedCommand()
     {
-        var file = ScriptParser.Parse("export command CHECK(violations) = PRINT('{Violation.Message}', violations)", "test.cop");
+        var file = ScriptParser.Parse("export command CHECK(violations) = PRINT('{item.Message}', violations)", "test.cop");
         Assert.That(file.Commands, Has.Count.EqualTo(1));
         Assert.That(file.Commands[0].IsExported, Is.True);
         Assert.That(file.Commands[0].Parameters, Has.Count.EqualTo(1));

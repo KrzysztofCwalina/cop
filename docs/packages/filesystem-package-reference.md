@@ -16,7 +16,7 @@ The package exports a `Disk` binding containing two collections:
 import filesystem
 
 # Use Disk.Files and Disk.Folders
-foreach Disk.Files => PRINT('{DiskFile.Path}')
+foreach Disk.Files => PRINT('{item.Path}')
 ```
 
 `Disk` is a `Filesystem` object containing two collections:
@@ -47,7 +47,7 @@ import filesystem
 
 predicate deepFolder(Folder) => Folder.Depth > 5
 predicate manyFiles(Folder) => Folder.FileCount > 100
-foreach Disk.Folders:manyFiles => PRINT('{Folder.Path} has {Folder.FileCount} files')
+foreach Disk.Folders:manyFiles => PRINT('{item.Path} has {item.FileCount} files')
 ```
 
 ### DiskFile
@@ -72,7 +72,7 @@ import filesystem
 
 predicate isLargeFile(DiskFile) => DiskFile.Size > 1048576
 predicate isMarkdown(DiskFile) => DiskFile.Extension == '.md'
-foreach Disk.Files:isLargeFile => PRINT('{DiskFile.Name} ({DiskFile.Size} bytes)')
+foreach Disk.Files:isLargeFile => PRINT('{item.Name} ({item.Size} bytes)')
 ```
 
 ### Filesystem
@@ -106,8 +106,8 @@ let RecentFiles = Disk.Files:recentlyModified
 let StaleFolders = Disk.Folders:stale
 let LockIssues = Disk.Files:lockViolation
 
-foreach RecentFiles => PRINT('{Recently modified:@yellow} {DiskFile.Path}')
-foreach StaleFolders => PRINT('{Stale folder:@yellow} {Folder.Path}')
+foreach RecentFiles => PRINT('{Recently modified:@yellow} {item.Path}')
+foreach StaleFolders => PRINT('{Stale folder:@yellow} {item.Path}')
 ```
 
 ## Pre-built Checks
@@ -120,7 +120,7 @@ Flags every empty folder as an error.
 
 ```ruby
 export let empty-folders = Disk.Folders:empty
-    :toError('Empty folder: {Folder.Path}')
+    :toError('Empty folder: {item.Path}')
 ```
 
 ### lock-violations
@@ -129,7 +129,7 @@ Flags every file whose lock status indicates an unauthorized change.
 
 ```ruby
 export let lock-violations = Disk.Files:lockViolation
-    :toError('Lock violation: {DiskFile.Path} ({DiskFile.LockStatus})')
+    :toError('Lock violation: {item.Path} ({item.LockStatus})')
 ```
 
 ## Lock Integration
@@ -157,7 +157,7 @@ Usage — check lock status:
 import filesystem
 
 let ModifiedLocked = Disk.Files:locked:recentlyModified
-foreach Disk.Files:lockViolation => PRINT('{warning:@yellow} Locked file changed: {DiskFile.Path} (status: {DiskFile.LockStatus})')
+foreach Disk.Files:lockViolation => PRINT('{warning:@yellow} Locked file changed: {item.Path} (status: {item.LockStatus})')
 ```
 
 ## Examples
@@ -170,7 +170,7 @@ import filesystem
 predicate isLarge(DiskFile) => DiskFile.Size > 1048576
 
 let large-files = Disk.Files:isLarge
-    :toWarning('Large file ({DiskFile.Size} bytes): {DiskFile.Path}')
+    :toWarning('Large file ({item.Size} bytes): {item.Path}')
 ```
 
 ### Find deeply nested folders
@@ -181,7 +181,7 @@ import filesystem
 predicate isDeeplyNested(Folder) => Folder.Depth > 5
 
 let deep-folders = Disk.Folders:isDeeplyNested
-    :toWarning('Deeply nested folder: {Folder.Path} (depth {Folder.Depth})')
+    :toWarning('Deeply nested folder: {item.Path} (depth {item.Depth})')
 ```
 
 ### Detect stale locked files
@@ -194,7 +194,7 @@ predicate isStaleLocked(DiskFile) =>
     DiskFile.MinutesSinceModified > 1440
 
 let stale-locked = Disk.Files:isStaleLocked
-    :toWarning('Locked file is stale: {DiskFile.Path}')
+    :toWarning('Locked file is stale: {item.Path}')
 ```
 
 ### Check for specific file extensions
@@ -207,5 +207,5 @@ predicate isTempFile(DiskFile) =>
     DiskFile.Extension == '.bak'
 
 let temp-files = Disk.Files:isTempFile
-    :toWarning('Temporary file found: {DiskFile.Path}')
+    :toWarning('Temporary file found: {item.Path}')
 ```

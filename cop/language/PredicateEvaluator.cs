@@ -114,6 +114,7 @@ public class PredicateEvaluator
     private object? EvalIdentifier(string name, object item, string paramType, EvaluationContext ctx)
     {
         if (name == paramType) return item;
+        if (name == "item") return item;
         if (name == "null") return null;
 
         if (_predicates.TryGetValue(name, out var group))
@@ -781,12 +782,12 @@ public class PredicateEvaluator
         // Bind function parameters from call arguments
         // e.g., function error(Statement, message: string) called as :error("Do not use var")
         // → binds "message" to "Do not use var"
-        // String arguments with {Type.Prop} templates are resolved against the input item.
+        // String arguments with {item.Prop} templates are resolved against the input item.
         var paramBindings = new Dictionary<string, object?>();
         for (int i = 0; i < func.Parameters.Count && i < callArgs.Count; i++)
         {
             var argValue = Eval(callArgs[i], item, paramType, ctx);
-            // Resolve string templates like {Statement.MemberName} in string arguments
+            // Resolve string templates like {item.MemberName} in string arguments
             if (argValue is string strVal && strVal.Contains('{'))
                 argValue = ResolveStringTemplate(strVal, inputItem, inputType);
             paramBindings[func.Parameters[i].Name] = argValue;
@@ -801,8 +802,9 @@ public class PredicateEvaluator
             // Copy parameter bindings into context
             foreach (var (pName, pValue) in paramBindings)
                 funcCtx.Capture(pName, pValue);
-            // Capture the input item as its type name
+            // Capture the input item as its type name and as "item"
             funcCtx.Capture(inputType, inputItem);
+            funcCtx.Capture("item", inputItem);
 
             fields[fieldName] = EvalInFunctionContext(fieldExpr, inputItem, inputType, funcCtx, paramBindings);
         }
@@ -831,8 +833,8 @@ public class PredicateEvaluator
     public bool IsFunction(string name) => _functions.ContainsKey(name);
 
     /// <summary>
-    /// Resolve {Type.Prop} patterns in a string, using the current item as context.
-    /// Used for function string arguments like "Do not use var for {Statement.MemberName}".
+    /// Resolve {item.Prop} patterns in a string, using the current item as context.
+    /// Used for function string arguments like "Do not use var for {item.MemberName}".
     /// </summary>
     private string ResolveStringTemplate(string template, object item, string itemType)
     {
@@ -850,7 +852,7 @@ public class PredicateEvaluator
             }
             else if (segment is ExpressionSegment expr)
             {
-                object? obj = expr.PropertyPath[0] == itemType ? item : null;
+                object? obj = (expr.PropertyPath[0] == itemType || expr.PropertyPath[0] == "item") ? item : null;
                 if (obj == null)
                 {
                     // Preserve unresolved placeholder

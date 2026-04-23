@@ -4,19 +4,19 @@ import code-analysis
 
 ## SA1302: Interface names must begin with 'I' followed by an uppercase letter
 export let interface-prefix = Code.Types:csharp:interfaceMissingIPrefix
-    :toWarning('SA1302: Interface {Type.Name} should begin with \'I\' followed by an uppercase letter')
+    :toWarning('SA1302: Interface {item.Name} should begin with \'I\' followed by an uppercase letter')
 
 ## SA1300: Type names must begin with an uppercase letter (PascalCase)
 export let type-name-casing = Code.Types:csharp:lowercaseTypeName
-    :toWarning('SA1300: Type {Type.Name} should begin with an uppercase letter')
+    :toWarning('SA1300: Type {item.Name} should begin with an uppercase letter')
 
 ## SA1300: Public method names must begin with an uppercase letter (PascalCase)
 export let method-name-casing = Code.Types:csharp:hasLowercasePublicMethod
-    :toWarning('SA1300: {Type.Name} has a public method that should begin with an uppercase letter')
+    :toWarning('SA1300: {item.Name} has a public method that should begin with an uppercase letter')
 
 ## SA1402: A file may only contain a single type
 export let single-type-per-file = Code.Types:csharp:multipleTypesInFile
-    :toWarning('SA1402: {Type.Name} — file should contain only a single type')
+    :toWarning('SA1402: {item.Name} — file should contain only a single type')
 
 ## SA1005: Single-line comment must begin with a space after //
 export let comment-spacing = Code.Lines:csharp:commentMissingSpace
@@ -52,26 +52,26 @@ export let file-header-required = Code.Lines:csharp:missingFileHeader
 
 ## SA1600: Public elements should be documented
 export let public-documented = Code.Types:csharp:publicUndocumented
-    :toWarning('SA1600: Public type {Type.Name} should have XML documentation')
+    :toWarning('SA1600: Public type {item.Name} should have XML documentation')
 
 export let public-method-documented = Code.Types:csharp:hasUndocumentedPublicMethod
-    :toWarning('SA1600: {Type.Name} has a public method without XML documentation')
+    :toWarning('SA1600: {item.Name} has a public method without XML documentation')
 
 ## SA1401: Fields should be private
 export let no-public-fields = Code.Types:csharp:hasPublicField
-    :toWarning('SA1401: {Type.Name} has a public non-const field; use a property instead')
+    :toWarning('SA1401: {item.Name} has a public non-const field; use a property instead')
 
 ## .editorconfig naming: private field underscore prefix
 export let private-field-naming = Code.Types:csharp:hasPrivateFieldNamingViolation
-    :toWarning('{Type.Name} has a private field that should start with underscore (_)')
+    :toWarning('{item.Name} has a private field that should start with underscore (_)')
 
 ## .editorconfig naming: static field s_ prefix
 export let static-field-naming = Code.Types:csharp:hasStaticFieldNamingViolation
-    :toWarning('{Type.Name} has a private static field that should start with s_')
+    :toWarning('{item.Name} has a private static field that should start with s_')
 
 ## .editorconfig naming: const PascalCase
 export let const-naming = Code.Types:csharp:hasConstNamingViolation
-    :toWarning('{Type.Name} has a constant that should be PascalCase')
+    :toWarning('{item.Name} has a constant that should be PascalCase')
 
 ## SA1500: Braces must be on their own line (Allman style)
 export let braces-on-own-line = Code.Lines:csharp:braceNotOnOwnLine
@@ -83,7 +83,7 @@ export let required-braces = Code.Lines:csharp:missingBraces
 
 ## SA1600: Public properties should be documented
 export let public-property-documented = Code.Types:csharp:hasUndocumentedPublicProperty
-    :toWarning('SA1600: {Type.Name} has a public property without XML documentation')
+    :toWarning('SA1600: {item.Name} has a public property without XML documentation')
 
 ## All style checks combined
 export let csharp-style = [interface-prefix, type-name-casing, method-name-casing, single-type-per-file, comment-spacing, no-tabs, no-trailing-whitespace, no-empty-statements, no-empty-comments, use-string-empty, modifier-order, file-header-required, public-documented, public-method-documented, no-public-fields, private-field-naming, static-field-naming, const-naming, braces-on-own-line, required-braces, public-property-documented]

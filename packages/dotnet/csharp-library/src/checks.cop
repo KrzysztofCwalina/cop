@@ -12,11 +12,11 @@ export predicate bannedParams(Type) => Type.Methods:any(bannedParamType)
 
 ## Public methods should not have a bool parameter named 'async'
 export let public-async-bool-params = Code.Types:csharp:exposesAsyncBool
-    :toWarning('{Type.Name} should not have a bool \'async\' parameter in public API')
+    :toWarning('{item.Name} should not have a bool \'async\' parameter in public API')
 
 ## Non-public async methods should accept a bool 'async' parameter
 export let async-missing-bool-param = Code.Types:csharp:nonPublicAsyncWithoutParam
-    :toWarning('{Type.Name} non-public async method should have \'async\' parameter')
+    :toWarning('{item.Name} non-public async method should have \'async\' parameter')
 
 ## Library code must use ConfigureAwait(false) on all await expressions
 export let awaits-using-default = Code.Statements:csharp:awaitUsingDefault

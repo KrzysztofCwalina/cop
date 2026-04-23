@@ -9,7 +9,7 @@ Create a file called `api-listing.cop` in your project:
 ```ruby
 import csharp-api
 
-export command api-listing = foreach Code.Api:csharp:publicApi => PRINT('{Api.ApiAsText}')
+export command api-listing = foreach Code.Api:csharp:publicApi => PRINT('{item.ApiAsText}')
 ```
 
 ```bash
@@ -55,7 +55,7 @@ Use `:text()` to flatten the collection into a single text block, then `save()` 
 ```ruby
 import csharp-api
 
-let apiText = Code.Api:csharp:publicApi:text('{Api.ApiAsText}')
+let apiText = Code.Api:csharp:publicApi:text('{item.ApiAsText}')
 export command save-api = save('api-surface.txt', apiText)
 ```
 
@@ -74,7 +74,7 @@ import csharp-api
 
 let dll = Code.Load('bin/Release/net8.0/MyPackage.dll')
 
-export command list-dll = foreach dll.Api:publicApi => PRINT('{Api.ApiAsText}')
+export command list-dll = foreach dll.Api:publicApi => PRINT('{item.ApiAsText}')
 ```
 
 To save assembly API to a file:
@@ -83,7 +83,7 @@ To save assembly API to a file:
 import csharp-api
 
 let dll = Code.Load('bin/Release/net8.0/MyPackage.dll')
-let apiText = dll.Api:publicApi:text('{Api.ApiAsText}')
+let apiText = dll.Api:publicApi:text('{item.ApiAsText}')
 export command save-dll = save('api-surface.txt', apiText)
 ```
 
@@ -104,12 +104,12 @@ This is useful for:
 
 ## Signature Format (for Diff)
 
-For API diff comparison, use `Api.Signature` instead of `Api.ApiAsText`. Signatures are compact canonical keys:
+For API diff comparison, use `item.Signature` instead of `item.ApiAsText`. Signatures are compact canonical keys:
 
 ```ruby
 import csharp-api
 
-export command api-signatures = foreach Code.Api:csharp:publicApi => PRINT('{Api.Signature}')
+export command api-signatures = foreach Code.Api:csharp:publicApi => PRINT('{item.Signature}')
 ```
 
 ```
@@ -163,7 +163,7 @@ List only methods:
 ```ruby
 import csharp-api
 
-export command list-methods = foreach Code.Api:csharp:apiMethod => PRINT('{Api.Signature}')
+export command list-methods = foreach Code.Api:csharp:apiMethod => PRINT('{item.Signature}')
 ```
 
 ## Diagnostics vs. Listings
@@ -175,18 +175,18 @@ import csharp-api
 import code-analysis
 
 export let missing-docs = Code.Api:csharp:publicApi
-    :toWarning('{Api.Signature} has no documentation')
+    :toWarning('{item.Signature} has no documentation')
 ```
 
 The `Violation` type has these fields:
 
 | Field | Type | Description |
 |---|---|---|
-| `Violation.Severity` | string | `'error'`, `'warning'`, or `'info'` |
-| `Violation.Message` | string | The formatted message |
-| `Violation.File` | string | Source file path |
-| `Violation.Line` | int | Source line number |
-| `Violation.Source` | string | Language of the source file |
+| `item.Severity` | string | `'error'`, `'warning'`, or `'info'` |
+| `item.Message` | string | The formatted message |
+| `item.File` | string | Source file path |
+| `item.Line` | int | Source line number |
+| `item.Source` | string | Language of the source file |
 
 ## The Api Type
 
@@ -194,13 +194,13 @@ Each entry in `Code.Api` (or from `Code.Load().Api`) has these fields:
 
 | Field | Type | Description |
 |---|---|---|
-| `Api.Kind` | string | `class`, `interface`, `struct`, `enum`, `method`, `property`, `event`, `ctor`, `enumvalue` |
-| `Api.TypeName` | string | Declaring type name |
-| `Api.MemberName` | string | Member name (empty for type-level entries) |
-| `Api.Signature` | string | Canonical signature (stable comparison key) |
-| `Api.ApiAsText` | string | C# stub declaration (for listings) |
-| `Api.Line` | int | Source line number (0 for assembly-loaded entries) |
-| `Api.File` | File | Source file |
+| `item.Kind` | string | `class`, `interface`, `struct`, `enum`, `method`, `property`, `event`, `ctor`, `enumvalue` |
+| `item.TypeName` | string | Declaring type name |
+| `item.MemberName` | string | Member name (empty for type-level entries) |
+| `item.Signature` | string | Canonical signature (stable comparison key) |
+| `item.ApiAsText` | string | C# stub declaration (for listings) |
+| `item.Line` | int | Source line number (0 for assembly-loaded entries) |
+| `item.File` | File | Source file |
 
 ### ApiAsText Format
 

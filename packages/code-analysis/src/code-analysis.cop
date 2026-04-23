@@ -17,50 +17,50 @@ export type Violation = {
 export function toError(Statement, message: string) => Violation {
     Severity = 'error',
     Message = message,
-    File = Statement.File.Path,
-    Line = Statement.Line,
-    Source = Statement.Source
+    File = item.File.Path,
+    Line = item.Line,
+    Source = item.Source
 }
 
 export function toWarning(Statement, message: string) => Violation {
     Severity = 'warning',
     Message = message,
-    File = Statement.File.Path,
-    Line = Statement.Line,
-    Source = Statement.Source
+    File = item.File.Path,
+    Line = item.Line,
+    Source = item.Source
 }
 
 export function toInfo(Statement, message: string) => Violation {
     Severity = 'info',
     Message = message,
-    File = Statement.File.Path,
-    Line = Statement.Line,
-    Source = Statement.Source
+    File = item.File.Path,
+    Line = item.Line,
+    Source = item.Source
 }
 
 # Type overloads
 export function toError(Type, message: string) => Violation {
     Severity = 'error',
     Message = message,
-    File = Type.File.Path,
-    Line = Type.Line,
-    Source = Type.Source
+    File = item.File.Path,
+    Line = item.Line,
+    Source = item.Source
 }
 
 export function toWarning(Type, message: string) => Violation {
     Severity = 'warning',
     Message = message,
-    File = Type.File.Path,
-    Line = Type.Line,
-    Source = Type.Source
+    File = item.File.Path,
+    Line = item.Line,
+    Source = item.Source
 }
 
 export function toInfo(Type, message: string) => Violation {
     Severity = 'info',
     Message = message,
-    File = Type.File.Path,
-    Line = Type.Line,
-    Source = Type.Source
+    File = item.File.Path,
+    Line = item.Line,
+    Source = item.Source
 }
 
 # Line overloads
@@ -92,54 +92,54 @@ export function toInfo(Line, message: string) => Violation {
 export function toError(Folder, message: string) => Violation {
     Severity = 'error',
     Message = message,
-    File = Folder.Path,
+    File = item.Path,
     Line = 0,
-    Source = Folder.Source
+    Source = item.Source
 }
 
 export function toWarning(Folder, message: string) => Violation {
     Severity = 'warning',
     Message = message,
-    File = Folder.Path,
+    File = item.Path,
     Line = 0,
-    Source = Folder.Source
+    Source = item.Source
 }
 
 export function toInfo(Folder, message: string) => Violation {
     Severity = 'info',
     Message = message,
-    File = Folder.Path,
+    File = item.Path,
     Line = 0,
-    Source = Folder.Source
+    Source = item.Source
 }
 
 # Api overloads
 export function toError(Api, message: string) => Violation {
     Severity = 'error',
     Message = message,
-    File = Api.File.Path,
-    Line = Api.Line,
-    Source = Api.Source
+    File = item.File.Path,
+    Line = item.Line,
+    Source = item.Source
 }
 
 export function toWarning(Api, message: string) => Violation {
     Severity = 'warning',
     Message = message,
-    File = Api.File.Path,
-    Line = Api.Line,
-    Source = Api.Source
+    File = item.File.Path,
+    Line = item.Line,
+    Source = item.Source
 }
 
 export function toInfo(Api, message: string) => Violation {
     Severity = 'info',
     Message = message,
-    File = Api.File.Path,
-    Line = Api.Line,
-    Source = Api.Source
+    File = item.File.Path,
+    Line = item.Line,
+    Source = item.Source
 }
 
 # Parameterized check command — users invoke via RUN CHECK(violations)
 export command CHECK(violations) = PRINT(
-    '{Violation.File@dim}({Violation.Line@dim}): {Violation.Severity@auto}: {Violation.Message}',
+    '{item.File@dim}({item.Line@dim}): {item.Severity@auto}: {item.Message}',
     violations
 )

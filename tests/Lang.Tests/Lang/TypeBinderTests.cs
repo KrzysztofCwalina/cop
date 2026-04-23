@@ -54,7 +54,7 @@ public class TypeBinderTests
         var file = ScriptParser.Parse(
             """
             import code
-            foreach Types => PRINT('ERROR: {Type.FakeProperty}')
+            foreach Types => PRINT('ERROR: {item.FakeProperty}')
             """, "test.cop");
 
         var errors = binder.Bind(file);
@@ -70,7 +70,7 @@ public class TypeBinderTests
         var file = ScriptParser.Parse(
             """
             import code
-            foreach Types => PRINT('INFO: {Type.Name} is public: {Type.Public}')
+            foreach Types => PRINT('INFO: {item.Name} is public: {item.Public}')
             """, "test.cop");
 
         var errors = binder.Bind(file);
@@ -86,7 +86,7 @@ public class TypeBinderTests
         var file = ScriptParser.Parse(
             """
             predicate bad(Type) => Type.CompletelyWrong == 'foo'
-            foreach Types => PRINT('ERROR: {Type.BadProp}')
+            foreach Types => PRINT('ERROR: {item.BadProp}')
             """, "test.cop");
 
         var errors = binder.Bind(file);
@@ -149,7 +149,7 @@ public class TypeBinderTests
             import code
             predicate isPublic(Type) => Type.Public
             let PublicTypes = FakeCollection:isPublic
-            foreach PublicTypes => PRINT('INFO: {Type.Name}')
+            foreach PublicTypes => PRINT('INFO: {item.Name}')
             """, "test.cop");
 
         var errors = binder.Bind(file);
@@ -167,7 +167,7 @@ public class TypeBinderTests
             import code
             predicate isPublic(Type) => Type.Public
             let PublicTypes = Types:isPublic
-            foreach PublicTypes => PRINT('INFO: {Type.Name}')
+            foreach PublicTypes => PRINT('INFO: {item.Name}')
             """, "test.cop");
 
         var errors = binder.Bind(file);

@@ -14,7 +14,7 @@ Create a file called `checks.cop` in your project root:
 import code
 
 foreach Code.Statements:call
-    => PRINT('{Statement.File.Path}:{Statement.Line} {Statement.TypeName}.{Statement.MemberName}')
+    => PRINT('{item.File.Path}:{item.Line} {item.TypeName}.{item.MemberName}')
 ```
 
 Run it:
@@ -105,7 +105,7 @@ let UnsealedCSharpClients = Code.Types:csharp:client:!sealed
 
 ```ruby
 foreach Code.Types:csharp:client:!sealed
-    => PRINT('{Type.File.Path}:{Type.Line} {Type.Name} should be sealed')
+    => PRINT('{item.File.Path}:{item.Line} {item.Name} should be sealed')
 ```
 
 Output:
@@ -121,7 +121,7 @@ Use `{text@style}` for colored/styled output:
 
 ```ruby
 foreach Code.Statements:javascript:evalCall
-    => PRINT('{error@red} {Statement.File.Path}:{Statement.Line} Do not use eval()')
+    => PRINT('{error@red} {item.File.Path}:{item.Line} Do not use eval()')
 ```
 
 Available styles: `@red`, `@yellow`, `@green`, `@cyan`, `@dim`, `@bold`, `@auto` (auto-colors by severity keyword).
@@ -329,8 +329,8 @@ Define named commands that can be run individually:
 ```ruby
 import code
 
-command list-types = foreach Code.Types => PRINT('{Type.Name} ({Type.Kind}) — {Type.File.Path}')
-command list-clients = foreach Code.Types:client => PRINT('{Type.Name}')
+command list-types = foreach Code.Types => PRINT('{item.Name} ({item.Kind}) — {item.File.Path}')
+command list-clients = foreach Code.Types:client => PRINT('{item.Name}')
 command count-files = PRINT('{Code.Files.Count} source files')
 ```
 
@@ -396,13 +396,13 @@ let all-language-checks = [csharp-checks, javascript-checks, python-checks]
 # ── Custom cross-language rules ──
 predicate todoComment(Line) => Line.Text:contains('TODO') || Line.Text:contains('HACK')
 let todos = Code.Lines:todoComment
-    :toInfo('{Line.Text}')
+    :toInfo('{item.Text}')
 
 # ── Custom project-specific rules ──
 predicate testHelper(Type) => Type.Name:endsWith('TestHelper')
     && !Type.Public
 let non-public-helpers = Code.Types:testHelper
-    :toWarning('{Type.Name} should be public so tests in other projects can use it')
+    :toWarning('{item.Name} should be public so tests in other projects can use it')
 
 # ── Run everything ──
 CHECK([all-language-checks, todos, non-public-helpers])

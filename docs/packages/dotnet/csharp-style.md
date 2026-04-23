@@ -30,10 +30,10 @@ Defined in `checks.cop`:
 
 | Check | Rule | Severity | Message |
 |---|---|---|---|
-| `interface-prefix` | SA1302 | warning | Interface {Type.Name} should begin with 'I' followed by an uppercase letter |
-| `type-name-casing` | SA1300 | warning | Type {Type.Name} should begin with an uppercase letter |
-| `method-name-casing` | SA1300 | warning | {Type.Name} has a public method that should begin with an uppercase letter |
-| `single-type-per-file` | SA1402 | warning | {Type.Name} — file should contain only a single type |
+| `interface-prefix` | SA1302 | warning | Interface {item.Name} should begin with 'I' followed by an uppercase letter |
+| `type-name-casing` | SA1300 | warning | Type {item.Name} should begin with an uppercase letter |
+| `method-name-casing` | SA1300 | warning | {item.Name} has a public method that should begin with an uppercase letter |
+| `single-type-per-file` | SA1402 | warning | {item.Name} — file should contain only a single type |
 | `comment-spacing` | SA1005 | warning | Single-line comment should begin with a space |
 | `no-tabs` | SA1027 | warning | Use spaces instead of tabs |
 | `no-trailing-whitespace` | SA1028 | warning | Remove trailing whitespace |

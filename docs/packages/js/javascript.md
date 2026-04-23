@@ -29,7 +29,7 @@ Defined in `checks.cop`:
 
 | Check | Severity | Message |
 |---|---|---|
-| `console-calls` | warning | Avoid console.{Statement.MemberName} in production code |
+| `console-calls` | warning | Avoid console.{item.MemberName} in production code |
 | `alert-calls` | error | Do not use alert() |
 | `eval-calls` | error | Do not use eval() — it is a security risk |
 | `debugger-statements` | error | Remove debugger statement |

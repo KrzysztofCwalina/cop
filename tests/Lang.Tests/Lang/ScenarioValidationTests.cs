@@ -69,7 +69,7 @@ public class ScenarioValidationTests
     [Test]
     public void S1_HelloWorld_PrintInterpolation()
     {
-        // Verify that {Statement.File.Path}:{Statement.Line} interpolation works
+        // Verify that {item.File.Path}:{item.Line} interpolation works
         var sampleDir = GetSamplesDir("s1-HelloWorld");
 
         var result = Engine.Run(sampleDir, sampleDir);

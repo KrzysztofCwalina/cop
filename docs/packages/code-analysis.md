@@ -32,7 +32,7 @@ Each function has overloads for `Statement`, `Type`, `Line`, and `Folder`:
 | `toWarning(item, message)` | Creates a Violation with severity `'warning'` |
 | `toInfo(item, message)` | Creates a Violation with severity `'info'` |
 
-The `message` parameter supports template interpolation (e.g., `'Missing docs for {Type.Name}'`).
+The `message` parameter supports template interpolation (e.g., `'Missing docs for {item.Name}'`).
 
 ## CHECK Command
 
@@ -42,7 +42,7 @@ The package exports a `CHECK` command that prints formatted violations:
 import code-analysis
 
 let errors = Code.Statements:csharp:varDeclaration
-    :toError('Do not use var for {Statement.MemberName}')
+    :toError('Do not use var for {item.MemberName}')
 
 CHECK(errors)
 ```
@@ -58,7 +58,7 @@ import code-analysis
 
 let violations = Code.Types:csharp:publicType
     :!Name:endsWith('Base')
-    :toWarning('{Type.Name} should not have a Base suffix')
+    :toWarning('{item.Name} should not have a Base suffix')
 
 CHECK(violations)
 ```

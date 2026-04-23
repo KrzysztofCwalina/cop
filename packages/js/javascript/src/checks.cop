@@ -4,7 +4,7 @@ import code-analysis
 
 ## Avoid console output in production code
 export let console-calls = Code.Statements:javascript:consoleCall
-    :toWarning('Avoid console.{Statement.MemberName} in production code')
+    :toWarning('Avoid console.{item.MemberName} in production code')
 
 ## Do not use alert()
 export let alert-calls = Code.Statements:javascript:alertCall

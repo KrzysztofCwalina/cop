@@ -141,7 +141,7 @@ public class FilesystemTests
         // Write a .cop program that flags empty folders
         var copSource = """
             predicate isEmpty(Folder) => Folder.Empty == true
-            foreach Folders:isEmpty => PRINT('WARNING: Empty folder: {Folder.Path}')
+            foreach Folders:isEmpty => PRINT('WARNING: Empty folder: {item.Path}')
             """;
         File.WriteAllText(Path.Combine(scriptsDir, "no-empty-folders.cop"), copSource);
 
@@ -172,7 +172,7 @@ public class FilesystemTests
         var copSource = """
             predicate isEmpty(Folder) => Folder.Empty == true
             let EmptyFolders = Folders:isEmpty
-            foreach EmptyFolders => PRINT('Empty: {Folder.Path}')
+            foreach EmptyFolders => PRINT('Empty: {item.Path}')
             """;
         File.WriteAllText(Path.Combine(scriptsDir, "test.cop"), copSource);
 

@@ -31,8 +31,8 @@ Defined in `checks.cop`:
 
 | Check | Severity | Message |
 |---|---|---|
-| `public-async-bool-params` | warning | {Type.Name} should not have a bool 'async' parameter in public API |
-| `async-missing-bool-param` | warning | {Type.Name} non-public async method should have 'async' parameter |
+| `public-async-bool-params` | warning | {item.Name} should not have a bool 'async' parameter in public API |
+| `async-missing-bool-param` | warning | {item.Name} non-public async method should have 'async' parameter |
 | `awaits-using-default` | warning | Library code must use ConfigureAwait(false) on await expressions |
 
 All checks are combined into the `csharp-library` array.

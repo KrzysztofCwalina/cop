@@ -19,9 +19,9 @@ import filesystem
 predicate deep(Folder) => Folder.Depth > 5
 
 # :empty is a built-in predicate from the filesystem package
-foreach Disk.Folders:empty => PRINT('{warning:@yellow} Empty folder: {Folder.Path}')
+foreach Disk.Folders:empty => PRINT('{warning:@yellow} Empty folder: {item.Path}')
 # :deep is the custom predicate defined above
-foreach Disk.Folders:deep => PRINT('{Folder.Path} is deeply nested ({Folder.Depth} levels)')
+foreach Disk.Folders:deep => PRINT('{item.Path} is deeply nested ({item.Depth} levels)')
 ```
 
 Run it:
@@ -42,8 +42,8 @@ import code
 # Works across all supported languages
 predicate longMethod(Method) => Method.Statements:count > 50
 
-foreach Code.Types => PRINT('{Type.Name} in {Type.File.Path}')
-foreach Code.Types:longMethod => PRINT('{warning:@yellow} {Method.Name} has too many statements')
+foreach Code.Types => PRINT('{item.Name} in {item.File.Path}')
+foreach Code.Types:longMethod => PRINT('{warning:@yellow} {item.Name} has too many statements')
 ```
 
 Use language-specific packages for targeted rules. For example, a project with both C# and JavaScript:
@@ -54,8 +54,8 @@ import javascript
 
 # These checks automatically apply to the right language
 # csharp checks only match .cs files, javascript checks only match .js/.ts files
-foreach csharp-checks => PRINT('{Violation.File@dim}:{Violation.Line@dim} {Violation.Message}')
-foreach javascript-checks => PRINT('{Violation.File@dim}:{Violation.Line@dim} {Violation.Message}')
+foreach csharp-checks => PRINT('{item.File@dim}:{item.Line@dim} {item.Message}')
+foreach javascript-checks => PRINT('{item.File@dim}:{item.Line@dim} {item.Message}')
 ```
 
 Or write cross-language rules using the `code` package directly:
@@ -94,7 +94,7 @@ predicate clientOptions(Type) => Type.Name:endsWith('ClientOptions')
 let Clients = Code.Types:client:!clientOptions
 
 # foreach iterates over the subset — one line per item
-foreach Clients:csharp:!Sealed => PRINT('{error:@red} {Type.Name} should be sealed')
+foreach Clients:csharp:!Sealed => PRINT('{error:@red} {item.Name} should be sealed')
 ```
 
 Predicates compose — you can reference one predicate from another:
@@ -104,7 +104,7 @@ predicate optionsType(Parameter) => Parameter.Type.Name:endsWith('Options')
 predicate hasOptions(Constructor) => Constructor.Parameters:any(optionsType)
 predicate missingOptions(Type) => Type.Constructors:none(hasOptions)
 
-foreach Clients:missingOptions => PRINT('{warning:@yellow} {Type.Name} needs an options constructor')
+foreach Clients:missingOptions => PRINT('{warning:@yellow} {item.Name} needs an options constructor')
 ```
 
 ## Strings and Identifiers
@@ -122,7 +122,7 @@ All string comparisons ignore case by default:
 
 | Operation | Example | Behavior |
 |---|---|---|
-| `==`, `!=` | `Type.Name == 'foo'` | Case-insensitive equality |
+| `==`, `!=` | `item.Name == 'foo'` | Case-insensitive equality |
 | `contains` | `Name:contains('task')` | Case-insensitive substring |
 | `startsWith` | `Name:startsWith('i')` | Case-insensitive prefix |
 | `endsWith` | `Name:endsWith('Client')` | Case-insensitive suffix |
@@ -187,7 +187,7 @@ The `code-analysis` package provides the `CHECK` command for structured violatio
 import code-analysis
 
 let errors = Code.Types:csharp:client:!Sealed
-    :toError('{Type.Name} must be sealed')
+    :toError('{item.Name} must be sealed')
 
 CHECK(errors)
 ```
@@ -197,8 +197,8 @@ CHECK(errors)
 Give commands a name so they can be run individually:
 
 ```ruby
-command check-var = foreach Code.Statements:csharp:varDeclaration => PRINT('{error:@red} {Statement.File.Path} uses var')
-command check-clients = foreach Clients:csharp:!Sealed => PRINT('{error:@red} {Type.Name} must be sealed')
+command check-var = foreach Code.Statements:csharp:varDeclaration => PRINT('{error:@red} {item.File.Path} uses var')
+command check-clients = foreach Clients:csharp:!Sealed => PRINT('{error:@red} {item.Name} must be sealed')
 ```
 
 ```bash

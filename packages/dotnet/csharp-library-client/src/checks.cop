@@ -18,23 +18,23 @@ export predicate missingMockingConstructor(Type) => Type.Constructors:!any(prote
 
 ## Client types must have a constructor that accepts an Options parameter
 export let client-needs-options-ctor = Clients:missingOptionsConstructor
-    :toWarning('{Type.Name} should accept an options parameter')
+    :toWarning('{item.Name} should accept an options parameter')
 
 ## Client types must be sealed or abstract to prevent unintended inheritance
 export let client-sealed-or-abstract = Clients:notSealedOrAbstract
-    :toWarning('{Type.Name} should be sealed or abstract')
+    :toWarning('{item.Name} should be sealed or abstract')
 
 ## Async methods on client types must accept a CancellationToken parameter
 export let async-needs-cancellation-token = Clients:asyncWithoutCancellation
-    :toWarning('{Type.Name} is async without CancellationToken')
+    :toWarning('{item.Name} is async without CancellationToken')
 
 ## Public instance methods on client types should be virtual for mocking
 export let client-methods-virtual = Clients:nonVirtualServiceMethod
-    :toWarning('{Type.Name} has non-virtual service method')
+    :toWarning('{item.Name} has non-virtual service method')
 
 ## Every public async method on a client type must have a matching sync method
 export let async-needs-sync-counterpart = Clients:asyncWithoutSync
-    :toWarning('{Type.Name} has async method without sync counterpart')
+    :toWarning('{item.Name} has async method without sync counterpart')
 
 ## All client library checks combined
 export let csharp-library-client = [client-needs-options-ctor, client-sealed-or-abstract, async-needs-cancellation-token, client-methods-virtual, async-needs-sync-counterpart]

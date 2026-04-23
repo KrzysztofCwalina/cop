@@ -50,6 +50,6 @@ export predicate lockViolation(DiskFile) =>
 
 # Violation collections
 export let empty-folders = Disk.Folders:empty
-    :toError('Empty folder: {Folder.Path}')
+    :toError('Empty folder: {item.Path}')
 export let lock-violations = Disk.Files:lockViolation
-    :toError('Lock violation: {DiskFile.Path} ({DiskFile.LockStatus})')
+    :toError('Lock violation: {item.Path} ({item.LockStatus})')

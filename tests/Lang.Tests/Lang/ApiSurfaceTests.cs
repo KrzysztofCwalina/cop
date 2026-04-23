@@ -189,7 +189,7 @@ public class ApiSurfaceTests
         var cop = $@"
 let baseline = Code.Load('{assemblyPath}')
 predicate anyApi(Api) => Api.Kind != ''
-export command api-list = SAVE('api.txt', '{{Api.Signature}}', baseline.Api:anyApi)
+export command api-list = SAVE('api.txt', '{{item.Signature}}', baseline.Api:anyApi)
 ";
 
         var registry = new TypeRegistry();
@@ -218,7 +218,7 @@ export command api-list = SAVE('api.txt', '{{Api.Signature}}', baseline.Api:anyA
         // Access dll.Types — same extractor as source code Types
         var cop = $@"
 let baseline = Code.Load('{assemblyPath}')
-export command types = SAVE('types.txt', '{{Type.Name}}', baseline.Types)
+export command types = SAVE('types.txt', '{{item.Name}}', baseline.Types)
 ";
 
         var registry = new TypeRegistry();
@@ -245,7 +245,7 @@ export command types = SAVE('types.txt', '{{Type.Name}}', baseline.Types)
         var assemblyPath = typeof(ApiSurfaceTests).Assembly.Location.Replace("\\", "\\\\");
         var cop = $@"
 let baseline = Code.Load('{assemblyPath}')
-export command check = foreach baseline => PRINT('{{Api.Signature}}')
+export command check = foreach baseline => PRINT('{{item.Signature}}')
 ";
 
         var registry = new TypeRegistry();
@@ -271,7 +271,7 @@ export command check = foreach baseline => PRINT('{{Api.Signature}}')
         var cop = $@"
 let baseline = Code.Load('{assemblyPath}')
 predicate anyApi(Api) => Api.Kind != ''
-let apiText = baseline.Api:anyApi:text('{{Api.Signature}}')
+let apiText = baseline.Api:anyApi:text('{{item.Signature}}')
 export command print-text = foreach apiText => PRINT('{{item}}')
 ";
 
@@ -301,7 +301,7 @@ export command print-text = foreach apiText => PRINT('{{item}}')
         var cop = $@"
 let baseline = Code.Load('{assemblyPath}')
 predicate anyApi(Api) => Api.Kind != ''
-let apiText = baseline.Api:anyApi:text('{{Api.Signature}}')
+let apiText = baseline.Api:anyApi:text('{{item.Signature}}')
 export command save-api = save('api-surface.txt', apiText)
 ";
 

@@ -306,8 +306,8 @@ foreach List:filter1:filter2 => COMMAND("args...")
 Commands are **named** using `command`, which makes them invocable by name with `cop run <name>`:
 
 ```ruby
-command list-types = foreach Types => PRINT('{Type.Name}')
-command export-names = foreach Types:csharp:client => SAVE('names.txt', '{Type.Name}')
+command list-types = foreach Types => PRINT('{item.Name}')
+command export-names = foreach Types:csharp:client => SAVE('names.txt', '{item.Name}')
 ```
 
 ### PRINT
@@ -316,7 +316,7 @@ Writes output to the console. One line per matching item.
 
 ```ruby
 PRINT('Hello World')                                                      # bare — outputs once
-foreach Types:csharp:client => PRINT('{error:@red} {Type.Name} is a client')  # list — one line per item
+foreach Types:csharp:client => PRINT('{error:@red} {item.Name} is a client')  # list — one line per item
 ```
 
 | Part | Required | Description |
@@ -330,10 +330,10 @@ foreach Types:csharp:client => PRINT('{error:@red} {Type.Name} is a client')  # 
 `ERROR`, `WARNING`, and `INFO` are syntactic aliases for `PRINT` (backward compatibility). They all produce the same plain text output:
 
 ```ruby
-foreach Types:client => PRINT('{error:@red} {Type.Name} is invalid')
-foreach Types:client => ERROR('{error:@red} {Type.Name} is invalid')     # same as PRINT
-foreach Types:client => WARNING('{warning:@yellow} {Type.Name} needs review')  # same as PRINT
-foreach Types:client => INFO('{info:@cyan} {Type.Name} found')             # same as PRINT
+foreach Types:client => PRINT('{error:@red} {item.Name} is invalid')
+foreach Types:client => ERROR('{error:@red} {item.Name} is invalid')     # same as PRINT
+foreach Types:client => WARNING('{warning:@yellow} {item.Name} needs review')  # same as PRINT
+foreach Types:client => INFO('{info:@cyan} {item.Name} found')             # same as PRINT
 ```
 
 #### Language Filtering
@@ -341,7 +341,7 @@ foreach Types:client => INFO('{info:@cyan} {Type.Name} found')             # sam
 Use a language name as a filter (`:csharp`, `:python`, etc.) to scope iteration to files of that language:
 
 ```ruby
-foreach Clients:csharp:!Sealed => PRINT('{error:@red} {Type.Name} should be sealed')
+foreach Clients:csharp:!Sealed => PRINT('{error:@red} {item.Name} should be sealed')
 foreach Lines:python:Matches(@'\bprint\s*\(') => PRINT('{warning:@yellow} Use logging instead of print')
 ```
 
@@ -351,8 +351,8 @@ Writes output to a file. The first argument is the file path (relative to the co
 
 ```ruby
 SAVE('output.txt', 'Hello World')                                                      # bare — writes once
-foreach Types:csharp:client => SAVE('clients.txt', '{Type.Name}')                      # list — one line per item
-foreach Clients:csharp:!Sealed => SAVE('report.txt', '{Type.Name}: not sealed')        # filtered subset
+foreach Types:csharp:client => SAVE('clients.txt', '{item.Name}')                      # list — one line per item
+foreach Clients:csharp:!Sealed => SAVE('report.txt', '{item.Name}: not sealed')        # filtered subset
 ```
 
 | Part | Required | Description |
@@ -373,8 +373,8 @@ SAVE commands only run when explicitly invoked (e.g., `cop run export-names`), n
 Interpolated strings in commands use `{Expr}` placeholders:
 
 ```ruby
-foreach Clients:!Sealed => PRINT('{error:@red} {Type.Name} should be sealed')
-foreach Clients:hasAsyncWithoutCancellation => PRINT('{warning:@yellow} {Statement.File.Path}:{Statement.Line} {Type.Name} missing cancellation token')
+foreach Clients:!Sealed => PRINT('{error:@red} {item.Name} should be sealed')
+foreach Clients:hasAsyncWithoutCancellation => PRINT('{warning:@yellow} {item.File.Path}:{item.Line} {item.Name} missing cancellation token')
 ```
 
 ## Comments
@@ -402,7 +402,7 @@ A `#` alone on a line opens a block comment. Another `#` alone on a line closes 
 
 ```ruby
 ## Client types must have a constructor that accepts an Options parameter
-foreach Clients:missingOptions => PRINT('{warning:@yellow} {Type.Name} should accept options')
+foreach Clients:missingOptions => PRINT('{warning:@yellow} {item.Name} should accept options')
 ```
 
 `##` doc comments are captured and displayed as rule descriptions in the UI.

@@ -638,14 +638,14 @@ predicate baselineApi(Api) => publicApi && Api.File.Path:matches('[/\\\\]api[/\\
 # Source: everything NOT in api/
 predicate sourceApi(Api) => publicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')
 
-let baselineSignatures = Code.Api:csharp:baselineApi:select(Api.Signature)
-let currentSignatures = Code.Api:csharp:sourceApi:select(Api.Signature)
+let baselineSignatures = Code.Api:csharp:baselineApi:select(item.Signature)
+let currentSignatures = Code.Api:csharp:sourceApi:select(item.Signature)
 
 predicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)
 predicate addedApi(Api) => sourceApi && !Api.Signature:in(baselineSignatures)
 
-export let api-removed = Code.Api:removedApi:toError('API REMOVED (breaking): {Api.Signature}')
-export let api-added = Code.Api:addedApi:toInfo('API ADDED: {Api.Signature}')
+export let api-removed = Code.Api:removedApi:toError('API REMOVED (breaking): {item.Signature}')
+export let api-added = Code.Api:addedApi:toInfo('API ADDED: {item.Signature}')
 export let api-compat = [api-removed, api-added]
 ";
 
@@ -656,7 +656,7 @@ export let api-compat = [api-removed, api-added]
         var exportPolicy = @"
 import csharp-api
 import code-analysis
-export command api-export = SAVE('api-baseline.txt', '{Api.Signature}', Code.Api:csharp:publicApi)
+export command api-export = SAVE('api-baseline.txt', '{item.Signature}', Code.Api:csharp:publicApi)
 ";
         var result = RunInlineCop(exportPolicy,
             [SamplePath("GoodClient.cs")], commandName: "api-export");

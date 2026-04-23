@@ -22,10 +22,10 @@ export type ApiLine = {
 }
 
 export function toApiLine(Api) => ApiLine {
-    Text = Api.ApiAsText,
-    Kind = Api.Kind,
-    TypeName = Api.TypeName,
-    MemberName = Api.MemberName,
-    File = Api.File.Path,
-    Line = Api.Line
+    Text = item.ApiAsText,
+    Kind = item.Kind,
+    TypeName = item.TypeName,
+    MemberName = item.MemberName,
+    File = item.File.Path,
+    Line = item.Line
 }

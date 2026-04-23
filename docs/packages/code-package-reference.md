@@ -47,7 +47,7 @@ The `code` package recognizes these language keywords for scoping checks to spec
 Use a language filter on the list name to scope to a specific language:
 
 ```ruby
-foreach Types:csharp:client => PRINT('{warning:@yellow} {Type.Name} needs review')
+foreach Types:csharp:client => PRINT('{warning:@yellow} {item.Name} needs review')
 foreach Lines:python:Matches(@'\bprint\s*\('):!Path('**/tests/**') => PRINT('{warning:@yellow} Use logging instead of print')
 ```
 
@@ -272,13 +272,13 @@ predicate missingCancellationToken(Method) => Method.Parameters:none(cancellatio
 predicate asyncWithoutCancellation(Type) => Type.Methods:where(publicAsync):any(missingCancellationToken)
 
 ## Client types must have a constructor that accepts an Options parameter
-foreach Clients:csharp:missingOptions => PRINT('{warning:@yellow} {Type.Name} should accept an options parameter')
+foreach Clients:csharp:missingOptions => PRINT('{warning:@yellow} {item.Name} should accept an options parameter')
 
 ## Client types must be sealed or abstract
-foreach Clients:csharp:notSealedOrAbstract => PRINT('{error:@red} {Type.Name} should be sealed or abstract')
+foreach Clients:csharp:notSealedOrAbstract => PRINT('{error:@red} {item.Name} should be sealed or abstract')
 
 ## Async methods must accept a CancellationToken parameter
-foreach Clients:csharp:asyncWithoutCancellation => PRINT('{warning:@yellow} {Type.Name}.{Method.Name} is async without CancellationToken')
+foreach Clients:csharp:asyncWithoutCancellation => PRINT('{warning:@yellow} {item.Name} is async without CancellationToken')
 ```
 
 ### Code Style Enforcement
@@ -290,7 +290,7 @@ predicate usesVar(Statement) => Statement.Keywords:contains('var')
 predicate usesDynamic(Statement) => Statement.Keywords:contains('dynamic')
 predicate threadSleep(Statement) => Statement.TypeName == 'Thread' && Statement.MemberName == 'Sleep'
 
-foreach Statements:csharp:usesVar:!Path('**/Tests/**') => PRINT('{error:@red} {Statement.File.Path}:{Statement.Line} uses var')
+foreach Statements:csharp:usesVar:!Path('**/Tests/**') => PRINT('{error:@red} {item.File.Path}:{item.Line} uses var')
 foreach Statements:csharp:usesDynamic => PRINT('{error:@red} Do not use dynamic')
 foreach Statements:csharp:threadSleep => PRINT('{error:@red} Use Task.Delay instead of Thread.Sleep')
 ```
@@ -307,7 +307,7 @@ import code
 predicate client(Type) => Type.Name:words:contains('client')
 predicate notPublic(Type) => !Type.Public
 
-foreach Types:client:notPublic => PRINT('{warning:@yellow} {Type.Name} should be public')
+foreach Types:client:notPublic => PRINT('{warning:@yellow} {item.Name} should be public')
 ```
 
 Or use language-specific overloads when the rules differ per language:
@@ -316,7 +316,7 @@ Or use language-specific overloads when the rules differ per language:
 predicate client(Type:csharp) => Type.Name:endsWith('Client')
 predicate client(Type:python) => Type.Name:endsWith('_client')
 
-foreach Types:client:notPublic => PRINT('{warning:@yellow} {Type.Name} should be public')
+foreach Types:client:notPublic => PRINT('{warning:@yellow} {item.Name} should be public')
 ```
 
 ### Domain Architecture Rules

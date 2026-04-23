@@ -30,8 +30,8 @@ Defined in `checks.cop`:
 
 | Check | Severity | Message |
 |---|---|---|
-| `untyped-public-params` | warning | {Type.Name} has public methods with missing parameter type hints |
-| `missing-return-types` | warning | {Type.Name} has public methods without return type annotations |
+| `untyped-public-params` | warning | {item.Name} has public methods with missing parameter type hints |
+| `missing-return-types` | warning | {item.Name} has public methods without return type annotations |
 
 All checks are combined into the `python-library` array.
 

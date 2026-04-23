@@ -1063,7 +1063,7 @@ public class PredicateEvaluatorTests
 
         var stmt = MakeStatement("var", "myField", 10);
         var result = eval.ApplyFunction("error", stmt, "Statement",
-            [new LiteralExpr("Do not use var for {Statement.MemberName}")]);
+            [new LiteralExpr("Do not use var for {item.MemberName}")]);
 
         Assert.That(result.GetField("Message"), Is.EqualTo("Do not use var for myField"));
     }

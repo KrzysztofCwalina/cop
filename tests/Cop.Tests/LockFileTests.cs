@@ -446,7 +446,7 @@ public class LockFileTests
                 DiskFile.LockStatus == 'modified' ||
                 DiskFile.LockStatus == 'deleted'
 
-            foreach DiskFiles:isLockViolation => PRINT('VIOLATION: {DiskFile.Path} ({DiskFile.LockStatus})')
+            foreach DiskFiles:isLockViolation => PRINT('VIOLATION: {item.Path} ({item.LockStatus})')
             """;
         File.WriteAllText(Path.Combine(scriptsDir, "check-locks.cop"), copSource);
 

@@ -32,10 +32,10 @@ Defined in `checks.cop`:
 
 | Check | Severity | Message |
 |---|---|---|
-| `var-declarations` | error | Do not use 'var' for {Statement.MemberName} |
+| `var-declarations` | error | Do not use 'var' for {item.MemberName} |
 | `dynamic-declarations` | error | Do not use 'dynamic' |
 | `thread-sleep-calls` | error | Use Task.Delay instead of Thread.Sleep |
-| `console-calls` | warning | Don't use Console.{Statement.MemberName} in library code |
+| `console-calls` | warning | Don't use Console.{item.MemberName} in library code |
 | `base-exception-catches` | warning | Catch a specific exception type instead of Exception |
 | `swallowed-exceptions` | warning | Do not swallow Exception — rethrow or catch a specific type |
 | `configure-await-true-calls` | warning | Do not use ConfigureAwait(true) — it is the default |

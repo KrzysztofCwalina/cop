@@ -48,7 +48,7 @@ public class RunProjectTests
                 export let Disk = runtime::Filesystem
                 export predicate isEmpty(Folder) => Folder.Empty == true
                 command empty-folders = foreach Folders:isEmpty => PRINT(
-                    'Empty folder: {Folder.Path}'
+                    'Empty folder: {item.Path}'
                 )
                 """);
     }
