@@ -1,6 +1,5 @@
 using System.Reflection;
 using System.Runtime.Loader;
-using System.Text.Json;
 using Cop.Core;
 using Cop.Lang;
 
@@ -13,8 +12,6 @@ namespace Cop.Providers;
 /// </summary>
 public static class ProviderLoader
 {
-    private const string TrustFileName = "trusted-providers.json";
-
     /// <summary>
     /// Represents a loaded and ready-to-query provider instance with its schema.
     /// </summary>
@@ -32,13 +29,6 @@ public static class ProviderLoader
         if (string.IsNullOrEmpty(metadata.ProviderEntry))
         {
             errors.Add($"Package '{metadata.Name}' has provider:clr but no providerEntry specified.");
-            return null;
-        }
-
-        // Check trust
-        if (!IsProviderTrusted(metadata.Name))
-        {
-            errors.Add($"Provider package '{metadata.Name}' is not trusted. Run 'cop trust {metadata.Name}' to allow loading.");
             return null;
         }
 
@@ -141,84 +131,6 @@ public static class ProviderLoader
         }
 
         return null;
-    }
-
-    /// <summary>
-    /// Checks if a provider package is in the trust list.
-    /// </summary>
-    public static bool IsProviderTrusted(string packageName)
-    {
-        var trustFile = GetTrustFilePath();
-        if (!File.Exists(trustFile))
-            return false;
-
-        try
-        {
-            var json = File.ReadAllText(trustFile);
-            var trusted = JsonSerializer.Deserialize<List<string>>(json);
-            return trusted?.Contains(packageName, StringComparer.OrdinalIgnoreCase) == true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Adds a package to the trust list.
-    /// </summary>
-    public static void TrustProvider(string packageName)
-    {
-        var trustFile = GetTrustFilePath();
-        List<string> trusted = [];
-
-        if (File.Exists(trustFile))
-        {
-            try
-            {
-                var json = File.ReadAllText(trustFile);
-                trusted = JsonSerializer.Deserialize<List<string>>(json) ?? [];
-            }
-            catch
-            {
-                trusted = [];
-            }
-        }
-
-        if (!trusted.Contains(packageName, StringComparer.OrdinalIgnoreCase))
-        {
-            trusted.Add(packageName);
-            Directory.CreateDirectory(Path.GetDirectoryName(trustFile)!);
-            File.WriteAllText(trustFile, JsonSerializer.Serialize(trusted, new JsonSerializerOptions { WriteIndented = true }));
-        }
-    }
-
-    /// <summary>
-    /// Removes a package from the trust list.
-    /// </summary>
-    public static void UntrustProvider(string packageName)
-    {
-        var trustFile = GetTrustFilePath();
-        if (!File.Exists(trustFile))
-            return;
-
-        try
-        {
-            var json = File.ReadAllText(trustFile);
-            var trusted = JsonSerializer.Deserialize<List<string>>(json) ?? [];
-            trusted.RemoveAll(p => string.Equals(p, packageName, StringComparison.OrdinalIgnoreCase));
-            File.WriteAllText(trustFile, JsonSerializer.Serialize(trusted, new JsonSerializerOptions { WriteIndented = true }));
-        }
-        catch
-        {
-            // Ignore errors
-        }
-    }
-
-    private static string GetTrustFilePath()
-    {
-        var copDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cop");
-        return Path.Combine(copDir, TrustFileName);
     }
 }
 

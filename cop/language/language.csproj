@@ -12,4 +12,8 @@
     <RootNamespace>Cop.Lang</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\shared\Cop.Core.csproj" />
+  </ItemGroup>
+
 </Project>

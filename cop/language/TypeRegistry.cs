@@ -1,3 +1,5 @@
+using Cop.Core;
+
 namespace Cop.Lang;
 
 /// <summary>
@@ -98,6 +100,64 @@ public class TypeRegistry
         var result = extractor(document);
         _extractorCache[cacheKey] = result;
         return result;
+    }
+
+    /// <summary>
+    /// Gets collection items with pushdown filter support.
+    /// First retrieves unfiltered items (cached), then applies the filter
+    /// using registered property accessors for the collection's item type.
+    /// </summary>
+    public List<object>? GetCollectionItems(string collectionName, Document document, Core.FilterExpression? filter)
+    {
+        var items = GetCollectionItems(collectionName, document);
+        if (items is null || filter is null) return items;
+
+        var itemTypeName = GetCollectionItemType(collectionName);
+        return itemTypeName is not null ? ApplyPushdownFilter(itemTypeName, items, filter) : items;
+    }
+
+    /// <summary>
+    /// Gets items from a global collection with pushdown filter support.
+    /// </summary>
+    public List<object>? GetGlobalCollectionItems(string name, Core.FilterExpression? filter)
+    {
+        var items = GetGlobalCollectionItems(name);
+        if (items is null || filter is null) return items;
+
+        var itemTypeName = GetCollectionItemType(name);
+        return itemTypeName is not null ? ApplyPushdownFilter(itemTypeName, items, filter) : items;
+    }
+
+    /// <summary>
+    /// Applies a pushdown filter to items using registered property accessors.
+    /// This evaluates filter conditions natively on CLR objects, bypassing the
+    /// full PredicateEvaluator/ScriptObject pipeline for significantly faster execution.
+    /// </summary>
+    public List<object> ApplyPushdownFilter(string itemTypeName, List<object> items, Core.FilterExpression filter)
+    {
+        var accessors = GetAccessors(itemTypeName);
+        if (accessors is null || accessors.Count == 0) return items;
+
+        var predicate = FilterCompiler.Compile(filter, accessors);
+        return items.Where(predicate).ToList();
+    }
+
+    /// <summary>
+    /// Gets all registered property accessors for a type name.
+    /// Returns null if the type is not registered or has no accessors.
+    /// </summary>
+    public Dictionary<string, Func<object, object?>>? GetAccessors(string typeName)
+    {
+        if (!_types.TryGetValue(typeName, out var descriptor)) return null;
+
+        var accessors = new Dictionary<string, Func<object, object?>>();
+        foreach (var (name, prop) in descriptor.Properties)
+        {
+            if (prop.Accessor is not null)
+                accessors[name] = prop.Accessor;
+        }
+
+        return accessors.Count > 0 ? accessors : null;
     }
 
     /// <summary>

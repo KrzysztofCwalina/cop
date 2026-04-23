@@ -418,7 +418,27 @@ public class ScriptInterpreter
                 letDecl.BaseCollection, document, evaluator, predicateGroups, letDeclarations, functionGroups, visited, useQueryCache);
             var baseItemType = ResolveItemType(letDecl.BaseCollection, predicateGroups, letDeclarations, functionGroups);
 
+            // Extract pushdown hints from the filter chain.
+            // Simple property checks (Public, Abstract, etc.) can be evaluated natively
+            // by the TypeRegistry without going through the full PredicateEvaluator pipeline.
+            var predicateNameSet = predicateGroups.Count > 0 ? new HashSet<string>(predicateGroups.Keys) : null;
+            var itemTypeDesc = _typeRegistry.GetType(baseItemType);
+            var (pushdownFilter, residualStart) = FilterHintExtractor.Extract(letDecl.Filters, itemTypeDesc, predicateNameSet);
+
+            // If we extracted pushdown hints, pre-filter the base items natively
+            if (pushdownFilter is not null)
+            {
+                baseItems = _typeRegistry.ApplyPushdownFilter(baseItemType, baseItems, pushdownFilter);
+            }
+
+            // Build residual filter list (filters not pushed down to the provider)
+            var residualFilters = residualStart > 0
+                ? letDecl.Filters.GetRange(residualStart, letDecl.Filters.Count - residualStart)
+                : letDecl.Filters;
+
             // Fingerprint-based cache: order-independent dedup for filter chains
+            // Note: fingerprint uses FULL filter chain for cache identity, but execution
+            // uses residualFilters (pushdown-filtered items + remaining filters)
             if (useQueryCache)
             {
                 var functionNameSet = functionGroups.Count > 0 ? new HashSet<string>(functionGroups.Keys) : null;
@@ -429,8 +449,8 @@ public class ScriptInterpreter
                 if (_queryCache.TryGetValue(fingerprint, out var cached))
                     return cached;
 
-                // Apply inline filters (may include function map steps)
-                var result = ApplyFilters(baseItems, baseItemType, letDecl.Filters, evaluator, functionGroups);
+                // Apply residual filters (pushdown-able ones already applied natively)
+                var result = ApplyFilters(baseItems, baseItemType, residualFilters, evaluator, functionGroups);
 
                 // Apply set subtraction if exclusions are specified
                 if (letDecl.Exclusions != null)
@@ -445,7 +465,7 @@ public class ScriptInterpreter
 
             // No caching — resolve directly
             {
-                var result = ApplyFilters(baseItems, baseItemType, letDecl.Filters, evaluator, functionGroups);
+                var result = ApplyFilters(baseItems, baseItemType, residualFilters, evaluator, functionGroups);
 
                 if (letDecl.Exclusions != null)
                 {

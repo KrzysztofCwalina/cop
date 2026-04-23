@@ -63,6 +63,14 @@ public class ProviderQuery
     public IReadOnlyList<string>? RequestedCollections { get; init; }
 
     /// <summary>
+    /// Pushdown filter expression. Providers that support query optimization
+    /// can inspect this to avoid materializing items that will be filtered out.
+    /// Providers that don't support pushdown can ignore this — the engine
+    /// will apply filters locally as a fallback.
+    /// </summary>
+    public FilterExpression? Filter { get; init; }
+
+    /// <summary>
     /// Extensible options bag for future needs (e.g. query language parameters).
     /// </summary>
     public IReadOnlyDictionary<string, string>? Options { get; init; }
