@@ -1,3 +1,4 @@
+# Named commands let you define reusable operations that can be invoked by name.
 # Run with: cop run LIST-TYPES
 import code
 
