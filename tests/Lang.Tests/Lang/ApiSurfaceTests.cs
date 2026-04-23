@@ -185,11 +185,11 @@ public class ApiSurfaceTests
     public void CodeLoad_InterpreterResolvesCollection()
     {
         var assemblyPath = typeof(ApiSurfaceTests).Assembly.Location.Replace("\\", "\\\\");
-        // Use SAVE to produce file output — this avoids needing imported CHECK command
+        // Use SAVE with dll.Api sub-collection — Code.Load returns documents, not flat ApiEntry
         var cop = $@"
 let baseline = Code.Load('{assemblyPath}')
 predicate anyApi(Api) => Api.Kind != ''
-export command api-list = SAVE('api.txt', '{{Api.Signature}}', baseline:anyApi)
+export command api-list = SAVE('api.txt', '{{Api.Signature}}', baseline.Api:anyApi)
 ";
 
         var registry = new TypeRegistry();
@@ -211,6 +211,57 @@ export command api-list = SAVE('api.txt', '{{Api.Signature}}', baseline:anyApi)
         Assert.That(apiFile.Content, Does.Contain("class"));
     }
 
+    [Test]
+    public void CodeLoad_TypesSubCollection()
+    {
+        var assemblyPath = typeof(ApiSurfaceTests).Assembly.Location.Replace("\\", "\\\\");
+        // Access dll.Types — same extractor as source code Types
+        var cop = $@"
+let baseline = Code.Load('{assemblyPath}')
+export command types = SAVE('types.txt', '{{Type.Name}}', baseline.Types)
+";
+
+        var registry = new TypeRegistry();
+        CodeTypeRegistrar.Register(registry);
+        registry.RegisterProgramType();
+
+        var codeLoader = CreateTestCodeLoader();
+        var interpreter = new ScriptInterpreter(registry, externalCodeLoader: codeLoader);
+
+        var script = ScriptParser.Parse(cop, "test.cop");
+        var documents = new List<Document>();
+        var result = interpreter.Run([script], documents, commandName: "types");
+
+        Assert.That(result.FileOutputs.Count, Is.GreaterThan(0), "Expected file outputs");
+        var typesFile = result.FileOutputs.First(f => f.Path == "types.txt");
+        Assert.That(typesFile.Content.Length, Is.GreaterThan(0), "Expected types.txt content");
+        // The test assembly has the ApiSurfaceTests class
+        Assert.That(typesFile.Content, Does.Contain("ApiSurfaceTests"));
+    }
+
+    [Test]
+    public void CodeLoad_BareReferenceThrowsHelpfulError()
+    {
+        var assemblyPath = typeof(ApiSurfaceTests).Assembly.Location.Replace("\\", "\\\\");
+        var cop = $@"
+let baseline = Code.Load('{assemblyPath}')
+export command check = foreach baseline => PRINT('{{Api.Signature}}')
+";
+
+        var registry = new TypeRegistry();
+        CodeTypeRegistrar.Register(registry);
+        registry.RegisterProgramType();
+
+        var codeLoader = CreateTestCodeLoader();
+        var interpreter = new ScriptInterpreter(registry, externalCodeLoader: codeLoader);
+
+        var script = ScriptParser.Parse(cop, "test.cop");
+        var documents = new List<Document>();
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => interpreter.Run([script], documents, commandName: "check"));
+        Assert.That(ex!.Message, Does.Contain("sub-collections"));
+    }
+
     // ── Helpers ──
 
     private static TypeDeclaration CreateType(string name, TypeKind kind = TypeKind.Class) =>
@@ -222,48 +273,19 @@ export command api-list = SAVE('api.txt', '{{Api.Signature}}', baseline:anyApi)
     private static ParameterDeclaration Param(string name, string type) =>
         new(name, TR(type), false, false, false, 0);
 
-    private static Func<string, List<object>> CreateTestCodeLoader()
+    private static Func<string, List<Document>> CreateTestCodeLoader()
     {
         return (string path) =>
         {
             var sourceFile = AssemblyApiReader.ReadAssembly(path);
-            var entries = new List<object>();
-            foreach (var type in sourceFile.Types)
+
+            // Stamp TypeDeclaration.File references (same as Engine.CreateCodeLoader)
+            for (int i = 0; i < sourceFile.Types.Count; i++)
             {
-                entries.Add(ApiEntry.ForType(type));
-                if (type.Kind == TypeKind.Enum)
-                {
-                    foreach (var value in type.EnumValues)
-                        entries.Add(ApiEntry.ForEnumValue(type, value));
-                    continue;
-                }
-                foreach (var ctor in type.Constructors)
-                {
-                    if (ctor.IsPublic || ctor.IsProtected)
-                        entries.Add(ApiEntry.ForConstructor(type, ctor));
-                }
-                foreach (var method in type.Methods)
-                {
-                    if (method.IsPublic || method.IsProtected)
-                        entries.Add(ApiEntry.ForMethod(type, method));
-                }
-                foreach (var prop in type.Properties)
-                {
-                    if (prop.IsPublic || prop.IsProtected)
-                        entries.Add(ApiEntry.ForProperty(type, prop));
-                }
-                foreach (var evt in type.Events)
-                {
-                    if (evt.IsPublic || evt.IsProtected)
-                        entries.Add(ApiEntry.ForEvent(type, evt));
-                }
-                foreach (var field in type.Fields)
-                {
-                    if (field.IsPublic || field.IsProtected)
-                        entries.Add(ApiEntry.ForField(type, field));
-                }
+                sourceFile.Types[i] = sourceFile.Types[i] with { File = sourceFile };
             }
-            return entries;
+
+            return [new Document(path, sourceFile.Language, sourceFile)];
         };
     }
 }

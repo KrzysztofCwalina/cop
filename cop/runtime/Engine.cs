@@ -408,54 +408,22 @@ public static class Engine
 
     /// <summary>
     /// Creates the external code loader delegate for Code.Load('path').
-    /// Loads .NET assemblies via AssemblyApiReader and returns ApiEntry objects.
+    /// Returns Documents wrapping SourceFiles — the same model as implicit source loading.
+    /// The existing collection extractors (Types, Api, Statements, etc.) handle extraction.
     /// </summary>
-    private static Func<string, List<object>> CreateCodeLoader(TypeRegistry typeRegistry)
+    private static Func<string, List<Document>> CreateCodeLoader(TypeRegistry typeRegistry)
     {
         return (string path) =>
         {
             var sourceFile = AssemblyApiReader.ReadAssembly(path);
-            var entries = new List<object>();
 
-            foreach (var type in sourceFile.Types)
+            // Stamp TypeDeclaration.File references (same as ParseSourceFiles does for source code)
+            for (int i = 0; i < sourceFile.Types.Count; i++)
             {
-                entries.Add(ApiEntry.ForType(type));
-
-                if (type.Kind == TypeKind.Enum)
-                {
-                    foreach (var value in type.EnumValues)
-                        entries.Add(ApiEntry.ForEnumValue(type, value));
-                    continue;
-                }
-
-                foreach (var ctor in type.Constructors)
-                {
-                    if (ctor.IsPublic || ctor.IsProtected)
-                        entries.Add(ApiEntry.ForConstructor(type, ctor));
-                }
-                foreach (var method in type.Methods)
-                {
-                    if (method.IsPublic || method.IsProtected)
-                        entries.Add(ApiEntry.ForMethod(type, method));
-                }
-                foreach (var prop in type.Properties)
-                {
-                    if (prop.IsPublic || prop.IsProtected)
-                        entries.Add(ApiEntry.ForProperty(type, prop));
-                }
-                foreach (var evt in type.Events)
-                {
-                    if (evt.IsPublic || evt.IsProtected)
-                        entries.Add(ApiEntry.ForEvent(type, evt));
-                }
-                foreach (var field in type.Fields)
-                {
-                    if (field.IsPublic || field.IsProtected)
-                        entries.Add(ApiEntry.ForField(type, field));
-                }
+                sourceFile.Types[i] = sourceFile.Types[i] with { File = sourceFile };
             }
 
-            return entries;
+            return [new Document(path, sourceFile.Language, sourceFile)];
         };
     }
 }

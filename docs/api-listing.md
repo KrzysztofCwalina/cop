@@ -50,16 +50,25 @@ The output matches Azure SDK's `api/*.cs` stub file format: `partial class/struc
 
 ## Loading from Assemblies
 
-Use `Code.Load()` to read the public API from a compiled .NET DLL. Type names are fully qualified (from metadata), matching GenAPI output:
+Use `Code.Load()` to read types from a compiled .NET DLL. This returns the same data model as source loading — just with no statements or line info. Access sub-collections via dot syntax:
 
 ```ruby
 import csharp-api
 
-let apis = Code.Load('bin/Release/net8.0/MyPackage.dll')
-predicate allApi(Api) => Api.Kind != ''
+let dll = Code.Load('bin/Release/net8.0/MyPackage.dll')
 
-export command list-dll = SAVE('api-surface.txt', '{Api.StubLine}', apis:allApi)
+export command list-dll = SAVE('api-surface.txt', '{Api.StubLine}', dll.Api:publicApi)
 ```
+
+`Code.Load()` and the implicit source loading are superset-subset of the same model:
+
+| Sub-collection | Source | Code.Load |
+|---|---|---|
+| `.Types` | ✅ all parsed types | ✅ public exported types |
+| `.Api` | ✅ public API entries | ✅ public API entries |
+| `.Statements` | ✅ all statements | empty (no source) |
+| `.Lines` | ✅ source lines | empty (no source) |
+| `.Files` | ✅ source files | ✅ the loaded assembly |
 
 This is useful for:
 - Generating baselines from published packages
@@ -156,7 +165,7 @@ The `Violation` type has these fields:
 
 ## The Api Type
 
-Each entry in `Code.Api` (or from `Code.Load()`) has these fields:
+Each entry in `Code.Api` (or from `Code.Load().Api`) has these fields:
 
 | Field | Type | Description |
 |---|---|---|

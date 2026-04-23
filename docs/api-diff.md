@@ -63,7 +63,7 @@ Cop parses this as normal C# source and extracts the same `Code.Api` entries it 
 
 ## Comparing Against Assemblies
 
-Use `Code.Load()` to load a compiled .NET DLL as the baseline instead of a stub file. This is useful for comparing against published NuGet packages:
+Use `Code.Load()` to load a compiled .NET DLL as the baseline instead of a stub file. Access API entries via the `.Api` sub-collection — the same model as source loading:
 
 ```ruby
 import csharp-api
@@ -71,26 +71,25 @@ import code-analysis
 
 # Baseline: loaded from a compiled DLL
 let baseline = Code.Load('packages/MyPackage.1.0.0/lib/net8.0/MyPackage.dll')
-predicate baselineApi(Api) => Api.Kind != ''
 
 # Current source
 predicate currentApi(Api) => publicApi
 
 # Build lookups
-let baselineSignatures = baseline:baselineApi:select(Api.Signature)
+let baselineSignatures = baseline.Api:select(Api.Signature)
 let currentSignatures = Code.Api:csharp:currentApi:select(Api.Signature)
 
 # Diff
-predicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)
+predicate removedApi(Api) => Api.Signature:in(baselineSignatures) && !Api.Signature:in(currentSignatures)
 predicate addedFromSource(Api) => currentApi && !Api.Signature:in(baselineSignatures)
 
-export let api-removed = baseline:removedApi
+export let api-removed = baseline.Api:removedApi
     :toError('API REMOVED (breaking): {Api.Signature}')
 export let api-added = Code.Api:addedFromSource
     :toInfo('API ADDED: {Api.Signature}')
 ```
 
-`Code.Load()` produces `Api` entries with fully qualified type names (from assembly metadata), so signatures like `method MyNamespace.MyClient.GetItemAsync(System.String) : System.Threading.Tasks.Task` will differ from source-parsed signatures which use short names. Use `Code.Load()` on both sides (or source stubs on both sides) for consistent comparison.
+`Code.Load()` and the implicit source loading return the same data model. You can also access `baseline.Types` to work with type declarations directly.
 
 ## Running the Diff
 
@@ -129,7 +128,7 @@ Everything in `api-compat.cop` is policy you control:
 | What | How | Example |
 |---|---|---|
 | **Baseline path pattern** | Change `baselineApi` predicate | `Api.File.Path:matches('ApiSurface')` |
-| **Baseline from DLL** | Use `Code.Load()` | `let baseline = Code.Load('pkg.dll')` |
+| **Baseline from DLL** | Use `Code.Load()` with `.Api` | `let baseline = Code.Load('pkg.dll')` then `baseline.Api` |
 | **Severity of removed APIs** | Use `toError`, `toWarning`, or `toInfo` | `:toWarning('...')` |
 | **Severity of added APIs** | Same | `:toError('...')` |
 | **Scope** | Add predicates to filter | Only check certain types or namespaces |
@@ -158,7 +157,7 @@ export let api-added = Code.Api:addedApi:toWarning('ADDED: {Api.Signature}')
 ## Key Concepts
 
 - **Api-to-Api comparison** — both the baseline stub and the current source are parsed as C#, producing `Code.Api` entries with identical signature formats
-- **`Code.Load('path.dll')`** — loads a .NET assembly as an `Api` collection (fully qualified names from metadata)
+- **`Code.Load('path.dll')`** — loads a .NET assembly as a document source; access sub-collections via `dll.Api`, `dll.Types`, etc.
 - **`:select()`** projects a collection to a list of strings (e.g., `Code.Api:baselineApi:select(Api.Signature)` → list of signature strings)
 - **`:in()`** checks if a value is in a list (e.g., `!Api.Signature:in(currentSignatures)` → true if signature not found)
 - **Cross-document comparison** works automatically — cop aggregates data across all source files before evaluating `:select()` lets
