@@ -184,6 +184,7 @@ public static class CodeTypeRegistrar
                 ("TypeName", "string", false, false),
                 ("MemberName", "string", false, false),
                 ("Signature", "string", false, false),
+                ("StubLine", "string", false, false),
                 ("Line", "int", false, false),
                 ("File", "File", true, false),
                 ("Source", "string", false, false),
@@ -401,6 +402,7 @@ public static class CodeTypeRegistrar
             ["TypeName"] = o => ((ApiEntry)o).TypeName,
             ["MemberName"] = o => ((ApiEntry)o).MemberName,
             ["Signature"] = o => ((ApiEntry)o).Signature,
+            ["StubLine"] = o => ((ApiEntry)o).StubLine,
             ["Line"] = o => (object)((ApiEntry)o).Line,
             ["File"] = o => ((ApiEntry)o).File,
             ["Source"] = o => ((ApiEntry)o).Source,
@@ -481,6 +483,13 @@ public static class CodeTypeRegistrar
                     {
                         if (evt.IsPublic || evt.IsProtected)
                             entries.Add(ApiEntry.ForEvent(type, evt));
+                    }
+
+                    // Fields
+                    foreach (var field in type.Fields)
+                    {
+                        if (field.IsPublic || field.IsProtected)
+                            entries.Add(ApiEntry.ForField(type, field));
                     }
                 }
                 return entries;

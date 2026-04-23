@@ -8,16 +8,19 @@ public class ScriptInterpreter
     private readonly TypeRegistry _typeRegistry;
     private readonly int _maxOutputsPerCommand;
     private readonly TimeSpan _timeout;
+    private readonly Func<string, List<object>>? _externalCodeLoader;
     private Dictionary<string, IList>? _globalResolvedSelects;
 
     public ScriptInterpreter(
         TypeRegistry typeRegistry,
         int maxOutputsPerCommand = 1000,
-        TimeSpan? timeout = null)
+        TimeSpan? timeout = null,
+        Func<string, List<object>>? externalCodeLoader = null)
     {
         _typeRegistry = typeRegistry;
         _maxOutputsPerCommand = maxOutputsPerCommand;
         _timeout = timeout ?? TimeSpan.FromSeconds(30);
+        _externalCodeLoader = externalCodeLoader;
     }
 
     public InterpreterResult Run(
@@ -393,6 +396,12 @@ public class ScriptInterpreter
                 return unionItems;
             }
 
+            // Code.Load('path') — load external code (DLL or source) as Api collection
+            if (letDecl.IsCodeLoad)
+            {
+                return ResolveCodeLoad(letDecl);
+            }
+
             // Value bindings (let Name = [...]) are not collections — skip
             if (letDecl.IsValueBinding)
                 throw new InvalidOperationException($"'{collection}' is a value binding, not a collection");
@@ -450,7 +459,8 @@ public class ScriptInterpreter
 
         foreach (var (name, letDecl) in letDeclarations)
         {
-            // Skip value bindings and collection unions — handled by the evaluator directly
+            // Skip value bindings, collection unions, and Code.Load — handled elsewhere
+            if (letDecl.IsCodeLoad) continue;
             if (letDecl.IsValueBinding || letDecl.IsCollectionUnion) continue;
             // Skip check-level lets (those with actions like :toWarning) — they are commands, not data
             if (letDecl.Filters.Any(f =>
@@ -678,6 +688,7 @@ public class ScriptInterpreter
                 return ((ListLiteralExpr)letDecl.ValueExpression!).Elements.All(e =>
                     e is IdentifierExpr id && IsGlobalRootCollection(id.Name, predicateGroups, letDeclarations, new(visited)));
             }
+            if (letDecl.IsCodeLoad) return true; // Code.Load is self-contained, process once globally
             if (letDecl.IsValueBinding) return false;
             return IsGlobalRootCollection(letDecl.BaseCollection, predicateGroups, letDeclarations, visited);
         }
@@ -723,6 +734,12 @@ public class ScriptInterpreter
                     unionItems.AddRange(ResolveGlobalCollection(name, evaluator, predicateGroups, letDeclarations, functionGroups, new(visited)));
                 }
                 return unionItems;
+            }
+
+            // Code.Load — resolve from external loader
+            if (letDecl.IsCodeLoad)
+            {
+                return ResolveCodeLoad(letDecl);
             }
 
             if (letDecl.IsValueBinding)
@@ -806,6 +823,7 @@ public class ScriptInterpreter
                 var firstElem = ((ListLiteralExpr)letDecl.ValueExpression!).Elements[0];
                 return ResolveItemType(((IdentifierExpr)firstElem).Name, predicateGroups, letDeclarations, functionGroups, new(visited));
             }
+            if (letDecl.IsCodeLoad) return "Api";
             if (letDecl.IsValueBinding) return "Unknown";
             var baseType = ResolveItemType(letDecl.BaseCollection, predicateGroups, letDeclarations, functionGroups, visited);
             // Follow through any function steps in the filters
@@ -1114,4 +1132,27 @@ public class ScriptInterpreter
 
     private static bool IsSaveAction(string? actionName) =>
         string.Equals(actionName, "SAVE", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Resolve a Code.Load('path') let declaration by loading external code (DLL or source files).
+    /// Returns the loaded items as a list (typically Api entries).
+    /// </summary>
+    private List<object> ResolveCodeLoad(LetDeclaration letDecl)
+    {
+        if (_externalCodeLoader == null)
+            throw new InvalidOperationException("Code.Load() is not available — no external code loader configured");
+
+        var loadExpr = (FunctionCallExpr)letDecl.ValueExpression!;
+        if (loadExpr.Args.Count == 0)
+            throw new InvalidOperationException("Code.Load() requires a path argument");
+
+        var pathArg = loadExpr.Args[0];
+        string path;
+        if (pathArg is LiteralExpr lit && lit.Value is string s)
+            path = s;
+        else
+            throw new InvalidOperationException("Code.Load() path argument must be a string literal");
+
+        return _externalCodeLoader(path);
+    }
 }

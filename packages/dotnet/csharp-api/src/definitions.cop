@@ -10,3 +10,22 @@ predicate apiProperty(Api) => Api.Kind == 'property'
 predicate apiEvent(Api) => Api.Kind == 'event'
 predicate apiCtor(Api) => Api.Kind == 'ctor'
 predicate apiEnumValue(Api) => Api.Kind == 'enumvalue'
+
+# API line representation for listings and diff
+export type ApiLine = {
+    Text : string,
+    Kind : string,
+    TypeName : string,
+    MemberName : string,
+    File : string,
+    Line : int
+}
+
+export function toApiLine(Api) => ApiLine {
+    Text = Api.StubLine,
+    Kind = Api.Kind,
+    TypeName = Api.TypeName,
+    MemberName = Api.MemberName,
+    File = Api.File.Path,
+    Line = Api.Line
+}

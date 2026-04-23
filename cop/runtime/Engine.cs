@@ -83,7 +83,7 @@ public static class Engine
             }
         }
 
-        var interpreter = new ScriptInterpreter(typeRegistry);
+        var interpreter = new ScriptInterpreter(typeRegistry, externalCodeLoader: CreateCodeLoader(typeRegistry));
         HashSet<string>? filterSet = commandFilter is { Length: > 0 }
             ? new HashSet<string>(commandFilter, StringComparer.OrdinalIgnoreCase)
             : null;
@@ -216,7 +216,7 @@ public static class Engine
         // Run each command, or all non-SAVE if no rules specified
         var allOutputs = new List<PrintOutput>();
         var allFileOutputs = new List<FileOutput>();
-        var interpreter = new ScriptInterpreter(typeRegistry);
+        var interpreter = new ScriptInterpreter(typeRegistry, externalCodeLoader: CreateCodeLoader(typeRegistry));
 
         // Check if any specified rules are let collections (not commands).
         // If so, synthesize RUN CHECK(name) invocations for them.
@@ -404,6 +404,59 @@ public static class Engine
         }
 
         return documents;
+    }
+
+    /// <summary>
+    /// Creates the external code loader delegate for Code.Load('path').
+    /// Loads .NET assemblies via AssemblyApiReader and returns ApiEntry objects.
+    /// </summary>
+    private static Func<string, List<object>> CreateCodeLoader(TypeRegistry typeRegistry)
+    {
+        return (string path) =>
+        {
+            var sourceFile = AssemblyApiReader.ReadAssembly(path);
+            var entries = new List<object>();
+
+            foreach (var type in sourceFile.Types)
+            {
+                entries.Add(ApiEntry.ForType(type));
+
+                if (type.Kind == TypeKind.Enum)
+                {
+                    foreach (var value in type.EnumValues)
+                        entries.Add(ApiEntry.ForEnumValue(type, value));
+                    continue;
+                }
+
+                foreach (var ctor in type.Constructors)
+                {
+                    if (ctor.IsPublic || ctor.IsProtected)
+                        entries.Add(ApiEntry.ForConstructor(type, ctor));
+                }
+                foreach (var method in type.Methods)
+                {
+                    if (method.IsPublic || method.IsProtected)
+                        entries.Add(ApiEntry.ForMethod(type, method));
+                }
+                foreach (var prop in type.Properties)
+                {
+                    if (prop.IsPublic || prop.IsProtected)
+                        entries.Add(ApiEntry.ForProperty(type, prop));
+                }
+                foreach (var evt in type.Events)
+                {
+                    if (evt.IsPublic || evt.IsProtected)
+                        entries.Add(ApiEntry.ForEvent(type, evt));
+                }
+                foreach (var field in type.Fields)
+                {
+                    if (field.IsPublic || field.IsProtected)
+                        entries.Add(ApiEntry.ForField(type, field));
+                }
+            }
+
+            return entries;
+        };
     }
 }
 
