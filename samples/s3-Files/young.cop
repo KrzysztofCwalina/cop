@@ -1,5 +1,5 @@
 import csv
-import s2 from ..\s2-JSON
+import person from ..\s2-JSON
 
 let Persons = csv::Parse('table.csv', [Person]) # csv:: resolves ambiguity
 
