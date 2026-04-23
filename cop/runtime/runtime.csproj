@@ -6,6 +6,14 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <!-- Provider source files (compiled into runtime but isolated in top-level providers/) -->
+  <ItemGroup>
+    <Compile Include="..\..\providers\code-provider\src\**\*.cs" LinkBase="providers\code" />
+    <Compile Include="..\..\providers\filesystem-provider\src\**\*.cs" LinkBase="providers\filesystem" />
+    <Compile Include="..\..\providers\python-provider\src\**\*.cs" LinkBase="providers\python" />
+    <Compile Include="..\..\providers\javascript-provider\src\**\*.cs" LinkBase="providers\javascript" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\language\language.csproj" />
     <ProjectReference Include="..\shared\Cop.Core.csproj" />
