@@ -1,6 +1,6 @@
 # API Listing
 
-Print the public API surface of C# source files as a flat list of canonical signatures.
+Generate the public API surface of C# source files as a flat list of canonical signatures.
 
 ## Setup
 
@@ -8,19 +8,17 @@ Create a file called `api-listing.cop` in your project:
 
 ```ruby
 import csharp-api
-import code-analysis
 
-export let api-listing = Code.Api:csharp:publicApi
-    :toInfo('{Api.Signature}')
+export command api-listing = SAVE('api-surface.txt', '{Api.Signature}', Code.Api:csharp:publicApi)
 ```
 
 ## Run
 
 ```bash
-cop run api-listing.cop
+cop run api-listing.cop api-listing
 ```
 
-Output:
+This writes `api-surface.txt` with one signature per line:
 
 ```
 class ClientOptions
@@ -33,6 +31,8 @@ method MyClient.DeleteItemAsync(string, CancellationToken) : Task<Response>
 property MyClientOptions.Diagnostics : DiagnosticsOptions
 event MyClient.ItemChanged : EventHandler
 ```
+
+The file can be checked into source control as a baseline for [API diff](api-diff.md).
 
 ## Filtering
 
@@ -52,39 +52,42 @@ List only methods:
 
 ```ruby
 import csharp-api
-import code-analysis
 
-export let methods = Code.Api:csharp:apiMethod
-    :toInfo('{Api.Signature}')
+export command list-methods = SAVE('methods.txt', '{Api.Signature}', Code.Api:csharp:apiMethod)
 ```
 
 List only types:
 
 ```ruby
 import csharp-api
-import code-analysis
 
-export let types = Code.Api:csharp:apiType
-    :toInfo('{Api.Signature}')
+export command list-types = SAVE('types.txt', '{Api.Signature}', Code.Api:csharp:apiType)
 ```
 
-## Save to File
+## Diagnostics vs. Listings
 
-To write the API listing to a file instead of stdout, use a `SAVE` command:
+The `SAVE` command writes plain text to a file — use it for listings and baselines.
+
+For analysis checks that report problems, use `toError`, `toWarning`, or `toInfo`. These create `Violation` objects with severity, file location, and message:
 
 ```ruby
 import csharp-api
+import code-analysis
 
-export command api-export = SAVE('api-surface.txt', '{Api.Signature}', Code.Api:csharp:publicApi)
+# This creates Violation objects — use for analysis, not for listings
+export let missing-docs = Code.Api:csharp:publicApi
+    :toWarning('{Api.Signature} has no documentation')
 ```
 
-Run with:
+The `Violation` type has these fields:
 
-```bash
-cop run api-listing.cop api-export
-```
-
-This writes one signature per line to `api-surface.txt`. The file can be checked into source control as a baseline for [API diff](api-diff.md).
+| Field | Type | Description |
+|---|---|---|
+| `Violation.Severity` | string | `'error'`, `'warning'`, or `'info'` |
+| `Violation.Message` | string | The formatted message |
+| `Violation.File` | string | Source file path |
+| `Violation.Line` | int | Source line number |
+| `Violation.Source` | string | Language of the source file |
 
 ## The Api Type
 
