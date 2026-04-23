@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>TypeSpecProvider</RootNamespace>
+    <PublishReadyToRun>true</PublishReadyToRun>
   </PropertyGroup>
 
   <ItemGroup>
