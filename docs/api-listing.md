@@ -1,54 +1,56 @@
 # API Listing
 
-Generate the public API surface of C# source files or compiled assemblies.
+Generate the public API surface of C# source files or compiled assemblies as structured C# stubs — the same format used by Azure SDK's GenAPI baseline files.
 
-## Quick Start — Signatures
+## Quick Start
 
 Create a file called `api-listing.cop` in your project:
 
 ```ruby
 import csharp-api
 
-export command api-listing = SAVE('api-surface.txt', '{Api.Signature}', Code.Api:csharp:publicApi)
+export command api-listing = SAVE('api-surface.txt', '{Api.StubLine}', Code.Api:csharp:publicApi)
 ```
 
 ```bash
 cop run api-listing.cop api-listing
 ```
 
-This writes `api-surface.txt` with one signature per line:
-
-```
-class MyClient
-ctor MyClient(Uri, TokenCredential, MyClientOptions)
-method MyClient.GetItemAsync(string, CancellationToken) : Task<Response<Item>>
-property MyClientOptions.Diagnostics : DiagnosticsOptions
-event MyClient.ItemChanged : EventHandler
-```
-
-## Quick Start — C# Stubs
-
-For C# stub output (Azure SDK GenAPI-compatible format), use `Api.StubLine`:
-
-```ruby
-import csharp-api
-
-export command api-stubs = SAVE('api-stubs.txt', '{Api.StubLine}', Code.Api:csharp:publicApi)
-```
-
-Each `StubLine` is a single C# declaration with stub bodies:
+This produces a C# stub listing with proper structure — namespaces, type blocks, indented members, and stub bodies:
 
 ```csharp
-public sealed class MyClient
-public MyClient(Uri endpoint, TokenCredential credential, MyClientOptions options) { }
-public virtual Task<Response> GetItemAsync(string id, CancellationToken cancellationToken) { throw null; }
-public string Name { get { throw null; } set { } }
-public event EventHandler ItemChanged { add { } remove { } }
+namespace Azure.ResourceManager.GraphServices
+{
+    public partial class GraphServicesExtensions
+    {
+        public static Azure.Response<Azure.ResourceManager.GraphServices.GraphServicesAccountResource> GetGraphServicesAccountResource(this Azure.ResourceManager.ArmClient client, Azure.Core.ResourceIdentifier id) { throw null; }
+        public static Azure.ResourceManager.GraphServices.GraphServicesAccountResourceCollection GetGraphServicesAccountResources(this Azure.ResourceManager.Resources.ResourceGroupResource resourceGroup) { throw null; }
+    }
+    public partial class GraphServicesAccountResource : Azure.ResourceManager.ArmResource
+    {
+        protected GraphServicesAccountResource() { }
+        public virtual Azure.ResourceManager.GraphServices.GraphServicesAccountResourceData Data { get { throw null; } }
+        public virtual Azure.Response<Azure.ResourceManager.GraphServices.GraphServicesAccountResource> Get(System.Threading.CancellationToken cancellationToken) { throw null; }
+        public virtual System.Threading.Tasks.Task<Azure.Response<Azure.ResourceManager.GraphServices.GraphServicesAccountResource>> GetAsync(System.Threading.CancellationToken cancellationToken) { throw null; }
+        public virtual Azure.ResourceManager.ArmOperation Delete(Azure.WaitUntil waitUntil, System.Threading.CancellationToken cancellationToken) { throw null; }
+    }
+    public partial class GraphServicesAccountResourceData : Azure.ResourceManager.Models.TrackedResourceData
+    {
+        public GraphServicesAccountResourceData(Azure.Core.AzureLocation location) { }
+        public string AppId { get { throw null; } set { } }
+    }
+    public enum ServiceVersion
+    {
+        V2023_04_13,
+    }
+}
 ```
+
+The output matches Azure SDK's `api/*.cs` stub file format: `partial class/struct/interface`, fully qualified type names (when loaded from DLLs), `{ throw null; }` for non-void methods and getters, `{ }` for void methods, setters, constructors, and event accessors.
 
 ## Loading from Assemblies
 
-Use `Code.Load('path')` to read the public API from a compiled .NET DLL instead of source files. Type names are fully qualified (from metadata), matching GenAPI output:
+Use `Code.Load()` to read the public API from a compiled .NET DLL. Type names are fully qualified (from metadata), matching GenAPI output:
 
 ```ruby
 import csharp-api
@@ -56,13 +58,34 @@ import csharp-api
 let apis = Code.Load('bin/Release/net8.0/MyPackage.dll')
 predicate allApi(Api) => Api.Kind != ''
 
-export command list-dll = SAVE('api-surface.txt', '{Api.Signature}', apis:allApi)
+export command list-dll = SAVE('api-surface.txt', '{Api.StubLine}', apis:allApi)
 ```
 
 This is useful for:
 - Generating baselines from published packages
 - Comparing against NuGet package DLLs
 - Getting fully qualified type names (e.g., `System.Threading.CancellationToken`)
+
+## Signature Format (for Diff)
+
+For API diff comparison, use `Api.Signature` instead of `Api.StubLine`. Signatures are compact canonical keys:
+
+```ruby
+import csharp-api
+
+export command api-signatures = SAVE('api-signatures.txt', '{Api.Signature}', Code.Api:csharp:publicApi)
+```
+
+```
+class MyClient
+ctor MyClient(Uri, TokenCredential, MyClientOptions)
+method MyClient.GetItemAsync(string, CancellationToken) : Task<Response<Item>>
+property MyClientOptions.Diagnostics : DiagnosticsOptions
+event MyClient.ItemChanged : EventHandler
+enumvalue ServiceVersion.V2024_01_01
+```
+
+See [API Diff](api-diff.md) for baseline comparison using signatures.
 
 ## The toApiLine Function
 
@@ -141,31 +164,13 @@ Each entry in `Code.Api` (or from `Code.Load()`) has these fields:
 | `Api.TypeName` | string | Declaring type name |
 | `Api.MemberName` | string | Member name (empty for type-level entries) |
 | `Api.Signature` | string | Canonical signature (stable comparison key) |
-| `Api.StubLine` | string | C# stub representation (for listings) |
+| `Api.StubLine` | string | C# stub declaration (for listings) |
 | `Api.Line` | int | Source line number (0 for assembly-loaded entries) |
 | `Api.File` | File | Source file |
 
-### Signature Format
-
-```
-{kind} {typeName}[.{memberName}][({paramTypes})][ : {returnType}]
-```
-
-Examples:
-
-```
-class MyClient
-interface IMyService
-method MyClient.GetItemAsync(string, CancellationToken) : Task<Response>
-property MyClientOptions.RetryCount : int
-ctor MyClient(Uri, TokenCredential, MyClientOptions)
-event MyClient.ItemChanged : EventHandler
-enumvalue ServiceVersion.V2024_01_01
-```
-
 ### StubLine Format
 
-Each `StubLine` is a single C# declaration with stub bodies:
+Each `StubLine` is a single C# declaration line with stub bodies (indentation added by the generator based on nesting):
 
 | Kind | Example |
 |---|---|
@@ -180,3 +185,9 @@ Each `StubLine` is a single C# declaration with stub bodies:
 | Event | `public event EventHandler Changed { add { } remove { } }` |
 | Field | `public static readonly string Empty;` |
 | Enum value | `V2024_01_01,` |
+
+### Signature Format
+
+```
+{kind} {typeName}[.{memberName}][({paramTypes})][ : {returnType}]
+```
