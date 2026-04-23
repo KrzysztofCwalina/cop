@@ -262,6 +262,67 @@ export command check = foreach baseline => PRINT('{{Api.Signature}}')
         Assert.That(ex!.Message, Does.Contain("sub-collections"));
     }
 
+    // ── :text() filter and save() ──
+
+    [Test]
+    public void TextFilter_FlattensCollectionToJoinedString()
+    {
+        var assemblyPath = typeof(ApiSurfaceTests).Assembly.Location.Replace("\\", "\\\\");
+        var cop = $@"
+let baseline = Code.Load('{assemblyPath}')
+predicate anyApi(Api) => Api.Kind != ''
+let apiText = baseline.Api:anyApi:text('{{Api.Signature}}')
+export command print-text = foreach apiText => PRINT('{{item}}')
+";
+
+        var registry = new TypeRegistry();
+        CodeTypeRegistrar.Register(registry);
+        registry.RegisterProgramType();
+
+        var codeLoader = CreateTestCodeLoader();
+        var interpreter = new ScriptInterpreter(registry, externalCodeLoader: codeLoader);
+
+        var script = ScriptParser.Parse(cop, "test.cop");
+        var documents = new List<Document>();
+        var result = interpreter.Run([script], documents, commandName: "print-text");
+
+        // :text() should produce exactly one output (the joined string)
+        Assert.That(result.Outputs.Count, Is.EqualTo(1), "Expected single output from :text() flattened collection");
+        var text = result.Outputs[0].Message;
+        Assert.That(text, Does.Contain("class"));
+        // Verify it contains multiple lines (newline-separated)
+        Assert.That(text.Split('\n').Length, Is.GreaterThan(1), "Expected multiple lines in :text() output");
+    }
+
+    [Test]
+    public void Save_WritesValueToFile()
+    {
+        var assemblyPath = typeof(ApiSurfaceTests).Assembly.Location.Replace("\\", "\\\\");
+        var cop = $@"
+let baseline = Code.Load('{assemblyPath}')
+predicate anyApi(Api) => Api.Kind != ''
+let apiText = baseline.Api:anyApi:text('{{Api.Signature}}')
+export command save-api = save('api-surface.txt', apiText)
+";
+
+        var registry = new TypeRegistry();
+        CodeTypeRegistrar.Register(registry);
+        registry.RegisterProgramType();
+
+        var codeLoader = CreateTestCodeLoader();
+        var interpreter = new ScriptInterpreter(registry, externalCodeLoader: codeLoader);
+
+        var script = ScriptParser.Parse(cop, "test.cop");
+        var documents = new List<Document>();
+        var result = interpreter.Run([script], documents, commandName: "save-api");
+
+        Assert.That(result.FileOutputs.Count, Is.GreaterThan(0), "Expected file output from save()");
+        var apiFile = result.FileOutputs.First(f => f.Path == "api-surface.txt");
+        Assert.That(apiFile.Content, Does.Contain("class"));
+        // Verify the content is the joined text (not the path)
+        Assert.That(apiFile.Content.Split('\n').Length, Is.GreaterThan(1), "Expected multiline content");
+    }
+
     // ── Helpers ──
 
     private static TypeDeclaration CreateType(string name, TypeKind kind = TypeKind.Class) =>

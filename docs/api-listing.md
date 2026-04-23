@@ -9,14 +9,14 @@ Create a file called `api-listing.cop` in your project:
 ```ruby
 import csharp-api
 
-export command api-listing = SAVE('api-surface.txt', '{Api.StubLine}', Code.Api:csharp:publicApi)
+export command api-listing = foreach Code.Api:csharp:publicApi => PRINT('{Api.StubLine}')
 ```
 
 ```bash
-cop run api-listing.cop api-listing
+cop run api-listing.cop
 ```
 
-This produces a C# stub listing with proper structure — namespaces, type blocks, indented members, and stub bodies:
+This prints a C# stub listing with proper structure — namespaces, type blocks, indented members, and stub bodies:
 
 ```csharp
 namespace Azure.ResourceManager.GraphServices
@@ -48,6 +48,23 @@ namespace Azure.ResourceManager.GraphServices
 
 The output matches Azure SDK's `api/*.cs` stub file format: `partial class/struct/interface`, fully qualified type names (when loaded from DLLs), `{ throw null; }` for non-void methods and getters, `{ }` for void methods, setters, constructors, and event accessors.
 
+## Saving to a File
+
+Use `:text()` to flatten the collection into a single text block, then `save()` to write it:
+
+```ruby
+import csharp-api
+
+let apiText = Code.Api:csharp:publicApi:text('{Api.StubLine}')
+export command save-api = save('api-surface.txt', apiText)
+```
+
+```bash
+cop run api-listing.cop save-api
+```
+
+The `:text(template)` filter formats each item with the template and joins them with newlines into a single string. The `save(path, value)` statement writes that string to a file.
+
 ## Loading from Assemblies
 
 Use `Code.Load()` to read types from a compiled .NET DLL. This returns the same data model as source loading — just with no statements or line info. Access sub-collections via dot syntax:
@@ -57,7 +74,17 @@ import csharp-api
 
 let dll = Code.Load('bin/Release/net8.0/MyPackage.dll')
 
-export command list-dll = SAVE('api-surface.txt', '{Api.StubLine}', dll.Api:publicApi)
+export command list-dll = foreach dll.Api:publicApi => PRINT('{Api.StubLine}')
+```
+
+To save assembly API to a file:
+
+```ruby
+import csharp-api
+
+let dll = Code.Load('bin/Release/net8.0/MyPackage.dll')
+let apiText = dll.Api:publicApi:text('{Api.StubLine}')
+export command save-dll = save('api-surface.txt', apiText)
 ```
 
 `Code.Load()` and the implicit source loading are superset-subset of the same model:
@@ -82,7 +109,7 @@ For API diff comparison, use `Api.Signature` instead of `Api.StubLine`. Signatur
 ```ruby
 import csharp-api
 
-export command api-signatures = SAVE('api-signatures.txt', '{Api.Signature}', Code.Api:csharp:publicApi)
+export command api-signatures = foreach Code.Api:csharp:publicApi => PRINT('{Api.Signature}')
 ```
 
 ```
@@ -136,12 +163,10 @@ List only methods:
 ```ruby
 import csharp-api
 
-export command list-methods = SAVE('methods.txt', '{Api.Signature}', Code.Api:csharp:apiMethod)
+export command list-methods = foreach Code.Api:csharp:apiMethod => PRINT('{Api.Signature}')
 ```
 
 ## Diagnostics vs. Listings
-
-The `SAVE` command writes plain text to a file — use it for listings and baselines.
 
 For analysis checks that report problems, use `toError`, `toWarning`, or `toInfo`. These create `Violation` objects with severity, file location, and message:
 

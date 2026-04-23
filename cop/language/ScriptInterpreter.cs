@@ -246,12 +246,7 @@ public class ScriptInterpreter
 
             if (IsSaveAction(cmd.ActionName) && cmd.OutputPath is not null)
             {
-                if (!fileOutputs.TryGetValue(cmd.OutputPath, out var lines))
-                {
-                    lines = [];
-                    fileOutputs[cmd.OutputPath] = lines;
-                }
-                lines.Add(richMessage.ToPlainText());
+                WriteSaveOutput(cmd, richMessage, null, fileOutputs);
             }
             else
             {
@@ -288,14 +283,9 @@ public class ScriptInterpreter
                     CaptureAlanObjectFields(finalCtx, ao);
 
                 var richMessage = ResolveTemplate(cmd.MessageTemplate, finalCtx);
-                if (IsSaveAction(cmd.ActionName) && cmd.OutputPath is not null)
+                if (IsSaveAction(cmd.ActionName))
                 {
-                    if (!fileOutputs.TryGetValue(cmd.OutputPath, out var lines))
-                    {
-                        lines = [];
-                        fileOutputs[cmd.OutputPath] = lines;
-                    }
-                    lines.Add(richMessage.ToPlainText());
+                    WriteSaveOutput(cmd, richMessage, item, fileOutputs);
                 }
                 else
                 {
@@ -345,14 +335,9 @@ public class ScriptInterpreter
                     CaptureAlanObjectFields(finalCtx, ao);
 
                 var richMessage = ResolveTemplate(cmd.MessageTemplate, finalCtx);
-                if (IsSaveAction(cmd.ActionName) && cmd.OutputPath is not null)
+                if (IsSaveAction(cmd.ActionName))
                 {
-                    if (!fileOutputs.TryGetValue(cmd.OutputPath, out var lines))
-                    {
-                        lines = [];
-                        fileOutputs[cmd.OutputPath] = lines;
-                    }
-                    lines.Add(richMessage.ToPlainText());
+                    WriteSaveOutput(cmd, richMessage, item, fileOutputs);
                 }
                 else
                 {
@@ -523,6 +508,29 @@ public class ScriptInterpreter
                             return (object)(value?.ToString() ?? "");
                         })
                         .ToList();
+                    currentType = "string";
+                    continue;
+                }
+            }
+            // Handle :text() — format each item with a template, join into a single string
+            else if (funcName == "text")
+            {
+                var templateArgs = GetFilterArgs(filter);
+                if (templateArgs.Count > 0 && templateArgs[0] is LiteralExpr litExpr && litExpr.Value is string template)
+                {
+                    var lines = currentItems
+                        .Where(item => item is not null)
+                        .Select(item =>
+                        {
+                            var ctx = new EvaluationContext();
+                            ctx.Capture(currentType, item);
+                            ctx.Capture("item", item);
+                            if (item is ScriptObject ao)
+                                CaptureAlanObjectFields(ctx, ao);
+                            return ResolveTemplate(template, ctx).ToPlainText();
+                        })
+                        .ToList();
+                    currentItems = [(object)string.Join(Environment.NewLine, lines)];
                     currentType = "string";
                     continue;
                 }
@@ -870,7 +878,9 @@ public class ScriptInterpreter
         foreach (var filter in filters)
         {
             var funcName = GetFunctionNameFromFilter(filter);
-            if (funcName != null && functionGroups != null && functionGroups.TryGetValue(funcName, out var group))
+            if (funcName is "select" or "text")
+                currentType = "string";
+            else if (funcName != null && functionGroups != null && functionGroups.TryGetValue(funcName, out var group))
                 currentType = group[0].ReturnType;
         }
         return currentType;
@@ -1154,6 +1164,39 @@ public class ScriptInterpreter
 
     private static bool IsSaveAction(string? actionName) =>
         string.Equals(actionName, "SAVE", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Write save/SAVE output to file. Handles two patterns:
+    /// - SAVE('path', '{template}', collection): OutputPath is set, richMessage is the formatted template
+    /// - save('path', value): OutputPath is null, MessageTemplate is the path, item is the content
+    /// </summary>
+    private static void WriteSaveOutput(
+        CommandBlock cmd, RichString richMessage, object? item,
+        Dictionary<string, List<string>> fileOutputs)
+    {
+        string path;
+        string content;
+
+        if (cmd.OutputPath is not null)
+        {
+            // Legacy SAVE('path', '{template}', collection) — format each item with template
+            path = cmd.OutputPath;
+            content = richMessage.ToPlainText();
+        }
+        else
+        {
+            // New save('path', value) — messageTemplate is the path, item is the content
+            path = cmd.MessageTemplate;
+            content = item is string s ? s : item?.ToString() ?? "";
+        }
+
+        if (!fileOutputs.TryGetValue(path, out var lines))
+        {
+            lines = [];
+            fileOutputs[path] = lines;
+        }
+        lines.Add(content);
+    }
 
     /// <summary>
     /// Checks if a collection name is a dotted reference to a Code.Load let (e.g., "dll.Api", "dll.Types").
