@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Cop.Core;
 using Cop.Lang;
 using Cop.Providers.SourceModel;
@@ -17,8 +18,11 @@ public static class Engine
     /// <summary>
     /// Discovers .cop scripts and source files, then runs all commands.
     /// </summary>
-    public static EngineResult Run(string scriptsDir, string rootPath, string? commandName = null, string[]? programArgs = null, string[]? commandFilter = null)
+    public static EngineResult Run(string scriptsDir, string rootPath, string? commandName = null, string[]? programArgs = null, string[]? commandFilter = null, Action<string>? diagLog = null)
     {
+        var totalSw = Stopwatch.StartNew();
+        var phaseSw = Stopwatch.StartNew();
+
         scriptsDir = Path.GetFullPath(scriptsDir);
         rootPath = Path.GetFullPath(rootPath);
 
@@ -52,38 +56,9 @@ public static class Engine
         if (scriptFiles.Count == 0 && parseErrors.Count > 0)
             return new EngineResult([], [], parseErrors);
 
-        // Fatal errors (e.g. failed imports) prevent execution
-        var fatalErrors = new List<string>();
+        diagLog?.Invoke($"[diag] Script parsing: {phaseSw.ElapsedMilliseconds}ms ({scriptFiles.Count} .cop files)");
 
-        // Create type registry, resolve imports, and detect provider packages
-        var providerPackages = new List<(string Dir, PackageMetadata Meta)>();
-        var typeRegistry = CreateTypeRegistry(scriptFiles, scriptsDir, parseErrors, fatalErrors, providerPackages: providerPackages);
-
-        if (fatalErrors.Count > 0)
-            return new EngineResult([], parseErrors, fatalErrors, commandName);
-
-        // Load external providers (schema registration + data query)
-        LoadExternalProviders(typeRegistry, providerPackages, rootPath, parseErrors, fatalErrors);
-
-        if (fatalErrors.Count > 0)
-            return new EngineResult([], parseErrors, fatalErrors, commandName);
-
-        // Scan filesystem and register global collections
-        FilesystemTypeRegistrar.Scan(typeRegistry, rootPath);
-
-        // Parse source files only if code collections are referenced
-        List<Document> documents;
-        if (NeedsSourceParsing(scriptFiles))
-        {
-            var requiredLanguages = DetectRequiredLanguages(scriptFiles);
-            documents = ParseSourceFiles(rootPath, requiredLanguages);
-        }
-        else
-        {
-            documents = [];
-        }
-
-        // Validate command name if specified
+        // Validate command name early (before expensive work)
         if (commandName != null)
         {
             var availableCommands = scriptFiles
@@ -96,15 +71,66 @@ public static class Engine
                 var message = availableCommands.Count > 0
                     ? $"Unknown command '{commandName}'. Available commands: {string.Join(", ", availableCommands)}"
                     : $"Unknown command '{commandName}'. No commands are defined in this directory.";
+                diagLog?.Invoke($"[diag] Total: {totalSw.ElapsedMilliseconds}ms (aborted: unknown command)");
                 return new EngineResult([], parseErrors, [message], commandName);
             }
+        }
+
+        // Fatal errors (e.g. failed imports) prevent execution
+        var fatalErrors = new List<string>();
+
+        // Create type registry, resolve imports, and detect provider packages
+        phaseSw.Restart();
+        var providerPackages = new List<(string Dir, PackageMetadata Meta)>();
+        var typeRegistry = CreateTypeRegistry(scriptFiles, scriptsDir, parseErrors, fatalErrors, providerPackages: providerPackages);
+        diagLog?.Invoke($"[diag] Type registry & imports: {phaseSw.ElapsedMilliseconds}ms");
+
+        if (fatalErrors.Count > 0)
+        {
+            diagLog?.Invoke($"[diag] Total: {totalSw.ElapsedMilliseconds}ms (aborted: fatal import errors)");
+            return new EngineResult([], parseErrors, fatalErrors, commandName);
+        }
+
+        // Load external providers (schema registration + data query)
+        phaseSw.Restart();
+        LoadExternalProviders(typeRegistry, providerPackages, rootPath, parseErrors, fatalErrors);
+        if (providerPackages.Count > 0)
+            diagLog?.Invoke($"[diag] External providers: {phaseSw.ElapsedMilliseconds}ms ({providerPackages.Count} providers)");
+
+        if (fatalErrors.Count > 0)
+        {
+            diagLog?.Invoke($"[diag] Total: {totalSw.ElapsedMilliseconds}ms (aborted: provider errors)");
+            return new EngineResult([], parseErrors, fatalErrors, commandName);
+        }
+
+        // Scan filesystem and register global collections
+        phaseSw.Restart();
+        FilesystemTypeRegistrar.Scan(typeRegistry, rootPath);
+        diagLog?.Invoke($"[diag] Filesystem scan: {phaseSw.ElapsedMilliseconds}ms");
+
+        // Parse source files only if code collections are referenced
+        phaseSw.Restart();
+        List<Document> documents;
+        if (NeedsSourceParsing(scriptFiles))
+        {
+            var requiredLanguages = DetectRequiredLanguages(scriptFiles);
+            documents = ParseSourceFiles(rootPath, requiredLanguages);
+            diagLog?.Invoke($"[diag] Source parsing: {phaseSw.ElapsedMilliseconds}ms ({documents.Count} files, languages: {(requiredLanguages != null ? string.Join(",", requiredLanguages) : "all")})");
+        }
+        else
+        {
+            documents = [];
+            diagLog?.Invoke($"[diag] Source parsing: skipped (no code collections referenced)");
         }
 
         var interpreter = new ScriptInterpreter(typeRegistry, externalDocumentLoader: CreateDocumentLoader(typeRegistry));
         HashSet<string>? filterSet = commandFilter is { Length: > 0 }
             ? new HashSet<string>(commandFilter, StringComparer.OrdinalIgnoreCase)
             : null;
+        phaseSw.Restart();
         var result = interpreter.Run(scriptFiles, documents, commandName, programArgs, filterSet);
+        diagLog?.Invoke($"[diag] Interpreter: {phaseSw.ElapsedMilliseconds}ms ({result.Outputs.Count} outputs)");
+        diagLog?.Invoke($"[diag] Total: {totalSw.ElapsedMilliseconds}ms");
 
         return new EngineResult(result.Outputs, parseErrors, [], commandName, result.FileOutputs);
     }

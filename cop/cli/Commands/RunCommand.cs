@@ -23,22 +23,25 @@ public static class RunCommand
         var formatOption = new Option<string>("--format") { Description = "Output format: text (default) or json" };
         formatOption.DefaultValueFactory = _ => "text";
         var commandsOption = new Option<string>("--commands") { Description = "Comma-separated list of check names to run (default: all)" };
+        var diagOption = new Option<bool>("--diag") { Description = "Print diagnostic timing for each engine phase to stderr" };
         var command = new Command("run", "Run .cop programs")
         {
             commandArg,
             extraArgsArg,
             formatOption,
-            commandsOption
+            commandsOption,
+            diagOption
         };
         command.SetAction(parseResult => Execute(
             parseResult.GetValue(commandArg),
             parseResult.GetValue(extraArgsArg),
             parseResult.GetValue(formatOption),
-            parseResult.GetValue(commandsOption)));
+            parseResult.GetValue(commandsOption),
+            parseResult.GetValue(diagOption)));
         return command;
     }
 
-    public static int Execute(string? commandOrFile, string[]? programArgs = null, string? format = null, string? commands = null)
+    public static int Execute(string? commandOrFile, string[]? programArgs = null, string? format = null, string? commands = null, bool diag = false)
     {
         string? commandName = null;
         string scriptsDir;
@@ -72,7 +75,8 @@ public static class RunCommand
         if (!string.IsNullOrEmpty(commands))
             commandFilter = commands.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter);
+        Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(msg) : null;
+        var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog);
 
         foreach (var error in result.ParseErrors)
             Console.Error.WriteLine(error);

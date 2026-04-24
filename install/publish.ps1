@@ -9,6 +9,7 @@ $OutputBase = $PSScriptRoot
 
 foreach ($rid in $Runtimes) {
     $outDir = Join-Path $OutputBase $rid
+    if (Test-Path $outDir) { Remove-Item -Recurse -Force $outDir }
     New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 
     Write-Host "Publishing cop for $rid..."
