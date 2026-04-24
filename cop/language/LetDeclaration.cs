@@ -18,10 +18,10 @@ public record LetDeclaration(
     public bool IsValueBinding => ValueExpression is not null;
 
     /// <summary>
-    /// True when this let is a Code.Load('path') external code load.
+    /// True when this let is a Load('path') external document load.
     /// Treated as a collection (not a value binding) at runtime.
     /// </summary>
-    public bool IsCodeLoad => ValueExpression is FunctionCallExpr fc && fc.Name == "Code.Load";
+    public bool IsExternalLoad => ValueExpression is FunctionCallExpr fc && fc.Name == "Load";
 
     /// <summary>
     /// True when this let is a union of other collection lets: let Name = [a, b, c]

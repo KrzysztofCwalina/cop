@@ -357,6 +357,8 @@ public class TypeRegistry
     {
         if (value is ScriptObject ao)
             return ao.TypeName;
+        if (value is DataObjectView v)
+            return v.Table.TypeName;
         return _clrTypeMappings.TryGetValue(value.GetType(), out var name) ? name : null;
     }
 
@@ -378,5 +380,82 @@ public class TypeRegistry
             current = _types.TryGetValue(current, out var desc) ? desc.BaseType?.Name : null;
         }
         return false;
+    }
+
+    /// <summary>
+    /// Registers type descriptors and collection declarations from a <see cref="ProviderSchema"/>.
+    /// Does NOT register property accessors — the caller is responsible for registering
+    /// CLR-based accessors via <see cref="RegisterAccessors"/> for Objects-format providers,
+    /// or ScriptObject-based accessors for JSON-format providers.
+    /// </summary>
+    public void RegisterProviderSchema(ProviderSchema schema)
+    {
+        foreach (var ts in schema.Types)
+        {
+            if (HasType(ts.Name)) continue;
+            var desc = new TypeDescriptor(ts.Name);
+            foreach (var ps in ts.Properties)
+                desc.Properties[ps.Name] = new PropertyDescriptor(ps.Name, ps.Type, ps.Optional, ps.Collection);
+            Register(desc);
+        }
+
+        // Resolve base types
+        foreach (var ts in schema.Types)
+        {
+            if (ts.Base is null) continue;
+            var desc = GetType(ts.Name);
+            var baseDesc = GetType(ts.Base);
+            if (desc is not null && baseDesc is not null && desc.BaseType is null)
+                desc.BaseType = baseDesc;
+        }
+
+        // Register collections
+        foreach (var cs in schema.Collections)
+        {
+            if (!HasCollection(cs.Name))
+                RegisterCollection(new CollectionDeclaration(cs.Name, cs.ItemType, 0));
+        }
+    }
+
+    /// <summary>
+    /// Auto-generates slot-based property accessors for all types in a provider schema.
+    /// Each property accessor reads from the corresponding <see cref="DataObjectView"/> slot,
+    /// decoding strings from the shared UTF-8 string heap. Slot index = property order in schema.
+    /// </summary>
+    public void RegisterDataTableAccessors(ProviderSchema schema)
+    {
+        foreach (var ts in schema.Types)
+        {
+            var accessors = new Dictionary<string, Func<object, object?>>();
+            for (int slot = 0; slot < ts.Properties.Count; slot++)
+            {
+                var prop = ts.Properties[slot];
+                int capturedSlot = slot; // capture for closure
+                accessors[prop.Name] = prop.Type switch
+                {
+                    "string" => obj =>
+                    {
+                        var v = (DataObjectView)obj;
+                        return v.Table.Records[v.Index].GetString(capturedSlot, v.Table.StringHeap);
+                    },
+                    "int" => obj =>
+                    {
+                        var v = (DataObjectView)obj;
+                        return (object)v.Table.Records[v.Index].GetInt32(capturedSlot);
+                    },
+                    "bool" => obj =>
+                    {
+                        var v = (DataObjectView)obj;
+                        return (object)v.Table.Records[v.Index].GetBool(capturedSlot);
+                    },
+                    _ => obj =>
+                    {
+                        var v = (DataObjectView)obj;
+                        return (object)v.Table.Records[v.Index].GetInt64(capturedSlot);
+                    },
+                };
+            }
+            RegisterAccessors(ts.Name, accessors);
+        }
     }
 }

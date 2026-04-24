@@ -17,10 +17,10 @@ public static class Engine
     /// <summary>
     /// Discovers .cop scripts and source files, then runs all commands.
     /// </summary>
-    public static EngineResult Run(string scriptsDir, string codebasePath, string? commandName = null, string[]? programArgs = null, string[]? commandFilter = null)
+    public static EngineResult Run(string scriptsDir, string rootPath, string? commandName = null, string[]? programArgs = null, string[]? commandFilter = null)
     {
         scriptsDir = Path.GetFullPath(scriptsDir);
-        codebasePath = Path.GetFullPath(codebasePath);
+        rootPath = Path.GetFullPath(rootPath);
 
         if (!Directory.Exists(scriptsDir))
             return new EngineResult([], [], [$"Scripts directory not found: {scriptsDir}"]);
@@ -63,20 +63,20 @@ public static class Engine
             return new EngineResult([], parseErrors, fatalErrors, commandName);
 
         // Load external providers (schema registration + data query)
-        LoadExternalProviders(typeRegistry, providerPackages, codebasePath, parseErrors, fatalErrors);
+        LoadExternalProviders(typeRegistry, providerPackages, rootPath, parseErrors, fatalErrors);
 
         if (fatalErrors.Count > 0)
             return new EngineResult([], parseErrors, fatalErrors, commandName);
 
         // Scan filesystem and register global collections
-        FilesystemTypeRegistrar.Scan(typeRegistry, codebasePath);
+        FilesystemTypeRegistrar.Scan(typeRegistry, rootPath);
 
         // Parse source files only if code collections are referenced
         List<Document> documents;
         if (NeedsSourceParsing(scriptFiles))
         {
             var requiredLanguages = DetectRequiredLanguages(scriptFiles);
-            documents = ParseSourceFiles(codebasePath, requiredLanguages);
+            documents = ParseSourceFiles(rootPath, requiredLanguages);
         }
         else
         {
@@ -100,7 +100,7 @@ public static class Engine
             }
         }
 
-        var interpreter = new ScriptInterpreter(typeRegistry, externalCodeLoader: CreateCodeLoader(typeRegistry));
+        var interpreter = new ScriptInterpreter(typeRegistry, externalDocumentLoader: CreateDocumentLoader(typeRegistry));
         HashSet<string>? filterSet = commandFilter is { Length: > 0 }
             ? new HashSet<string>(commandFilter, StringComparer.OrdinalIgnoreCase)
             : null;
@@ -157,11 +157,11 @@ public static class Engine
     public static EngineResult RunProject(
         List<string> feedPaths,
         List<string> packageNames,
-        string codebasePath,
+        string rootPath,
         List<string> rules,
         string[]? programArgs = null)
     {
-        codebasePath = Path.GetFullPath(codebasePath);
+        rootPath = Path.GetFullPath(rootPath);
         var scriptFiles = new List<ScriptFile>();
         var parseErrors = new List<string>();
         var fatalErrors = new List<string>();
@@ -226,20 +226,20 @@ public static class Engine
             return new EngineResult([], parseErrors, fatalErrors);
 
         // Load external providers
-        LoadExternalProviders(typeRegistry, providerPackages, codebasePath, parseErrors, fatalErrors);
+        LoadExternalProviders(typeRegistry, providerPackages, rootPath, parseErrors, fatalErrors);
 
         if (fatalErrors.Count > 0)
             return new EngineResult([], parseErrors, fatalErrors);
 
-        // Scan filesystem from codebasePath
-        FilesystemTypeRegistrar.Scan(typeRegistry, codebasePath);
+        // Scan filesystem from rootPath
+        FilesystemTypeRegistrar.Scan(typeRegistry, rootPath);
 
         // Parse source files only if code collections are referenced
         List<Document> documents;
         if (NeedsSourceParsing(scriptFiles))
         {
             var requiredLanguages = DetectRequiredLanguages(scriptFiles);
-            documents = ParseSourceFiles(codebasePath, requiredLanguages);
+            documents = ParseSourceFiles(rootPath, requiredLanguages);
         }
         else
         {
@@ -249,7 +249,7 @@ public static class Engine
         // Run each command, or all non-SAVE if no rules specified
         var allOutputs = new List<PrintOutput>();
         var allFileOutputs = new List<FileOutput>();
-        var interpreter = new ScriptInterpreter(typeRegistry, externalCodeLoader: CreateCodeLoader(typeRegistry));
+        var interpreter = new ScriptInterpreter(typeRegistry, externalDocumentLoader: CreateDocumentLoader(typeRegistry));
 
         // Check if any specified rules are let collections (not commands).
         // If so, synthesize RUN CHECK(name) invocations for them.
@@ -405,11 +405,11 @@ public static class Engine
     /// When requiredLanguages is provided, only files matching those languages are parsed.
     /// Uses recursive directory walk with early pruning of excluded directories.
     /// </summary>
-    private static List<Document> ParseSourceFiles(string codebasePath, HashSet<string>? requiredLanguages = null)
+    private static List<Document> ParseSourceFiles(string rootPath, HashSet<string>? requiredLanguages = null)
     {
         var parserRegistry = CreateParserRegistry();
         var filePaths = new List<string>();
-        CollectSourceFiles(codebasePath, parserRegistry, requiredLanguages, filePaths);
+        CollectSourceFiles(rootPath, parserRegistry, requiredLanguages, filePaths);
 
         // Parse files in parallel — Roslyn parsing is CPU-bound and embarrassingly parallel
         var documents = new System.Collections.Concurrent.ConcurrentBag<Document>();
@@ -434,7 +434,7 @@ public static class Engine
 
                 if (sourceFile == null) return;
 
-                var relativePath = Path.GetRelativePath(codebasePath, filePath).Replace('\\', '/');
+                var relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
                 var normalizedFile = sourceFile with { Path = relativePath };
 
                 // Pre-stamp StatementInfo.File references (in-place, no cloning)
@@ -625,11 +625,11 @@ public static class Engine
     }
 
     /// <summary>
-    /// Creates the external code loader delegate for Code.Load('path').
+    /// Creates the external document loader delegate for Load('path').
     /// Returns Documents wrapping SourceFiles — the same model as implicit source loading.
     /// The existing collection extractors (Types, Api, Statements, etc.) handle extraction.
     /// </summary>
-    private static Func<string, List<Document>> CreateCodeLoader(TypeRegistry typeRegistry)
+    private static Func<string, List<Document>> CreateDocumentLoader(TypeRegistry typeRegistry)
     {
         return (string path) =>
         {
@@ -674,7 +674,7 @@ public static class Engine
     /// Loads external CLR providers: registers their schemas into the type registry
     /// and queries them for collection data.
     /// </summary>
-    private static void LoadExternalProviders(TypeRegistry typeRegistry, List<(string Dir, PackageMetadata Meta)> providerPackages, string codebasePath, List<string> errors, List<string> fatalErrors)
+    private static void LoadExternalProviders(TypeRegistry typeRegistry, List<(string Dir, PackageMetadata Meta)> providerPackages, string rootPath, List<string> errors, List<string> fatalErrors)
     {
         foreach (var (dir, meta) in providerPackages)
         {
@@ -682,10 +682,14 @@ public static class Engine
             if (loaded is null) continue;
 
             // Register types and collections from the provider schema
-            JsonCollectionDeserializer.RegisterSchema(typeRegistry, loaded.Schema);
+            typeRegistry.RegisterProviderSchema(loaded.Schema);
+
+            // For JSON providers, also register ScriptObject-based accessors
+            if (!loaded.Instance.SupportedFormats.HasFlag(ProviderFormat.Objects))
+                JsonCollectionDeserializer.RegisterScriptObjectAccessors(typeRegistry, loaded.Schema);
 
             // Query for data and register global collections
-            ProviderLoader.QueryAndRegister(loaded, typeRegistry, codebasePath, errors);
+            ProviderLoader.QueryAndRegister(loaded, typeRegistry, rootPath, errors);
         }
     }
 }

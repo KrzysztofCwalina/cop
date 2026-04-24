@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Runtime.Loader;
 using Cop.Core;
 using Cop.Lang;
+using Cop.Providers.SourceModel;
 
 namespace Cop.Providers;
 
@@ -76,28 +77,72 @@ public static class ProviderLoader
 
     /// <summary>
     /// Queries a loaded provider and registers the resulting collections as global collections.
+    /// Prefers the Objects format (in-process CLR objects) when available for better performance.
+    /// Falls back to JSON format with deserialization.
     /// </summary>
-    public static void QueryAndRegister(LoadedProvider provider, TypeRegistry registry, string? codebasePath, List<string> errors)
+    public static void QueryAndRegister(LoadedProvider provider, TypeRegistry registry, string? rootPath, List<string> errors)
     {
-        if (!provider.Instance.SupportedFormats.HasFlag(ProviderFormat.Json))
-        {
-            errors.Add($"Provider '{provider.PackageName}' does not support JSON queries.");
-            return;
-        }
-
         try
         {
             var query = new ProviderQuery
             {
-                CodebasePath = codebasePath,
+                RootPath = rootPath,
             };
 
-            var resultJson = provider.Instance.QueryJson(query);
-            var collections = JsonCollectionDeserializer.Deserialize(resultJson, provider.Schema);
-
-            foreach (var (collName, items) in collections)
+            if (provider.Instance.SupportedFormats.HasFlag(ProviderFormat.Objects))
             {
-                registry.RegisterGlobalCollection(collName, items);
+                // Fast path: packed DataObject records, no per-item CLR objects
+                var tables = provider.Instance.QueryData(query);
+                foreach (var (collName, table) in tables)
+                {
+                    var views = new List<object>(table.Count);
+                    for (int i = 0; i < table.Count; i++)
+                        views.Add(new DataObjectView(table, i));
+                    registry.RegisterGlobalCollection(collName, views);
+                }
+
+                // Auto-generate slot-based accessors from schema
+                registry.RegisterDataTableAccessors(provider.Schema);
+
+                // Register CLR bindings if available (CodeProvider uses these)
+                var bindings = provider.Instance.GetRuntimeBindings();
+                if (bindings != null)
+                {
+                    foreach (var (clrType, copTypeName) in bindings.ClrTypeMappings)
+                        registry.RegisterClrType(clrType, copTypeName);
+                    foreach (var (typeName, accessors) in bindings.Accessors)
+                        registry.RegisterAccessors(typeName, accessors);
+                    if (bindings.CollectionExtractors != null)
+                    {
+                        foreach (var (collName, extractor) in bindings.CollectionExtractors)
+                            registry.RegisterCollectionExtractor(collName, doc => extractor(doc.As<SourceFile>()));
+                    }
+                    if (bindings.MethodEvaluators != null)
+                    {
+                        foreach (var ((typeName, methodName), evaluator) in bindings.MethodEvaluators)
+                            registry.RegisterMethodEvaluator(typeName, methodName, evaluator);
+                    }
+                    if (bindings.TextConverters != null)
+                    {
+                        foreach (var (typeName, converter) in bindings.TextConverters)
+                        {
+                            var desc = registry.GetType(typeName);
+                            if (desc != null) desc.TextConverter = converter;
+                        }
+                    }
+                }
+            }
+            else if (provider.Instance.SupportedFormats.HasFlag(ProviderFormat.Json))
+            {
+                // JSON path: deserialize into ScriptObjects
+                var resultJson = provider.Instance.QueryJson(query);
+                var collections = JsonCollectionDeserializer.Deserialize(resultJson, provider.Schema);
+                foreach (var (collName, items) in collections)
+                    registry.RegisterGlobalCollection(collName, items);
+            }
+            else
+            {
+                errors.Add($"Provider '{provider.PackageName}' does not support any query format.");
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)

@@ -11,14 +11,14 @@ namespace Cop.Core;
 public enum ProviderFormat
 {
     Json = 1,
-    // Future:
     // Binary = 2,   // e.g. MessagePack
-    // Structs = 4,  // direct struct arrays
+    Objects = 4,     // direct CLR objects with native lambda accessors
 }
 
 /// <summary>
 /// Abstract base class for extensible Cop data providers.
 /// Provider DLLs contain a subclass of this and are loaded dynamically by the engine.
+/// Built-in providers use the fast Objects path; external providers use JSON.
 /// </summary>
 public abstract class CopProvider
 {
@@ -35,15 +35,60 @@ public abstract class CopProvider
     public abstract byte[] GetSchema();
 
     /// <summary>
+    /// Returns CLR runtime bindings: type mappings, lambda property accessors,
+    /// collection extractors, and method evaluators. Called once at registration time.
+    /// Providers that return Objects format should override this to provide native accessors.
+    /// </summary>
+    public virtual RuntimeBindings? GetRuntimeBindings() => null;
+
+    /// <summary>
     /// Queries for collection data as UTF-8 JSON.
     /// Only callable if <see cref="SupportedFormats"/> includes <see cref="ProviderFormat.Json"/>.
     /// </summary>
     public virtual byte[] QueryJson(ProviderQuery query)
         => throw new NotSupportedException("This provider does not support JSON queries.");
 
-    // Future protocol methods — added without breaking existing providers:
-    // public virtual byte[] QueryBinary(ProviderQuery query) => throw new NotSupportedException();
-    // public virtual ReadOnlySpan<byte> QueryStructs(ProviderQuery query) => throw new NotSupportedException();
+    /// <summary>
+    /// Queries for collection data as packed <see cref="DataTable"/> records.
+    /// Only callable if <see cref="SupportedFormats"/> includes <see cref="ProviderFormat.Objects"/>.
+    /// Returns one DataTable per collection (e.g., "DiskFiles" → DataTable).
+    /// This is the fast in-proc path — no serialization overhead, strings stay in a flat UTF-8 heap.
+    /// </summary>
+    public virtual Dictionary<string, DataTable> QueryData(ProviderQuery query)
+        => throw new NotSupportedException("This provider does not support object queries.");
+}
+
+/// <summary>
+/// CLR runtime bindings provided by a provider at registration time.
+/// Contains type mappings, lambda property accessors, collection extractors, and method evaluators.
+/// </summary>
+public class RuntimeBindings
+{
+    /// <summary>
+    /// Maps CLR types to cop type names (e.g., typeof(DiskFileInfo) → "DiskFile").
+    /// </summary>
+    public Dictionary<Type, string> ClrTypeMappings { get; init; } = new();
+
+    /// <summary>
+    /// Lambda property accessors keyed by cop type name then property name.
+    /// </summary>
+    public Dictionary<string, Dictionary<string, Func<object, object?>>> Accessors { get; init; } = new();
+
+    /// <summary>
+    /// Per-document collection extractors (e.g., extract Types from a SourceFile document).
+    /// Keyed by collection name. Only used by providers whose data comes from parsed documents.
+    /// </summary>
+    public Dictionary<string, Func<object, List<object>>>? CollectionExtractors { get; init; }
+
+    /// <summary>
+    /// Method evaluators keyed by (typeName, methodName).
+    /// </summary>
+    public Dictionary<(string TypeName, string MethodName), Func<object, List<object?>, object?>>? MethodEvaluators { get; init; }
+
+    /// <summary>
+    /// Per-type text converters (e.g., TypeReference → its OriginalText).
+    /// </summary>
+    public Dictionary<string, Func<object, string>>? TextConverters { get; init; }
 }
 
 /// <summary>
@@ -52,9 +97,9 @@ public abstract class CopProvider
 public class ProviderQuery
 {
     /// <summary>
-    /// Root path of the codebase, or null for non-file-backed providers.
+    /// Root path of the project, or null for non-file-backed providers.
     /// </summary>
-    public string? CodebasePath { get; init; }
+    public string? RootPath { get; init; }
 
     /// <summary>
     /// Which collections the engine needs (null = all).

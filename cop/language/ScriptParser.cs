@@ -381,8 +381,8 @@ public class ScriptParser
         // Parse the RHS as an expression (handles colon chains via ParsePostfix)
         var expr = ParseExpression();
 
-        // Handle Code.Load('path') as a value binding (produces a collection at runtime)
-        if (expr is FunctionCallExpr loadCall && loadCall.Name == "Code.Load")
+        // Handle Load('path') as a value binding (produces a collection at runtime)
+        if (expr is FunctionCallExpr loadCall && loadCall.Name == "Load")
         {
             return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: loadCall);
         }
@@ -767,19 +767,8 @@ public class ScriptParser
                 var member = Expect(TokenKind.Identifier);
                 if (Current.Kind == TokenKind.LParen)
                 {
-                    // Allow Code.Load('path') as a special factory method call
-                    if (expr is IdentifierExpr factoryTarget && factoryTarget.Name == "Code" && member.Value == "Load")
-                    {
-                        Advance(); // consume '('
-                        var args = ParseArgList();
-                        Expect(TokenKind.RParen);
-                        expr = new FunctionCallExpr("Code.Load", args);
-                    }
-                    else
-                    {
-                        throw new InvalidOperationException(
-                            $"Line {member.Line}: Use colon syntax ':{member.Value}(...)' instead of '.{member.Value}(...)'");
-                    }
+                    throw new InvalidOperationException(
+                        $"Line {member.Line}: Use colon syntax ':{member.Value}(...)' instead of '.{member.Value}(...)'");
                 }
                 else
                 {

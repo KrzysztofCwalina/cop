@@ -12,12 +12,12 @@ public class TypeSpecProviderTests
     public void TypeSpecHttpProvider_PutPathSegments_FindsOddSegmentPut()
     {
         var scriptsDir = Path.Combine(RepoRoot, "samples", "s7-TypeSpec");
-        var codebasePath = Path.Combine(scriptsDir, "spec");
+        var rootPath = Path.Combine(scriptsDir, "spec");
 
-        if (!Directory.Exists(scriptsDir) || !Directory.Exists(codebasePath))
+        if (!Directory.Exists(scriptsDir) || !Directory.Exists(rootPath))
             Assert.Ignore("Sample directory not found");
 
-        var result = Engine.Run(scriptsDir, codebasePath);
+        var result = Engine.Run(scriptsDir, rootPath);
 
         // Should have no fatal errors
         Assert.That(result.Errors, Is.Empty, $"Fatal errors: {string.Join("; ", result.Errors)}");

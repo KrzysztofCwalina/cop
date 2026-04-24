@@ -22,8 +22,8 @@ public class CollectionQuery
     /// </summary>
     public FilterExpression? Filter { get; init; }
 
-    /// <summary>Root path of the codebase, for sources that need filesystem access.</summary>
-    public string? CodebasePath { get; init; }
+    /// <summary>Root path of the project, for sources that need filesystem access.</summary>
+    public string? RootPath { get; init; }
 }
 
 /// <summary>

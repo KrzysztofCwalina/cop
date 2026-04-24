@@ -4,7 +4,7 @@ namespace Cop.Lang;
 
 /// <summary>
 /// Collection source backed by a per-document extractor function.
-/// Used by code providers (Types, Statements, etc.) where each document produces items.
+/// Used by per-document providers (Types, Statements, etc.) where each document produces items.
 /// Supports filter pushdown using registered property accessors.
 /// </summary>
 public class DocumentCollectionSource : ICollectionSource

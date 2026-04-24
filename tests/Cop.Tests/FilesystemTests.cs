@@ -1,6 +1,6 @@
+using Cop.Core;
 using Cop.Lang;
 using Cop.Providers;
-using Cop.Providers.SourceModel;
 using NUnit.Framework;
 
 namespace Cop.Tests;
@@ -38,21 +38,20 @@ public class FilesystemTests
         FilesystemTypeRegistrar.Scan(registry, _tempDir);
 
         var folders = registry.GetGlobalCollectionItems("Folders");
+        var acc = registry.GetAccessors("Folder")!;
 
         // Assert
         Assert.That(folders, Is.Not.Null);
+        Assert.That(folders, Has.Count.EqualTo(2));
 
-        var folderInfos = folders!.Cast<FolderInfo>().ToList();
-        Assert.That(folderInfos, Has.Count.EqualTo(2));
+        var emptyFolder = folders!.Single(f => (string)acc["Name"](f)! == "empty-dir");
+        Assert.That(acc["Empty"](emptyFolder), Is.True);
+        Assert.That(acc["FileCount"](emptyFolder), Is.EqualTo(0));
+        Assert.That(acc["SubfolderCount"](emptyFolder), Is.EqualTo(0));
 
-        var emptyFolder = folderInfos.Single(f => f.Name == "empty-dir");
-        Assert.That(emptyFolder.IsEmpty, Is.True);
-        Assert.That(emptyFolder.FileCount, Is.EqualTo(0));
-        Assert.That(emptyFolder.SubfolderCount, Is.EqualTo(0));
-
-        var srcFolder = folderInfos.Single(f => f.Name == "src");
-        Assert.That(srcFolder.IsEmpty, Is.False);
-        Assert.That(srcFolder.FileCount, Is.EqualTo(1));
+        var srcFolder = folders!.Single(f => (string)acc["Name"](f)! == "src");
+        Assert.That(acc["Empty"](srcFolder), Is.False);
+        Assert.That(acc["FileCount"](srcFolder), Is.EqualTo(1));
     }
 
     [Test]
@@ -69,21 +68,21 @@ public class FilesystemTests
         FilesystemTypeRegistrar.Scan(registry, _tempDir);
 
         var diskFiles = registry.GetGlobalCollectionItems("DiskFiles");
+        var acc = registry.GetAccessors("DiskFile")!;
 
         // Assert
         Assert.That(diskFiles, Is.Not.Null);
-        var fileInfos = diskFiles!.Cast<DiskFileInfo>().ToList();
-        Assert.That(fileInfos, Has.Count.EqualTo(2));
+        Assert.That(diskFiles, Has.Count.EqualTo(2));
 
-        var rootFile = fileInfos.Single(f => f.Name == "root.txt");
-        Assert.That(rootFile.Extension, Is.EqualTo(".txt"));
-        Assert.That(rootFile.Folder, Is.EqualTo(""));
-        Assert.That(rootFile.Depth, Is.EqualTo(0));
+        var rootFile = diskFiles!.Single(f => (string)acc["Name"](f)! == "root.txt");
+        Assert.That(acc["Extension"](rootFile), Is.EqualTo(".txt"));
+        Assert.That(acc["Folder"](rootFile), Is.EqualTo(""));
+        Assert.That(acc["Depth"](rootFile), Is.EqualTo(0));
 
-        var readmeFile = fileInfos.Single(f => f.Name == "readme.md");
-        Assert.That(readmeFile.Extension, Is.EqualTo(".md"));
-        Assert.That(readmeFile.Folder, Is.EqualTo("docs"));
-        Assert.That(readmeFile.Depth, Is.EqualTo(1));
+        var readmeFile = diskFiles!.Single(f => (string)acc["Name"](f)! == "readme.md");
+        Assert.That(acc["Extension"](readmeFile), Is.EqualTo(".md"));
+        Assert.That(acc["Folder"](readmeFile), Is.EqualTo("docs"));
+        Assert.That(acc["Depth"](readmeFile), Is.EqualTo(1));
     }
 
     [Test]
@@ -97,12 +96,13 @@ public class FilesystemTests
         FilesystemTypeRegistrar.Register(registry);
         FilesystemTypeRegistrar.Scan(registry, _tempDir);
 
-        var folders = registry.GetGlobalCollectionItems("Folders")!.Cast<FolderInfo>().ToList();
+        var folders = registry.GetGlobalCollectionItems("Folders")!;
+        var acc = registry.GetAccessors("Folder")!;
 
         // Assert
-        Assert.That(folders.Single(f => f.Name == "a").Depth, Is.EqualTo(1));
-        Assert.That(folders.Single(f => f.Name == "b").Depth, Is.EqualTo(2));
-        Assert.That(folders.Single(f => f.Name == "c").Depth, Is.EqualTo(3));
+        Assert.That(acc["Depth"](folders.Single(f => (string)acc["Name"](f)! == "a")), Is.EqualTo(1));
+        Assert.That(acc["Depth"](folders.Single(f => (string)acc["Name"](f)! == "b")), Is.EqualTo(2));
+        Assert.That(acc["Depth"](folders.Single(f => (string)acc["Name"](f)! == "c")), Is.EqualTo(3));
     }
 
     [Test]
@@ -117,13 +117,15 @@ public class FilesystemTests
         FilesystemTypeRegistrar.Register(registry);
         FilesystemTypeRegistrar.Scan(registry, _tempDir);
 
-        var folders = registry.GetGlobalCollectionItems("Folders")!.Cast<FolderInfo>().ToList();
-        var files = registry.GetGlobalCollectionItems("DiskFiles")!.Cast<DiskFileInfo>().ToList();
+        var folders = registry.GetGlobalCollectionItems("Folders")!;
+        var files = registry.GetGlobalCollectionItems("DiskFiles")!;
+        var fAcc = registry.GetAccessors("Folder")!;
+        var dAcc = registry.GetAccessors("DiskFile")!;
 
         // Assert
-        Assert.That(folders.Single(f => f.Name == "child").Path, Is.EqualTo("parent/child"));
-        Assert.That(files.Single().Path, Is.EqualTo("parent/child/file.cs"));
-        Assert.That(files.Single().Folder, Is.EqualTo("parent/child"));
+        Assert.That(fAcc["Path"](folders.Single(f => (string)fAcc["Name"](f)! == "child")), Is.EqualTo("parent/child"));
+        Assert.That(dAcc["Path"](files.Single()), Is.EqualTo("parent/child/file.cs"));
+        Assert.That(dAcc["Folder"](files.Single()), Is.EqualTo("parent/child"));
     }
 
     [Test]

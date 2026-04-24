@@ -105,36 +105,24 @@ public static class JsonCollectionDeserializer
     /// Registers types from a <see cref="ProviderSchema"/> into the <see cref="TypeRegistry"/>,
     /// along with ScriptObject-based property accessors.
     /// Skips types that are already registered (e.g. from .cop file definitions).
+    /// Used by JSON-format providers whose data arrives as ScriptObjects.
     /// </summary>
     public static void RegisterSchema(TypeRegistry registry, ProviderSchema schema)
     {
-        var typeMap = schema.Types.ToDictionary(t => t.Name, StringComparer.Ordinal);
+        // Register type descriptors and collections via the shared helper
+        registry.RegisterProviderSchema(schema);
 
-        // First pass: register type descriptors for types not already in the registry
-        foreach (var ts in schema.Types)
-        {
-            if (registry.HasType(ts.Name))
-                continue;
+        // Register ScriptObject-based property accessors (JSON providers only)
+        RegisterScriptObjectAccessors(registry, schema);
+    }
 
-            var desc = new TypeDescriptor(ts.Name);
-            foreach (var ps in ts.Properties)
-            {
-                desc.Properties[ps.Name] = new PropertyDescriptor(ps.Name, ps.Type, ps.Optional, ps.Collection);
-            }
-            registry.Register(desc);
-        }
-
-        // Second pass: resolve base types
-        foreach (var ts in schema.Types)
-        {
-            if (ts.Base is null) continue;
-            var desc = registry.GetType(ts.Name);
-            var baseDesc = registry.GetType(ts.Base);
-            if (desc is not null && baseDesc is not null && desc.BaseType is null)
-                desc.BaseType = baseDesc;
-        }
-
-        // Third pass: register ScriptObject-based property accessors
+    /// <summary>
+    /// Registers ScriptObject-based property accessors for all types in a provider schema.
+    /// Only needed for JSON-format providers whose data is deserialized into ScriptObjects.
+    /// Objects-format providers supply their own CLR lambda accessors via GetRuntimeBindings().
+    /// </summary>
+    public static void RegisterScriptObjectAccessors(TypeRegistry registry, ProviderSchema schema)
+    {
         foreach (var ts in schema.Types)
         {
             var accessors = new Dictionary<string, Func<object, object?>>();
@@ -144,18 +132,6 @@ public static class JsonCollectionDeserializer
                 accessors[propName] = obj => obj is ScriptObject so ? so.GetField(propName) : null;
             }
             registry.RegisterAccessors(ts.Name, accessors);
-        }
-
-        // Register ScriptObject CLR type mapping for all provider types
-        // (TypeRegistry.InferTypeName already handles ScriptObject via TypeName property)
-
-        // Register collections
-        foreach (var cs in schema.Collections)
-        {
-            if (!registry.HasCollection(cs.Name))
-            {
-                registry.RegisterCollection(new CollectionDeclaration(cs.Name, cs.ItemType, 0, true));
-            }
         }
     }
 }

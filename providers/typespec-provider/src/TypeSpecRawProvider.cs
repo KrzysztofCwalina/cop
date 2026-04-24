@@ -143,9 +143,9 @@ public class TypeSpecRawProvider : CopProvider
     {
         var spec = new TspSpec();
 
-        if (query.CodebasePath is not null && Directory.Exists(query.CodebasePath))
+        if (query.RootPath is not null && Directory.Exists(query.RootPath))
         {
-            spec = TspParser.ParseFiles(query.CodebasePath);
+            spec = TspParser.ParseFiles(query.RootPath);
         }
 
         var result = new Dictionary<string, object>

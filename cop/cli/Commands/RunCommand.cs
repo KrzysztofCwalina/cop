@@ -42,7 +42,7 @@ public static class RunCommand
     {
         string? commandName = null;
         string scriptsDir;
-        string codebasePath;
+        string rootPath;
 
         if (commandOrFile != null && commandOrFile.EndsWith(".cop", StringComparison.OrdinalIgnoreCase))
         {
@@ -50,7 +50,7 @@ public static class RunCommand
             var spec = new FileInfo(commandOrFile);
             if (!spec.Exists) { Console.Error.WriteLine($"Error: File '{spec.FullName}' not found"); return 1; }
             scriptsDir = spec.DirectoryName ?? Directory.GetCurrentDirectory();
-            codebasePath = scriptsDir;
+            rootPath = scriptsDir;
 
             // First extra arg is the command name (if not a switch)
             if (programArgs is { Length: > 0 } && !programArgs[0].StartsWith('/') && !programArgs[0].StartsWith('-'))
@@ -63,7 +63,7 @@ public static class RunCommand
         {
             // Directory discovery mode
             scriptsDir = Directory.GetCurrentDirectory();
-            codebasePath = scriptsDir;
+            rootPath = scriptsDir;
             commandName = commandOrFile;
         }
 
@@ -72,7 +72,7 @@ public static class RunCommand
         if (!string.IsNullOrEmpty(commands))
             commandFilter = commands.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        var result = Engine.Run(scriptsDir, codebasePath, commandName, programArgs, commandFilter);
+        var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter);
 
         foreach (var error in result.ParseErrors)
             Console.Error.WriteLine(error);
@@ -103,11 +103,11 @@ public static class RunCommand
             {
                 var filePath = Path.IsPathRooted(output.Path)
                     ? null  // reject absolute paths
-                    : Path.GetFullPath(Path.Combine(codebasePath, output.Path));
+                    : Path.GetFullPath(Path.Combine(rootPath, output.Path));
 
-                if (filePath is null || !filePath.StartsWith(codebasePath, StringComparison.OrdinalIgnoreCase))
+                if (filePath is null || !filePath.StartsWith(rootPath, StringComparison.OrdinalIgnoreCase))
                 {
-                    Console.Error.WriteLine($"SAVE error: path '{output.Path}' is outside the codebase");
+                    Console.Error.WriteLine($"SAVE error: path '{output.Path}' is outside the project root");
                     continue;
                 }
 

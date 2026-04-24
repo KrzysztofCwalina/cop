@@ -18,13 +18,22 @@ cop/cli/            CLI (.NET 10, System.CommandLine). Commands for
 cop/language/       Cop language (namespace Cop.Lang). Parser, interpreter,
                     evaluator, type system. General-purpose language features only.
 
-cop/runtime/        Runtime data providers (namespace Cop.Providers). Engine
-                    orchestrator, source model types, source parsers (C#, Python, JavaScript),
-                    type registrars for code and filesystem data.
+cop/runtime/        Runtime engine (namespace Cop.Providers). Engine orchestrator,
+                    source parsers (C#, Python, JavaScript), provider loading
+                    and registration.
 
-cop/shared/         Core library (namespace Cop.Core). Package models,
-                    GitHub/local package sources, feed manager, dependency
-                    resolver, restore engine, checksum/lock file manager.
+cop/shared/         Core library (namespace Cop.Core). CopProvider base class,
+                    DataObject binary format, package models, feed manager,
+                    dependency resolver, restore engine, checksum/lock file manager.
+
+providers/          Data providers. Each extends CopProvider and supplies typed
+                    collections to the language runtime.
+  filesystem-provider/  Folders, DiskFiles — built-in, uses DataObject[] format
+  code-provider/        Types, Methods, Statements, Files — built-in, uses CLR objects
+  typespec-provider/    TypeSpec HTTP API analysis — external, uses JSON format
+  csharp-provider/      C# language-specific analysis
+  python-provider/      Python language-specific analysis
+  javascript-provider/  JavaScript/TypeScript language-specific analysis
 
 packages/           Seed packages organized by language. General packages are at
                     the root; language-specific packages are in group folders
@@ -61,10 +70,22 @@ samples/            Example .cop scripts (s1-HelloWorld through s6-Strings)
 | **Engine** | `Engine.cs` | Main orchestrator. Loads `.cop` files, resolves imports, runs interpreter |
 | **CSharpSourceParser** | `SourceParsers/CSharpSourceParser.cs` | Parses C# source into the source model (types, methods, statements) |
 | **PythonSourceParser** | `SourceParsers/PythonSourceParser.cs` | Parses Python source into the source model |
-| **CodeTypeRegistrar** | `CodeTypeRegistrar.cs` | Registers code-analysis types (`Type`, `Method`, `Statement`, etc.) into the type registry |
-| **FilesystemTypeRegistrar** | `FilesystemTypeRegistrar.cs` | Registers filesystem types (`Folder`, `DiskFile`) into the type registry |
+| **ProviderLoader** | `ProviderLoader.cs` | Loads external provider DLLs, queries data, registers into type system |
+| **CodeTypeRegistrar** | `CodeTypeRegistrar.cs` | Thin shim — delegates to `CodeProvider` for code-analysis type registration |
+| **FilesystemTypeRegistrar** | `FilesystemTypeRegistrar.cs` | Thin shim — delegates to `FilesystemProvider` for filesystem type registration |
 
 Source model types (e.g., `MethodDeclaration`, `StatementInfo`) live in `cop/runtime/` and represent parsed source code structures that `.cop` scripts can query.
+
+### Providers — `providers/` and `cop/shared/` (Cop.Core)
+
+| Class | File | Role |
+|---|---|---|
+| **CopProvider** | `cop/shared/CopProvider.cs` | Base class for all data providers. Defines schema, format negotiation, query API |
+| **DataObject** | `cop/shared/DataObject.cs` | 192-byte blittable struct — 24 × 8-byte slots for compact binary records |
+| **DataTable** | `cop/shared/DataObject.cs` | Wraps `DataObject[]` + UTF-8 string heap + type name |
+| **DataObjectView** | `cop/shared/DataObject.cs` | Lightweight evaluator bridge — references a record without boxing the 192-byte struct |
+| **FilesystemProvider** | `providers/filesystem-provider/` | Scans directories, packs into `DataObject[]` with shared string heap |
+| **CodeProvider** | `providers/code-provider/` | Provides code-analysis types via CLR objects and collection extractors |
 
 ### Core Library — `cop/shared/` (Cop.Core)
 
@@ -82,6 +103,7 @@ This is a critical architectural rule:
 - **`cop/language/`** implements **only general-purpose language features**: keywords (`predicate`, `function`, `let`, `type`), the parser, evaluator, interpreter, and type system. No domain-specific concepts.
 - **Domain-specific concepts** — the `Violation` type, `CHECK` command, `error`/`warning`/`info` functions, severity levels, analysis rules — belong **exclusively in `.cop` files** inside `packages/`. They must never be added to C# code.
 - **`cop/runtime/`** provides **general-purpose data providers** that supply collections to `.cop` packages via `runtime::` declarations (e.g., `runtime::Filesystem`, `runtime::Code`). Data providers are not domain-specific — they provide raw data that packages query and analyze.
+- **`providers/`** contains all provider implementations. Each provider extends `CopProvider` (defined in `cop/shared/`). Built-in providers use the fast `DataObject[]` binary format with a flat UTF-8 string heap — no CLR string allocations per record. External providers can use JSON or the same binary format.
 
 When adding a new capability, ask: *"Is this a language feature or a domain concept?"* Only language features go in C#.
 

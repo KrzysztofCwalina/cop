@@ -1,7 +1,6 @@
 using Cop.Core;
 using Cop.Lang;
 using Cop.Providers;
-using Cop.Providers.SourceModel;
 using NUnit.Framework;
 
 namespace Cop.Tests;
@@ -345,12 +344,13 @@ public class LockFileTests
         FilesystemTypeRegistrar.Register(registry);
         FilesystemTypeRegistrar.Scan(registry, _tempDir);
 
-        var files = registry.GetGlobalCollectionItems("DiskFiles")!.Cast<DiskFileInfo>().ToList();
-        var file = files.Single(f => f.Name == "normal.txt");
+        var files = registry.GetGlobalCollectionItems("DiskFiles")!;
+        var acc = registry.GetAccessors("DiskFile")!;
+        var file = files.Single(f => (string)acc["Name"](f)! == "normal.txt");
 
-        Assert.That(file.IsLocked, Is.False);
-        Assert.That(file.LockStatus, Is.EqualTo("unlocked"));
-        Assert.That(file.Checksum, Is.Null);
+        Assert.That(acc["Locked"](file), Is.False);
+        Assert.That(acc["LockStatus"](file), Is.EqualTo("unlocked"));
+        Assert.That(acc["Checksum"](file), Is.EqualTo(""));
     }
 
     [Test]
@@ -365,12 +365,13 @@ public class LockFileTests
         FilesystemTypeRegistrar.Register(registry);
         FilesystemTypeRegistrar.Scan(registry, _tempDir);
 
-        var files = registry.GetGlobalCollectionItems("DiskFiles")!.Cast<DiskFileInfo>().ToList();
-        var file = files.Single(f => f.Name == "locked.txt");
+        var files = registry.GetGlobalCollectionItems("DiskFiles")!;
+        var acc = registry.GetAccessors("DiskFile")!;
+        var file = files.Single(f => (string)acc["Name"](f)! == "locked.txt");
 
-        Assert.That(file.IsLocked, Is.True);
-        Assert.That(file.LockStatus, Is.EqualTo("clean"));
-        Assert.That(file.Checksum, Does.StartWith("sha256:"));
+        Assert.That(acc["Locked"](file), Is.True);
+        Assert.That(acc["LockStatus"](file), Is.EqualTo("clean"));
+        Assert.That((string)acc["Checksum"](file)!, Does.StartWith("sha256:"));
     }
 
     [Test]
@@ -388,11 +389,12 @@ public class LockFileTests
         FilesystemTypeRegistrar.Register(registry);
         FilesystemTypeRegistrar.Scan(registry, _tempDir);
 
-        var files = registry.GetGlobalCollectionItems("DiskFiles")!.Cast<DiskFileInfo>().ToList();
-        var file = files.Single(f => f.Name == "locked.txt");
+        var files = registry.GetGlobalCollectionItems("DiskFiles")!;
+        var acc = registry.GetAccessors("DiskFile")!;
+        var file = files.Single(f => (string)acc["Name"](f)! == "locked.txt");
 
-        Assert.That(file.IsLocked, Is.True);
-        Assert.That(file.LockStatus, Is.EqualTo("modified"));
+        Assert.That(acc["Locked"](file), Is.True);
+        Assert.That(acc["LockStatus"](file), Is.EqualTo("modified"));
     }
 
     [Test]
@@ -410,13 +412,14 @@ public class LockFileTests
         FilesystemTypeRegistrar.Register(registry);
         FilesystemTypeRegistrar.Scan(registry, _tempDir);
 
-        var files = registry.GetGlobalCollectionItems("DiskFiles")!.Cast<DiskFileInfo>().ToList();
-        var phantom = files.SingleOrDefault(f => f.Name == "locked.txt");
+        var files = registry.GetGlobalCollectionItems("DiskFiles")!;
+        var acc = registry.GetAccessors("DiskFile")!;
+        var phantom = files.SingleOrDefault(f => (string)acc["Name"](f)! == "locked.txt");
 
         Assert.That(phantom, Is.Not.Null);
-        Assert.That(phantom!.IsLocked, Is.True);
-        Assert.That(phantom.LockStatus, Is.EqualTo("deleted"));
-        Assert.That(phantom.Size, Is.EqualTo(0));
+        Assert.That(acc["Locked"](phantom!), Is.True);
+        Assert.That(acc["LockStatus"](phantom!), Is.EqualTo("deleted"));
+        Assert.That(acc["Size"](phantom!), Is.EqualTo(0));
     }
 
     // --- E2E: cop language can query lock status ---

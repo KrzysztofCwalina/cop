@@ -92,9 +92,9 @@ public class TypeSpecHttpProvider : CopProvider
     {
         var rawSpec = new TspSpec();
 
-        if (query.CodebasePath is not null && Directory.Exists(query.CodebasePath))
+        if (query.RootPath is not null && Directory.Exists(query.RootPath))
         {
-            rawSpec = TspParser.ParseFiles(query.CodebasePath);
+            rawSpec = TspParser.ParseFiles(query.RootPath);
         }
 
         var httpSpec = HttpTransformer.Transform(rawSpec);

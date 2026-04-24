@@ -8,9 +8,9 @@ public class ScriptInterpreter
     private readonly TypeRegistry _typeRegistry;
     private readonly int _maxOutputsPerCommand;
     private readonly TimeSpan _timeout;
-    private readonly Func<string, List<Document>>? _externalCodeLoader;
+    private readonly Func<string, List<Document>>? _externalDocumentLoader;
     private Dictionary<string, IList>? _globalResolvedSelects;
-    private Dictionary<string, List<Document>>? _codeLoadDocuments;
+    private Dictionary<string, List<Document>>? _loadDocuments;
 
     // Per-document cache for resolved let bindings — shared across all commands
     private readonly Dictionary<string, Dictionary<string, IList>> _documentLetCache = new();
@@ -22,12 +22,12 @@ public class ScriptInterpreter
         TypeRegistry typeRegistry,
         int maxOutputsPerCommand = 1000,
         TimeSpan? timeout = null,
-        Func<string, List<Document>>? externalCodeLoader = null)
+        Func<string, List<Document>>? externalDocumentLoader = null)
     {
         _typeRegistry = typeRegistry;
         _maxOutputsPerCommand = maxOutputsPerCommand;
         _timeout = timeout ?? TimeSpan.FromSeconds(30);
-        _externalCodeLoader = externalCodeLoader;
+        _externalDocumentLoader = externalDocumentLoader;
     }
 
     public InterpreterResult Run(
@@ -373,11 +373,11 @@ public class ScriptInterpreter
         HashSet<string>? visited = null,
         bool useQueryCache = true)
     {
-        // Code.Load dotted access (e.g., "dll.Api", "dll.Types") — resolve from loaded documents
-        var codeLoadItems = TryResolveCodeLoadCollection(collection, letDeclarations);
-        if (codeLoadItems != null) return codeLoadItems;
+        // Load() dotted access (e.g., "dll.Api", "dll.Types") — resolve from loaded documents
+        var loadItems = TryResolveLoadCollection(collection, letDeclarations);
+        if (loadItems != null) return loadItems;
 
-        // Resolve dotted collection names (e.g., "Code.Statements" → "Statements")
+        // Resolve dotted collection names (e.g., "Source.Statements" → "Statements")
         collection = ResolveDottedCollection(collection, letDeclarations);
 
         // Built-in collections
@@ -403,11 +403,11 @@ public class ScriptInterpreter
                 return unionItems;
             }
 
-            // Bare Code.Load reference without sub-collection — not valid as a collection
-            if (letDecl.IsCodeLoad)
+            // Bare Load() reference without sub-collection — not valid as a collection
+            if (letDecl.IsExternalLoad)
             {
                 throw new InvalidOperationException(
-                    $"'{collection}' is a Code.Load binding. Use '{collection}.Types', '{collection}.Api', etc. to access sub-collections.");
+                    $"'{collection}' is a Load() binding. Use '{collection}.Types', '{collection}.Api', etc. to access sub-collections.");
             }
 
             // Value bindings (let Name = [...]) are not collections — skip
@@ -496,7 +496,7 @@ public class ScriptInterpreter
     }
 
     /// <summary>
-    /// Pre-resolve collection let bindings (e.g., let factoryTypes = Code.Types:where(isFactory))
+    /// Pre-resolve collection let bindings (e.g., let factoryTypes = Source.Types:where(isFactory))
     /// so they can be accessed from within predicates. Value bindings and collection unions are skipped
     /// since they are already handled by the evaluator.
     /// </summary>
@@ -513,8 +513,8 @@ public class ScriptInterpreter
 
         foreach (var (name, letDecl) in letDeclarations)
         {
-            // Skip value bindings, collection unions, and Code.Load — handled elsewhere
-            if (letDecl.IsCodeLoad) continue;
+            // Skip value bindings, collection unions, and Load() — handled elsewhere
+            if (letDecl.IsExternalLoad) continue;
             if (letDecl.IsValueBinding || letDecl.IsCollectionUnion) continue;
             // Skip check-level lets (those with actions like :toWarning) — they are commands, not data
             if (letDecl.Filters.Any(f =>
@@ -723,7 +723,7 @@ public class ScriptInterpreter
     }
 
     /// <summary>
-    /// Resolves a dotted collection name (e.g., "Code.Statements") to its property collection name.
+    /// Resolves a dotted collection name (e.g., "Source.Statements") to its property collection name.
     /// Validates that the parent object exists as a let binding and resolves the property
     /// to the corresponding collection name. Non-dotted names pass through unchanged.
     /// </summary>
@@ -735,14 +735,14 @@ public class ScriptInterpreter
         var parentName = collection[..dotIndex];
         var propertyName = collection[(dotIndex + 1)..];
 
-        // Verify the parent exists as a let declaration (typically a runtime:: binding like Code or Disk)
+        // Verify the parent exists as a let declaration (typically a runtime:: binding)
         if (!letDeclarations.ContainsKey(parentName))
         {
             // Parent may come from a transitive import not yet in scope — try property name directly
             return propertyName;
         }
 
-        // The property name IS the collection name (Code.Statements → Statements, Disk.Folders → Folders)
+        // The property name IS the collection name (Source.Statements → Statements, Disk.Folders → Folders)
         return propertyName;
     }
 
@@ -755,8 +755,8 @@ public class ScriptInterpreter
         Dictionary<string, LetDeclaration> letDeclarations,
         HashSet<string>? visited = null)
     {
-        // Code.Load dotted access (e.g., "dll.Api") is always global
-        if (IsCodeLoadDottedReference(collection, letDeclarations))
+        // Load() dotted access (e.g., "dll.Api") is always global
+        if (IsLoadDottedReference(collection, letDeclarations))
             return true;
 
         collection = ResolveDottedCollection(collection, letDeclarations);
@@ -775,7 +775,7 @@ public class ScriptInterpreter
                 return ((ListLiteralExpr)letDecl.ValueExpression!).Elements.All(e =>
                     e is IdentifierExpr id && IsGlobalRootCollection(id.Name, predicateGroups, letDeclarations, new(visited)));
             }
-            if (letDecl.IsCodeLoad) return true; // Code.Load is self-contained, process once globally
+            if (letDecl.IsExternalLoad) return true; // Load() is self-contained, process once globally
             if (letDecl.IsValueBinding) return false;
             return IsGlobalRootCollection(letDecl.BaseCollection, predicateGroups, letDeclarations, visited);
         }
@@ -797,9 +797,9 @@ public class ScriptInterpreter
         Dictionary<string, List<FunctionDefinition>> functionGroups,
         HashSet<string>? visited = null)
     {
-        // Code.Load dotted access (e.g., "dll.Api", "dll.Types") — resolve from loaded documents
-        var codeLoadItems = TryResolveCodeLoadCollection(collection, letDeclarations);
-        if (codeLoadItems != null) return codeLoadItems;
+        // Load() dotted access (e.g., "dll.Api", "dll.Types") — resolve from loaded documents
+        var loadItems = TryResolveLoadCollection(collection, letDeclarations);
+        if (loadItems != null) return loadItems;
 
         collection = ResolveDottedCollection(collection, letDeclarations);
 
@@ -827,11 +827,11 @@ public class ScriptInterpreter
                 return unionItems;
             }
 
-            // Bare Code.Load reference without sub-collection — not valid as a collection
-            if (letDecl.IsCodeLoad)
+            // Bare Load() reference without sub-collection — not valid as a collection
+            if (letDecl.IsExternalLoad)
             {
                 throw new InvalidOperationException(
-                    $"'{collection}' is a Code.Load binding. Use '{collection}.Types', '{collection}.Api', etc. to access sub-collections.");
+                    $"'{collection}' is a Load() binding. Use '{collection}.Types', '{collection}.Api', etc. to access sub-collections.");
             }
 
             if (letDecl.IsValueBinding)
@@ -905,14 +905,14 @@ public class ScriptInterpreter
         Dictionary<string, List<FunctionDefinition>>? functionGroups = null,
         HashSet<string>? visited = null)
     {
-        // Code.Load dotted access (e.g., "dll.Api") — resolve sub-collection type from registry
-        if (letDeclarations != null && IsCodeLoadDottedReference(collection, letDeclarations))
+        // Load() dotted access (e.g., "dll.Api") — resolve sub-collection type from registry
+        if (letDeclarations != null && IsLoadDottedReference(collection, letDeclarations))
         {
             var subCollectionName = collection[(collection.IndexOf('.') + 1)..];
             return _typeRegistry.GetCollectionItemType(subCollectionName) ?? "Unknown";
         }
 
-        // Resolve dotted collection names (e.g., "Code.Statements" → "Statements")
+        // Resolve dotted collection names (e.g., "Source.Statements" → "Statements")
         if (letDeclarations != null)
             collection = ResolveDottedCollection(collection, letDeclarations);
 
@@ -932,7 +932,7 @@ public class ScriptInterpreter
                 var firstElem = ((ListLiteralExpr)letDecl.ValueExpression!).Elements[0];
                 return ResolveItemType(((IdentifierExpr)firstElem).Name, predicateGroups, letDeclarations, functionGroups, new(visited));
             }
-            if (letDecl.IsCodeLoad) return "Unknown"; // bare Code.Load — no sub-collection
+            if (letDecl.IsExternalLoad) return "Unknown"; // bare Load() — no sub-collection
             if (letDecl.IsValueBinding) return "Unknown";
             var baseType = ResolveItemType(letDecl.BaseCollection, predicateGroups, letDeclarations, functionGroups, visited);
             // Follow through any function steps in the filters
@@ -1278,22 +1278,22 @@ public class ScriptInterpreter
     }
 
     /// <summary>
-    /// Checks if a collection name is a dotted reference to a Code.Load let (e.g., "dll.Api", "dll.Types").
+    /// Checks if a collection name is a dotted reference to a Load() let (e.g., "dll.Api", "dll.Types").
     /// </summary>
-    private static bool IsCodeLoadDottedReference(string collection, Dictionary<string, LetDeclaration> letDeclarations)
+    private static bool IsLoadDottedReference(string collection, Dictionary<string, LetDeclaration> letDeclarations)
     {
         var dotIndex = collection.IndexOf('.');
         if (dotIndex < 0) return false;
 
         var parentName = collection[..dotIndex];
-        return letDeclarations.TryGetValue(parentName, out var letDecl) && letDecl.IsCodeLoad;
+        return letDeclarations.TryGetValue(parentName, out var letDecl) && letDecl.IsExternalLoad;
     }
 
     /// <summary>
-    /// Resolves a Code.Load dotted collection (e.g., "dll.Api") by extracting the sub-collection
-    /// from the loaded documents using the same collection extractors as source code loading.
+    /// Resolves a Load() dotted collection (e.g., "dll.Api") by extracting the sub-collection
+    /// from the loaded documents using the same collection extractors as document loading.
     /// </summary>
-    private List<object>? TryResolveCodeLoadCollection(
+    private List<object>? TryResolveLoadCollection(
         string collection,
         Dictionary<string, LetDeclaration> letDeclarations)
     {
@@ -1303,10 +1303,10 @@ public class ScriptInterpreter
         var parentName = collection[..dotIndex];
         var subCollectionName = collection[(dotIndex + 1)..];
 
-        if (!letDeclarations.TryGetValue(parentName, out var letDecl) || !letDecl.IsCodeLoad)
+        if (!letDeclarations.TryGetValue(parentName, out var letDecl) || !letDecl.IsExternalLoad)
             return null;
 
-        var docs = ResolveCodeLoadDocuments(letDecl);
+        var docs = ResolveLoadDocuments(letDecl);
         var items = new List<object>();
         foreach (var doc in docs)
         {
@@ -1318,46 +1318,46 @@ public class ScriptInterpreter
     }
 
     /// <summary>
-    /// Resolves and caches Code.Load documents. Keyed by resolved path for dedup.
+    /// Resolves and caches Load() documents. Keyed by resolved path for dedup.
     /// </summary>
-    private List<Document> ResolveCodeLoadDocuments(LetDeclaration letDecl)
+    private List<Document> ResolveLoadDocuments(LetDeclaration letDecl)
     {
-        _codeLoadDocuments ??= new();
-        var path = ExtractCodeLoadPath(letDecl);
-        if (!_codeLoadDocuments.TryGetValue(path, out var docs))
+        _loadDocuments ??= new();
+        var path = ExtractLoadPath(letDecl);
+        if (!_loadDocuments.TryGetValue(path, out var docs))
         {
-            docs = ResolveCodeLoad(letDecl);
-            _codeLoadDocuments[path] = docs;
+            docs = ResolveLoad(letDecl);
+            _loadDocuments[path] = docs;
         }
         return docs;
     }
 
     /// <summary>
-    /// Resolve a Code.Load('path') let declaration by loading external code (DLL or source files).
+    /// Resolve a Load('path') let declaration by loading external documents (DLL or source files).
     /// Returns documents wrapping SourceFiles — the same model as implicit source loading.
     /// </summary>
-    private List<Document> ResolveCodeLoad(LetDeclaration letDecl)
+    private List<Document> ResolveLoad(LetDeclaration letDecl)
     {
-        if (_externalCodeLoader == null)
-            throw new InvalidOperationException("Code.Load() is not available — no external code loader configured");
+        if (_externalDocumentLoader == null)
+            throw new InvalidOperationException("Load() is not available — no external document loader configured");
 
-        var path = ExtractCodeLoadPath(letDecl);
-        return _externalCodeLoader(path);
+        var path = ExtractLoadPath(letDecl);
+        return _externalDocumentLoader(path);
     }
 
     /// <summary>
-    /// Extracts the path string from a Code.Load('path') let declaration.
+    /// Extracts the path string from a Load('path') let declaration.
     /// </summary>
-    private static string ExtractCodeLoadPath(LetDeclaration letDecl)
+    private static string ExtractLoadPath(LetDeclaration letDecl)
     {
         var loadExpr = (FunctionCallExpr)letDecl.ValueExpression!;
         if (loadExpr.Args.Count == 0)
-            throw new InvalidOperationException("Code.Load() requires a path argument");
+            throw new InvalidOperationException("Load() requires a path argument");
 
         var pathArg = loadExpr.Args[0];
         if (pathArg is LiteralExpr lit && lit.Value is string s)
             return s;
 
-        throw new InvalidOperationException("Code.Load() path argument must be a string literal");
+        throw new InvalidOperationException("Load() path argument must be a string literal");
     }
 }
