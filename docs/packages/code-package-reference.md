@@ -213,6 +213,7 @@ Cop supports two comparison modes for cross-language checks:
 | `rx` | `Name:rx('^Foo$')` | **Case-sensitive** regex |
 | `sm` | `Name:sm('foo_bar')` | Convention-insensitive equality |
 | `in` | `Name:in(List)` | Value is a member of the list |
+| `empty` | `Name:empty` | String is empty (zero length) |
 
 ### String Transforms
 

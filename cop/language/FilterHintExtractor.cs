@@ -371,7 +371,7 @@ public static class FilterHintExtractor
             or "sw" or "ew"
             or "ct" or "rx"
             or "ca" or "sm"
-            or "in"
+            or "in" or "empty"
             or "gt" or "lt"
             or "ge" or "le";
 

@@ -266,6 +266,7 @@ Name:in(allowedNames)          # value is a member of the list
 | `rx(v)` | Matches regex (case-sensitive) |
 | `sm(v)` | Convention-insensitive equality (ignores PascalCase/snake_case/camelCase) |
 | `in(list)` | Value is a member of the list |
+| `empty` | String is empty (zero length) |
 
 #### Numeric Predicates
 
@@ -322,6 +323,7 @@ Items:any(predicate)         # true if any item matches
 Items:none(predicate)        # true if no items match
 Items:all(predicate)         # true if all items match
 Items:contains('value')      # true if list contains value
+Items:empty                  # true if list has no items
 ```
 
 ### List Transforms

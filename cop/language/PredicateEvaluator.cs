@@ -124,6 +124,22 @@ public class PredicateEvaluator
             return ToBool(Eval(pred.Body, item, pred.ParameterType, ctx));
         }
 
+        // Built-in 'empty' predicate — checks collections and strings on the item
+        if (name == "empty")
+        {
+            if (item is string s) return s.Length == 0;
+            if (item is IList col) return col.Count == 0;
+            // For objects, check boolean 'Empty' property via registry
+            var typeName = _registry.InferTypeName(item);
+            if (typeName is not null)
+            {
+                var prop = _registry.GetType(typeName)?.GetProperty("Empty");
+                if (prop?.Accessor is not null)
+                    return ToBool(prop.Accessor(item));
+            }
+            return false;
+        }
+
         // Let-bound value (e.g., let TestKeywords = ["Test", "Tests", ...])
         if (_letDeclarations is not null &&
             _letDeclarations.TryGetValue(name, out var letDecl) &&
@@ -418,6 +434,7 @@ public class PredicateEvaluator
                         ? Eval(args[1], item, paramType, ctx)?.ToString() ?? "" : "", StringComparison.OrdinalIgnoreCase)
                     : str,
                 "sm" => NormalizeIdentifier(str) == NormalizeIdentifier(arg0?.ToString() ?? ""),
+                "empty" => (object)(str.Length == 0),
                 _ => throw new InvalidOperationException($"Unknown string predicate '{predicate}'")
             };
         }
@@ -522,6 +539,10 @@ public class PredicateEvaluator
                         return true;
                 }
                 return false;
+            }
+            case "empty":
+            {
+                return collection.Count == 0;
             }
             case "First":
             {

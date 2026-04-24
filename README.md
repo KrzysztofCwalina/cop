@@ -18,7 +18,7 @@ import filesystem
 # define a custom predicate
 predicate deep(Folder) => Folder.Depth > 5
 
-# :empty is a built-in predicate from the filesystem package
+# :empty is a built-in predicate — works on any collection or string
 foreach Disk.Folders:empty => PRINT('{warning:@yellow} Empty folder: {item.Path}')
 # :deep is the custom predicate defined above
 foreach Disk.Folders:deep => PRINT('{item.Path} is deeply nested ({item.Depth} levels)')

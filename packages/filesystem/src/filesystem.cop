@@ -33,7 +33,6 @@ export type Filesystem = {
 export let Disk = runtime::Filesystem
 
 # Convenience predicates
-export predicate empty(Folder) => Folder.Empty == true
 export predicate recentlyModified(Folder) => Folder.MinutesSinceModified < 10
 export predicate recentlyModified(DiskFile) => DiskFile.MinutesSinceModified < 10
 export predicate stale(Folder) => Folder.MinutesSinceModified > 1440

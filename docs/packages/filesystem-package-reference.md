@@ -86,7 +86,7 @@ foreach Disk.Files:isLargeFile => PRINT('{item.Name} ({item.Size} bytes)')
 
 | Predicate            | Applies To | Condition                              |
 |----------------------|------------|----------------------------------------|
-| `empty`            | Folder     | `Folder.Empty == true`               |
+| `empty`            | any collection/string | Built-in: true if collection has no items or string is empty. For `Folder`, checks `Folder.Empty` property. |
 | `recentlyModified` | Folder     | `Folder.MinutesSinceModified < 10`     |
 | `recentlyModified` | DiskFile   | `DiskFile.MinutesSinceModified < 10`   |
 | `stale`            | Folder     | `Folder.MinutesSinceModified > 1440`   |
@@ -94,7 +94,7 @@ foreach Disk.Files:isLargeFile => PRINT('{item.Name} ({item.Size} bytes)')
 | `locked`           | DiskFile   | `DiskFile.Locked == true`            |
 | `lockViolation`    | DiskFile   | `DiskFile.LockStatus == 'modified'` or `DiskFile.LockStatus == 'deleted'` |
 
-`recentlyModified` is overloaded for both `Folder` and `DiskFile`. The same is true for `stale`.
+`empty` is a **built-in language predicate** — it works on any collection, string, or object with an `Empty` property. `recentlyModified` is overloaded for both `Folder` and `DiskFile`. The same is true for `stale`.
 
 Usage — apply exported predicates as filters:
 
