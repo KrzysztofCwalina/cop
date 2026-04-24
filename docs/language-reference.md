@@ -129,7 +129,7 @@ let PublicClients = Clients:isPublic       # subset of a subset
 A predicate is a named boolean expression that operates on a typed item. Predicates are the primary mechanism for creating subsets:
 
 ```ruby
-predicate client(Type) => Type.Name:endsWith('Client')
+predicate client(Type) => Type.Name:ew('Client')
 predicate publicAsync(Method) => Method.Public && Method.Async
 predicate usesVar(Statement) => Statement.Keywords:contains('var')
 ```
@@ -137,7 +137,7 @@ predicate usesVar(Statement) => Statement.Keywords:contains('var')
 Predicates compose by reference:
 
 ```ruby
-predicate optionsType(Parameter) => Parameter.Type.Name:endsWith('Options')
+predicate optionsType(Parameter) => Parameter.Type.Name:ew('Options')
 predicate hasOptions(Constructor) => Constructor.Parameters:any(optionsType)
 predicate missingOptions(Type) => Type.Constructors:none(hasOptions)
 ```
@@ -163,9 +163,9 @@ When applied as a filter, items are narrowed to `Call` (a superset of Statement�
 Append `:constraint` to the parameter type to create predicate overloads constrained by another predicate. The constraint is any predicate — language names like `csharp` and `python` are just predicates that match by file language:
 
 ```ruby
-predicate client(Type) => Type.Name:endsWith('Client')
-predicate client(Type:csharp) => Type.Name:endsWith('Client')
-predicate client(Type:python) => Type.Name:endsWith('_client')
+predicate client(Type) => Type.Name:ew('Client')
+predicate client(Type:csharp) => Type.Name:ew('Client')
+predicate client(Type:python) => Type.Name:ew('_client')
 ```
 
 Resolution order:
@@ -177,10 +177,15 @@ Constraints are not limited to languages — any predicate can be used:
 
 ```ruby
 predicate sealed(Type:csharp) => Type.Sealed
-predicate sealed(Type:python) => Type.Decorators:any(Decorator:contains('final'))
+predicate sealed(Type:python) => Type.Decorators:any(Decorator:ct('final'))
 ```
 
 ## Operations
+
+Cop uses two operators for accessing members:
+
+- **`:` (colon)** — applies a **predicate** (returns bool). Predicates use `camelCase` names: `:eq()`, `:sw()`, `:any()`, `:contains()`.
+- **`.` (dot)** — accesses a **property** or **transform** (returns a value). Properties and transforms use `PascalCase` names: `.Name`, `.Count`, `.Where()`, `.Select()`.
 
 ### Subset (`:`)
 
@@ -239,13 +244,65 @@ X <= 100        # less than or equal
 #### String Predicates
 
 ```ruby
-Name:endsWith("Client")
-Name:startsWith("Azure")
-Name:contains("Options")
-Name:matches(@"\bList<.*>")    # regex match
+Name:ew('Client')              # case-insensitive suffix match
+Name:sw('Azure')               # case-insensitive prefix match
+Name:ct('Options')             # case-insensitive substring match
+Name:rx(@'\bList<.*>')         # regex match (case-sensitive)
+Name:eq('Program')             # case-insensitive equality
+Name:ne('Object')              # case-insensitive inequality
+Name:sm('configure_await')     # convention-insensitive (matches ConfigureAwait, configureAwait, etc.)
+Name:ca(['Get', 'Set'])        # any item in list is a substring
+Name:in(allowedNames)          # value is a member of the list
 ```
 
-`matches` accepts a regular expression. Use verbatim strings (`@"..."`) for patterns with backslashes.
+| Predicate | Meaning |
+|-----------|---------|
+| `eq(v)` | Equal to (case-insensitive) |
+| `ne(v)` | Not equal to |
+| `sw(v)` | Starts with |
+| `ew(v)` | Ends with |
+| `ct(v)` | Contains substring |
+| `ca(list)` | Any item in list is a substring |
+| `rx(v)` | Matches regex (case-sensitive) |
+| `sm(v)` | Convention-insensitive equality (ignores PascalCase/snake_case/camelCase) |
+| `in(list)` | Value is a member of the list |
+
+#### Numeric Predicates
+
+```ruby
+Depth:gt(3)                    # greater than
+Depth:lt(10)                   # less than
+Size:ge(100)                   # greater than or equal
+Size:le(1000)                  # less than or equal
+Depth:eq(0)                    # equal to
+Size:ne(0)                     # not equal to
+```
+
+| Predicate | Meaning |
+|-----------|---------|
+| `eq(n)` | Equal to |
+| `ne(n)` | Not equal to |
+| `gt(n)` | Greater than |
+| `lt(n)` | Less than |
+| `ge(n)` | Greater than or equal |
+| `le(n)` | Less than or equal |
+
+### String Properties
+
+```ruby
+Name.Length                  # string length
+Name.Lower                  # lowercase version
+Name.Upper                  # uppercase version
+Name.Normalized             # convention-insensitive canonical form (Foo_Bar → foobar)
+Name.Words                  # split identifier into lowercase word list
+```
+
+### String Transforms
+
+```ruby
+Name.Trim('Async')           # remove suffix (→ 'GetItem' from 'GetItemAsync')
+Name.Replace('old', 'new')   # replace substring
+```
 
 ### List Properties
 
@@ -258,17 +315,27 @@ Items.Single                 # single item (null if 0 or 2+)
 
 ### List Predicates
 
-Predicate applications filter or test a list and return a subset or boolean:
+Predicate applications test a list and return a boolean:
 
 ```ruby
 Items:any(predicate)         # true if any item matches
 Items:none(predicate)        # true if no items match
 Items:all(predicate)         # true if all items match
-Items:contains("value")      # true if list contains value
-Items:where(predicate)       # subset of matching items
-Items:first(predicate)       # first matching item
-Items:last(predicate)        # last matching item
-Items:single(predicate)      # single matching item
+Items:contains('value')      # true if list contains value
+```
+
+### List Transforms
+
+Transforms return a new list or value from an existing list:
+
+```ruby
+Items.Where(predicate)       # subset of matching items
+Items.First(predicate)       # first matching item
+Items.Last(predicate)        # last matching item
+Items.Single(predicate)      # single matching item
+Items.ElementAt(n)           # item at index n
+Items.Select(template)       # project each item into a new value
+Items.Text(template)         # format each item and join into a single string
 ```
 
 #### Inline Expressions
@@ -278,8 +345,8 @@ Instead of defining a named predicate, write the condition inline. The element v
 ```ruby
 Type.Methods:any(Method.Public && Method.Async)
 Type.Constructors:none(Constructor.Protected)
-Type.BaseTypes:any(BaseType:contains('Service'))
-File.Usings:any(Using:contains('System.IO'))
+Type.BaseTypes:any(BaseType:ct('Service'))
+File.Usings:any(Using:ct('System.IO'))
 ```
 
 Recognized singular names: `Type`, `Method`, `Constructor`, `Parameter`, `Statement`, `Line`, `BaseType`, `Decorator`, `Using`, `Package`, `File`, `NestedType`.
@@ -342,7 +409,7 @@ Use a language name as a filter (`:csharp`, `:python`, etc.) to scope iteration 
 
 ```ruby
 foreach Clients:csharp:!Sealed => PRINT('{error:@red} {item.Name} should be sealed')
-foreach Lines:python:Matches(@'\bprint\s*\(') => PRINT('{warning:@yellow} Use logging instead of print')
+foreach Lines:python:rx(@'\bprint\s*\(') => PRINT('{warning:@yellow} Use logging instead of print')
 ```
 
 ### SAVE
@@ -383,7 +450,7 @@ foreach Clients:hasAsyncWithoutCancellation => PRINT('{warning:@yellow} {item.Fi
 
 ```ruby
 # This is a single-line comment
-predicate client(Type) => Type.Name:endsWith('Client')  # also valid at end of line
+predicate client(Type) => Type.Name:ew('Client')  # also valid at end of line
 // Legacy comment syntax (also supported)
 ```
 

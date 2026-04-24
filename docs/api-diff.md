@@ -18,13 +18,13 @@ import csharp-api
 import code-analysis
 
 # Baseline: C# stub files in api/ directory
-predicate baselineApi(Api) => publicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')
+predicate baselineApi(Api) => publicApi && Api.File.Path:rx('[/\\\\]api[/\\\\]')
 # Source: everything NOT in api/
-predicate sourceApi(Api) => publicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')
+predicate sourceApi(Api) => publicApi && !Api.File.Path:rx('[/\\\\]api[/\\\\]')
 
 # Build lookup lists from current source and baseline
-let baselineSignatures = Code.Api:csharp:baselineApi:select(item.Signature)
-let currentSignatures = Code.Api:csharp:sourceApi:select(item.Signature)
+let baselineSignatures = Code.Api:csharp:baselineApi.Select(item.Signature)
+let currentSignatures = Code.Api:csharp:sourceApi.Select(item.Signature)
 
 # Diff predicates
 predicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)
@@ -76,8 +76,8 @@ let baseline = Code.Load('packages/MyPackage.1.0.0/lib/net8.0/MyPackage.dll')
 predicate currentApi(Api) => publicApi
 
 # Build lookups
-let baselineSignatures = baseline.Api:select(item.Signature)
-let currentSignatures = Code.Api:csharp:currentApi:select(item.Signature)
+let baselineSignatures = baseline.Api.Select(item.Signature)
+let currentSignatures = Code.Api:csharp:currentApi.Select(item.Signature)
 
 # Diff
 predicate removedApi(Api) => Api.Signature:in(baselineSignatures) && !Api.Signature:in(currentSignatures)
@@ -118,7 +118,7 @@ When you intentionally change the API, update the baseline stub file to match th
 ```ruby
 import csharp-api
 
-let apiText = Code.Api:csharp:publicApi:text('{item.ApiAsText}')
+let apiText = Code.Api:csharp:publicApi.Text('{item.ApiAsText}')
 export command api-export = save('api/MyPackage.cs', apiText)
 ```
 
@@ -128,7 +128,7 @@ Everything in `api-compat.cop` is policy you control:
 
 | What | How | Example |
 |---|---|---|
-| **Baseline path pattern** | Change `baselineApi` predicate | `item.File.Path:matches('ApiSurface')` |
+| **Baseline path pattern** | Change `baselineApi` predicate | `item.File.Path:rx('ApiSurface')` |
 | **Baseline from DLL** | Use `Code.Load()` with `.Api` | `let baseline = Code.Load('pkg.dll')` then `baseline.Api` |
 | **Severity of removed APIs** | Use `toError`, `toWarning`, or `toInfo` | `:toWarning('...')` |
 | **Severity of added APIs** | Same | `:toError('...')` |
@@ -142,11 +142,11 @@ For a repo that stores baselines at `sdk/{service}/ApiSurface.cs`:
 import csharp-api
 import code-analysis
 
-predicate baselineApi(Api) => publicApi && Api.File.Path:matches('ApiSurface')
-predicate sourceApi(Api) => publicApi && !Api.File.Path:matches('ApiSurface')
+predicate baselineApi(Api) => publicApi && Api.File.Path:rx('ApiSurface')
+predicate sourceApi(Api) => publicApi && !Api.File.Path:rx('ApiSurface')
 
-let baselineSignatures = Code.Api:csharp:baselineApi:select(item.Signature)
-let currentSignatures = Code.Api:csharp:sourceApi:select(item.Signature)
+let baselineSignatures = Code.Api:csharp:baselineApi.Select(item.Signature)
+let currentSignatures = Code.Api:csharp:sourceApi.Select(item.Signature)
 
 predicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)
 predicate addedApi(Api) => sourceApi && !Api.Signature:in(baselineSignatures)
@@ -159,9 +159,9 @@ export let api-added = Code.Api:addedApi:toWarning('ADDED: {item.Signature}')
 
 - **Api-to-Api comparison** — both the baseline stub and the current source are parsed as C#, producing `Code.Api` entries with identical signature formats
 - **`Code.Load('path.dll')`** — loads a .NET assembly as a document source; access sub-collections via `dll.Api`, `dll.Types`, etc.
-- **`:select()`** projects a collection to a list of strings (e.g., `Code.Api:baselineApi:select(item.Signature)` → list of signature strings)
+- **`.Select()`** projects a collection to a list of strings (e.g., `Code.Api:baselineApi.Select(item.Signature)` → list of signature strings)
 - **`:in()`** checks if a value is in a list (e.g., `!Api.Signature:in(currentSignatures)` → true if signature not found)
-- **Cross-document comparison** works automatically — cop aggregates data across all source files before evaluating `:select()` lets
+- **Cross-document comparison** works automatically — cop aggregates data across all source files before evaluating `.Select()` lets
 
 ## CI Integration
 
@@ -177,10 +177,10 @@ To fail only on breaking changes (removed APIs), export only the removal check:
 import csharp-api
 import code-analysis
 
-predicate baselineApi(Api) => publicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')
-predicate sourceApi(Api) => publicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')
+predicate baselineApi(Api) => publicApi && Api.File.Path:rx('[/\\\\]api[/\\\\]')
+predicate sourceApi(Api) => publicApi && !Api.File.Path:rx('[/\\\\]api[/\\\\]')
 
-let currentSignatures = Code.Api:csharp:sourceApi:select(item.Signature)
+let currentSignatures = Code.Api:csharp:sourceApi.Select(item.Signature)
 predicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)
 
 export let breaking-changes = Code.Api:removedApi

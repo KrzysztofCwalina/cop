@@ -8,53 +8,72 @@ namespace Cop.Core;
 /// New formats can be added without breaking existing providers.
 /// </summary>
 [Flags]
-public enum ProviderFormat
+public enum DataFormat
 {
     Json = 1,
     // Binary = 2,   // e.g. MessagePack
-    Objects = 4,     // direct CLR objects with native lambda accessors
+    InMemoryDatabase = 4,
 }
 
 /// <summary>
 /// Abstract base class for extensible Cop data providers.
 /// Provider DLLs contain a subclass of this and are loaded dynamically by the engine.
-/// Built-in providers use the fast Objects path; external providers use JSON.
+///
+/// Two main methods:
+///   GetSchema() — returns the provider schema as UTF-8 JSON (always implemented).
+///   Query()     — returns collection data as UTF-8 JSON (the canonical format).
+///
+/// Performance-optimized alternative:
+///   QueryData() — returns a DataStore (in-memory database) for built-in providers.
+///                 Providers that support this set SupportedFormats to include InMemoryDatabase.
 /// </summary>
-public abstract class CopProvider
+public abstract class DataProvider
 {
     /// <summary>
-    /// Discovers what query formats the provider supports.
-    /// The engine checks this before calling any QueryXxx method.
+    /// Human-readable provider name, used in diagnostics.
+    /// Default strips the "Provider" suffix from the class name.
     /// </summary>
-    public virtual ProviderFormat SupportedFormats => ProviderFormat.Json;
+    public override string ToString()
+    {
+        var name = GetType().Name;
+        return name.EndsWith("Provider", StringComparison.Ordinal)
+            ? name[..^"Provider".Length]
+            : name;
+    }
+    /// <summary>
+    /// Discovers what query formats the provider supports.
+    /// The engine checks this before calling <see cref="Query"/> or <see cref="QueryData"/>.
+    /// </summary>
+    public virtual DataFormat SupportedFormats => DataFormat.Json;
 
     /// <summary>
     /// Returns the provider schema as UTF-8 JSON.
     /// Describes the types and collections this provider exposes.
+    /// All providers must implement this with a real schema (use <see cref="System.Text.Json.Utf8JsonWriter"/>).
     /// </summary>
-    public abstract byte[] GetSchema();
+    public abstract ReadOnlyMemory<byte> GetSchema();
 
     /// <summary>
     /// Returns CLR runtime bindings: type mappings, lambda property accessors,
     /// collection extractors, and method evaluators. Called once at registration time.
-    /// Providers that return Objects format should override this to provide native accessors.
+    /// Providers that return InMemoryDatabase format should override this to provide native accessors.
     /// </summary>
     public virtual RuntimeBindings? GetRuntimeBindings() => null;
 
     /// <summary>
     /// Queries for collection data as UTF-8 JSON.
-    /// Only callable if <see cref="SupportedFormats"/> includes <see cref="ProviderFormat.Json"/>.
+    /// Only callable if <see cref="SupportedFormats"/> includes <see cref="DataFormat.Json"/>.
     /// </summary>
-    public virtual byte[] QueryJson(ProviderQuery query)
+    public virtual byte[] Query(ProviderQuery query)
         => throw new NotSupportedException("This provider does not support JSON queries.");
 
     /// <summary>
-    /// Queries for collection data as packed <see cref="DataTable"/> records.
-    /// Only callable if <see cref="SupportedFormats"/> includes <see cref="ProviderFormat.Objects"/>.
-    /// Returns one DataTable per collection (e.g., "DiskFiles" → DataTable).
-    /// This is the fast in-proc path — no serialization overhead, strings stay in a flat UTF-8 heap.
+    /// Queries for collection data as a <see cref="DataStore"/> — an in-memory database
+    /// of stride-based <see cref="DataTable"/> records with a shared UTF-8 string heap.
+    /// Only callable if <see cref="SupportedFormats"/> includes <see cref="DataFormat.InMemoryDatabase"/>.
+    /// This is the fast in-proc path — no serialization overhead.
     /// </summary>
-    public virtual Dictionary<string, DataTable> QueryData(ProviderQuery query)
+    public virtual DataStore QueryData(ProviderQuery query)
         => throw new NotSupportedException("This provider does not support object queries.");
 }
 
@@ -116,13 +135,20 @@ public class ProviderQuery
     public FilterExpression? Filter { get; init; }
 
     /// <summary>
+    /// Directory names to skip during recursive filesystem scanning.
+    /// The caller owns this policy (e.g., .git, node_modules, bin, obj).
+    /// Providers that walk directories should prune these during traversal.
+    /// </summary>
+    public IReadOnlySet<string>? ExcludedDirectories { get; init; }
+
+    /// <summary>
     /// Extensible options bag for future needs (e.g. query language parameters).
     /// </summary>
     public IReadOnlyDictionary<string, string>? Options { get; init; }
 }
 
 /// <summary>
-/// Deserialized schema returned by <see cref="CopProvider.GetSchema"/>.
+/// Deserialized schema returned by <see cref="DataProvider.GetSchema"/>.
 /// Describes the types and collections a provider exposes.
 /// </summary>
 public class ProviderSchema
@@ -133,11 +159,58 @@ public class ProviderSchema
     /// <summary>
     /// Deserializes a provider schema from UTF-8 JSON bytes.
     /// </summary>
-    public static ProviderSchema FromJson(byte[] utf8Json)
+    public static ProviderSchema FromJson(ReadOnlyMemory<byte> utf8Json)
     {
         var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        return JsonSerializer.Deserialize<ProviderSchema>(utf8Json, options)
+        return JsonSerializer.Deserialize<ProviderSchema>(utf8Json.Span, options)
             ?? throw new InvalidOperationException("Failed to deserialize provider schema.");
+    }
+
+    /// <summary>
+    /// Serializes this schema to UTF-8 JSON using <see cref="System.Text.Json.Utf8JsonWriter"/>.
+    /// </summary>
+    public ReadOnlyMemory<byte> ToJson()
+    {
+        var buffer = new System.IO.MemoryStream();
+        using var w = new System.Text.Json.Utf8JsonWriter(buffer);
+        w.WriteStartObject();
+
+        w.WriteStartArray("types"u8);
+        foreach (var type in Types)
+        {
+            w.WriteStartObject();
+            w.WriteString("name"u8, type.Name);
+            if (type.Base != null) w.WriteString("base"u8, type.Base);
+            w.WriteStartArray("properties"u8);
+            foreach (var prop in type.Properties)
+            {
+                w.WriteStartObject();
+                w.WriteString("name"u8, prop.Name);
+                if (prop.Type != "string") w.WriteString("type"u8, prop.Type);
+                if (prop.Optional) w.WriteBoolean("optional"u8, true);
+                if (prop.Collection) w.WriteBoolean("collection"u8, true);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+
+        w.WriteStartArray("collections"u8);
+        foreach (var coll in Collections)
+        {
+            w.WriteStartObject();
+            w.WriteString("name"u8, coll.Name);
+            w.WriteString("itemType"u8, coll.ItemType);
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+
+        w.WriteEndObject();
+        w.Flush();
+        return buffer.TryGetBuffer(out var segment)
+            ? segment.AsMemory()
+            : buffer.ToArray();
     }
 }
 

@@ -360,6 +360,7 @@ public class PredicateEvaluator
                 "Lower" => str.ToLowerInvariant(),
                 "Upper" => str.ToUpperInvariant(),
                 "Normalized" => NormalizeIdentifier(str),
+                "Words" => (object)SplitIdentifierWords(str),
                 _ => null
             };
         }
@@ -402,21 +403,39 @@ public class PredicateEvaluator
             var arg0 = args.Count > 0 ? Eval(args[0], item, paramType, ctx) : null;
             return predicate switch
             {
-                "endsWith" => str.EndsWith(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
-                "startsWith" => str.StartsWith(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
-                "contains" => str.Contains(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
-                "containsAny" => ContainsAny(str, arg0),
-                "matches" => Regex.IsMatch(str, arg0?.ToString() ?? "",
+                "eq" => str.Equals(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
+                "ne" => !str.Equals(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
+                "ew" => str.EndsWith(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
+                "sw" => str.StartsWith(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
+                "ct" => str.Contains(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
+                "ca" => ContainsAny(str, arg0),
+                "rx" => Regex.IsMatch(str, arg0?.ToString() ?? "",
                     RegexOptions.None, TimeSpan.FromSeconds(1)),
-                "nameWithout" => arg0 is not null && str.EndsWith(arg0.ToString()!, StringComparison.OrdinalIgnoreCase)
+                "Trim" => arg0 is not null && str.EndsWith(arg0.ToString()!, StringComparison.OrdinalIgnoreCase)
                     ? str[..^arg0.ToString()!.Length] : str,
-                "replace" => arg0 is not null
+                "Replace" => arg0 is not null
                     ? str.Replace(arg0.ToString()!, args.Count > 1
                         ? Eval(args[1], item, paramType, ctx)?.ToString() ?? "" : "", StringComparison.OrdinalIgnoreCase)
                     : str,
-                "words" => SplitIdentifierWords(str),
-                "same" => NormalizeIdentifier(str) == NormalizeIdentifier(arg0?.ToString() ?? ""),
+                "sm" => NormalizeIdentifier(str) == NormalizeIdentifier(arg0?.ToString() ?? ""),
                 _ => throw new InvalidOperationException($"Unknown string predicate '{predicate}'")
+            };
+        }
+
+        // Numeric predicates (int, long, double, float)
+        if (target is int or long or double or float)
+        {
+            double num = ToDouble(target);
+            var arg0 = args.Count > 0 ? ToDouble(Eval(args[0], item, paramType, ctx)) : 0;
+            return predicate switch
+            {
+                "eq" => num == arg0,
+                "ne" => num != arg0,
+                "gt" => num > arg0,
+                "lt" => num < arg0,
+                "ge" => num >= arg0,
+                "le" => num <= arg0,
+                _ => throw new InvalidOperationException($"Unknown numeric predicate '{predicate}'")
             };
         }
 
@@ -481,7 +500,7 @@ public class PredicateEvaluator
                 }
                 return true;
             }
-            case "where":
+            case "Where":
             {
                 var predExpr = args[0];
                 var result = new List<object>();
@@ -504,7 +523,7 @@ public class PredicateEvaluator
                 }
                 return false;
             }
-            case "first":
+            case "First":
             {
                 if (args.Count > 0)
                 {
@@ -523,7 +542,7 @@ public class PredicateEvaluator
                 }
                 return collection.Count > 0 ? collection[0] : null;
             }
-            case "last":
+            case "Last":
             {
                 if (args.Count > 0)
                 {
@@ -543,7 +562,7 @@ public class PredicateEvaluator
                 }
                 return collection.Count > 0 ? collection[collection.Count - 1] : null;
             }
-            case "single":
+            case "Single":
             {
                 if (args.Count > 0)
                 {
@@ -571,15 +590,15 @@ public class PredicateEvaluator
                 }
                 return collection.Count == 1 ? collection[0] : null;
             }
-            case "elementAt":
+            case "ElementAt":
             {
                 var index = ToInt(Eval(args[0], item, paramType, ctx));
                 return index >= 0 && index < collection.Count ? collection[index] : null;
             }
-            case "select":
+            case "Select":
             {
                 // Project each item to a string value via a field accessor expression.
-                // Returns a List<object> (of strings) suitable for use with :in() or :contains().
+                // Returns a List<object> (of strings) suitable for use with :in() or :ct().
                 var fieldExpr = args[0];
                 var result = new List<object>();
                 foreach (var collItem in collection)

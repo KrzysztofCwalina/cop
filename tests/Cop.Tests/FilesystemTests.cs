@@ -8,6 +8,9 @@ namespace Cop.Tests;
 [TestFixture]
 public class FilesystemTests
 {
+    private static readonly DataProvider _fsProvider = new FilesystemProvider();
+    private static readonly ProviderSchema _fsSchema = ProviderSchema.FromJson(_fsProvider.GetSchema());
+
     private string _tempDir = null!;
 
     [SetUp]
@@ -24,23 +27,25 @@ public class FilesystemTests
             Directory.Delete(_tempDir, recursive: true);
     }
 
+    private TypeRegistry CreateRegistryAndScan(string rootPath)
+    {
+        var registry = new TypeRegistry();
+        ProviderLoader.RegisterSchema(_fsProvider, registry);
+        ProviderLoader.QueryAndRegister(_fsProvider, _fsSchema, registry, new ProviderQuery { RootPath = rootPath });
+        return registry;
+    }
+
     [Test]
     public void Scan_EmptyFolder_IsDetected()
     {
-        // Arrange: create a directory structure with an empty folder
         Directory.CreateDirectory(Path.Combine(_tempDir, "src"));
         Directory.CreateDirectory(Path.Combine(_tempDir, "empty-dir"));
         File.WriteAllText(Path.Combine(_tempDir, "src", "file.txt"), "hello");
 
-        // Act
-        var registry = new TypeRegistry();
-        FilesystemTypeRegistrar.Register(registry);
-        FilesystemTypeRegistrar.Scan(registry, _tempDir);
-
+        var registry = CreateRegistryAndScan(_tempDir);
         var folders = registry.GetGlobalCollectionItems("Folders");
         var acc = registry.GetAccessors("Folder")!;
 
-        // Assert
         Assert.That(folders, Is.Not.Null);
         Assert.That(folders, Has.Count.EqualTo(2));
 
@@ -57,20 +62,14 @@ public class FilesystemTests
     [Test]
     public void Scan_DiskFiles_AreEnumerated()
     {
-        // Arrange
         Directory.CreateDirectory(Path.Combine(_tempDir, "docs"));
         File.WriteAllText(Path.Combine(_tempDir, "root.txt"), "root");
         File.WriteAllText(Path.Combine(_tempDir, "docs", "readme.md"), "# Hi");
 
-        // Act
-        var registry = new TypeRegistry();
-        FilesystemTypeRegistrar.Register(registry);
-        FilesystemTypeRegistrar.Scan(registry, _tempDir);
-
+        var registry = CreateRegistryAndScan(_tempDir);
         var diskFiles = registry.GetGlobalCollectionItems("DiskFiles");
         var acc = registry.GetAccessors("DiskFile")!;
 
-        // Assert
         Assert.That(diskFiles, Is.Not.Null);
         Assert.That(diskFiles, Has.Count.EqualTo(2));
 
@@ -88,18 +87,12 @@ public class FilesystemTests
     [Test]
     public void Scan_NestedFolders_DepthIsCorrect()
     {
-        // Arrange
         Directory.CreateDirectory(Path.Combine(_tempDir, "a", "b", "c"));
 
-        // Act
-        var registry = new TypeRegistry();
-        FilesystemTypeRegistrar.Register(registry);
-        FilesystemTypeRegistrar.Scan(registry, _tempDir);
-
+        var registry = CreateRegistryAndScan(_tempDir);
         var folders = registry.GetGlobalCollectionItems("Folders")!;
         var acc = registry.GetAccessors("Folder")!;
 
-        // Assert
         Assert.That(acc["Depth"](folders.Single(f => (string)acc["Name"](f)! == "a")), Is.EqualTo(1));
         Assert.That(acc["Depth"](folders.Single(f => (string)acc["Name"](f)! == "b")), Is.EqualTo(2));
         Assert.That(acc["Depth"](folders.Single(f => (string)acc["Name"](f)! == "c")), Is.EqualTo(3));
@@ -108,21 +101,15 @@ public class FilesystemTests
     [Test]
     public void Scan_PathsUseForwardSlashes()
     {
-        // Arrange
         Directory.CreateDirectory(Path.Combine(_tempDir, "parent", "child"));
         File.WriteAllText(Path.Combine(_tempDir, "parent", "child", "file.cs"), "");
 
-        // Act
-        var registry = new TypeRegistry();
-        FilesystemTypeRegistrar.Register(registry);
-        FilesystemTypeRegistrar.Scan(registry, _tempDir);
-
+        var registry = CreateRegistryAndScan(_tempDir);
         var folders = registry.GetGlobalCollectionItems("Folders")!;
         var files = registry.GetGlobalCollectionItems("DiskFiles")!;
         var fAcc = registry.GetAccessors("Folder")!;
         var dAcc = registry.GetAccessors("DiskFile")!;
 
-        // Assert
         Assert.That(fAcc["Path"](folders.Single(f => (string)fAcc["Name"](f)! == "child")), Is.EqualTo("parent/child"));
         Assert.That(dAcc["Path"](files.Single()), Is.EqualTo("parent/child/file.cs"));
         Assert.That(dAcc["Folder"](files.Single()), Is.EqualTo("parent/child"));

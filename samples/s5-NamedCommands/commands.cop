@@ -4,5 +4,10 @@
 # Run with: cop run LIST-PUBLIC-TYPES
 import code
 
+predicate isClient(Type) => Type.Name:ew('Client')
+let public-types = Types:Public
+let clients = public-types:isClient
+
 command LIST-TYPES = foreach Types => PRINT('{item.Name}')
-command LIST-PUBLIC-TYPES = foreach Types:Public => PRINT('{item.Name}')
+command LIST-PUBLIC-TYPES = foreach public-types => PRINT('{item.Name}')
+command CLIENTS = foreach clients => PRINT('{item.Name}')

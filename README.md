@@ -40,7 +40,7 @@ Import the `code` package to analyze source code across languages (C#, Python, J
 import code
 
 # Works across all supported languages
-predicate longMethod(Method) => Method.Statements:count > 50
+predicate longMethod(Method) => Method.Statements.Count > 50
 
 foreach Code.Types => PRINT('{item.Name} in {item.File.Path}')
 foreach Code.Types:longMethod => PRINT('{warning:@yellow} {item.Name} has too many statements')
@@ -87,8 +87,8 @@ Most checks follow the same pattern: import a package, define predicates, filter
 import code
 
 # Predicates test individual items
-predicate client(Type) => Type.Name:endsWith('Client')
-predicate clientOptions(Type) => Type.Name:endsWith('ClientOptions')
+predicate client(Type) => Type.Name:ew('Client')
+predicate clientOptions(Type) => Type.Name:ew('ClientOptions')
 
 # Let declarations create filtered subsets
 let Clients = Code.Types:client:!clientOptions
@@ -100,7 +100,7 @@ foreach Clients:csharp:!Sealed => PRINT('{error:@red} {item.Name} should be seal
 Predicates compose — you can reference one predicate from another:
 
 ```ruby
-predicate optionsType(Parameter) => Parameter.Type.Name:endsWith('Options')
+predicate optionsType(Parameter) => Parameter.Type.Name:ew('Options')
 predicate hasOptions(Constructor) => Constructor.Parameters:any(optionsType)
 predicate missingOptions(Type) => Type.Constructors:none(hasOptions)
 
@@ -113,8 +113,8 @@ Cop has two string comparison modes to make cross-language checks easy:
 
 | Mode | Syntax | Behavior |
 |---|---|---|
-| **CaseInsensitive** | `==`, `!=`, `contains`, etc. | Ignores letter case (default for all operations) |
-| **ConventionInsensitive** | `:same()` or `.Normalized` | Ignores case AND naming convention (`FooBar` = `foo_bar` = `fooBar`) |
+| **CaseInsensitive** | `==`, `!=`, `ct`, etc. | Ignores letter case (default for all operations) |
+| **ConventionInsensitive** | `:sm()` or `.Normalized` | Ignores case AND naming convention (`FooBar` = `foo_bar` = `fooBar`) |
 
 ### CaseInsensitive (Default)
 
@@ -123,33 +123,33 @@ All string comparisons ignore case by default:
 | Operation | Example | Behavior |
 |---|---|---|
 | `==`, `!=` | `item.Name == 'foo'` | Case-insensitive equality |
-| `contains` | `Name:contains('task')` | Case-insensitive substring |
-| `startsWith` | `Name:startsWith('i')` | Case-insensitive prefix |
-| `endsWith` | `Name:endsWith('Client')` | Case-insensitive suffix |
-| `matches` | `Name:matches('^Foo$')` | **Case-sensitive** regex (escape hatch) |
+| `ct` | `Name:ct('task')` | Case-insensitive substring |
+| `sw` | `Name:sw('i')` | Case-insensitive prefix |
+| `ew` | `Name:ew('Client')` | Case-insensitive suffix |
+| `rx` | `Name:rx('^Foo$')` | **Case-sensitive** regex (escape hatch) |
 
 ### ConventionInsensitive
 
-Use `:same()` to compare identifiers regardless of naming convention:
+Use `:sm()` to compare identifiers regardless of naming convention:
 
 ```ruby
 # All of these are true — FooBar, foo_bar, fooBar, FOO_BAR all normalize to the same form
-Type.Name:same('foo_bar')
-Type.Name:same('FooBar')
-Type.Name:same('fooBar')
+Type.Name:sm('foo_bar')
+Type.Name:sm('FooBar')
+Type.Name:sm('fooBar')
 ```
 
 This is ideal for cross-language rules where C# uses `PascalCase`, Python uses `snake_case`, and JS uses `camelCase`.
 
 ### Identifier Normalization
 
-The `:words` predicate splits identifiers into lowercase words, normalizing across naming conventions:
+The `.Words` property splits identifiers into lowercase words, normalizing across naming conventions:
 
 ```ruby
 # PascalCase → ['task', 'completion', 'source']
 # camelCase  → ['task', 'completion', 'source']
 # snake_case → ['task', 'completion', 'source']
-Type.Name:words:contains('task')
+Type.Name.Words:contains('task')
 ```
 
 ### String Properties

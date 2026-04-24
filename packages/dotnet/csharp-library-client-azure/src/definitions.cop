@@ -9,7 +9,7 @@ predicate tokenCredentialParam(Constructor) => Constructor.Parameters:any(tokenC
 
 predicate inheritsClientOptions(Type) => Type:inheritsFrom('ClientOptions') || Type:inheritsFrom('ClientPipelineOptions')
 
-predicate optionsParameter(Parameter) => Parameter.Type:endsWith('Options')
+predicate optionsParameter(Parameter) => Parameter.Type:ew('Options')
 predicate ctorWithOptions(Type) => Type.Constructors:any(ctorHasOptions)
 predicate ctorHasOptions(Constructor) => Constructor.Public && Constructor.Parameters:any(optionsParameter)
 predicate ctorWithoutOptions(Type) => Type.Constructors:any(ctorLacksOptions)
@@ -20,7 +20,7 @@ predicate requestContent(Parameter) => Parameter.Type == 'RequestContent' || Par
 predicate usesRequestContent(Method) => Method.Parameters:any(requestContent)
 predicate convenience(Method) => Method.Public && Method.Virtual
 
-predicate resourceSuffix(Type) => Type.Name:endsWith('Resource')
+predicate resourceSuffix(Type) => Type.Name:ew('Resource')
 
 predicate serviceVersionEnum(Type) => Type.Kind == 'Enum' && Type.Name == 'ServiceVersion'
 
@@ -37,17 +37,17 @@ predicate protocolMethodByContext(Method) => Method.Public && Method.Virtual
 predicate protocolMethod(Method) => Method.Public && Method.Virtual && Method.Parameters:any(requestContent)
 predicate convenienceMethod(Method) => Method.Public && Method.Virtual && Method.Parameters:!any(requestContent)
 predicate sameNameMethod(Method2) => Method2.Name == Method.Name
-predicate protocolWithSameNameConvenience(Method) => Type.Methods:where(convenienceMethod):any(sameNameMethod)
+predicate protocolWithSameNameConvenience(Method) => Type.Methods.Where(convenienceMethod):any(sameNameMethod)
 
 predicate internalsVisibleTo(Statement) => Statement.Kind == 'attribute'
     && Statement.TypeName == 'InternalsVisibleTo'
 
 # AZC0112: InternalsVisibleTo targeting non-test assemblies
 predicate internalsVisibleToNonTest(Statement) => internalsVisibleTo
-    && !Statement.Arguments.First:contains('Test')
+    && !Statement.Arguments.First:ct('Test')
 
 # AZC0021: ClientSettings constructor should not combine settings param with other params
-predicate clientSettingsParam(Parameter) => Parameter.Type:endsWith('Settings')
+predicate clientSettingsParam(Parameter) => Parameter.Type:ew('Settings')
 predicate hasSettingsAndOtherParams(Constructor) => Constructor.Public
     && Constructor.Parameters:any(clientSettingsParam)
     && Constructor.Parameters.Count > 1
@@ -101,7 +101,7 @@ let bclTypeNames = [
 predicate duplicatesBclTypeName(Type) => bclTypeNames:contains(Type.Name)
 
 # AZC0035: Output model types need a ModelFactory method
-predicate isModelFactory(Type) => Type.Name:endsWith('ModelFactory')
+predicate isModelFactory(Type) => Type.Name:ew('ModelFactory')
 let factoryTypes = Code.Types:isModelFactory
 predicate factoryMethodReturns(Method) => Method.Static && Method.Public && Method.ReturnType.Name == Type.Name
 predicate factoryHasMethodFor(FactoryType) => FactoryType.Methods:any(factoryMethodReturns)
@@ -114,16 +114,16 @@ predicate getResultInSyncMethod(Statement) => Statement.Kind == 'call'
 
 # AZC0107: Don't call *Async methods from sync context
 predicate asyncCallInSyncMethod(Statement) => Statement.Kind == 'call'
-    && Statement.MemberName:endsWith('Async') && inSyncMethod
+    && Statement.MemberName:ew('Async') && inSyncMethod
 
 # AZC0012: Single-word public type names are too generic
-predicate singleWordName(Type) => Type.Public && Type.Name:matches('^[A-Z][a-z]+$')
+predicate singleWordName(Type) => Type.Public && Type.Name:rx('^[A-Z][a-z]+$')
 
 # AZC0020: Async calls/awaits should propagate CancellationToken or RequestContext
 predicate methodHasCancellation(Statement) => Statement.Method != null
     && Statement.Method.Parameters:any(cancellation)
-predicate argRefersToToken(Argument) => Argument:contains('cancellationToken')
-    || Argument:contains('cancellation') || Argument:contains('context')
+predicate argRefersToToken(Argument) => Argument:ct('cancellationToken')
+    || Argument:ct('cancellation') || Argument:ct('context')
 predicate asyncCallMissingToken(Statement) => Statement.Kind == 'await'
     && methodHasCancellation
     && !Statement.Arguments:any(argRefersToToken)

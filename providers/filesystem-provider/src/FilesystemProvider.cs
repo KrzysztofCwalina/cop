@@ -5,141 +5,116 @@ namespace Cop.Providers;
 
 /// <summary>
 /// Built-in provider for filesystem data (Folders and DiskFiles).
-/// Uses the fast Objects path — data packed into DataObject[] with a shared UTF-8 string heap.
+/// Uses the fast Objects path — stride-based DataTable records with a shared UTF-8 string heap.
 /// No per-record CLR objects or CLR strings allocated for the permanent data.
 /// </summary>
-public class FilesystemProvider : CopProvider
+public class FilesystemProvider : DataProvider
 {
-    public override ProviderFormat SupportedFormats => ProviderFormat.Objects;
+    public override DataFormat SupportedFormats => DataFormat.InMemoryDatabase;
 
-    public override byte[] GetSchema()
+
+    public override ReadOnlyMemory<byte> GetSchema()
     {
-        var schema = new
-        {
-            types = new object[]
-            {
-                new
-                {
-                    name = "Folder",
-                    properties = new object[]
-                    {
-                        new { name = "Path", type = "string" },       // slot 0
-                        new { name = "Name", type = "string" },       // slot 1
-                        new { name = "Empty", type = "bool" },        // slot 2
-                        new { name = "FileCount", type = "int" },     // slot 3
-                        new { name = "SubfolderCount", type = "int" },// slot 4
-                        new { name = "Depth", type = "int" },         // slot 5
-                        new { name = "MinutesSinceModified", type = "int" }, // slot 6
-                        new { name = "Source", type = "string" },     // slot 7
-                    }
-                },
-                new
-                {
-                    name = "DiskFile",
-                    properties = new object[]
-                    {
-                        new { name = "Path", type = "string" },       // slot 0
-                        new { name = "Name", type = "string" },       // slot 1
-                        new { name = "Extension", type = "string" },  // slot 2
-                        new { name = "Size", type = "int" },          // slot 3
-                        new { name = "Folder", type = "string" },     // slot 4
-                        new { name = "Depth", type = "int" },         // slot 5
-                        new { name = "MinutesSinceModified", type = "int" }, // slot 6
-                        new { name = "Source", type = "string" },     // slot 7
-                        new { name = "Checksum", type = "string", optional = true }, // slot 8
-                        new { name = "Locked", type = "bool" },       // slot 9
-                        new { name = "LockStatus", type = "string" }, // slot 10
-                    }
-                }
-            },
-            collections = new object[]
-            {
-                new { name = "Folders", itemType = "Folder" },
-                new { name = "DiskFiles", itemType = "DiskFile" },
-            }
-        };
-        return JsonSerializer.SerializeToUtf8Bytes(schema);
+        var buffer = new MemoryStream();
+        using var w = new Utf8JsonWriter(buffer);
+        w.WriteStartObject();
+
+        w.WriteStartArray("types"u8);
+
+        // Folder
+        w.WriteStartObject();
+        w.WriteString("name"u8, "Folder"u8);
+        w.WriteStartArray("properties"u8);
+        WriteProp(w, "Path"u8);
+        WriteProp(w, "Name"u8);
+        WriteProp(w, "Empty"u8, "bool"u8);
+        WriteProp(w, "FileCount"u8, "int"u8);
+        WriteProp(w, "SubfolderCount"u8, "int"u8);
+        WriteProp(w, "Depth"u8, "int"u8);
+        WriteProp(w, "MinutesSinceModified"u8, "int"u8);
+        WriteProp(w, "Source"u8);
+        w.WriteEndArray();
+        w.WriteEndObject();
+
+        // DiskFile
+        w.WriteStartObject();
+        w.WriteString("name"u8, "DiskFile"u8);
+        w.WriteStartArray("properties"u8);
+        WriteProp(w, "Path"u8);
+        WriteProp(w, "Name"u8);
+        WriteProp(w, "Extension"u8);
+        WriteProp(w, "Size"u8, "int"u8);
+        WriteProp(w, "Folder"u8);
+        WriteProp(w, "Depth"u8, "int"u8);
+        WriteProp(w, "MinutesSinceModified"u8, "int"u8);
+        WriteProp(w, "Source"u8);
+        w.WriteEndArray();
+        w.WriteEndObject();
+
+        w.WriteEndArray(); // types
+
+        w.WriteStartArray("collections"u8);
+        WriteColl(w, "Folders"u8, "Folder"u8);
+        WriteColl(w, "DiskFiles"u8, "DiskFile"u8);
+        w.WriteEndArray();
+
+        w.WriteEndObject();
+        w.Flush();
+        return buffer.TryGetBuffer(out var segment)
+            ? segment.AsMemory()
+            : buffer.ToArray();
     }
 
-    public override Dictionary<string, DataTable> QueryData(ProviderQuery query)
+    private static void WriteProp(Utf8JsonWriter w, ReadOnlySpan<byte> name, ReadOnlySpan<byte> type = default)
+    {
+        w.WriteStartObject();
+        w.WriteString("name"u8, name);
+        if (type.Length > 0) w.WriteString("type"u8, type);
+        w.WriteEndObject();
+    }
+
+    private static void WriteColl(Utf8JsonWriter w, ReadOnlySpan<byte> name, ReadOnlySpan<byte> itemType)
+    {
+        w.WriteStartObject();
+        w.WriteString("name"u8, name);
+        w.WriteString("itemType"u8, itemType);
+        w.WriteEndObject();
+    }
+
+    public override DataStore QueryData(ProviderQuery query)
     {
         var rootPath = Path.GetFullPath(query.RootPath
             ?? throw new ArgumentException("RootPath is required for FilesystemProvider."));
 
-        // Phase 1: scan filesystem into temporary typed lists
-        var folders = new List<SourceModel.FolderInfo>();
-        var diskFiles = new List<SourceModel.DiskFileInfo>();
-        ScanDirectory(rootPath, rootPath, folders, diskFiles, DateTime.UtcNow);
+        var requested = query.RequestedCollections;
+        bool wantFiles = requested is null || requested.Any(c => c.Equals("DiskFiles", StringComparison.OrdinalIgnoreCase));
+        bool wantFolders = requested is null || requested.Any(c => c.Equals("Folders", StringComparison.OrdinalIgnoreCase));
 
-        // Apply lock state if .cop-lock exists
-        var lockFile = LockFile.Load(rootPath);
-        if (lockFile != null)
-            ApplyLockState(lockFile, rootPath, diskFiles);
+        int maxDepth = ExtractMaxDepth(query.Filter);
 
-        // Phase 2: pack into DataObject[] with shared string heap
-        var builder = new DataObjectBuilder();
+        var db = new DataStoreBuilder();
+        var files = wantFiles ? db.AddTable("DiskFiles", "DiskFile", stride: 8) : null;
+        var folders = wantFolders ? db.AddTable("Folders", "Folder", stride: 8) : null;
 
-        var fileRecords = new DataObject[diskFiles.Count];
-        for (int i = 0; i < diskFiles.Count; i++)
-        {
-            var f = diskFiles[i];
-            long pathPacked = builder.PackString(f.Path);
-            fileRecords[i].Slots[0] = pathPacked;                      // Path
-            fileRecords[i].Slots[1] = builder.PackString(f.Name);      // Name
-            fileRecords[i].Slots[2] = builder.PackString(f.Extension); // Extension
-            fileRecords[i].Slots[3] = f.Size;                          // Size
-            fileRecords[i].Slots[4] = builder.PackString(f.Folder);    // Folder
-            fileRecords[i].Slots[5] = f.Depth;                         // Depth
-            fileRecords[i].Slots[6] = f.MinutesSinceModified;          // MinutesSinceModified
-            fileRecords[i].Slots[7] = pathPacked;                      // Source = Path (same heap entry)
-            fileRecords[i].Slots[8] = builder.PackString(f.Checksum);  // Checksum
-            fileRecords[i].Slots[9] = f.IsLocked ? 1L : 0L;           // Locked
-            fileRecords[i].Slots[10] = builder.PackString(f.LockStatus); // LockStatus
-        }
+        ScanDirectory(rootPath, rootPath, files, folders, query.ExcludedDirectories, query.Filter, maxDepth, DateTime.UtcNow, depth: 0);
 
-        var folderRecords = new DataObject[folders.Count];
-        for (int i = 0; i < folders.Count; i++)
-        {
-            var f = folders[i];
-            long pathPacked = builder.PackString(f.Path);
-            folderRecords[i].Slots[0] = pathPacked;                    // Path
-            folderRecords[i].Slots[1] = builder.PackString(f.Name);    // Name
-            folderRecords[i].Slots[2] = f.IsEmpty ? 1L : 0L;          // Empty
-            folderRecords[i].Slots[3] = f.FileCount;                   // FileCount
-            folderRecords[i].Slots[4] = f.SubfolderCount;              // SubfolderCount
-            folderRecords[i].Slots[5] = f.Depth;                       // Depth
-            folderRecords[i].Slots[6] = f.MinutesSinceModified;        // MinutesSinceModified
-            folderRecords[i].Slots[7] = pathPacked;                    // Source = Path
-        }
-
-        // One shared heap for both collections
-        var heap = builder.GetStringHeap();
-
-        return new Dictionary<string, DataTable>
-        {
-            ["DiskFiles"] = new DataTable(fileRecords, heap, "DiskFile"),
-            ["Folders"] = new DataTable(folderRecords, heap, "Folder"),
-        };
+        return db.Build();
     }
 
-    private static readonly HashSet<string> ExcludedDirectoryNames = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "bin", "obj", ".git", ".vs", ".idea", "node_modules",
-        ".nuget", ".dotnet", "TestResults",
-        "__pycache__", ".mypy_cache", ".pytest_cache",
-        "dist", ".next", ".cache"
-    };
-
     private static void ScanDirectory(string dir, string root,
-        List<SourceModel.FolderInfo> folders, List<SourceModel.DiskFileInfo> diskFiles, DateTime now)
+        DataTableBuilder? files, DataTableBuilder? folders,
+        IReadOnlySet<string>? excludedDirs, FilterExpression? filter, int maxDepth, DateTime now, int depth)
     {
-        string[] childDirs;
-        string[] childFiles;
+        if (maxDepth >= 0 && depth > maxDepth)
+            return;
+
+        IEnumerable<string> childDirs;
+        IEnumerable<string> childFiles;
 
         try
         {
-            childDirs = Directory.GetDirectories(dir);
-            childFiles = Directory.GetFiles(dir);
+            childDirs = Directory.EnumerateDirectories(dir);
+            childFiles = Directory.EnumerateFiles(dir);
         }
         catch (UnauthorizedAccessException) { return; }
         catch (IOException) { return; }
@@ -147,89 +122,137 @@ public class FilesystemProvider : CopProvider
         var relativePath = Path.GetRelativePath(root, dir).Replace('\\', '/');
         if (relativePath == ".") relativePath = "";
 
-        int depth = relativePath.Length == 0 ? 0 : relativePath.Count(c => c == '/') + 1;
-
-        foreach (var filePath in childFiles)
+        // Write files directly to the DataTableBuilder
+        int fileCount = 0;
+        if (files is not null)
         {
-            var fileRelPath = Path.GetRelativePath(root, filePath).Replace('\\', '/');
-            var fi = new FileInfo(filePath);
-            var minutesSinceModified = (int)(now - fi.LastWriteTimeUtc).TotalMinutes;
-            diskFiles.Add(new SourceModel.DiskFileInfo(
-                Path: fileRelPath,
-                Name: fi.Name,
-                Extension: fi.Extension,
-                Size: fi.Length,
-                Folder: relativePath,
-                Depth: depth,
-                MinutesSinceModified: minutesSinceModified));
+            foreach (var filePath in childFiles)
+            {
+                fileCount++;
+                var fi = new FileInfo(filePath);
+                var fileRelPath = Path.GetRelativePath(root, filePath).Replace('\\', '/');
+                var minutesSinceModified = (int)(now - fi.LastWriteTimeUtc).TotalMinutes;
+                var size = fi.Length;
+                var name = fi.Name;
+                var ext = fi.Extension;
+
+                if (!FilterEvaluator.Matches(filter, prop => prop switch
+                {
+                    "Path" => fileRelPath,
+                    "Name" => name,
+                    "Extension" => ext,
+                    "Size" => size,
+                    "Folder" => relativePath,
+                    "Depth" => depth,
+                    "MinutesSinceModified" => minutesSinceModified,
+                    "Source" => fileRelPath,
+                    _ => throw new ArgumentException($"Unknown DiskFile property in filter: '{prop}'")
+                }))
+                    continue;
+
+                int row = files.AddRow();
+                long pathRef = files.PackString(fileRelPath);
+                files.SetSlot(row, 0, pathRef);              // Path
+                files.SetString(row, 1, name);               // Name
+                files.SetString(row, 2, ext);                // Extension
+                files.SetLong(row, 3, size);                 // Size
+                files.SetString(row, 4, relativePath);       // Folder
+                files.SetInt(row, 5, depth);                 // Depth
+                files.SetInt(row, 6, minutesSinceModified);  // MinutesSinceModified
+                files.SetSlot(row, 7, pathRef);              // Source = Path
+            }
+        }
+        else
+        {
+            foreach (var _ in childFiles)
+                fileCount++;
         }
 
-        if (relativePath.Length > 0)
-        {
-            var dirInfo = new DirectoryInfo(dir);
-            var minutesSinceModified = (int)(now - dirInfo.LastWriteTimeUtc).TotalMinutes;
-            folders.Add(new SourceModel.FolderInfo(
-                Path: relativePath,
-                Name: Path.GetFileName(dir),
-                IsEmpty: childDirs.Length == 0 && childFiles.Length == 0,
-                FileCount: childFiles.Length,
-                SubfolderCount: childDirs.Length,
-                Depth: depth,
-                MinutesSinceModified: minutesSinceModified));
-        }
-
+        // Enumerate child directories, prune excluded, and recurse
+        var includedDirs = new List<string>();
+        int subfolderCount = 0;
         foreach (var childDir in childDirs)
         {
+            subfolderCount++;
             var dirName = Path.GetFileName(childDir);
-            if (ExcludedDirectoryNames.Contains(dirName)) continue;
-            ScanDirectory(childDir, root, folders, diskFiles, now);
+            if (excludedDirs is null || !excludedDirs.Contains(dirName))
+                includedDirs.Add(childDir);
+        }
+
+        // Write folder directly to the DataTableBuilder (skip root)
+        if (folders is not null && relativePath.Length > 0)
+        {
+            var dirName = Path.GetFileName(dir);
+            var dirInfo = new DirectoryInfo(dir);
+            var minutesSinceModified = (int)(now - dirInfo.LastWriteTimeUtc).TotalMinutes;
+            bool empty = subfolderCount == 0 && fileCount == 0;
+
+            if (FilterEvaluator.Matches(filter, prop => prop switch
+            {
+                "Path" => relativePath,
+                "Name" => dirName,
+                "Empty" => empty,
+                "FileCount" => fileCount,
+                "SubfolderCount" => subfolderCount,
+                "Depth" => depth,
+                "MinutesSinceModified" => minutesSinceModified,
+                "Source" => relativePath,
+                _ => throw new ArgumentException($"Unknown Folder property in filter: '{prop}'")
+            }))
+            {
+                int row = folders.AddRow();
+                long pathRef = folders.PackString(relativePath);
+                folders.SetSlot(row, 0, pathRef);            // Path
+                folders.SetString(row, 1, dirName);          // Name
+                folders.SetBool(row, 2, empty);              // Empty
+                folders.SetInt(row, 3, fileCount);           // FileCount
+                folders.SetInt(row, 4, subfolderCount);      // SubfolderCount
+                folders.SetInt(row, 5, depth);               // Depth
+                folders.SetInt(row, 6, minutesSinceModified);// MinutesSinceModified
+                folders.SetSlot(row, 7, pathRef);            // Source = Path
+            }
+        }
+
+        foreach (var childDir in includedDirs)
+        {
+            ScanDirectory(childDir, root, files, folders, excludedDirs, filter, maxDepth, now, depth + 1);
         }
     }
 
-    private static void ApplyLockState(LockFile lockFile, string rootPath, List<SourceModel.DiskFileInfo> diskFiles)
+    /// <summary>
+    /// Extracts a max-depth limit from the filter for scan-level pruning.
+    /// This is the one structural optimization — it avoids recursing into
+    /// directories beyond the requested depth, which no post-hoc filter can do.
+    /// Returns -1 if no depth limit is found.
+    /// </summary>
+    private static int ExtractMaxDepth(FilterExpression? filter)
     {
-        var verifications = lockFile.VerifyChecksums(rootPath);
-        var verificationMap = verifications.ToDictionary(v => v.RelativePath, v => v);
+        if (filter is null) return -1;
 
-        for (int i = 0; i < diskFiles.Count; i++)
+        foreach (var condition in Flatten(filter))
         {
-            var file = diskFiles[i];
-            if (verificationMap.TryGetValue(file.Path, out var verification))
+            switch (condition)
             {
-                diskFiles[i] = file with
-                {
-                    IsLocked = true,
-                    LockStatus = verification.Status,
-                    Checksum = verification.ActualChecksum ?? verification.ExpectedChecksum
-                };
-                verificationMap.Remove(file.Path);
+                case ComparisonFilter { Property: "Depth", Op: CompareOp.LessThan } cf:
+                    return Math.Max(0, (int)cf.Value - 1);
+                case ComparisonFilter { Property: "Depth", Op: CompareOp.LessOrEqual } cf:
+                    return Math.Max(0, (int)cf.Value);
             }
         }
+        return -1;
+    }
 
-        foreach (var (path, verification) in verificationMap)
+    private static IEnumerable<FilterExpression> Flatten(FilterExpression expr)
+    {
+        if (expr is AndFilter and)
         {
-            if (verification.Status == "deleted")
-            {
-                var folder = Path.GetDirectoryName(path)?.Replace('\\', '/') ?? "";
-                var name = Path.GetFileName(path);
-                var ext = Path.GetExtension(path);
-                var depth = path.Count(c => c == '/');
-                if (folder.Length > 0) depth = folder.Count(c => c == '/') + 1;
-
-                diskFiles.Add(new SourceModel.DiskFileInfo(
-                    Path: path,
-                    Name: name,
-                    Extension: ext,
-                    Size: 0,
-                    Folder: folder,
-                    Depth: depth,
-                    MinutesSinceModified: 0)
-                {
-                    IsLocked = true,
-                    LockStatus = "deleted",
-                    Checksum = verification.ExpectedChecksum
-                });
-            }
+            foreach (var c in and.Conditions)
+                foreach (var inner in Flatten(c))
+                    yield return inner;
+        }
+        else
+        {
+            yield return expr;
         }
     }
 }

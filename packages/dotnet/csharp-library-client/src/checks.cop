@@ -6,13 +6,13 @@ predicate missingOptionsConstructor(Type) => Type.Constructors:!any(constructorA
 predicate notSealedOrAbstract(Type) => !Type.Sealed && !Type.Abstract
 
 predicate missingCancellationToken(Method) => Method.Parameters:!any(cancellationToken)
-predicate asyncWithoutCancellation(Type) => Type.Methods:where(publicAsync):any(missingCancellationToken)
+predicate asyncWithoutCancellation(Type) => Type.Methods.Where(publicAsync):any(missingCancellationToken)
 
 predicate notVirtual(Method) => !Method.Virtual && !Method.Override && !Method.Abstract
-predicate nonVirtualServiceMethod(Type) => Type.Methods:where(publicInstance):any(notVirtual)
+predicate nonVirtualServiceMethod(Type) => Type.Methods.Where(publicInstance):any(notVirtual)
 
-predicate missingSyncCounterpart(Method) => !Type.MethodNames:contains(Method.Name:nameWithout('Async'))
-predicate asyncWithoutSync(Type) => Type.Methods:where(asyncServiceMethod):any(missingSyncCounterpart)
+predicate missingSyncCounterpart(Method) => !Type.MethodNames:contains(Method.Name.Trim('Async'))
+predicate asyncWithoutSync(Type) => Type.Methods.Where(asyncServiceMethod):any(missingSyncCounterpart)
 
 export predicate missingMockingConstructor(Type) => Type.Constructors:!any(protectedParameterless)
 

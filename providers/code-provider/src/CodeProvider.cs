@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Cop.Core;
 using Cop.Providers.SourceModel;
 
@@ -10,101 +9,115 @@ namespace Cop.Providers;
 /// Unlike FilesystemProvider, this provider does not return global collections — it provides
 /// per-document collection extractors that derive data from parsed source files.
 /// </summary>
-public class CodeProvider : CopProvider
+public class CodeProvider : DataProvider
 {
-    public override ProviderFormat SupportedFormats => ProviderFormat.Objects;
+    public override DataFormat SupportedFormats => DataFormat.InMemoryDatabase;
 
-    public override byte[] GetSchema()
+    public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
+
+    private static readonly ProviderSchema _schema = BuildSchema();
+
+    private static ProviderSchema BuildSchema()
     {
-        var schema = new
+        return new ProviderSchema
         {
-            types = new object[]
-            {
-                TypeSchema("Type", null,
+            Types =
+            [
+                TypeDef("Type", null,
                     Prop("Name"), Prop("Kind"),
-                    BoolProp("Public"), BoolProp("Sealed"), BoolProp("Abstract"), BoolProp("Static"),
-                    CollProp("BaseTypes"), CollProp("Constructors", "Method"), CollProp("Methods", "Method"),
-                    CollProp("MethodNames"), CollProp("NestedTypes", "Type"),
-                    CollProp("EnumValues"), CollProp("Decorators"),
-                    Prop("Line", "int"), OptProp("File", "File"), Prop("Source"),
-                    BoolProp("Documented"),
-                    CollProp("Fields", "Field"), CollProp("Properties", "Property"), CollProp("Events", "Event")),
+                    Bool("Public"), Bool("Sealed"), Bool("Abstract"), Bool("Static"),
+                    Coll("BaseTypes"), Coll("Constructors", "Method"), Coll("Methods", "Method"),
+                    Coll("MethodNames"), Coll("NestedTypes", "Type"),
+                    Coll("EnumValues"), Coll("Decorators"),
+                    Prop("Line", "int"), Opt("File", "File"), Prop("Source"),
+                    Bool("Documented"),
+                    Coll("Fields", "Field"), Coll("Properties", "Property"), Coll("Events", "Event")),
 
-                TypeSchema("Method", null,
+                TypeDef("Method", null,
                     Prop("Name"),
-                    BoolProp("Public"), BoolProp("Protected"), BoolProp("Private"), BoolProp("Internal"),
-                    BoolProp("Async"), BoolProp("Static"), BoolProp("Abstract"), BoolProp("Virtual"), BoolProp("Override"),
-                    OptProp("ReturnType", "TypeReference"),
-                    CollProp("Parameters", "Parameter"), CollProp("Statements", "Statement"), CollProp("Decorators"),
-                    Prop("Line", "int"), BoolProp("Documented")),
+                    Bool("Public"), Bool("Protected"), Bool("Private"), Bool("Internal"),
+                    Bool("Async"), Bool("Static"), Bool("Abstract"), Bool("Virtual"), Bool("Override"),
+                    Opt("ReturnType", "TypeReference"),
+                    Coll("Parameters", "Parameter"), Coll("Statements", "Statement"), Coll("Decorators"),
+                    Prop("Line", "int"), Bool("Documented")),
 
-                TypeSchema("Constructor", "Method"),
+                TypeDef("Constructor", "Method"),
 
-                TypeSchema("Parameter", null,
-                    Prop("Name"), OptProp("Type", "TypeReference"),
-                    BoolProp("Variadic"), BoolProp("Kwargs"), BoolProp("Defaulted"),
-                    OptProp("DefaultValue")),
+                TypeDef("Parameter", null,
+                    Prop("Name"), Opt("Type", "TypeReference"),
+                    Bool("Variadic"), Bool("Kwargs"), Bool("Defaulted"),
+                    Opt("DefaultValue")),
 
-                TypeSchema("Field", null,
-                    Prop("Name"), OptProp("Type", "TypeReference"),
-                    BoolProp("Public"), BoolProp("Private"), BoolProp("Protected"), BoolProp("Internal"),
-                    BoolProp("Static"), BoolProp("Readonly"), BoolProp("Const"),
+                TypeDef("Field", null,
+                    Prop("Name"), Opt("Type", "TypeReference"),
+                    Bool("Public"), Bool("Private"), Bool("Protected"), Bool("Internal"),
+                    Bool("Static"), Bool("Readonly"), Bool("Const"),
                     Prop("Line", "int")),
 
-                TypeSchema("Property", null,
-                    Prop("Name"), OptProp("Type", "TypeReference"),
-                    BoolProp("Public"), BoolProp("Protected"), BoolProp("Private"), BoolProp("Internal"),
-                    BoolProp("Static"), BoolProp("Abstract"), BoolProp("Virtual"), BoolProp("Override"),
-                    BoolProp("HasGetter"), BoolProp("HasSetter"), BoolProp("Documented"),
+                TypeDef("Property", null,
+                    Prop("Name"), Opt("Type", "TypeReference"),
+                    Bool("Public"), Bool("Protected"), Bool("Private"), Bool("Internal"),
+                    Bool("Static"), Bool("Abstract"), Bool("Virtual"), Bool("Override"),
+                    Bool("HasGetter"), Bool("HasSetter"), Bool("Documented"),
                     Prop("Line", "int")),
 
-                TypeSchema("Event", null,
-                    Prop("Name"), OptProp("Type", "TypeReference"),
-                    BoolProp("Public"), BoolProp("Protected"), BoolProp("Private"), BoolProp("Internal"),
-                    BoolProp("Static"), Prop("Line", "int")),
+                TypeDef("Event", null,
+                    Prop("Name"), Opt("Type", "TypeReference"),
+                    Bool("Public"), Bool("Protected"), Bool("Private"), Bool("Internal"),
+                    Bool("Static"), Prop("Line", "int")),
 
-                TypeSchema("TypeReference", null,
-                    Prop("Name"), OptProp("Namespace"),
-                    BoolProp("Generic"), CollProp("GenericArguments", "TypeReference"),
+                TypeDef("TypeReference", null,
+                    Prop("Name"), Opt("Namespace"),
+                    Bool("Generic"), Coll("GenericArguments", "TypeReference"),
                     Prop("Length", "int")),
 
-                TypeSchema("Statement", null,
-                    Prop("Kind"), CollProp("Keywords"),
-                    OptProp("TypeName"), OptProp("MemberName"),
-                    CollProp("Arguments"), Prop("Line", "int"),
-                    BoolProp("InMethod"), BoolProp("Rethrows"), BoolProp("Generic"), BoolProp("ErrorHandler"),
-                    OptProp("File", "File"), Prop("Source"),
-                    OptProp("Method", "Method"), OptProp("Parent", "Statement"),
-                    CollProp("Children", "Statement"), CollProp("Ancestors", "Statement"),
-                    OptProp("Condition"), OptProp("Expression")),
+                TypeDef("Statement", null,
+                    Prop("Kind"), Coll("Keywords"),
+                    Opt("TypeName"), Opt("MemberName"),
+                    Coll("Arguments"), Prop("Line", "int"),
+                    Bool("InMethod"), Bool("Rethrows"), Bool("Generic"), Bool("ErrorHandler"),
+                    Opt("File", "File"), Prop("Source"),
+                    Opt("Method", "Method"), Opt("Parent", "Statement"),
+                    Coll("Children", "Statement"), Coll("Ancestors", "Statement"),
+                    Opt("Condition"), Opt("Expression")),
 
-                TypeSchema("Line", null,
-                    Prop("Text"), Prop("Number", "int"), OptProp("File", "File"), Prop("Source")),
+                TypeDef("Line", null,
+                    Prop("Text"), Prop("Number", "int"), Opt("File", "File"), Prop("Source")),
 
-                TypeSchema("File", null,
-                    Prop("Path"), OptProp("Language"), OptProp("Namespace"),
-                    CollProp("Usings"), CollProp("Types", "Type")),
+                TypeDef("File", null,
+                    Prop("Path"), Opt("Language"), Opt("Namespace"),
+                    Coll("Usings"), Coll("Types", "Type")),
 
-                TypeSchema("Api", null,
+                TypeDef("Api", null,
                     Prop("Kind"), Prop("TypeName"), Prop("MemberName"),
                     Prop("Signature"), Prop("ApiAsText"),
-                    Prop("Line", "int"), OptProp("File", "File"), Prop("Source")),
+                    Prop("Line", "int"), Opt("File", "File"), Prop("Source")),
 
-                TypeSchema("Member", null,
+                TypeDef("Member", null,
                     Prop("Name"), Prop("DeclaringType"), Prop("Line", "int")),
-            },
-            collections = new object[]
-            {
-                new { name = "Types", itemType = "Type" },
-                new { name = "Statements", itemType = "Statement" },
-                new { name = "Lines", itemType = "Line" },
-                new { name = "Files", itemType = "File" },
-                new { name = "Members", itemType = "Member" },
-                new { name = "Api", itemType = "Api" },
-            }
+            ],
+            Collections =
+            [
+                new() { Name = "Types", ItemType = "Type" },
+                new() { Name = "Statements", ItemType = "Statement" },
+                new() { Name = "Lines", ItemType = "Line" },
+                new() { Name = "Files", ItemType = "File" },
+                new() { Name = "Members", ItemType = "Member" },
+                new() { Name = "Api", ItemType = "Api" },
+            ]
         };
-        return JsonSerializer.SerializeToUtf8Bytes(schema);
     }
+
+    private static ProviderTypeSchema TypeDef(string name, string? baseType, params ProviderPropertySchema[] props)
+        => new() { Name = name, Base = baseType, Properties = [.. props] };
+    private static ProviderPropertySchema Prop(string name, string type = "string")
+        => new() { Name = name, Type = type };
+    private static ProviderPropertySchema Opt(string name, string type = "string")
+        => new() { Name = name, Type = type, Optional = true };
+    private static ProviderPropertySchema Bool(string name)
+        => new() { Name = name, Type = "bool" };
+    private static ProviderPropertySchema Coll(string name, string type = "string")
+        => new() { Name = name, Type = type, Collection = true };
 
     public override RuntimeBindings GetRuntimeBindings()
     {
@@ -357,23 +370,4 @@ public class CodeProvider : CopProvider
         };
     }
 
-    // Schema helper methods
-    private static object TypeSchema(string name, string? baseType, params object[] properties)
-    {
-        if (baseType != null)
-            return new { name, @base = baseType, properties = Array.Empty<object>() };
-        return new { name, properties };
-    }
-
-    private static object Prop(string name, string type = "string")
-        => new { name, type };
-
-    private static object OptProp(string name, string type = "string")
-        => new { name, type, optional = true };
-
-    private static object BoolProp(string name)
-        => new { name, type = "bool" };
-
-    private static object CollProp(string name, string type = "string")
-        => new { name, type, collection = true };
 }

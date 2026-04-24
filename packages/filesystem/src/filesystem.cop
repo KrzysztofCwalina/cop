@@ -21,10 +21,7 @@ export type DiskFile = {
     Size : int,
     Folder : string,
     Depth : int,
-    MinutesSinceModified : int,
-    Checksum : string?,
-    Locked : bool,
-    LockStatus : string
+    MinutesSinceModified : int
 }
 
 export type Filesystem = {
@@ -42,14 +39,6 @@ export predicate recentlyModified(DiskFile) => DiskFile.MinutesSinceModified < 1
 export predicate stale(Folder) => Folder.MinutesSinceModified > 1440
 export predicate stale(DiskFile) => DiskFile.MinutesSinceModified > 1440
 
-# Lock-related predicates
-export predicate locked(DiskFile) => DiskFile.Locked == true
-export predicate lockViolation(DiskFile) =>
-    DiskFile.LockStatus == 'modified' ||
-    DiskFile.LockStatus == 'deleted'
-
 # Violation collections
 export let empty-folders = Disk.Folders:empty
     :toError('Empty folder: {item.Path}')
-export let lock-violations = Disk.Files:lockViolation
-    :toError('Lock violation: {item.Path} ({item.LockStatus})')

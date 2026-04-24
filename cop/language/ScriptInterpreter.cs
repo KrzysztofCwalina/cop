@@ -84,7 +84,7 @@ public class ScriptInterpreter
         // Compute aggregate collection counts
         var aggregateCounts = ComputeAggregateCounts(documents);
 
-        // Pre-resolve let declarations that use :select() — these need global (cross-document) data
+        // Pre-resolve let declarations that use .Select() — these need global (cross-document) data
         _globalResolvedSelects = PreResolveGlobalSelects(
             letDeclarations, documents, predicateGroups, functionGroups);
 
@@ -423,7 +423,8 @@ public class ScriptInterpreter
             // by the TypeRegistry without going through the full PredicateEvaluator pipeline.
             var predicateNameSet = predicateGroups.Count > 0 ? new HashSet<string>(predicateGroups.Keys) : null;
             var itemTypeDesc = _typeRegistry.GetType(baseItemType);
-            var (pushdownFilter, residualStart) = FilterHintExtractor.Extract(letDecl.Filters, itemTypeDesc, predicateNameSet);
+            var (pushdownFilter, residualStart) = FilterHintExtractor.Extract(
+                letDecl.Filters, itemTypeDesc, predicateNameSet, predicateGroups.Count > 0 ? predicateGroups : null);
 
             // If we extracted pushdown hints, pre-filter the base items natively
             if (pushdownFilter is not null)
@@ -560,8 +561,8 @@ public class ScriptInterpreter
             // Detect if this filter is a function call
             var funcName = GetFunctionNameFromFilter(filter);
 
-            // Handle :select() — project each item to a string value
-            if (funcName == "select")
+            // Handle .Select() — project each item to a string value
+            if (funcName == "Select")
             {
                 var fieldArgs = GetFilterArgs(filter);
                 if (fieldArgs.Count > 0)
@@ -578,7 +579,7 @@ public class ScriptInterpreter
                 }
             }
             // Handle :text() — format each item with a template, join into a single string
-            else if (funcName == "text")
+            else if (funcName == "Text")
             {
                 var templateArgs = GetFilterArgs(filter);
                 if (templateArgs.Count > 0 && templateArgs[0] is LiteralExpr litExpr && litExpr.Value is string template)
@@ -957,7 +958,7 @@ public class ScriptInterpreter
         foreach (var filter in filters)
         {
             var funcName = GetFunctionNameFromFilter(filter);
-            if (funcName is "select" or "text")
+            if (funcName is "Select" or "Text")
                 currentType = "string";
             else if (funcName != null && functionGroups != null && functionGroups.TryGetValue(funcName, out var group))
                 currentType = group[0].ReturnType;
@@ -1107,7 +1108,7 @@ public class ScriptInterpreter
     }
 
     /// <summary>
-    /// Pre-resolve let declarations that use :select() across ALL documents.
+    /// Pre-resolve let declarations that use .Select() across ALL documents.
     /// These produce string lists used for cross-document comparisons (e.g., API compat).
     /// </summary>
     private Dictionary<string, IList>? PreResolveGlobalSelects(
@@ -1116,10 +1117,10 @@ public class ScriptInterpreter
         Dictionary<string, List<PredicateDefinition>> predicateGroups,
         Dictionary<string, List<FunctionDefinition>> functionGroups)
     {
-        // Find let declarations that use :select()
+        // Find let declarations that use .Select()
         var selectLets = letDeclarations
             .Where(kv => !kv.Value.IsValueBinding && !kv.Value.IsCollectionUnion &&
-                         kv.Value.Filters.Any(f => f is FunctionCallExpr fc && fc.Name == "select"))
+                         kv.Value.Filters.Any(f => f is FunctionCallExpr fc && fc.Name == "Select"))
             .ToList();
 
         if (selectLets.Count == 0) return null;

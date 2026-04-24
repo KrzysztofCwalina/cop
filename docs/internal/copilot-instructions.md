@@ -22,11 +22,11 @@ cop/runtime/        Runtime engine (namespace Cop.Providers). Engine orchestrato
                     source parsers (C#, Python, JavaScript), provider loading
                     and registration.
 
-cop/shared/         Core library (namespace Cop.Core). CopProvider base class,
+cop/shared/         Core library (namespace Cop.Core). DataProvider base class,
                     DataObject binary format, package models, feed manager,
                     dependency resolver, restore engine, checksum/lock file manager.
 
-providers/          Data providers. Each extends CopProvider and supplies typed
+providers/          Data providers. Each extends DataProvider and supplies typed
                     collections to the language runtime.
   filesystem-provider/  Folders, DiskFiles — built-in, uses DataObject[] format
   code-provider/        Types, Methods, Statements, Files — built-in, uses CLR objects
@@ -59,7 +59,7 @@ samples/            Example .cop scripts (s1-HelloWorld through s6-Strings)
 | **Tokenizer** | `Tokenizer.cs` | Lexical analysis of `.cop` source text |
 | **ScriptParser** | `ScriptParser.cs` | Parses token stream into AST |
 | **ScriptInterpreter** | `ScriptInterpreter.cs` | Evaluates commands, `foreach` loops, `PRINT`/`SAVE` actions |
-| **PredicateEvaluator** | `PredicateEvaluator.cs` | Evaluates predicate chains (`.where(...)`, `.select(...)`) on collections |
+| **PredicateEvaluator** | `PredicateEvaluator.cs` | Evaluates predicate chains (`:filter`, `.Where(...)`, `.Select(...)`) on collections |
 | **TypeRegistry** | `TypeRegistry.cs` | Type system — property resolution, method dispatch |
 | **ScriptObject** | `ScriptObject.cs` | Runtime value representation for all Cop values |
 
@@ -70,9 +70,7 @@ samples/            Example .cop scripts (s1-HelloWorld through s6-Strings)
 | **Engine** | `Engine.cs` | Main orchestrator. Loads `.cop` files, resolves imports, runs interpreter |
 | **CSharpSourceParser** | `SourceParsers/CSharpSourceParser.cs` | Parses C# source into the source model (types, methods, statements) |
 | **PythonSourceParser** | `SourceParsers/PythonSourceParser.cs` | Parses Python source into the source model |
-| **ProviderLoader** | `ProviderLoader.cs` | Loads external provider DLLs, queries data, registers into type system |
-| **CodeTypeRegistrar** | `CodeTypeRegistrar.cs` | Thin shim — delegates to `CodeProvider` for code-analysis type registration |
-| **FilesystemTypeRegistrar** | `FilesystemTypeRegistrar.cs` | Thin shim — delegates to `FilesystemProvider` for filesystem type registration |
+| **ProviderLoader** | `ProviderLoader.cs` | Loads external provider DLLs, queries data, registers into type system. Also provides `RegisterSchema()` for built-in providers. |
 
 Source model types (e.g., `MethodDeclaration`, `StatementInfo`) live in `cop/runtime/` and represent parsed source code structures that `.cop` scripts can query.
 
@@ -80,7 +78,7 @@ Source model types (e.g., `MethodDeclaration`, `StatementInfo`) live in `cop/run
 
 | Class | File | Role |
 |---|---|---|
-| **CopProvider** | `cop/shared/CopProvider.cs` | Base class for all data providers. Defines schema, format negotiation, query API |
+| **DataProvider** | `cop/shared/DataProvider.cs` | Base class for all data providers. Defines schema, format negotiation, query API |
 | **DataObject** | `cop/shared/DataObject.cs` | 192-byte blittable struct — 24 × 8-byte slots for compact binary records |
 | **DataTable** | `cop/shared/DataObject.cs` | Wraps `DataObject[]` + UTF-8 string heap + type name |
 | **DataObjectView** | `cop/shared/DataObject.cs` | Lightweight evaluator bridge — references a record without boxing the 192-byte struct |
@@ -103,7 +101,7 @@ This is a critical architectural rule:
 - **`cop/language/`** implements **only general-purpose language features**: keywords (`predicate`, `function`, `let`, `type`), the parser, evaluator, interpreter, and type system. No domain-specific concepts.
 - **Domain-specific concepts** — the `Violation` type, `CHECK` command, `error`/`warning`/`info` functions, severity levels, analysis rules — belong **exclusively in `.cop` files** inside `packages/`. They must never be added to C# code.
 - **`cop/runtime/`** provides **general-purpose data providers** that supply collections to `.cop` packages via `runtime::` declarations (e.g., `runtime::Filesystem`, `runtime::Code`). Data providers are not domain-specific — they provide raw data that packages query and analyze.
-- **`providers/`** contains all provider implementations. Each provider extends `CopProvider` (defined in `cop/shared/`). Built-in providers use the fast `DataObject[]` binary format with a flat UTF-8 string heap — no CLR string allocations per record. External providers can use JSON or the same binary format.
+- **`providers/`** contains all provider implementations. Each provider extends `DataProvider` (defined in `cop/shared/`). Built-in providers use the fast `DataObject[]` binary format with a flat UTF-8 string heap — no CLR string allocations per record. External providers can use JSON or the same binary format.
 
 When adding a new capability, ask: *"Is this a language feature or a domain concept?"* Only language features go in C#.
 

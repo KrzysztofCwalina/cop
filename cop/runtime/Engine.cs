@@ -15,6 +15,17 @@ namespace Cop.Providers;
 /// </summary>
 public static class Engine
 {
+    // Built-in providers
+    private static readonly DataProvider _filesystemProvider = new FilesystemProvider();
+    private static readonly DataProvider _codeProvider = new CodeProvider();
+    private static readonly ProviderSchema _filesystemSchema = ProviderSchema.FromJson(_filesystemProvider.GetSchema());
+    private static readonly ProviderSchema _codeSchema = ProviderSchema.FromJson(_codeProvider.GetSchema());
+
+    private static readonly HashSet<string> CodeCollections = new(StringComparer.OrdinalIgnoreCase)
+        { "Types", "Statements", "Lines", "Files", "Members", "Api" };
+    private static readonly HashSet<string> FilesystemCollections = new(StringComparer.OrdinalIgnoreCase)
+        { "DiskFiles", "Folders" };
+
     /// <summary>
     /// Discovers .cop scripts and source files, then runs all commands.
     /// </summary>
@@ -93,7 +104,7 @@ public static class Engine
 
         // Load external providers (schema registration + data query)
         phaseSw.Restart();
-        LoadExternalProviders(typeRegistry, providerPackages, rootPath, parseErrors, fatalErrors);
+        LoadExternalProviders(typeRegistry, providerPackages, rootPath, parseErrors, fatalErrors, diagLog);
         if (providerPackages.Count > 0)
             diagLog?.Invoke($"[diag] External providers: {phaseSw.ElapsedMilliseconds}ms ({providerPackages.Count} providers)");
 
@@ -103,10 +114,36 @@ public static class Engine
             return new EngineResult([], parseErrors, fatalErrors, commandName);
         }
 
+        // Extract query hints from the target command (collection, filters, languages)
+        var queryHints = commandName is not null
+            ? ExtractCommandQueryHints(scriptFiles, commandName, typeRegistry)
+            : null;
+
         // Scan filesystem and register global collections
         phaseSw.Restart();
-        FilesystemTypeRegistrar.Scan(typeRegistry, rootPath);
-        diagLog?.Invoke($"[diag] Filesystem scan: {phaseSw.ElapsedMilliseconds}ms");
+        IReadOnlyList<string>? fsCols = null;
+        FilterExpression? fsFilter = null;
+        if (queryHints is not null)
+            (fsCols, fsFilter) = queryHints.ForProvider(FilesystemCollections);
+
+        var fsQuery = new ProviderQuery
+        {
+            RootPath = rootPath,
+            ExcludedDirectories = ExcludedDirectoryNames,
+            RequestedCollections = fsCols,
+            Filter = fsFilter
+        };
+        if (diagLog is not null)
+        {
+            var fsParts = new List<string> { $"RootPath={rootPath}" };
+            if (fsCols is not null)
+                fsParts.Add($"Collections=[{string.Join(", ", fsCols)}]");
+            if (fsFilter is not null)
+                fsParts.Add($"Filter={FilterExpression.Format(fsFilter)}");
+            diagLog($"[diag] {_filesystemProvider} query: {string.Join(", ", fsParts)}");
+        }
+        ProviderLoader.QueryAndRegister(_filesystemProvider, _filesystemSchema, typeRegistry, fsQuery);
+        diagLog?.Invoke($"[diag] {_filesystemProvider} scan: {phaseSw.ElapsedMilliseconds}ms");
 
         // Parse source files only if code collections are referenced
         phaseSw.Restart();
@@ -114,13 +151,28 @@ public static class Engine
         if (NeedsSourceParsing(scriptFiles))
         {
             var requiredLanguages = DetectRequiredLanguages(scriptFiles);
+            if (diagLog is not null)
+            {
+                var codeParts = new List<string> { $"RootPath={rootPath}" };
+                if (queryHints is not null)
+                {
+                    var (codeCols, codeFilter) = queryHints.ForProvider(CodeCollections);
+                    if (codeCols is not null)
+                        codeParts.Add($"Collections=[{string.Join(", ", codeCols)}]");
+                    if (codeFilter is not null)
+                        codeParts.Add($"Filter={FilterExpression.Format(codeFilter)}");
+                }
+                if (requiredLanguages is not null)
+                    codeParts.Add($"Languages={string.Join(",", requiredLanguages)}");
+                diagLog($"[diag] {_codeProvider} query: {string.Join(", ", codeParts)}");
+            }
             documents = ParseSourceFiles(rootPath, requiredLanguages);
-            diagLog?.Invoke($"[diag] Source parsing: {phaseSw.ElapsedMilliseconds}ms ({documents.Count} files, languages: {(requiredLanguages != null ? string.Join(",", requiredLanguages) : "all")})");
+            diagLog?.Invoke($"[diag] {_codeProvider} parse: {phaseSw.ElapsedMilliseconds}ms ({documents.Count} files)");
         }
         else
         {
             documents = [];
-            diagLog?.Invoke($"[diag] Source parsing: skipped (no code collections referenced)");
+            diagLog?.Invoke($"[diag] {_codeProvider} parse: skipped (no code collections referenced)");
         }
 
         var interpreter = new ScriptInterpreter(typeRegistry, externalDocumentLoader: CreateDocumentLoader(typeRegistry));
@@ -258,7 +310,8 @@ public static class Engine
             return new EngineResult([], parseErrors, fatalErrors);
 
         // Scan filesystem from rootPath
-        FilesystemTypeRegistrar.Scan(typeRegistry, rootPath);
+        ProviderLoader.QueryAndRegister(_filesystemProvider, _filesystemSchema, typeRegistry,
+            new ProviderQuery { RootPath = rootPath, ExcludedDirectories = ExcludedDirectoryNames });
 
         // Parse source files only if code collections are referenced
         List<Document> documents;
@@ -404,8 +457,8 @@ public static class Engine
 
         scriptFiles.AddRange(importedFiles);
 
-        CodeTypeRegistrar.Register(typeRegistry);
-        FilesystemTypeRegistrar.Register(typeRegistry);
+        ProviderLoader.RegisterSchema(_codeProvider, typeRegistry);
+        ProviderLoader.RegisterSchema(_filesystemProvider, typeRegistry);
         typeRegistry.RegisterProgramType();
 
         return typeRegistry;
@@ -619,9 +672,6 @@ public static class Engine
     /// </summary>
     public static bool NeedsSourceParsing(List<ScriptFile> scriptFiles)
     {
-        var codeCollections = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            { "Types", "Statements", "Lines", "Files", "Members", "Api" };
-
         foreach (var sf in scriptFiles)
         {
             // If the script imports the code package, parsing is needed
@@ -634,19 +684,19 @@ public static class Engine
             // Check let base collections (commands reference lets transitively)
             foreach (var let in sf.LetDeclarations)
             {
-                if (IsCodeCollection(let.BaseCollection, codeCollections))
+                if (IsCodeCollection(let.BaseCollection))
                     return true;
             }
         }
 
         return false;
 
-        static bool IsCodeCollection(string name, HashSet<string> codeCollections)
+        static bool IsCodeCollection(string name)
         {
             // Match exact name (e.g., "Types") or dotted suffix (e.g., "Code.Types")
-            if (codeCollections.Contains(name)) return true;
+            if (CodeCollections.Contains(name)) return true;
             var dotIdx = name.LastIndexOf('.');
-            return dotIdx >= 0 && codeCollections.Contains(name[(dotIdx + 1)..]);
+            return dotIdx >= 0 && CodeCollections.Contains(name[(dotIdx + 1)..]);
         }
     }
 
@@ -697,22 +747,150 @@ public static class Engine
     }
 
     /// <summary>
+    /// Extracted query hints from a target command: per-collection filter expressions
+    /// that can be pushed down to providers.
+    /// </summary>
+    private record QueryHints(Dictionary<string, FilterExpression?> CollectionFilters)
+    {
+        /// <summary>Gets the filter for a specific collection, or null.</summary>
+        public FilterExpression? GetFilter(string collection)
+            => CollectionFilters.TryGetValue(collection, out var f) ? f : null;
+
+        /// <summary>Gets all referenced collection names.</summary>
+        public IEnumerable<string> Collections => CollectionFilters.Keys;
+
+        /// <summary>
+        /// Gets the combined filter and collections for a set of provider-owned collection names.
+        /// Returns null filter if none of the provider's collections are referenced.
+        /// </summary>
+        public (List<string>? RequestedCollections, FilterExpression? Filter) ForProvider(IEnumerable<string> providerCollections)
+        {
+            var matched = new List<string>();
+            var filters = new List<FilterExpression>();
+            foreach (var c in providerCollections)
+            {
+                if (CollectionFilters.TryGetValue(c, out var f))
+                {
+                    matched.Add(c);
+                    if (f is not null) filters.Add(f);
+                }
+            }
+            if (matched.Count == 0) return (null, null);
+            var combined = filters.Count switch { 0 => null, 1 => filters[0], _ => new AndFilter(filters) };
+            return (matched, combined);
+        }
+    }
+
+    /// <summary>
+    /// Analyzes the target command's collection references and filter chains to extract
+    /// pushdown-able query hints. Walks through let bindings recursively to find the
+    /// base collection and combines all filters along the chain.
+    /// </summary>
+    private static QueryHints? ExtractCommandQueryHints(
+        List<ScriptFile> scriptFiles, string commandName, TypeRegistry typeRegistry)
+    {
+        // Find matching command blocks
+        var commands = scriptFiles
+            .SelectMany(f => f.Commands)
+            .Where(c => c.IsCommand && string.Equals(c.Name, commandName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (commands.Count == 0) return null;
+
+        // Build let declaration dictionary for resolving transitive references
+        var letDeclarations = new Dictionary<string, LetDeclaration>(StringComparer.OrdinalIgnoreCase);
+        foreach (var sf in scriptFiles)
+            foreach (var let in sf.LetDeclarations)
+                letDeclarations[let.Name] = let;
+
+        // Collect predicate names and definitions for filter inlining
+        var predicateNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var predicateDefs = new Dictionary<string, List<PredicateDefinition>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var sf in scriptFiles)
+        {
+            foreach (var pred in sf.Predicates)
+            {
+                predicateNames.Add(pred.Name);
+                if (!predicateDefs.TryGetValue(pred.Name, out var group))
+                {
+                    group = [];
+                    predicateDefs[pred.Name] = group;
+                }
+                group.Add(pred);
+            }
+        }
+
+        var collectionFilters = new Dictionary<string, FilterExpression?>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var cmd in commands)
+        {
+            if (cmd.Collection is null) continue;
+
+            // Resolve collection through let bindings to find base collection + accumulated filters
+            var allCmdFilters = new List<Expression>(cmd.Filters);
+            var baseCollection = ResolveBaseCollection(cmd.Collection, letDeclarations, allCmdFilters);
+
+            // Get the item type for the base collection to extract pushdown hints
+            var itemTypeName = typeRegistry.GetCollectionItemType(baseCollection);
+            if (itemTypeName is null)
+            {
+                collectionFilters.TryAdd(baseCollection, null);
+                continue;
+            }
+
+            var itemTypeDesc = typeRegistry.GetType(itemTypeName);
+            var (hints, _) = FilterHintExtractor.Extract(allCmdFilters, itemTypeDesc, predicateNames, predicateDefs);
+
+            // Merge: if same collection from multiple command blocks, AND the filters
+            if (collectionFilters.TryGetValue(baseCollection, out var existing) && existing is not null && hints is not null)
+                collectionFilters[baseCollection] = FilterExpression.And(existing, hints);
+            else
+                collectionFilters[baseCollection] = hints ?? existing;
+        }
+
+        return collectionFilters.Count > 0 ? new QueryHints(collectionFilters) : null;
+    }
+
+    /// <summary>
+    /// Walks let bindings to find the base collection name, accumulating filters along the way.
+    /// For example: let x = Types:Public → base="Types", filters=[Public].
+    /// </summary>
+    private static string ResolveBaseCollection(
+        string name, Dictionary<string, LetDeclaration> letDeclarations, List<Expression> filters,
+        HashSet<string>? visited = null)
+    {
+        if (!letDeclarations.TryGetValue(name, out var letDecl))
+            return name; // Not a let — it's a direct collection reference
+
+        if (letDecl.IsValueBinding)
+            return name; // Value binding, not a collection chain
+
+        visited ??= new(StringComparer.OrdinalIgnoreCase);
+        if (!visited.Add(name))
+            return name; // Cycle detected
+
+        // Prepend let filters (they apply before the command's own filters)
+        filters.InsertRange(0, letDecl.Filters);
+
+        // Recurse into the let's base collection
+        return ResolveBaseCollection(letDecl.BaseCollection, letDeclarations, filters, visited);
+    }
+
+    /// <summary>
     /// Loads external CLR providers: registers their schemas into the type registry
     /// and queries them for collection data.
     /// </summary>
-    private static void LoadExternalProviders(TypeRegistry typeRegistry, List<(string Dir, PackageMetadata Meta)> providerPackages, string rootPath, List<string> errors, List<string> fatalErrors)
+    private static void LoadExternalProviders(TypeRegistry typeRegistry, List<(string Dir, PackageMetadata Meta)> providerPackages, string rootPath, List<string> errors, List<string> fatalErrors, Action<string>? diagLog = null)
     {
         foreach (var (dir, meta) in providerPackages)
         {
             var loaded = ProviderLoader.Load(dir, meta, fatalErrors);
             if (loaded is null) continue;
 
-            // Register types and collections from the provider schema
-            typeRegistry.RegisterProviderSchema(loaded.Schema);
+            // Register schema, types, accessors, and bindings
+            ProviderLoader.RegisterSchema(loaded.Instance, typeRegistry);
 
-            // For JSON providers, also register ScriptObject-based accessors
-            if (!loaded.Instance.SupportedFormats.HasFlag(ProviderFormat.Objects))
-                JsonCollectionDeserializer.RegisterScriptObjectAccessors(typeRegistry, loaded.Schema);
+            diagLog?.Invoke($"[diag] {loaded.Instance} query: RootPath={rootPath}, Format={loaded.Instance.SupportedFormats}, Collections=[{string.Join(", ", loaded.Schema.Collections.Select(c => c.Name))}]");
 
             // Query for data and register global collections
             ProviderLoader.QueryAndRegister(loaded, typeRegistry, rootPath, errors);

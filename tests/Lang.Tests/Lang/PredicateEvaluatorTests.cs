@@ -13,7 +13,7 @@ public class PredicateEvaluatorTests
         string filePath = "test.cs")
     {
         var registry = new TypeRegistry();
-        CodeTypeRegistrar.Register(registry);
+        ProviderLoader.RegisterSchema(new CodeProvider(), registry);
         return new PredicateEvaluator(predicates ?? [], filePath, registry);
     }
 
@@ -22,7 +22,7 @@ public class PredicateEvaluatorTests
     private static TypeRegistry CreateTestRegistry()
     {
         var registry = new TypeRegistry();
-        CodeTypeRegistrar.Register(registry);
+        ProviderLoader.RegisterSchema(new CodeProvider(), registry);
         return registry;
     }
 
@@ -56,7 +56,7 @@ public class PredicateEvaluatorTests
         var type = MakeType("BlobClient");
         var expr = new PredicateCallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Name"),
-            "endsWith", [new LiteralExpr("Client")]);
+            "ew", [new LiteralExpr("Client")]);
         var (result, _) = eval.EvaluateAsBool(expr, type, "Type");
         Assert.That(result, Is.True);
     }
@@ -68,7 +68,7 @@ public class PredicateEvaluatorTests
         var type = MakeType("BlobClient");
         var expr = new PredicateCallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Name"),
-            "startsWith", [new LiteralExpr("Blob")]);
+            "sw", [new LiteralExpr("Blob")]);
         var (result, _) = eval.EvaluateAsBool(expr, type, "Type");
         Assert.That(result, Is.True);
     }
@@ -104,7 +104,7 @@ public class PredicateEvaluatorTests
         var isOptionsType = new PredicateDefinition("IsOptionsType", "Parameter", null,
             new PredicateCallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Parameter"), "Type"),
-                "endsWith", [new LiteralExpr("Options")]), 1);
+                "ew", [new LiteralExpr("Options")]), 1);
 
         var eval = CreateEvaluator(new Dictionary<string, List<PredicateDefinition>>
         {
@@ -128,7 +128,7 @@ public class PredicateEvaluatorTests
         var isOptionsType = new PredicateDefinition("IsOptionsType", "Parameter", null,
             new PredicateCallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Parameter"), "Type"),
-                "endsWith", [new LiteralExpr("Options")]), 1);
+                "ew", [new LiteralExpr("Options")]), 1);
 
         var eval = CreateEvaluator(new Dictionary<string, List<PredicateDefinition>>
         {
@@ -149,11 +149,11 @@ public class PredicateEvaluatorTests
     [Test]
     public void PredicateComposition()
     {
-        // IsClient(Type) => Type.Name:endsWith("Client")
+        // IsClient(Type) => Type.Name:ew("Client")
         var isClient = new PredicateDefinition("IsClient", "Type", null,
             new PredicateCallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Type"), "Name"),
-                "endsWith", [new LiteralExpr("Client")]), 1);
+                "ew", [new LiteralExpr("Client")]), 1);
 
         var eval = CreateEvaluator(new Dictionary<string, List<PredicateDefinition>>
         {
@@ -173,10 +173,10 @@ public class PredicateEvaluatorTests
     public void ConstraintPredicate_EvaluatesAsFilter()
     {
         // "csharp" is now a regular predicate, not a built-in keyword.
-        // Register it as a predicate that checks Type.Name:endsWith('Client').
+        // Register it as a predicate that checks Type.Name:ew('Client').
         var csharpPred = new PredicateDefinition("csharp", "Type", null,
             new PredicateCallExpr(new MemberAccessExpr(new IdentifierExpr("Type"), "Name"),
-                "endsWith", [new LiteralExpr("Client")]), 1);
+                "ew", [new LiteralExpr("Client")]), 1);
         var preds = new Dictionary<string, List<PredicateDefinition>>
         {
             ["csharp"] = [csharpPred]
@@ -202,10 +202,10 @@ public class PredicateEvaluatorTests
         // Two constrained overloads of "client"
         var sealedClient = new PredicateDefinition("client", "Type", "sealed",
             new PredicateCallExpr(new MemberAccessExpr(new IdentifierExpr("Type"), "Name"),
-                "endsWith", [new LiteralExpr("_client")]), 1);
+                "ew", [new LiteralExpr("_client")]), 1);
         var unsealedClient = new PredicateDefinition("client", "Type", "unsealed",
             new PredicateCallExpr(new MemberAccessExpr(new IdentifierExpr("Type"), "Name"),
-                "endsWith", [new LiteralExpr("Client")]), 1);
+                "ew", [new LiteralExpr("Client")]), 1);
 
         var preds = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -236,7 +236,7 @@ public class PredicateEvaluatorTests
             new LiteralExpr(false), 1);
         var unconstrained = new PredicateDefinition("client", "Type", null,
             new PredicateCallExpr(new MemberAccessExpr(new IdentifierExpr("Type"), "Name"),
-                "endsWith", [new LiteralExpr("Client")]), 1);
+                "ew", [new LiteralExpr("Client")]), 1);
 
         var preds = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -440,7 +440,7 @@ public class PredicateEvaluatorTests
     [Test]
     public void PropertyAccess_First_ChainsWithTypeMethod()
     {
-        // Parameters.First.Type:endsWith("ServiceVersion")
+        // Parameters.First.Type:ew("ServiceVersion")
         var eval = CreateEvaluator();
         var ctor = new MethodDeclaration(".ctor", Modifier.Public, [], null, [
             new ParameterDeclaration("version", TR("ServiceVersion"), false, false, false, 1)
@@ -452,7 +452,7 @@ public class PredicateEvaluatorTests
                     new MemberAccessExpr(new IdentifierExpr("Constructor"), "Parameters"),
                     "First"),
                 "Type"),
-            "endsWith", [new LiteralExpr("ServiceVersion")]);
+            "ew", [new LiteralExpr("ServiceVersion")]);
         var (result, _) = eval.EvaluateAsBool(expr, ctor, "Constructor");
         Assert.That(result, Is.True);
     }
@@ -467,7 +467,7 @@ public class PredicateEvaluatorTests
         var isOptions = new PredicateDefinition("IsOptions", "Parameter", null,
             new PredicateCallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Parameter"), "Type"),
-                "endsWith", [new LiteralExpr("Options")]), 1);
+                "ew", [new LiteralExpr("Options")]), 1);
 
         var eval = CreateEvaluator(new Dictionary<string, List<PredicateDefinition>>
         {
@@ -480,11 +480,11 @@ public class PredicateEvaluatorTests
             new ParameterDeclaration("moreOptions", TR("RetryOptions"), false, false, false, 3)
         ], 1);
 
-        // Parameters:first(IsOptions) → should return "options" (first match)
+        // Parameters.First(IsOptions) → should return "options" (first match)
         var expr = new MemberAccessExpr(
             new PredicateCallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Constructor"), "Parameters"),
-                "first", [new IdentifierExpr("IsOptions")]),
+                "First", [new IdentifierExpr("IsOptions")]),
             "Name");
         var (result, _) = eval.EvaluateAsBool(
             new BinaryExpr(expr, "==", new LiteralExpr("options")),
@@ -498,7 +498,7 @@ public class PredicateEvaluatorTests
         var isOptions = new PredicateDefinition("IsOptions", "Parameter", null,
             new PredicateCallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Parameter"), "Type"),
-                "endsWith", [new LiteralExpr("Options")]), 1);
+                "ew", [new LiteralExpr("Options")]), 1);
 
         var eval = CreateEvaluator(new Dictionary<string, List<PredicateDefinition>>
         {
@@ -511,7 +511,7 @@ public class PredicateEvaluatorTests
 
         var expr = new PredicateCallExpr(
             new MemberAccessExpr(new IdentifierExpr("Constructor"), "Parameters"),
-            "first", [new IdentifierExpr("IsOptions")]);
+            "First", [new IdentifierExpr("IsOptions")]);
         var (result, _) = eval.EvaluateAsBool(
             new BinaryExpr(
                 new MemberAccessExpr(expr, "Name"),
@@ -526,7 +526,7 @@ public class PredicateEvaluatorTests
         var isOptions = new PredicateDefinition("IsOptions", "Parameter", null,
             new PredicateCallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Parameter"), "Type"),
-                "endsWith", [new LiteralExpr("Options")]), 1);
+                "ew", [new LiteralExpr("Options")]), 1);
 
         var eval = CreateEvaluator(new Dictionary<string, List<PredicateDefinition>>
         {
@@ -539,11 +539,11 @@ public class PredicateEvaluatorTests
             new ParameterDeclaration("endpoint", TR("string"), false, false, false, 3)
         ], 1);
 
-        // Parameters:last(IsOptions) → should return "retryOptions" (last match)
+        // Parameters.Last(IsOptions) → should return "retryOptions" (last match)
         var expr = new MemberAccessExpr(
             new PredicateCallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Constructor"), "Parameters"),
-                "last", [new IdentifierExpr("IsOptions")]),
+                "Last", [new IdentifierExpr("IsOptions")]),
             "Name");
         var (result, _) = eval.EvaluateAsBool(
             new BinaryExpr(expr, "==", new LiteralExpr("retryOptions")),
@@ -557,7 +557,7 @@ public class PredicateEvaluatorTests
         var isOptions = new PredicateDefinition("IsOptions", "Parameter", null,
             new PredicateCallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Parameter"), "Type"),
-                "endsWith", [new LiteralExpr("Options")]), 1);
+                "ew", [new LiteralExpr("Options")]), 1);
 
         var eval = CreateEvaluator(new Dictionary<string, List<PredicateDefinition>>
         {
@@ -569,11 +569,11 @@ public class PredicateEvaluatorTests
             new ParameterDeclaration("options", TR("BlobClientOptions"), false, false, false, 2)
         ], 1);
 
-        // Parameters:single(IsOptions) → "options" (exactly one match)
+        // Parameters.Single(IsOptions) → "options" (exactly one match)
         var expr = new MemberAccessExpr(
             new PredicateCallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Constructor"), "Parameters"),
-                "single", [new IdentifierExpr("IsOptions")]),
+                "Single", [new IdentifierExpr("IsOptions")]),
             "Name");
         var (result, _) = eval.EvaluateAsBool(
             new BinaryExpr(expr, "==", new LiteralExpr("options")),
@@ -587,7 +587,7 @@ public class PredicateEvaluatorTests
         var isOptions = new PredicateDefinition("IsOptions", "Parameter", null,
             new PredicateCallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Parameter"), "Type"),
-                "endsWith", [new LiteralExpr("Options")]), 1);
+                "ew", [new LiteralExpr("Options")]), 1);
 
         var eval = CreateEvaluator(new Dictionary<string, List<PredicateDefinition>>
         {
@@ -599,10 +599,10 @@ public class PredicateEvaluatorTests
             new ParameterDeclaration("opts2", TR("RetryOptions"), false, false, false, 2)
         ], 1);
 
-        // Parameters:single(IsOptions) → null (two matches)
+        // Parameters.Single(IsOptions) → null (two matches)
         var expr = new PredicateCallExpr(
             new MemberAccessExpr(new IdentifierExpr("Constructor"), "Parameters"),
-            "single", [new IdentifierExpr("IsOptions")]);
+            "Single", [new IdentifierExpr("IsOptions")]);
         var (result, _) = eval.EvaluateAsBool(
             new BinaryExpr(
                 new MemberAccessExpr(expr, "Name"),
@@ -627,10 +627,10 @@ public class PredicateEvaluatorTests
             new MethodDeclaration("AsyncMethod", Modifier.Public | Modifier.Async, [], TR("Task"), [], 2)
         ]);
 
-        // Methods:first(IsAsync) → captures AsyncMethod in context
+        // Methods.First(IsAsync) → captures AsyncMethod in context
         var expr = new PredicateCallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
-            "first", [new IdentifierExpr("IsAsync")]);
+            "First", [new IdentifierExpr("IsAsync")]);
         var (_, ctx) = eval.EvaluateAsBool(
             new BinaryExpr(
                 new MemberAccessExpr(expr, "Name"),
@@ -676,10 +676,10 @@ public class PredicateEvaluatorTests
             new MethodDeclaration("ListBlobs", Modifier.Public, [], TR("void"), [], 2)
         ]);
 
-        // Type.Methods:none(Method.Name:startsWith("Delete")) — should be true (no Delete methods)
+        // Type.Methods:none(Method.Name:sw("Delete")) — should be true (no Delete methods)
         var inlineExpr = new PredicateCallExpr(
             new MemberAccessExpr(new IdentifierExpr("Method"), "Name"),
-            "startsWith", [new LiteralExpr("Delete")]);
+            "sw", [new LiteralExpr("Delete")]);
         var expr = new PredicateCallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
             "none", [inlineExpr]);
@@ -749,10 +749,10 @@ public class PredicateEvaluatorTests
         var eval = CreateEvaluator();
         var type = MakeType("BlobClient", baseTypes: ["ServiceClient", "IDisposable"]);
 
-        // Type.BaseTypes:any(BaseType:contains("Service"))
+        // Type.BaseTypes:any(BaseType:ct("Service"))
         var inlineExpr = new PredicateCallExpr(
             new IdentifierExpr("BaseType"),
-            "contains", [new LiteralExpr("Service")]);
+            "ct", [new LiteralExpr("Service")]);
         var expr = new PredicateCallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "BaseTypes"),
             "any", [inlineExpr]);
@@ -779,7 +779,7 @@ public class PredicateEvaluatorTests
         // File.Path returns the path from the SourceFile object
         var expr = new MemberAccessExpr(new IdentifierExpr("File"), "Path");
         var (result, _) = eval.EvaluateAsBool(
-            new PredicateCallExpr(expr, "contains", [new LiteralExpr("Controllers")]),
+            new PredicateCallExpr(expr, "ct", [new LiteralExpr("Controllers")]),
             sf, "File");
         Assert.That(result, Is.True);
     }
@@ -808,7 +808,7 @@ public class PredicateEvaluatorTests
 
         var expr = new PredicateCallExpr(
             new MemberAccessExpr(new IdentifierExpr("File"), "Namespace"),
-            "startsWith", [new LiteralExpr("MyApp")]);
+            "sw", [new LiteralExpr("MyApp")]);
         var (result, _) = eval.EvaluateAsBool(expr, sf, "File");
         Assert.That(result, Is.True);
     }
@@ -822,10 +822,10 @@ public class PredicateEvaluatorTests
             Usings = ["System", "System.IO", "Microsoft.Extensions"]
         };
 
-        // File.Usings:any(Using:contains("System.IO"))
+        // File.Usings:any(Using:ct("System.IO"))
         var inlineExpr = new PredicateCallExpr(
             new IdentifierExpr("Using"),
-            "contains", [new LiteralExpr("System.IO")]);
+            "ct", [new LiteralExpr("System.IO")]);
         var expr = new PredicateCallExpr(
             new MemberAccessExpr(new IdentifierExpr("File"), "Usings"),
             "any", [inlineExpr]);
@@ -842,10 +842,10 @@ public class PredicateEvaluatorTests
             Usings = ["System", "System.Collections"]
         };
 
-        // File.Usings:none(Using:startsWith("Microsoft"))
+        // File.Usings:none(Using:sw("Microsoft"))
         var inlineExpr = new PredicateCallExpr(
             new IdentifierExpr("Using"),
-            "startsWith", [new LiteralExpr("Microsoft")]);
+            "sw", [new LiteralExpr("Microsoft")]);
         var expr = new PredicateCallExpr(
             new MemberAccessExpr(new IdentifierExpr("File"), "Usings"),
             "none", [inlineExpr]);
@@ -879,10 +879,10 @@ public class PredicateEvaluatorTests
     {
         var eval = CreateEvaluator();
         var type = MakeType("BlobClient");
-        // Type.Name:!endsWith("Options") → true (BlobClient does NOT end with Options)
+        // Type.Name:!ew("Options") → true (BlobClient does NOT end with Options)
         var expr = new PredicateCallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Name"),
-            "endsWith", [new LiteralExpr("Options")], Negated: true);
+            "ew", [new LiteralExpr("Options")], Negated: true);
         var (result, _) = eval.EvaluateAsBool(expr, type, "Type");
         Assert.That(result, Is.True);
     }
@@ -892,10 +892,10 @@ public class PredicateEvaluatorTests
     {
         var eval = CreateEvaluator();
         var type = MakeType("BlobClient");
-        // Type.Name:!endsWith("Client") → false (BlobClient DOES end with Client)
+        // Type.Name:!ew("Client") → false (BlobClient DOES end with Client)
         var expr = new PredicateCallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Name"),
-            "endsWith", [new LiteralExpr("Client")], Negated: true);
+            "ew", [new LiteralExpr("Client")], Negated: true);
         var (result, _) = eval.EvaluateAsBool(expr, type, "Type");
         Assert.That(result, Is.False);
     }
@@ -906,7 +906,7 @@ public class PredicateEvaluatorTests
         var isOptionsType = new PredicateDefinition("IsOptionsType", "Parameter", null,
             new PredicateCallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Parameter"), "Type"),
-                "endsWith", [new LiteralExpr("Options")]), 1);
+                "ew", [new LiteralExpr("Options")]), 1);
 
         var eval = CreateEvaluator(new Dictionary<string, List<PredicateDefinition>>
         {
@@ -928,15 +928,15 @@ public class PredicateEvaluatorTests
     [Test]
     public void NegatedMethodCall_ParsedFromDsl()
     {
-        // Verify the parser produces Negated=true for :!endsWith syntax
+        // Verify the parser produces Negated=true for :!ew syntax
         var ScriptFile = ScriptParser.Parse("""
-            predicate IsNotClient(Type) => Type.Name:!endsWith('Client')
+            predicate IsNotClient(Type) => Type.Name:!ew('Client')
             """, "test.cop");
         var pred = ScriptFile.Predicates[0];
         var body = pred.Body as PredicateCallExpr;
         Assert.That(body, Is.Not.Null);
         Assert.That(body!.Negated, Is.True);
-        Assert.That(body.Name, Is.EqualTo("endsWith"));
+        Assert.That(body.Name, Is.EqualTo("ew"));
     }
 
     #endregion

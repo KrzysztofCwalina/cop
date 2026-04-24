@@ -193,7 +193,7 @@ export command api-list = SAVE('api.txt', '{{item.Signature}}', baseline.Api:any
 ";
 
         var registry = new TypeRegistry();
-        CodeTypeRegistrar.Register(registry);
+        ProviderLoader.RegisterSchema(new CodeProvider(), registry);
         registry.RegisterProgramType();
 
         var docLoader = CreateTestDocumentLoader();
@@ -222,7 +222,7 @@ export command types = SAVE('types.txt', '{{item.Name}}', baseline.Types)
 ";
 
         var registry = new TypeRegistry();
-        CodeTypeRegistrar.Register(registry);
+        ProviderLoader.RegisterSchema(new CodeProvider(), registry);
         registry.RegisterProgramType();
 
         var docLoader = CreateTestDocumentLoader();
@@ -249,7 +249,7 @@ export command check = foreach baseline => PRINT('{{item.Signature}}')
 ";
 
         var registry = new TypeRegistry();
-        CodeTypeRegistrar.Register(registry);
+        ProviderLoader.RegisterSchema(new CodeProvider(), registry);
         registry.RegisterProgramType();
 
         var docLoader = CreateTestDocumentLoader();
@@ -262,7 +262,7 @@ export command check = foreach baseline => PRINT('{{item.Signature}}')
         Assert.That(ex!.Message, Does.Contain("sub-collections"));
     }
 
-    // ── :text() filter and save() ──
+    // ── .Text() filter and save() ──
 
     [Test]
     public void TextFilter_FlattensCollectionToJoinedString()
@@ -271,12 +271,12 @@ export command check = foreach baseline => PRINT('{{item.Signature}}')
         var cop = $@"
 let baseline = Load('{assemblyPath}')
 predicate anyApi(Api) => Api.Kind != ''
-let apiText = baseline.Api:anyApi:text('{{item.Signature}}')
+let apiText = baseline.Api:anyApi.Text('{{item.Signature}}')
 export command print-text = foreach apiText => PRINT('{{item}}')
 ";
 
         var registry = new TypeRegistry();
-        CodeTypeRegistrar.Register(registry);
+        ProviderLoader.RegisterSchema(new CodeProvider(), registry);
         registry.RegisterProgramType();
 
         var docLoader = CreateTestDocumentLoader();
@@ -286,12 +286,12 @@ export command print-text = foreach apiText => PRINT('{{item}}')
         var documents = new List<Document>();
         var result = interpreter.Run([script], documents, commandName: "print-text");
 
-        // :text() should produce exactly one output (the joined string)
-        Assert.That(result.Outputs.Count, Is.EqualTo(1), "Expected single output from :text() flattened collection");
+        // .Text() should produce exactly one output (the joined string)
+        Assert.That(result.Outputs.Count, Is.EqualTo(1), "Expected single output from .Text() flattened collection");
         var text = result.Outputs[0].Message;
         Assert.That(text, Does.Contain("class"));
         // Verify it contains multiple lines (newline-separated)
-        Assert.That(text.Split('\n').Length, Is.GreaterThan(1), "Expected multiple lines in :text() output");
+        Assert.That(text.Split('\n').Length, Is.GreaterThan(1), "Expected multiple lines in .Text() output");
     }
 
     [Test]
@@ -301,12 +301,12 @@ export command print-text = foreach apiText => PRINT('{{item}}')
         var cop = $@"
 let baseline = Load('{assemblyPath}')
 predicate anyApi(Api) => Api.Kind != ''
-let apiText = baseline.Api:anyApi:text('{{item.Signature}}')
+let apiText = baseline.Api:anyApi.Text('{{item.Signature}}')
 export command save-api = save('api-surface.txt', apiText)
 ";
 
         var registry = new TypeRegistry();
-        CodeTypeRegistrar.Register(registry);
+        ProviderLoader.RegisterSchema(new CodeProvider(), registry);
         registry.RegisterProgramType();
 
         var docLoader = CreateTestDocumentLoader();

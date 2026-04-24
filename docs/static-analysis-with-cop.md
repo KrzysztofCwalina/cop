@@ -49,10 +49,10 @@ import code
 
 # Matches any call to Thread.Sleep (C#) or time.sleep (Python)
 predicate sleepCall(Statement) => Statement.Kind == 'call'
-    && Statement.MemberName:same('sleep')
+    && Statement.MemberName:sm('sleep')
 
 # Matches types whose name ends with "Client"
-predicate client(Type) => Type.Name:endsWith('Client')
+predicate client(Type) => Type.Name:ew('Client')
 
 # Matches error handlers that catch a broad exception without rethrowing
 predicate swallowsException(Statement) => Statement.ErrorHandler == true
@@ -163,25 +163,25 @@ predicate sleepCall(Statement) => Statement.Kind == 'call'
     && Statement.MemberName == 'sleep'
 ```
 
-### Convention-Insensitive Comparisons with `:same`
+### Convention-Insensitive Comparisons with `:sm`
 
-Different languages use different naming conventions. Use `:same()` to compare identifiers regardless of convention (PascalCase, camelCase, snake_case, UPPER_SNAKE):
+Different languages use different naming conventions. Use `:sm()` to compare identifiers regardless of convention (PascalCase, camelCase, snake_case, UPPER_SNAKE):
 
 ```ruby
 # All of these match: ConfigureAwait, configure_await, configureAwait
-Type.Name:same('ConfigureAwait')
+Type.Name:sm('ConfigureAwait')
 ```
 
-### Word-Level Analysis with `:words`
+### Word-Level Analysis with `.Words`
 
-The `:words` predicate splits identifiers into lowercase words, normalizing across all conventions:
+The `.Words` transform splits identifiers into lowercase words, normalizing across all conventions:
 
 ```ruby
 # "TaskCompletionSource", "task_completion_source", "taskCompletionSource" all produce:
 # ['task', 'completion', 'source']
 
 # Check if any type name contains the word "client"
-predicate client(Type) => Type.Name:words:contains('client')
+predicate client(Type) => Type.Name.Words:contains('client')
 ```
 
 ### The ErrorHandler Abstraction
@@ -220,7 +220,7 @@ let consoleWarnings = Code.Statements:consoleOutput
     :toWarning('Avoid console/print output in production code')
 
 # ── Type naming: clients should end with Client ──
-predicate client(Type) => Type.Name:endsWith('Client')
+predicate client(Type) => Type.Name:ew('Client')
 
 CHECK([swallowed, consoleWarnings])
 ```
@@ -257,9 +257,9 @@ The convention is to separate **predicates** (pure definitions, no output) from 
 
 ```ruby
 # Service layer conventions
-predicate serviceClass(Type) => Type.Name:endsWith('Service')
-predicate controllerClass(Type) => Type.Name:endsWith('Controller')
-predicate repositoryClass(Type) => Type.Name:endsWith('Repository')
+predicate serviceClass(Type) => Type.Name:ew('Service')
+predicate controllerClass(Type) => Type.Name:ew('Controller')
+predicate repositoryClass(Type) => Type.Name:ew('Repository')
 
 # Error handling
 predicate emptyErrorHandler(Statement) => Statement.ErrorHandler == true && Statement.Empty
@@ -394,12 +394,12 @@ exclude '**/__pycache__/**'
 let all-language-checks = [csharp-checks, javascript-checks, python-checks]
 
 # ── Custom cross-language rules ──
-predicate todoComment(Line) => Line.Text:contains('TODO') || Line.Text:contains('HACK')
+predicate todoComment(Line) => Line.Text:ct('TODO') || Line.Text:ct('HACK')
 let todos = Code.Lines:todoComment
     :toInfo('{item.Text}')
 
 # ── Custom project-specific rules ──
-predicate testHelper(Type) => Type.Name:endsWith('TestHelper')
+predicate testHelper(Type) => Type.Name:ew('TestHelper')
     && !Type.Public
 let non-public-helpers = Code.Types:testHelper
     :toWarning('{item.Name} should be public so tests in other projects can use it')

@@ -634,12 +634,12 @@ import csharp-api
 import code-analysis
 
 # Baseline: C# stub files in api/ directory (Azure SDK convention)
-predicate baselineApi(Api) => publicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')
+predicate baselineApi(Api) => publicApi && Api.File.Path:rx('[/\\\\]api[/\\\\]')
 # Source: everything NOT in api/
-predicate sourceApi(Api) => publicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')
+predicate sourceApi(Api) => publicApi && !Api.File.Path:rx('[/\\\\]api[/\\\\]')
 
-let baselineSignatures = Code.Api:csharp:baselineApi:select(item.Signature)
-let currentSignatures = Code.Api:csharp:sourceApi:select(item.Signature)
+let baselineSignatures = Code.Api:csharp:baselineApi.Select(item.Signature)
+let currentSignatures = Code.Api:csharp:sourceApi.Select(item.Signature)
 
 predicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)
 predicate addedApi(Api) => sourceApi && !Api.Signature:in(baselineSignatures)

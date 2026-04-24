@@ -410,7 +410,9 @@ public class ScriptParser
         // foreach after = means this is a let-command
         if (i < _tokens.Count && _tokens[i].Kind == TokenKind.ForeachKeyword) return true;
         // Check for identifier followed by ( — this is an action invocation
+        // But Load() is a value binding, not a command action
         if (i >= _tokens.Count || _tokens[i].Kind != TokenKind.Identifier) return false;
+        if (_tokens[i].Value == "Load") return false;
         i++;
         return i < _tokens.Count && _tokens[i].Kind == TokenKind.LParen;
     }
@@ -767,8 +769,11 @@ public class ScriptParser
                 var member = Expect(TokenKind.Identifier);
                 if (Current.Kind == TokenKind.LParen)
                 {
-                    throw new InvalidOperationException(
-                        $"Line {member.Line}: Use colon syntax ':{member.Value}(...)' instead of '.{member.Value}(...)'");
+                    // .Transform(args) — PascalCase transforms use dot syntax
+                    Advance();
+                    var args = ParseArgList();
+                    Expect(TokenKind.RParen);
+                    expr = new PredicateCallExpr(expr, member.Value, args, false);
                 }
                 else
                 {

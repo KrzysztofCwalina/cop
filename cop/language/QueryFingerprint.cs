@@ -13,7 +13,7 @@ public static class QueryFingerprint
 {
     private static readonly HashSet<string> BarrierFunctions = new(StringComparer.OrdinalIgnoreCase)
     {
-        "select", "text"
+        "Select", "Text"
     };
 
     /// <summary>
@@ -36,7 +36,9 @@ public static class QueryFingerprint
             if (IsBarrier(filter, functionNames))
             {
                 FlushPredicates(sb, pendingPredicates);
-                sb.Append(':');
+                // Built-in transforms (Select, Text) use '.' separator; user functions use ':'
+                bool isTransform = filter is FunctionCallExpr fc2 && BarrierFunctions.Contains(fc2.Name);
+                sb.Append(isTransform ? '.' : ':');
                 sb.Append(Serialize(filter));
             }
             else

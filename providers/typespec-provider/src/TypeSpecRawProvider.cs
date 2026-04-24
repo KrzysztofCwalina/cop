@@ -4,12 +4,12 @@ using Cop.Core;
 namespace TypeSpecProvider;
 
 /// <summary>
-/// CopProvider for raw TypeSpec type graph.
+/// DataProvider for raw TypeSpec type graph.
 /// Exposes Models, Operations, Interfaces, Enums, Unions, Scalars.
 /// </summary>
-public class TypeSpecRawProvider : CopProvider
+public class TypeSpecRawProvider : DataProvider
 {
-    public override byte[] GetSchema()
+    public override ReadOnlyMemory<byte> GetSchema()
     {
         var schema = new
         {
@@ -139,7 +139,7 @@ public class TypeSpecRawProvider : CopProvider
         return JsonSerializer.SerializeToUtf8Bytes(schema, JsonOptions);
     }
 
-    public override byte[] QueryJson(ProviderQuery query)
+    public override byte[] Query(ProviderQuery query)
     {
         var spec = new TspSpec();
 

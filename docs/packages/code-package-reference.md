@@ -48,7 +48,7 @@ Use a language filter on the list name to scope to a specific language:
 
 ```ruby
 foreach Types:csharp:client => PRINT('{warning:@yellow} {item.Name} needs review')
-foreach Lines:python:Matches(@'\bprint\s*\('):!Path('**/tests/**') => PRINT('{warning:@yellow} Use logging instead of print')
+foreach Lines:python:rx(@'\bprint\s*\('):!Path('**/tests/**') => PRINT('{warning:@yellow} Use logging instead of print')
 ```
 
 ## Type Reference
@@ -148,9 +148,9 @@ Statement has several subsets defined by narrowing predicates:
 | Subset Type | Predicate | Meaning |
 |---|---|---|
 | `Call` | `call` | `Kind == 'call'` — adds `Signature : string` |
-| `Declaration` | `declaration` | `Kind == "declaration"` |
+| `Declaration` | `declaration` | `Kind == 'declaration'` |
 | `ErrorHandler` | `errorHandler` | `ErrorHandler == true` — error-handling constructs (catch, except, etc.) |
-| `Attribute` | `attribute` | `Kind == "attribute"` |
+| `Attribute` | `attribute` | `Kind == 'attribute'` |
 
 ### Line
 
@@ -190,8 +190,8 @@ Cop supports two comparison modes for cross-language checks:
 
 | Mode | Syntax | Behavior |
 |---|---|---|
-| **CaseInsensitive** | `==`, `contains`, etc. | Ignores letter case (default) |
-| **ConventionInsensitive** | `:same()`, `.Normalized` | Ignores case AND naming convention |
+| **CaseInsensitive** | `==`, `ct`, etc. | Ignores letter case (default) |
+| **ConventionInsensitive** | `:sm()`, `.Normalized` | Ignores case AND naming convention |
 
 ### Comparison Operators
 
@@ -204,15 +204,33 @@ Cop supports two comparison modes for cross-language checks:
 
 | Predicate | Example | Description |
 |---|---|---|
-| `contains` | `Name:contains('task')` | Case-insensitive substring |
-| `startsWith` | `Name:startsWith('I')` | Case-insensitive prefix |
-| `endsWith` | `Name:endsWith('Client')` | Case-insensitive suffix |
-| `containsAny` | `Name:containsAny(List)` | Any item in list is a substring |
-| `matches` | `Name:matches('^Foo$')` | **Case-sensitive** regex |
-| `same` | `Name:same('foo_bar')` | Convention-insensitive equality |
-| `words` | `Name:words` | Split identifier into lowercase word list |
-| `nameWithout` | `Name:nameWithout('Async')` | Remove suffix |
-| `replace` | `Name:replace('old', 'new')` | Replace substring |
+| `eq` | `Name:eq('Client')` | Case-insensitive equality |
+| `ne` | `Name:ne('Object')` | Case-insensitive inequality |
+| `ct` | `Name:ct('task')` | Case-insensitive substring |
+| `sw` | `Name:sw('I')` | Case-insensitive prefix |
+| `ew` | `Name:ew('Client')` | Case-insensitive suffix |
+| `ca` | `Name:ca(List)` | Any item in list is a substring |
+| `rx` | `Name:rx('^Foo$')` | **Case-sensitive** regex |
+| `sm` | `Name:sm('foo_bar')` | Convention-insensitive equality |
+| `in` | `Name:in(List)` | Value is a member of the list |
+
+### String Transforms
+
+| Transform | Example | Description |
+|---|---|---|
+| `Trim` | `Name.Trim('Async')` | Remove suffix |
+| `Replace` | `Name.Replace('old', 'new')` | Replace substring |
+
+### Numeric Predicates
+
+| Predicate | Example | Description |
+|---|---|---|
+| `eq` | `Depth:eq(0)` | Equal to |
+| `ne` | `Size:ne(0)` | Not equal to |
+| `gt` | `Size:gt(1000)` | Greater than |
+| `lt` | `Depth:lt(3)` | Less than |
+| `ge` | `Size:ge(100)` | Greater than or equal |
+| `le` | `Depth:le(5)` | Less than or equal |
 
 ### String Properties
 
@@ -222,33 +240,34 @@ Cop supports two comparison modes for cross-language checks:
 | `Lower` | `Name.Lower` | Lowercase version |
 | `Upper` | `Name.Upper` | Uppercase version |
 | `Normalized` | `Name.Normalized` | Convention-insensitive canonical form (`Foo_Bar` → `foobar`) |
+| `Words` | `Name.Words` | Split identifier into lowercase word list |
 
-### Convention-Insensitive Comparison with `:same`
+### Convention-Insensitive Comparison with `:sm`
 
-Use `:same()` when identifiers may follow different naming conventions across languages:
+Use `:sm()` when identifiers may follow different naming conventions across languages:
 
 ```ruby
 # All true — PascalCase, snake_case, camelCase, UPPER_SNAKE are all equivalent
-Type.Name:same('ConfigureAwait')
-Type.Name:same('configure_await')
-Type.Name:same('configureAwait')
+Type.Name:sm('ConfigureAwait')
+Type.Name:sm('configure_await')
+Type.Name:sm('configureAwait')
 ```
 
-### Identifier Normalization with `:words`
+### Identifier Normalization with `.Words`
 
-The `:words` predicate splits identifiers into lowercase words, normalizing across naming conventions:
+The `.Words` property splits identifiers into lowercase words, normalizing across naming conventions:
 
-| Input | `:words` Result |
+| Input | `.Words` Result |
 |---|---|
 | `TaskCompletionSource` | `['task', 'completion', 'source']` |
 | `taskCompletionSource` | `['task', 'completion', 'source']` |
 | `task_completion_source` | `['task', 'completion', 'source']` |
 | `HTTPClient` | `['http', 'client']` |
 
-Since `:words` returns a list, you can chain collection predicates:
+Since `.Words` returns a list, you can chain collection predicates:
 ```ruby
-Type.Name:words:contains('task')        # does identifier contain the word "task"?
-Method.Name:words:any(=> == 'get')      # does method name start with word "get"?
+Type.Name.Words:contains('task')        # does identifier contain the word "task"?
+Method.Name.Words:any(=> == 'get')      # does method name start with word "get"?
 ```
 
 ## Examples
@@ -258,10 +277,10 @@ Method.Name:words:any(=> == 'get')      # does method name start with word "get"
 ```ruby
 import code
 
-predicate client(Type) => Type.Name:endsWith('Client')
-predicate clientOptions(Type) => Type.Name:endsWith('ClientOptions')
+predicate client(Type) => Type.Name:ew('Client')
+predicate clientOptions(Type) => Type.Name:ew('ClientOptions')
 predicate Clients(Types) => client && !clientOptions
-predicate optionsType(Parameter) => Parameter.Type.Name:endsWith('Options')
+predicate optionsType(Parameter) => Parameter.Type.Name:ew('Options')
 predicate hasOptions(Constructor) => Constructor.Parameters:any(optionsType)
 predicate missingOptions(Type) => Type.Constructors:none(hasOptions)
 predicate notSealedOrAbstract(Type) => !Type.Sealed && !Type.Abstract
@@ -269,7 +288,7 @@ predicate notSealedOrAbstract(Type) => !Type.Sealed && !Type.Abstract
 predicate cancellationToken(Parameter) => Parameter.Type.Name == 'CancellationToken'
 predicate publicAsync(Method) => Method.Public && Method.Async
 predicate missingCancellationToken(Method) => Method.Parameters:none(cancellationToken)
-predicate asyncWithoutCancellation(Type) => Type.Methods:where(publicAsync):any(missingCancellationToken)
+predicate asyncWithoutCancellation(Type) => Type.Methods.Where(publicAsync):any(missingCancellationToken)
 
 ## Client types must have a constructor that accepts an Options parameter
 foreach Clients:csharp:missingOptions => PRINT('{warning:@yellow} {item.Name} should accept an options parameter')
@@ -297,14 +316,14 @@ foreach Statements:csharp:threadSleep => PRINT('{error:@red} Use Task.Delay inst
 
 ### Cross-Language Checks
 
-Use `:same()` for convention-insensitive matching across languages:
+Use `:sm()` for convention-insensitive matching across languages:
 
 ```ruby
 import code
 
 # One predicate handles all naming conventions:
 # C# PascalCase (MyClient), Python snake_case (my_client), JS camelCase (myClient)
-predicate client(Type) => Type.Name:words:contains('client')
+predicate client(Type) => Type.Name.Words:contains('client')
 predicate notPublic(Type) => !Type.Public
 
 foreach Types:client:notPublic => PRINT('{warning:@yellow} {item.Name} should be public')
@@ -313,8 +332,8 @@ foreach Types:client:notPublic => PRINT('{warning:@yellow} {item.Name} should be
 Or use language-specific overloads when the rules differ per language:
 
 ```ruby
-predicate client(Type:csharp) => Type.Name:endsWith('Client')
-predicate client(Type:python) => Type.Name:endsWith('_client')
+predicate client(Type:csharp) => Type.Name:ew('Client')
+predicate client(Type:python) => Type.Name:ew('_client')
 
 foreach Types:client:notPublic => PRINT('{warning:@yellow} {item.Name} should be public')
 ```
@@ -324,7 +343,7 @@ foreach Types:client:notPublic => PRINT('{warning:@yellow} {item.Name} should be
 ```ruby
 import code
 
-predicate bannedUsing(File) => Path('**/Domain/**') && File.Usings:any(Using:contains('System.IO'))
+predicate bannedUsing(File) => Path('**/Domain/**') && File.Usings:any(Using:ct('System.IO'))
 
 foreach Files:csharp:bannedUsing => PRINT('{error:@red} Domain layer must not reference System.IO in {File.Path}')
 ```

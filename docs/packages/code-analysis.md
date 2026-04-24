@@ -57,7 +57,7 @@ Most language-specific packages (e.g., `csharp`, `python`, `javascript`) import 
 import code-analysis
 
 let violations = Code.Types:csharp:publicType
-    :!Name:endsWith('Base')
+    :!Name:ew('Base')
     :toWarning('{item.Name} should not have a Base suffix')
 
 CHECK(violations)

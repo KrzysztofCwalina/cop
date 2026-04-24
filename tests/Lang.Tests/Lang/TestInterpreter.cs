@@ -14,7 +14,7 @@ internal static class TestInterpreter
     public static ScriptInterpreter Create()
     {
         var registry = new TypeRegistry();
-        CodeTypeRegistrar.Register(registry);
+        ProviderLoader.RegisterSchema(new CodeProvider(), registry);
         registry.RegisterProgramType();
         return new ScriptInterpreter(registry);
     }

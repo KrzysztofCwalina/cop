@@ -38,7 +38,7 @@ export predicate inSyncMethod(Statement) => Statement.Method != null && !Stateme
 # Banned API: Uri.ToString() — prefer Uri.AbsoluteUri for consistent output
 predicate uriToString(Statement) => Statement.Kind == 'call'
     && Statement.MemberName == 'ToString'
-    && Statement.TypeName != null && Statement.TypeName:matches('[Uu]ri')
+    && Statement.TypeName != null && Statement.TypeName:rx('[Uu]ri')
 
 # CA1716: Identifiers should not match C# reserved keywords
 let csharpKeywords = ['abstract', 'as', 'base', 'bool', 'break', 'byte', 'case', 'catch',
@@ -61,17 +61,17 @@ predicate internalNonAbstractClass(Type) => Type.Kind == 'Class' && !Type.Public
 # new SomeType() not inside a using ancestor
 predicate isUsingStatement(Statement) => Statement.Kind == 'using'
 predicate newCallNotInUsing(Statement) => Statement.Kind == 'call'
-    && Statement.Expression != null && Statement.Expression:matches('new\s+')
+    && Statement.Expression != null && Statement.Expression:rx('new\s+')
     && !Statement.Ancestors:any(isUsingStatement)
 
 # CHANGELOG validation: Markdown files named CHANGELOG should have ## entries
-predicate isChangelogFile(Line) => Line.File.Path:matches('CHANGELOG') && Line.Number == 1
+predicate isChangelogFile(Line) => Line.File.Path:rx('CHANGELOG') && Line.Number == 1
 
 # README: Should not contain 'Install-Package' (use 'dotnet add package')
-predicate readmeInstallPackage(Line) => Line.File.Path:matches('README') && Line.Text:matches('Install-Package')
+predicate readmeInstallPackage(Line) => Line.File.Path:rx('README') && Line.Text:rx('Install-Package')
 
 # .csproj: PackageReference should not have Version attribute (CPM compliance)
-predicate packageRefWithVersion(Line) => Line.File.Path:matches('\\.csproj$') && Line.Text:matches('PackageReference.*Version\s*=')
+predicate packageRefWithVersion(Line) => Line.File.Path:rx('\\.csproj$') && Line.Text:rx('PackageReference.*Version\s*=')
 
 # .csproj: TargetFramework validation
-predicate targetFrameworkLine(Line) => Line.File.Path:matches('\\.csproj$') && Line.Text:matches('<TargetFramework>')
+predicate targetFrameworkLine(Line) => Line.File.Path:rx('\\.csproj$') && Line.Text:rx('<TargetFramework>')

@@ -50,12 +50,12 @@ The output matches Azure SDK's `api/*.cs` stub file format: `partial class/struc
 
 ## Saving to a File
 
-Use `:text()` to flatten the collection into a single text block, then `save()` to write it:
+Use `.Text()` to flatten the collection into a single text block, then `save()` to write it:
 
 ```ruby
 import csharp-api
 
-let apiText = Code.Api:csharp:publicApi:text('{item.ApiAsText}')
+let apiText = Code.Api:csharp:publicApi.Text('{item.ApiAsText}')
 export command save-api = save('api-surface.txt', apiText)
 ```
 
@@ -63,7 +63,7 @@ export command save-api = save('api-surface.txt', apiText)
 cop run api-listing.cop save-api
 ```
 
-The `:text(template)` filter formats each item with the template and joins them with newlines into a single string. The `save(path, value)` statement writes that string to a file.
+The `.Text(template)` transform formats each item with the template and joins them with newlines into a single string. The `save(path, value)` statement writes that string to a file.
 
 ## Loading from Assemblies
 
@@ -83,7 +83,7 @@ To save assembly API to a file:
 import csharp-api
 
 let dll = Code.Load('bin/Release/net8.0/MyPackage.dll')
-let apiText = dll.Api:publicApi:text('{item.ApiAsText}')
+let apiText = dll.Api:publicApi.Text('{item.ApiAsText}')
 export command save-dll = save('api-surface.txt', apiText)
 ```
 

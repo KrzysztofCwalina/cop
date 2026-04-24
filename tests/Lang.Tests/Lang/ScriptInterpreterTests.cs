@@ -671,7 +671,7 @@ CHECK(var-usage)
     public void Run_Select_ProjectsFieldToStringList()
     {
         var source = """
-            let typeNames = Code.Types:select(item.Name)
+            let typeNames = Code.Types.Select(item.Name)
             predicate isInList(Type) => Type.Name:in(typeNames)
             let listed = Code.Types:isInList
             command CHECK = PRINT('{item.Name} is in the list', listed)

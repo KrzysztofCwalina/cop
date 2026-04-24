@@ -4,13 +4,13 @@ using Cop.Core;
 namespace TypeSpecProvider;
 
 /// <summary>
-/// CopProvider for HTTP protocol graph derived from TypeSpec.
+/// DataProvider for HTTP protocol graph derived from TypeSpec.
 /// Transforms raw TypeSpec AST through HTTP decorator interpretation.
 /// Exposes HttpOperations, HttpServices with resolved verbs, paths, parameters.
 /// </summary>
-public class TypeSpecHttpProvider : CopProvider
+public class TypeSpecHttpProvider : DataProvider
 {
-    public override byte[] GetSchema()
+    public override ReadOnlyMemory<byte> GetSchema()
     {
         var schema = new
         {
@@ -88,7 +88,7 @@ public class TypeSpecHttpProvider : CopProvider
         return JsonSerializer.SerializeToUtf8Bytes(schema, JsonOptions);
     }
 
-    public override byte[] QueryJson(ProviderQuery query)
+    public override byte[] Query(ProviderQuery query)
     {
         var rawSpec = new TspSpec();
 

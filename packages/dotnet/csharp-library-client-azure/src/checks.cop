@@ -9,26 +9,26 @@ predicate missingBaseClass(Type) => !inheritsClientOptions
 predicate missingCtorWithOptions(Type) => !ctorWithOptions
 predicate missingCtorWithoutOptions(Type) => ctorWithOptions && !ctorWithoutOptions
 
-predicate convenienceWithRequestContent(Type) => Type.Methods:where(convenience):any(usesRequestContent)
+predicate convenienceWithRequestContent(Type) => Type.Methods.Where(convenience):any(usesRequestContent)
 
 predicate tooManyCtorParams(Constructor) => Constructor.Public && Constructor.Parameters.Count > 1
 predicate optionsCtorOverloaded(Type) => Type.Constructors:any(tooManyCtorParams)
 
 predicate firstParamNotServiceVersion(Constructor) => Constructor.Public
     && Constructor.Parameters.Count > 0
-    && !Constructor.Parameters.First.Type:endsWith('ServiceVersion')
+    && !Constructor.Parameters.First.Type:ew('ServiceVersion')
 predicate optionsCtorBadFirstParam(Type) => Type.Constructors:any(firstParamNotServiceVersion)
 
 predicate missingServiceVersionEnum(Type) => Type.NestedTypes:!any(serviceVersionEnum)
 
-predicate badVersionMemberName(Name) => !Name:matches('^V\\d+(_\\d+)*$')
+predicate badVersionMemberName(Name) => !Name:rx('^V\\d+(_\\d+)*$')
 predicate serviceVersionWithBadNames(Type) => Type.Kind == 'Enum' && Type.Name == 'ServiceVersion'
     && Type.EnumValues:any(badVersionMemberName)
 predicate badServiceVersionNames(Type) => Type.NestedTypes:any(serviceVersionWithBadNames)
 
 predicate serviceVersionParamNoDefault(Constructor) => Constructor.Public
     && Constructor.Parameters.Count > 0
-    && Constructor.Parameters.First.Type:endsWith('ServiceVersion')
+    && Constructor.Parameters.First.Type:ew('ServiceVersion')
     && !Constructor.Parameters.First.Defaulted
 predicate optionsCtorMissingDefault(Type) => Type.Constructors:any(serviceVersionParamNoDefault)
 
@@ -36,7 +36,7 @@ predicate missingCancellation(Method) => Method.Parameters:!any(cancellation)
 predicate cancellationNotOptional(Method) => Method.Parameters:any(cancellation)
     && !Method.Parameters.Last.Defaulted
     && (Method.Parameters.Last.Type == 'CancellationToken' || Method.Parameters.Last.Type == 'RequestContext')
-predicate methodMissingCancellation(Type) => Type.Methods:where(publicServiceMethod):any(missingCancellation)
+predicate methodMissingCancellation(Type) => Type.Methods.Where(publicServiceMethod):any(missingCancellation)
 
 predicate bannedReturnType(Method) => Method.Public
     && Method.ReturnType != null
@@ -67,7 +67,7 @@ predicate allowedProtocolReturn(Method) => Method.ReturnType:in(AllowedProtocolR
 predicate invalidProtocolReturn(Method) => protocolMethodByContext && !allowedProtocolReturn
 predicate protocolWithInvalidReturn(Type) => Type.Methods:any(invalidProtocolReturn)
 
-predicate ambiguousOverload(Type) => Type.Methods:where(protocolMethod):any(protocolWithSameNameConvenience)
+predicate ambiguousOverload(Type) => Type.Methods.Where(protocolMethod):any(protocolWithSameNameConvenience)
 
 ## Azure clients must accept TokenCredential for authentication
 export let client-needs-token-credential = Clients:missingTokenCredential

@@ -61,13 +61,13 @@ public class PackageMetadata
 
     /// <summary>
     /// Provider type. When set to "clr", this package contains a CLR assembly
-    /// that implements <see cref="CopProvider"/>. Defaults to empty (no provider).
+    /// that implements <see cref="DataProvider"/>. Defaults to empty (no provider).
     /// </summary>
     [YamlMember(Alias = "provider")]
     public string Provider { get; set; } = string.Empty;
 
     /// <summary>
-    /// Fully-qualified class name of the <see cref="CopProvider"/> subclass.
+    /// Fully-qualified class name of the <see cref="DataProvider"/> subclass.
     /// Required when <see cref="Provider"/> is "clr". The engine instantiates
     /// exactly this class from the provider assembly.
     /// </summary>

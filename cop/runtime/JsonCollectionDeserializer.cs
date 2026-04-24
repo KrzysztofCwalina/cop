@@ -5,7 +5,7 @@ using Cop.Lang;
 namespace Cop.Providers;
 
 /// <summary>
-/// Deserializes UTF-8 JSON from a <see cref="CopProvider.QueryJson"/> response
+/// Deserializes UTF-8 JSON from a <see cref="DataProvider.Query"/> response
 /// into ScriptObject instances using the provider's type schema.
 /// </summary>
 public static class JsonCollectionDeserializer
@@ -24,7 +24,7 @@ public static class JsonCollectionDeserializer
         var root = doc.RootElement;
 
         if (root.ValueKind != JsonValueKind.Object)
-            throw new InvalidOperationException("Provider QueryJson must return a JSON object.");
+            throw new InvalidOperationException("Provider Query must return a JSON object.");
 
         foreach (var prop in root.EnumerateObject())
         {

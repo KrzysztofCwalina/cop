@@ -33,7 +33,13 @@ public static class FilterCompiler
             PropertyFilter pf => CompilePropertyFilter(pf, accessors),
             StringOpFilter sf => CompileStringOpFilter(sf, accessors),
             ComparisonFilter cf => CompileComparisonFilter(cf, accessors),
+            ContainsAnyFilter caf => CompileContainsAnyFilter(caf, accessors),
+            InFilter inf => CompileInFilter(inf, accessors),
+            CollectionContainsFilter ccf => CompileCollectionContainsFilter(ccf, accessors),
+            CollectionAnyFilter canyf => CompileCollectionAnyFilter(canyf, accessors),
+            CollectionCountFilter ccntf => CompileCollectionCountFilter(ccntf, accessors),
             AndFilter af => CompileAndFilter(af, accessors),
+            OrFilter orf => CompileOrFilter(orf, accessors),
             NotFilter nf => CompileNotFilter(nf, accessors),
             _ => _ => true // Unknown filter type — pass everything through
         };
@@ -70,6 +76,7 @@ public static class FilterCompiler
                 StringOp.EndsWith => value.EndsWith(sf.Value, StringComparison.OrdinalIgnoreCase),
                 StringOp.Contains => value.Contains(sf.Value, StringComparison.OrdinalIgnoreCase),
                 StringOp.Equals => value.Equals(sf.Value, StringComparison.OrdinalIgnoreCase),
+                StringOp.Same => NormalizeIdentifier(value) == NormalizeIdentifier(sf.Value),
                 StringOp.Matches => System.Text.RegularExpressions.Regex.IsMatch(
                     value, sf.Value, System.Text.RegularExpressions.RegexOptions.None,
                     TimeSpan.FromSeconds(1)),
@@ -110,6 +117,45 @@ public static class FilterCompiler
         };
     }
 
+    private static Func<object, bool> CompileContainsAnyFilter(
+        ContainsAnyFilter caf, Dictionary<string, Func<object, object?>> accessors)
+    {
+        if (!accessors.TryGetValue(caf.Property, out var accessor))
+            return _ => true;
+
+        return item =>
+        {
+            var value = accessor(item)?.ToString();
+            if (value is null) return false;
+
+            foreach (var v in caf.Values)
+            {
+                if (value.Contains(v, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        };
+    }
+
+    private static Func<object, bool> CompileInFilter(
+        InFilter inf, Dictionary<string, Func<object, object?>> accessors)
+    {
+        if (!accessors.TryGetValue(inf.Property, out var accessor))
+            return _ => true;
+
+        return item =>
+        {
+            var value = accessor(item)?.ToString() ?? "";
+
+            foreach (var v in inf.Values)
+            {
+                if (value.Equals(v, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        };
+    }
+
     private static Func<object, bool> CompileAndFilter(
         AndFilter af, Dictionary<string, Func<object, object?>> accessors)
     {
@@ -122,10 +168,94 @@ public static class FilterCompiler
         };
     }
 
+    private static Func<object, bool> CompileOrFilter(
+        OrFilter orf, Dictionary<string, Func<object, object?>> accessors)
+    {
+        var compiled = orf.Conditions.Select(c => Compile(c, accessors)).ToArray();
+        return item =>
+        {
+            foreach (var pred in compiled)
+                if (pred(item)) return true;
+            return false;
+        };
+    }
+
     private static Func<object, bool> CompileNotFilter(
         NotFilter nf, Dictionary<string, Func<object, object?>> accessors)
     {
         var inner = Compile(nf.Inner, accessors);
         return item => !inner(item);
     }
+
+    private static Func<object, bool> CompileCollectionContainsFilter(
+        CollectionContainsFilter ccf, Dictionary<string, Func<object, object?>> accessors)
+    {
+        if (!accessors.TryGetValue(ccf.Property, out var accessor))
+            return _ => true;
+
+        return item =>
+        {
+            var value = accessor(item);
+            if (value is not System.Collections.IList list) return false;
+
+            foreach (var elem in list)
+            {
+                if (string.Equals(elem?.ToString(), ccf.Value, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        };
+    }
+
+    private static Func<object, bool> CompileCollectionAnyFilter(
+        CollectionAnyFilter canyf, Dictionary<string, Func<object, object?>> accessors)
+    {
+        if (!accessors.TryGetValue(canyf.Property, out var accessor))
+            return _ => true;
+
+        // The item filter needs accessors for the child type — these are in the same
+        // accessor dictionary if the child type's properties are registered (flattened).
+        // For now, compile the item filter with the same accessors.
+        var itemPredicate = Compile(canyf.ItemFilter, accessors);
+
+        return item =>
+        {
+            var value = accessor(item);
+            if (value is not System.Collections.IList list) return false;
+
+            foreach (var elem in list)
+            {
+                if (elem is not null && itemPredicate(elem))
+                    return true;
+            }
+            return false;
+        };
+    }
+
+    private static Func<object, bool> CompileCollectionCountFilter(
+        CollectionCountFilter ccntf, Dictionary<string, Func<object, object?>> accessors)
+    {
+        if (!accessors.TryGetValue(ccntf.Property, out var accessor))
+            return _ => true;
+
+        return item =>
+        {
+            var value = accessor(item);
+            if (value is not System.Collections.IList list) return false;
+
+            int count = list.Count;
+            return ccntf.Op switch
+            {
+                CompareOp.Equals => count == ccntf.Value,
+                CompareOp.GreaterThan => count > ccntf.Value,
+                CompareOp.LessThan => count < ccntf.Value,
+                CompareOp.GreaterOrEqual => count >= ccntf.Value,
+                CompareOp.LessOrEqual => count <= ccntf.Value,
+                _ => true
+            };
+        };
+    }
+
+    private static string NormalizeIdentifier(string s) =>
+        s.Replace("_", "").Replace("-", "").ToLowerInvariant();
 }

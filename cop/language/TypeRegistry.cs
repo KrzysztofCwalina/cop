@@ -357,7 +357,7 @@ public class TypeRegistry
     {
         if (value is ScriptObject ao)
             return ao.TypeName;
-        if (value is DataObjectView v)
+        if (value is RecordView v)
             return v.Table.TypeName;
         return _clrTypeMappings.TryGetValue(value.GetType(), out var name) ? name : null;
     }
@@ -419,7 +419,7 @@ public class TypeRegistry
 
     /// <summary>
     /// Auto-generates slot-based property accessors for all types in a provider schema.
-    /// Each property accessor reads from the corresponding <see cref="DataObjectView"/> slot,
+    /// Each property accessor reads from the corresponding <see cref="RecordView"/> slot,
     /// decoding strings from the shared UTF-8 string heap. Slot index = property order in schema.
     /// </summary>
     public void RegisterDataTableAccessors(ProviderSchema schema)
@@ -431,31 +431,148 @@ public class TypeRegistry
             {
                 var prop = ts.Properties[slot];
                 int capturedSlot = slot; // capture for closure
-                accessors[prop.Name] = prop.Type switch
+                bool isPrimitive = prop.Type is "string" or "int" or "bool";
+
+                if (!prop.Collection && isPrimitive)
                 {
-                    "string" => obj =>
+                    // Scalar primitive — works for both required and optional
+                    accessors[prop.Name] = prop.Type switch
                     {
-                        var v = (DataObjectView)obj;
-                        return v.Table.Records[v.Index].GetString(capturedSlot, v.Table.StringHeap);
-                    },
-                    "int" => obj =>
+                        "string" => obj =>
+                        {
+                            var v = (RecordView)obj;
+                            return v.Table.GetString(v.Index, capturedSlot);
+                        },
+                        "int" => obj =>
+                        {
+                            var v = (RecordView)obj;
+                            return (object)v.Table.GetInt32(v.Index, capturedSlot);
+                        },
+                        "bool" => obj =>
+                        {
+                            var v = (RecordView)obj;
+                            return (object)v.Table.GetBool(v.Index, capturedSlot);
+                        },
+                        _ => throw new InvalidOperationException()
+                    };
+                }
+                else
+                {
+                    // Collection or object-reference — raw long placeholder, wired later
+                    accessors[prop.Name] = obj =>
                     {
-                        var v = (DataObjectView)obj;
-                        return (object)v.Table.Records[v.Index].GetInt32(capturedSlot);
-                    },
-                    "bool" => obj =>
-                    {
-                        var v = (DataObjectView)obj;
-                        return (object)v.Table.Records[v.Index].GetBool(capturedSlot);
-                    },
-                    _ => obj =>
-                    {
-                        var v = (DataObjectView)obj;
-                        return (object)v.Table.Records[v.Index].GetInt64(capturedSlot);
-                    },
-                };
+                        var v = (RecordView)obj;
+                        return (object)v.Table.GetInt64(v.Index, capturedSlot);
+                    };
+                }
             }
             RegisterAccessors(ts.Name, accessors);
+        }
+    }
+
+    /// <summary>
+    /// Wires collection and reference property accessors using the actual DataStore tables.
+    /// Call after <see cref="RegisterDataTableAccessors"/> and after the DataStore is built.
+    /// Replaces raw long accessors with proper RecordView-returning accessors for
+    /// collection (range → List&lt;RecordView&gt;) and reference (index → RecordView) properties.
+    /// </summary>
+    public void WireDataStoreAccessors(ProviderSchema schema, DataStore store)
+    {
+        // Build lookups: by type name (for object refs) and by table name (for string collections)
+        var tableByType = new Dictionary<string, DataTable>();
+        var tableByName = new Dictionary<string, DataTable>();
+        foreach (var (name, table) in store.Tables)
+        {
+            tableByName[name] = table;
+            tableByType[table.TypeName] = table;
+        }
+
+        foreach (var ts in schema.Types)
+        {
+            var desc = GetType(ts.Name);
+            if (desc is null) continue;
+
+            for (int slot = 0; slot < ts.Properties.Count; slot++)
+            {
+                var prop = ts.Properties[slot];
+                int capturedSlot = slot;
+                bool isPrimitive = prop.Type is "string" or "int" or "bool";
+
+                if (prop.Collection)
+                {
+                    if (isPrimitive)
+                    {
+                        // String/int/bool collection: range into a child table named "{Type}.{Prop}"
+                        string childTableName = $"{ts.Name}.{prop.Name}";
+                        if (tableByName.TryGetValue(childTableName, out var strTable))
+                        {
+                            var capturedChild = strTable;
+                            desc.Properties[prop.Name].Accessor = prop.Type switch
+                            {
+                                "string" => obj =>
+                                {
+                                    var v = (RecordView)obj;
+                                    var (start, count) = v.Table.GetRange(v.Index, capturedSlot);
+                                    var items = new List<object>(count);
+                                    for (int i = 0; i < count; i++)
+                                        items.Add(capturedChild.GetString(start + i, 0));
+                                    return items;
+                                },
+                                "int" => obj =>
+                                {
+                                    var v = (RecordView)obj;
+                                    var (start, count) = v.Table.GetRange(v.Index, capturedSlot);
+                                    var items = new List<object>(count);
+                                    for (int i = 0; i < count; i++)
+                                        items.Add(capturedChild.GetInt32(start + i, 0));
+                                    return items;
+                                },
+                                "bool" => obj =>
+                                {
+                                    var v = (RecordView)obj;
+                                    var (start, count) = v.Table.GetRange(v.Index, capturedSlot);
+                                    var items = new List<object>(count);
+                                    for (int i = 0; i < count; i++)
+                                        items.Add(capturedChild.GetBool(start + i, 0));
+                                    return items;
+                                },
+                                _ => throw new InvalidOperationException()
+                            };
+                        }
+                    }
+                    else
+                    {
+                        // Object collection: range reference into a child table by type name
+                        if (tableByType.TryGetValue(prop.Type, out var childTable))
+                        {
+                            var capturedChild = childTable;
+                            desc.Properties[prop.Name].Accessor = obj =>
+                            {
+                                var v = (RecordView)obj;
+                                var (start, count) = v.Table.GetRange(v.Index, capturedSlot);
+                                var items = new List<object>(count);
+                                for (int i = 0; i < count; i++)
+                                    items.Add(new RecordView(capturedChild, start + i));
+                                return items;
+                            };
+                        }
+                    }
+                }
+                else if (!isPrimitive)
+                {
+                    // Optional object reference: index into a child table (-1 = null)
+                    if (tableByType.TryGetValue(prop.Type, out var refTable))
+                    {
+                        var capturedRef = refTable;
+                        desc.Properties[prop.Name].Accessor = obj =>
+                        {
+                            var v = (RecordView)obj;
+                            int idx = v.Table.GetRef(v.Index, capturedSlot);
+                            return idx < 0 ? null : new RecordView(capturedRef, idx);
+                        };
+                    }
+                }
+            }
         }
     }
 }

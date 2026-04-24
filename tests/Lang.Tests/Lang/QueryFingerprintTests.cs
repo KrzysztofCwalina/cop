@@ -79,10 +79,10 @@ public class QueryFingerprintTests
         {
             new IdentifierExpr("Public"),
             new IdentifierExpr("Abstract"),
-            new FunctionCallExpr("select", [new IdentifierExpr("Name")])
+            new FunctionCallExpr("Select", [new IdentifierExpr("Name")])
         };
         var result = QueryFingerprint.Compute("Types", filters, null);
-        Assert.That(result, Is.EqualTo("Types:Abstract:Public:select(Name)"));
+        Assert.That(result, Is.EqualTo("Types:Abstract:Public.Select(Name)"));
     }
 
     [Test]
@@ -91,12 +91,12 @@ public class QueryFingerprintTests
         var filters = new List<Expression>
         {
             new IdentifierExpr("Public"),
-            new FunctionCallExpr("select", [new IdentifierExpr("Name")]),
+            new FunctionCallExpr("Select", [new IdentifierExpr("Name")]),
             new IdentifierExpr("Zebra"),
             new IdentifierExpr("Alpha")
         };
         var result = QueryFingerprint.Compute("Types", filters, null);
-        Assert.That(result, Is.EqualTo("Types:Public:select(Name):Alpha:Zebra"));
+        Assert.That(result, Is.EqualTo("Types:Public.Select(Name):Alpha:Zebra"));
     }
 
     [Test]
@@ -105,10 +105,10 @@ public class QueryFingerprintTests
         var filters = new List<Expression>
         {
             new IdentifierExpr("Public"),
-            new FunctionCallExpr("text", [new LiteralExpr("template")])
+            new FunctionCallExpr("Text", [new LiteralExpr("template")])
         };
         var result = QueryFingerprint.Compute("Types", filters, null);
-        Assert.That(result, Is.EqualTo("Types:Public:text('template')"));
+        Assert.That(result, Is.EqualTo("Types:Public.Text('template')"));
     }
 
     [Test]
@@ -182,11 +182,11 @@ public class QueryFingerprintTests
         {
             new PredicateCallExpr(
                 new IdentifierExpr("Name"),
-                "startswith",
+                "sw",
                 [new LiteralExpr("A")])
         };
         var result = QueryFingerprint.Compute("Types", filters, null);
-        Assert.That(result, Is.EqualTo("Types:Name.startswith('A')"));
+        Assert.That(result, Is.EqualTo("Types:Name.sw('A')"));
     }
 
     [Test]
@@ -196,38 +196,38 @@ public class QueryFingerprintTests
         {
             new PredicateCallExpr(
                 new IdentifierExpr("Name"),
-                "startswith",
+                "sw",
                 [new LiteralExpr("A")],
                 Negated: true)
         };
         var result = QueryFingerprint.Compute("Types", filters, null);
-        Assert.That(result, Is.EqualTo("Types:!Name.startswith('A')"));
+        Assert.That(result, Is.EqualTo("Types:!Name.sw('A')"));
     }
 
     [Test]
     public void ComplexChain_OrderIndependentBeforeBarrier()
     {
-        // Types:Public:csharp:Abstract:select(Name) should equal
-        // Types:csharp:Abstract:Public:select(Name)
+        // Types:Public:csharp:Abstract.Select(Name) should equal
+        // Types:csharp:Abstract:Public.Select(Name)
         var filtersA = new List<Expression>
         {
             new IdentifierExpr("Public"),
             new IdentifierExpr("csharp"),
             new IdentifierExpr("Abstract"),
-            new FunctionCallExpr("select", [new IdentifierExpr("Name")])
+            new FunctionCallExpr("Select", [new IdentifierExpr("Name")])
         };
         var filtersB = new List<Expression>
         {
             new IdentifierExpr("csharp"),
             new IdentifierExpr("Abstract"),
             new IdentifierExpr("Public"),
-            new FunctionCallExpr("select", [new IdentifierExpr("Name")])
+            new FunctionCallExpr("Select", [new IdentifierExpr("Name")])
         };
 
         var a = QueryFingerprint.Compute("Types", filtersA, "test.cs");
         var b = QueryFingerprint.Compute("Types", filtersB, "test.cs");
         Assert.That(a, Is.EqualTo(b));
-        Assert.That(a, Is.EqualTo("Types:Abstract:Public:csharp:select(Name)@test.cs"));
+        Assert.That(a, Is.EqualTo("Types:Abstract:Public:csharp.Select(Name)@test.cs"));
     }
 
     [Test]

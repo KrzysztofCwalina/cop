@@ -54,7 +54,7 @@ public class LanguageDetectionTests
     public void DetectsLanguage_InPredicateConstraint()
     {
         var source = """
-            predicate client(Type:csharp) => Type.Name:endsWith('Client')
+            predicate client(Type:csharp) => Type.Name:ew('Client')
             let clients = Code.Types:client
             command CHECK = PRINT('{item.Name}', clients)
             """;

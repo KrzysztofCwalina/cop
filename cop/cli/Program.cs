@@ -1,5 +1,15 @@
 using System.CommandLine;
+using System.Diagnostics;
 using Cop.Cli.Commands;
+
+bool diag = args.Contains("--diag");
+long clrStartupMs = 0;
+if (diag)
+{
+    var process = Process.GetCurrentProcess();
+    clrStartupMs = (long)(DateTime.UtcNow - process.StartTime.ToUniversalTime()).TotalMilliseconds;
+    Console.Error.WriteLine($"[diag] Process startup: {clrStartupMs}ms");
+}
 
 var rootCommand = new RootCommand { Description = "cop — a DSL for processing lists" };
 

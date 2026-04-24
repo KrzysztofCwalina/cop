@@ -3,7 +3,7 @@
 import code-analysis
 
 predicate missingAsyncParam(Method) => Method.Parameters:!any(asyncBoolParam)
-predicate nonPublicAsyncWithoutParam(Type) => Type.Methods:where(nonPublicAsync):any(missingAsyncParam)
+predicate nonPublicAsyncWithoutParam(Type) => Type.Methods.Where(nonPublicAsync):any(missingAsyncParam)
 
 export predicate bannedInternalType(Parameter) => Parameter.Type.Namespace == 'System.Runtime.CompilerServices'
     || Parameter.Type.Namespace == 'System.Runtime.InteropServices'

@@ -10,7 +10,7 @@ public class TypeBinderTests
     private TypeRegistry CreateRegistry()
     {
         var registry = new TypeRegistry();
-        CodeTypeRegistrar.Register(registry);
+        ProviderLoader.RegisterSchema(new CodeProvider(), registry);
         return registry;
     }
 
@@ -132,7 +132,7 @@ public class TypeBinderTests
         var file = ScriptParser.Parse(
             """
             import code
-            predicate nameCheck(Type) => Type.Name:endsWith('Client')
+            predicate nameCheck(Type) => Type.Name:ew('Client')
             """, "test.cop");
 
         var errors = binder.Bind(file);

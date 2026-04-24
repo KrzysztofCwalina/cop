@@ -9,7 +9,7 @@ public class TokenizerTests
     [Test]
     public void Tokenize_PredicateDefinition()
     {
-        var tokens = new Tokenizer("IsClient(Type) => Type.Name:endsWith('Client')").Tokenize();
+        var tokens = new Tokenizer("IsClient(Type) => Type.Name:ew('Client')").Tokenize();
         Assert.That(tokens[0].Kind, Is.EqualTo(TokenKind.Identifier));
         Assert.That(tokens[0].Value, Is.EqualTo("IsClient"));
         Assert.That(tokens[1].Kind, Is.EqualTo(TokenKind.LParen));
