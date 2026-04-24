@@ -13,7 +13,7 @@ foreach ($rid in $Runtimes) {
     New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 
     Write-Host "Publishing cop for $rid..."
-    dotnet publish "$RepoRoot\cop\cli\cop.csproj" -c Release -r $rid --self-contained -o $outDir
+    dotnet publish "$RepoRoot\cop\cli\cop.csproj" -c Release -r $rid --self-contained -p:PublishReadyToRun=false -o $outDir
     
     # Clean up build artifacts
     Remove-Item -Force "$outDir\*.pdb" -ErrorAction SilentlyContinue
