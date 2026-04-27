@@ -43,6 +43,7 @@ public class ScriptParser
         var imports = new List<string>();
         var feedPaths = new List<string>();
         var typeDefinitions = new List<TypeDefinition>();
+        var flagsDefinitions = new List<FlagsDefinition>();
         var collectionDeclarations = new List<CollectionDeclaration>();
         var letDeclarations = new List<LetDeclaration>();
         var predicates = new List<PredicateDefinition>();
@@ -87,9 +88,11 @@ public class ScriptParser
                     predicates.Add(ParsePredicateDefinition(isExported: true));
                 else if (Current.Kind == TokenKind.FunctionKeyword)
                     functions.Add(ParseFunctionDefinition(isExported: true));
+                else if (Current.Kind == TokenKind.FlagsKeyword)
+                    flagsDefinitions.Add(ParseFlagsDefinition(isExported: true));
                 else
                     throw new ParseException(
-                        "Expected type, collection, let, command, or predicate after 'export'",
+                        "Expected type, collection, let, command, predicate, or flags after 'export'",
                         _filePath, Current.Line);
             }
             else if (Current.Kind == TokenKind.TypeKeyword)
@@ -152,15 +155,20 @@ public class ScriptParser
                 pendingDocComment = null;
                 functions.Add(ParseFunctionDefinition());
             }
+            else if (Current.Kind == TokenKind.FlagsKeyword)
+            {
+                pendingDocComment = null;
+                flagsDefinitions.Add(ParseFlagsDefinition());
+            }
             else
             {
                 throw new ParseException(
-                    $"Unexpected token '{Current.Value}' — expected predicate, let, command, foreach, type, or collection",
+                    $"Unexpected token '{Current.Value}' — expected predicate, let, command, foreach, type, flags, or collection",
                     _filePath, Current.Line);
             }
         }
 
-        return new ScriptFile(_filePath, imports, typeDefinitions, collectionDeclarations, letDeclarations, predicates, functions, commands, runInvocations, feedPaths.Count > 0 ? feedPaths : null);
+        return new ScriptFile(_filePath, imports, typeDefinitions, collectionDeclarations, letDeclarations, predicates, functions, commands, runInvocations, feedPaths.Count > 0 ? feedPaths : null, flagsDefinitions.Count > 0 ? flagsDefinitions : null);
     }
 
     private string CollectDocComment()
@@ -200,6 +208,24 @@ public class ScriptParser
 
         var properties = ParsePropertyBlock();
         return new TypeDefinition(name.Value, baseType, properties, line, isExported);
+    }
+
+    // flags Visibility = Public | Protected | Private | Internal
+    private FlagsDefinition ParseFlagsDefinition(bool isExported = false)
+    {
+        int line = Current.Line;
+        Expect(TokenKind.FlagsKeyword);
+        var name = Expect(TokenKind.Identifier);
+        Expect(TokenKind.Equals);
+
+        var members = new List<string>();
+        members.Add(Expect(TokenKind.Identifier).Value);
+        while (Current.Kind == TokenKind.Pipe)
+        {
+            Advance();
+            members.Add(Expect(TokenKind.Identifier).Value);
+        }
+        return new FlagsDefinition(name.Value, members, line, isExported);
     }
 
     private List<PropertyDefinition> ParsePropertyBlock()
@@ -726,13 +752,35 @@ public class ScriptParser
 
     private Expression ParseEquality()
     {
-        var left = ParseAdditive();
+        var left = ParseBitwiseOr();
         if (Current.Kind is TokenKind.EqualEqual or TokenKind.NotEqual
             or TokenKind.GreaterThan or TokenKind.LessThan
             or TokenKind.GreaterEqual or TokenKind.LessEqual)
         {
             var op = Advance();
-            left = new BinaryExpr(left, op.Value, ParseAdditive());
+            left = new BinaryExpr(left, op.Value, ParseBitwiseOr());
+        }
+        return left;
+    }
+
+    private Expression ParseBitwiseOr()
+    {
+        var left = ParseBitwiseAnd();
+        while (Current.Kind == TokenKind.Pipe)
+        {
+            Advance();
+            left = new BinaryExpr(left, "|", ParseBitwiseAnd());
+        }
+        return left;
+    }
+
+    private Expression ParseBitwiseAnd()
+    {
+        var left = ParseAdditive();
+        while (Current.Kind == TokenKind.Ampersand)
+        {
+            Advance();
+            left = new BinaryExpr(left, "&", ParseAdditive());
         }
         return left;
     }
@@ -792,16 +840,17 @@ public class ScriptParser
                     Advance();
                 }
                 var predName = Expect(TokenKind.Identifier);
+                var normalizedName = NormalizePredicateName(predName.Value);
                 if (Current.Kind == TokenKind.LParen)
                 {
                     Advance();
                     var args = ParseArgList();
                     Expect(TokenKind.RParen);
-                    expr = new PredicateCallExpr(expr, predName.Value, args, negated);
+                    expr = new PredicateCallExpr(expr, normalizedName, args, negated);
                 }
                 else
                 {
-                    expr = new PredicateCallExpr(expr, predName.Value, [], negated);
+                    expr = new PredicateCallExpr(expr, normalizedName, [], negated);
                 }
             }
             else
@@ -928,4 +977,22 @@ public class ScriptParser
         Expect(TokenKind.RBrace);
         return new ObjectLiteralExpr(fields);
     }
+
+    /// <summary>Expands legacy 2-letter predicate abbreviations to their full camelCase names.</summary>
+    private static string NormalizePredicateName(string name) => name switch
+    {
+        "eq" => "equals",
+        "ne" => "notEquals",
+        "sw" => "startsWith",
+        "ew" => "endsWith",
+        "ct" => "contains",
+        "ca" => "containsAny",
+        "rx" => "matches",
+        "sm" => "sameAs",
+        "gt" => "greaterThan",
+        "lt" => "lessThan",
+        "ge" => "greaterOrEqual",
+        "le" => "lessOrEqual",
+        _ => name
+    };
 }

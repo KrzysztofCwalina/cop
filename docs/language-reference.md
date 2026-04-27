@@ -66,6 +66,7 @@ A `.cop` file contains these kinds of declarations:
 |---|---|
 | `import` | Bring types and lists from a package into scope |
 | `type` | Describe the shape of an object’s property list |
+| `flags` | Define a flags enum for bitwise operations |
 | `let` | Declare a named list (base or subset) |
 | `command name =` | Define a named command (PRINT, SAVE, or composition) |
 | `predicate name(Param) =>` | Define a named predicate for subsetting |
@@ -105,6 +106,23 @@ type SpecialMethod = Method & { Extra : string }
 
 The `&` operator creates a property **superset** — `Constructor = Method & {}` means a Constructor has all the properties of a Method (and is a distinct nominal type).
 
+### Flags
+
+`flags` defines a set of named bit constants for use with the `&` (bitwise AND) and `|` (bitwise OR) operators:
+
+```ruby
+flags Modifier = Public | Private | Protected | Internal | Static | Sealed | Abstract | Virtual
+```
+
+Each member is assigned a power of 2 automatically (Public=1, Private=2, Protected=4, ...). Use with an integer property and `&` to test individual bits:
+
+```ruby
+predicate isPublic(Type) => Type.Modifiers & Public != 0
+predicate isSealed(Type) => Type.Modifiers & Sealed != 0
+```
+
+The `code` package defines a `Modifier` flags enum and provides `isX` predicates for all common modifiers (see [Code Package Reference](packages/code-package-reference.md)).
+
 ### Let Declarations
 
 `let` declares a named list. It has two forms:
@@ -129,15 +147,15 @@ let PublicClients = Clients:isPublic       # subset of a subset
 A predicate is a named boolean expression that operates on a typed item. Predicates are the primary mechanism for creating subsets:
 
 ```ruby
-predicate client(Type) => Type.Name:ew('Client')
-predicate publicAsync(Method) => Method.Public && Method.Async
+predicate client(Type) => Type.Name:endsWith('Client')
+predicate publicAsync(Method) => Method:isPublic && Method:isAsync
 predicate usesVar(Statement) => Statement.Keywords:contains('var')
 ```
 
 Predicates compose by reference:
 
 ```ruby
-predicate optionsType(Parameter) => Parameter.Type.Name:ew('Options')
+predicate optionsType(Parameter) => Parameter.Type.Name:endsWith('Options')
 predicate hasOptions(Constructor) => Constructor.Parameters:any(optionsType)
 predicate missingOptions(Type) => Type.Constructors:none(hasOptions)
 ```
@@ -163,9 +181,9 @@ When applied as a filter, items are narrowed to `Call` (a superset of Statement�
 Append `:constraint` to the parameter type to create predicate overloads constrained by another predicate. The constraint is any predicate — language names like `csharp` and `python` are just predicates that match by file language:
 
 ```ruby
-predicate client(Type) => Type.Name:ew('Client')
-predicate client(Type:csharp) => Type.Name:ew('Client')
-predicate client(Type:python) => Type.Name:ew('_client')
+predicate client(Type) => Type.Name:endsWith('Client')
+predicate client(Type:csharp) => Type.Name:endsWith('Client')
+predicate client(Type:python) => Type.Name:endsWith('_client')
 ```
 
 Resolution order:
@@ -176,15 +194,15 @@ Resolution order:
 Constraints are not limited to languages — any predicate can be used:
 
 ```ruby
-predicate sealed(Type:csharp) => Type.Sealed
-predicate sealed(Type:python) => Type.Decorators:any(Decorator:ct('final'))
+predicate sealed(Type:csharp) => Type:isSealed
+predicate sealed(Type:python) => Type.Decorators:any(Decorator:contains('final'))
 ```
 
 ## Operations
 
 Cop uses two operators for accessing members:
 
-- **`:` (colon)** — applies a **predicate** (returns bool). Predicates use `camelCase` names: `:eq()`, `:sw()`, `:any()`, `:contains()`.
+- **`:` (colon)** — applies a **predicate** (returns bool). Predicates use `camelCase` names: `:equals()`, `:startsWith()`, `:any()`, `:contains()`.
 - **`.` (dot)** — accesses a **property** or **transform** (returns a value). Properties and transforms use `PascalCase` names: `.Name`, `.Count`, `.Where()`, `.Select()`.
 
 ### Subset (`:`)
@@ -230,6 +248,13 @@ A || B          # logical OR
 !A              # logical NOT
 ```
 
+#### Bitwise Operators
+
+```ruby
+X & Y           # bitwise AND (used with flags enums)
+X | Y           # bitwise OR
+```
+
 #### Comparison
 
 ```ruby
@@ -244,49 +269,49 @@ X <= 100        # less than or equal
 #### String Predicates
 
 ```ruby
-Name:ew('Client')              # case-insensitive suffix match
-Name:sw('Azure')               # case-insensitive prefix match
-Name:ct('Options')             # case-insensitive substring match
-Name:rx(@'\bList<.*>')         # regex match (case-sensitive)
-Name:eq('Program')             # case-insensitive equality
-Name:ne('Object')              # case-insensitive inequality
-Name:sm('configure_await')     # convention-insensitive (matches ConfigureAwait, configureAwait, etc.)
-Name:ca(['Get', 'Set'])        # any item in list is a substring
+Name:endsWith('Client')              # case-insensitive suffix match
+Name:startsWith('Azure')               # case-insensitive prefix match
+Name:contains('Options')             # case-insensitive substring match
+Name:matches(@'\bList<.*>')         # regex match (case-sensitive)
+Name:equals('Program')             # case-insensitive equality
+Name:notEquals('Object')              # case-insensitive inequality
+Name:sameAs('configure_await')     # convention-insensitive (matches ConfigureAwait, configureAwait, etc.)
+Name:containsAny(['Get', 'Set'])        # any item in list is a substring
 Name:in(allowedNames)          # value is a member of the list
 ```
 
 | Predicate | Meaning |
 |-----------|---------|
-| `eq(v)` | Equal to (case-insensitive) |
-| `ne(v)` | Not equal to |
-| `sw(v)` | Starts with |
-| `ew(v)` | Ends with |
-| `ct(v)` | Contains substring |
-| `ca(list)` | Any item in list is a substring |
-| `rx(v)` | Matches regex (case-sensitive) |
-| `sm(v)` | Convention-insensitive equality (ignores PascalCase/snake_case/camelCase) |
+| `equals(v)` | Equal to (case-insensitive) |
+| `notEquals(v)` | Not equal to |
+| `startsWith(v)` | Starts with |
+| `endsWith(v)` | Ends with |
+| `contains(v)` | Contains substring |
+| `containsAny(list)` | Any item in list is a substring |
+| `matches(v)` | Matches regex (case-sensitive) |
+| `sameAs(v)` | Convention-insensitive equality (ignores PascalCase/snake_case/camelCase) |
 | `in(list)` | Value is a member of the list |
 | `empty` | String is empty (zero length) |
 
 #### Numeric Predicates
 
 ```ruby
-Depth:gt(3)                    # greater than
-Depth:lt(10)                   # less than
-Size:ge(100)                   # greater than or equal
-Size:le(1000)                  # less than or equal
-Depth:eq(0)                    # equal to
-Size:ne(0)                     # not equal to
+Depth:greaterThan(3)                    # greater than
+Depth:lessThan(10)                   # less than
+Size:greaterOrEqual(100)                   # greater than or equal
+Size:lessOrEqual(1000)                  # less than or equal
+Depth:equals(0)                    # equal to
+Size:notEquals(0)                     # not equal to
 ```
 
 | Predicate | Meaning |
 |-----------|---------|
-| `eq(n)` | Equal to |
-| `ne(n)` | Not equal to |
-| `gt(n)` | Greater than |
-| `lt(n)` | Less than |
-| `ge(n)` | Greater than or equal |
-| `le(n)` | Less than or equal |
+| `equals(n)` | Equal to |
+| `notEquals(n)` | Not equal to |
+| `greaterThan(n)` | Greater than |
+| `lessThan(n)` | Less than |
+| `greaterOrEqual(n)` | Greater than or equal |
+| `lessOrEqual(n)` | Less than or equal |
 
 ### String Properties
 
@@ -345,10 +370,10 @@ Items.Text(template)         # format each item and join into a single string
 Instead of defining a named predicate, write the condition inline. The element variable uses the singular form of the property name:
 
 ```ruby
-Type.Methods:any(Method.Public && Method.Async)
-Type.Constructors:none(Constructor.Protected)
-Type.BaseTypes:any(BaseType:ct('Service'))
-File.Usings:any(Using:ct('System.IO'))
+Type.Methods:any(Method:isPublic && Method:isAsync)
+Type.Constructors:none(Constructor:isProtected)
+Type.BaseTypes:any(BaseType:contains('Service'))
+File.Usings:any(Using:contains('System.IO'))
 ```
 
 Recognized singular names: `Type`, `Method`, `Constructor`, `Parameter`, `Statement`, `Line`, `BaseType`, `Decorator`, `Using`, `Package`, `File`, `NestedType`.
@@ -411,7 +436,7 @@ Use a language name as a filter (`:csharp`, `:python`, etc.) to scope iteration 
 
 ```ruby
 foreach Clients:csharp:!Sealed => PRINT('{error:@red} {item.Name} should be sealed')
-foreach Lines:python:rx(@'\bprint\s*\(') => PRINT('{warning:@yellow} Use logging instead of print')
+foreach Lines:python:matches(@'\bprint\s*\(') => PRINT('{warning:@yellow} Use logging instead of print')
 ```
 
 ### SAVE
@@ -452,7 +477,7 @@ foreach Clients:hasAsyncWithoutCancellation => PRINT('{warning:@yellow} {item.Fi
 
 ```ruby
 # This is a single-line comment
-predicate client(Type) => Type.Name:ew('Client')  # also valid at end of line
+predicate client(Type) => Type.Name:endsWith('Client')  # also valid at end of line
 // Legacy comment syntax (also supported)
 ```
 

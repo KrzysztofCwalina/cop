@@ -311,7 +311,7 @@ public static class FilterHintExtractor
         if (prop is null || prop.IsCollection) return null;
 
         // List-argument predicates: ca (containsAny), in
-        if (predicateName is "ca" or "in" && args.Count == 1 && args[0] is ListLiteralExpr listLit)
+        if (predicateName is "containsAny" or "in" && args.Count == 1 && args[0] is ListLiteralExpr listLit)
         {
             var values = new List<string>();
             foreach (var elem in listLit.Elements)
@@ -323,7 +323,7 @@ public static class FilterHintExtractor
             {
                 return predicateName switch
                 {
-                    "ca" => new ContainsAnyFilter(propertyName, values),
+                    "containsAny" => new ContainsAnyFilter(propertyName, values),
                     "in" => new InFilter(propertyName, values),
                     _ => null
                 };
@@ -345,35 +345,35 @@ public static class FilterHintExtractor
 
     private static FilterExpression? TryStringPredicate(string prop, string predName, string value) => predName switch
     {
-        "eq" => new StringOpFilter(prop, StringOp.Equals, value),
-        "ne" => new NotFilter(new StringOpFilter(prop, StringOp.Equals, value)),
-        "sw" => new StringOpFilter(prop, StringOp.StartsWith, value),
-        "ew" => new StringOpFilter(prop, StringOp.EndsWith, value),
-        "ct" => new StringOpFilter(prop, StringOp.Contains, value),
-        "rx" => new StringOpFilter(prop, StringOp.Matches, value),
-        "sm" => new StringOpFilter(prop, StringOp.Same, value),
+        "equals" => new StringOpFilter(prop, StringOp.Equals, value),
+        "notEquals" => new NotFilter(new StringOpFilter(prop, StringOp.Equals, value)),
+        "startsWith" => new StringOpFilter(prop, StringOp.StartsWith, value),
+        "endsWith" => new StringOpFilter(prop, StringOp.EndsWith, value),
+        "contains" => new StringOpFilter(prop, StringOp.Contains, value),
+        "matches" => new StringOpFilter(prop, StringOp.Matches, value),
+        "sameAs" => new StringOpFilter(prop, StringOp.Same, value),
         _ => null
     };
 
     private static FilterExpression? TryNumericPredicate(string prop, string predName, double value) => predName switch
     {
-        "eq" => new ComparisonFilter(prop, CompareOp.Equals, value),
-        "ne" => new NotFilter(new ComparisonFilter(prop, CompareOp.Equals, value)),
-        "gt" => new ComparisonFilter(prop, CompareOp.GreaterThan, value),
-        "lt" => new ComparisonFilter(prop, CompareOp.LessThan, value),
-        "ge" => new ComparisonFilter(prop, CompareOp.GreaterOrEqual, value),
-        "le" => new ComparisonFilter(prop, CompareOp.LessOrEqual, value),
+        "equals" => new ComparisonFilter(prop, CompareOp.Equals, value),
+        "notEquals" => new NotFilter(new ComparisonFilter(prop, CompareOp.Equals, value)),
+        "greaterThan" => new ComparisonFilter(prop, CompareOp.GreaterThan, value),
+        "lessThan" => new ComparisonFilter(prop, CompareOp.LessThan, value),
+        "greaterOrEqual" => new ComparisonFilter(prop, CompareOp.GreaterOrEqual, value),
+        "lessOrEqual" => new ComparisonFilter(prop, CompareOp.LessOrEqual, value),
         _ => null
     };
 
     private static bool IsBuiltinPredicate(string name) =>
-        name is "eq" or "ne"
-            or "sw" or "ew"
-            or "ct" or "rx"
-            or "ca" or "sm"
+        name is "equals" or "notEquals"
+            or "startsWith" or "endsWith"
+            or "contains" or "matches"
+            or "containsAny" or "sameAs"
             or "in" or "empty"
-            or "gt" or "lt"
-            or "ge" or "le";
+            or "greaterThan" or "lessThan"
+            or "greaterOrEqual" or "lessOrEqual";
 
     private static double? AsDouble(object? v) => v switch
     {

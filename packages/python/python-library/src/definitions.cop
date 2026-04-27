@@ -3,12 +3,12 @@
 predicate untypedParam(Parameter) => Parameter.Type == null
     && !Parameter.Variadic && !Parameter.Kwargs
 
-predicate publicMethodMissingParamTypes(Method) => Method.Public
+predicate publicMethodMissingParamTypes(Method) => Method:isPublic
     && Method.Parameters:any(untypedParam)
 
 predicate untypedParams(Type) => Type.Methods:any(publicMethodMissingParamTypes)
 
-predicate publicMethodMissingReturnType(Method) => Method.Public
+predicate publicMethodMissingReturnType(Method) => Method:isPublic
     && Method.ReturnType == null
 
 predicate missingReturnTypes(Type) => Type.Methods:any(publicMethodMissingReturnType)

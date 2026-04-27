@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Cop.Core;
 
 namespace TypeSpecProvider;
@@ -7,157 +6,210 @@ namespace TypeSpecProvider;
 /// DataProvider for HTTP protocol graph derived from TypeSpec.
 /// Transforms raw TypeSpec AST through HTTP decorator interpretation.
 /// Exposes HttpOperations, HttpServices with resolved verbs, paths, parameters.
+/// Uses stride-based DataTables with shared UTF-8 string heap.
 /// </summary>
 public class TypeSpecHttpProvider : DataProvider
 {
-    public override ReadOnlyMemory<byte> GetSchema()
-    {
-        var schema = new
-        {
-            types = new object[]
-            {
-                new {
-                    name = "TspDecorator",
-                    properties = new object[]
-                    {
-                        new { name = "Name", type = "string" },
-                        new { name = "Arguments", type = "string", collection = true },
-                    }
-                },
-                new {
-                    name = "HttpParameter",
-                    properties = new object[]
-                    {
-                        new { name = "Name", type = "string" },
-                        new { name = "Type", type = "string" },
-                        new { name = "In", type = "string" },
-                        new { name = "Optional", type = "bool" },
-                        new { name = "Style", type = "string", optional = true },
-                    }
-                },
-                new {
-                    name = "HttpHeader",
-                    properties = new object[]
-                    {
-                        new { name = "Name", type = "string" },
-                        new { name = "Type", type = "string" },
-                    }
-                },
-                new {
-                    name = "HttpResponse",
-                    properties = new object[]
-                    {
-                        new { name = "StatusCode", type = "string" },
-                        new { name = "Description", type = "string", optional = true },
-                        new { name = "Body", type = "string", optional = true },
-                        new { name = "Headers", type = "HttpHeader", collection = true },
-                    }
-                },
-                new {
-                    name = "HttpOperation",
-                    properties = new object[]
-                    {
-                        new { name = "Name", type = "string" },
-                        new { name = "Verb", type = "string" },
-                        new { name = "Path", type = "string" },
-                        new { name = "UriTemplate", type = "string" },
-                        new { name = "Parameters", type = "HttpParameter", collection = true },
-                        new { name = "Responses", type = "HttpResponse", collection = true },
-                        new { name = "Interface", type = "string", optional = true },
-                        new { name = "Decorators", type = "TspDecorator", collection = true },
-                    }
-                },
-                new {
-                    name = "HttpService",
-                    properties = new object[]
-                    {
-                        new { name = "Name", type = "string" },
-                        new { name = "Namespace", type = "string" },
-                        new { name = "Operations", type = "HttpOperation", collection = true },
-                        new { name = "Auth", type = "string", optional = true },
-                    }
-                },
-            },
-            collections = new object[]
-            {
-                new { name = "Operations", itemType = "HttpOperation" },
-                new { name = "Services", itemType = "HttpService" },
-            }
-        };
+    public override DataFormat SupportedFormats => DataFormat.InMemoryDatabase;
 
-        return JsonSerializer.SerializeToUtf8Bytes(schema, JsonOptions);
+    public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
+
+    private static readonly ProviderSchema _schema = BuildSchema();
+
+    private static ProviderSchema BuildSchema()
+    {
+        return new ProviderSchema
+        {
+            Types =
+            [
+                new() { Name = "TspDecorator", Properties =
+                [
+                    new() { Name = "Name" },
+                    new() { Name = "Arguments", Collection = true },
+                ]},
+                new() { Name = "HttpParameter", Properties =
+                [
+                    new() { Name = "Name" },
+                    new() { Name = "Type" },
+                    new() { Name = "In" },
+                    new() { Name = "Optional", Type = "bool" },
+                    new() { Name = "Style", Optional = true },
+                ]},
+                new() { Name = "HttpHeader", Properties =
+                [
+                    new() { Name = "Name" },
+                    new() { Name = "Type" },
+                ]},
+                new() { Name = "HttpResponse", Properties =
+                [
+                    new() { Name = "StatusCode" },
+                    new() { Name = "Description", Optional = true },
+                    new() { Name = "Body", Optional = true },
+                    new() { Name = "Headers", Type = "HttpHeader", Collection = true },
+                ]},
+                new() { Name = "HttpOperation", Properties =
+                [
+                    new() { Name = "Name" },
+                    new() { Name = "Verb" },
+                    new() { Name = "Path" },
+                    new() { Name = "UriTemplate" },
+                    new() { Name = "Parameters", Type = "HttpParameter", Collection = true },
+                    new() { Name = "Responses", Type = "HttpResponse", Collection = true },
+                    new() { Name = "Interface", Optional = true },
+                    new() { Name = "Decorators", Type = "TspDecorator", Collection = true },
+                ]},
+                new() { Name = "HttpService", Properties =
+                [
+                    new() { Name = "Name" },
+                    new() { Name = "Namespace" },
+                    new() { Name = "Operations", Type = "HttpOperation", Collection = true },
+                    new() { Name = "Auth", Optional = true },
+                ]},
+            ],
+            Collections =
+            [
+                new() { Name = "Operations", ItemType = "HttpOperation" },
+                new() { Name = "Services", ItemType = "HttpService" },
+            ]
+        };
     }
 
-    public override byte[] Query(ProviderQuery query)
+    public override DataStore QueryData(ProviderQuery query)
     {
         var rawSpec = new TspSpec();
-
         if (query.RootPath is not null && Directory.Exists(query.RootPath))
-        {
             rawSpec = TspParser.ParseFiles(query.RootPath);
-        }
 
         var httpSpec = HttpTransformer.Transform(rawSpec);
+        var requested = query.RequestedCollections;
+        bool Want(string name) => requested is null || requested.Any(c => c.Equals(name, StringComparison.OrdinalIgnoreCase));
 
-        var result = new Dictionary<string, object>
+        var db = new DataStoreBuilder();
+
+        // Child tables
+        // TspDecorator: stride 2 (Name, Arguments-range)
+        var decorators = db.AddTable("Decorators", "TspDecorator", 2);
+        // TspDecorator.Arguments: stride 1
+        var decArgs = db.AddTable("TspDecorator.Arguments", "string", 1);
+        // HttpParameter: stride 5 (Name, Type, In, Optional, Style)
+        var parameters = db.AddTable("Parameters", "HttpParameter", 5);
+        // HttpHeader: stride 2 (Name, Type)
+        var headers = db.AddTable("Headers", "HttpHeader", 2);
+        // HttpResponse: stride 4 (StatusCode, Description, Body, Headers-range)
+        var responses = db.AddTable("Responses", "HttpResponse", 4);
+        // HttpOperation: stride 8 (Name, Verb, Path, UriTemplate, Parameters-range, Responses-range, Interface, Decorators-range)
+        var operations = db.AddTable("Operations", "HttpOperation", 8);
+
+        // Top-level tables
+        var services = Want("Services") ? db.AddTable("Services", "HttpService", 4) : null;
+
+        // Populate operations (used both top-level and as child of Services)
+        if (Want("Operations"))
         {
-            ["Operations"] = httpSpec.Operations.Select(OpToDict).ToList(),
-            ["Services"] = httpSpec.Services.Select(SvcToDict).ToList(),
-        };
+            foreach (var o in httpSpec.Operations)
+            {
+                if (!MatchesFilter(query.Filter, "Name", o.Name, "Verb", o.Verb))
+                    continue;
+                AddOperation(operations, parameters, responses, headers, decorators, decArgs, o);
+            }
+        }
 
-        return JsonSerializer.SerializeToUtf8Bytes(result, JsonOptions);
+        // Services: Name(0), Namespace(1), Operations(2→Operations), Auth(3)
+        if (services is not null)
+        {
+            foreach (var s in httpSpec.Services)
+            {
+                if (!MatchesFilter(query.Filter, "Name", s.Name, "Namespace", s.Namespace))
+                    continue;
+                int row = services.AddRow();
+                services.SetString(row, 0, s.Name);
+                services.SetString(row, 1, s.Namespace);
+                int opStart = operations.Count;
+                foreach (var o in s.Operations)
+                    AddOperation(operations, parameters, responses, headers, decorators, decArgs, o);
+                services.SetRange(row, 2, opStart, s.Operations.Count);
+                services.SetString(row, 3, s.Auth);
+            }
+        }
+
+        return db.Build();
     }
 
-    private static Dictionary<string, object?> OpToDict(HttpOperation o) => new()
+    private static void AddOperation(
+        DataTableBuilder operations, DataTableBuilder parameters, DataTableBuilder responses,
+        DataTableBuilder headers, DataTableBuilder decorators, DataTableBuilder decArgs,
+        HttpOperation o)
     {
-        ["Name"] = o.Name,
-        ["Verb"] = o.Verb,
-        ["Path"] = o.Path,
-        ["UriTemplate"] = o.UriTemplate,
-        ["Parameters"] = o.Parameters.Select(ParamToDict).ToList(),
-        ["Responses"] = o.Responses.Select(RespToDict).ToList(),
-        ["Interface"] = o.Interface,
-        ["Decorators"] = o.Decorators.Select(DecToDict).ToList(),
-    };
+        int row = operations.AddRow();
+        operations.SetString(row, 0, o.Name);
+        operations.SetString(row, 1, o.Verb);
+        operations.SetString(row, 2, o.Path);
+        operations.SetString(row, 3, o.UriTemplate);
 
-    private static Dictionary<string, object?> SvcToDict(HttpService s) => new()
-    {
-        ["Name"] = s.Name,
-        ["Namespace"] = s.Namespace,
-        ["Operations"] = s.Operations.Select(OpToDict).ToList(),
-        ["Auth"] = s.Auth,
-    };
-
-    private static Dictionary<string, object?> ParamToDict(HttpParameter p) => new()
-    {
-        ["Name"] = p.Name,
-        ["Type"] = p.Type,
-        ["In"] = p.In,
-        ["Optional"] = p.Optional,
-        ["Style"] = p.Style,
-    };
-
-    private static Dictionary<string, object?> RespToDict(HttpResponse r) => new()
-    {
-        ["StatusCode"] = r.StatusCode,
-        ["Description"] = r.Description,
-        ["Body"] = r.Body,
-        ["Headers"] = r.Headers.Select(h => new Dictionary<string, object?>
+        // Parameters
+        int paramStart = parameters.Count;
+        foreach (var p in o.Parameters)
         {
-            ["Name"] = h.Name,
-            ["Type"] = h.Type,
-        }).ToList(),
-    };
+            int pRow = parameters.AddRow();
+            parameters.SetString(pRow, 0, p.Name);
+            parameters.SetString(pRow, 1, p.Type);
+            parameters.SetString(pRow, 2, p.In);
+            parameters.SetBool(pRow, 3, p.Optional);
+            parameters.SetString(pRow, 4, p.Style);
+        }
+        operations.SetRange(row, 4, paramStart, o.Parameters.Count);
 
-    private static Dictionary<string, object?> DecToDict(TspDecorator d) => new()
-    {
-        ["Name"] = d.Name,
-        ["Arguments"] = d.Arguments,
-    };
+        // Responses
+        int respStart = responses.Count;
+        foreach (var r in o.Responses)
+        {
+            int rRow = responses.AddRow();
+            responses.SetString(rRow, 0, r.StatusCode);
+            responses.SetString(rRow, 1, r.Description);
+            responses.SetString(rRow, 2, r.Body);
+            int hdrStart = headers.Count;
+            foreach (var h in r.Headers)
+            {
+                int hRow = headers.AddRow();
+                headers.SetString(hRow, 0, h.Name);
+                headers.SetString(hRow, 1, h.Type);
+            }
+            responses.SetRange(rRow, 3, hdrStart, r.Headers.Count);
+        }
+        operations.SetRange(row, 5, respStart, o.Responses.Count);
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+        operations.SetString(row, 6, o.Interface);
+        operations.SetRange(row, 7, AddDecorators(decorators, decArgs, o.Decorators));
+    }
+
+    private static (int Start, int Count) AddDecorators(
+        DataTableBuilder decorators, DataTableBuilder decArgs, List<TspDecorator> items)
     {
-        PropertyNamingPolicy = null,
-        WriteIndented = false,
-    };
+        int start = decorators.Count;
+        foreach (var d in items)
+        {
+            int row = decorators.AddRow();
+            decorators.SetString(row, 0, d.Name);
+            int argStart = decArgs.Count;
+            foreach (var a in d.Arguments)
+            {
+                int aRow = decArgs.AddRow();
+                decArgs.SetString(aRow, 0, a);
+            }
+            decorators.SetRange(row, 1, argStart, d.Arguments.Count);
+        }
+        return (start, items.Count);
+    }
+
+    private static bool MatchesFilter(FilterExpression? filter, string prop1, string? val1,
+        string? prop2 = null, string? val2 = null)
+    {
+        if (filter is null) return true;
+        return FilterEvaluator.Matches(filter, prop => prop switch
+        {
+            _ when prop == prop1 => (object?)val1,
+            _ when prop == prop2 => (object?)val2,
+            _ => null
+        });
+    }
 }

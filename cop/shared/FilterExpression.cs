@@ -48,12 +48,12 @@ public abstract record FilterExpression
         PropertyFilter pf => pf.Value ? pf.Property : $"!{pf.Property}",
         StringOpFilter sf => $"{sf.Property}:{sf.Op switch
         {
-            StringOp.StartsWith => "sw",
-            StringOp.EndsWith => "ew",
-            StringOp.Contains => "ct",
-            StringOp.Equals => "eq",
-            StringOp.Matches => "rx",
-            StringOp.Same => "sm",
+            StringOp.StartsWith => "startsWith",
+            StringOp.EndsWith => "endsWith",
+            StringOp.Contains => "contains",
+            StringOp.Equals => "equals",
+            StringOp.Matches => "matches",
+            StringOp.Same => "sameAs",
             _ => sf.Op.ToString()
         }}('{sf.Value}')",
         ComparisonFilter cf => $"{cf.Property}{cf.Op switch
@@ -65,7 +65,7 @@ public abstract record FilterExpression
             CompareOp.LessOrEqual => "<=",
             _ => cf.Op.ToString()
         }}{cf.Value}",
-        ContainsAnyFilter caf => $"{caf.Property}:ca([{string.Join(", ", caf.Values.Select(v => $"'{v}'"))}])",
+        ContainsAnyFilter caf => $"{caf.Property}:containsAny([{string.Join(", ", caf.Values.Select(v => $"'{v}'"))}])",
         InFilter inf => $"{inf.Property}:in([{string.Join(", ", inf.Values.Select(v => $"'{v}'"))}])",
         CollectionContainsFilter ccf => $"{ccf.Property}:contains('{ccf.Value}')",
         CollectionAnyFilter caf2 => $"{caf2.Property}:any({Format(caf2.ItemFilter)})",

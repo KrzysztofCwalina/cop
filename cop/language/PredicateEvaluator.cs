@@ -168,6 +168,12 @@ public class PredicateEvaluator
         var ancestor = ctx.GetAncestor(name);
         if (ancestor is not null) return ancestor;
 
+        // Flags constant resolution (e.g., Public → 1, Static → 16)
+        // Must come before language filter fallback, which would return false for
+        // any identifier that doesn't match the file's language.
+        var flagsValue = _registry.TryResolveFlagsConstant(name);
+        if (flagsValue is not null) return flagsValue.Value;
+
         // Language filter fallback: if the item has a File.Language property,
         // check if the identifier matches the language. This enables filter chains
         // like Types:csharp:client where "csharp" matches File.Language == "csharp".
@@ -234,6 +240,10 @@ public class PredicateEvaluator
                      && ToBool(Eval(bin.Right, item, paramType, ctx)),
             "||" => ToBool(Eval(bin.Left, item, paramType, ctx))
                      || ToBool(Eval(bin.Right, item, paramType, ctx)),
+            "&" => ToInt(Eval(bin.Left, item, paramType, ctx))
+                     & ToInt(Eval(bin.Right, item, paramType, ctx)),
+            "|" => ToInt(Eval(bin.Left, item, paramType, ctx))
+                     | ToInt(Eval(bin.Right, item, paramType, ctx)),
             "==" => ValuesEqual(
                 Eval(bin.Left, item, paramType, ctx),
                 Eval(bin.Right, item, paramType, ctx)),
@@ -419,13 +429,13 @@ public class PredicateEvaluator
             var arg0 = args.Count > 0 ? Eval(args[0], item, paramType, ctx) : null;
             return predicate switch
             {
-                "eq" => str.Equals(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
-                "ne" => !str.Equals(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
-                "ew" => str.EndsWith(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
-                "sw" => str.StartsWith(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
-                "ct" => str.Contains(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
-                "ca" => ContainsAny(str, arg0),
-                "rx" => Regex.IsMatch(str, arg0?.ToString() ?? "",
+                "equals" => str.Equals(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
+                "notEquals" => !str.Equals(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
+                "endsWith" => str.EndsWith(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
+                "startsWith" => str.StartsWith(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
+                "contains" => str.Contains(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
+                "containsAny" => ContainsAny(str, arg0),
+                "matches" => Regex.IsMatch(str, arg0?.ToString() ?? "",
                     RegexOptions.None, TimeSpan.FromSeconds(1)),
                 "Trim" => arg0 is not null && str.EndsWith(arg0.ToString()!, StringComparison.OrdinalIgnoreCase)
                     ? str[..^arg0.ToString()!.Length] : str,
@@ -433,7 +443,7 @@ public class PredicateEvaluator
                     ? str.Replace(arg0.ToString()!, args.Count > 1
                         ? Eval(args[1], item, paramType, ctx)?.ToString() ?? "" : "", StringComparison.OrdinalIgnoreCase)
                     : str,
-                "sm" => NormalizeIdentifier(str) == NormalizeIdentifier(arg0?.ToString() ?? ""),
+                "sameAs" => NormalizeIdentifier(str) == NormalizeIdentifier(arg0?.ToString() ?? ""),
                 "empty" => (object)(str.Length == 0),
                 _ => throw new InvalidOperationException($"Unknown string predicate '{predicate}'")
             };
@@ -446,12 +456,12 @@ public class PredicateEvaluator
             var arg0 = args.Count > 0 ? ToDouble(Eval(args[0], item, paramType, ctx)) : 0;
             return predicate switch
             {
-                "eq" => num == arg0,
-                "ne" => num != arg0,
-                "gt" => num > arg0,
-                "lt" => num < arg0,
-                "ge" => num >= arg0,
-                "le" => num <= arg0,
+                "equals" => num == arg0,
+                "notEquals" => num != arg0,
+                "greaterThan" => num > arg0,
+                "lessThan" => num < arg0,
+                "greaterOrEqual" => num >= arg0,
+                "lessOrEqual" => num <= arg0,
                 _ => throw new InvalidOperationException($"Unknown numeric predicate '{predicate}'")
             };
         }
@@ -466,6 +476,14 @@ public class PredicateEvaluator
         var methodResult = _registry.TryEvaluateMethod(target, predicate, evalArgs);
         if (methodResult is not null)
             return methodResult;
+
+        // User-defined predicates called on an object (e.g., Type:isPublic)
+        if (_predicates.TryGetValue(predicate, out var predGroup))
+        {
+            var pred = ResolvePredicate(predGroup, target, paramType, ctx);
+            if (pred is null) return false;
+            return ToBool(Eval(pred.Body, target, pred.ParameterType, ctx));
+        }
 
         throw new InvalidOperationException($"Cannot call predicate '{predicate}' on {target.GetType().Name}");
     }

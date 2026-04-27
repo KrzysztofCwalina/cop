@@ -18,7 +18,7 @@ public class CheckInterpreterTests
 
         var interpreter = TestInterpreter.Create();
 
-        var outputs = interpreter.Run([ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("GoodClient.cs"))).Outputs;
+        var outputs = interpreter.Run([TestInterpreter.CodePackage, ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("GoodClient.cs"))).Outputs;
 
         var clientOutputs = outputs.Where(d =>
             d.Message.Contains("GoodClient") && !d.Message.Contains("ClientOptions")).ToList();
@@ -34,7 +34,7 @@ public class CheckInterpreterTests
 
         var interpreter = TestInterpreter.Create();
 
-        var outputs = interpreter.Run([ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
+        var outputs = interpreter.Run([TestInterpreter.CodePackage, ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
 
         Assert.That(outputs.Any(d => d.Message.Contains("sealed") && d.Message.Contains("BadClient")),
             Is.True, "Should flag BadClient not sealed");
@@ -52,7 +52,7 @@ public class CheckInterpreterTests
 
         var interpreter = TestInterpreter.Create();
 
-        var outputs = interpreter.Run([ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
+        var outputs = interpreter.Run([TestInterpreter.CodePackage, ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
 
         var sealedOutput = outputs.FirstOrDefault(d => d.Message.Contains("sealed") && d.Message.Contains("BadClient"));
         Assert.That(sealedOutput, Is.Not.Null);
@@ -67,7 +67,7 @@ public class CheckInterpreterTests
 
         var interpreter = TestInterpreter.Create();
 
-        var outputs = interpreter.Run([ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("good_client.py"))).Outputs;
+        var outputs = interpreter.Run([TestInterpreter.CodePackage, ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("good_client.py"))).Outputs;
 
         Assert.That(outputs, Is.Empty);
     }
@@ -80,7 +80,7 @@ public class CheckInterpreterTests
 
         var interpreter = TestInterpreter.Create();
 
-        var outputs = interpreter.Run([ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
+        var outputs = interpreter.Run([TestInterpreter.CodePackage, ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
 
         Assert.That(outputs.Any(d => d.Message.Contains("var")), Is.True, "Should detect var usage");
         Assert.That(outputs.Any(d => d.Message.Contains("Thread.Sleep")), Is.True, "Should detect Thread.Sleep");
@@ -94,7 +94,7 @@ public class CheckInterpreterTests
 
         var interpreter = TestInterpreter.Create();
 
-        var outputs = interpreter.Run([ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
+        var outputs = interpreter.Run([TestInterpreter.CodePackage, ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
 
         // BadClient has two catch(Exception) blocks: one with throw; (rethrow) and one without
         var swallowOutputs = outputs.Where(d => d.Message.Contains("Do not swallow")).ToList();
@@ -109,7 +109,7 @@ public class CheckInterpreterTests
 
         var interpreter = TestInterpreter.Create();
 
-        var outputs = interpreter.Run([ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
+        var outputs = interpreter.Run([TestInterpreter.CodePackage, ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
 
         Assert.That(outputs, Is.Not.Empty);
         var msg = outputs[0].Message;
@@ -125,7 +125,7 @@ public class CheckInterpreterTests
 
         var interpreter = TestInterpreter.Create();
 
-        var outputs = interpreter.Run([ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
+        var outputs = interpreter.Run([TestInterpreter.CodePackage, ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
 
         Assert.That(outputs.Any(d => d.Message.Contains("BadClient")), Is.True);
         Assert.That(outputs.Any(d => d.Message.Contains("BadClientOptions")), Is.False);
@@ -139,7 +139,7 @@ public class CheckInterpreterTests
 
         var interpreter = TestInterpreter.Create();
 
-        var outputs = interpreter.Run([ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
+        var outputs = interpreter.Run([TestInterpreter.CodePackage, ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
 
         var sealedOutputs = outputs.Where(d => d.Message.Contains("sealed")).ToList();
         Assert.That(sealedOutputs, Is.Not.Empty);
@@ -154,7 +154,7 @@ public class CheckInterpreterTests
 
         var interpreter = TestInterpreter.Create();
 
-        var outputs = interpreter.Run([ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
+        var outputs = interpreter.Run([TestInterpreter.CodePackage, ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
 
         Assert.That(outputs.Any(d => d.Message.Contains("BadClient")), Is.True);
     }
@@ -612,7 +612,7 @@ CHECK(var-usage)
         var csharpDir = ImportResolver.FindPackageDir(apmRoot, "csharp")
             ?? Path.Combine(apmRoot, "csharp");
         var csharpDefs = Path.Combine(csharpDir, "src", "definitions.cop");
-        var allFiles = new List<ScriptFile> { scriptFile };
+        var allFiles = new List<ScriptFile> { TestInterpreter.CodePackage, scriptFile };
         allFiles.Add(ScriptParser.Parse(File.ReadAllText(csharpDefs), csharpDefs));
 
         // Resolve all imports from all files

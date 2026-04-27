@@ -55,8 +55,8 @@ public class AzureSdkRuleTests
                 if (pkg != null) imported.Add(pkg);
             }
 
-        // Order: imports first, then package files (local overrides imported)
-        var scriptFiles = new List<ScriptFile>();
+        // Order: code package first (base types + isX predicates), then imports, then package files
+        var scriptFiles = new List<ScriptFile> { TestInterpreter.CodePackage };
         scriptFiles.AddRange(imported);
         scriptFiles.AddRange(packageFiles);
 

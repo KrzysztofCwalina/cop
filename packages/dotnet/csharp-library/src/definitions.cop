@@ -1,15 +1,15 @@
 # Library API design definitions for C#
 
 predicate asyncBoolParam(Parameter) => Parameter.Name == 'async' && Parameter.Type == 'bool'
-predicate publicWithAsyncBool(Method) => Method.Public && Method.Parameters:any(asyncBoolParam)
+predicate publicWithAsyncBool(Method) => Method:isPublic && Method.Parameters:any(asyncBoolParam)
 predicate exposesAsyncBool(Type) => Type.Methods:any(publicWithAsyncBool)
 
-predicate nonPublicAsync(Method) => !Method.Public && Method.Async
+predicate nonPublicAsync(Method) => Method:!isPublic && Method:isAsync
 
 predicate awaitUsingDefault(Statement) => Statement.Kind == 'await'
     && (Statement.MemberName != 'ConfigureAwait' || Statement.Arguments:contains('true'))
 
-export predicate publicType(Type) => Type.Public
+export predicate publicType(Type) => Type:isPublic
 
 # Method uses the dual-mode async bool parameter pattern
 export predicate dualModeMethod(Method) => Method.Parameters:any(asyncBoolParam)
@@ -19,7 +19,7 @@ export predicate inDualModeMethod(Statement) => Statement.Method != null
     && Statement.Method.Parameters:any(asyncBoolParam)
 
 # Statement has an ancestor if-statement whose condition references 'async'
-predicate isAsyncGuard(Ancestor) => Ancestor.Kind == 'if' && Ancestor.Condition:ct('async')
+predicate isAsyncGuard(Ancestor) => Ancestor.Kind == 'if' && Ancestor.Condition:contains('async')
 export predicate guardedByAsyncCheck(Statement) => Statement.Ancestors:any(isAsyncGuard)
 
 # AZC0108: Detect wrong async argument values in guarded branches
@@ -27,15 +27,15 @@ export predicate guardedByAsyncCheck(Statement) => Statement.Ancestors:any(isAsy
 predicate isPositiveAsyncGuard(Ancestor) => Ancestor.Kind == 'if' && Ancestor.Condition == 'async'
 predicate inPositiveAsyncGuard(Statement) => Statement.Ancestors:any(isPositiveAsyncGuard)
 # In else branch of if(async) or in if(!async), passing async: true is wrong
-predicate isNegatedAsyncGuard(Ancestor) => Ancestor.Kind == 'if' && Ancestor.Condition:ct('!async')
+predicate isNegatedAsyncGuard(Ancestor) => Ancestor.Kind == 'if' && Ancestor.Condition:contains('!async')
 predicate isElseBranch(Ancestor) => Ancestor.Kind == 'else'
 predicate inNegatedAsyncGuard(Statement) => Statement.Ancestors:any(isNegatedAsyncGuard)
     || Statement.Ancestors:any(isElseBranch)
-predicate hasAsyncFalseArg(Argument) => Argument:ct('async: false')
+predicate hasAsyncFalseArg(Argument) => Argument:contains('async: false')
 export predicate wrongAsyncFalseInAsyncGuard(Statement) => Statement.Kind == 'call'
     && inDualModeMethod && inPositiveAsyncGuard
     && Statement.Arguments:any(hasAsyncFalseArg)
-predicate hasAsyncTrueArg(Argument) => Argument:ct('async: true')
+predicate hasAsyncTrueArg(Argument) => Argument:contains('async: true')
 export predicate wrongAsyncTrueInSyncGuard(Statement) => Statement.Kind == 'call'
     && inDualModeMethod && inNegatedAsyncGuard
     && Statement.Arguments:any(hasAsyncTrueArg)

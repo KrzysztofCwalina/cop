@@ -18,9 +18,9 @@ import csharp-api
 import code-analysis
 
 # Baseline: C# stub files in api/ directory
-predicate baselineApi(Api) => publicApi && Api.File.Path:rx('[/\\\\]api[/\\\\]')
+predicate baselineApi(Api) => publicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')
 # Source: everything NOT in api/
-predicate sourceApi(Api) => publicApi && !Api.File.Path:rx('[/\\\\]api[/\\\\]')
+predicate sourceApi(Api) => publicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')
 
 # Build lookup lists from current source and baseline
 let baselineSignatures = Code.Api:csharp:baselineApi.Select(item.Signature)
@@ -128,7 +128,7 @@ Everything in `api-compat.cop` is policy you control:
 
 | What | How | Example |
 |---|---|---|
-| **Baseline path pattern** | Change `baselineApi` predicate | `item.File.Path:rx('ApiSurface')` |
+| **Baseline path pattern** | Change `baselineApi` predicate | `item.File.Path:matches('ApiSurface')` |
 | **Baseline from DLL** | Use `Code.Load()` with `.Api` | `let baseline = Code.Load('pkg.dll')` then `baseline.Api` |
 | **Severity of removed APIs** | Use `toError`, `toWarning`, or `toInfo` | `:toWarning('...')` |
 | **Severity of added APIs** | Same | `:toError('...')` |
@@ -142,8 +142,8 @@ For a repo that stores baselines at `sdk/{service}/ApiSurface.cs`:
 import csharp-api
 import code-analysis
 
-predicate baselineApi(Api) => publicApi && Api.File.Path:rx('ApiSurface')
-predicate sourceApi(Api) => publicApi && !Api.File.Path:rx('ApiSurface')
+predicate baselineApi(Api) => publicApi && Api.File.Path:matches('ApiSurface')
+predicate sourceApi(Api) => publicApi && !Api.File.Path:matches('ApiSurface')
 
 let baselineSignatures = Code.Api:csharp:baselineApi.Select(item.Signature)
 let currentSignatures = Code.Api:csharp:sourceApi.Select(item.Signature)
@@ -177,8 +177,8 @@ To fail only on breaking changes (removed APIs), export only the removal check:
 import csharp-api
 import code-analysis
 
-predicate baselineApi(Api) => publicApi && Api.File.Path:rx('[/\\\\]api[/\\\\]')
-predicate sourceApi(Api) => publicApi && !Api.File.Path:rx('[/\\\\]api[/\\\\]')
+predicate baselineApi(Api) => publicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')
+predicate sourceApi(Api) => publicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')
 
 let currentSignatures = Code.Api:csharp:sourceApi.Select(item.Signature)
 predicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)

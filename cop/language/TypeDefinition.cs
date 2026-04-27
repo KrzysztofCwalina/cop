@@ -16,3 +16,13 @@ public record PropertyDefinition(
     bool IsOptional,
     bool IsCollection,
     int Line);
+
+/// <summary>
+/// A flags enum definition: flags Visibility = Public | Protected | Private | Internal
+/// Members are auto-assigned power-of-2 values starting from 1.
+/// </summary>
+public record FlagsDefinition(
+    string Name,
+    List<string> Members,
+    int Line,
+    bool IsExported = false);

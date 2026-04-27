@@ -1,15 +1,15 @@
 # Client library design checks for C#
 
-predicate client(Type) => Type.Name:ew('Client')
-predicate clientOptionsType(Type) => Type.Name:ew('ClientOptions')
+predicate client(Type) => Type.Name:endsWith('Client')
+predicate clientOptionsType(Type) => Type.Name:endsWith('ClientOptions')
 predicate Clients(Types) => client && !clientOptionsType
-predicate optionsParam(Parameter) => Parameter.Type:ew('Options')
+predicate optionsParam(Parameter) => Parameter.Type:endsWith('Options')
 predicate constructorAcceptsOptions(Constructor) => Constructor.Parameters:any(optionsParam)
 predicate missingOptionsConstructor(Type) => Type.Constructors:!any(constructorAcceptsOptions)
-predicate notSealedOrAbstract(Type) => !Type.Sealed && !Type.Abstract
+predicate notSealedOrAbstract(Type) => Type:!isSealed && Type:!isAbstract
 
 predicate cancellationToken(Parameter) => Parameter.Type == 'CancellationToken'
-predicate publicAsync(Method) => Method.Public && Method.Async
+predicate publicAsync(Method) => Method:isPublic && Method:isAsync
 predicate missingCancellationToken(Method) => Method.Parameters:!any(cancellationToken)
 predicate asyncWithoutCancellation(Type) => Type.Methods.Where(publicAsync):any(missingCancellationToken)
 

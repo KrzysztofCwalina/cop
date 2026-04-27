@@ -10,4 +10,5 @@ public record ScriptFile(
     List<FunctionDefinition> Functions,
     List<CommandBlock> Commands,
     List<RunInvocation>? RunInvocations = null,
-    List<string>? FeedPaths = null);
+    List<string>? FeedPaths = null,
+    List<FlagsDefinition>? FlagsDefinitions = null);

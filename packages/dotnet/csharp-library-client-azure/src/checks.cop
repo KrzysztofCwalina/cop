@@ -11,24 +11,24 @@ predicate missingCtorWithoutOptions(Type) => ctorWithOptions && !ctorWithoutOpti
 
 predicate convenienceWithRequestContent(Type) => Type.Methods.Where(convenience):any(usesRequestContent)
 
-predicate tooManyCtorParams(Constructor) => Constructor.Public && Constructor.Parameters.Count > 1
+predicate tooManyCtorParams(Constructor) => Constructor:isPublic && Constructor.Parameters.Count > 1
 predicate optionsCtorOverloaded(Type) => Type.Constructors:any(tooManyCtorParams)
 
-predicate firstParamNotServiceVersion(Constructor) => Constructor.Public
+predicate firstParamNotServiceVersion(Constructor) => Constructor:isPublic
     && Constructor.Parameters.Count > 0
-    && !Constructor.Parameters.First.Type:ew('ServiceVersion')
+    && !Constructor.Parameters.First.Type:endsWith('ServiceVersion')
 predicate optionsCtorBadFirstParam(Type) => Type.Constructors:any(firstParamNotServiceVersion)
 
 predicate missingServiceVersionEnum(Type) => Type.NestedTypes:!any(serviceVersionEnum)
 
-predicate badVersionMemberName(Name) => !Name:rx('^V\\d+(_\\d+)*$')
+predicate badVersionMemberName(Name) => !Name:matches('^V\\d+(_\\d+)*$')
 predicate serviceVersionWithBadNames(Type) => Type.Kind == 'Enum' && Type.Name == 'ServiceVersion'
     && Type.EnumValues:any(badVersionMemberName)
 predicate badServiceVersionNames(Type) => Type.NestedTypes:any(serviceVersionWithBadNames)
 
-predicate serviceVersionParamNoDefault(Constructor) => Constructor.Public
+predicate serviceVersionParamNoDefault(Constructor) => Constructor:isPublic
     && Constructor.Parameters.Count > 0
-    && Constructor.Parameters.First.Type:ew('ServiceVersion')
+    && Constructor.Parameters.First.Type:endsWith('ServiceVersion')
     && !Constructor.Parameters.First.Defaulted
 predicate optionsCtorMissingDefault(Type) => Type.Constructors:any(serviceVersionParamNoDefault)
 
@@ -38,7 +38,7 @@ predicate cancellationNotOptional(Method) => Method.Parameters:any(cancellation)
     && (Method.Parameters.Last.Type == 'CancellationToken' || Method.Parameters.Last.Type == 'RequestContext')
 predicate methodMissingCancellation(Type) => Type.Methods.Where(publicServiceMethod):any(missingCancellation)
 
-predicate bannedReturnType(Method) => Method.Public
+predicate bannedReturnType(Method) => Method:isPublic
     && Method.ReturnType != null
     && (Method.ReturnType.Name == 'HttpResponseMessage'
         || Method.ReturnType.Name == 'HttpRequestMessage'
@@ -46,7 +46,7 @@ predicate bannedReturnType(Method) => Method.Public
 predicate bannedReturn(Type) => Type.Methods:any(bannedReturnType)
 
 predicate bannedAzureCoreType(Parameter) => Parameter.Type.Namespace == 'Azure.Core.Pipeline'
-predicate bannedAzureCoreParam(Method) => Method.Public && Method.Parameters:any(bannedAzureCoreType)
+predicate bannedAzureCoreParam(Method) => Method:isPublic && Method.Parameters:any(bannedAzureCoreType)
 predicate bannedAzureCoreParams(Type) => Type.Methods:any(bannedAzureCoreParam)
 
 predicate missingContextArg(Statement) => Statement.Arguments.Count < 3

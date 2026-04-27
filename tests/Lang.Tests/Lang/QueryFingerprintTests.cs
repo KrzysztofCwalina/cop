@@ -182,11 +182,11 @@ public class QueryFingerprintTests
         {
             new PredicateCallExpr(
                 new IdentifierExpr("Name"),
-                "sw",
+                "startsWith",
                 [new LiteralExpr("A")])
         };
         var result = QueryFingerprint.Compute("Types", filters, null);
-        Assert.That(result, Is.EqualTo("Types:Name.sw('A')"));
+        Assert.That(result, Is.EqualTo("Types:Name.startsWith('A')"));
     }
 
     [Test]
@@ -196,12 +196,12 @@ public class QueryFingerprintTests
         {
             new PredicateCallExpr(
                 new IdentifierExpr("Name"),
-                "sw",
+                "startsWith",
                 [new LiteralExpr("A")],
                 Negated: true)
         };
         var result = QueryFingerprint.Compute("Types", filters, null);
-        Assert.That(result, Is.EqualTo("Types:!Name.sw('A')"));
+        Assert.That(result, Is.EqualTo("Types:!Name.startsWith('A')"));
     }
 
     [Test]

@@ -431,6 +431,12 @@ public static class Engine
             var typeErrors = typeRegistry.LoadTypeDefinitions(packageFile.TypeDefinitions);
             errors.AddRange(typeErrors);
 
+            if (packageFile.FlagsDefinitions is not null)
+            {
+                var flagsErrors = typeRegistry.LoadFlagsDefinitions(packageFile.FlagsDefinitions);
+                errors.AddRange(flagsErrors);
+            }
+
             foreach (var coll in packageFile.CollectionDeclarations)
                 typeRegistry.RegisterCollection(coll);
 
@@ -450,6 +456,12 @@ public static class Engine
         {
             var localErrors = typeRegistry.LoadTypeDefinitions(sf.TypeDefinitions);
             errors.AddRange(localErrors);
+
+            if (sf.FlagsDefinitions is not null)
+            {
+                var flagsErrors = typeRegistry.LoadFlagsDefinitions(sf.FlagsDefinitions);
+                errors.AddRange(flagsErrors);
+            }
 
             foreach (var coll in sf.CollectionDeclarations)
                 typeRegistry.RegisterCollection(coll);

@@ -1,6 +1,6 @@
 # Azure SDK Python client library checks
 
-predicate client(Type) => Type.Name:ew('Client')
+predicate client(Type) => Type.Name:endsWith('Client')
 predicate PythonClients(Types) => client
 
 predicate init(Method) => Method.Name == '__init__'
@@ -16,16 +16,16 @@ predicate missingFromConnStr(Type) => Type.Methods:!any(fromConnStrClassmethod)
 
 predicate kwargsParam(Parameter) => Parameter.Kwargs
 predicate hasKwargs(Method) => Method.Parameters:any(kwargsParam)
-predicate publicService(Method) => Method.Public && !Method.Name:sw('_')
+predicate publicService(Method) => Method:isPublic && !Method.Name:startsWith('_')
 predicate publicWithoutKwargs(Method) => publicService && !hasKwargs
 predicate methodWithoutKwargs(Type) => Type.Methods:any(publicWithoutKwargs)
 
 predicate standardPrefix(Method) =>
-    Method.Name:sw('get_') || Method.Name:sw('list_') ||
-    Method.Name:sw('create_') || Method.Name:sw('delete_') ||
-    Method.Name:sw('update_') || Method.Name:sw('set_') ||
-    Method.Name:sw('begin_') || Method.Name == 'close' ||
-    Method.Name:sw('from_')
+    Method.Name:startsWith('get_') || Method.Name:startsWith('list_') ||
+    Method.Name:startsWith('create_') || Method.Name:startsWith('delete_') ||
+    Method.Name:startsWith('update_') || Method.Name:startsWith('set_') ||
+    Method.Name:startsWith('begin_') || Method.Name == 'close' ||
+    Method.Name:startsWith('from_')
 predicate badMethodName(Method) => publicService && !standardPrefix
 predicate typeBadMethodName(Type) => Type.Methods:any(badMethodName)
 

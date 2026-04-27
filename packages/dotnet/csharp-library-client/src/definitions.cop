@@ -1,26 +1,26 @@
 # Client library design definitions for C#
 
-export predicate client(Type) => Type.Name:ew('Client')
-export predicate clientOptionsType(Type) => Type.Name:ew('ClientOptions')
+export predicate client(Type) => Type.Name:endsWith('Client')
+export predicate clientOptionsType(Type) => Type.Name:endsWith('ClientOptions')
 export predicate Clients(Types) => csharp && client && !clientOptionsType
 
-predicate optionsParam(Parameter) => Parameter.Type:ew('Options')
+predicate optionsParam(Parameter) => Parameter.Type:endsWith('Options')
 predicate constructorAcceptsOptions(Constructor) => Constructor.Parameters:any(optionsParam)
 
 predicate cancellationToken(Parameter) => Parameter.Type == 'CancellationToken'
-predicate publicAsync(Method) => Method.Public && Method.Async
+predicate publicAsync(Method) => Method:isPublic && Method:isAsync
 
-predicate publicInstance(Method) => Method.Public && !Method.Static
+predicate publicInstance(Method) => Method:isPublic && Method:!isStatic
 
-predicate asyncServiceMethod(Method) => Method.Public && Method.Virtual && Method.Name:ew('Async')
+predicate asyncServiceMethod(Method) => Method:isPublic && Method:isVirtual && Method.Name:endsWith('Async')
 
-export predicate model(Type) => Type.Kind == 'Class' && Type.Public && !client && !clientOptionsType
+export predicate model(Type) => Type.Kind == 'Class' && Type:isPublic && !client && !clientOptionsType
 export predicate Models(Types) => csharp && model
 export predicate ClientOptions(Types) => csharp && clientOptionsType
 
-export predicate protectedParameterless(Constructor) => Constructor.Protected && Constructor.Parameters.Count == 0
+export predicate protectedParameterless(Constructor) => Constructor:isProtected && Constructor.Parameters.Count == 0
 
-export predicate collectionSuffix(Type) => Type.Name:ew('Collection')
-export predicate requestSuffix(Type) => Type.Name:ew('Request')
-export predicate parameterSuffix(Type) => Type.Name:ew('Parameter') || Type.Name:ew('Parameters')
-export predicate optionSuffix(Type) => Type.Name:ew('Option') || Type.Name:ew('Options')
+export predicate collectionSuffix(Type) => Type.Name:endsWith('Collection')
+export predicate requestSuffix(Type) => Type.Name:endsWith('Request')
+export predicate parameterSuffix(Type) => Type.Name:endsWith('Parameter') || Type.Name:endsWith('Parameters')
+export predicate optionSuffix(Type) => Type.Name:endsWith('Option') || Type.Name:endsWith('Options')

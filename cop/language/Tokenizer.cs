@@ -20,10 +20,12 @@ public enum TokenKind
     ForeachKeyword,
     RunKeyword,
     FeedKeyword,
+    FlagsKeyword,
     DoubleColon,
     Colon,
     AndAnd,
     Ampersand,
+    Pipe,
     OrOr,
     Not,
     EqualEqual,
@@ -190,6 +192,7 @@ public class Tokenizer
         switch (c)
         {
             case '&': _pos++; return new Token(TokenKind.Ampersand, "&", line);
+            case '|': _pos++; return new Token(TokenKind.Pipe, "|", line);
             case '!': _pos++; return new Token(TokenKind.Not, "!", line);
             case '.': _pos++; return new Token(TokenKind.Dot, ".", line);
             case '(': _pos++; return new Token(TokenKind.LParen, "(", line);
@@ -372,6 +375,7 @@ public class Tokenizer
             "foreach" => TokenKind.ForeachKeyword,
             "RUN" => TokenKind.RunKeyword,
             "feed" => TokenKind.FeedKeyword,
+            "flags" => TokenKind.FlagsKeyword,
 
             _ => TokenKind.Identifier
         };

@@ -5,7 +5,7 @@ import typespec-http
 # HTTP PUT operations should have a path with an even number of segments.
 
 predicate isPut(HttpOperation) => HttpOperation.Verb == 'put'
-predicate evenSegments(HttpOperation) => HttpOperation.Path:rx('^((/[^/]+){2})+$')
+predicate evenSegments(HttpOperation) => HttpOperation.Path:matches('^((/[^/]+){2})+$')
 
 let put-odd-segments = Operations:isPut:!evenSegments
 foreach put-odd-segments => PRINT('{warning-bold@WARNING}: PUT {item.Name} ({item.Path}) has odd number of path segments')

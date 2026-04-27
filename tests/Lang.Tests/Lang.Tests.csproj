@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <Content Include="Samples\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\packages\code\src\code.cop" Link="Samples\code.cop" CopyToOutputDirectory="PreserveNewest" />
     <Compile Remove="Samples\**\*.cs" />
   </ItemGroup>
 

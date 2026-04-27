@@ -3,12 +3,12 @@
 import code-analysis
 
 predicate missingOptionsConstructor(Type) => Type.Constructors:!any(constructorAcceptsOptions)
-predicate notSealedOrAbstract(Type) => !Type.Sealed && !Type.Abstract
+predicate notSealedOrAbstract(Type) => Type:!isSealed && Type:!isAbstract
 
 predicate missingCancellationToken(Method) => Method.Parameters:!any(cancellationToken)
 predicate asyncWithoutCancellation(Type) => Type.Methods.Where(publicAsync):any(missingCancellationToken)
 
-predicate notVirtual(Method) => !Method.Virtual && !Method.Override && !Method.Abstract
+predicate notVirtual(Method) => Method:!isVirtual && Method:!isOverride && Method:!isAbstract
 predicate nonVirtualServiceMethod(Type) => Type.Methods.Where(publicInstance):any(notVirtual)
 
 predicate missingSyncCounterpart(Method) => !Type.MethodNames:contains(Method.Name.Trim('Async'))

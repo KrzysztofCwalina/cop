@@ -49,14 +49,15 @@ public class TextAndListTests
     [Test]
     public void Text_Bool_ReturnsLowercaseString()
     {
-        var source = """predicate test(Type) => Text(Type.Public) == 'true' """;
+        var source = """predicate test(Type) => Text(Type.Documented) == 'true' """;
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
             ["test"] = [file.Predicates[0]]
         };
         var evaluator = new PredicateEvaluator(predicates, "test.cs", CreateTestRegistry());
-        var (result, _) = evaluator.EvaluateAsBool(file.Predicates[0].Body, MakeType(), "Type");
+        var type = new TypeDeclaration("Foo", TypeKind.Class, Modifier.Public, [], [], [], [], [], [], 1) { HasDocComment = true };
+        var (result, _) = evaluator.EvaluateAsBool(file.Predicates[0].Body, type, "Type");
         Assert.That(result, Is.True);
     }
 

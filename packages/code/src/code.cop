@@ -2,13 +2,14 @@
 # Defines types and collections for source code structural analysis.
 # Import with: import code
 
+# Modifier flags — bit values match the code provider's CLR Modifier enum.
+# Use with & operator: Type.Modifiers & Public != 0
+export flags Modifier = Public | Private | Protected | Internal | Static | Sealed | Abstract | Virtual | Async | Override | Readonly | Const
+
 export type Type = {
     Name : string,
     Kind : string,
-    Public : bool,
-    Sealed : bool,
-    Abstract : bool,
-    Static : bool,
+    Modifiers : int,
     BaseTypes : [string],
     Constructors : [Method],
     Methods : [Method],
@@ -27,15 +28,7 @@ export type Type = {
 
 export type Method = {
     Name : string,
-    Public : bool,
-    Protected : bool,
-    Private : bool,
-    Internal : bool,
-    Async : bool,
-    Static : bool,
-    Abstract : bool,
-    Virtual : bool,
-    Override : bool,
+    Modifiers : int,
     ReturnType : TypeReference?,
     Parameters : [Parameter],
     Statements : [Statement],
@@ -49,27 +42,14 @@ export type Constructor = Method & {}
 export type Field = {
     Name : string,
     Type : TypeReference?,
-    Public : bool,
-    Private : bool,
-    Protected : bool,
-    Internal : bool,
-    Static : bool,
-    Readonly : bool,
-    Const : bool,
+    Modifiers : int,
     Line : int
 }
 
 export type Property = {
     Name : string,
     Type : TypeReference?,
-    Public : bool,
-    Protected : bool,
-    Private : bool,
-    Internal : bool,
-    Static : bool,
-    Abstract : bool,
-    Virtual : bool,
-    Override : bool,
+    Modifiers : int,
     HasGetter : bool,
     HasSetter : bool,
     Documented : bool,
@@ -79,11 +59,7 @@ export type Property = {
 export type Event = {
     Name : string,
     Type : TypeReference?,
-    Public : bool,
-    Protected : bool,
-    Private : bool,
-    Internal : bool,
-    Static : bool,
+    Modifiers : int,
     Line : int
 }
 
@@ -145,6 +121,50 @@ export type Declaration = Statement & {}
 export type ErrorHandler = Statement & {}
 
 export type Attribute = Statement & {}
+
+# Modifier predicates — test flags on Type, Method, Field, Property, Event
+export predicate isPublic(Type) => Type.Modifiers & Public != 0
+export predicate isSealed(Type) => Type.Modifiers & Sealed != 0
+export predicate isAbstract(Type) => Type.Modifiers & Abstract != 0
+export predicate isStatic(Type) => Type.Modifiers & Static != 0
+export predicate isDocumented(Type) => Type.Documented
+
+export predicate isPublic(Method) => Method.Modifiers & Public != 0
+export predicate isProtected(Method) => Method.Modifiers & Protected != 0
+export predicate isPrivate(Method) => Method.Modifiers & Private != 0
+export predicate isInternal(Method) => Method.Modifiers & Internal != 0
+export predicate isAsync(Method) => Method.Modifiers & Async != 0
+export predicate isStatic(Method) => Method.Modifiers & Static != 0
+export predicate isAbstract(Method) => Method.Modifiers & Abstract != 0
+export predicate isVirtual(Method) => Method.Modifiers & Virtual != 0
+export predicate isOverride(Method) => Method.Modifiers & Override != 0
+export predicate isDocumented(Method) => Method.Documented
+
+export predicate isPublic(Field) => Field.Modifiers & Public != 0
+export predicate isPrivate(Field) => Field.Modifiers & Private != 0
+export predicate isProtected(Field) => Field.Modifiers & Protected != 0
+export predicate isInternal(Field) => Field.Modifiers & Internal != 0
+export predicate isStatic(Field) => Field.Modifiers & Static != 0
+export predicate isReadonly(Field) => Field.Modifiers & Readonly != 0
+export predicate isConst(Field) => Field.Modifiers & Const != 0
+
+export predicate isPublic(Property) => Property.Modifiers & Public != 0
+export predicate isProtected(Property) => Property.Modifiers & Protected != 0
+export predicate isPrivate(Property) => Property.Modifiers & Private != 0
+export predicate isInternal(Property) => Property.Modifiers & Internal != 0
+export predicate isStatic(Property) => Property.Modifiers & Static != 0
+export predicate isAbstract(Property) => Property.Modifiers & Abstract != 0
+export predicate isVirtual(Property) => Property.Modifiers & Virtual != 0
+export predicate isOverride(Property) => Property.Modifiers & Override != 0
+export predicate hasGetter(Property) => Property.HasGetter
+export predicate hasSetter(Property) => Property.HasSetter
+export predicate isDocumented(Property) => Property.Documented
+
+export predicate isPublic(Event) => Event.Modifiers & Public != 0
+export predicate isProtected(Event) => Event.Modifiers & Protected != 0
+export predicate isPrivate(Event) => Event.Modifiers & Private != 0
+export predicate isInternal(Event) => Event.Modifiers & Internal != 0
+export predicate isStatic(Event) => Event.Modifiers & Static != 0
 
 # Narrowing predicates — filter Statements and narrow to subtypes
 export predicate call(Statement) : Call => Statement.Kind == 'call'

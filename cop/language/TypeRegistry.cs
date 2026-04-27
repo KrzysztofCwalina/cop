@@ -10,6 +10,8 @@ public class TypeRegistry
 {
     private readonly Dictionary<string, TypeDescriptor> _types = new();
     private readonly Dictionary<string, CollectionDeclaration> _collections = new();
+    private readonly Dictionary<string, FlagsDefinition> _flagsTypes = new();
+    private readonly Dictionary<string, int> _flagsConstants = new();
     private readonly Dictionary<Type, string> _clrTypeMappings = new();
     private readonly Dictionary<string, Func<Document, List<object>>> _collectionExtractors = new();
     private readonly Dictionary<string, List<object>> _globalCollections = new();
@@ -54,6 +56,55 @@ public class TypeRegistry
     {
         _collections[decl.Name] = decl;
     }
+
+    /// <summary>
+    /// Loads flags definitions from a parsed .cop file, registering each member as a named constant.
+    /// Members get power-of-2 values: first=1, second=2, third=4, etc.
+    /// </summary>
+    public List<string> LoadFlagsDefinitions(IEnumerable<FlagsDefinition> flagsDefs)
+    {
+        var errors = new List<string>();
+        foreach (var fd in flagsDefs)
+        {
+            if (_flagsTypes.ContainsKey(fd.Name))
+            {
+                errors.Add($"line {fd.Line}: duplicate flags definition '{fd.Name}'");
+                continue;
+            }
+            _flagsTypes[fd.Name] = fd;
+
+            int bit = 1;
+            foreach (var member in fd.Members)
+            {
+                if (_flagsConstants.TryGetValue(member, out _))
+                {
+                    errors.Add($"line {fd.Line}: flags member '{member}' already defined in another flags type");
+                    continue;
+                }
+                _flagsConstants[member] = bit;
+                bit <<= 1;
+            }
+        }
+        return errors;
+    }
+
+    /// <summary>
+    /// Tries to resolve a bare identifier as a flags constant.
+    /// Returns the integer bit value, or null if not a known flags member.
+    /// </summary>
+    public int? TryResolveFlagsConstant(string name) =>
+        _flagsConstants.TryGetValue(name, out var value) ? value : null;
+
+    /// <summary>
+    /// Returns the FlagsDefinition for a named flags type, or null if not found.
+    /// </summary>
+    public FlagsDefinition? GetFlagsType(string name) =>
+        _flagsTypes.TryGetValue(name, out var fd) ? fd : null;
+
+    /// <summary>
+    /// Returns true if the given type name is a registered flags type.
+    /// </summary>
+    public bool IsFlagsType(string typeName) => _flagsTypes.ContainsKey(typeName);
 
     /// <summary>
     /// Maps a CLR type to an cop type name for runtime type inference.

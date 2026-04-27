@@ -49,10 +49,10 @@ import code
 
 # Matches any call to Thread.Sleep (C#) or time.sleep (Python)
 predicate sleepCall(Statement) => Statement.Kind == 'call'
-    && Statement.MemberName:sm('sleep')
+    && Statement.MemberName:sameAs('sleep')
 
 # Matches types whose name ends with "Client"
-predicate client(Type) => Type.Name:ew('Client')
+predicate client(Type) => Type.Name:endsWith('Client')
 
 # Matches error handlers that catch a broad exception without rethrowing
 predicate swallowsException(Statement) => Statement.ErrorHandler == true
@@ -84,7 +84,7 @@ Available language keywords: `csharp` (`.cs`), `python` (`.py`), `javascript` (`
 Prefix a predicate with `!` to negate it:
 
 ```ruby
-predicate sealed(Type) => Type.Sealed
+predicate sealed(Type) => Type:isSealed
 let UnsealedClients = Code.Types:client:!sealed     # clients that are NOT sealed
 ```
 
@@ -163,13 +163,13 @@ predicate sleepCall(Statement) => Statement.Kind == 'call'
     && Statement.MemberName == 'sleep'
 ```
 
-### Convention-Insensitive Comparisons with `:sm`
+### Convention-Insensitive Comparisons with `:sameAs`
 
-Different languages use different naming conventions. Use `:sm()` to compare identifiers regardless of convention (PascalCase, camelCase, snake_case, UPPER_SNAKE):
+Different languages use different naming conventions. Use `:sameAs()` to compare identifiers regardless of convention (PascalCase, camelCase, snake_case, UPPER_SNAKE):
 
 ```ruby
 # All of these match: ConfigureAwait, configure_await, configureAwait
-Type.Name:sm('ConfigureAwait')
+Type.Name:sameAs('ConfigureAwait')
 ```
 
 ### Word-Level Analysis with `.Words`
@@ -220,7 +220,7 @@ let consoleWarnings = Code.Statements:consoleOutput
     :toWarning('Avoid console/print output in production code')
 
 # ── Type naming: clients should end with Client ──
-predicate client(Type) => Type.Name:ew('Client')
+predicate client(Type) => Type.Name:endsWith('Client')
 
 CHECK([swallowed, consoleWarnings])
 ```
@@ -257,9 +257,9 @@ The convention is to separate **predicates** (pure definitions, no output) from 
 
 ```ruby
 # Service layer conventions
-predicate serviceClass(Type) => Type.Name:ew('Service')
-predicate controllerClass(Type) => Type.Name:ew('Controller')
-predicate repositoryClass(Type) => Type.Name:ew('Repository')
+predicate serviceClass(Type) => Type.Name:endsWith('Service')
+predicate controllerClass(Type) => Type.Name:endsWith('Controller')
+predicate repositoryClass(Type) => Type.Name:endsWith('Repository')
 
 # Error handling
 predicate emptyErrorHandler(Statement) => Statement.ErrorHandler == true && Statement.Empty
@@ -394,13 +394,13 @@ exclude '**/__pycache__/**'
 let all-language-checks = [csharp-checks, javascript-checks, python-checks]
 
 # ── Custom cross-language rules ──
-predicate todoComment(Line) => Line.Text:ct('TODO') || Line.Text:ct('HACK')
+predicate todoComment(Line) => Line.Text:contains('TODO') || Line.Text:contains('HACK')
 let todos = Code.Lines:todoComment
     :toInfo('{item.Text}')
 
 # ── Custom project-specific rules ──
-predicate testHelper(Type) => Type.Name:ew('TestHelper')
-    && !Type.Public
+predicate testHelper(Type) => Type.Name:endsWith('TestHelper')
+    && !Type:isPublic
 let non-public-helpers = Code.Types:testHelper
     :toWarning('{item.Name} should be public so tests in other projects can use it')
 

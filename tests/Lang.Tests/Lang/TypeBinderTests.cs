@@ -22,7 +22,7 @@ public class TypeBinderTests
         var file = ScriptParser.Parse(
             """
             import code
-            predicate isPublic(Type) => Type.Public
+            predicate hasDoc(Type) => Type.Documented
             """, "test.cop");
 
         var errors = binder.Bind(file);
@@ -70,7 +70,7 @@ public class TypeBinderTests
         var file = ScriptParser.Parse(
             """
             import code
-            foreach Types => PRINT('INFO: {item.Name} is public: {item.Public}')
+            foreach Types => PRINT('INFO: {item.Name} has {item.Modifiers} modifiers')
             """, "test.cop");
 
         var errors = binder.Bind(file);
@@ -147,9 +147,9 @@ public class TypeBinderTests
         var file = ScriptParser.Parse(
             """
             import code
-            predicate isPublic(Type) => Type.Public
-            let PublicTypes = FakeCollection:isPublic
-            foreach PublicTypes => PRINT('INFO: {item.Name}')
+            predicate hasDoc(Type) => Type.Documented
+            let DocTypes = FakeCollection:hasDoc
+            foreach DocTypes => PRINT('INFO: {item.Name}')
             """, "test.cop");
 
         var errors = binder.Bind(file);
@@ -165,9 +165,9 @@ public class TypeBinderTests
         var file = ScriptParser.Parse(
             """
             import code
-            predicate isPublic(Type) => Type.Public
-            let PublicTypes = Types:isPublic
-            foreach PublicTypes => PRINT('INFO: {item.Name}')
+            predicate hasDoc(Type) => Type.Documented
+            let DocTypes = Types:hasDoc
+            foreach DocTypes => PRINT('INFO: {item.Name}')
             """, "test.cop");
 
         var errors = binder.Bind(file);

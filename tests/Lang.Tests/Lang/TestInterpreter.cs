@@ -11,10 +11,22 @@ namespace Cop.Tests.Lang;
 /// </summary>
 internal static class TestInterpreter
 {
+    private static readonly Lazy<ScriptFile> _codeCop = new(() =>
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Samples", "code.cop");
+        return ScriptParser.Parse(File.ReadAllText(path), "code.cop");
+    });
+
+    /// <summary>The parsed code.cop package (flags definitions + isX predicates).</summary>
+    public static ScriptFile CodePackage => _codeCop.Value;
+
     public static ScriptInterpreter Create()
     {
         var registry = new TypeRegistry();
         ProviderLoader.RegisterSchema(new CodeProvider(), registry);
+        var codeFile = CodePackage;
+        if (codeFile.FlagsDefinitions != null)
+            registry.LoadFlagsDefinitions(codeFile.FlagsDefinitions);
         registry.RegisterProgramType();
         return new ScriptInterpreter(registry);
     }

@@ -26,6 +26,11 @@ public class DataTableBuilder
     internal string CollectionName => _collectionName;
 
     /// <summary>
+    /// Gets the current number of rows that have been added.
+    /// </summary>
+    public int Count => _count;
+
+    /// <summary>
     /// Starts a new row. Returns the row index.
     /// </summary>
     public int AddRow()
@@ -69,6 +74,13 @@ public class DataTableBuilder
     /// </summary>
     public void SetRange(int row, int slot, int startIndex, int count)
         => _data[row * _stride + slot] = ((long)startIndex << 32) | (uint)count;
+
+    /// <summary>
+    /// Stores a range reference from a (Start, Count) tuple.
+    /// Convenience overload for methods that return pre-computed ranges.
+    /// </summary>
+    public void SetRange(int row, int slot, (int Start, int Count) range)
+        => SetRange(row, slot, range.Start, range.Count);
 
     /// <summary>
     /// Stores an index reference to a row in another table.

@@ -1,14 +1,14 @@
 # Azure SDK client library checks for C#
 
-predicate client(Type) => Type.Name:ew('Client')
-predicate clientOptionsType(Type) => Type.Name:ew('ClientOptions')
+predicate client(Type) => Type.Name:endsWith('Client')
+predicate clientOptionsType(Type) => Type.Name:endsWith('ClientOptions')
 predicate Clients(Types) => client && !clientOptionsType
 
 predicate tokenCredential(Parameter) => Parameter.Type == 'TokenCredential'
 predicate tokenCredentialParam(Constructor) => Constructor.Parameters:any(tokenCredential)
 predicate missingTokenCredential(Type) => Type.Constructors:!any(tokenCredentialParam)
 
-predicate protectedParameterless(Constructor) => Constructor.Protected && Constructor.Parameters.Count == 0
+predicate protectedParameterless(Constructor) => Constructor:isProtected && Constructor.Parameters.Count == 0
 predicate missingMockingConstructor(Type) => Type.Constructors:!any(protectedParameterless)
 
 predicate inheritsClientOptions(Type) => Type:inheritsFrom('ClientOptions') || Type:inheritsFrom('ClientPipelineOptions')

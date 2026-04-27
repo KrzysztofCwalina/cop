@@ -48,7 +48,7 @@ Use a language filter on the list name to scope to a specific language:
 
 ```ruby
 foreach Types:csharp:client => PRINT('{warning:@yellow} {item.Name} needs review')
-foreach Lines:python:rx(@'\bprint\s*\('):!Path('**/tests/**') => PRINT('{warning:@yellow} Use logging instead of print')
+foreach Lines:python:matches(@'\bprint\s*\('):!Path('**/tests/**') => PRINT('{warning:@yellow} Use logging instead of print')
 ```
 
 ## Type Reference
@@ -63,10 +63,7 @@ Represents a class, struct, interface, enum, or record declaration.
 |---|---|---|
 | `Name` | `string` | Type name |
 | `Kind` | `string` | `Class`, `Struct`, `Interface`, `Enum`, `Record` |
-| `Public` | `bool` | Has public modifier |
-| `Sealed` | `bool` | Has sealed modifier |
-| `Abstract` | `bool` | Has abstract modifier |
-| `Static` | `bool` | Has static modifier |
+| `Modifiers` | `int` | Bitfield of `Modifier` flags (use `isX` predicates below) |
 | `BaseTypes` | `[string]` | Base types and interfaces |
 | `Constructors` | `[Method]` | Constructor declarations |
 | `Methods` | `[Method]` | Method declarations |
@@ -76,6 +73,16 @@ Represents a class, struct, interface, enum, or record declaration.
 | `Decorators` | `[string]` | Attributes/decorators |
 | `Line` | `int` | Source line number |
 
+**Modifier predicates** (apply with `:` syntax):
+
+| Predicate | Meaning |
+|---|---|
+| `Type:isPublic` | Has public modifier |
+| `Type:isSealed` | Has sealed modifier |
+| `Type:isAbstract` | Has abstract modifier |
+| `Type:isStatic` | Has static modifier |
+| `Type:isDocumented` | Has documentation |
+
 ### Method
 
 Represents a method declaration. `Constructor` is a superset of `Method` (defined as `type Constructor = Method & {}`).
@@ -83,19 +90,26 @@ Represents a method declaration. `Constructor` is a superset of `Method` (define
 | Property | Type | Description |
 |---|---|---|
 | `Name` | `string` | Method name |
-| `Public` | `bool` | Has public modifier |
-| `Protected` | `bool` | Has protected modifier |
-| `Private` | `bool` | Has private modifier |
-| `Internal` | `bool` | Has internal modifier |
-| `Async` | `bool` | Has async modifier |
-| `Static` | `bool` | Has static modifier |
-| `Abstract` | `bool` | Has abstract modifier |
-| `Virtual` | `bool` | Has virtual modifier |
-| `Override` | `bool` | Has override modifier |
+| `Modifiers` | `int` | Bitfield of `Modifier` flags (use `isX` predicates below) |
 | `ReturnType` | `TypeReference?` | Return type (null for constructors, void methods) |
 | `Parameters` | `[Parameter]` | Parameter declarations |
 | `Decorators` | `[string]` | Attributes/decorators |
 | `Line` | `int` | Source line number |
+
+**Modifier predicates**:
+
+| Predicate | Meaning |
+|---|---|
+| `Method:isPublic` | Has public modifier |
+| `Method:isProtected` | Has protected modifier |
+| `Method:isPrivate` | Has private modifier |
+| `Method:isInternal` | Has internal modifier |
+| `Method:isAsync` | Has async modifier |
+| `Method:isStatic` | Has static modifier |
+| `Method:isAbstract` | Has abstract modifier |
+| `Method:isVirtual` | Has virtual modifier |
+| `Method:isOverride` | Has override modifier |
+| `Method:isDocumented` | Has documentation |
 
 ### Constructor
 
@@ -190,8 +204,8 @@ Cop supports two comparison modes for cross-language checks:
 
 | Mode | Syntax | Behavior |
 |---|---|---|
-| **CaseInsensitive** | `==`, `ct`, etc. | Ignores letter case (default) |
-| **ConventionInsensitive** | `:sm()`, `.Normalized` | Ignores case AND naming convention |
+| **CaseInsensitive** | `==`, `contains`, etc. | Ignores letter case (default) |
+| **ConventionInsensitive** | `:sameAs()`, `.Normalized` | Ignores case AND naming convention |
 
 ### Comparison Operators
 
@@ -204,14 +218,14 @@ Cop supports two comparison modes for cross-language checks:
 
 | Predicate | Example | Description |
 |---|---|---|
-| `eq` | `Name:eq('Client')` | Case-insensitive equality |
-| `ne` | `Name:ne('Object')` | Case-insensitive inequality |
-| `ct` | `Name:ct('task')` | Case-insensitive substring |
-| `sw` | `Name:sw('I')` | Case-insensitive prefix |
-| `ew` | `Name:ew('Client')` | Case-insensitive suffix |
-| `ca` | `Name:ca(List)` | Any item in list is a substring |
-| `rx` | `Name:rx('^Foo$')` | **Case-sensitive** regex |
-| `sm` | `Name:sm('foo_bar')` | Convention-insensitive equality |
+| `equals` | `Name:equals('Client')` | Case-insensitive equality |
+| `notEquals` | `Name:notEquals('Object')` | Case-insensitive inequality |
+| `contains` | `Name:contains('task')` | Case-insensitive substring |
+| `startsWith` | `Name:startsWith('I')` | Case-insensitive prefix |
+| `endsWith` | `Name:endsWith('Client')` | Case-insensitive suffix |
+| `containsAny` | `Name:containsAny(List)` | Any item in list is a substring |
+| `matches` | `Name:matches('^Foo$')` | **Case-sensitive** regex |
+| `sameAs` | `Name:sameAs('foo_bar')` | Convention-insensitive equality |
 | `in` | `Name:in(List)` | Value is a member of the list |
 | `empty` | `Name:empty` | String is empty (zero length) |
 
@@ -226,12 +240,12 @@ Cop supports two comparison modes for cross-language checks:
 
 | Predicate | Example | Description |
 |---|---|---|
-| `eq` | `Depth:eq(0)` | Equal to |
-| `ne` | `Size:ne(0)` | Not equal to |
-| `gt` | `Size:gt(1000)` | Greater than |
-| `lt` | `Depth:lt(3)` | Less than |
-| `ge` | `Size:ge(100)` | Greater than or equal |
-| `le` | `Depth:le(5)` | Less than or equal |
+| `equals` | `Depth:equals(0)` | Equal to |
+| `notEquals` | `Size:notEquals(0)` | Not equal to |
+| `greaterThan` | `Size:greaterThan(1000)` | Greater than |
+| `lessThan` | `Depth:lessThan(3)` | Less than |
+| `greaterOrEqual` | `Size:greaterOrEqual(100)` | Greater than or equal |
+| `lessOrEqual` | `Depth:lessOrEqual(5)` | Less than or equal |
 
 ### String Properties
 
@@ -243,15 +257,15 @@ Cop supports two comparison modes for cross-language checks:
 | `Normalized` | `Name.Normalized` | Convention-insensitive canonical form (`Foo_Bar` → `foobar`) |
 | `Words` | `Name.Words` | Split identifier into lowercase word list |
 
-### Convention-Insensitive Comparison with `:sm`
+### Convention-Insensitive Comparison with `:sameAs`
 
-Use `:sm()` when identifiers may follow different naming conventions across languages:
+Use `:sameAs()` when identifiers may follow different naming conventions across languages:
 
 ```ruby
 # All true — PascalCase, snake_case, camelCase, UPPER_SNAKE are all equivalent
-Type.Name:sm('ConfigureAwait')
-Type.Name:sm('configure_await')
-Type.Name:sm('configureAwait')
+Type.Name:sameAs('ConfigureAwait')
+Type.Name:sameAs('configure_await')
+Type.Name:sameAs('configureAwait')
 ```
 
 ### Identifier Normalization with `.Words`
@@ -278,16 +292,16 @@ Method.Name.Words:any(=> == 'get')      # does method name start with word "get"
 ```ruby
 import code
 
-predicate client(Type) => Type.Name:ew('Client')
-predicate clientOptions(Type) => Type.Name:ew('ClientOptions')
+predicate client(Type) => Type.Name:endsWith('Client')
+predicate clientOptions(Type) => Type.Name:endsWith('ClientOptions')
 predicate Clients(Types) => client && !clientOptions
-predicate optionsType(Parameter) => Parameter.Type.Name:ew('Options')
+predicate optionsType(Parameter) => Parameter.Type.Name:endsWith('Options')
 predicate hasOptions(Constructor) => Constructor.Parameters:any(optionsType)
 predicate missingOptions(Type) => Type.Constructors:none(hasOptions)
-predicate notSealedOrAbstract(Type) => !Type.Sealed && !Type.Abstract
+predicate notSealedOrAbstract(Type) => !Type:isSealed && !Type:isAbstract
 
 predicate cancellationToken(Parameter) => Parameter.Type.Name == 'CancellationToken'
-predicate publicAsync(Method) => Method.Public && Method.Async
+predicate publicAsync(Method) => Method:isPublic && Method:isAsync
 predicate missingCancellationToken(Method) => Method.Parameters:none(cancellationToken)
 predicate asyncWithoutCancellation(Type) => Type.Methods.Where(publicAsync):any(missingCancellationToken)
 
@@ -317,7 +331,7 @@ foreach Statements:csharp:threadSleep => PRINT('{error:@red} Use Task.Delay inst
 
 ### Cross-Language Checks
 
-Use `:sm()` for convention-insensitive matching across languages:
+Use `:sameAs()` for convention-insensitive matching across languages:
 
 ```ruby
 import code
@@ -325,7 +339,7 @@ import code
 # One predicate handles all naming conventions:
 # C# PascalCase (MyClient), Python snake_case (my_client), JS camelCase (myClient)
 predicate client(Type) => Type.Name.Words:contains('client')
-predicate notPublic(Type) => !Type.Public
+predicate notPublic(Type) => !Type:isPublic
 
 foreach Types:client:notPublic => PRINT('{warning:@yellow} {item.Name} should be public')
 ```
@@ -333,8 +347,8 @@ foreach Types:client:notPublic => PRINT('{warning:@yellow} {item.Name} should be
 Or use language-specific overloads when the rules differ per language:
 
 ```ruby
-predicate client(Type:csharp) => Type.Name:ew('Client')
-predicate client(Type:python) => Type.Name:ew('_client')
+predicate client(Type:csharp) => Type.Name:endsWith('Client')
+predicate client(Type:python) => Type.Name:endsWith('_client')
 
 foreach Types:client:notPublic => PRINT('{warning:@yellow} {item.Name} should be public')
 ```
@@ -344,7 +358,7 @@ foreach Types:client:notPublic => PRINT('{warning:@yellow} {item.Name} should be
 ```ruby
 import code
 
-predicate bannedUsing(File) => Path('**/Domain/**') && File.Usings:any(Using:ct('System.IO'))
+predicate bannedUsing(File) => Path('**/Domain/**') && File.Usings:any(Using:contains('System.IO'))
 
 foreach Files:csharp:bannedUsing => PRINT('{error:@red} Domain layer must not reference System.IO in {File.Path}')
 ```

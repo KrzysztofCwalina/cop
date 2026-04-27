@@ -22,10 +22,10 @@ public class CheckFileParserTests
         var file = ScriptParser.Parse(
             "predicate IsClient(Type) => Type.Name:ew('Client')", "test.cop");
         var body = file.Predicates[0].Body;
-        // Type.Name:ew("Client") → PredicateCallExpr(MemberAccessExpr(Identifier("Type"), "Name"), "ew", [Literal("Client")])
+        // Type.Name:endsWith("Client") → PredicateCallExpr(MemberAccessExpr(Identifier("Type"), "Name"), "endsWith", [Literal("Client")])
         Assert.That(body, Is.TypeOf<PredicateCallExpr>());
         var call = (PredicateCallExpr)body;
-        Assert.That(call.Name, Is.EqualTo("ew"));
+        Assert.That(call.Name, Is.EqualTo("endsWith"));
         Assert.That(call.Target, Is.TypeOf<MemberAccessExpr>());
     }
 
@@ -145,7 +145,7 @@ public class CheckFileParserTests
         Assert.That(check.Filters, Has.Count.EqualTo(3));
         Assert.That(check.Filters[1], Is.TypeOf<FunctionCallExpr>());
         var fc = (FunctionCallExpr)check.Filters[1];
-        Assert.That(fc.Name, Is.EqualTo("rx"));
+        Assert.That(fc.Name, Is.EqualTo("matches"));
     }
 
     [Test]

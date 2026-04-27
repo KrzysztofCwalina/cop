@@ -4,8 +4,8 @@
 # Run with: cop run LIST-PUBLIC-TYPES
 import code
 
-predicate isClient(Type) => Type.Name:ew('Client')
-let public-types = Types:Public
+predicate isClient(Type) => Type.Name:endsWith('Client')
+let public-types = Types:isPublic
 let clients = public-types:isClient
 
 command LIST-TYPES = foreach Types => PRINT('{item.Name}')
