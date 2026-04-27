@@ -10,13 +10,13 @@ Azure-specific client library checks. &nbsp; `import csharp-library-client-azure
 
 | Predicate | Applies To | Matches |
 |---|---|---|
-| `tokenCredential` | Parameter | Type is `TokenCredential` |
-| `inheritsClientOptions` | Type | Inherits from `ClientOptions` or `ClientPipelineOptions` |
-| `requestContent` | Parameter | Type is `RequestContent` or `RequestBody` |
-| `protocolMethod` | Method | Public virtual method with `RequestContent` parameter |
-| `convenienceMethod` | Method | Public virtual method without `RequestContent` parameter |
-| `serviceVersionEnum` | Type | Enum named `ServiceVersion` |
-| `internalsVisibleTo` | Statement | `InternalsVisibleTo` attribute |
+| `tokenCredential` | [Parameter](../code.md#parameter) | Type is `TokenCredential` |
+| `inheritsClientOptions` | [Type](../code.md#type) | Inherits from `ClientOptions` or `ClientPipelineOptions` |
+| `requestContent` | [Parameter](../code.md#parameter) | Type is `RequestContent` or `RequestBody` |
+| `protocolMethod` | [Method](../code.md#method) | Public virtual method with `RequestContent` parameter |
+| `convenienceMethod` | [Method](../code.md#method) | Public virtual method without `RequestContent` parameter |
+| `serviceVersionEnum` | [Type](../code.md#type) | Enum named `ServiceVersion` |
+| `internalsVisibleTo` | [Statement](../code.md#statement) | `InternalsVisibleTo` attribute |
 
 ---
 

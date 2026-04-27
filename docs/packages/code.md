@@ -11,10 +11,10 @@ Source code structural analysis across multiple languages. &nbsp; `import code`
 
 | Collection | Type | Description |
 |---|---|---|
-| `Code.Types` | `[Type]` | Classes, structs, interfaces, enums, records |
-| `Code.Statements` | `[Statement]` | Individual code statements |
-| `Code.Lines` | `[Line]` | Raw text lines |
-| `Code.Files` | `[File]` | Source files |
+| `Code.Types` | [`[Type]`](#type) | Classes, structs, interfaces, enums, records |
+| `Code.Statements` | [`[Statement]`](#statement) | Individual code statements |
+| `Code.Lines` | [`[Line]`](#line) | Raw text lines |
+| `Code.Files` | [`[File]`](#file) | Source files |
 
 Convenience subsets:
 
@@ -39,10 +39,10 @@ Language keywords (`csharp`, `python`, `java`, `go`, `typescript`) scope collect
 | `Kind` | `string` | `Class`, `Struct`, `Interface`, `Enum`, `Record` |
 | `Modifiers` | `int` | Modifier bitfield (use predicates) |
 | `BaseTypes` | `[string]` | Base types and interfaces |
-| `Constructors` | `[Method]` | Constructor declarations |
-| `Methods` | `[Method]` | Method declarations |
+| `Constructors` | [`[Method]`](#method) | Constructor declarations |
+| `Methods` | [`[Method]`](#method) | Method declarations |
 | `MethodNames` | `[string]` | Method names (quick string matching) |
-| `NestedTypes` | `[Type]` | Nested type declarations |
+| `NestedTypes` | [`[Type]`](#type) | Nested type declarations |
 | `EnumValues` | `[string]` | Enum member names |
 | `Decorators` | `[string]` | Attributes/decorators |
 | `Line` | `int` | Source line number |
@@ -55,8 +55,8 @@ Language keywords (`csharp`, `python`, `java`, `go`, `typescript`) scope collect
 |---|---|---|
 | `Name` | `string` | Method name |
 | `Modifiers` | `int` | Modifier bitfield (use predicates) |
-| `ReturnType` | `TypeReference?` | Return type (null for constructors/void) |
-| `Parameters` | `[Parameter]` | Parameter declarations |
+| `ReturnType` | [`TypeReference`](#typereference)`?` | Return type (null for constructors/void) |
+| `Parameters` | [`[Parameter]`](#parameter) | Parameter declarations |
 | `Decorators` | `[string]` | Attributes/decorators |
 | `Line` | `int` | Source line number |
 
@@ -65,7 +65,7 @@ Language keywords (`csharp`, `python`, `java`, `go`, `typescript`) scope collect
 | Property | Type | Description |
 |---|---|---|
 | `Name` | `string` | Parameter name |
-| `Type` | `TypeReference?` | Parameter type (null if untyped) |
+| `Type` | [`TypeReference`](#typereference)`?` | Parameter type (null if untyped) |
 | `Variadic` | `bool` | Is `params`/`*args` |
 | `Kwargs` | `bool` | Is `**kwargs` (Python) |
 | `Defaulted` | `bool` | Has default value |
@@ -78,7 +78,7 @@ Language keywords (`csharp`, `python`, `java`, `go`, `typescript`) scope collect
 | `Name` | `string` | Type name without namespace |
 | `Namespace` | `string?` | Namespace prefix (null if unqualified) |
 | `Generic` | `bool` | Has generic arguments |
-| `GenericArguments` | `[TypeReference]` | Generic type arguments |
+| `GenericArguments` | [`[TypeReference]`](#typereference) | Generic type arguments |
 | `Length` | `int` | Length of original type text |
 
 #### Statement
@@ -92,7 +92,7 @@ Language keywords (`csharp`, `python`, `java`, `go`, `typescript`) scope collect
 | `Arguments` | `[string]` | Call arguments |
 | `Line` | `int` | Source line number |
 | `InMethod` | `bool` | Inside a method body |
-| `File` | `File?` | Containing file |
+| `File` | [`File`](#file)`?` | Containing file |
 
 Subset types narrow by predicate:
 
@@ -118,16 +118,16 @@ Subset types narrow by predicate:
 | `Language` | `string?` | Language (`csharp`, `python`, etc.) |
 | `Namespace` | `string?` | Declared namespace |
 | `Usings` | `[string]` | Import/using directives |
-| `Types` | `[Type]` | Type declarations in file |
+| `Types` | [`[Type]`](#type) | Type declarations in file |
 
 #### Codebase
 
 | Property | Type | Description |
 |---|---|---|
-| `Files` | `[File]` | All source files |
-| `Types` | `[Type]` | All type declarations |
-| `Statements` | `[Statement]` | All code statements |
-| `Lines` | `[Line]` | All text lines |
+| `Files` | [`[File]`](#file) | All source files |
+| `Types` | [`[Type]`](#type) | All type declarations |
+| `Statements` | [`[Statement]`](#statement) | All code statements |
+| `Lines` | [`[Line]`](#line) | All text lines |
 
 ---
 

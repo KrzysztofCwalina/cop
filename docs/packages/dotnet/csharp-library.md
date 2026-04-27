@@ -10,12 +10,12 @@ Design convention checks for .NET class libraries. &nbsp; `import csharp-library
 
 | Predicate | Applies To | Matches |
 |---|---|---|
-| `asyncBoolParam` | Parameter | Named `async` with type `bool` |
-| `publicWithAsyncBool` | Method | Public method with `async` bool parameter |
-| `exposesAsyncBool` | Type | Has public method with `async` bool parameter |
-| `nonPublicAsync` | Method | Non-public async method |
-| `awaitUsingDefault` | Statement | Await without `ConfigureAwait(false)` |
-| `publicType` | Type | Has public modifier |
+| `asyncBoolParam` | [Parameter](../code.md#parameter) | Named `async` with type `bool` |
+| `publicWithAsyncBool` | [Method](../code.md#method) | Public method with `async` bool parameter |
+| `exposesAsyncBool` | [Type](../code.md#type) | Has public method with `async` bool parameter |
+| `nonPublicAsync` | [Method](../code.md#method) | Non-public async method |
+| `awaitUsingDefault` | [Statement](../code.md#statement) | Await without `ConfigureAwait(false)` |
+| `publicType` | [Type](../code.md#type) | Has public modifier |
 
 ---
 

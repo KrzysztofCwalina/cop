@@ -10,13 +10,13 @@ StyleCop-equivalent formatting, naming, and style checks. &nbsp; `import csharp-
 
 | Predicate (Rule) | Applies To | Matches |
 |---|---|---|
-| `interfaceMissingIPrefix` (SA1302) | Type | Interface not starting with `I` + uppercase |
-| `lowercaseTypeName` (SA1300) | Type | Type name starts with lowercase |
-| `lowercasePublicMethod` (SA1300) | Method | Public method starts with lowercase |
-| `multipleTypesInFile` (SA1402) | Type | File contains multiple types |
-| `commentMissingSpace` (SA1005) | Line | `//` comment without leading space |
-| `containsTab` (SA1027) | Line | Line contains tab character |
-| `trailingWhitespace` (SA1028) | Line | Line ends with spaces or tabs |
+| `interfaceMissingIPrefix` (SA1302) | [Type](../code.md#type) | Interface not starting with `I` + uppercase |
+| `lowercaseTypeName` (SA1300) | [Type](../code.md#type) | Type name starts with lowercase |
+| `lowercasePublicMethod` (SA1300) | [Method](../code.md#method) | Public method starts with lowercase |
+| `multipleTypesInFile` (SA1402) | [Type](../code.md#type) | File contains multiple types |
+| `commentMissingSpace` (SA1005) | [Line](../code.md#line) | `//` comment without leading space |
+| `containsTab` (SA1027) | [Line](../code.md#line) | Line contains tab character |
+| `trailingWhitespace` (SA1028) | [Line](../code.md#line) | Line ends with spaces or tabs |
 
 ---
 

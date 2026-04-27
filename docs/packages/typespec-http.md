@@ -10,8 +10,8 @@ HTTP protocol graph derived from TypeSpec specs. &nbsp; `import typespec-http`
 
 | Collection | Type | Description |
 |---|---|---|
-| `Operations` | `[HttpOperation]` | All HTTP operations |
-| `Services` | `[HttpService]` | All HTTP services |
+| `Operations` | [`[HttpOperation]`](#httpoperation) | All HTTP operations |
+| `Services` | [`[HttpService]`](#httpservice) | All HTTP services |
 
 ---
 
@@ -41,7 +41,7 @@ HTTP protocol graph derived from TypeSpec specs. &nbsp; `import typespec-http`
 | `StatusCode` | string | HTTP status code |
 | `Description` | string? | Response description |
 | `Body` | string? | Body type expression |
-| `Headers` | `[HttpHeader]` | Response headers |
+| `Headers` | [`[HttpHeader]`](#httpheader) | Response headers |
 
 #### HttpOperation
 
@@ -51,8 +51,8 @@ HTTP protocol graph derived from TypeSpec specs. &nbsp; `import typespec-http`
 | `Verb` | string | HTTP verb (get, put, post, etc.) |
 | `Path` | string | Resolved route path |
 | `UriTemplate` | string | URI template with placeholders |
-| `Parameters` | `[HttpParameter]` | Request parameters |
-| `Responses` | `[HttpResponse]` | Possible responses |
+| `Parameters` | [`[HttpParameter]`](#httpparameter) | Request parameters |
+| `Responses` | [`[HttpResponse]`](#httpresponse) | Possible responses |
 | `Interface` | string? | Parent interface |
 
 #### HttpService
@@ -61,7 +61,7 @@ HTTP protocol graph derived from TypeSpec specs. &nbsp; `import typespec-http`
 |---|---|---|
 | `Name` | string | Service name |
 | `Namespace` | string | Service namespace |
-| `Operations` | `[HttpOperation]` | Service operations |
+| `Operations` | [`[HttpOperation]`](#httpoperation) | Service operations |
 | `Auth` | string? | Authentication scheme |
 
 ---

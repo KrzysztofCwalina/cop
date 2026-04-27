@@ -10,11 +10,11 @@ Design convention checks for Python packages. &nbsp; `import python-library`
 
 | Predicate | Applies To | Matches |
 |---|---|---|
-| `untypedParam` | Parameter | Parameter without type hint (excludes `*args`, `**kwargs`) |
-| `publicMethodMissingParamTypes` | Method | Public method with untyped parameter |
-| `untypedParams` | Type | Type with public methods having untyped parameters |
-| `publicMethodMissingReturnType` | Method | Public method without return type annotation |
-| `missingReturnTypes` | Type | Type with public methods missing return types |
+| `untypedParam` | [`Parameter`](../code.md#parameter) | Parameter without type hint (excludes `*args`, `**kwargs`) |
+| `publicMethodMissingParamTypes` | [`Method`](../code.md#method) | Public method with untyped parameter |
+| `untypedParams` | [`Type`](../code.md#type) | Type with public methods having untyped parameters |
+| `publicMethodMissingReturnType` | [`Method`](../code.md#method) | Public method without return type annotation |
+| `missingReturnTypes` | [`Type`](../code.md#type) | Type with public methods missing return types |
 
 ---
 

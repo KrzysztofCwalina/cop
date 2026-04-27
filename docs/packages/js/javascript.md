@@ -10,12 +10,12 @@ JavaScript and TypeScript coding convention checks. &nbsp; `import javascript`
 
 | Predicate | Applies To | Matches |
 |---|---|---|
-| `consoleCall` | Statement | Call to `console.*` |
-| `alertCall` | Statement | Call to `alert()` |
-| `evalCall` | Statement | Call to `eval()` |
-| `debuggerStatement` | Statement | `debugger` statement |
-| `usesVar` | Statement | Variable declaration using `var` |
-| `catchWithoutRethrow` | Statement | Error handler without rethrowing |
+| `consoleCall` | [`Statement`](../code.md#statement) | Call to `console.*` |
+| `alertCall` | [`Statement`](../code.md#statement) | Call to `alert()` |
+| `evalCall` | [`Statement`](../code.md#statement) | Call to `eval()` |
+| `debuggerStatement` | [`Statement`](../code.md#statement) | `debugger` statement |
+| `usesVar` | [`Statement`](../code.md#statement) | Variable declaration using `var` |
+| `catchWithoutRethrow` | [`Statement`](../code.md#statement) | Error handler without rethrowing |
 
 ---
 

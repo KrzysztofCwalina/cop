@@ -10,10 +10,10 @@ Python coding convention checks. &nbsp; `import python`
 
 | Predicate | Applies To | Matches |
 |---|---|---|
-| `printCall` | Statement | Call to `print()` |
-| `bareExcept` | Statement | `except:` with no exception type |
-| `catchesException` | Statement | Error handler catching broad `Exception` |
-| `swallowsException` | Statement | Error handler catching `Exception` without reraising |
+| `printCall` | [`Statement`](../code.md#statement) | Call to `print()` |
+| `bareExcept` | [`Statement`](../code.md#statement) | `except:` with no exception type |
+| `catchesException` | [`Statement`](../code.md#statement) | Error handler catching broad `Exception` |
+| `swallowsException` | [`Statement`](../code.md#statement) | Error handler catching `Exception` without reraising |
 
 ---
 

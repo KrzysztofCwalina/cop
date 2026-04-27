@@ -12,8 +12,8 @@ File and folder analysis. &nbsp; `import filesystem`
 
 | Collection | Type | Description |
 |---|---|---|
-| `Disk.Folders` | `[Folder]` | All folders in the scanned tree |
-| `Disk.Files` | `[DiskFile]` | All files in the scanned tree |
+| `Disk.Folders` | [`[Folder]`](#folder) | All folders in the scanned tree |
+| `Disk.Files` | [`[DiskFile]`](#diskfile) | All files in the scanned tree |
 
 ---
 
@@ -50,8 +50,8 @@ File and folder analysis. &nbsp; `import filesystem`
 
 | Property | Type | Description |
 |---|---|---|
-| `Folders` | `[Folder]` | Collection of all folders |
-| `Files` | `[DiskFile]` | Collection of all files |
+| `Folders` | [`[Folder]`](#folder) | Collection of all folders |
+| `Files` | [`[DiskFile]`](#diskfile) | Collection of all files |
 
 ---
 

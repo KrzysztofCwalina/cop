@@ -10,9 +10,9 @@ Design convention checks for client libraries. &nbsp; `import csharp-library-cli
 
 | Collection | Type | Description |
 |---|---|---|
-| `Clients` | `[Type]` | Types ending with `Client` (excludes options types) |
-| `Models` | `[Type]` | Public classes that are not clients or options |
-| `ClientOptions` | `[Type]` | Types ending with `ClientOptions` |
+| `Clients` | `[`[`Type`](../code.md#type)`]` | Types ending with `Client` (excludes options types) |
+| `Models` | `[`[`Type`](../code.md#type)`]` | Public classes that are not clients or options |
+| `ClientOptions` | `[`[`Type`](../code.md#type)`]` | Types ending with `ClientOptions` |
 
 ---
 
@@ -20,16 +20,16 @@ Design convention checks for client libraries. &nbsp; `import csharp-library-cli
 
 | Predicate | Applies To | Matches |
 |---|---|---|
-| `client` | Type | Name ends with 'Client' |
-| `clientOptionsType` | Type | Name ends with 'ClientOptions' |
-| `model` | Type | Public class, not a client or options type |
-| `constructorAcceptsOptions` | Constructor | Has options parameter |
-| `cancellationToken` | Parameter | Type is `CancellationToken` |
-| `publicAsync` | Method | Public async method |
-| `asyncServiceMethod` | Method | Public virtual method ending with 'Async' |
-| `protectedParameterless` | Constructor | Protected parameterless constructor |
-| `collectionSuffix` | Type | Name ends with 'Collection' |
-| `requestSuffix` | Type | Name ends with 'Request' |
+| `client` | [Type](../code.md#type) | Name ends with 'Client' |
+| `clientOptionsType` | [Type](../code.md#type) | Name ends with 'ClientOptions' |
+| `model` | [Type](../code.md#type) | Public class, not a client or options type |
+| `constructorAcceptsOptions` | [Constructor](../code.md#method) | Has options parameter |
+| `cancellationToken` | [Parameter](../code.md#parameter) | Type is `CancellationToken` |
+| `publicAsync` | [Method](../code.md#method) | Public async method |
+| `asyncServiceMethod` | [Method](../code.md#method) | Public virtual method ending with 'Async' |
+| `protectedParameterless` | [Constructor](../code.md#method) | Protected parameterless constructor |
+| `collectionSuffix` | [Type](../code.md#type) | Name ends with 'Collection' |
+| `requestSuffix` | [Type](../code.md#type) | Name ends with 'Request' |
 
 ---
 

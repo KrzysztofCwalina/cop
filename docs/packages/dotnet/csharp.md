@@ -10,15 +10,15 @@ Core C# coding convention checks. &nbsp; `import csharp`
 
 | Predicate | Applies To | Matches |
 |---|---|---|
-| `varDeclaration` | Statement | Declaration using `var` |
-| `dynamicDeclaration` | Statement | Declaration using `dynamic` |
-| `threadSleep` | Statement | Call to `Thread.Sleep()` |
-| `consoleCall` | Statement | Call to `Console.*` |
-| `catchesBaseException` | Statement | Catches broad `Exception` |
-| `swallowsBaseException` | Statement | Catches `Exception` without rethrowing |
-| `configureAwaitTrue` | Statement | `ConfigureAwait(true)` (the default) |
-| `getAwaiterGetResult` | Statement | `GetAwaiter().GetResult()` — sync-over-async |
-| `taskCompletionSourceNew` | Statement | `new TaskCompletionSource` without options |
+| `varDeclaration` | [Statement](../code.md#statement) | Declaration using `var` |
+| `dynamicDeclaration` | [Statement](../code.md#statement) | Declaration using `dynamic` |
+| `threadSleep` | [Statement](../code.md#statement) | Call to `Thread.Sleep()` |
+| `consoleCall` | [Statement](../code.md#statement) | Call to `Console.*` |
+| `catchesBaseException` | [Statement](../code.md#statement) | Catches broad `Exception` |
+| `swallowsBaseException` | [Statement](../code.md#statement) | Catches `Exception` without rethrowing |
+| `configureAwaitTrue` | [Statement](../code.md#statement) | `ConfigureAwait(true)` (the default) |
+| `getAwaiterGetResult` | [Statement](../code.md#statement) | `GetAwaiter().GetResult()` — sync-over-async |
+| `taskCompletionSourceNew` | [Statement](../code.md#statement) | `new TaskCompletionSource` without options |
 
 ---
 

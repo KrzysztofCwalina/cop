@@ -22,7 +22,7 @@ Structured violation reporting for source code checks. &nbsp; `import code-analy
 
 ### Functions
 
-Each function has overloads for `Statement`, `Type`, `Line`, and `Folder`. The `message` parameter supports template interpolation (e.g., `'Missing docs for {item.Name}'`).
+Each function has overloads for [`Statement`](code.md#statement), [`Type`](code.md#type), [`Line`](code.md#line), and [`Folder`](filesystem.md#folder). The `message` parameter supports template interpolation (e.g., `'Missing docs for {item.Name}'`).
 
 | Function | Description |
 |---|---|

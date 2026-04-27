@@ -10,13 +10,13 @@ TypeSpec API specification type graph. &nbsp; `import typespec`
 
 | Collection | Type | Description |
 |---|---|---|
-| `Models` | `[TspModel]` | All models in the spec |
-| `Operations` | `[TspOperation]` | All operations |
-| `Interfaces` | `[TspInterface]` | All interfaces |
-| `Enums` | `[TspEnum]` | All enums |
-| `Unions` | `[TspUnion]` | All unions |
-| `Scalars` | `[TspScalar]` | All scalars |
-| `Namespaces` | `[TspNamespace]` | All namespaces |
+| `Models` | [`[TspModel]`](#tspmodel) | All models in the spec |
+| `Operations` | [`[TspOperation]`](#tspoperation) | All operations |
+| `Interfaces` | [`[TspInterface]`](#tspinterface) | All interfaces |
+| `Enums` | [`[TspEnum]`](#tspenum) | All enums |
+| `Unions` | [`[TspUnion]`](#tspunion) | All unions |
+| `Scalars` | [`[TspScalar]`](#tspscalar) | All scalars |
+| `Namespaces` | [`[TspNamespace]`](#tspnamespace) | All namespaces |
 
 ---
 
@@ -37,7 +37,7 @@ TypeSpec API specification type graph. &nbsp; `import typespec`
 | `Type` | string | Type expression |
 | `Optional` | bool | True if optional |
 | `Default` | string? | Default value |
-| `Decorators` | `[TspDecorator]` | Applied decorators |
+| `Decorators` | [`[TspDecorator]`](#tspdecorator) | Applied decorators |
 
 #### TspModel
 
@@ -45,9 +45,9 @@ TypeSpec API specification type graph. &nbsp; `import typespec`
 |---|---|---|
 | `Name` | string | Model name |
 | `Namespace` | string? | Containing namespace |
-| `Properties` | `[TspProperty]` | Model properties |
+| `Properties` | [`[TspProperty]`](#tspproperty) | Model properties |
 | `BaseModel` | string? | Parent model |
-| `Decorators` | `[TspDecorator]` | Applied decorators |
+| `Decorators` | [`[TspDecorator]`](#tspdecorator) | Applied decorators |
 
 #### TspOperation
 
@@ -56,9 +56,9 @@ TypeSpec API specification type graph. &nbsp; `import typespec`
 | `Name` | string | Operation name |
 | `Namespace` | string? | Containing namespace |
 | `Interface` | string? | Parent interface |
-| `Parameters` | `[TspProperty]` | Input parameters |
+| `Parameters` | [`[TspProperty]`](#tspproperty) | Input parameters |
 | `ReturnType` | string | Return type expression |
-| `Decorators` | `[TspDecorator]` | Applied decorators |
+| `Decorators` | [`[TspDecorator]`](#tspdecorator) | Applied decorators |
 
 #### TspInterface
 
@@ -66,8 +66,8 @@ TypeSpec API specification type graph. &nbsp; `import typespec`
 |---|---|---|
 | `Name` | string | Interface name |
 | `Namespace` | string? | Containing namespace |
-| `Operations` | `[TspOperation]` | Contained operations |
-| `Decorators` | `[TspDecorator]` | Applied decorators |
+| `Operations` | [`[TspOperation]`](#tspoperation) | Contained operations |
+| `Decorators` | [`[TspDecorator]`](#tspdecorator) | Applied decorators |
 
 #### TspEnumMember
 
@@ -75,7 +75,7 @@ TypeSpec API specification type graph. &nbsp; `import typespec`
 |---|---|---|
 | `Name` | string | Member name |
 | `Value` | string? | Explicit value |
-| `Decorators` | `[TspDecorator]` | Applied decorators |
+| `Decorators` | [`[TspDecorator]`](#tspdecorator) | Applied decorators |
 
 #### TspEnum
 
@@ -83,8 +83,8 @@ TypeSpec API specification type graph. &nbsp; `import typespec`
 |---|---|---|
 | `Name` | string | Enum name |
 | `Namespace` | string? | Containing namespace |
-| `Members` | `[TspEnumMember]` | Enum members |
-| `Decorators` | `[TspDecorator]` | Applied decorators |
+| `Members` | [`[TspEnumMember]`](#tspenummember) | Enum members |
+| `Decorators` | [`[TspDecorator]`](#tspdecorator) | Applied decorators |
 
 #### TspUnionVariant
 
@@ -99,8 +99,8 @@ TypeSpec API specification type graph. &nbsp; `import typespec`
 |---|---|---|
 | `Name` | string | Union name |
 | `Namespace` | string? | Containing namespace |
-| `Variants` | `[TspUnionVariant]` | Union variants |
-| `Decorators` | `[TspDecorator]` | Applied decorators |
+| `Variants` | [`[TspUnionVariant]`](#tspunionvariant) | Union variants |
+| `Decorators` | [`[TspDecorator]`](#tspdecorator) | Applied decorators |
 
 #### TspScalar
 
@@ -109,7 +109,7 @@ TypeSpec API specification type graph. &nbsp; `import typespec`
 | `Name` | string | Scalar name |
 | `Namespace` | string? | Containing namespace |
 | `BaseScalar` | string? | Base scalar type |
-| `Decorators` | `[TspDecorator]` | Applied decorators |
+| `Decorators` | [`[TspDecorator]`](#tspdecorator) | Applied decorators |
 
 #### TspNamespace
 
@@ -117,4 +117,4 @@ TypeSpec API specification type graph. &nbsp; `import typespec`
 |---|---|---|
 | `Name` | string | Short name |
 | `FullName` | string | Fully qualified name |
-| `Decorators` | `[TspDecorator]` | Applied decorators |
+| `Decorators` | [`[TspDecorator]`](#tspdecorator) | Applied decorators |
