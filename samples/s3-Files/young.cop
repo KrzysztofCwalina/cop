@@ -1,6 +1,10 @@
-import csv
-import person from ..\s2-JSON
+# Filesystem queries on disk files and folders.
+# Demonstrates filtering files by extension, path patterns, and size.
+# Run with: cop run
+import filesystem
 
-let Persons = csv::Parse('table.csv', [Person]) # csv:: resolves ambiguity
+# Find all CSV files in the project
+predicate csvFile(DiskFile) => DiskFile.Extension:equals('.csv')
+let CsvFiles = Disk.DiskFiles:csvFile
 
-foreach Persons:young => PRINT('{item.Name}')
+foreach CsvFiles => PRINT('CSV file: {item.Name} ({item.Size} bytes)')

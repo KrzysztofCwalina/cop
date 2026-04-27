@@ -363,6 +363,8 @@ public static class FilterHintExtractor
         "lessThan" => new ComparisonFilter(prop, CompareOp.LessThan, value),
         "greaterOrEqual" => new ComparisonFilter(prop, CompareOp.GreaterOrEqual, value),
         "lessOrEqual" => new ComparisonFilter(prop, CompareOp.LessOrEqual, value),
+        "isSet" => new FlagsFilter(prop, FlagsOp.IsSet, (long)value),
+        "isClear" => new FlagsFilter(prop, FlagsOp.IsClear, (long)value),
         _ => null
     };
 
@@ -373,7 +375,8 @@ public static class FilterHintExtractor
             or "containsAny" or "sameAs"
             or "in" or "empty"
             or "greaterThan" or "lessThan"
-            or "greaterOrEqual" or "lessOrEqual";
+            or "greaterOrEqual" or "lessOrEqual"
+            or "isSet" or "isClear";
 
     private static double? AsDouble(object? v) => v switch
     {

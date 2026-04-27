@@ -1,0 +1,10 @@
+# Demonstrates the SAVE command for writing results to files.
+# SAVE only runs when explicitly invoked: cop run EXPORT-API
+# Output files are relative to the codebase root.
+import code
+
+# Export public type names to a text file
+command EXPORT-API = foreach Code.Types:isPublic => SAVE('api-surface.txt', '{item.Name}')
+
+# Export as CSV with multiple fields
+command EXPORT-CSV = foreach Code.Types:isPublic => SAVE('types.csv', '{item.Name},{item.Methods.Count},{item.File.Path}')

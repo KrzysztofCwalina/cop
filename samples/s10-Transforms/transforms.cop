@@ -1,0 +1,20 @@
+# Demonstrates list transforms: Where, Select, Text, First, Count.
+# Transforms use .PascalCase() syntax and return new lists or values.
+# Run with: cop run PUBLIC-METHODS
+import code
+
+# .Where(predicate) — filter a sub-list to matching items
+let PublicMethods = Code.Types.Where(Type.Methods:any(Method:isPublic))
+
+# .First / .Last / .Single — access specific list elements
+predicate hasConstructor(Type) => Type.Constructors.First != null
+
+# .Select(template) — project each item into a string value
+# .Text(separator) — join projected strings into one string
+predicate methodSummary(Type) => Type.Methods.Select('{Method.Name}').Text(', '):!empty
+
+# .Count — number of items in a list
+predicate hasManyMethods(Type) => Type.Methods.Count > 3
+
+# Combine transforms in output
+command PUBLIC-METHODS = foreach PublicMethods:hasManyMethods => PRINT('{item.Name} ({item.Methods.Count}): {item.Methods.Where(Method:isPublic).Select('{Method.Name}').Text(', ')}')

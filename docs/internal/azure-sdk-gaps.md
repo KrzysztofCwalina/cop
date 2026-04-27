@@ -172,9 +172,9 @@ Cop now handles text file analysis (markdown, XML, csproj) via the text file par
 | Target framework validation | MSBuild ValidateTargetFrameworks | ✅ Cop reads .csproj as XML lines — can validate `<TargetFramework>` |
 | Configuration schema validation | MSBuild ConfigurationSchema | ⚠️ Requires MSBuild evaluation |
 
-> Cop now handles 7 of 11 build script checks directly via text file parsing and API
-> surface analysis. The remaining 4 require external tool binaries (ApiCompat DLL
-> comparison, Bicep compiler, MSBuild evaluation, snippet-to-code matching).
+> Cop now handles 8 of 11 build script checks directly via text file parsing and API
+> surface analysis. The remaining 3 require external tool binaries (Bicep compiler,
+> MSBuild evaluation, snippet-to-code matching).
 
 ---
 
@@ -205,9 +205,11 @@ These checks exist in Cop packages but have **no equivalent** enforcement in `az
 | `client-sealed-or-abstract` | csharp-library-client | Client types must be sealed or abstract |
 | `client-needs-token-credential` | csharp-library-client-azure | Azure clients must accept TokenCredential |
 | `options-inherits-base` | csharp-library-client-azure | Options must inherit ClientOptions base |
+| `options-single-ctor-param` | csharp-library-client-azure | ClientOptions ctor should only accept optional ServiceVersion |
 
 > `client-needs-token-credential` and `options-inherits-base` are enforced by our Roslyn
-> analyzers (AZURE001, AZURE002) but not by any azure-sdk-for-net tool.
+> analyzers (AZURE001, AZURE002) but not by any azure-sdk-for-net tool. `options-single-ctor-param`
+> has no equivalent in any azure-sdk-for-net analyzer.
 
 ---
 
@@ -217,16 +219,16 @@ These checks exist in Cop packages but have **no equivalent** enforcement in `az
 
 | Category | Total | Covered | Gaps |
 |----------|:-----:|:-------:|:----:|
-| Client API Design (AZC0002–AZC0021) | 18 | 18 | 0 |
-| Model Naming (AZC0030–AZC0036) | 6 | 6 | 0 |
-| Async/Sync Patterns (AZC0100–AZC0112) | 12 | 12 | 0 |
+| Client API Design (AZC0002–AZC0021) | 19 | 19 | 0 |
+| Model Naming (AZC0030–AZC0036) | 7 | 7 | 0 |
+| Async/Sync Patterns (AZC0100–AZC0112) | 13 | 13 | 0 |
 | AOT (AZC0150) | 1 | 1 | 0 |
 | In-repo SdkAnalyzers (unique rules) | 2 | 2 | 0 |
-| **Totals** | **39** | **39** | **0** |
+| **Totals** | **42** | **42** | **0** |
 
 ### Gap List (AZC rules not covered by Cop)
 
-All 39 AZC rules are now fully covered by Cop checks — zero gaps remain.
+All 42 AZC rules are now fully covered by Cop checks — zero gaps remain.
 
 ### Non-AZC Check Categories
 
@@ -241,7 +243,7 @@ All 39 AZC rules are now fully covered by Cop checks — zero gaps remain.
 
 ### Overall
 
-- **39 AZC rules** (API design guidelines) → **39 covered**, **0 gaps**
+- **42 AZC rules** (API design guidelines) → **42 covered**, **0 gaps**
 - **Non-AZC categories** → **5 residual ⚠️** (out of ~260+ total rules):
   - CA1062: requires true data-flow analysis (parameter use tracking)
   - ~200 general CA rules: enforced by Roslyn `NetAnalyzers` at compile time
@@ -249,5 +251,5 @@ All 39 AZC rules are now fully covered by Cop checks — zero gaps remain.
   - Bicep validation: requires Bicep compiler
   - MSBuild ConfigurationSchema: requires MSBuild evaluation
 - **Everything else is now ✅** — cop implements checks directly or via text file parsing
-- Cop provides **7 unique checks** with no azure-sdk-for-net equivalent, adding value for `var`/`dynamic` bans, `Thread.Sleep`, `Console` calls, sealed-or-abstract enforcement, and Azure identity requirements.
+- Cop provides **8 unique checks** with no azure-sdk-for-net equivalent, adding value for `var`/`dynamic` bans, `Thread.Sleep`, `Console` calls, sealed-or-abstract enforcement, Azure identity requirements, and ClientOptions single-parameter enforcement.
 - **New `csharp-api` package** provides full public API surface extraction from source (types, methods, properties, events, enums) — replaces GenAPI for source-based API listing.

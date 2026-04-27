@@ -1,11 +1,19 @@
+# JSON parsing with custom type definitions.
+# Demonstrates type declarations, JSON deserialization, and predicate filtering.
+# Run with: cop run
 import json
 
+# Define a typed schema for JSON records
 type Person = {
     name : string,
-    age : integer
+    age : int
 }
+
+# Parse a JSON file into a typed collection
 let Persons = Parse('data.json', [Person])
 
+# Filter persons by age using a predicate
 predicate young(Person) => Person.age < 30
 let YoungPeople = Persons:young
-foreach YongPeople => PRINT('{item.Name}')
+
+foreach YoungPeople => PRINT('{item.name}')

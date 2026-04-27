@@ -407,10 +407,10 @@ public class ScriptParser
         // Parse the RHS as an expression (handles colon chains via ParsePostfix)
         var expr = ParseExpression();
 
-        // Handle Load('path') as a value binding (produces a collection at runtime)
-        if (expr is FunctionCallExpr loadCall && loadCall.Name == "Load")
+        // Handle Load('path') and Parse('file', [Type]) as value bindings
+        if (expr is FunctionCallExpr call && call.Name is "Load" or "Parse")
         {
-            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: loadCall);
+            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: call);
         }
 
         var (baseCollection, filters, exclusions) = DecomposeCollectionExpression(expr);
@@ -438,7 +438,7 @@ public class ScriptParser
         // Check for identifier followed by ( — this is an action invocation
         // But Load() is a value binding, not a command action
         if (i >= _tokens.Count || _tokens[i].Kind != TokenKind.Identifier) return false;
-        if (_tokens[i].Value == "Load") return false;
+        if (_tokens[i].Value is "Load" or "Parse") return false;
         i++;
         return i < _tokens.Count && _tokens[i].Kind == TokenKind.LParen;
     }

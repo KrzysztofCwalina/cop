@@ -38,6 +38,7 @@ public static class FilterCompiler
             CollectionContainsFilter ccf => CompileCollectionContainsFilter(ccf, accessors),
             CollectionAnyFilter canyf => CompileCollectionAnyFilter(canyf, accessors),
             CollectionCountFilter ccntf => CompileCollectionCountFilter(ccntf, accessors),
+            FlagsFilter ff => CompileFlagsFilter(ff, accessors),
             AndFilter af => CompileAndFilter(af, accessors),
             OrFilter orf => CompileOrFilter(orf, accessors),
             NotFilter nf => CompileNotFilter(nf, accessors),
@@ -251,6 +252,31 @@ public static class FilterCompiler
                 CompareOp.LessThan => count < ccntf.Value,
                 CompareOp.GreaterOrEqual => count >= ccntf.Value,
                 CompareOp.LessOrEqual => count <= ccntf.Value,
+                _ => true
+            };
+        };
+    }
+
+    private static Func<object, bool> CompileFlagsFilter(
+        FlagsFilter ff, Dictionary<string, Func<object, object?>> accessors)
+    {
+        if (!accessors.TryGetValue(ff.Property, out var accessor))
+            return _ => true;
+
+        return item =>
+        {
+            var value = accessor(item);
+            var numVal = value switch
+            {
+                int i => (long)i,
+                long l => l,
+                _ => 0L
+            };
+
+            return ff.Op switch
+            {
+                FlagsOp.IsSet => (numVal & ff.Value) != 0,
+                FlagsOp.IsClear => (numVal & ff.Value) == 0,
                 _ => true
             };
         };

@@ -462,6 +462,8 @@ public class PredicateEvaluator
                 "lessThan" => num < arg0,
                 "greaterOrEqual" => num >= arg0,
                 "lessOrEqual" => num <= arg0,
+                "isSet" => ((long)num & (long)arg0) != 0,
+                "isClear" => ((long)num & (long)arg0) == 0,
                 _ => throw new InvalidOperationException($"Unknown numeric predicate '{predicate}'")
             };
         }

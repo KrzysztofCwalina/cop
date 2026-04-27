@@ -175,7 +175,9 @@ public static class Engine
             diagLog?.Invoke($"[diag] {_codeProvider} parse: skipped (no code collections referenced)");
         }
 
-        var interpreter = new ScriptInterpreter(typeRegistry, externalDocumentLoader: CreateDocumentLoader(typeRegistry));
+        var interpreter = new ScriptInterpreter(typeRegistry,
+            externalDocumentLoader: CreateDocumentLoader(typeRegistry),
+            jsonFileParser: CreateJsonFileParser(typeRegistry, rootPath));
         HashSet<string>? filterSet = commandFilter is { Length: > 0 }
             ? new HashSet<string>(commandFilter, StringComparer.OrdinalIgnoreCase)
             : null;
@@ -328,7 +330,9 @@ public static class Engine
         // Run each command, or all non-SAVE if no rules specified
         var allOutputs = new List<PrintOutput>();
         var allFileOutputs = new List<FileOutput>();
-        var interpreter = new ScriptInterpreter(typeRegistry, externalDocumentLoader: CreateDocumentLoader(typeRegistry));
+        var interpreter = new ScriptInterpreter(typeRegistry,
+            externalDocumentLoader: CreateDocumentLoader(typeRegistry),
+            jsonFileParser: CreateJsonFileParser(typeRegistry, rootPath));
 
         // Check if any specified rules are let collections (not commands).
         // If so, synthesize RUN CHECK(name) invocations for them.
@@ -731,6 +735,63 @@ public static class Engine
 
             return [new Document(path, sourceFile.Language, sourceFile)];
         };
+    }
+
+    /// <summary>
+    /// Creates the JSON file parser delegate for Parse('file.json', [Type]).
+    /// Reads a JSON file, deserializes its top-level array into typed ScriptObjects,
+    /// and registers property accessors for the user-defined type.
+    /// </summary>
+    private static Func<string, string, List<object>> CreateJsonFileParser(TypeRegistry typeRegistry, string rootPath)
+    {
+        return (string filePath, string typeName) =>
+        {
+            // Resolve path relative to root (working directory)
+            var fullPath = Path.IsPathRooted(filePath) ? filePath : Path.Combine(rootPath, filePath);
+            if (!File.Exists(fullPath))
+                throw new InvalidOperationException($"Parse() file not found: {fullPath}");
+
+            var jsonBytes = File.ReadAllBytes(fullPath);
+
+            // Build a ProviderSchema from the user-defined type in the TypeRegistry
+            var schema = BuildSchemaFromUserType(typeRegistry, typeName);
+
+            // Deserialize the JSON array into ScriptObjects
+            var items = JsonCollectionDeserializer.DeserializeArray(jsonBytes, typeName, schema);
+
+            // Register ScriptObject-based property accessors so predicates can access fields
+            JsonCollectionDeserializer.RegisterScriptObjectAccessors(typeRegistry, schema);
+
+            return items;
+        };
+    }
+
+    /// <summary>
+    /// Builds a ProviderSchema from a user-defined type in the TypeRegistry.
+    /// This allows JsonCollectionDeserializer to use the type's property definitions
+    /// for field mapping during deserialization.
+    /// </summary>
+    private static ProviderSchema BuildSchemaFromUserType(TypeRegistry typeRegistry, string typeName)
+    {
+        var typeDesc = typeRegistry.GetType(typeName)
+            ?? throw new InvalidOperationException($"Parse() type '{typeName}' is not defined. Add: type {typeName} = {{ ... }}");
+
+        var schema = new ProviderSchema();
+        var typeSchema = new ProviderTypeSchema { Name = typeName };
+
+        foreach (var (propName, prop) in typeDesc.Properties)
+        {
+            typeSchema.Properties.Add(new ProviderPropertySchema
+            {
+                Name = propName,
+                Type = prop.TypeName ?? "string",
+                Optional = prop.IsOptional,
+                Collection = prop.IsCollection
+            });
+        }
+
+        schema.Types.Add(typeSchema);
+        return schema;
     }
 
     /// <summary>

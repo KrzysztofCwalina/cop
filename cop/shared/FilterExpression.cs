@@ -78,6 +78,7 @@ public abstract record FilterExpression
             CompareOp.LessOrEqual => "<=",
             _ => ccntf.Op.ToString()
         }}{ccntf.Value}",
+        FlagsFilter ff => $"{ff.Property}:{(ff.Op == FlagsOp.IsSet ? "isSet" : "isClear")}({ff.Value})",
         AndFilter af => string.Join(", ", af.Conditions.Select(Format)),
         OrFilter orf => $"({string.Join(" || ", orf.Conditions.Select(Format))})",
         NotFilter nf => $"!({Format(nf.Inner)})",
@@ -150,6 +151,14 @@ public record CollectionAnyFilter(string Property, FilterExpression ItemFilter) 
 public record CollectionCountFilter(string Property, CompareOp Op, int Value) : FilterExpression;
 
 /// <summary>
+/// Flags (bitwise) test on an integer property.
+/// <c>isSet</c>: <c>(value &amp; mask) != 0</c> — at least one flag in mask is set.
+/// <c>isClear</c>: <c>(value &amp; mask) == 0</c> — none of the flags in mask are set.
+/// E.g., <c>Modifiers:isSet(Public)</c>, <c>Modifiers:isClear(Static)</c>.
+/// </summary>
+public record FlagsFilter(string Property, FlagsOp Op, long Value) : FilterExpression;
+
+/// <summary>
 /// String comparison operations for <see cref="StringOpFilter"/>.
 /// All operations are case-insensitive except <see cref="Matches"/> (regex)
 /// and <see cref="Same"/> (case-sensitive exact equality).
@@ -186,4 +195,15 @@ public enum CompareOp
     GreaterOrEqual,
     /// <summary><c>&lt;=</c></summary>
     LessOrEqual
+}
+
+/// <summary>
+/// Flags test operations for <see cref="FlagsFilter"/>.
+/// </summary>
+public enum FlagsOp
+{
+    /// <summary><c>isSet</c> — <c>(value &amp; mask) != 0</c></summary>
+    IsSet,
+    /// <summary><c>isClear</c> — <c>(value &amp; mask) == 0</c></summary>
+    IsClear
 }

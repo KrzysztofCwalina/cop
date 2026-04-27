@@ -3,7 +3,7 @@
 # Import with: import code
 
 # Modifier flags — bit values match the code provider's CLR Modifier enum.
-# Use with & operator: Type.Modifiers & Public != 0
+# Use with :isSet() and :isClear() predicates: Type.Modifiers:isSet(Public)
 export flags Modifier = Public | Private | Protected | Internal | Static | Sealed | Abstract | Virtual | Async | Override | Readonly | Const
 
 export type Type = {
@@ -123,48 +123,48 @@ export type ErrorHandler = Statement & {}
 export type Attribute = Statement & {}
 
 # Modifier predicates — test flags on Type, Method, Field, Property, Event
-export predicate isPublic(Type) => Type.Modifiers & Public != 0
-export predicate isSealed(Type) => Type.Modifiers & Sealed != 0
-export predicate isAbstract(Type) => Type.Modifiers & Abstract != 0
-export predicate isStatic(Type) => Type.Modifiers & Static != 0
+export predicate isPublic(Type) => Type.Modifiers:isSet(Public)
+export predicate isSealed(Type) => Type.Modifiers:isSet(Sealed)
+export predicate isAbstract(Type) => Type.Modifiers:isSet(Abstract)
+export predicate isStatic(Type) => Type.Modifiers:isSet(Static)
 export predicate isDocumented(Type) => Type.Documented
 
-export predicate isPublic(Method) => Method.Modifiers & Public != 0
-export predicate isProtected(Method) => Method.Modifiers & Protected != 0
-export predicate isPrivate(Method) => Method.Modifiers & Private != 0
-export predicate isInternal(Method) => Method.Modifiers & Internal != 0
-export predicate isAsync(Method) => Method.Modifiers & Async != 0
-export predicate isStatic(Method) => Method.Modifiers & Static != 0
-export predicate isAbstract(Method) => Method.Modifiers & Abstract != 0
-export predicate isVirtual(Method) => Method.Modifiers & Virtual != 0
-export predicate isOverride(Method) => Method.Modifiers & Override != 0
+export predicate isPublic(Method) => Method.Modifiers:isSet(Public)
+export predicate isProtected(Method) => Method.Modifiers:isSet(Protected)
+export predicate isPrivate(Method) => Method.Modifiers:isSet(Private)
+export predicate isInternal(Method) => Method.Modifiers:isSet(Internal)
+export predicate isAsync(Method) => Method.Modifiers:isSet(Async)
+export predicate isStatic(Method) => Method.Modifiers:isSet(Static)
+export predicate isAbstract(Method) => Method.Modifiers:isSet(Abstract)
+export predicate isVirtual(Method) => Method.Modifiers:isSet(Virtual)
+export predicate isOverride(Method) => Method.Modifiers:isSet(Override)
 export predicate isDocumented(Method) => Method.Documented
 
-export predicate isPublic(Field) => Field.Modifiers & Public != 0
-export predicate isPrivate(Field) => Field.Modifiers & Private != 0
-export predicate isProtected(Field) => Field.Modifiers & Protected != 0
-export predicate isInternal(Field) => Field.Modifiers & Internal != 0
-export predicate isStatic(Field) => Field.Modifiers & Static != 0
-export predicate isReadonly(Field) => Field.Modifiers & Readonly != 0
-export predicate isConst(Field) => Field.Modifiers & Const != 0
+export predicate isPublic(Field) => Field.Modifiers:isSet(Public)
+export predicate isPrivate(Field) => Field.Modifiers:isSet(Private)
+export predicate isProtected(Field) => Field.Modifiers:isSet(Protected)
+export predicate isInternal(Field) => Field.Modifiers:isSet(Internal)
+export predicate isStatic(Field) => Field.Modifiers:isSet(Static)
+export predicate isReadonly(Field) => Field.Modifiers:isSet(Readonly)
+export predicate isConst(Field) => Field.Modifiers:isSet(Const)
 
-export predicate isPublic(Property) => Property.Modifiers & Public != 0
-export predicate isProtected(Property) => Property.Modifiers & Protected != 0
-export predicate isPrivate(Property) => Property.Modifiers & Private != 0
-export predicate isInternal(Property) => Property.Modifiers & Internal != 0
-export predicate isStatic(Property) => Property.Modifiers & Static != 0
-export predicate isAbstract(Property) => Property.Modifiers & Abstract != 0
-export predicate isVirtual(Property) => Property.Modifiers & Virtual != 0
-export predicate isOverride(Property) => Property.Modifiers & Override != 0
+export predicate isPublic(Property) => Property.Modifiers:isSet(Public)
+export predicate isProtected(Property) => Property.Modifiers:isSet(Protected)
+export predicate isPrivate(Property) => Property.Modifiers:isSet(Private)
+export predicate isInternal(Property) => Property.Modifiers:isSet(Internal)
+export predicate isStatic(Property) => Property.Modifiers:isSet(Static)
+export predicate isAbstract(Property) => Property.Modifiers:isSet(Abstract)
+export predicate isVirtual(Property) => Property.Modifiers:isSet(Virtual)
+export predicate isOverride(Property) => Property.Modifiers:isSet(Override)
 export predicate hasGetter(Property) => Property.HasGetter
 export predicate hasSetter(Property) => Property.HasSetter
 export predicate isDocumented(Property) => Property.Documented
 
-export predicate isPublic(Event) => Event.Modifiers & Public != 0
-export predicate isProtected(Event) => Event.Modifiers & Protected != 0
-export predicate isPrivate(Event) => Event.Modifiers & Private != 0
-export predicate isInternal(Event) => Event.Modifiers & Internal != 0
-export predicate isStatic(Event) => Event.Modifiers & Static != 0
+export predicate isPublic(Event) => Event.Modifiers:isSet(Public)
+export predicate isProtected(Event) => Event.Modifiers:isSet(Protected)
+export predicate isPrivate(Event) => Event.Modifiers:isSet(Private)
+export predicate isInternal(Event) => Event.Modifiers:isSet(Internal)
+export predicate isStatic(Event) => Event.Modifiers:isSet(Static)
 
 # Narrowing predicates — filter Statements and narrow to subtypes
 export predicate call(Statement) : Call => Statement.Kind == 'call'

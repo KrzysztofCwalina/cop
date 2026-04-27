@@ -1,12 +1,22 @@
+# Command composition with the & operator.
+# Demonstrates defining named commands and chaining them together
+# so multiple actions run as a single composed command.
+# Run with: cop run LIST-TYPES
+# Run with: cop run STATISTICS
 import code
 
+# Predicate that checks if the /s flag was passed on the command line
 predicate printStats(Program) => Program.Args:contains('/s')
 
+# Individual counting commands
 command TYPE-COUNT = PRINT('{Code.Types.Count} types')
 command NAMESPACE-COUNT = PRINT('{Code.Files.Count} files')
 command MEMBER-COUNT = PRINT('{Members.Count} members')
+
+# Chain commands with & to compose a single STATISTICS command
 command STATISTICS = TYPE-COUNT & NAMESPACE-COUNT & MEMBER-COUNT
 
+# Combine a foreach listing with a conditional count summary using &
 command LIST-TYPES = foreach Types => PRINT('{item.Name}') & TYPE-COUNT:printStats
 command LIST-NAMESPACES = foreach Files => PRINT('{item.Namespace}') & NAMESPACE-COUNT:printStats
 command LIST-MEMBERS = foreach Members => PRINT('{item.Name}') & MEMBER-COUNT:printStats

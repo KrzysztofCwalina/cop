@@ -24,6 +24,12 @@ public record LetDeclaration(
     public bool IsExternalLoad => ValueExpression is FunctionCallExpr fc && fc.Name == "Load";
 
     /// <summary>
+    /// True when this let is a Parse('file.json', [Type]) JSON/CSV file parse.
+    /// Returns a flat typed collection at runtime (unlike Load which returns Documents).
+    /// </summary>
+    public bool IsFileParse => ValueExpression is FunctionCallExpr fc && fc.Name == "Parse";
+
+    /// <summary>
     /// True when this let is a union of other collection lets: let Name = [a, b, c]
     /// where each element references another let-bound collection.
     /// </summary>

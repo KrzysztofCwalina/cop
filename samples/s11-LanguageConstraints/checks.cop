@@ -1,0 +1,16 @@
+# Demonstrates language-constrained predicates.
+# The same predicate name dispatches differently per source language.
+# Constraints use :language syntax on the parameter type.
+import code
+
+# C# print detection — Console.WriteLine, Console.Write
+predicate printUsage(Statement:csharp) => Statement.Kind == 'call'
+    && Statement.TypeName == 'Console'
+
+# Python print detection — print() function call
+predicate printUsage(Statement:python) => Statement.Kind == 'call'
+    && Statement.MemberName == 'print'
+
+# Single collection works across both languages
+let PrintStatements = Code.Statements:printUsage
+foreach PrintStatements => PRINT('{item.File.Path}:{item.Line} uses print')

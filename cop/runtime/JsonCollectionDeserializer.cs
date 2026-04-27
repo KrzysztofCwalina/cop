@@ -7,9 +7,32 @@ namespace Cop.Providers;
 /// <summary>
 /// Deserializes UTF-8 JSON from a <see cref="DataProvider.Query"/> response
 /// into ScriptObject instances using the provider's type schema.
+/// Also provides direct array deserialization for Parse('file.json', [Type]).
 /// </summary>
 public static class JsonCollectionDeserializer
 {
+    /// <summary>
+    /// Deserializes a top-level JSON array into a list of ScriptObjects
+    /// using the specified type name and its schema for field mapping.
+    /// Used by Parse('file.json', [Type]) to load user-defined typed collections.
+    /// </summary>
+    public static List<object> DeserializeArray(byte[] utf8Json, string typeName, ProviderSchema schema)
+    {
+        var typeMap = schema.Types.ToDictionary(t => t.Name, StringComparer.Ordinal);
+        using var doc = JsonDocument.Parse(utf8Json);
+        var root = doc.RootElement;
+
+        if (root.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException($"Parse() expects a JSON array, but got {root.ValueKind}.");
+
+        var items = new List<object>();
+        foreach (var elem in root.EnumerateArray())
+        {
+            items.Add(DeserializeElement(elem, typeName, typeMap));
+        }
+        return items;
+    }
+
     /// <summary>
     /// Deserializes the top-level JSON object (collection name → array of items)
     /// into a dictionary of collection name → list of ScriptObjects.

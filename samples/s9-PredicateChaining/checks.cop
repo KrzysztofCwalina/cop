@@ -1,0 +1,15 @@
+# Demonstrates predicate chaining and negation.
+# Multiple :filters are AND-combined to produce smaller subsets.
+# Use :! to negate a predicate.
+import code
+
+predicate client(Type) => Type.Name:endsWith('Client')
+predicate options(Type) => Type.Name:endsWith('Options')
+
+# Chain predicates: clients that are NOT options types
+let Clients = Code.Types:client:!options
+
+# Further narrowing: public clients that are not sealed
+let UnsealedClients = Clients:!isSealed:isPublic
+
+foreach UnsealedClients => PRINT('{item.Name} should be sealed')

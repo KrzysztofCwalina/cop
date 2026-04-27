@@ -1,3 +1,5 @@
+# Domain-specific analysis using the TypeSpec/HTTP API package.
+# Demonstrates how Cop packages can target specialized domains beyond source code.
 import typespec-http
 
 # PUT path even segments rule

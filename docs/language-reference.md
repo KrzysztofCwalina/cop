@@ -108,18 +108,23 @@ The `&` operator creates a property **superset** — `Constructor = Method & {}`
 
 ### Flags
 
-`flags` defines a set of named bit constants for use with the `&` (bitwise AND) and `|` (bitwise OR) operators:
+`flags` defines a set of named bit constants:
 
 ```ruby
 flags Modifier = Public | Private | Protected | Internal | Static | Sealed | Abstract | Virtual
 ```
 
-Each member is assigned a power of 2 automatically (Public=1, Private=2, Protected=4, ...). Use with an integer property and `&` to test individual bits:
+Each member is assigned a power of 2 automatically (Public=1, Private=2, Protected=4, ...). Test flags with the `:isSet()` and `:isClear()` predicates on integer properties:
 
 ```ruby
-predicate isPublic(Type) => Type.Modifiers & Public != 0
-predicate isSealed(Type) => Type.Modifiers & Sealed != 0
+predicate isPublic(Type) => Type.Modifiers:isSet(Public)
+predicate notAbstract(Type) => Type.Modifiers:isClear(Abstract)
 ```
+
+| Predicate | Meaning |
+|-----------|---------|
+| `isSet(flag)` | True if the flag bit is set — `(value & flag) != 0` |
+| `isClear(flag)` | True if the flag bit is clear — `(value & flag) == 0` |
 
 The `code` package defines a `Modifier` flags enum and provides `isX` predicates for all common modifiers (see [Code Package Reference](packages/code.md)).
 
@@ -141,6 +146,15 @@ let Clients = Types:isClient              # subset of Types where isClient is tr
 let Calls = Statements:call               # subset of Statements where call is true
 let PublicClients = Clients:isPublic       # subset of a subset
 ```
+
+**External data** — loads a JSON file into a typed collection (requires `import json`):
+
+```ruby
+type Person = { name : string, age : int }
+let People = Parse('data.json', [Person])
+```
+
+`Parse(path, [Type])` reads a JSON file containing a top-level array and deserializes each element into a typed object. See [JSON Package Reference](packages/json.md).
 
 ### Predicates
 
@@ -312,6 +326,8 @@ Size:notEquals(0)                     # not equal to
 | `lessThan(n)` | Less than |
 | `greaterOrEqual(n)` | Greater than or equal |
 | `lessOrEqual(n)` | Less than or equal |
+| `isSet(flag)` | Flags bit is set — `(value & flag) != 0` |
+| `isClear(flag)` | Flags bit is clear — `(value & flag) == 0` |
 
 ### String Properties
 
@@ -509,5 +525,7 @@ Packages provide domain-specific types, lists, and runtime data. Import a packag
 | Package | Import | Description |
 |---------|--------|-------------|
 | `code` | `import code` | Source code structural analysis — see [Code Package Reference](packages/code.md) |
+| `json` | `import json` | JSON file parsing into typed collections — see [JSON Package Reference](packages/json.md) |
+| `filesystem` | `import filesystem` | File and folder analysis — see [Filesystem Package Reference](packages/filesystem.md) |
 
 More packages are listed in the [Getting Started](getting-started.md#available-packages) guide.

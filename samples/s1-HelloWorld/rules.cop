@@ -1,5 +1,13 @@
+# Basic code analysis rule: flags C# statements that use 'var'.
+# Demonstrates predicates, filtering, and foreach output.
+# Run with: cop run
 import code
 
-predicate usesVar([Statement]) => Statement.Keywords:contains('var')
+# Define a predicate that matches statements containing the 'var' keyword
+predicate usesVar(Statement) => Statement.Keywords:contains('var')
+
+# Filter all statements through the predicate
 let StatementsUsingVar = Code.Statements:usesVar
+
+# Print an error for each matching statement, with file path and line number
 foreach StatementsUsingVar => PRINT('ERROR: {item.File.Path}:{item.Line} uses \'var\'')

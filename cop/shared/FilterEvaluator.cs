@@ -28,6 +28,7 @@ public static class FilterEvaluator
         PropertyFilter pf => EvalBool(pf, getValue(pf.Property)),
         StringOpFilter sf => EvalString(sf, getValue(sf.Property)),
         ComparisonFilter cf => EvalNumeric(cf, getValue(cf.Property)),
+        FlagsFilter ff => EvalFlags(ff, getValue(ff.Property)),
         ContainsAnyFilter caf => EvalContainsAny(caf, getValue(caf.Property)),
         InFilter inf => EvalIn(inf, getValue(inf.Property)),
         CollectionContainsFilter ccf => EvalCollectionContains(ccf, getValue(ccf.Property)),
@@ -98,6 +99,22 @@ public static class FilterEvaluator
             CompareOp.GreaterOrEqual => num >= cf.Value,
             CompareOp.LessOrEqual => num <= cf.Value,
             _ => throw new ArgumentException($"Unknown comparison operation: {cf.Op}")
+        };
+    }
+
+    private static bool EvalFlags(FlagsFilter ff, object? raw)
+    {
+        long numVal = raw switch
+        {
+            int i => i,
+            long l => l,
+            _ => throw new ArgumentException($"FlagsFilter expects integer for '{ff.Property}', got {raw?.GetType().Name ?? "null"}")
+        };
+        return ff.Op switch
+        {
+            FlagsOp.IsSet => (numVal & ff.Value) != 0,
+            FlagsOp.IsClear => (numVal & ff.Value) == 0,
+            _ => throw new ArgumentException($"Unknown flags operation: {ff.Op}")
         };
     }
 

@@ -30,10 +30,10 @@ export predicate syncBlockingCall(Statement) => Statement.Kind == 'call'
     && (Statement.MemberName == 'Wait' || Statement.MemberName == 'GetResult')
 
 # Statement is inside an async method
-export predicate inAsyncMethod(Statement) => Statement.Method != null && Statement.Method.Modifiers & Async != 0
+export predicate inAsyncMethod(Statement) => Statement.Method != null && Statement.Method.Modifiers:isSet(Async)
 
 # Statement is inside a non-async method
-export predicate inSyncMethod(Statement) => Statement.Method != null && Statement.Method.Modifiers & Async == 0
+export predicate inSyncMethod(Statement) => Statement.Method != null && Statement.Method.Modifiers:isClear(Async)
 
 # Banned API: Uri.ToString() — prefer Uri.AbsoluteUri for consistent output
 predicate uriToString(Statement) => Statement.Kind == 'call'

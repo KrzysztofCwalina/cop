@@ -1,0 +1,12 @@
+# Demonstrates the code-analysis package for structured violations.
+# Violations produce machine-readable output with severity, file, and line info.
+# Run with: cop run CHECK-TODOS
+import code-analysis
+
+## TODO comments should be resolved before merging
+predicate todoComment(Line) => Line.Text:contains('TODO')
+
+let todos = Code.Lines:todoComment
+    :toWarning('TODO found: {item.Source}')
+
+command CHECK-TODOS = CHECK(todos)

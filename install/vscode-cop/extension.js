@@ -260,6 +260,8 @@ const NUMERIC_PREDICATES = [
     { label: 'lessThan', detail: '(value) — less than', kind: Kind.Method },
     { label: 'greaterOrEqual', detail: '(value) — greater or equal', kind: Kind.Method },
     { label: 'lessOrEqual', detail: '(value) — less or equal', kind: Kind.Method },
+    { label: 'isSet', detail: '(flag) — flags bit is set', kind: Kind.Method },
+    { label: 'isClear', detail: '(flag) — flags bit is clear', kind: Kind.Method },
 ];
 
 const COLLECTION_PREDICATES = [

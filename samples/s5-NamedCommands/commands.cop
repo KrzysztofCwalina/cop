@@ -2,9 +2,13 @@
 # that can be invoked by name.
 # Run with: cop run LIST-TYPES
 # Run with: cop run LIST-PUBLIC-TYPES
+# Run with: cop run CLIENTS
 import code
 
 predicate isClient(Type) => Type.Name:endsWith('Client')
+
+# 'let' chaining narrows collections step by step:
+# Types -> public-types (subset) -> clients (subset of subset)
 let public-types = Types:isPublic
 let clients = public-types:isClient
 

@@ -1,0 +1,19 @@
+# Demonstrates inline expressions and predicate composition.
+# Use :any(), :none(), :all() with inline conditions.
+# Inline conditions use the singular form: Constructor, Parameter, Method, etc.
+import code
+
+# Define building-block predicates
+predicate client(Type) => Type.Name:endsWith('Client')
+predicate optionsParam(Parameter) => Parameter.Type.Name:endsWith('Options')
+
+# Compose: does any constructor have an Options parameter?
+predicate hasOptions(Type) => Type.Constructors:any(Constructor.Parameters:any(optionsParam))
+
+# Negate: find clients missing the options constructor
+predicate missingOptions(Type) => Type:!hasOptions
+
+let Clients = Code.Types:client
+let NeedsOptions = Clients:missingOptions
+
+foreach NeedsOptions => PRINT('{item.Name} needs an Options constructor parameter')

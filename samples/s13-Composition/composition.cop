@@ -1,0 +1,14 @@
+# Demonstrates predicate composition: building complex rules from simple ones.
+# The code package provides modifier predicates (isPublic, isStatic, isSealed, etc.)
+# that you combine with && and || to express richer conditions.
+import code
+
+# Combine built-in predicates with a custom one
+predicate returnsVoid(Method) => Method.ReturnType.Name:equals('void')
+predicate entryPoint(Method) => Method:isPublic && Method:isStatic && Method:returnsVoid
+
+# Find types that have entry-point methods
+predicate hasEntryPoint(Type) => Type.Methods:any(entryPoint)
+let EntryPointTypes = Code.Types:hasEntryPoint
+
+foreach EntryPointTypes => PRINT('{item.Name} has public static void methods')

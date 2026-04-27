@@ -9,6 +9,7 @@ public class ScriptInterpreter
     private readonly int _maxOutputsPerCommand;
     private readonly TimeSpan _timeout;
     private readonly Func<string, List<Document>>? _externalDocumentLoader;
+    private readonly Func<string, string, List<object>>? _jsonFileParser;
     private Dictionary<string, IList>? _globalResolvedSelects;
     private Dictionary<string, List<Document>>? _loadDocuments;
 
@@ -22,12 +23,14 @@ public class ScriptInterpreter
         TypeRegistry typeRegistry,
         int maxOutputsPerCommand = 1000,
         TimeSpan? timeout = null,
-        Func<string, List<Document>>? externalDocumentLoader = null)
+        Func<string, List<Document>>? externalDocumentLoader = null,
+        Func<string, string, List<object>>? jsonFileParser = null)
     {
         _typeRegistry = typeRegistry;
         _maxOutputsPerCommand = maxOutputsPerCommand;
         _timeout = timeout ?? TimeSpan.FromSeconds(30);
         _externalDocumentLoader = externalDocumentLoader;
+        _jsonFileParser = jsonFileParser;
     }
 
     public InterpreterResult Run(
@@ -410,6 +413,14 @@ public class ScriptInterpreter
                     $"'{collection}' is a Load() binding. Use '{collection}.Types', '{collection}.Api', etc. to access sub-collections.");
             }
 
+            // Parse('file.json', [Type]) — resolve to a flat typed collection
+            if (letDecl.IsFileParse)
+            {
+                var parsed = ResolveFileParse(letDecl);
+                _typeRegistry.RegisterGlobalCollection(collection, parsed);
+                return parsed;
+            }
+
             // Value bindings (let Name = [...]) are not collections — skip
             if (letDecl.IsValueBinding)
                 throw new InvalidOperationException($"'{collection}' is a value binding, not a collection");
@@ -514,8 +525,9 @@ public class ScriptInterpreter
 
         foreach (var (name, letDecl) in letDeclarations)
         {
-            // Skip value bindings, collection unions, and Load() — handled elsewhere
+            // Skip value bindings, collection unions, Load(), and Parse() — handled elsewhere
             if (letDecl.IsExternalLoad) continue;
+            if (letDecl.IsFileParse) continue;
             if (letDecl.IsValueBinding || letDecl.IsCollectionUnion) continue;
             // Skip check-level lets (those with actions like :toWarning) — they are commands, not data
             if (letDecl.Filters.Any(f =>
@@ -777,6 +789,7 @@ public class ScriptInterpreter
                     e is IdentifierExpr id && IsGlobalRootCollection(id.Name, predicateGroups, letDeclarations, new(visited)));
             }
             if (letDecl.IsExternalLoad) return true; // Load() is self-contained, process once globally
+            if (letDecl.IsFileParse) return true; // Parse() is self-contained, process once globally
             if (letDecl.IsValueBinding) return false;
             return IsGlobalRootCollection(letDecl.BaseCollection, predicateGroups, letDeclarations, visited);
         }
@@ -833,6 +846,14 @@ public class ScriptInterpreter
             {
                 throw new InvalidOperationException(
                     $"'{collection}' is a Load() binding. Use '{collection}.Types', '{collection}.Api', etc. to access sub-collections.");
+            }
+
+            // Parse('file.json', [Type]) — resolve to a flat typed collection
+            if (letDecl.IsFileParse)
+            {
+                var items = ResolveFileParse(letDecl);
+                _typeRegistry.RegisterGlobalCollection(collection, items);
+                return items;
             }
 
             if (letDecl.IsValueBinding)
@@ -934,6 +955,7 @@ public class ScriptInterpreter
                 return ResolveItemType(((IdentifierExpr)firstElem).Name, predicateGroups, letDeclarations, functionGroups, new(visited));
             }
             if (letDecl.IsExternalLoad) return "Unknown"; // bare Load() — no sub-collection
+            if (letDecl.IsFileParse) return ExtractParseTypeName(letDecl); // type from Parse args
             if (letDecl.IsValueBinding) return "Unknown";
             var baseType = ResolveItemType(letDecl.BaseCollection, predicateGroups, letDeclarations, functionGroups, visited);
             // Follow through any function steps in the filters
@@ -1360,5 +1382,53 @@ public class ScriptInterpreter
             return s;
 
         throw new InvalidOperationException("Load() path argument must be a string literal");
+    }
+
+    /// <summary>
+    /// Resolves a Parse('file.json', [Type]) let declaration by reading and deserializing
+    /// a JSON file into a flat list of typed ScriptObjects.
+    /// </summary>
+    private List<object> ResolveFileParse(LetDeclaration letDecl)
+    {
+        if (_jsonFileParser == null)
+            throw new InvalidOperationException("Parse() is not available — no JSON file parser configured");
+
+        var (filePath, typeName) = ExtractParseArgs(letDecl);
+        return _jsonFileParser(filePath, typeName);
+    }
+
+    /// <summary>
+    /// Extracts the file path and type name from a Parse('file.json', [Type]) let declaration.
+    /// </summary>
+    private static (string FilePath, string TypeName) ExtractParseArgs(LetDeclaration letDecl)
+    {
+        var parseExpr = (FunctionCallExpr)letDecl.ValueExpression!;
+
+        if (parseExpr.Args.Count < 2)
+            throw new InvalidOperationException(
+                $"Parse() requires two arguments: Parse('file.json', [TypeName]). Got {parseExpr.Args.Count} argument(s).");
+
+        // First arg: file path (string literal)
+        if (parseExpr.Args[0] is not LiteralExpr { Value: string filePath })
+            throw new InvalidOperationException("Parse() first argument must be a string literal file path.");
+
+        // Second arg: type hint as [TypeName]
+        if (parseExpr.Args[1] is not ListLiteralExpr { Elements: { Count: 1 } elements }
+            || elements[0] is not IdentifierExpr typeIdent)
+        {
+            throw new InvalidOperationException(
+                "Parse() second argument must be a single-element type list, e.g. [Person].");
+        }
+
+        return (filePath, typeIdent.Name);
+    }
+
+    /// <summary>
+    /// Extracts the type name from a Parse('file.json', [Type]) let declaration.
+    /// </summary>
+    private static string ExtractParseTypeName(LetDeclaration letDecl)
+    {
+        var (_, typeName) = ExtractParseArgs(letDecl);
+        return typeName;
     }
 }
