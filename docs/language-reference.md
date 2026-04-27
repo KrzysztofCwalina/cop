@@ -12,7 +12,7 @@ And one kind of side-effect:
 
 4. **Commands** — routines that produce output (`PRINT`) or write files (`SAVE`)
 
-> **Note:** Most examples use the [`code` package](packages/code-package-reference.md) (`import code`), which provides types for source code analysis. See [Code Package Reference](packages/code-package-reference.md) for the full type catalog.
+> **Note:** Most examples use the [`code` package](packages/code.md) (`import code`), which provides types for source code analysis. See [Code Package Reference](packages/code.md) for the full type catalog.
 
 ## Data Model
 
@@ -121,7 +121,7 @@ predicate isPublic(Type) => Type.Modifiers & Public != 0
 predicate isSealed(Type) => Type.Modifiers & Sealed != 0
 ```
 
-The `code` package defines a `Modifier` flags enum and provides `isX` predicates for all common modifiers (see [Code Package Reference](packages/code-package-reference.md)).
+The `code` package defines a `Modifier` flags enum and provides `isX` predicates for all common modifiers (see [Code Package Reference](packages/code.md)).
 
 ### Let Declarations
 
@@ -508,6 +508,6 @@ Packages provide domain-specific types, lists, and runtime data. Import a packag
 
 | Package | Import | Description |
 |---------|--------|-------------|
-| `code` | `import code` | Source code structural analysis — see [Code Package Reference](packages/code-package-reference.md) |
+| `code` | `import code` | Source code structural analysis — see [Code Package Reference](packages/code.md) |
 
 More packages are listed in the [Getting Started](getting-started.md#available-packages) guide.

@@ -1,61 +1,44 @@
-# C# Client Library Package Reference
+## csharp-library-client
 
-The `csharp-library-client` package provides design convention checks for building client libraries. It covers constructor patterns, virtual methods, CancellationToken requirements, and naming conventions for models.
+Design convention checks for client libraries. &nbsp; `import csharp-library-client`
 
-**Source:** [`packages/dotnet/csharp-library-client/src/`](../../packages/dotnet/csharp-library-client/src/)
+**Source:** [`packages/dotnet/csharp-library-client/src/`](../../../packages/dotnet/csharp-library-client/src/) &nbsp; **Depends on:** csharp-library
 
-## Import
+---
 
-```ruby
-import csharp-library-client
-```
+### Collections
 
-This also brings `csharp-library` and `csharp` into scope.
+| Collection | Type | Description |
+|---|---|---|
+| `Clients` | `[Type]` | Types ending with `Client` (excludes options types) |
+| `Models` | `[Type]` | Public classes that are not clients or options |
+| `ClientOptions` | `[Type]` | Types ending with `ClientOptions` |
 
-## Collections
+---
 
-| Collection | Description |
-|---|---|
-| `Clients` | C# types ending with `Client` (excludes options types) |
-| `Models` | Public classes that are not clients or options types |
-| `ClientOptions` | C# types ending with `ClientOptions` |
+### Predicates
 
-## Predicates
+| Predicate | Applies To | Matches |
+|---|---|---|
+| `client` | Type | Name ends with 'Client' |
+| `clientOptionsType` | Type | Name ends with 'ClientOptions' |
+| `model` | Type | Public class, not a client or options type |
+| `constructorAcceptsOptions` | Constructor | Has options parameter |
+| `cancellationToken` | Parameter | Type is `CancellationToken` |
+| `publicAsync` | Method | Public async method |
+| `asyncServiceMethod` | Method | Public virtual method ending with 'Async' |
+| `protectedParameterless` | Constructor | Protected parameterless constructor |
+| `collectionSuffix` | Type | Name ends with 'Collection' |
+| `requestSuffix` | Type | Name ends with 'Request' |
 
-Defined in `definitions.cop`:
+---
 
-| Predicate | Matches |
-|---|---|
-| `client(Type)` | Type name ends with 'Client' |
-| `clientOptionsType(Type)` | Type name ends with 'ClientOptions' |
-| `model(Type)` | Public class, not a client or options type |
-| `constructorAcceptsOptions(Constructor)` | Constructor has options parameter |
-| `cancellationToken(Parameter)` | Parameter type is `CancellationToken` |
-| `publicAsync(Method)` | Public async method |
-| `asyncServiceMethod(Method)` | Public virtual method ending with 'Async' |
-| `protectedParameterless(Constructor)` | Protected parameterless constructor |
-| `collectionSuffix(Type)` | Type name ends with 'Collection' |
-| `requestSuffix(Type)` | Type name ends with 'Request' |
-
-## Checks
-
-Defined in `checks.cop`:
+### Checks
 
 | Check | Severity | Message |
 |---|---|---|
-| `client-needs-options-ctor` | warning | {item.Name} should accept an options parameter |
-| `client-sealed-or-abstract` | warning | {item.Name} should be sealed or abstract |
-| `async-needs-cancellation-token` | warning | {item.Name} is async without CancellationToken |
-| `client-methods-virtual` | warning | {item.Name} has non-virtual service method |
-| `async-needs-sync-counterpart` | warning | {item.Name} has async method without sync counterpart |
-
-All checks are combined into the `csharp-library-client` array.
-
-## Usage
-
-```ruby
-import csharp-library-client
-
-# Run all client library checks
-CHECK(csharp-library-client)
-```
+| `client-needs-options-ctor` | warning | Client should accept an options parameter |
+| `client-sealed-or-abstract` | warning | Client should be sealed or abstract |
+| `async-needs-cancellation-token` | warning | Async method missing CancellationToken |
+| `client-methods-virtual` | warning | Service method should be virtual |
+| `async-needs-sync-counterpart` | warning | Async method without sync counterpart |

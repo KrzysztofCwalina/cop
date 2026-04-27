@@ -1,19 +1,11 @@
-# Test Package Reference
-
-The `test` package provides general testing principles, patterns, and guidance for coding agents. It covers unit testing, integration testing, and TDD best practices.
+## test
+General testing principles, patterns, and best practices for coding agents. &nbsp; `import test`
 
 **Source:** [`packages/test/`](../../packages/test/)
 
-## Import
+---
 
-```ruby
-import test
-```
-
-## Content
-
-This is a guidance-only package — it provides instructions and skills for coding agents but does not define checks or predicates. It covers:
-
+Guidance package — provides instructions for coding agents. Covers:
 - Unit testing principles and patterns
 - Integration testing guidance
 - Test-driven development (TDD) workflow

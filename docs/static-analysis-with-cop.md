@@ -36,7 +36,7 @@ When cop runs, it parses every source file in your project and populates four li
 | `Code.Lines` | `Line` | Raw text lines |
 | `Code.Files` | `File` | Source files |
 
-Every item in these lists has properties you can filter on. A `Type` has `Name`, `Public`, `Sealed`, `Methods`, `Constructors`, `BaseTypes`. A `Statement` has `Kind`, `TypeName`, `MemberName`, `Arguments`, `Line`. See the [Code Package Reference](packages/code-package-reference.md) for the full property catalog.
+Every item in these lists has properties you can filter on. A `Type` has `Name`, `Public`, `Sealed`, `Methods`, `Constructors`, `BaseTypes`. A `Statement` has `Kind`, `TypeName`, `MemberName`, `Arguments`, `Line`. See the [Code Package Reference](packages/code.md) for the full property catalog.
 
 The key insight: **the same data model works across all languages**. A C# class and a Python class both produce `Type` items with the same properties. A `console.log()` call in JavaScript and a `Console.WriteLine()` call in C# both produce `Statement` items with `Kind == 'call'`.
 
@@ -427,6 +427,6 @@ src/Helpers/QueryTestHelper.cs(1): warning: QueryTestHelper should be public so 
 ## Further Reading
 
 - [Language Reference](language-reference.md) — full DSL syntax and semantics
-- [Code Package Reference](packages/code-package-reference.md) — complete type catalog (Type, Statement, File, etc.)
-- [Filesystem Package Reference](packages/filesystem-package-reference.md) — folder and file analysis types
+- [Code Package Reference](packages/code.md) — complete type catalog (Type, Statement, File, etc.)
+- [Filesystem Package Reference](packages/filesystem.md) — folder and file analysis types
 - [Package Documentation](packages/) — reference docs for all built-in packages

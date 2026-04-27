@@ -1,31 +1,25 @@
-# JavaScript Package Reference
+## javascript
 
-The `javascript` package provides core JavaScript and TypeScript coding convention checks. It detects `console` calls, `alert()`, `eval()`, `debugger` statements, `var` usage, and swallowed exceptions.
+JavaScript and TypeScript coding convention checks. &nbsp; `import javascript`
 
 **Source:** [`packages/js/javascript/src/`](../../packages/js/javascript/src/)
 
-## Import
+---
 
-```ruby
-import javascript
-```
+### Predicates
 
-## Predicates
+| Predicate | Applies To | Matches |
+|---|---|---|
+| `consoleCall` | Statement | Call to `console.*` |
+| `alertCall` | Statement | Call to `alert()` |
+| `evalCall` | Statement | Call to `eval()` |
+| `debuggerStatement` | Statement | `debugger` statement |
+| `usesVar` | Statement | Variable declaration using `var` |
+| `catchWithoutRethrow` | Statement | Error handler without rethrowing |
 
-Defined in `definitions.cop`:
+---
 
-| Predicate | Matches |
-|---|---|
-| `consoleCall(Statement)` | Call to `console.*` |
-| `alertCall(Statement)` | Call to `alert()` |
-| `evalCall(Statement)` | Call to `eval()` |
-| `debuggerStatement(Statement)` | `debugger` statement |
-| `usesVar(Statement)` | Variable declaration using `var` |
-| `catchWithoutRethrow(Statement)` | Error handler without rethrowing |
-
-## Checks
-
-Defined in `checks.cop`:
+### Checks
 
 | Check | Severity | Message |
 |---|---|---|
@@ -35,14 +29,3 @@ Defined in `checks.cop`:
 | `debugger-statements` | error | Remove debugger statement |
 | `var-declarations` | warning | Use const or let instead of var |
 | `swallowed-exceptions` | warning | Do not swallow errors — rethrow or handle explicitly |
-
-All checks are combined into the `javascript-checks` array.
-
-## Usage
-
-```ruby
-import javascript
-
-# Run all JavaScript/TypeScript checks
-CHECK(javascript-checks)
-```

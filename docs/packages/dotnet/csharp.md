@@ -1,54 +1,37 @@
-# C# Package Reference
+## csharp
 
-The `csharp` package provides core C# coding convention checks. It detects common issues like implicit typing with `var`, `dynamic` usage, `Thread.Sleep`, console output, exception handling anti-patterns, and sync-over-async calls.
+Core C# coding convention checks. &nbsp; `import csharp`
 
-**Source:** [`packages/dotnet/csharp/src/`](../../packages/dotnet/csharp/src/)
+**Source:** [`packages/dotnet/csharp/src/`](../../../packages/dotnet/csharp/src/)
 
-## Import
+---
 
-```ruby
-import csharp
-```
+### Predicates
 
-## Predicates
+| Predicate | Applies To | Matches |
+|---|---|---|
+| `varDeclaration` | Statement | Declaration using `var` |
+| `dynamicDeclaration` | Statement | Declaration using `dynamic` |
+| `threadSleep` | Statement | Call to `Thread.Sleep()` |
+| `consoleCall` | Statement | Call to `Console.*` |
+| `catchesBaseException` | Statement | Catches broad `Exception` |
+| `swallowsBaseException` | Statement | Catches `Exception` without rethrowing |
+| `configureAwaitTrue` | Statement | `ConfigureAwait(true)` (the default) |
+| `getAwaiterGetResult` | Statement | `GetAwaiter().GetResult()` — sync-over-async |
+| `taskCompletionSourceNew` | Statement | `new TaskCompletionSource` without options |
 
-Defined in `definitions.cop`:
+---
 
-| Predicate | Matches |
-|---|---|
-| `varDeclaration(Statement)` | Declaration using `var` keyword |
-| `dynamicDeclaration(Statement)` | Declaration using `dynamic` keyword |
-| `threadSleep(Statement)` | Call to `Thread.Sleep()` |
-| `consoleCall(Statement)` | Call to `Console.*` |
-| `catchesBaseException(Statement)` | Error handler catching broad `Exception` |
-| `swallowsBaseException(Statement)` | Error handler catching `Exception` without rethrowing |
-| `configureAwaitTrue(Statement)` | `ConfigureAwait(true)` call (the default) |
-| `getAwaiterGetResult(Statement)` | `GetAwaiter().GetResult()` — sync-over-async |
-| `taskCompletionSourceNew(Statement)` | `new TaskCompletionSource` without options |
-
-## Checks
-
-Defined in `checks.cop`:
+### Checks
 
 | Check | Severity | Message |
 |---|---|---|
-| `var-declarations` | error | Do not use 'var' for {item.MemberName} |
+| `var-declarations` | error | Do not use 'var' |
 | `dynamic-declarations` | error | Do not use 'dynamic' |
 | `thread-sleep-calls` | error | Use Task.Delay instead of Thread.Sleep |
-| `console-calls` | warning | Don't use Console.{item.MemberName} in library code |
+| `console-calls` | warning | Don't use Console in library code |
 | `base-exception-catches` | warning | Catch a specific exception type instead of Exception |
-| `swallowed-exceptions` | warning | Do not swallow Exception — rethrow or catch a specific type |
+| `swallowed-exceptions` | warning | Do not swallow Exception — rethrow or catch specific type |
 | `configure-await-true-calls` | warning | Do not use ConfigureAwait(true) — it is the default |
-| `sync-over-async-calls` | warning | Do not use GetAwaiter().GetResult() — use await instead |
+| `sync-over-async-calls` | warning | Use await instead of GetAwaiter().GetResult() |
 | `bare-task-completion-sources` | warning | Use TaskCompletionSource\<T\>(RunContinuationsAsynchronously) |
-
-All checks are combined into the `csharp-checks` array.
-
-## Usage
-
-```ruby
-import csharp
-
-# Run all C# checks
-CHECK(csharp-checks)
-```

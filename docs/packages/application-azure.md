@@ -1,19 +1,11 @@
-# Azure Application Package Reference
-
-The `application-azure` package provides guidance for Azure application development including resource provisioning, deployment, and monitoring for Bicep/ARM templates.
+## application-azure
+Azure application development guidance including provisioning, deployment, and monitoring. &nbsp; `import application-azure`
 
 **Source:** [`packages/application-azure/`](../../packages/application-azure/)
 
-## Import
+---
 
-```ruby
-import application-azure
-```
-
-## Content
-
-This is a guidance package that provides Azure-specific instructions for coding agents. It covers:
-
+Guidance package — provides instructions for coding agents. Covers:
 - Azure resource provisioning patterns (Bicep, ARM templates)
 - Deployment best practices
 - Monitoring and observability

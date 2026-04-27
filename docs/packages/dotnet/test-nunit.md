@@ -1,20 +1,12 @@
-# NUnit Test Package Reference
+## test-nunit
 
-The `test-nunit` package provides NUnit-specific testing guidance and includes the NUnit.Analyzers Roslyn analyzer package for compile-time diagnostics.
+NUnit testing guidance + Roslyn analyzers. &nbsp; `import test-nunit`
 
-**Source:** [`packages/dotnet/test-nunit/`](../../packages/dotnet/test-nunit/)
+**Source:** [`packages/dotnet/test-nunit/`](../../../packages/dotnet/test-nunit/) &nbsp; **Depends on:** test
 
-## Import
+---
 
-```ruby
-import test-nunit
-```
-
-This also brings `test` into scope.
-
-## Content
-
-This is a guidance package that provides NUnit-specific instructions for coding agents. It also configures the NUnit.Analyzers NuGet package (v4.5.0) for Roslyn-based diagnostics.
+Guidance package — provides NUnit-specific instructions for coding agents and configures NUnit.Analyzers (v4.5.0).
 
 - NUnit test framework patterns and conventions
 - Assertion patterns (`Assert.That`, constraint model)

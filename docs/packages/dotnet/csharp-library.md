@@ -1,47 +1,28 @@
-# C# Library Package Reference
+## csharp-library
 
-The `csharp-library` package provides design convention checks for .NET class libraries. It covers async patterns, `ConfigureAwait` usage, and API surface design rules.
+Design convention checks for .NET class libraries. &nbsp; `import csharp-library`
 
-**Source:** [`packages/dotnet/csharp-library/src/`](../../packages/dotnet/csharp-library/src/)
+**Source:** [`packages/dotnet/csharp-library/src/`](../../../packages/dotnet/csharp-library/src/) &nbsp; **Depends on:** csharp
 
-## Import
+---
 
-```ruby
-import csharp-library
-```
+### Predicates
 
-This also brings `csharp` into scope.
+| Predicate | Applies To | Matches |
+|---|---|---|
+| `asyncBoolParam` | Parameter | Named `async` with type `bool` |
+| `publicWithAsyncBool` | Method | Public method with `async` bool parameter |
+| `exposesAsyncBool` | Type | Has public method with `async` bool parameter |
+| `nonPublicAsync` | Method | Non-public async method |
+| `awaitUsingDefault` | Statement | Await without `ConfigureAwait(false)` |
+| `publicType` | Type | Has public modifier |
 
-## Predicates
+---
 
-Defined in `definitions.cop`:
-
-| Predicate | Matches |
-|---|---|
-| `asyncBoolParam(Parameter)` | Parameter named `async` with type `bool` |
-| `publicWithAsyncBool(Method)` | Public method with `async` bool parameter |
-| `exposesAsyncBool(Type)` | Type with public method having `async` bool parameter |
-| `nonPublicAsync(Method)` | Non-public async method |
-| `awaitUsingDefault(Statement)` | Await without `ConfigureAwait(false)` |
-| `publicType(Type)` | Type with public modifier |
-
-## Checks
-
-Defined in `checks.cop`:
+### Checks
 
 | Check | Severity | Message |
 |---|---|---|
-| `public-async-bool-params` | warning | {item.Name} should not have a bool 'async' parameter in public API |
-| `async-missing-bool-param` | warning | {item.Name} non-public async method should have 'async' parameter |
-| `awaits-using-default` | warning | Library code must use ConfigureAwait(false) on await expressions |
-
-All checks are combined into the `csharp-library` array.
-
-## Usage
-
-```ruby
-import csharp-library
-
-# Run all library design checks
-CHECK(csharp-library)
-```
+| `public-async-bool-params` | warning | Should not have bool 'async' parameter in public API |
+| `async-missing-bool-param` | warning | Non-public async method should have 'async' parameter |
+| `awaits-using-default` | warning | Library code must use ConfigureAwait(false) |

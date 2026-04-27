@@ -1,18 +1,14 @@
-# Code Analysis Package Reference
+## code-analysis
 
-The `code-analysis` package provides structured violation reporting for source code checks. It defines the `Violation` type and severity functions (`toError`, `toWarning`, `toInfo`) that transform code items into typed results with file path, line number, and message.
+Structured violation reporting for source code checks. &nbsp; `import code-analysis`
 
-**Source:** [`packages/code-analysis/src/code-analysis.cop`](../../packages/code-analysis/src/code-analysis.cop)
+**Source:** [`packages/code-analysis/src/code-analysis.cop`](../../packages/code-analysis/src/code-analysis.cop) &nbsp; **Depends on:** code, filesystem
 
-## Import
+---
 
-```ruby
-import code-analysis
-```
+### Types
 
-This also brings `code` and `filesystem` into scope (transitive dependencies).
-
-## Violation Type
+#### Violation
 
 | Property | Type | Description |
 |---|---|---|
@@ -22,9 +18,11 @@ This also brings `code` and `filesystem` into scope (transitive dependencies).
 | `Line` | int | Line number (0 for folder-level violations) |
 | `Source` | string | Source code text |
 
-## Functions
+---
 
-Each function has overloads for `Statement`, `Type`, `Line`, and `Folder`:
+### Functions
+
+Each function has overloads for `Statement`, `Type`, `Line`, and `Folder`. The `message` parameter supports template interpolation (e.g., `'Missing docs for {item.Name}'`).
 
 | Function | Description |
 |---|---|
@@ -32,11 +30,17 @@ Each function has overloads for `Statement`, `Type`, `Line`, and `Folder`:
 | `toWarning(item, message)` | Creates a Violation with severity `'warning'` |
 | `toInfo(item, message)` | Creates a Violation with severity `'info'` |
 
-The `message` parameter supports template interpolation (e.g., `'Missing docs for {item.Name}'`).
+---
 
-## CHECK Command
+### Commands
 
-The package exports a `CHECK` command that prints formatted violations:
+| Command | Description |
+|---|---|
+| `CHECK(violations)` | Prints formatted violations as `file(line): severity: message` |
+
+---
+
+### Examples
 
 ```ruby
 import code-analysis
@@ -46,12 +50,6 @@ let errors = Code.Statements:csharp:varDeclaration
 
 CHECK(errors)
 ```
-
-Output format: `file(line): severity: message`
-
-## Usage
-
-Most language-specific packages (e.g., `csharp`, `python`, `javascript`) import `code-analysis` and use these functions to produce their checks. You typically don't import `code-analysis` directly unless building custom checks.
 
 ```ruby
 import code-analysis
