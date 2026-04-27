@@ -1,14 +1,18 @@
 {
     "name": "cop-language",
     "displayName": "cop Check Language",
-    "description": "Syntax highlighting for cop check (.cop) files",
-    "version": "0.1.0",
+    "description": "Syntax highlighting and IntelliSense for cop check (.cop) files",
+    "version": "0.2.0",
     "publisher": "cop",
     "engines": {
         "vscode": "^1.80.0"
     },
     "categories": [
         "Programming Languages"
+    ],
+    "main": "./extension.js",
+    "activationEvents": [
+        "onLanguage:cop"
     ],
     "contributes": {
         "languages": [

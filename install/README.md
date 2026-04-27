@@ -43,7 +43,22 @@ install/linux-x64/cop run checks.cop
 
 ## VS Code Extension
 
-The `vscode-cop/` subfolder contains the VS Code syntax highlighting extension for `.cop` files. It provides syntax coloring for keywords, strings, template expressions, comments, and more — works with both light and dark themes.
+The `vscode-cop/` subfolder contains the VS Code extension for `.cop` files. It provides:
+
+- **Syntax highlighting** — keywords, strings, template expressions, comments, and more (light & dark themes)
+- **IntelliSense completions** — context-aware suggestions triggered by `.`, `:`, and space:
+
+| Context | What's offered |
+|---|---|
+| `runtime::` | Runtime type names (Codebase, Filesystem) |
+| `import ` | Known package names |
+| `Name:` | Type-aware predicates (string → equals/startsWith/…, collection → any/none/…) |
+| `Code.` | Properties of the resolved type (Types, Statements, Lines, Files) |
+| `=> ` | Actions (PRINT, SAVE) and violation transforms (toError, toWarning, …) |
+| Line start | Keywords, let bindings, runtime variables |
+| `export ` | Declaration keywords (predicate, function, type, let, …) |
+
+The extension also discovers **user-defined predicates, functions, and let bindings** in the current file and offers them as completions.
 
 ### Install from GitHub (no clone needed)
 
@@ -51,7 +66,7 @@ Download the extension folder directly and copy it into your VS Code extensions 
 
 ```powershell
 # Windows (PowerShell)
-$dest = "$env:USERPROFILE\.vscode\extensions\cop.cop-language-0.1.0"
+$dest = "$env:USERPROFILE\.vscode\extensions\cop.cop-language-0.2.0"
 if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
 gh repo clone KrzysztofCwalina/cop -- --depth 1 --filter=blob:none --sparse --no-checkout "$env:TEMP\cop-ext"
 Push-Location "$env:TEMP\cop-ext"
@@ -64,7 +79,7 @@ Remove-Item "$env:TEMP\cop-ext" -Recurse -Force
 
 ```bash
 # Linux / macOS
-dest="$HOME/.vscode/extensions/cop.cop-language-0.1.0"
+dest="$HOME/.vscode/extensions/cop.cop-language-0.2.0"
 rm -rf "$dest"
 tmp=$(mktemp -d)
 gh repo clone KrzysztofCwalina/cop -- --depth 1 --filter=blob:none --sparse --no-checkout "$tmp/cop-ext"
@@ -77,7 +92,7 @@ rm -rf "$tmp/cop-ext"
 
 ```bash
 # From the repo root
-cp -r install/vscode-cop ~/.vscode/extensions/cop.cop-language-0.1.0
+cp -r install/vscode-cop ~/.vscode/extensions/cop.cop-language-0.2.0
 ```
 
 After installing, reload VS Code (`Ctrl+Shift+P` → `Developer: Reload Window`).
