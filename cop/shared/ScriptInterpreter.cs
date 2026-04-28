@@ -32,10 +32,12 @@ public class ScriptInterpreter
         List<Document> documents,
         string? commandName = null,
         string[]? programArgs = null,
-        HashSet<string>? commandFilter = null)
+        HashSet<string>? commandFilter = null,
+        bool assertMode = false)
     {
         var allOutputs = new List<PrintOutput>();
         var fileOutputs = new Dictionary<string, List<string>>();
+        var allAsserts = new List<AssertResult>();
 
         // Create Program built-in
         var program = new ProgramInfo(new List<string>(programArgs ?? []));
@@ -106,7 +108,12 @@ public class ScriptInterpreter
         {
             // Determine which commands to run from this file
             IEnumerable<CommandBlock> commandsToRun;
-            if (commandName != null)
+            if (assertMode)
+            {
+                // Test mode: run ONLY assert commands
+                commandsToRun = ScriptFile.Commands.Where(c => IsAssertAction(c.ActionName));
+            }
+            else if (commandName != null)
             {
                 // Run only matching named commands (legacy single-command mode)
                 commandsToRun = ScriptFile.Commands.Where(c => c.IsCommand && string.Equals(c.Name, commandName, StringComparison.OrdinalIgnoreCase));
@@ -115,13 +122,13 @@ public class ScriptInterpreter
             {
                 // Run only commands whose name matches the filter (supports auto-derived names)
                 commandsToRun = ScriptFile.Commands.Where(c =>
-                    !IsSaveAction(c.ActionName) &&
+                    !IsSaveAction(c.ActionName) && !IsAssertAction(c.ActionName) &&
                     commandFilter.Contains(c.Name));
             }
             else
             {
-                // Run all commands but skip SAVE actions (side-effecting, require explicit invocation)
-                commandsToRun = ScriptFile.Commands.Where(c => !IsSaveAction(c.ActionName));
+                // Run all commands but skip SAVE and ASSERT actions (require explicit invocation)
+                commandsToRun = ScriptFile.Commands.Where(c => !IsSaveAction(c.ActionName) && !IsAssertAction(c.ActionName));
             }
 
             // Expand command references into concrete blocks
@@ -154,11 +161,11 @@ public class ScriptInterpreter
                             Exclusions = cmd.Exclusions
                         };
                     }
-                    ExecuteCommand(target, documents, predicateGroups, tempLets, functionGroups, program, allCommands, allOutputs, fileOutputs, aggregateCounts);
+                    ExecuteCommand(target, documents, predicateGroups, tempLets, functionGroups, program, allCommands, allOutputs, fileOutputs, aggregateCounts, allAsserts);
                     continue;
                 }
 
-                ExecuteCommand(cmd, documents, predicateGroups, letDeclarations, functionGroups, program, allCommands, allOutputs, fileOutputs, aggregateCounts);
+                ExecuteCommand(cmd, documents, predicateGroups, letDeclarations, functionGroups, program, allCommands, allOutputs, fileOutputs, aggregateCounts, allAsserts);
             }
         }
 
@@ -195,11 +202,11 @@ public class ScriptInterpreter
                         };
                     }
 
-                    ExecuteCommand(cmdTemplate, documents, predicateGroups, tempLets, functionGroups, program, allCommands, allOutputs, fileOutputs, aggregateCounts);
+                    ExecuteCommand(cmdTemplate, documents, predicateGroups, tempLets, functionGroups, program, allCommands, allOutputs, fileOutputs, aggregateCounts, allAsserts);
                 }
                 else
                 {
-                    ExecuteCommand(cmdTemplate, documents, predicateGroups, letDeclarations, functionGroups, program, allCommands, allOutputs, fileOutputs, aggregateCounts);
+                    ExecuteCommand(cmdTemplate, documents, predicateGroups, letDeclarations, functionGroups, program, allCommands, allOutputs, fileOutputs, aggregateCounts, allAsserts);
                 }
             }
         }
@@ -209,8 +216,9 @@ public class ScriptInterpreter
             .ToList();
 
         // Warn about empty root collections referenced by executed commands
+        // Skip warning in assert mode — test results are the intended output
         var warnings = new List<string>();
-        if (allOutputs.Count == 0 && outputs.Count == 0)
+        if (!assertMode && allOutputs.Count == 0 && outputs.Count == 0)
         {
             // Only check collections from commands that actually executed (not all commands in all files)
             var referencedCollections = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -255,7 +263,7 @@ public class ScriptInterpreter
             }
         }
 
-        return new InterpreterResult(allOutputs, outputs, warnings);
+        return new InterpreterResult(allOutputs, outputs, warnings, allAsserts);
     }
 
     /// <summary>
@@ -271,13 +279,21 @@ public class ScriptInterpreter
         Dictionary<string, List<CommandBlock>> allCommands,
         List<PrintOutput> allOutputs,
         Dictionary<string, List<string>> fileOutputs,
-        Dictionary<string, int> aggregateCounts)
+        Dictionary<string, int> aggregateCounts,
+        List<AssertResult> allAsserts)
     {
         // Evaluate guard predicate if present
         if (cmd.Guard is not null)
         {
             if (!EvaluateGuard(cmd.Guard, program, predicateGroups, letDeclarations, functionGroups))
                 return;
+        }
+
+        // ASSERT / ASSERT_EMPTY: resolve collection, count items, record result
+        if (IsAssertAction(cmd.ActionName) && cmd.Collection is not null)
+        {
+            ExecuteAssert(cmd, documents, predicateGroups, letDeclarations, functionGroups, allAsserts);
+            return;
         }
 
         // Bare command — no collection, execute once
@@ -1341,6 +1357,53 @@ public class ScriptInterpreter
 
     private static bool IsSaveAction(string? actionName) =>
         string.Equals(actionName, "SAVE", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsAssertAction(string? actionName) =>
+        string.Equals(actionName, "ASSERT", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(actionName, "ASSERT_EMPTY", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Execute an ASSERT or ASSERT_EMPTY command: resolve collection, count items, record pass/fail.
+    /// </summary>
+    private void ExecuteAssert(
+        CommandBlock cmd,
+        List<Document> documents,
+        Dictionary<string, List<PredicateDefinition>> predicateGroups,
+        Dictionary<string, LetDeclaration> letDeclarations,
+        Dictionary<string, List<FunctionDefinition>> functionGroups,
+        List<AssertResult> allAsserts)
+    {
+        bool expectEmpty = string.Equals(cmd.ActionName, "ASSERT_EMPTY", StringComparison.OrdinalIgnoreCase);
+        string itemType = ResolveItemType(cmd.Collection!, predicateGroups, letDeclarations, functionGroups);
+
+        List<object> items;
+        if (IsGlobalRootCollection(cmd.Collection!, predicateGroups, letDeclarations))
+        {
+            var evaluator = new PredicateEvaluator(predicateGroups, "", _typeRegistry, letDeclarations, functionGroups);
+            items = ResolveGlobalCollection(cmd.Collection!, evaluator, predicateGroups, letDeclarations, functionGroups);
+            items = ApplyFilters(items, itemType, cmd.Filters, evaluator, functionGroups);
+
+            if (cmd.Exclusions != null)
+            {
+                string finalItemType = ResolveItemTypeAfterFilters(itemType, cmd.Filters, functionGroups);
+                items = ApplyExclusions(items, finalItemType, cmd.Exclusions, evaluator, letDeclarations);
+            }
+        }
+        else
+        {
+            items = [];
+        }
+
+        int count = items.Count;
+        bool passed = expectEmpty ? count == 0 : count > 0;
+        string message = !string.IsNullOrEmpty(cmd.MessageTemplate)
+            ? cmd.MessageTemplate
+            : expectEmpty
+                ? $"{cmd.Name}: expected empty"
+                : $"{cmd.Name}: expected non-empty";
+
+        allAsserts.Add(new AssertResult(cmd.Name, passed, message, count));
+    }
 
     /// <summary>
     /// Write save/SAVE output to file. Handles two patterns:

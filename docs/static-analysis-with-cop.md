@@ -348,6 +348,7 @@ cop run                     # run all statements (but not named commands)
 cop run                      # discover and run all .cop files in the project
 cop run checks.cop           # run a specific file
 cop run my-command           # run a named command
+cop test tests.cop           # run ASSERT commands and report results
 ```
 
 ### Exit Codes

@@ -22,6 +22,7 @@ rootCommand.Add(PublishCommand.Create());
 rootCommand.Add(SearchCommand.Create());
 rootCommand.Add(FeedCommand.Create());
 rootCommand.Add(RunCommand.Create());
+rootCommand.Add(TestCommand.Create());
 rootCommand.Add(HelpCommand.Create());
 
 

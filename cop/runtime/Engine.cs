@@ -39,7 +39,7 @@ public static class Engine
     /// <summary>
     /// Discovers .cop scripts and source files, then runs all commands.
     /// </summary>
-    public static EngineResult Run(string scriptsDir, string rootPath, string? commandName = null, string[]? programArgs = null, string[]? commandFilter = null, Action<string>? diagLog = null)
+    public static EngineResult Run(string scriptsDir, string rootPath, string? commandName = null, string[]? programArgs = null, string[]? commandFilter = null, Action<string>? diagLog = null, bool assertMode = false)
     {
         var totalSw = Stopwatch.StartNew();
         var phaseSw = Stopwatch.StartNew();
@@ -185,7 +185,7 @@ public static class Engine
         InterpreterResult result;
         try
         {
-            result = interpreter.Run(scriptFiles, documents, commandName, programArgs, filterSet);
+            result = interpreter.Run(scriptFiles, documents, commandName, programArgs, filterSet, assertMode);
         }
         catch (AmbiguousCollectionException ex)
         {
@@ -195,7 +195,7 @@ public static class Engine
         diagLog?.Invoke($"[diag] Interpreter: {phaseSw.ElapsedMilliseconds}ms ({result.Outputs.Count} outputs)");
         diagLog?.Invoke($"[diag] Total: {totalSw.ElapsedMilliseconds}ms");
 
-        return new EngineResult(result.Outputs, parseErrors, [], commandName, result.FileOutputs, result.Warnings);
+        return new EngineResult(result.Outputs, parseErrors, [], commandName, result.FileOutputs, result.Warnings, result.Asserts);
     }
 
     /// <summary>
@@ -707,7 +707,8 @@ public record EngineResult(
     List<string> Errors,
     string? CommandName = null,
     List<FileOutput>? FileOutputs = null,
-    List<string>? Warnings = null)
+    List<string>? Warnings = null,
+    List<AssertResult>? Asserts = null)
 {
     public bool HasParseErrors => ParseErrors.Count > 0;
     public bool HasFatalErrors => Errors.Count > 0;

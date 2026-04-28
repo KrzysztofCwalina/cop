@@ -407,7 +407,7 @@ Recognized singular names: `Type`, `Method`, `Constructor`, `Parameter`, `Statem
 
 ## Commands
 
-Commands produce side effects — output to the console or files. Use `foreach` to iterate over a collection:
+Commands produce side effects — output to the console, files, or test results. Use `foreach` to iterate over a collection:
 
 ```
 foreach List:filter1:filter2 => COMMAND("args...")
@@ -418,6 +418,7 @@ Commands are **named** using `command`, which makes them invocable by name with 
 ```ruby
 command list-types = foreach Types => PRINT('{item.Name}')
 command export-names = foreach Types:csharp:client => SAVE('names.txt', '{item.Name}')
+command test-has-types = ASSERT(csharp.Types)
 ```
 
 ### PRINT
@@ -472,6 +473,40 @@ foreach Clients:csharp:!Sealed => SAVE('report.txt', '{item.Name}: not sealed') 
 | `'...'` | yes | Template string with `{Expr}` interpolation |
 
 SAVE commands only run when explicitly invoked (e.g., `cop run export-names`), never during normal check runs. File paths must be relative and within the codebase directory. The file is overwritten on each run.
+
+### ASSERT
+
+Tests that a collection is non-empty. Run with `cop test`.
+
+```ruby
+command test-has-types = ASSERT(csharp.Types)
+command test-public = ASSERT(csharp.Types:isPublic, 'expected public types')
+```
+
+| Part | Required | Description |
+|---|---|---|
+| `collection` | yes | A collection name or filtered chain |
+| `'message'` | no | Custom failure message (defaults to command name) |
+
+Passes when at least one item matches. Fails when the collection is empty.
+
+### ASSERT_EMPTY
+
+Tests that a collection is empty. The inverse of `ASSERT`.
+
+```ruby
+command test-no-var = ASSERT_EMPTY(csharp.Statements:isVar)
+command test-clean = ASSERT_EMPTY(violations, 'should have no violations')
+```
+
+| Part | Required | Description |
+|---|---|---|
+| `collection` | yes | A collection name or filtered chain |
+| `'message'` | no | Custom failure message (defaults to command name) |
+
+Passes when zero items match. Fails when items are found.
+
+ASSERT and ASSERT_EMPTY commands only run via `cop test`, never during `cop run`. See [Testing with Cop](testing-with-cop.md) for details.
 
 ## Strings
 
