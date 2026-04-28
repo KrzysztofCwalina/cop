@@ -4,14 +4,17 @@
 # Run with: cop run LIST-PUBLIC-TYPES
 # Run with: cop run CLIENTS
 import csharp
+import python
 
 predicate isClient(Type) => Type.Name:endsWith('Client')
 
 # 'let' chaining narrows collections step by step:
 # Types -> public-types (subset) -> clients (subset of subset)
-let public-types = Types:isPublic
+let public-csharp-types = csharp.Types:isPublic
+let public-python-types = python.Types:isPublic
+let public-types = public-csharp-types + public-python-types
 let clients = public-types:isClient
 
-command LIST-TYPES = foreach Types => PRINT('{item.Name}')
+command LIST-CSHARP-TYPES = foreach csharp.Types => PRINT('{item.Name}')
 command LIST-PUBLIC-TYPES = foreach public-types => PRINT('{item.Name}')
 command CLIENTS = foreach clients => PRINT('{item.Name}')

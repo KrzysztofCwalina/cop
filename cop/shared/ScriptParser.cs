@@ -414,6 +414,13 @@ public class ScriptParser
             return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: call);
         }
 
+        // Collection union with + operator: let x = a + b + c → let x = [a, b, c]
+        if (expr is BinaryExpr && FlattenUnionOperands(expr) is { } unionElements)
+        {
+            var listExpr = new ListLiteralExpr(unionElements);
+            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: listExpr);
+        }
+
         var (baseCollection, filters, exclusions) = DecomposeCollectionExpression(expr);
         return new LetDeclaration(name.Value, baseCollection, filters, line, isExported, isRuntime, Exclusions: exclusions);
     }
@@ -422,6 +429,40 @@ public class ScriptParser
     private bool IsActionInvocation()
     {
         return _pos + 1 < _tokens.Count && _tokens[_pos + 1].Kind == TokenKind.LParen;
+    }
+
+    /// <summary>
+    /// Flattens a + b + c BinaryExpr tree into [a, b, c] operands for collection union.
+    /// Returns null if any operator is not '+' or any leaf is not an identifier.
+    /// </summary>
+    private static List<Expression>? FlattenUnionOperands(Expression expr)
+    {
+        if (expr is not BinaryExpr bin || bin.Operator != "+")
+            return null;
+
+        var elements = new List<Expression>();
+        var stack = new Stack<Expression>();
+        stack.Push(expr);
+
+        while (stack.Count > 0)
+        {
+            var current = stack.Pop();
+            if (current is BinaryExpr b && b.Operator == "+")
+            {
+                stack.Push(b.Right);
+                stack.Push(b.Left);
+            }
+            else if (current is IdentifierExpr)
+            {
+                elements.Add(current);
+            }
+            else
+            {
+                return null; // not a simple collection union
+            }
+        }
+
+        return elements.Count >= 2 ? elements : null;
     }
 
     // Peek ahead to check if this is a let-command: let <name> = <identifier>(...) or let <name> = foreach ...
