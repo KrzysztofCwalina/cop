@@ -4,12 +4,12 @@
 import csharp
 
 # ── Type predicates ──
-predicate t_endsClient(Type) => Type.Name:endsWith('Client')
-predicate t_endsService(Type) => Type.Name:endsWith('Service')
-predicate t_startsA(Type) => Type.Name:startsWith('A')
-predicate t_containsI(Type) => Type.Name:contains('i')
-predicate t_equalsDog(Type) => Type.Name:equals('Dog')
-predicate t_equalsXyz(Type) => Type.Name:equals('Xyz')
+predicate endsClient(Type) => Type.Name:endsWith('Client')
+predicate endsService(Type) => Type.Name:endsWith('Service')
+predicate startsA(Type) => Type.Name:startsWith('A')
+predicate containsI(Type) => Type.Name:contains('i')
+predicate equalsDog(Type) => Type.Name:equals('Dog')
+predicate equalsXyz(Type) => Type.Name:equals('Xyz')
 
 # ── Existence ──
 command test-types-exist = ASSERT(csharp.Types, 'C# types should exist')
@@ -19,12 +19,12 @@ command test-has-sealed = ASSERT(csharp.Types:isSealed, 'should have sealed type
 command test-has-abstract = ASSERT(csharp.Types:isAbstract, 'should have abstract types')
 
 # ── String predicates on names ──
-command test-ends-client = ASSERT(csharp.Types:t_endsClient, 'should find FishClient')
-command test-ends-service = ASSERT(csharp.Types:t_endsService, 'should find AbstractService')
-command test-starts-a = ASSERT(csharp.Types:t_startsA, 'should find Animal and AbstractService')
-command test-contains-i = ASSERT(csharp.Types:t_containsI, 'types containing i')
-command test-equals-dog = ASSERT(csharp.Types:t_equalsDog, 'should find Dog')
-command test-no-xyz = ASSERT_EMPTY(csharp.Types:t_equalsXyz, 'no type named Xyz')
+command test-ends-client = ASSERT(csharp.Types:endsClient, 'should find FishClient')
+command test-ends-service = ASSERT(csharp.Types:endsService, 'should find AbstractService')
+command test-starts-a = ASSERT(csharp.Types:startsA, 'should find Animal and AbstractService')
+command test-contains-i = ASSERT(csharp.Types:containsI, 'types containing i')
+command test-equals-dog = ASSERT(csharp.Types:equalsDog, 'should find Dog')
+command test-no-xyz = ASSERT_EMPTY(csharp.Types:equalsXyz, 'no type named Xyz')
 
 # ── Chained predicates ──
 command test-public-sealed = ASSERT(csharp.Types:isPublic:isSealed, 'FishClient is public+sealed')

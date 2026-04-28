@@ -213,6 +213,7 @@ public class PredicateEvaluator
     /// </summary>
     private PredicateDefinition? ResolvePredicate(List<PredicateDefinition> group, object item, string paramType, EvaluationContext ctx)
     {
+        PredicateDefinition? typeMatch = null;
         PredicateDefinition? unconstrained = null;
         foreach (var pred in group)
         {
@@ -227,12 +228,16 @@ public class PredicateEvaluator
                         return pred;
                 }
             }
+            else if (pred.ParameterType == paramType)
+            {
+                typeMatch = pred;
+            }
             else
             {
                 unconstrained = pred;
             }
         }
-        return unconstrained;
+        return typeMatch ?? unconstrained;
     }
 
     private object? EvalBinary(BinaryExpr bin, object item, string paramType, EvaluationContext ctx)
