@@ -70,6 +70,9 @@ public class PredicateEvaluator
             FunctionCallExpr fc => EvalFunctionCall(fc, item, paramType, ctx),
             BinaryExpr bin => EvalBinary(bin, item, paramType, ctx),
             UnaryExpr { Operator: "!" } un => !ToBool(Eval(un.Operand, item, paramType, ctx)),
+            ConditionalExpr cond => ToBool(Eval(cond.Condition, item, paramType, ctx))
+                ? Eval(cond.TrueExpr, item, paramType, ctx)
+                : Eval(cond.FalseExpr, item, paramType, ctx),
             _ => throw new InvalidOperationException($"Unsupported expression: {expr}")
         };
     }
@@ -79,7 +82,7 @@ public class PredicateEvaluator
         var fields = new Dictionary<string, object?>();
         foreach (var (name, expr) in obj.Fields)
             fields[name] = Eval(expr, item, paramType, ctx);
-        return new ScriptObject("Object", fields);
+        return new ScriptObject(obj.TypeName ?? "Object", fields);
     }
 
     private object? EvalFunctionCall(FunctionCallExpr fc, object item, string paramType, EvaluationContext ctx)
@@ -254,6 +257,12 @@ public class PredicateEvaluator
                 Eval(bin.Left, item, paramType, ctx),
                 bin.Operator,
                 Eval(bin.Right, item, paramType, ctx)),
+            "+" => EvalAdd(
+                Eval(bin.Left, item, paramType, ctx),
+                Eval(bin.Right, item, paramType, ctx)),
+            "-" => EvalSubtract(
+                Eval(bin.Left, item, paramType, ctx),
+                Eval(bin.Right, item, paramType, ctx)),
             _ => throw new InvalidOperationException($"Unknown operator '{bin.Operator}'")
         };
     }
@@ -270,6 +279,40 @@ public class PredicateEvaluator
             "<=" => ad <= bd,
             _ => false
         };
+    }
+
+    private static object EvalAdd(object? left, object? right)
+    {
+        // List + List → new concatenated list
+        if (left is IList leftList && right is IList rightList)
+        {
+            var result = new List<object?>(leftList.Count + rightList.Count);
+            foreach (var item in leftList) result.Add(item);
+            foreach (var item in rightList) result.Add(item);
+            return result;
+        }
+        // List + element → new list with element appended
+        if (left is IList list)
+        {
+            var result = new List<object?>(list.Count + 1);
+            foreach (var item in list) result.Add(item);
+            result.Add(right);
+            return result;
+        }
+        // String + String → concatenation
+        if (left is string ls && right is string rs)
+            return ls + rs;
+        // Numeric addition
+        if (left is int li && right is int ri)
+            return li + ri;
+        return ToDouble(left) + ToDouble(right);
+    }
+
+    private static object EvalSubtract(object? left, object? right)
+    {
+        if (left is int li && right is int ri)
+            return li - ri;
+        return ToDouble(left) - ToDouble(right);
     }
 
     private static int ToInt(object? value) => value switch
@@ -691,6 +734,7 @@ public class PredicateEvaluator
             PredicateCallExpr mc => ExtractRootIdentifier(mc.Target),
             BinaryExpr bin => ExtractRootIdentifier(bin.Left),
             UnaryExpr un => ExtractRootIdentifier(un.Operand),
+            ConditionalExpr cond => ExtractRootIdentifier(cond.Condition),
             _ => null
         };
     }

@@ -46,6 +46,7 @@ public enum TokenKind
     GreaterEqual,
     LessEqual,
     Minus,
+    Plus,
     DocComment,
     Eof
 }
@@ -214,6 +215,7 @@ public class Tokenizer
             case '>': _pos++; return new Token(TokenKind.GreaterThan, ">", line);
             case '<': _pos++; return new Token(TokenKind.LessThan, "<", line);
             case '-': _pos++; return new Token(TokenKind.Minus, "-", line);
+            case '+': _pos++; return new Token(TokenKind.Plus, "+", line);
         }
 
         if (c == '\'')

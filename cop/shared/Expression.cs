@@ -18,4 +18,6 @@ public record FunctionCallExpr(string Name, List<Expression> Args) : Expression;
 
 public record ListLiteralExpr(List<Expression> Elements) : Expression;
 
-public record ObjectLiteralExpr(Dictionary<string, Expression> Fields) : Expression;
+public record ObjectLiteralExpr(string? TypeName, Dictionary<string, Expression> Fields) : Expression;
+
+public record ConditionalExpr(Expression Condition, Expression TrueExpr, Expression FalseExpr) : Expression;

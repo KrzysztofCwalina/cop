@@ -10,7 +10,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\cop\shared\Cop.Core.csproj" />
-    <ProjectReference Include="..\..\cop\language\language.csproj" />
   </ItemGroup>
 
 </Project>

@@ -98,6 +98,7 @@ public static class QueryFingerprint
             FunctionCallExpr fc => SerializeFunctionCall(fc),
             ListLiteralExpr list => $"[{string.Join(",", list.Elements.Select(Serialize))}]",
             ObjectLiteralExpr obj => SerializeObject(obj),
+            ConditionalExpr cond => $"({Serialize(cond.Condition)}?{Serialize(cond.TrueExpr)}|{Serialize(cond.FalseExpr)})",
             _ => expr.ToString() ?? "?"
         };
     }
@@ -135,6 +136,7 @@ public static class QueryFingerprint
         var fields = obj.Fields
             .OrderBy(kv => kv.Key, StringComparer.Ordinal)
             .Select(kv => $"{kv.Key}:{Serialize(kv.Value)}");
-        return $"{{{string.Join(",", fields)}}}";
+        var prefix = obj.TypeName != null ? $"{obj.TypeName}" : "";
+        return $"{prefix}{{{string.Join(",", fields)}}}";
     }
 }

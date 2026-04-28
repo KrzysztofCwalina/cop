@@ -8,8 +8,6 @@ public class ScriptInterpreter
     private readonly TypeRegistry _typeRegistry;
     private readonly int _maxOutputsPerCommand;
     private readonly TimeSpan _timeout;
-    private readonly Func<string, List<Document>>? _externalDocumentLoader;
-    private readonly Func<string, string, List<object>>? _jsonFileParser;
     private Dictionary<string, IList>? _globalResolvedSelects;
     private Dictionary<string, List<Document>>? _loadDocuments;
 
@@ -22,15 +20,11 @@ public class ScriptInterpreter
     public ScriptInterpreter(
         TypeRegistry typeRegistry,
         int maxOutputsPerCommand = 1000,
-        TimeSpan? timeout = null,
-        Func<string, List<Document>>? externalDocumentLoader = null,
-        Func<string, string, List<object>>? jsonFileParser = null)
+        TimeSpan? timeout = null)
     {
         _typeRegistry = typeRegistry;
         _maxOutputsPerCommand = maxOutputsPerCommand;
         _timeout = timeout ?? TimeSpan.FromSeconds(30);
-        _externalDocumentLoader = externalDocumentLoader;
-        _jsonFileParser = jsonFileParser;
     }
 
     public InterpreterResult Run(
@@ -1118,8 +1112,8 @@ public class ScriptInterpreter
             }
         }
 
-        // Include global collections (Folders, DiskFiles, etc.)
-        foreach (var collName in new[] { "Folders", "DiskFiles" })
+        // Include global collections (all providers)
+        foreach (var collName in _typeRegistry.GetGlobalCollectionNames())
         {
             var items = _typeRegistry.GetGlobalCollectionItems(collName);
             if (items is not null)
@@ -1361,11 +1355,11 @@ public class ScriptInterpreter
     /// </summary>
     private List<Document> ResolveLoad(LetDeclaration letDecl)
     {
-        if (_externalDocumentLoader == null)
-            throw new InvalidOperationException("Load() is not available — no external document loader configured");
+        var loader = _typeRegistry.DocumentLoader
+            ?? throw new InvalidOperationException("Load() is not available — no document loader registered");
 
         var path = ExtractLoadPath(letDecl);
-        return _externalDocumentLoader(path);
+        return loader(path);
     }
 
     /// <summary>
@@ -1385,16 +1379,20 @@ public class ScriptInterpreter
     }
 
     /// <summary>
-    /// Resolves a Parse('file.json', [Type]) let declaration by reading and deserializing
-    /// a JSON file into a flat list of typed ScriptObjects.
+    /// Resolves a Parse('file.ext', [Type]) let declaration by delegating to a
+    /// registered file parser for the file's extension.
     /// </summary>
     private List<object> ResolveFileParse(LetDeclaration letDecl)
     {
-        if (_jsonFileParser == null)
-            throw new InvalidOperationException("Parse() is not available — no JSON file parser configured");
-
         var (filePath, typeName) = ExtractParseArgs(letDecl);
-        return _jsonFileParser(filePath, typeName);
+        var items = _typeRegistry.TryParseFile(filePath, typeName);
+        if (items == null)
+        {
+            var ext = Path.GetExtension(filePath);
+            throw new InvalidOperationException(
+                $"No file parser registered for '{ext}' files. Parse() cannot handle '{filePath}'.");
+        }
+        return items;
     }
 
     /// <summary>

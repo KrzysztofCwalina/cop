@@ -5,6 +5,7 @@ public class ScriptParser
     private readonly List<Token> _tokens;
     private readonly string _filePath;
     private int _pos;
+    private bool _skipPipe;
 
     private ScriptParser(List<Token> tokens, string filePath)
     {
@@ -400,7 +401,7 @@ public class ScriptParser
         // Value binding: let Name = { Field = expr, ... }
         if (Current.Kind == TokenKind.LBrace)
         {
-            var objExpr = ParseObjectLiteral();
+            var objExpr = ParseObjectLiteral(null);
             return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: objExpr);
         }
 
@@ -726,7 +727,21 @@ public class ScriptParser
     }
 
     // Expression parsing with operator precedence
-    private Expression ParseExpression() => ParseOr();
+    private Expression ParseExpression() => ParseTernary();
+
+    private Expression ParseTernary()
+    {
+        var expr = ParseOr();
+        if (Current.Kind != TokenKind.QuestionMark) return expr;
+        Advance(); // consume ?
+        var savedSkipPipe = _skipPipe;
+        _skipPipe = true;
+        var trueExpr = ParseTernary(); // recursive for nesting in true branch
+        _skipPipe = savedSkipPipe;
+        Expect(TokenKind.Pipe); // consume |
+        var falseExpr = ParseTernary(); // right-associative
+        return new ConditionalExpr(expr, trueExpr, falseExpr);
+    }
 
     private Expression ParseOr()
     {
@@ -766,7 +781,7 @@ public class ScriptParser
     private Expression ParseBitwiseOr()
     {
         var left = ParseBitwiseAnd();
-        while (Current.Kind == TokenKind.Pipe)
+        while (!_skipPipe && Current.Kind == TokenKind.Pipe)
         {
             Advance();
             left = new BinaryExpr(left, "|", ParseBitwiseAnd());
@@ -788,10 +803,10 @@ public class ScriptParser
     private Expression ParseAdditive()
     {
         var left = ParseUnary();
-        while (Current.Kind == TokenKind.Minus)
+        while (Current.Kind is TokenKind.Minus or TokenKind.Plus)
         {
-            Advance();
-            left = new BinaryExpr(left, "-", ParseUnary());
+            var op = Advance();
+            left = new BinaryExpr(left, op.Value, ParseUnary());
         }
         return left;
     }
@@ -876,6 +891,11 @@ public class ScriptParser
                     Expect(TokenKind.RParen);
                     return new FunctionCallExpr(token.Value, args);
                 }
+                // Record construction: TypeName { Field: expr, ... }
+                if (Current.Kind == TokenKind.LBrace)
+                {
+                    return ParseObjectLiteral(token.Value);
+                }
                 return new IdentifierExpr(token.Value);
             }
             case TokenKind.True:
@@ -902,7 +922,10 @@ public class ScriptParser
             case TokenKind.LParen:
             {
                 Advance();
+                var savedPipe = _skipPipe;
+                _skipPipe = false;
                 var expr = ParseExpression();
+                _skipPipe = savedPipe;
                 Expect(TokenKind.RParen);
                 return expr;
             }
@@ -912,7 +935,7 @@ public class ScriptParser
             }
             case TokenKind.LBrace:
             {
-                return ParseObjectLiteral();
+                return ParseObjectLiteral(null);
             }
             default:
                 throw new ParseException(
@@ -954,20 +977,30 @@ public class ScriptParser
         return new ListLiteralExpr(elements);
     }
 
-    // { Field = expr, Field2 = expr2, ... }
-    private ObjectLiteralExpr ParseObjectLiteral()
+    // TypeName { Field: expr, Field2: expr2, ... } or { Field = expr, ... }
+    private ObjectLiteralExpr ParseObjectLiteral(string? typeName)
     {
         Advance(); // consume {
         var fields = new Dictionary<string, Expression>();
         while (Current.Kind != TokenKind.RBrace && Current.Kind != TokenKind.Eof)
         {
             // Accept identifier, true/false as field names
+            var fieldToken = Current;
             var fieldName = Current.Kind switch
             {
                 TokenKind.Identifier or TokenKind.True or TokenKind.False => Advance().Value,
                 _ => Expect(TokenKind.Identifier).Value
             };
-            Expect(TokenKind.Equals);
+
+            if (fields.ContainsKey(fieldName))
+                throw new ParseException($"Duplicate field '{fieldName}' in object literal", _filePath, fieldToken.Line);
+
+            // Accept both ':' and '=' for field assignment
+            if (Current.Kind == TokenKind.Colon)
+                Advance();
+            else
+                Expect(TokenKind.Equals);
+
             var fieldExpr = ParseExpression();
             fields[fieldName] = fieldExpr;
 
@@ -975,7 +1008,7 @@ public class ScriptParser
                 Advance();
         }
         Expect(TokenKind.RBrace);
-        return new ObjectLiteralExpr(fields);
+        return new ObjectLiteralExpr(typeName, fields);
     }
 
     /// <summary>Expands legacy 2-letter predicate abbreviations to their full camelCase names.</summary>

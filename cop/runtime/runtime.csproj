@@ -7,12 +7,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\language\language.csproj" />
     <ProjectReference Include="..\shared\Cop.Core.csproj" />
     <ProjectReference Include="..\..\providers\code-provider\code-provider.csproj" />
-    <ProjectReference Include="..\..\providers\csharp-provider\csharp-provider.csproj" />
-    <ProjectReference Include="..\..\providers\python-provider\python-provider.csproj" />
-    <ProjectReference Include="..\..\providers\javascript-provider\javascript-provider.csproj" />
+    <ProjectReference Include="..\..\providers\markdown-provider\markdown-provider.csproj" />
     <ProjectReference Include="..\..\providers\filesystem-provider\filesystem-provider.csproj" />
   </ItemGroup>
 

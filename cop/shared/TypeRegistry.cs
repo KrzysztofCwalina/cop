@@ -16,6 +16,8 @@ public class TypeRegistry
     private readonly Dictionary<string, Func<Document, List<object>>> _collectionExtractors = new();
     private readonly Dictionary<string, List<object>> _globalCollections = new();
     private readonly Dictionary<(string, string), List<object>> _extractorCache = new();
+    private readonly Dictionary<string, Func<string, string, List<object>>> _fileParsers = new(StringComparer.OrdinalIgnoreCase);
+    private Func<string, List<Document>>? _documentLoader;
 
     public TypeRegistry()
     {
@@ -236,6 +238,67 @@ public class TypeRegistry
     /// Removes a global collection registration.
     /// </summary>
     public void UnregisterGlobalCollection(string name) => _globalCollections.Remove(name);
+
+    /// <summary>
+    /// Gets the names of all registered global collections.
+    /// </summary>
+    public IEnumerable<string> GetGlobalCollectionNames() => _globalCollections.Keys;
+
+    /// <summary>
+    /// Registers a document loader for Load('path') calls.
+    /// Typically registered by the code provider for assembly loading.
+    /// </summary>
+    public void RegisterDocumentLoader(Func<string, List<Document>> loader) => _documentLoader = loader;
+
+    /// <summary>
+    /// Gets the registered document loader, or null if none is registered.
+    /// </summary>
+    public Func<string, List<Document>>? DocumentLoader => _documentLoader;
+
+    /// <summary>
+    /// Registers a file parser for a given file extension (e.g., "json", "csv").
+    /// Parsers are used by Parse('file.ext', [Type]) in the interpreter.
+    /// </summary>
+    public void RegisterFileParser(string extension, Func<string, string, List<object>> parser)
+        => _fileParsers[extension] = parser;
+
+    /// <summary>
+    /// Attempts to parse a file using a registered parser for its extension.
+    /// Returns null if no parser is registered for the file's extension.
+    /// </summary>
+    public List<object>? TryParseFile(string filePath, string typeName)
+    {
+        var ext = Path.GetExtension(filePath).TrimStart('.');
+        if (_fileParsers.TryGetValue(ext, out var parser))
+            return parser(filePath, typeName);
+        return null;
+    }
+
+    /// <summary>
+    /// Exports a user-defined type as a ProviderSchema for use by file parsers.
+    /// </summary>
+    public ProviderSchema ExportTypeAsSchema(string typeName)
+    {
+        var typeDesc = GetType(typeName)
+            ?? throw new InvalidOperationException($"Type '{typeName}' is not defined. Add: type {typeName} = {{ ... }}");
+
+        var schema = new ProviderSchema();
+        var typeSchema = new ProviderTypeSchema { Name = typeName };
+
+        foreach (var (propName, prop) in typeDesc.Properties)
+        {
+            typeSchema.Properties.Add(new ProviderPropertySchema
+            {
+                Name = propName,
+                Type = prop.TypeName ?? "string",
+                Optional = prop.IsOptional,
+                Collection = prop.IsCollection
+            });
+        }
+
+        schema.Types.Add(typeSchema);
+        return schema;
+    }
 
     public bool HasType(string name) => _types.ContainsKey(name);
 

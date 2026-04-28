@@ -134,6 +134,33 @@ public class TypeBinder
             case LiteralExpr:
                 // These are always valid
                 break;
+
+            case ObjectLiteralExpr obj:
+                if (obj.TypeName is not null)
+                {
+                    var typeDesc = _registry.GetType(obj.TypeName);
+                    if (typeDesc is null)
+                    {
+                        _errors.Add($"{filePath}({line}): unknown type '{obj.TypeName}' in record construction");
+                    }
+                    else
+                    {
+                        foreach (var fieldName in obj.Fields.Keys)
+                        {
+                            if (typeDesc.GetProperty(fieldName) is null)
+                                _errors.Add($"{filePath}({line}): property '{fieldName}' is not defined on type '{obj.TypeName}'");
+                        }
+                    }
+                }
+                foreach (var fieldExpr in obj.Fields.Values)
+                    ValidateExpression(fieldExpr, contextType, filePath, line);
+                break;
+
+            case ConditionalExpr cond:
+                ValidateExpression(cond.Condition, contextType, filePath, line);
+                ValidateExpression(cond.TrueExpr, contextType, filePath, line);
+                ValidateExpression(cond.FalseExpr, contextType, filePath, line);
+                break;
         }
     }
 
@@ -167,6 +194,8 @@ public class TypeBinder
         {
             IdentifierExpr id => ResolveIdentifierType(id.Name, contextType),
             MemberAccessExpr ma => InferMemberAccessType(ma, contextType),
+            ConditionalExpr cond => InferExpressionType(cond.TrueExpr, contextType),
+            ObjectLiteralExpr obj => obj.TypeName,
             LiteralExpr lit => lit.Value switch
             {
                 string => "string",
