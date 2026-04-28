@@ -24,6 +24,7 @@ public static class CodeCollectionBuilder
         var filePaths = new List<string>();
         CollectSourceFiles(rootPath, parsers, excluded, filePaths);
 
+        var parseErrors = new System.Collections.Concurrent.ConcurrentBag<string>();
         var sourceFiles = new System.Collections.Concurrent.ConcurrentBag<SourceFile>();
         Parallel.ForEach(filePaths,
             new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
@@ -39,8 +40,9 @@ public static class CodeCollectionBuilder
                     var text = File.ReadAllText(filePath);
                     sourceFile = parser.Parse(filePath, text);
                 }
-                catch
+                catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
+                    parseErrors.Add($"Failed to parse '{filePath}': {ex.Message}");
                     return;
                 }
 
@@ -57,6 +59,12 @@ public static class CodeCollectionBuilder
 
                 sourceFiles.Add(normalizedFile);
             });
+
+        if (!parseErrors.IsEmpty)
+        {
+            foreach (var err in parseErrors)
+                Console.Error.WriteLine(err);
+        }
 
         var sorted = sourceFiles.OrderBy(f => f.Path, StringComparer.Ordinal).ToList();
         return ExtractCollections(sorted, query.RequestedCollections);

@@ -437,7 +437,7 @@ public static class Engine
 
             // Detect provider packages: check for package metadata with provider:clr
             if (providerPackages != null)
-                DetectProviderPackage(packageFile.FilePath, import, feedPaths, providerPackages);
+                DetectProviderPackage(packageFile.FilePath, import, feedPaths, providerPackages, errors);
 
             // Enqueue the package's own imports for transitive resolution
             foreach (var subImport in packageFile.Imports)
@@ -486,9 +486,9 @@ public static class Engine
     /// <summary>
     /// Detects if a resolved package is a CLR provider package and adds it to the list.
     /// </summary>
-    private static void DetectProviderPackage(string copDirPath, string packageName, List<string> feedPaths, List<(string Dir, PackageMetadata Meta)> providerPackages)
+    private static void DetectProviderPackage(string copDirPath, string packageName, List<string> feedPaths, List<(string Dir, PackageMetadata Meta)> providerPackages, List<string> errors)
     {
-        // copDirPath is the package's src/ or types/ directory.
+        // copDirPath is the package's src/ or types/ directory (from ImportResolver).
         // The package root is its parent directory.
         var packageDir = Path.GetDirectoryName(copDirPath);
         if (packageDir is null) return;
@@ -496,15 +496,19 @@ public static class Engine
         var metadataFile = Path.Combine(packageDir, $"{packageName}.md");
         if (!File.Exists(metadataFile)) return;
 
+        // Only parse files with YAML front-matter (provider metadata requires it)
+        var content = File.ReadAllText(metadataFile);
+        if (!content.StartsWith("---")) return;
+
         try
         {
-            var metadata = PackageMetadata.ParseFromFile(metadataFile);
+            var metadata = PackageMetadata.ParseFromMarkdown(content);
             if (metadata.IsClrProvider)
                 providerPackages.Add((packageDir, metadata));
         }
-        catch
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // Metadata parse error — not a provider package
+            errors.Add($"Failed to parse metadata for package '{packageName}': {ex.Message}");
         }
     }
 
