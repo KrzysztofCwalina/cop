@@ -5,4 +5,5 @@ namespace Cop.Lang;
 /// </summary>
 public record InterpreterResult(
     List<PrintOutput> Outputs,
-    List<FileOutput> FileOutputs);
+    List<FileOutput> FileOutputs,
+    List<string> Warnings);

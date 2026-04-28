@@ -208,7 +208,35 @@ public class ScriptInterpreter
             new FileOutput(kv.Key, string.Join(Environment.NewLine, kv.Value)))
             .ToList();
 
-        return new InterpreterResult(allOutputs, outputs);
+        // Warn about empty collections referenced by foreach commands
+        var warnings = new List<string>();
+        if (allOutputs.Count == 0 && outputs.Count == 0)
+        {
+            var referencedCollections = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var sf in scriptFiles)
+                foreach (var cmd in sf.Commands)
+                    if (cmd.Collection is not null)
+                        referencedCollections.Add(cmd.Collection);
+
+            var emptyCollections = new List<string>();
+            foreach (var col in referencedCollections)
+            {
+                // Resolve let chains to find the root collection
+                var root = ResolveRootCollection(col, letDeclarations);
+                if (aggregateCounts.TryGetValue(root, out var count) && count == 0)
+                    emptyCollections.Add(root);
+                else if (!aggregateCounts.ContainsKey(root) && !letDeclarations.ContainsKey(root))
+                    emptyCollections.Add(root);
+            }
+
+            if (emptyCollections.Count > 0)
+            {
+                var names = string.Join(", ", emptyCollections.Distinct(StringComparer.OrdinalIgnoreCase));
+                warnings.Add($"Warning: No output produced. The following collections are empty: {names}. Check that you imported the correct provider (e.g., 'import csharp' instead of 'import code').");
+            }
+        }
+
+        return new InterpreterResult(allOutputs, outputs, warnings);
     }
 
     /// <summary>
@@ -1112,6 +1140,22 @@ public class ScriptInterpreter
         }
 
         return counts;
+    }
+
+    /// <summary>
+    /// Follow let-declaration chains to find the root collection name.
+    /// e.g., "public-types" → let public-types = Types:isPublic → "Types"
+    /// </summary>
+    private static string ResolveRootCollection(string name, Dictionary<string, LetDeclaration> letDeclarations)
+    {
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var current = name;
+        while (letDeclarations.TryGetValue(current, out var let) && let.BaseCollection is not null)
+        {
+            if (!visited.Add(current)) break;
+            current = let.BaseCollection;
+        }
+        return current;
     }
 
     /// <summary>

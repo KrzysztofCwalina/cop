@@ -178,7 +178,7 @@ public static class Engine
         diagLog?.Invoke($"[diag] Interpreter: {phaseSw.ElapsedMilliseconds}ms ({result.Outputs.Count} outputs)");
         diagLog?.Invoke($"[diag] Total: {totalSw.ElapsedMilliseconds}ms");
 
-        return new EngineResult(result.Outputs, parseErrors, [], commandName, result.FileOutputs);
+        return new EngineResult(result.Outputs, parseErrors, [], commandName, result.FileOutputs, result.Warnings);
     }
 
     /// <summary>
@@ -378,7 +378,7 @@ public static class Engine
             }
 
             var result = interpreter.Run(scriptFiles, documents, null, programArgs);
-            return new EngineResult(result.Outputs, parseErrors, [], null, result.FileOutputs);
+            return new EngineResult(result.Outputs, parseErrors, [], null, result.FileOutputs, result.Warnings);
         }
     }
 
@@ -675,7 +675,8 @@ public record EngineResult(
     List<string> ParseErrors,
     List<string> Errors,
     string? CommandName = null,
-    List<FileOutput>? FileOutputs = null)
+    List<FileOutput>? FileOutputs = null,
+    List<string>? Warnings = null)
 {
     public bool HasParseErrors => ParseErrors.Count > 0;
     public bool HasFatalErrors => Errors.Count > 0;

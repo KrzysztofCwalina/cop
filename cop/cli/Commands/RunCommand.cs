@@ -81,6 +81,12 @@ public static class RunCommand
         foreach (var error in result.ParseErrors)
             Console.Error.WriteLine(error);
 
+        if (result.Warnings is { Count: > 0 })
+        {
+            foreach (var warning in result.Warnings)
+                Console.Error.WriteLine(warning);
+        }
+
         if (result.HasFatalErrors)
         {
             foreach (var error in result.Errors)
