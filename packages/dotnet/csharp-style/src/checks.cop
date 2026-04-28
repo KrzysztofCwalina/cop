@@ -86,4 +86,4 @@ export let public-property-documented = Code.Types:csharp:hasUndocumentedPublicP
     :toWarning('SA1600: {item.Name} has a public property without XML documentation')
 
 ## All style checks combined
-export let csharp-style = [interface-prefix, type-name-casing, method-name-casing, single-type-per-file, comment-spacing, no-tabs, no-trailing-whitespace, no-empty-statements, no-empty-comments, use-string-empty, modifier-order, file-header-required, public-documented, public-method-documented, no-public-fields, private-field-naming, static-field-naming, const-naming, braces-on-own-line, required-braces, public-property-documented]
+export let csharp-style = interface-prefix + type-name-casing + method-name-casing + single-type-per-file + comment-spacing + no-tabs + no-trailing-whitespace + no-empty-statements + no-empty-comments + use-string-empty + modifier-order + file-header-required + public-documented + public-method-documented + no-public-fields + private-field-naming + static-field-naming + const-naming + braces-on-own-line + required-braces + public-property-documented

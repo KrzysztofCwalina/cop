@@ -414,11 +414,11 @@ public class ScriptParser
             return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: call);
         }
 
-        // Collection union with + operator: let x = a + b + c → let x = [a, b, c]
+        // Collection union with + operator: let x = a + b + c
         if (expr is BinaryExpr && FlattenUnionOperands(expr) is { } unionElements)
         {
-            var listExpr = new ListLiteralExpr(unionElements);
-            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: listExpr);
+            var unionExpr = new CollectionUnionExpr(unionElements);
+            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: unionExpr);
         }
 
         var (baseCollection, filters, exclusions) = DecomposeCollectionExpression(expr);

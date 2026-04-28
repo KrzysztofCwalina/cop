@@ -67,4 +67,4 @@ export let cpm-compliance = Code.Lines:xml:packageRefWithVersion
     :toWarning('PackageReference should not specify Version (use Central Package Management)')
 
 ## All C# checks combined
-export let csharp-checks = [var-declarations, dynamic-declarations, thread-sleep-calls, console-calls, base-exception-catches, swallowed-exceptions, configure-await-true-calls, sync-over-async-calls, bare-task-completion-sources, sync-wait-in-async, uri-tostring, type-name-is-keyword, uninstantiated-internal, undisposed-new, readme-install-package, cpm-compliance]
+export let csharp-checks = var-declarations + dynamic-declarations + thread-sleep-calls + console-calls + base-exception-catches + swallowed-exceptions + configure-await-true-calls + sync-over-async-calls + bare-task-completion-sources + sync-wait-in-async + uri-tostring + type-name-is-keyword + uninstantiated-internal + undisposed-new + readme-install-package + cpm-compliance

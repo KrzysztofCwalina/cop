@@ -649,7 +649,7 @@ CHECK(var-usage)
 
             export let var-decls = Statements:csharp:isVar:toWarning('no var')
             export let sleep-calls = Statements:csharp:threadSleep:toWarning('no sleep')
-            export let all-checks = [var-decls, sleep-calls]
+            export let all-checks = var-decls + sleep-calls
 
             command CHECK(violations) = PRINT('{item.Message}', violations)
             RUN CHECK(all-checks)

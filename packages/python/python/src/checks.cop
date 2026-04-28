@@ -15,4 +15,4 @@ export let silenced-exceptions = Code.Statements:python:swallowsException
     :toWarning('Do not silence Exception — reraise or catch a specific type')
 
 ## All Python checks combined
-export let python-checks = [print-calls, bare-except-clauses, silenced-exceptions]
+export let python-checks = print-calls + bare-except-clauses + silenced-exceptions

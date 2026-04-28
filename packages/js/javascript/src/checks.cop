@@ -27,4 +27,4 @@ export let swallowed-exceptions = Code.Statements:javascript:catchWithoutRethrow
     :toWarning('Do not swallow errors — rethrow or handle explicitly')
 
 ## All JavaScript checks combined
-export let javascript-checks = [console-calls, alert-calls, eval-calls, debugger-statements, var-declarations, swallowed-exceptions]
+export let javascript-checks = console-calls + alert-calls + eval-calls + debugger-statements + var-declarations + swallowed-exceptions

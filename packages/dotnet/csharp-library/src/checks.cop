@@ -45,4 +45,4 @@ export let async-param-misuse = Code.Statements:csharp:asyncParamPassedAsArg
     :toWarning('Do not pass async parameter as argument — use if/else branching instead')
 
 ## All C# library checks combined
-export let csharp-library = [public-async-bool-params, async-missing-bool-param, awaits-using-default, unconditional-await-in-dual-mode, unconditional-sync-in-dual-mode, wrong-async-arg-value, wrong-sync-arg-value, async-param-misuse]
+export let csharp-library = public-async-bool-params + async-missing-bool-param + awaits-using-default + unconditional-await-in-dual-mode + unconditional-sync-in-dual-mode + wrong-async-arg-value + wrong-sync-arg-value + async-param-misuse

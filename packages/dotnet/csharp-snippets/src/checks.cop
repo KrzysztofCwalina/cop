@@ -18,4 +18,4 @@ export let snippet-stale-content = snippetFences:hasSource:!contentMatchesSource
     :toWarning('{item.Tag} content is out of sync with C# source')
 
 ## All snippet checks combined
-export let csharp-snippets = [snippet-missing-docs, snippet-orphaned-ref, snippet-duplicate-name, snippet-stale-content]
+export let csharp-snippets = snippet-missing-docs + snippet-orphaned-ref + snippet-duplicate-name + snippet-stale-content

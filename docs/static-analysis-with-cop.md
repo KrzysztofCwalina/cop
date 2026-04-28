@@ -142,7 +142,7 @@ let evalErrors = Code.Statements:javascript:evalCall
 let printWarnings = Code.Statements:python:printCall
     :toWarning('Avoid print() — use logging instead')
 
-CHECK([sleepErrors, evalErrors, printWarnings])
+CHECK(sleepErrors + evalErrors + printWarnings)
 ```
 
 The `CHECK` command formats output as `file(line): severity: message` — the standard format understood by IDEs and CI systems.
@@ -222,7 +222,7 @@ let consoleWarnings = Code.Statements:consoleOutput
 # ── Type naming: clients should end with Client ──
 predicate client(Type) => Type.Name:endsWith('Client')
 
-CHECK([swallowed, consoleWarnings])
+CHECK(swallowed + consoleWarnings)
 ```
 
 ## Organizing Checks
@@ -236,7 +236,7 @@ import csharp
 import javascript
 import python
 
-CHECK([csharp-checks, javascript-checks, python-checks])
+CHECK(csharp-checks + javascript-checks + python-checks)
 ```
 
 ### Multiple Files
@@ -285,10 +285,10 @@ import csharp
 import javascript
 import python
 
-CHECK([csharp-checks, javascript-checks, python-checks])
+CHECK(csharp-checks + javascript-checks + python-checks)
 ```
 
-This runs all built-in checks for all three languages. Each package only matches files in its language — `csharp-checks` only touches `.cs` files, `javascript-checks` only `.ts`/`.js`, etc.
+This runs all built-in checksfor all three languages. Each package only matches files in its language — `csharp-checks` only touches `.cs` files, `javascript-checks` only `.ts`/`.js`, etc.
 
 ### Package Hierarchy
 
@@ -391,7 +391,7 @@ exclude '**/dist/**'
 exclude '**/__pycache__/**'
 
 # ── Use all built-in language checks ──
-let all-language-checks = [csharp-checks, javascript-checks, python-checks]
+let all-language-checks = csharp-checks + javascript-checks + python-checks
 
 # ── Custom cross-language rules ──
 predicate todoComment(Line) => Line.Text:contains('TODO') || Line.Text:contains('HACK')
@@ -405,7 +405,7 @@ let non-public-helpers = Code.Types:testHelper
     :toWarning('{item.Name} should be public so tests in other projects can use it')
 
 # ── Run everything ──
-CHECK([all-language-checks, todos, non-public-helpers])
+CHECK(all-language-checks + todos + non-public-helpers)
 ```
 
 ```bash

@@ -30,9 +30,7 @@ public record LetDeclaration(
     public bool IsFileParse => ValueExpression is FunctionCallExpr fc && fc.Name == "Parse";
 
     /// <summary>
-    /// True when this let is a union of other collection lets: let Name = [a, b, c]
-    /// where each element references another let-bound collection.
+    /// True when this let is a union of other collections: let Name = a + b + c
     /// </summary>
-    public bool IsCollectionUnion => ValueExpression is ListLiteralExpr list
-        && list.Elements.Count > 0 && list.Elements.All(e => e is IdentifierExpr);
+    public bool IsCollectionUnion => ValueExpression is CollectionUnionExpr;
 }

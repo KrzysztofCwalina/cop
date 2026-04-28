@@ -11,4 +11,4 @@ export let missing-return-types = Code.Types:python:missingReturnTypes
     :toWarning('{item.Name} has public methods without return type annotations')
 
 ## All Python library checks combined
-export let python-library = [untyped-public-params, missing-return-types]
+export let python-library = untyped-public-params + missing-return-types

@@ -411,7 +411,7 @@ public class ScriptInterpreter
             if (letDecl.IsCollectionUnion)
             {
                 var unionItems = new List<object>();
-                foreach (var elem in ((ListLiteralExpr)letDecl.ValueExpression!).Elements)
+                foreach (var elem in ((CollectionUnionExpr)letDecl.ValueExpression!).Elements)
                 {
                     var name = ((IdentifierExpr)elem).Name;
                     unionItems.AddRange(ResolveCollection(name, document, evaluator, predicateGroups, letDeclarations, functionGroups, new(visited), useQueryCache));
@@ -800,7 +800,7 @@ public class ScriptInterpreter
         {
             if (letDecl.IsCollectionUnion)
             {
-                return ((ListLiteralExpr)letDecl.ValueExpression!).Elements.All(e =>
+                return ((CollectionUnionExpr)letDecl.ValueExpression!).Elements.All(e =>
                     e is IdentifierExpr id && IsGlobalRootCollection(id.Name, predicateGroups, letDeclarations, new(visited)));
             }
             if (letDecl.IsExternalLoad) return true; // Load() is self-contained, process once globally
@@ -844,11 +844,11 @@ public class ScriptInterpreter
         // Let declaration
         if (letDeclarations.TryGetValue(collection, out var letDecl))
         {
-            // Collection union: let Name = [a, b, c]
+            // Collection union: let Name = a + b + c
             if (letDecl.IsCollectionUnion)
             {
                 var unionItems = new List<object>();
-                foreach (var elem in ((ListLiteralExpr)letDecl.ValueExpression!).Elements)
+                foreach (var elem in ((CollectionUnionExpr)letDecl.ValueExpression!).Elements)
                 {
                     var name = ((IdentifierExpr)elem).Name;
                     unionItems.AddRange(ResolveGlobalCollection(name, evaluator, predicateGroups, letDeclarations, functionGroups, new(visited)));
@@ -966,7 +966,7 @@ public class ScriptInterpreter
         {
             if (letDecl.IsCollectionUnion)
             {
-                var firstElem = ((ListLiteralExpr)letDecl.ValueExpression!).Elements[0];
+                var firstElem = ((CollectionUnionExpr)letDecl.ValueExpression!).Elements[0];
                 return ResolveItemType(((IdentifierExpr)firstElem).Name, predicateGroups, letDeclarations, functionGroups, new(visited));
             }
             if (letDecl.IsExternalLoad) return "Unknown"; // bare Load() — no sub-collection

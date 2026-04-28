@@ -646,7 +646,7 @@ predicate addedApi(Api) => sourceApi && !Api.Signature:in(baselineSignatures)
 
 export let api-removed = Code.Api:removedApi:toError('API REMOVED (breaking): {item.Signature}')
 export let api-added = Code.Api:addedApi:toInfo('API ADDED: {item.Signature}')
-export let api-compat = [api-removed, api-added]
+export let api-compat = api-removed + api-added
 ";
 
     [Test]

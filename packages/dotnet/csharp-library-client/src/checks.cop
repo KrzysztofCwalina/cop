@@ -37,4 +37,4 @@ export let async-needs-sync-counterpart = Clients:asyncWithoutSync
     :toWarning('{item.Name} has async method without sync counterpart')
 
 ## All client library checks combined
-export let csharp-library-client = [client-needs-options-ctor, client-sealed-or-abstract, async-needs-cancellation-token, client-methods-virtual, async-needs-sync-counterpart]
+export let csharp-library-client = client-needs-options-ctor + client-sealed-or-abstract + async-needs-cancellation-token + client-methods-virtual + async-needs-sync-counterpart

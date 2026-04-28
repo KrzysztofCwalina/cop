@@ -242,7 +242,7 @@ public class TypeBinder
         {
             if (letDecl.IsCollectionUnion)
             {
-                var firstElem = ((ListLiteralExpr)letDecl.ValueExpression!).Elements[0];
+                var firstElem = ((CollectionUnionExpr)letDecl.ValueExpression!).Elements[0];
                 return ResolveCollectionItemType(((IdentifierExpr)firstElem).Name, file);
             }
             if (letDecl.IsValueBinding) return null; // Value bindings are not collections

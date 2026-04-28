@@ -97,6 +97,7 @@ public static class QueryFingerprint
             PredicateCallExpr pc => SerializePredicateCall(pc),
             FunctionCallExpr fc => SerializeFunctionCall(fc),
             ListLiteralExpr list => $"[{string.Join(",", list.Elements.Select(Serialize))}]",
+            CollectionUnionExpr union => $"({string.Join("+", union.Elements.Select(Serialize))})",
             ObjectLiteralExpr obj => SerializeObject(obj),
             ConditionalExpr cond => $"({Serialize(cond.Condition)}?{Serialize(cond.TrueExpr)}|{Serialize(cond.FalseExpr)})",
             _ => expr.ToString() ?? "?"
