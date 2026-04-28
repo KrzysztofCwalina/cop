@@ -22,6 +22,14 @@ rootCommand.Add(PublishCommand.Create());
 rootCommand.Add(SearchCommand.Create());
 rootCommand.Add(FeedCommand.Create());
 rootCommand.Add(RunCommand.Create());
+rootCommand.Add(HelpCommand.Create());
 
+
+// System.CommandLine reserves 'help' as a directive, so intercept it before parsing
+if (args.Length >= 1 && args[0] == "help")
+{
+    string? file = args.Length >= 2 ? args[1] : null;
+    return HelpCommand.Execute(file);
+}
 
 return rootCommand.Parse(args).Invoke();

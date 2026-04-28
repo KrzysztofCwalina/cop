@@ -49,6 +49,10 @@ This publishes self-contained single-file EXEs into `install/<rid>/` subfolders.
 - `.cop` files contain the Cop language and package declarations
 - `.cop` files use single-quoted strings (not double) and `{Prop}` for template interpolation, `{text@style}` for styled output
 
+## Safety Rules
+
+- **NEVER discard, revert, or unstage changes you did not make.** If you see uncommitted or untracked files you don't recognize, ask the user before touching them — they may be the user's own work. Assume all changes in the working tree are intentional until told otherwise.
+
 ## Language vs. Package Boundary
 
 The C# language project (`cop/language/`) implements **only general-purpose language features**: keywords (`predicate`, `function`, `let`, `type`), the parser, evaluator, interpreter, and type system. **Domain-specific concepts** (e.g., Violation type, error/warning/info functions, severity levels, analysis rules) must **never** be added to C# code — they belong in `.cop` files in `packages/` packages. When adding a new capability, ask: "Is this a language feature or a domain concept?" Only language features go in C#.
