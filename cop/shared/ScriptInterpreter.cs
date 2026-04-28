@@ -208,30 +208,49 @@ public class ScriptInterpreter
             new FileOutput(kv.Key, string.Join(Environment.NewLine, kv.Value)))
             .ToList();
 
-        // Warn about empty collections referenced by foreach commands
+        // Warn about empty root collections referenced by executed commands
         var warnings = new List<string>();
         if (allOutputs.Count == 0 && outputs.Count == 0)
         {
+            // Only check collections from commands that actually executed (not all commands in all files)
             var referencedCollections = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var sf in scriptFiles)
-                foreach (var cmd in sf.Commands)
+            {
+                IEnumerable<CommandBlock> executed;
+                if (commandName != null)
+                    executed = sf.Commands.Where(c => c.IsCommand && string.Equals(c.Name, commandName, StringComparison.OrdinalIgnoreCase));
+                else if (commandFilter != null)
+                    executed = sf.Commands.Where(c => commandFilter.Contains(c.Name));
+                else
+                    executed = sf.Commands.Where(c => c.Parameters is not { Count: > 0 });
+
+                foreach (var cmd in executed)
                     if (cmd.Collection is not null)
                         referencedCollections.Add(cmd.Collection);
-
-            var emptyCollections = new List<string>();
-            foreach (var col in referencedCollections)
-            {
-                // Resolve let chains to find the root collection
-                var root = ResolveRootCollection(col, letDeclarations);
-                if (aggregateCounts.TryGetValue(root, out var count) && count == 0)
-                    emptyCollections.Add(root);
-                else if (!aggregateCounts.ContainsKey(root) && !letDeclarations.ContainsKey(root))
-                    emptyCollections.Add(root);
             }
 
-            if (emptyCollections.Count > 0)
+            // Resolve all root provider collections. Only warn if ALL roots are empty —
+            // if any root has data, zero output is from predicate filtering, not missing data.
+            bool anyRootHasData = false;
+            var emptyRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var col in referencedCollections)
             {
-                var names = string.Join(", ", emptyCollections.Distinct(StringComparer.OrdinalIgnoreCase));
+                var roots = ResolveRootCollections(col, letDeclarations);
+                foreach (var root in roots)
+                {
+                    if (aggregateCounts.TryGetValue(root, out var count))
+                    {
+                        if (count > 0) anyRootHasData = true;
+                        else emptyRoots.Add(root);
+                    }
+                    else if (!letDeclarations.ContainsKey(root))
+                        emptyRoots.Add(root);
+                }
+            }
+
+            if (emptyRoots.Count > 0 && !anyRootHasData)
+            {
+                var names = string.Join(", ", emptyRoots.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
                 warnings.Add($"Warning: No output produced. The following collections are empty: {names}. Check that you imported the correct provider (e.g., 'import csharp' instead of 'import code').");
             }
         }
@@ -1145,19 +1164,44 @@ public class ScriptInterpreter
     }
 
     /// <summary>
-    /// Follow let-declaration chains to find the root collection name.
-    /// e.g., "public-types" → let public-types = Types:isPublic → "Types"
+    /// Follow let-declaration chains to find the root collection name(s).
+    /// For unions (a + b + c), returns all root collections.
+    /// e.g., "public-types" → let public-types = Types:isPublic → ["Types"]
+    /// e.g., "all" → let all = a + b → resolves each branch recursively
     /// </summary>
-    private static string ResolveRootCollection(string name, Dictionary<string, LetDeclaration> letDeclarations)
+    private static List<string> ResolveRootCollections(string name, Dictionary<string, LetDeclaration> letDeclarations)
     {
-        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var current = name;
-        while (letDeclarations.TryGetValue(current, out var let) && let.BaseCollection is not null)
+        var results = new List<string>();
+        ResolveRootCollectionsRecursive(name, letDeclarations, results, []);
+        return results;
+    }
+
+    private static void ResolveRootCollectionsRecursive(string name, Dictionary<string, LetDeclaration> letDeclarations, List<string> results, HashSet<string> visited)
+    {
+        if (!visited.Add(name)) return;
+
+        if (!letDeclarations.TryGetValue(name, out var let))
         {
-            if (!visited.Add(current)) break;
-            current = let.BaseCollection;
+            // Not a let declaration — this is a root provider collection
+            if (!string.IsNullOrEmpty(name))
+                results.Add(name);
+            return;
         }
-        return current;
+
+        // Union: recurse into each element
+        if (let.IsCollectionUnion && let.ValueExpression is CollectionUnionExpr union)
+        {
+            foreach (var elem in union.Elements)
+            {
+                if (elem is IdentifierExpr id)
+                    ResolveRootCollectionsRecursive(id.Name, letDeclarations, results, visited);
+            }
+            return;
+        }
+
+        // Regular let chain: follow BaseCollection
+        if (!string.IsNullOrEmpty(let.BaseCollection))
+            ResolveRootCollectionsRecursive(let.BaseCollection, letDeclarations, results, visited);
     }
 
     /// <summary>
