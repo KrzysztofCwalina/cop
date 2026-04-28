@@ -23,6 +23,12 @@ install/publish.ps1 -Runtimes win-x64        # single platform
 
 This publishes self-contained single-file EXEs into `install/<rid>/` subfolders. No .NET runtime needed on the target machine.
 
+**After finishing a feature or bug fix**, always republish so the user's PATH-installed `cop.exe` is up to date:
+
+```bash
+install/publish.ps1 -Runtimes win-x64
+```
+
 ## Architecture
 
 - **cop/** — Main Cop project folder containing:
