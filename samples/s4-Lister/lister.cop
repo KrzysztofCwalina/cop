@@ -3,7 +3,7 @@
 # so multiple actions run as a single composed command.
 # Run with: cop run LIST-TYPES
 # Run with: cop run STATISTICS
-import code
+import csharp
 
 # Predicate that checks if the /s flag was passed on the command line
 predicate printStats(Program) => Program.Args:contains('/s')
