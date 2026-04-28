@@ -1,0 +1,33 @@
+# Tests for basic C# type collection and type predicates.
+# Runs against samples/Animals.cs (6 types: Animal, Dog, Cat, FishClient, HiddenHelper, AbstractService)
+
+import csharp
+
+# ── Type predicates ──
+predicate t_endsClient(Type) => Type.Name:endsWith('Client')
+predicate t_endsService(Type) => Type.Name:endsWith('Service')
+predicate t_startsA(Type) => Type.Name:startsWith('A')
+predicate t_containsI(Type) => Type.Name:contains('i')
+predicate t_equalsDog(Type) => Type.Name:equals('Dog')
+predicate t_equalsXyz(Type) => Type.Name:equals('Xyz')
+
+# ── Existence ──
+command test-types-exist = ASSERT(csharp.Types, 'C# types should exist')
+command test-has-public = ASSERT(csharp.Types:isPublic, 'should have public types')
+command test-has-non-public = ASSERT(csharp.Types:!isPublic, 'should have non-public types')
+command test-has-sealed = ASSERT(csharp.Types:isSealed, 'should have sealed types')
+command test-has-abstract = ASSERT(csharp.Types:isAbstract, 'should have abstract types')
+
+# ── String predicates on names ──
+command test-ends-client = ASSERT(csharp.Types:t_endsClient, 'should find FishClient')
+command test-ends-service = ASSERT(csharp.Types:t_endsService, 'should find AbstractService')
+command test-starts-a = ASSERT(csharp.Types:t_startsA, 'should find Animal and AbstractService')
+command test-contains-i = ASSERT(csharp.Types:t_containsI, 'types containing i')
+command test-equals-dog = ASSERT(csharp.Types:t_equalsDog, 'should find Dog')
+command test-no-xyz = ASSERT_EMPTY(csharp.Types:t_equalsXyz, 'no type named Xyz')
+
+# ── Chained predicates ──
+command test-public-sealed = ASSERT(csharp.Types:isPublic:isSealed, 'FishClient is public+sealed')
+command test-public-abstract = ASSERT(csharp.Types:isPublic:isAbstract, 'AbstractService is public+abstract')
+command test-no-sealed-abstract = ASSERT_EMPTY(csharp.Types:isSealed:isAbstract, 'nothing is sealed+abstract')
+command test-no-nonpub-sealed = ASSERT_EMPTY(csharp.Types:!isPublic:isSealed, 'no non-public sealed types')

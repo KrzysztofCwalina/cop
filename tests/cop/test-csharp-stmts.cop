@@ -1,0 +1,31 @@
+# Tests for C# statement extraction and filtering.
+# Runs against samples/BadCode.cs (var, dynamic, Console, Thread.Sleep)
+
+import csharp
+
+# ── Statement predicates ──
+predicate t_isVar(Statement) => Statement.Kind == 'declaration' && Statement.Keywords:contains('var')
+predicate t_isDynamic(Statement) => Statement.Kind == 'declaration' && Statement.Keywords:contains('dynamic')
+predicate t_isConsole(Statement) => Statement.Kind == 'call' && Statement.TypeName == 'Console'
+predicate t_isSleep(Statement) => Statement.Kind == 'call'
+    && Statement.TypeName == 'Thread' && Statement.MemberName == 'Sleep'
+predicate t_isCall(Statement) => Statement.Kind == 'call'
+predicate t_isDecl(Statement) => Statement.Kind == 'declaration'
+
+# ── Existence ──
+command test-stmts-exist = ASSERT(csharp.Statements, 'should have statements')
+command test-has-var = ASSERT(csharp.Statements:t_isVar, 'should find var declarations')
+command test-has-dynamic = ASSERT(csharp.Statements:t_isDynamic, 'should find dynamic')
+command test-has-console = ASSERT(csharp.Statements:t_isConsole, 'should find Console calls')
+command test-has-sleep = ASSERT(csharp.Statements:t_isSleep, 'should find Thread.Sleep')
+command test-has-calls = ASSERT(csharp.Statements:t_isCall, 'should have call statements')
+command test-has-decls = ASSERT(csharp.Statements:t_isDecl, 'should have declarations')
+
+# ── Negated ──
+command test-not-all-var = ASSERT(csharp.Statements:!t_isVar, 'some statements are not var')
+
+# ── Files ──
+command test-has-cs-files = ASSERT(csharp.Files, 'should have C# files')
+
+# ── Impossible intersection ──
+command test-no-console-var = ASSERT_EMPTY(csharp.Statements:t_isConsole:t_isVar, 'nothing is both console and var')

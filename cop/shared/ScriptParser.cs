@@ -433,7 +433,7 @@ public class ScriptParser
 
     /// <summary>
     /// Flattens a + b + c BinaryExpr tree into [a, b, c] operands for collection union.
-    /// Returns null if any operator is not '+' or any leaf is not an identifier.
+    /// Returns null if any operator is not '+'.
     /// </summary>
     private static List<Expression>? FlattenUnionOperands(Expression expr)
     {
@@ -452,13 +452,9 @@ public class ScriptParser
                 stack.Push(b.Right);
                 stack.Push(b.Left);
             }
-            else if (current is IdentifierExpr)
-            {
-                elements.Add(current);
-            }
             else
             {
-                return null; // not a simple collection union
+                elements.Add(current);
             }
         }
 

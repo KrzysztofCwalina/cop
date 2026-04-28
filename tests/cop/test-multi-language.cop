@@ -1,0 +1,39 @@
+# Tests for multi-language support, namespace resolution, unions, and filesystem.
+# Runs against samples/Animals.cs, samples/calculator.py, samples/app.js
+
+import csharp
+import python
+import javascript
+
+# ── Namespace resolution ──
+command test-cs-types = ASSERT(csharp.Types, 'csharp.Types via namespace')
+command test-py-types = ASSERT(python.Types, 'python.Types via namespace')
+command test-js-types = ASSERT(javascript.Types, 'javascript.Types via namespace')
+command test-cs-stmts = ASSERT(csharp.Statements, 'csharp.Statements via namespace')
+command test-py-stmts = ASSERT(python.Statements, 'python.Statements via namespace')
+command test-js-stmts = ASSERT(javascript.Statements, 'javascript.Statements via namespace')
+
+# ── Python-specific ──
+command test-py-print = ASSERT(python.Statements:printCall, 'should find print() in calculator.py')
+
+# ── JavaScript-specific ──
+command test-js-console = ASSERT(javascript.Statements:consoleCall, 'should find console.log in app.js')
+command test-js-eval = ASSERT(javascript.Statements:evalCall, 'should find eval() in app.js')
+command test-js-alert = ASSERT(javascript.Statements:alertCall, 'should find alert() in app.js')
+
+# ── Union: two languages ──
+let cs-py-types = csharp.Types + python.Types
+command test-union-two = ASSERT(cs-py-types, 'union of csharp + python types')
+
+# ── Union: three languages ──
+let all-types = csharp.Types + python.Types + javascript.Types
+command test-union-three = ASSERT(all-types, 'union of all three language types')
+
+# ── Union: filtered branches ──
+let public-cs = csharp.Types:isPublic
+let public-all = public-cs + python.Types
+command test-union-filtered = ASSERT(public-all, 'union with filtered branch')
+
+# ── Filesystem ──
+command test-has-files = ASSERT(DiskFiles, 'should have files')
+command test-has-folders = ASSERT(Folders, 'should have folders')

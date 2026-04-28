@@ -1,0 +1,47 @@
+# Tests for let declarations, chaining, unions of let-bound collections, and negation.
+# Runs against samples/Animals.cs
+
+import csharp
+
+# ── Predicates used by let chains ──
+predicate t_lc_client(Type) => Type.Name:endsWith('Client')
+predicate t_lc_service(Type) => Type.Name:endsWith('Service')
+predicate t_lc_zzz(Type) => Type.Name:contains('Zzz')
+
+# ── Basic let ──
+let lc-public = csharp.Types:isPublic
+command test-let-basic = ASSERT(lc-public, 'let binding should resolve')
+
+# ── Chained let (narrowing) ──
+let lc-sealed-public = lc-public:isSealed
+command test-let-chain-sealed = ASSERT(lc-sealed-public, 'chained let narrows to sealed')
+
+let lc-abstract-public = lc-public:isAbstract
+command test-let-chain-abstract = ASSERT(lc-abstract-public, 'chained let narrows to abstract')
+
+# ── Chain producing empty ──
+let lc-sealed-abstract = lc-sealed-public:isAbstract
+command test-let-empty-chain = ASSERT_EMPTY(lc-sealed-abstract, 'sealed+abstract should be empty')
+
+# ── Multiple predicates ──
+let lc-clients = lc-public:t_lc_client
+command test-let-client = ASSERT(lc-clients, 'should find client types via let')
+
+let lc-services = lc-public:t_lc_service
+command test-let-service = ASSERT(lc-services, 'should find service types via let')
+
+# ── Deep chain (3 levels) ──
+let lc-sealed-clients = lc-clients:isSealed
+command test-let-deep = ASSERT(lc-sealed-clients, 'FishClient is a sealed client')
+
+# ── Union of let-bound collections ──
+let lc-important = lc-clients + lc-services
+command test-let-union = ASSERT(lc-important, 'union of let-chained collections')
+
+# ── Negated filter on let ──
+let lc-non-sealed = lc-public:!isSealed
+command test-let-negated = ASSERT(lc-non-sealed, 'should have non-sealed public types')
+
+# ── Let that produces empty ──
+let lc-zzz = csharp.Types:t_lc_zzz
+command test-let-empty = ASSERT_EMPTY(lc-zzz, 'no types contain Zzz')

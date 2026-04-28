@@ -177,6 +177,9 @@ public class JavaScriptSourceParser : ISourceParser
                 else
                     methods.Add(method);
 
+                // Undo the brace count from line 148 for this line — SkipBracedBlock
+                // already handled all braces from this line through the method's closing }.
+                braceDepth -= CountUnquotedChar(lines[i], '{') - CountUnquotedChar(lines[i], '}');
                 i = bodyEnd;
                 continue;
             }

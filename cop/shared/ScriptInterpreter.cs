@@ -17,6 +17,18 @@ public class ScriptInterpreter
     // Bounded to prevent unbounded memory growth on large repos with many unique queries.
     private readonly BoundedCache<string, List<object>> _queryCache = new(capacity: 2048);
 
+    /// <summary>
+    /// Extracts a collection name from a union element expression.
+    /// Supports IdentifierExpr ("Types") and MemberAccessExpr ("csharp.Types").
+    /// </summary>
+    private static string GetUnionElementName(Expression expr) => expr switch
+    {
+        IdentifierExpr id => id.Name,
+        MemberAccessExpr { Target: IdentifierExpr parent } ma => $"{parent.Name}.{ma.Member}",
+        _ => throw new InvalidOperationException(
+            $"Unsupported union element: expected a collection name like 'Types' or 'csharp.Types', got {expr.GetType().Name}")
+    };
+
     public ScriptInterpreter(
         TypeRegistry typeRegistry,
         int maxOutputsPerCommand = 1000,
@@ -448,7 +460,7 @@ public class ScriptInterpreter
                 var unionItems = new List<object>();
                 foreach (var elem in ((CollectionUnionExpr)letDecl.ValueExpression!).Elements)
                 {
-                    var name = ((IdentifierExpr)elem).Name;
+                    var name = GetUnionElementName(elem);
                     unionItems.AddRange(ResolveCollection(name, document, evaluator, predicateGroups, letDeclarations, functionGroups, new(visited), useQueryCache));
                 }
                 return unionItems;
@@ -836,7 +848,7 @@ public class ScriptInterpreter
             if (letDecl.IsCollectionUnion)
             {
                 return ((CollectionUnionExpr)letDecl.ValueExpression!).Elements.All(e =>
-                    e is IdentifierExpr id && IsGlobalRootCollection(id.Name, predicateGroups, letDeclarations, new(visited)));
+                    IsGlobalRootCollection(GetUnionElementName(e), predicateGroups, letDeclarations, new(visited)));
             }
             if (letDecl.IsExternalLoad) return true; // Load() is self-contained, process once globally
             if (letDecl.IsFileParse) return true; // Parse() is self-contained, process once globally
@@ -885,7 +897,7 @@ public class ScriptInterpreter
                 var unionItems = new List<object>();
                 foreach (var elem in ((CollectionUnionExpr)letDecl.ValueExpression!).Elements)
                 {
-                    var name = ((IdentifierExpr)elem).Name;
+                    var name = GetUnionElementName(elem);
                     unionItems.AddRange(ResolveGlobalCollection(name, evaluator, predicateGroups, letDeclarations, functionGroups, new(visited)));
                 }
                 return unionItems;
@@ -1002,7 +1014,7 @@ public class ScriptInterpreter
             if (letDecl.IsCollectionUnion)
             {
                 var firstElem = ((CollectionUnionExpr)letDecl.ValueExpression!).Elements[0];
-                return ResolveItemType(((IdentifierExpr)firstElem).Name, predicateGroups, letDeclarations, functionGroups, new(visited));
+                return ResolveItemType(GetUnionElementName(firstElem), predicateGroups, letDeclarations, functionGroups, new(visited));
             }
             if (letDecl.IsExternalLoad) return "Unknown"; // bare Load() — no sub-collection
             if (letDecl.IsFileParse) return ExtractParseTypeName(letDecl); // type from Parse args
@@ -1209,8 +1221,7 @@ public class ScriptInterpreter
         {
             foreach (var elem in union.Elements)
             {
-                if (elem is IdentifierExpr id)
-                    ResolveRootCollectionsRecursive(id.Name, letDeclarations, results, visited);
+                ResolveRootCollectionsRecursive(GetUnionElementName(elem), letDeclarations, results, visited);
             }
             return;
         }

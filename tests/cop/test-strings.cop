@@ -1,0 +1,40 @@
+# Tests for case-insensitive string predicates: equals, startsWith, endsWith, contains, notEquals, matches.
+# Runs against samples/Animals.cs (types: Animal, Dog, Cat, FishClient, HiddenHelper, AbstractService)
+
+import csharp
+
+# ── Case-insensitive equals ──
+predicate t_s_eqAnimal(Type) => Type.Name:equals('animal')
+predicate t_s_eqDOG(Type) => Type.Name:equals('DOG')
+predicate t_s_eqCaT(Type) => Type.Name:equals('CaT')
+command test-eq-lower = ASSERT(csharp.Types:t_s_eqAnimal, 'equals matches lowercase')
+command test-eq-upper = ASSERT(csharp.Types:t_s_eqDOG, 'equals matches uppercase')
+command test-eq-mixed = ASSERT(csharp.Types:t_s_eqCaT, 'equals matches mixed case')
+
+# ── Case-insensitive startsWith ──
+predicate t_s_swAbstract(Type) => Type.Name:startsWith('abstract')
+predicate t_s_swFISH(Type) => Type.Name:startsWith('FISH')
+command test-sw-lower = ASSERT(csharp.Types:t_s_swAbstract, 'startsWith case-insensitive')
+command test-sw-upper = ASSERT(csharp.Types:t_s_swFISH, 'startsWith FISH matches FishClient')
+
+# ── Case-insensitive endsWith ──
+predicate t_s_ewHELPER(Type) => Type.Name:endsWith('HELPER')
+predicate t_s_ewClient(Type) => Type.Name:endsWith('client')
+command test-ew-upper = ASSERT(csharp.Types:t_s_ewHELPER, 'endsWith HELPER matches HiddenHelper')
+command test-ew-lower = ASSERT(csharp.Types:t_s_ewClient, 'endsWith client matches FishClient')
+
+# ── Case-insensitive contains ──
+predicate t_s_ctSERV(Type) => Type.Name:contains('SERV')
+predicate t_s_ctfish(Type) => Type.Name:contains('fish')
+command test-ct-upper = ASSERT(csharp.Types:t_s_ctSERV, 'contains SERV matches AbstractService')
+command test-ct-lower = ASSERT(csharp.Types:t_s_ctfish, 'contains fish matches FishClient')
+
+# ── notEquals ──
+predicate t_s_neDog(Type) => Type.Name:notEquals('Dog')
+command test-ne = ASSERT(csharp.Types:t_s_neDog, 'notEquals excludes Dog, others remain')
+
+# ── Regex matches ──
+predicate t_s_rxCat(Type) => Type.Name:matches('^[A-Z]at$')
+predicate t_s_rxService(Type) => Type.Name:matches('Service$')
+command test-rx-cat = ASSERT(csharp.Types:t_s_rxCat, 'regex ^[A-Z]at$ matches Cat')
+command test-rx-service = ASSERT(csharp.Types:t_s_rxService, 'regex Service$ matches AbstractService')
