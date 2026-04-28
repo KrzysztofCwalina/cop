@@ -13,7 +13,7 @@ public static class TestCommand
             Arity = ArgumentArity.ZeroOrOne,
             Description = ".cop file or directory containing test files"
         };
-        var diagOption = new Option<bool>("--diag") { Description = "Print diagnostic timing to stderr" };
+        var diagOption = new Option<bool>("-d") { Description = "Print diagnostic timing to stderr" };
         var command = new Command("test", "Run ASSERT commands in .cop files and report results")
         {
             fileArg,

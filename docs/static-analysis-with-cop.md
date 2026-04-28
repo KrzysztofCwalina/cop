@@ -346,9 +346,10 @@ cop run                     # run all statements (but not named commands)
 
 ```bash
 cop run                      # discover and run all .cop files in the project
-cop run checks.cop           # run a specific file
+cop run checks.cop           # run a specific .cop file
 cop run my-command           # run a named command
-cop test tests.cop           # run ASSERT commands and report results
+cop run -t src/              # run against a specific directory
+cop test                     # run ASSERT commands and report results
 ```
 
 ### Exit Codes
@@ -372,7 +373,7 @@ This makes cop easy to integrate into CI pipelines:
 If your `.cop` file imports packages from a GitHub feed, restore them first:
 
 ```bash
-cop restore checks.cop       # download remote packages
+cop package restore          # download remote packages
 cop run                      # run checks
 ```
 

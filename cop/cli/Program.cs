@@ -1,8 +1,10 @@
 using System.CommandLine;
+using System.CommandLine.Help;
 using System.Diagnostics;
+using System.Linq;
 using Cop.Cli.Commands;
 
-bool diag = args.Contains("--diag");
+bool diag = args.Contains("-d");
 long clrStartupMs = 0;
 if (diag)
 {
@@ -11,19 +13,43 @@ if (diag)
     Console.Error.WriteLine($"[diag] Process startup: {clrStartupMs}ms");
 }
 
-var rootCommand = new RootCommand { Description = "cop — a DSL for processing lists" };
+var rootCommand = new RootCommand
+{
+    Description = """
+        cop — a DSL for processing lists
 
-rootCommand.Add(RestoreCommand.Create());
-rootCommand.Add(LockCommand.Create());
-rootCommand.Add(UnlockCommand.Create());
-rootCommand.Add(NewCommand.Create());
-rootCommand.Add(ValidateCommand.Create());
-rootCommand.Add(PublishCommand.Create());
-rootCommand.Add(SearchCommand.Create());
-rootCommand.Add(FeedCommand.Create());
+        Quick reference:
+          cop run [<command>] [-t <target>] [-c <commands>] [-f text|json] [-d]
+          cop test [<file>] [-d]
+          cop package <subcommand>
+          cop <command> -h for details
+        """
+};
+
+// Replace built-in --help/-?/-h with just -h
+var defaultHelp = rootCommand.Options.FirstOrDefault(o => o is HelpOption);
+if (defaultHelp != null) rootCommand.Options.Remove(defaultHelp);
+rootCommand.Options.Add(new HelpOption("-h"));
+
+// Replace built-in --version with -v
+var defaultVersion = rootCommand.Options.FirstOrDefault(o => o is VersionOption);
+if (defaultVersion != null) rootCommand.Options.Remove(defaultVersion);
+rootCommand.Options.Add(new VersionOption("-v"));
+
 rootCommand.Add(RunCommand.Create());
 rootCommand.Add(TestCommand.Create());
+rootCommand.Add(LockCommand.Create());
+rootCommand.Add(UnlockCommand.Create());
 rootCommand.Add(HelpCommand.Create());
+
+var packageCommand = new Command("package", "Manage cop packages");
+packageCommand.Add(RestoreCommand.Create());
+packageCommand.Add(NewCommand.Create());
+packageCommand.Add(ValidateCommand.Create());
+packageCommand.Add(PublishCommand.Create());
+packageCommand.Add(SearchCommand.Create());
+packageCommand.Add(FeedCommand.Create());
+rootCommand.Add(packageCommand);
 
 
 // System.CommandLine reserves 'help' as a directive, so intercept it before parsing

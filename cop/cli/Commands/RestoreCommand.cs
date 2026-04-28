@@ -22,7 +22,11 @@ public static class RestoreCommand
     /// <returns>A System.CommandLine.Command configured for the restore subcommand.</returns>
     public static Command Create()
     {
-        var fileArg = new Argument<FileInfo>("file") { Description = "A .cop file with feed and import declarations" };
+        var fileArg = new Argument<string>("file")
+        {
+            Arity = ArgumentArity.ZeroOrOne,
+            Description = "A .cop file (or omit to restore all .cop files in the current directory)"
+        };
         var command = new Command("restore", "Restore packages from a .cop file")
         {
             fileArg
@@ -36,16 +40,42 @@ public static class RestoreCommand
     /// <summary>
     /// Executes the restore operation.
     /// </summary>
-    public static async Task<int> ExecuteAsync(FileInfo? fileArg)
+    public static async Task<int> ExecuteAsync(string? fileArg)
     {
-        if (fileArg == null)
+        string[] filePaths;
+
+        if (fileArg != null)
         {
-            Console.Error.WriteLine("Error: File argument is required");
-            return 1;
+            var fullPath = Path.GetFullPath(fileArg);
+            if (!File.Exists(fullPath))
+            {
+                Console.Error.WriteLine($"Error: File '{fullPath}' does not exist");
+                return 1;
+            }
+            filePaths = [fullPath];
+        }
+        else
+        {
+            var dir = Directory.GetCurrentDirectory();
+            filePaths = Directory.GetFiles(dir, "*.cop");
+            if (filePaths.Length == 0)
+            {
+                Console.Error.WriteLine("Error: No .cop files found in current directory");
+                return 1;
+            }
         }
 
-        string filePath = fileArg.FullName;
+        int exitCode = 0;
+        foreach (var filePath in filePaths)
+        {
+            var result = await RestoreFileAsync(filePath);
+            if (result != 0) exitCode = result;
+        }
+        return exitCode;
+    }
 
+    private static async Task<int> RestoreFileAsync(string filePath)
+    {
         if (!File.Exists(filePath))
         {
             Console.Error.WriteLine($"Error: File '{filePath}' does not exist");

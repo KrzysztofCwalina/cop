@@ -96,10 +96,6 @@ export let api-added = Code.Api:addedFromSource
 ```bash
 cop run api-compat.cop
 ```
-
-If an API was removed (breaking change):
-
-```
 ERROR: API REMOVED (breaking): method MyClient.DeleteItemAsync(string, CancellationToken) : Task<Response>
 ```
 

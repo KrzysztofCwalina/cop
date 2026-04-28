@@ -2,6 +2,7 @@ using System;
 using System.CommandLine;
 using System.CommandLine.Parsing;
 using System.IO;
+using System.Linq;
 using Cop.Core;
 
 namespace Cop.Cli.Commands;
@@ -12,8 +13,8 @@ public static class UnlockCommand
     {
         var filesArg = new Argument<string[]>("files")
         {
-            Arity = ArgumentArity.OneOrMore,
-            Description = "Files to unlock (repo-relative or absolute paths)"
+            Arity = ArgumentArity.ZeroOrMore,
+            Description = "Files to unlock (or omit to unlock all locked files)"
         };
         var command = new Command("unlock", "Unlock previously locked files")
         {
@@ -27,12 +28,6 @@ public static class UnlockCommand
 
     public static void Execute(string[]? files)
     {
-        if (files == null || files.Length == 0)
-        {
-            Console.Error.WriteLine("Error: Specify files to unlock");
-            Environment.Exit(1);
-        }
-
         var rootDirectory = Directory.GetCurrentDirectory();
         var lockFile = LockFile.Load(rootDirectory);
 
@@ -53,9 +48,13 @@ public static class UnlockCommand
             Environment.Exit(1);
         }
 
-        foreach (var file in files)
+        // If no files specified, unlock all locked files
+        var filesToUnlock = (files == null || files.Length == 0)
+            ? lockFile.Files.Select(f => f.Key).ToArray()
+            : files.Select(f => ResolveRelativePath(rootDirectory, f)).ToArray();
+
+        foreach (var relativePath in filesToUnlock)
         {
-            var relativePath = ResolveRelativePath(rootDirectory, file);
             if (lockFile.Unlock(relativePath))
                 Console.WriteLine($"Unlocked: {relativePath}");
             else

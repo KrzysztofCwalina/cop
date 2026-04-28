@@ -13,21 +13,23 @@ public static class RunCommand
         var commandArg = new Argument<string>("command")
         {
             Arity = ArgumentArity.ZeroOrOne,
-            Description = "Command name or .cop file path"
+            Description = "Command name or .cop file to run"
         };
         var extraArgsArg = new Argument<string[]>("args")
         {
             Arity = ArgumentArity.ZeroOrMore,
             Description = "Extra arguments passed to the program"
         };
-        var formatOption = new Option<string>("--format") { Description = "Output format: text (default) or json" };
+        var targetOption = new Option<string>("-t") { Description = "Target: directory, file, or comma-separated file list to pass to the program (default: current directory)" };
+        var formatOption = new Option<string>("-f") { Description = "Output format: text (default) or json" };
         formatOption.DefaultValueFactory = _ => "text";
-        var commandsOption = new Option<string>("--commands") { Description = "Comma-separated list of check names to run (default: all)" };
-        var diagOption = new Option<bool>("--diag") { Description = "Print diagnostic timing for each engine phase to stderr" };
+        var commandsOption = new Option<string>("-c") { Description = "Comma-separated list of commands to run (default: all)" };
+        var diagOption = new Option<bool>("-d") { Description = "Print diagnostic timing for each engine phase to stderr" };
         var command = new Command("run", "Run .cop programs")
         {
             commandArg,
             extraArgsArg,
+            targetOption,
             formatOption,
             commandsOption,
             diagOption
@@ -35,22 +37,23 @@ public static class RunCommand
         command.SetAction(parseResult => Execute(
             parseResult.GetValue(commandArg),
             parseResult.GetValue(extraArgsArg),
+            parseResult.GetValue(targetOption),
             parseResult.GetValue(formatOption),
             parseResult.GetValue(commandsOption),
             parseResult.GetValue(diagOption)));
         return command;
     }
 
-    public static int Execute(string? commandOrFile, string[]? programArgs = null, string? format = null, string? commands = null, bool diag = false)
+    public static int Execute(string? command, string[]? programArgs = null, string? target = null, string? format = null, string? commands = null, bool diag = false)
     {
         string? commandName = null;
         string scriptsDir;
         string rootPath;
 
-        if (commandOrFile != null && commandOrFile.EndsWith(".cop", StringComparison.OrdinalIgnoreCase))
+        if (command != null && command.EndsWith(".cop", StringComparison.OrdinalIgnoreCase))
         {
-            // File path mode: treat as file path
-            var spec = new FileInfo(commandOrFile);
+            // .cop file mode: load scripts from that file's directory
+            var spec = new FileInfo(command);
             if (!spec.Exists) { Console.Error.WriteLine($"Error: File '{spec.FullName}' not found"); return 1; }
             scriptsDir = spec.DirectoryName ?? Directory.GetCurrentDirectory();
             rootPath = scriptsDir;
@@ -64,13 +67,19 @@ public static class RunCommand
         }
         else
         {
-            // Directory discovery mode
+            // Command name mode: discover .cop files in cwd
             scriptsDir = Directory.GetCurrentDirectory();
             rootPath = scriptsDir;
-            commandName = commandOrFile;
+            commandName = command;
         }
 
-        // Parse --commands filter
+        // Override rootPath if -t is specified
+        if (!string.IsNullOrEmpty(target))
+        {
+            rootPath = Path.GetFullPath(target);
+        }
+
+        // Parse -c filter
         string[]? commandFilter = null;
         if (!string.IsNullOrEmpty(commands))
             commandFilter = commands.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
