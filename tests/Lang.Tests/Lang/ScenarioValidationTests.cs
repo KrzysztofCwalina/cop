@@ -19,7 +19,6 @@ public class ScenarioValidationTests
     }
 
     [Test]
-    [Ignore("Requires external language provider package — will re-enable after Phase 4 (package metadata)")]
     public void S1_HelloWorld_DetectsVarUsage()
     {
         // Arrange: samples/s1-HelloWorld has rules.cop and app.cs
@@ -53,7 +52,6 @@ public class ScenarioValidationTests
     }
 
     [Test]
-    [Ignore("Requires external language provider package — will re-enable after Phase 4 (package metadata)")]
     public void S1_HelloWorld_ImportCodeResolvesTypes()
     {
         // Verify that 'import code' properly resolves the code package
@@ -69,7 +67,6 @@ public class ScenarioValidationTests
     }
 
     [Test]
-    [Ignore("Requires external language provider package — will re-enable after Phase 4 (package metadata)")]
     public void S1_HelloWorld_PrintInterpolation()
     {
         // Verify that {item.File.Path}:{item.Line} interpolation works

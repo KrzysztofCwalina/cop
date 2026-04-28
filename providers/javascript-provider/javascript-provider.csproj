@@ -12,4 +12,14 @@
     <ProjectReference Include="..\code\code.csproj" />
   </ItemGroup>
 
+  <!-- Copy provider DLL to package lib/ folder after build -->
+  <Target Name="CopyToPackageLib" AfterTargets="Build">
+    <PropertyGroup>
+      <PackageLibDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\packages\js\javascript\lib\'))</PackageLibDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(PackageLibDir)" />
+    <Copy SourceFiles="$(OutputPath)javascript-provider.dll" DestinationFolder="$(PackageLibDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(OutputPath)javascript-provider.deps.json" DestinationFolder="$(PackageLibDir)" SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>

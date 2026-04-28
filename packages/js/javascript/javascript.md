@@ -7,6 +7,8 @@ authors: cop-team
 tags: javascript, typescript, coding-standards
 language: JavaScript
 dependencies: []
+provider: clr
+providerEntry: Cop.Providers.JavaScriptProvider
 ---
 
 # JavaScript Coding Rules

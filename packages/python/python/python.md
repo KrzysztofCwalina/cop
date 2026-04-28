@@ -7,6 +7,8 @@ authors: cop-team
 tags: python, coding-standards
 language: Python
 dependencies: []
+provider: clr
+providerEntry: Cop.Providers.PythonProvider
 ---
 
 # Python Coding Rules

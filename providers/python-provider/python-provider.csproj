@@ -12,4 +12,14 @@
     <ProjectReference Include="..\code\code.csproj" />
   </ItemGroup>
 
+  <!-- Copy provider DLL to package lib/ folder after build -->
+  <Target Name="CopyToPackageLib" AfterTargets="Build">
+    <PropertyGroup>
+      <PackageLibDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\packages\python\python\lib\'))</PackageLibDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(PackageLibDir)" />
+    <Copy SourceFiles="$(OutputPath)python-provider.dll" DestinationFolder="$(PackageLibDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(OutputPath)python-provider.deps.json" DestinationFolder="$(PackageLibDir)" SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>

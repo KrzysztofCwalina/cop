@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
     <RootNamespace>Cop.Providers</RootNamespace>
     <PublishReadyToRun>true</PublishReadyToRun>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,5 +17,22 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0" />
     <PackageReference Include="System.Reflection.MetadataLoadContext" Version="9.0.0" />
   </ItemGroup>
+
+  <!-- Copy provider DLL + deps to package lib/ folder after build -->
+  <Target Name="CopyToPackageLib" AfterTargets="Build">
+    <PropertyGroup>
+      <PackageLibDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\packages\dotnet\csharp\lib\'))</PackageLibDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(PackageLibDir)" />
+    <ItemGroup>
+      <ProviderFiles Include="$(OutputPath)csharp-provider.dll" />
+      <ProviderFiles Include="$(OutputPath)csharp-provider.deps.json" />
+      <!-- Roslyn and MetadataLoadContext dependencies -->
+      <ProviderFiles Include="$(OutputPath)Microsoft.CodeAnalysis*.dll" />
+      <ProviderFiles Include="$(OutputPath)System.Reflection.MetadataLoadContext.dll" />
+      <ProviderFiles Include="$(OutputPath)System.Collections.Immutable.dll" Condition="Exists('$(OutputPath)System.Collections.Immutable.dll')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ProviderFiles)" DestinationFolder="$(PackageLibDir)" SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

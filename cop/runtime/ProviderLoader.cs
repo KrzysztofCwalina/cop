@@ -219,6 +219,7 @@ public static class ProviderLoader
 
     /// <summary>
     /// Finds the provider DLL in the package's lib/ directory.
+    /// Prefers a DLL matching the package name or containing "provider".
     /// </summary>
     private static string? FindProviderDll(string packageDir, string packageName)
     {
@@ -226,22 +227,27 @@ public static class ProviderLoader
         if (!Directory.Exists(libDir))
             return null;
 
-        // Look for any .dll file in lib/
         var dlls = Directory.GetFiles(libDir, "*.dll", SearchOption.TopDirectoryOnly);
-        if (dlls.Length > 0)
-            return dlls[0];
-
-        // Also check RID-specific subdirectories
-        var rid = System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier;
-        var ridDir = Path.Combine(libDir, rid);
-        if (Directory.Exists(ridDir))
+        if (dlls.Length == 0)
         {
-            dlls = Directory.GetFiles(ridDir, "*.dll", SearchOption.TopDirectoryOnly);
-            if (dlls.Length > 0)
-                return dlls[0];
+            // Check RID-specific subdirectories
+            var rid = System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier;
+            var ridDir = Path.Combine(libDir, rid);
+            if (Directory.Exists(ridDir))
+                dlls = Directory.GetFiles(ridDir, "*.dll", SearchOption.TopDirectoryOnly);
         }
 
-        return null;
+        if (dlls.Length == 0)
+            return null;
+        if (dlls.Length == 1)
+            return dlls[0];
+
+        // When multiple DLLs exist, prefer one matching the package name or containing "provider"
+        var match = dlls.FirstOrDefault(d => Path.GetFileNameWithoutExtension(d)
+            .Equals($"{packageName}-provider", StringComparison.OrdinalIgnoreCase));
+        match ??= dlls.FirstOrDefault(d => Path.GetFileNameWithoutExtension(d)
+            .Contains("provider", StringComparison.OrdinalIgnoreCase));
+        return match ?? dlls[0];
     }
 }
 
