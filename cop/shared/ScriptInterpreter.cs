@@ -154,11 +154,11 @@ public class ScriptInterpreter
                             Exclusions = cmd.Exclusions
                         };
                     }
-                    ExecuteCommand(target, documents, predicateGroups, tempLets, functionGroups, program, allCommands, allOutputs, fileOutputs);
+                    ExecuteCommand(target, documents, predicateGroups, tempLets, functionGroups, program, allCommands, allOutputs, fileOutputs, aggregateCounts);
                     continue;
                 }
 
-                ExecuteCommand(cmd, documents, predicateGroups, letDeclarations, functionGroups, program, allCommands, allOutputs, fileOutputs);
+                ExecuteCommand(cmd, documents, predicateGroups, letDeclarations, functionGroups, program, allCommands, allOutputs, fileOutputs, aggregateCounts);
             }
         }
 
@@ -195,11 +195,11 @@ public class ScriptInterpreter
                         };
                     }
 
-                    ExecuteCommand(cmdTemplate, documents, predicateGroups, tempLets, functionGroups, program, allCommands, allOutputs, fileOutputs);
+                    ExecuteCommand(cmdTemplate, documents, predicateGroups, tempLets, functionGroups, program, allCommands, allOutputs, fileOutputs, aggregateCounts);
                 }
                 else
                 {
-                    ExecuteCommand(cmdTemplate, documents, predicateGroups, letDeclarations, functionGroups, program, allCommands, allOutputs, fileOutputs);
+                    ExecuteCommand(cmdTemplate, documents, predicateGroups, letDeclarations, functionGroups, program, allCommands, allOutputs, fileOutputs, aggregateCounts);
                 }
             }
         }
@@ -223,23 +223,14 @@ public class ScriptInterpreter
         ProgramInfo program,
         Dictionary<string, List<CommandBlock>> allCommands,
         List<PrintOutput> allOutputs,
-        Dictionary<string, List<string>> fileOutputs)
+        Dictionary<string, List<string>> fileOutputs,
+        Dictionary<string, int> aggregateCounts)
     {
         // Evaluate guard predicate if present
         if (cmd.Guard is not null)
         {
             if (!EvaluateGuard(cmd.Guard, program, predicateGroups, letDeclarations, functionGroups))
                 return;
-        }
-
-        // Aggregate counts for template resolution
-        var aggregateCounts = new Dictionary<string, int>();
-        foreach (var otherCmd in allCommands.Values.SelectMany(c => c))
-        {
-            if (otherCmd.Collection is not null && otherCmd.Name is not null)
-            {
-                // We could compute counts here, but for now just use the command name
-            }
         }
 
         // Bare command — no collection, execute once
@@ -1212,11 +1203,11 @@ public class ScriptInterpreter
                 var annotations = RichString.ParseAnnotation(annLit.Annotation);
                 spans.Add(new TextSpan(annLit.Text, annotations));
             }
-            else if (segment is ExpressionSegment expr && expr.PropertyPath.Length == 2)
+            else if (segment is ExpressionSegment expr && expr.PropertyPath.Length >= 2)
             {
-                var collName = expr.PropertyPath[0];
-                var prop = expr.PropertyPath[1];
-                if (prop == "Count" && aggregateCounts.TryGetValue(collName, out var count))
+                var lastProp = expr.PropertyPath[^1];
+                var collName = expr.PropertyPath[^2];
+                if (lastProp == "Count" && aggregateCounts.TryGetValue(collName, out var count))
                 {
                     var annotations = RichString.ParseAnnotation(expr.Annotation);
                     spans.Add(new TextSpan(count.ToString(), annotations));
