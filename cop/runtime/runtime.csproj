@@ -8,7 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\shared\Cop.Core.csproj" />
-    <ProjectReference Include="..\..\providers\code-provider\code-provider.csproj" />
+    <ProjectReference Include="..\..\providers\code\code.csproj" />
     <ProjectReference Include="..\..\providers\markdown-provider\markdown-provider.csproj" />
     <ProjectReference Include="..\..\providers\filesystem-provider\filesystem-provider.csproj" />
   </ItemGroup>

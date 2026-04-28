@@ -13,7 +13,7 @@ public class PredicateEvaluatorTests
         string filePath = "test.cs")
     {
         var registry = new TypeRegistry();
-        ProviderLoader.RegisterSchema(new CodeProvider(), registry);
+        ProviderLoader.RegisterSchema(new CodeSchemaProvider(), registry);
 
         // Load flags definitions and isX predicates from code.cop
         var codeFile = TestInterpreter.CodePackage;
@@ -44,7 +44,7 @@ public class PredicateEvaluatorTests
     private static TypeRegistry CreateTestRegistry()
     {
         var registry = new TypeRegistry();
-        ProviderLoader.RegisterSchema(new CodeProvider(), registry);
+        ProviderLoader.RegisterSchema(new CodeSchemaProvider(), registry);
         var codeFile = TestInterpreter.CodePackage;
         if (codeFile.FlagsDefinitions != null)
             registry.LoadFlagsDefinitions(codeFile.FlagsDefinitions);

@@ -14,7 +14,7 @@ public class TextAndListTests
     private static TypeRegistry CreateTestRegistry()
     {
         var registry = new TypeRegistry();
-        ProviderLoader.RegisterSchema(new CodeProvider(), registry);
+        ProviderLoader.RegisterSchema(new CodeSchemaProvider(), registry);
         return registry;
     }
 

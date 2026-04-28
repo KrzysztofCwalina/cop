@@ -138,6 +138,32 @@ export function toInfo(Api, message: string) => Violation {
     Source = item.Source
 }
 
+# Region overloads
+export function toError(Region, message: string) => Violation {
+    Severity = 'error',
+    Message = message,
+    File = item.File.Path,
+    Line = item.StartLine,
+    Source = item.Source
+}
+
+export function toWarning(Region, message: string) => Violation {
+    Severity = 'warning',
+    Message = message,
+    File = item.File.Path,
+    Line = item.StartLine,
+    Source = item.Source
+}
+
+export function toInfo(Region, message: string) => Violation {
+    Severity = 'info',
+    Message = message,
+    File = item.File.Path,
+    Line = item.StartLine,
+    Source = item.Source
+}
+
+
 # Parameterized check command — users invoke via RUN CHECK(violations)
 export command CHECK(violations) = PRINT(
     '{item.File@dim}({item.Line@dim}): {item.Severity@auto}: {item.Message}',

@@ -276,7 +276,7 @@ public class FlagsTests
     public void Eval_IsSealedPredicate_OnRealTypeDeclaration()
     {
         var registry = new TypeRegistry();
-        Cop.Providers.ProviderLoader.RegisterSchema(new Cop.Providers.CodeProvider(), registry);
+        Cop.Providers.ProviderLoader.RegisterSchema(new Cop.Providers.CodeSchemaProvider(), registry);
         var codeFile = TestInterpreter.CodePackage;
         if (codeFile.FlagsDefinitions != null)
             registry.LoadFlagsDefinitions(codeFile.FlagsDefinitions);

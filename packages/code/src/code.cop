@@ -188,6 +188,16 @@ export type Line = {
     Source : string
 }
 
+export type Region = {
+    Name : string,
+    StartLine : int,
+    EndLine : int,
+    Content : string,
+    ContentHash : string,
+    File : File?,
+    Source : string
+}
+
 export type File = {
     Path : string,
     Language : string?,
@@ -200,7 +210,8 @@ export type Codebase = {
     Files : [File],
     Types : [Type],
     Statements : [Statement],
-    Lines : [Line]
+    Lines : [Line],
+    Regions : [Region]
 }
 
 # Built-in value — implementation is provided by the runtime engine

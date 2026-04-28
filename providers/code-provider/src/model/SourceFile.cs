@@ -14,4 +14,6 @@ public record SourceFile(
     public List<string> Usings { get; init; } = [];
 
     public string? Namespace { get; init; }
+
+    public List<RegionInfo> Regions { get; init; } = [];
 }

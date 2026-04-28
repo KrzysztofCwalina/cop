@@ -1,11 +1,10 @@
 # Cop JSON Package v1.0
-# Provides the Parse() function for loading JSON files into typed collections.
-# Import with: import json
+# Parse() is a built-in function — no import required.
+# This package exists for documentation only.
 #
 # Usage:
 #   type MyRecord = { field : string, count : int }
 #   let Records = Parse('data.json', [MyRecord])
 #
-# Parse() is a built-in function — no type or collection exports needed.
-# The user defines types inline and Parse creates ScriptObject instances
-# matching the type schema.
+# Parse() uses extension-keyed file parsers registered in the runtime.
+# JSON (.json) is supported by default.

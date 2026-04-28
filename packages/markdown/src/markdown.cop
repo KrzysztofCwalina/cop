@@ -1,0 +1,148 @@
+# Markdown Package — Type definitions for markdown document analysis
+# Provides Heading, Link, Section, FenceBlock types and the Markdown aggregate.
+
+import code-analysis
+
+export type Heading = {
+    Text : string,
+    Level : int,
+    Line : int,
+    File : File?,
+    Source : string
+}
+
+export type Link = {
+    Url : string,
+    Text : string?,
+    Line : int,
+    File : File?,
+    Source : string
+}
+
+export type Section = {
+    Heading : string,
+    Level : int,
+    Content : string,
+    StartLine : int,
+    EndLine : int,
+    File : File?,
+    Source : string
+}
+
+export type FenceBlock = {
+    Language : string?,
+    Tag : string?,
+    StartLine : int,
+    EndLine : int,
+    Content : string,
+    ContentHash : string,
+    File : File?,
+    Source : string
+}
+
+export type MarkdownContent = {
+    Headings : [Heading],
+    Links : [Link],
+    Sections : [Section],
+    FenceBlocks : [FenceBlock]
+}
+
+# Built-in value — implementation is provided by the runtime engine
+export let Markdown = runtime::MarkdownContent
+
+# Violation overloads for markdown types
+export function toError(FenceBlock, message: string) => Violation {
+    Severity = 'error',
+    Message = message,
+    File = item.File.Path,
+    Line = item.StartLine,
+    Source = item.Source
+}
+
+export function toWarning(FenceBlock, message: string) => Violation {
+    Severity = 'warning',
+    Message = message,
+    File = item.File.Path,
+    Line = item.StartLine,
+    Source = item.Source
+}
+
+export function toInfo(FenceBlock, message: string) => Violation {
+    Severity = 'info',
+    Message = message,
+    File = item.File.Path,
+    Line = item.StartLine,
+    Source = item.Source
+}
+
+export function toError(Heading, message: string) => Violation {
+    Severity = 'error',
+    Message = message,
+    File = item.File.Path,
+    Line = item.Line,
+    Source = item.Source
+}
+
+export function toWarning(Heading, message: string) => Violation {
+    Severity = 'warning',
+    Message = message,
+    File = item.File.Path,
+    Line = item.Line,
+    Source = item.Source
+}
+
+export function toInfo(Heading, message: string) => Violation {
+    Severity = 'info',
+    Message = message,
+    File = item.File.Path,
+    Line = item.Line,
+    Source = item.Source
+}
+
+export function toError(Link, message: string) => Violation {
+    Severity = 'error',
+    Message = message,
+    File = item.File.Path,
+    Line = item.Line,
+    Source = item.Source
+}
+
+export function toWarning(Link, message: string) => Violation {
+    Severity = 'warning',
+    Message = message,
+    File = item.File.Path,
+    Line = item.Line,
+    Source = item.Source
+}
+
+export function toInfo(Link, message: string) => Violation {
+    Severity = 'info',
+    Message = message,
+    File = item.File.Path,
+    Line = item.Line,
+    Source = item.Source
+}
+
+export function toError(Section, message: string) => Violation {
+    Severity = 'error',
+    Message = message,
+    File = item.File.Path,
+    Line = item.StartLine,
+    Source = item.Source
+}
+
+export function toWarning(Section, message: string) => Violation {
+    Severity = 'warning',
+    Message = message,
+    File = item.File.Path,
+    Line = item.StartLine,
+    Source = item.Source
+}
+
+export function toInfo(Section, message: string) => Violation {
+    Severity = 'info',
+    Message = message,
+    File = item.File.Path,
+    Line = item.StartLine,
+    Source = item.Source
+}

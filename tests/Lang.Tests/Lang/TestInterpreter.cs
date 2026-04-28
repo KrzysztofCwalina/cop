@@ -1,5 +1,6 @@
 using Cop.Lang;
 using Cop.Providers;
+using Cop.Providers.Markdown;
 using Cop.Providers.SourceModel;
 using Cop.Providers.SourceParsers;
 
@@ -23,7 +24,8 @@ internal static class TestInterpreter
     public static ScriptInterpreter Create()
     {
         var registry = new TypeRegistry();
-        ProviderLoader.RegisterSchema(new CodeProvider(), registry);
+        ProviderLoader.RegisterSchema(new CodeSchemaProvider(), registry);
+        ProviderLoader.RegisterSchema(new MarkdownProvider(), registry);
         var codeFile = CodePackage;
         if (codeFile.FlagsDefinitions != null)
             registry.LoadFlagsDefinitions(codeFile.FlagsDefinitions);

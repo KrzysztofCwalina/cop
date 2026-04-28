@@ -13,6 +13,7 @@ public enum DataFormat
     Json = 1,
     // Binary = 2,   // e.g. MessagePack
     InMemoryDatabase = 4,
+    ObjectCollections = 8,
 }
 
 /// <summary>
@@ -75,6 +76,15 @@ public abstract class DataProvider
     /// </summary>
     public virtual DataStore QueryData(ProviderQuery query)
         => throw new NotSupportedException("This provider does not support object queries.");
+
+    /// <summary>
+    /// Queries for collection data as CLR object lists.
+    /// Used by providers with hierarchical CLR data that can't be flattened into DataStore.
+    /// Only callable if <see cref="SupportedFormats"/> includes <see cref="DataFormat.ObjectCollections"/>.
+    /// Returns a dictionary mapping collection names to lists of CLR objects.
+    /// </summary>
+    public virtual Dictionary<string, List<object>>? QueryCollections(ProviderQuery query)
+        => throw new NotSupportedException("This provider does not support CLR object collection queries.");
 }
 
 /// <summary>

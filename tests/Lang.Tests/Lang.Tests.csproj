@@ -15,6 +15,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\cop\runtime\runtime.csproj" />
+    <ProjectReference Include="..\..\providers\csharp-provider\csharp-provider.csproj" />
+    <ProjectReference Include="..\..\providers\python-provider\python-provider.csproj" />
+    <ProjectReference Include="..\..\providers\javascript-provider\javascript-provider.csproj" />
   </ItemGroup>
 
   <ItemGroup>

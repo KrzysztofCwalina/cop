@@ -83,7 +83,8 @@ public static class ProviderLoader
         var schema = ProviderSchema.FromJson(instance.GetSchema());
         registry.RegisterProviderSchema(schema);
 
-        if (instance.SupportedFormats.HasFlag(DataFormat.InMemoryDatabase))
+        if (instance.SupportedFormats.HasFlag(DataFormat.InMemoryDatabase) ||
+            instance.SupportedFormats.HasFlag(DataFormat.ObjectCollections))
         {
             registry.RegisterDataTableAccessors(schema);
 
@@ -132,12 +133,22 @@ public static class ProviderLoader
 
     /// <summary>
     /// Queries a provider with the given query and registers the resulting collections.
+    /// Uses append semantics so multiple providers can contribute to the same collection names.
     /// </summary>
     public static void QueryAndRegister(DataProvider instance, ProviderSchema schema, TypeRegistry registry, ProviderQuery query, List<string>? errors = null)
     {
         try
         {
-            if (instance.SupportedFormats.HasFlag(DataFormat.InMemoryDatabase))
+            if (instance.SupportedFormats.HasFlag(DataFormat.ObjectCollections))
+            {
+                var collections = instance.QueryCollections(query);
+                if (collections != null)
+                {
+                    foreach (var (collName, items) in collections)
+                        registry.AppendGlobalCollection(collName, items);
+                }
+            }
+            else if (instance.SupportedFormats.HasFlag(DataFormat.InMemoryDatabase))
             {
                 var store = instance.QueryData(query);
 
@@ -152,7 +163,7 @@ public static class ProviderLoader
                     var views = new List<object>(table.Count);
                     for (int i = 0; i < table.Count; i++)
                         views.Add(new RecordView(table, i));
-                    registry.RegisterGlobalCollection(collName, views);
+                    registry.AppendGlobalCollection(collName, views);
                 }
             }
             else if (instance.SupportedFormats.HasFlag(DataFormat.Json))
@@ -160,7 +171,7 @@ public static class ProviderLoader
                 var resultJson = instance.Query(query);
                 var collections = JsonCollectionDeserializer.Deserialize(resultJson, schema);
                 foreach (var (collName, items) in collections)
-                    registry.RegisterGlobalCollection(collName, items);
+                    registry.AppendGlobalCollection(collName, items);
             }
             else
             {
@@ -174,6 +185,36 @@ public static class ProviderLoader
             else
                 throw;
         }
+    }
+
+    /// <summary>
+    /// Initializes provider capabilities (document loaders, file parsers, etc.).
+    /// Providers implement <see cref="ICapabilityProvider"/> to register additional capabilities.
+    /// Also registers built-in file parsers (e.g., JSON).
+    /// </summary>
+    public static void InitializeCapabilities(DataProvider instance, TypeRegistry registry, string rootPath)
+    {
+        if (instance is ICapabilityProvider cap)
+            cap.RegisterCapabilities(registry, rootPath);
+    }
+
+    /// <summary>
+    /// Registers built-in file parsers for Parse('file.ext', [Type]).
+    /// Extension-keyed — easily extensible for new formats.
+    /// </summary>
+    public static void RegisterBuiltinFileParsers(TypeRegistry registry, string rootPath)
+    {
+        registry.RegisterFileParser("json", (filePath, typeName) =>
+        {
+            var fullPath = Path.IsPathRooted(filePath) ? filePath : Path.Combine(rootPath, filePath);
+            if (!File.Exists(fullPath))
+                throw new InvalidOperationException($"Parse() file not found: {fullPath}");
+
+            var schema = registry.ExportTypeAsSchema(typeName);
+            var items = JsonCollectionDeserializer.DeserializeArray(File.ReadAllBytes(fullPath), typeName, schema);
+            JsonCollectionDeserializer.RegisterScriptObjectAccessors(registry, schema);
+            return items;
+        });
     }
 
     /// <summary>
@@ -206,11 +247,13 @@ public static class ProviderLoader
 
 /// <summary>
 /// Isolated assembly load context for provider DLLs.
-/// Shares the Cop.Core assembly with the default context to avoid type identity split.
+/// Shares Cop.Core and the shared code model assembly with the default context
+/// to avoid type identity splits for DataProvider, SourceFile, etc.
 /// </summary>
 internal class ProviderLoadContext : AssemblyLoadContext
 {
     private readonly AssemblyDependencyResolver _resolver;
+    private static readonly string? SharedCodeAssemblyName = typeof(CodeSchemaProvider).Assembly.GetName().Name;
 
     public ProviderLoadContext(string pluginPath) : base(isCollectible: true)
     {
@@ -219,8 +262,8 @@ internal class ProviderLoadContext : AssemblyLoadContext
 
     protected override Assembly? Load(AssemblyName assemblyName)
     {
-        // Share Cop.Core with the default context to prevent type identity split
-        if (assemblyName.Name == "Cop.Core")
+        // Share Cop.Core and the code models assembly with the default context
+        if (assemblyName.Name == "Cop.Core" || assemblyName.Name == SharedCodeAssemblyName)
             return null; // falls back to default context
 
         var assemblyPath = _resolver.ResolveAssemblyToPath(assemblyName);

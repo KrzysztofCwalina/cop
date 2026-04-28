@@ -215,10 +215,24 @@ public class TypeRegistry
 
     /// <summary>
     /// Registers a pre-computed global collection (not tied to any document).
+    /// Replaces any existing collection with the same name.
     /// </summary>
     public void RegisterGlobalCollection(string name, List<object> items)
     {
         _globalCollections[name] = items;
+    }
+
+    /// <summary>
+    /// Appends items to an existing global collection, or creates a new one.
+    /// Used by provider loading to merge collections from multiple providers
+    /// (e.g., csharp + python both contributing to Types).
+    /// </summary>
+    public void AppendGlobalCollection(string name, List<object> items)
+    {
+        if (_globalCollections.TryGetValue(name, out var existing))
+            existing.AddRange(items);
+        else
+            _globalCollections[name] = items;
     }
 
     /// <summary>

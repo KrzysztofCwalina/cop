@@ -1,17 +1,48 @@
 using Cop.Core;
+using Cop.Lang;
 using Cop.Providers.SourceModel;
+using Cop.Providers.SourceParsers;
 
 namespace Cop.Providers;
 
 /// <summary>
 /// Built-in provider for source code analysis data (Types, Methods, Statements, etc.).
-/// Uses the Objects path for native CLR lambda accessors.
-/// Unlike FilesystemProvider, this provider does not return global collections — it provides
-/// per-document collection extractors that derive data from parsed source files.
+/// Uses ObjectCollections format — scans and parses source files, returns flat CLR object collections.
+/// Self-initializes with all built-in source parsers and registers document loading capability.
 /// </summary>
-public class CodeProvider : DataProvider
+public class CodeProvider : DataProvider, ICapabilityProvider
 {
-    public override DataFormat SupportedFormats => DataFormat.InMemoryDatabase;
+    public override DataFormat SupportedFormats => DataFormat.ObjectCollections;
+
+    /// <summary>
+    /// Source parser registry. Auto-initialized with all built-in parsers.
+    /// </summary>
+    public SourceParserRegistry Parsers { get; } = CreateDefaultParsers();
+
+    private static SourceParserRegistry CreateDefaultParsers()
+    {
+        var registry = new SourceParserRegistry();
+        registry.Register(new CSharpSourceParser());
+        registry.Register(new TextFileParser());
+        registry.Register(new PythonSourceParser());
+        registry.Register(new JavaScriptSourceParser());
+        return registry;
+    }
+
+    /// <summary>
+    /// Registers the document loader for Load('path') — loads DLL assemblies
+    /// into Documents for collection extraction.
+    /// </summary>
+    public void RegisterCapabilities(TypeRegistry registry, string rootPath)
+    {
+        registry.RegisterDocumentLoader(path =>
+        {
+            var sourceFile = AssemblyApiReader.ReadAssembly(path);
+            for (int i = 0; i < sourceFile.Types.Count; i++)
+                sourceFile.Types[i] = sourceFile.Types[i] with { File = sourceFile };
+            return [new Document(path, sourceFile.Language, sourceFile)];
+        });
+    }
 
     public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
 
@@ -92,6 +123,11 @@ public class CodeProvider : DataProvider
 
                 TypeDef("Member", null,
                     Prop("Name"), Prop("DeclaringType"), Prop("Line", "int")),
+
+                TypeDef("Region", null,
+                    Prop("Name"), Prop("StartLine", "int"), Prop("EndLine", "int"),
+                    Prop("Content"), Prop("ContentHash"),
+                    Opt("File", "File"), Prop("Source")),
             ],
             Collections =
             [
@@ -101,6 +137,7 @@ public class CodeProvider : DataProvider
                 new() { Name = "Files", ItemType = "File" },
                 new() { Name = "Members", ItemType = "Member" },
                 new() { Name = "Api", ItemType = "Api" },
+                new() { Name = "Regions", ItemType = "Region" },
             ]
         };
     }
@@ -134,6 +171,7 @@ public class CodeProvider : DataProvider
                 [typeof(FieldDeclaration)] = "Field",
                 [typeof(PropertyDeclaration)] = "Property",
                 [typeof(EventDeclaration)] = "Event",
+                [typeof(RegionInfo)] = "Region",
             },
             Accessors = BuildAccessors(),
             CollectionExtractors = BuildExtractors(),
@@ -149,6 +187,106 @@ public class CodeProvider : DataProvider
                 ["Api"] = o => ((ApiEntry)o).Signature,
             },
         };
+    }
+
+    /// <summary>
+    /// Scans source files, parses them, and returns flat collections as global data.
+    /// Moves file scanning/parsing logic that was previously in Engine.
+    /// </summary>
+    public override Dictionary<string, List<object>>? QueryCollections(ProviderQuery query)
+    {
+        if (Parsers is null)
+            throw new InvalidOperationException("CodeProvider.Parsers must be set before querying.");
+        if (query.RootPath is null)
+            return new();
+
+        var rootPath = query.RootPath;
+        var excluded = query.ExcludedDirectories;
+
+        // Collect source file paths
+        var filePaths = new List<string>();
+        CollectSourceFiles(rootPath, Parsers, excluded, filePaths);
+
+        // Parse files in parallel
+        var sourceFiles = new System.Collections.Concurrent.ConcurrentBag<SourceFile>();
+        Parallel.ForEach(filePaths,
+            new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
+            filePath =>
+            {
+                var ext = Path.GetExtension(filePath);
+                var parser = Parsers.GetParser(ext);
+                if (parser == null) return;
+
+                SourceFile? sourceFile;
+                try
+                {
+                    var text = File.ReadAllText(filePath);
+                    sourceFile = parser.Parse(filePath, text);
+                }
+                catch
+                {
+                    return;
+                }
+
+                if (sourceFile == null) return;
+
+                var relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
+                var normalizedFile = sourceFile with { Path = relativePath };
+
+                // Stamp StatementInfo.File references
+                for (int i = 0; i < normalizedFile.Statements.Count; i++)
+                    normalizedFile.Statements[i].File = normalizedFile;
+
+                // Stamp TypeDeclaration.File references
+                for (int i = 0; i < normalizedFile.Types.Count; i++)
+                    normalizedFile.Types[i] = normalizedFile.Types[i] with { File = normalizedFile };
+
+                sourceFiles.Add(normalizedFile);
+            });
+
+        // Sort for deterministic order
+        var sorted = sourceFiles.OrderBy(f => f.Path, StringComparer.Ordinal).ToList();
+
+        // Extract flat collections from all source files
+        var extractors = BuildExtractors();
+        var collections = new Dictionary<string, List<object>>();
+
+        // Only extract requested collections if specified, otherwise extract all
+        var requested = query.RequestedCollections;
+        foreach (var (name, extractor) in extractors)
+        {
+            if (requested != null && !requested.Contains(name))
+                continue;
+
+            var items = new List<object>();
+            foreach (var file in sorted)
+                items.AddRange(extractor(file));
+            collections[name] = items;
+        }
+
+        return collections;
+    }
+
+    private static void CollectSourceFiles(string dir, SourceParserRegistry parsers, IReadOnlySet<string>? excluded, List<string> result)
+    {
+        try
+        {
+            foreach (var file in Directory.GetFiles(dir))
+            {
+                var ext = Path.GetExtension(file);
+                if (parsers.GetParser(ext) != null)
+                    result.Add(file);
+            }
+
+            foreach (var subDir in Directory.GetDirectories(dir))
+            {
+                var dirName = Path.GetFileName(subDir);
+                if (excluded is not null && excluded.Contains(dirName)) continue;
+                CollectSourceFiles(subDir, parsers, excluded, result);
+            }
+        }
+        catch (UnauthorizedAccessException) { }
+        catch (IOException) { }
     }
 
     private static Dictionary<string, Dictionary<string, Func<object, object?>>> BuildAccessors()
@@ -280,6 +418,16 @@ public class CodeProvider : DataProvider
                 ["File"] = o => ((ApiEntry)o).File,
                 ["Source"] = o => ((ApiEntry)o).Source,
             },
+            ["Region"] = new()
+            {
+                ["Name"] = o => ((RegionInfo)o).Name,
+                ["StartLine"] = o => (object)((RegionInfo)o).StartLine,
+                ["EndLine"] = o => (object)((RegionInfo)o).EndLine,
+                ["Content"] = o => ((RegionInfo)o).Content,
+                ["ContentHash"] = o => ((RegionInfo)o).ContentHash,
+                ["File"] = o => ((RegionInfo)o).File,
+                ["Source"] = o => ((RegionInfo)o).Source,
+            },
         };
     }
 
@@ -335,6 +483,11 @@ public class CodeProvider : DataProvider
                             entries.Add(ApiEntry.ForField(type, field));
                 }
                 return entries;
+            },
+            ["Regions"] = doc =>
+            {
+                var file = (SourceFile)doc;
+                return file.Regions.Select(r => (object)(r with { File = file })).ToList();
             },
         };
     }

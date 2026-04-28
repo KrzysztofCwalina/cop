@@ -1,0 +1,21 @@
+import code-analysis
+import csharp-snippets/definitions
+
+## C# snippet has no corresponding markdown fence
+export let snippet-missing-docs = snippetRegions:!hasDocumentation
+    :toWarning('{item.Name} has no corresponding markdown code fence')
+
+## Markdown fence references a snippet that does not exist in C# source
+export let snippet-orphaned-ref = snippetFences:!hasSource
+    :toWarning('{item.Tag} references a snippet not found in C# source')
+
+## Same snippet name defined in multiple C# locations
+export let snippet-duplicate-name = snippetRegions:isDuplicateSnippet
+    :toWarning('{item.Name} is defined in multiple locations')
+
+## Markdown snippet content is out of sync with C# source
+export let snippet-stale-content = snippetFences:hasSource:!contentMatchesSource
+    :toWarning('{item.Tag} content is out of sync with C# source')
+
+## All snippet checks combined
+export let csharp-snippets = [snippet-missing-docs, snippet-orphaned-ref, snippet-duplicate-name, snippet-stale-content]

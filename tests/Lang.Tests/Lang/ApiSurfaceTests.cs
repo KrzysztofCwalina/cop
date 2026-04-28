@@ -193,11 +193,11 @@ export command api-list = SAVE('api.txt', '{{item.Signature}}', baseline.Api:any
 ";
 
         var registry = new TypeRegistry();
-        ProviderLoader.RegisterSchema(new CodeProvider(), registry);
+        ProviderLoader.RegisterSchema(new CodeSchemaProvider(), registry);
         registry.RegisterProgramType();
 
-        var docLoader = CreateTestDocumentLoader();
-        var interpreter = new ScriptInterpreter(registry, externalDocumentLoader: docLoader);
+        registry.RegisterDocumentLoader(CreateTestDocumentLoader());
+        var interpreter = new ScriptInterpreter(registry);
 
         var script = ScriptParser.Parse(cop, "test.cop");
         var documents = new List<Document>();
@@ -222,11 +222,11 @@ export command types = SAVE('types.txt', '{{item.Name}}', baseline.Types)
 ";
 
         var registry = new TypeRegistry();
-        ProviderLoader.RegisterSchema(new CodeProvider(), registry);
+        ProviderLoader.RegisterSchema(new CodeSchemaProvider(), registry);
         registry.RegisterProgramType();
 
-        var docLoader = CreateTestDocumentLoader();
-        var interpreter = new ScriptInterpreter(registry, externalDocumentLoader: docLoader);
+        registry.RegisterDocumentLoader(CreateTestDocumentLoader());
+        var interpreter = new ScriptInterpreter(registry);
 
         var script = ScriptParser.Parse(cop, "test.cop");
         var documents = new List<Document>();
@@ -249,11 +249,11 @@ export command check = foreach baseline => PRINT('{{item.Signature}}')
 ";
 
         var registry = new TypeRegistry();
-        ProviderLoader.RegisterSchema(new CodeProvider(), registry);
+        ProviderLoader.RegisterSchema(new CodeSchemaProvider(), registry);
         registry.RegisterProgramType();
 
-        var docLoader = CreateTestDocumentLoader();
-        var interpreter = new ScriptInterpreter(registry, externalDocumentLoader: docLoader);
+        registry.RegisterDocumentLoader(CreateTestDocumentLoader());
+        var interpreter = new ScriptInterpreter(registry);
 
         var script = ScriptParser.Parse(cop, "test.cop");
         var documents = new List<Document>();
@@ -276,11 +276,11 @@ export command print-text = foreach apiText => PRINT('{{item}}')
 ";
 
         var registry = new TypeRegistry();
-        ProviderLoader.RegisterSchema(new CodeProvider(), registry);
+        ProviderLoader.RegisterSchema(new CodeSchemaProvider(), registry);
         registry.RegisterProgramType();
 
-        var docLoader = CreateTestDocumentLoader();
-        var interpreter = new ScriptInterpreter(registry, externalDocumentLoader: docLoader);
+        registry.RegisterDocumentLoader(CreateTestDocumentLoader());
+        var interpreter = new ScriptInterpreter(registry);
 
         var script = ScriptParser.Parse(cop, "test.cop");
         var documents = new List<Document>();
@@ -306,11 +306,11 @@ export command save-api = save('api-surface.txt', apiText)
 ";
 
         var registry = new TypeRegistry();
-        ProviderLoader.RegisterSchema(new CodeProvider(), registry);
+        ProviderLoader.RegisterSchema(new CodeSchemaProvider(), registry);
         registry.RegisterProgramType();
 
-        var docLoader = CreateTestDocumentLoader();
-        var interpreter = new ScriptInterpreter(registry, externalDocumentLoader: docLoader);
+        registry.RegisterDocumentLoader(CreateTestDocumentLoader());
+        var interpreter = new ScriptInterpreter(registry);
 
         var script = ScriptParser.Parse(cop, "test.cop");
         var documents = new List<Document>();

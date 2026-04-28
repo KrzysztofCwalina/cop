@@ -9,13 +9,11 @@ tags: json, parsing, data
 
 # JSON File Parsing
 
-Parses JSON files into typed collections that can be queried with predicates and transforms.
+`Parse()` is a built-in function that reads JSON files into typed collections. No import is required.
 
 ## Usage
 
 ```cop
-import json
-
 type Person = {
     name : string,
     age : int
@@ -52,8 +50,6 @@ The JSON file must contain a top-level array of objects matching the type schema
 ```
 
 ```cop
-import json
-
 type Person = { name : string, age : int }
 let People = Parse('data.json', [Person])
 

@@ -10,7 +10,7 @@ public class TypeBinderTests
     private TypeRegistry CreateRegistry()
     {
         var registry = new TypeRegistry();
-        ProviderLoader.RegisterSchema(new CodeProvider(), registry);
+        ProviderLoader.RegisterSchema(new CodeSchemaProvider(), registry);
         return registry;
     }
 

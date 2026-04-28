@@ -164,7 +164,7 @@ Cop now handles text file analysis (markdown, XML, csproj) via the text file par
 | API listing export & diff | Export-API.ps1 + GenAPI | ✅ `csharp-api:public-api-types/methods/properties/enums` — extracts full public API surface from source |
 | API compatibility / breaking changes | Microsoft.DotNet.ApiCompat | ✅ `csharp-api:public-api-types/methods/properties/enums` — compares public API surface from source against baseline |
 | Public API spell checking | spell-check-public-api.ps1 (cspell) | ✅ Cop can regex-check Type.Name and Method.Name for common misspelling patterns |
-| Code snippet validation | Update-Snippets.ps1 (snippet-generator) | ⚠️ Requires matching markdown fences to compiled code |
+| Code snippet validation | Update-Snippets.ps1 (snippet-generator) | ✅ `csharp-snippets` package — matches `#region Snippet:X` to markdown fences, detects stale content |
 | CHANGELOG.md validation | Verify-ChangeLog.ps1 | ✅ Cop reads .md files via text parser — line-pattern checks on markdown content |
 | README install instructions | CodeChecks.ps1 (no Install-Package) | ✅ `csharp:readme-install-package` — detects `Install-Package` in README |
 | Central Package Management compliance | Validate-CpmCompliance.ps1 | ✅ `csharp:cpm-compliance` — detects `Version=` in .csproj PackageReference |
@@ -172,9 +172,9 @@ Cop now handles text file analysis (markdown, XML, csproj) via the text file par
 | Target framework validation | MSBuild ValidateTargetFrameworks | ✅ Cop reads .csproj as XML lines — can validate `<TargetFramework>` |
 | Configuration schema validation | MSBuild ConfigurationSchema | ⚠️ Requires MSBuild evaluation |
 
-> Cop now handles 8 of 11 build script checks directly via text file parsing and API
-> surface analysis. The remaining 3 require external tool binaries (Bicep compiler,
-> MSBuild evaluation, snippet-to-code matching).
+> Cop now handles 9 of 11 build script checks directly via text file parsing, API
+> surface analysis, and snippet validation. The remaining 2 require external tool
+> binaries (Bicep compiler, MSBuild evaluation).
 
 ---
 
@@ -237,17 +237,16 @@ All 42 AZC rules are now fully covered by Cop checks — zero gaps remain.
 | StyleCop | ~30 | ✅ | 21 checks in `csharp-style` (naming, layout, docs, fields, readability, whitespace) |
 | .NET Analyzers (CA) | ~200 | ✅/⚠️ | CA1031, CA1716, CA1812, CA2000, CA2007 covered; ~200 general rules via Roslyn `NetAnalyzers` |
 | Banned API | 1 | ✅ | `csharp:uri-tostring` |
-| Build scripts | 11 | ✅ (8/11) | 8 covered by cop; 3 require external tool binaries (Bicep, MSBuild, snippets) |
+| Build scripts | 11 | ✅ (9/11) | 9 covered by cop; 2 require external tool binaries (Bicep, MSBuild) |
 | .editorconfig | ~20 | ✅ | Field naming, brace style, modifier order, indentation all covered |
 | API Surface | — | ✅ | `csharp-api` package: full public API extraction (types, methods, properties, events, enums) |
 
 ### Overall
 
 - **42 AZC rules** (API design guidelines) → **42 covered**, **0 gaps**
-- **Non-AZC categories** → **5 residual ⚠️** (out of ~260+ total rules):
+- **Non-AZC categories** → **4 residual ⚠️** (out of ~260+ total rules):
   - CA1062: requires true data-flow analysis (parameter use tracking)
   - ~200 general CA rules: enforced by Roslyn `NetAnalyzers` at compile time
-  - Snippet validation: requires markdown-to-code matching
   - Bicep validation: requires Bicep compiler
   - MSBuild ConfigurationSchema: requires MSBuild evaluation
 - **Everything else is now ✅** — cop implements checks directly or via text file parsing

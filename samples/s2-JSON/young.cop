@@ -1,7 +1,6 @@
 # JSON parsing with custom type definitions.
 # Demonstrates type declarations, JSON deserialization, and predicate filtering.
 # Run with: cop run
-import json
 
 # Define a typed schema for JSON records
 type Person = {
