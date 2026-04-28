@@ -75,7 +75,8 @@ public class CSharpSourceParser : ISourceParser
         return new SourceFile(filePath, "csharp", types, allStatements, sourceText)
         {
             Usings = usings,
-            Namespace = ns
+            Namespace = ns,
+            Regions = ExtractRegions(root, sourceText)
         };
     }
 
@@ -594,4 +595,38 @@ public class CSharpSourceParser : ISourceParser
 
     private static string ExtractBaseTypeName(TypeSyntax type) =>
         type is GenericNameSyntax generic ? generic.Identifier.Text : type.ToString();
+
+    private static List<RegionInfo> ExtractRegions(CompilationUnitSyntax root, string sourceText)
+    {
+        var regions = new List<RegionInfo>();
+        var stack = new Stack<(string Name, int Line)>();
+        var lines = sourceText.Split('\n');
+
+        foreach (var trivia in root.DescendantTrivia())
+        {
+            if (trivia.IsKind(SyntaxKind.RegionDirectiveTrivia))
+            {
+                var directive = (RegionDirectiveTriviaSyntax)trivia.GetStructure()!;
+                var line = directive.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+                var name = directive.EndOfDirectiveToken.LeadingTrivia.ToString().Trim();
+                stack.Push((name, line));
+            }
+            else if (trivia.IsKind(SyntaxKind.EndRegionDirectiveTrivia) && stack.Count > 0)
+            {
+                var directive = (EndRegionDirectiveTriviaSyntax)trivia.GetStructure()!;
+                var endLine = directive.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+                var (name, startLine) = stack.Pop();
+
+                // Extract content between region and endregion (exclusive of markers)
+                var contentLines = new List<string>();
+                for (int i = startLine; i < endLine - 1 && i < lines.Length; i++)
+                    contentLines.Add(lines[i].TrimEnd('\r'));
+                var content = string.Join('\n', contentLines);
+
+                regions.Add(new RegionInfo(name, startLine, endLine, content));
+            }
+        }
+
+        return regions;
+    }
 }

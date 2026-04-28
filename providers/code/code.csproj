@@ -5,11 +5,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>Cop.Providers</RootNamespace>
-    <PublishReadyToRun>true</PublishReadyToRun>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\code\code.csproj" />
+    <ProjectReference Include="..\..\cop\shared\Cop.Core.csproj" />
   </ItemGroup>
 
 </Project>
