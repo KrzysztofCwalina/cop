@@ -18,7 +18,7 @@ public static class Engine
         new Markdown.MarkdownProvider(),
     ];
 
-    private record BuiltinProvider(DataProvider Instance, ProviderSchema Schema, HashSet<string> CollectionNames);
+    private record BuiltinProvider(string Name, DataProvider Instance, ProviderSchema Schema, HashSet<string> CollectionNames);
 
     private static readonly BuiltinProvider[] _builtinProviders = _rawProviders.Select(ToBuiltin).ToArray();
 
@@ -26,7 +26,14 @@ public static class Engine
     {
         var schema = ProviderSchema.FromJson(provider.GetSchema());
         var collNames = new HashSet<string>(schema.Collections.Select(c => c.Name), StringComparer.OrdinalIgnoreCase);
-        return new(provider, schema, collNames);
+        var name = provider switch
+        {
+            FilesystemProvider => "filesystem",
+            CodeSchemaProvider => "code",
+            Markdown.MarkdownProvider => "markdown",
+            _ => provider.ToString() ?? provider.GetType().Name
+        };
+        return new(name, provider, schema, collNames);
     }
 
     /// <summary>
@@ -157,7 +164,7 @@ public static class Engine
                 diagLog($"[diag] {bp.Instance} query: {string.Join(", ", parts)}");
             }
 
-            ProviderLoader.QueryAndRegister(bp.Instance, bp.Schema, typeRegistry, query);
+            ProviderLoader.QueryAndRegister(bp.Instance, bp.Schema, bp.Name, typeRegistry, query);
             diagLog?.Invoke($"[diag] {bp.Instance} query: {phaseSw.ElapsedMilliseconds}ms");
             phaseSw.Restart();
         }
@@ -174,7 +181,17 @@ public static class Engine
             ? new HashSet<string>(commandFilter, StringComparer.OrdinalIgnoreCase)
             : null;
         phaseSw.Restart();
-        var result = interpreter.Run(scriptFiles, documents, commandName, programArgs, filterSet);
+
+        InterpreterResult result;
+        try
+        {
+            result = interpreter.Run(scriptFiles, documents, commandName, programArgs, filterSet);
+        }
+        catch (AmbiguousCollectionException ex)
+        {
+            return new EngineResult([], parseErrors, [$"Error: {ex.Message}"], commandName);
+        }
+
         diagLog?.Invoke($"[diag] Interpreter: {phaseSw.ElapsedMilliseconds}ms ({result.Outputs.Count} outputs)");
         diagLog?.Invoke($"[diag] Total: {totalSw.ElapsedMilliseconds}ms");
 
@@ -306,7 +323,7 @@ public static class Engine
         // Query all built-in providers uniformly
         foreach (var bp in _builtinProviders)
         {
-            ProviderLoader.QueryAndRegister(bp.Instance, bp.Schema, typeRegistry,
+            ProviderLoader.QueryAndRegister(bp.Instance, bp.Schema, bp.Name, typeRegistry,
                 new ProviderQuery { RootPath = rootPath, ExcludedDirectories = ExcludedDirectoryNames });
         }
 
@@ -339,25 +356,32 @@ public static class Engine
             var commandRules = rules.Where(r => allCommands.Contains(r)).ToList();
             var letRules = rules.Where(r => !allCommands.Contains(r) && allLets.Contains(r)).ToList();
 
-            // Run actual commands directly
-            foreach (var rule in commandRules)
+            try
             {
-                var result = interpreter.Run(scriptFiles, documents, rule, programArgs);
-                allOutputs.AddRange(result.Outputs);
-                if (result.FileOutputs is not null)
-                    allFileOutputs.AddRange(result.FileOutputs);
-            }
+                // Run actual commands directly
+                foreach (var rule in commandRules)
+                {
+                    var result = interpreter.Run(scriptFiles, documents, rule, programArgs);
+                    allOutputs.AddRange(result.Outputs);
+                    if (result.FileOutputs is not null)
+                        allFileOutputs.AddRange(result.FileOutputs);
+                }
 
-            // For let collections, synthesize RUN CHECK(name) if check command exists
-            if (letRules.Count > 0 && hasCheckCommand)
+                // For let collections, synthesize RUN CHECK(name) if check command exists
+                if (letRules.Count > 0 && hasCheckCommand)
+                {
+                    var runStatements = string.Join("\n", letRules.Select(name => $"RUN CHECK({name})"));
+                    var wrapperFile = ScriptParser.Parse(runStatements, "<project>");
+                    scriptFiles.Add(wrapperFile);
+                    var result = interpreter.Run(scriptFiles, documents, null, programArgs);
+                    allOutputs.AddRange(result.Outputs);
+                    if (result.FileOutputs is not null)
+                        allFileOutputs.AddRange(result.FileOutputs);
+                }
+            }
+            catch (AmbiguousCollectionException ex)
             {
-                var runStatements = string.Join("\n", letRules.Select(name => $"RUN CHECK({name})"));
-                var wrapperFile = ScriptParser.Parse(runStatements, "<project>");
-                scriptFiles.Add(wrapperFile);
-                var result = interpreter.Run(scriptFiles, documents, null, programArgs);
-                allOutputs.AddRange(result.Outputs);
-                if (result.FileOutputs is not null)
-                    allFileOutputs.AddRange(result.FileOutputs);
+                return new EngineResult(allOutputs, parseErrors, [$"Error: {ex.Message}"], rules[0], allFileOutputs);
             }
 
             return new EngineResult(allOutputs, parseErrors, [], rules[0], allFileOutputs);
@@ -377,8 +401,15 @@ public static class Engine
                 scriptFiles.Add(wrapperFile);
             }
 
-            var result = interpreter.Run(scriptFiles, documents, null, programArgs);
-            return new EngineResult(result.Outputs, parseErrors, [], null, result.FileOutputs, result.Warnings);
+            try
+            {
+                var result = interpreter.Run(scriptFiles, documents, null, programArgs);
+                return new EngineResult(result.Outputs, parseErrors, [], null, result.FileOutputs, result.Warnings);
+            }
+            catch (AmbiguousCollectionException ex)
+            {
+                return new EngineResult([], parseErrors, [$"Error: {ex.Message}"]);
+            }
         }
     }
 

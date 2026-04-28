@@ -31,7 +31,7 @@ public class FilesystemTests
     {
         var registry = new TypeRegistry();
         ProviderLoader.RegisterSchema(_fsProvider, registry);
-        ProviderLoader.QueryAndRegister(_fsProvider, _fsSchema, registry, new ProviderQuery { RootPath = rootPath });
+        ProviderLoader.QueryAndRegister(_fsProvider, _fsSchema, "filesystem", registry, new ProviderQuery { RootPath = rootPath });
         return registry;
     }
 

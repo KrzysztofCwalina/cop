@@ -129,13 +129,13 @@ public static class ProviderLoader
     /// Falls back to JSON format with deserialization.
     /// </summary>
     public static void QueryAndRegister(LoadedProvider provider, TypeRegistry registry, string? rootPath, List<string> errors)
-        => QueryAndRegister(provider.Instance, provider.Schema, registry, new ProviderQuery { RootPath = rootPath }, errors);
+        => QueryAndRegister(provider.Instance, provider.Schema, provider.PackageName, registry, new ProviderQuery { RootPath = rootPath }, errors);
 
     /// <summary>
     /// Queries a provider with the given query and registers the resulting collections.
-    /// Uses append semantics so multiple providers can contribute to the same collection names.
+    /// Collections are registered under the provider's namespace for proper scoping.
     /// </summary>
-    public static void QueryAndRegister(DataProvider instance, ProviderSchema schema, TypeRegistry registry, ProviderQuery query, List<string>? errors = null)
+    public static void QueryAndRegister(DataProvider instance, ProviderSchema schema, string ns, TypeRegistry registry, ProviderQuery query, List<string>? errors = null)
     {
         try
         {
@@ -145,7 +145,7 @@ public static class ProviderLoader
                 if (collections != null)
                 {
                     foreach (var (collName, items) in collections)
-                        registry.AppendGlobalCollection(collName, items);
+                        registry.AppendNamespacedCollection(ns, collName, items);
                 }
             }
             else if (instance.SupportedFormats.HasFlag(DataFormat.InMemoryDatabase))
@@ -163,7 +163,7 @@ public static class ProviderLoader
                     var views = new List<object>(table.Count);
                     for (int i = 0; i < table.Count; i++)
                         views.Add(new RecordView(table, i));
-                    registry.AppendGlobalCollection(collName, views);
+                    registry.AppendNamespacedCollection(ns, collName, views);
                 }
             }
             else if (instance.SupportedFormats.HasFlag(DataFormat.Json))
@@ -171,7 +171,7 @@ public static class ProviderLoader
                 var resultJson = instance.Query(query);
                 var collections = JsonCollectionDeserializer.Deserialize(resultJson, schema);
                 foreach (var (collName, items) in collections)
-                    registry.AppendGlobalCollection(collName, items);
+                    registry.AppendNamespacedCollection(ns, collName, items);
             }
             else
             {

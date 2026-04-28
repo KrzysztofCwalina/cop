@@ -753,7 +753,7 @@ public class ScriptInterpreter
     /// Validates that the parent object exists as a let binding and resolves the property
     /// to the corresponding collection name. Non-dotted names pass through unchanged.
     /// </summary>
-    private static string ResolveDottedCollection(string collection, Dictionary<string, LetDeclaration> letDeclarations)
+    private string ResolveDottedCollection(string collection, Dictionary<string, LetDeclaration> letDeclarations)
     {
         var dotIndex = collection.IndexOf('.');
         if (dotIndex < 0) return collection;
@@ -761,14 +761,16 @@ public class ScriptInterpreter
         var parentName = collection[..dotIndex];
         var propertyName = collection[(dotIndex + 1)..];
 
-        // Verify the parent exists as a let declaration (typically a runtime:: binding)
-        if (!letDeclarations.ContainsKey(parentName))
-        {
-            // Parent may come from a transitive import not yet in scope — try property name directly
+        // Let declarations take priority (local scope: Source.Statements, Disk.Folders)
+        if (letDeclarations.ContainsKey(parentName))
             return propertyName;
-        }
 
-        // The property name IS the collection name (Source.Statements → Statements, Disk.Folders → Folders)
+        // Check if the parent is a known provider namespace (e.g., csharp.Types)
+        // If so, keep the qualified name for namespace-aware resolution
+        if (_typeRegistry.IsGlobalCollection(collection))
+            return collection;
+
+        // Unknown parent — try property name as bare collection for backward compat
         return propertyName;
     }
 

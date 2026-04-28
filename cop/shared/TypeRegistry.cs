@@ -3,6 +3,17 @@ using Cop.Core;
 namespace Cop.Lang;
 
 /// <summary>
+/// Result of resolving a collection name. Handles bare names (may be ambiguous)
+/// and qualified names (e.g., csharp.Types).
+/// </summary>
+public abstract record CollectionResolution
+{
+    public sealed record Found(List<object> Items) : CollectionResolution;
+    public sealed record NotFound() : CollectionResolution;
+    public sealed record Ambiguous(List<string> Namespaces, string CollectionName) : CollectionResolution;
+}
+
+/// <summary>
 /// Central registry for all cop type definitions. Pre-registers core primitives
 /// and loads user/package-defined types from parsed cop files.
 /// </summary>
@@ -15,6 +26,7 @@ public class TypeRegistry
     private readonly Dictionary<Type, string> _clrTypeMappings = new();
     private readonly Dictionary<string, Func<Document, List<object>>> _collectionExtractors = new();
     private readonly Dictionary<string, List<object>> _globalCollections = new();
+    private readonly Dictionary<string, Dictionary<string, List<object>>> _nsCollections = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<(string, string), List<object>> _extractorCache = new();
     private readonly Dictionary<string, Func<string, string, List<object>>> _fileParsers = new(StringComparer.OrdinalIgnoreCase);
     private Func<string, List<Document>>? _documentLoader;
@@ -215,7 +227,8 @@ public class TypeRegistry
 
     /// <summary>
     /// Registers a pre-computed global collection (not tied to any document).
-    /// Replaces any existing collection with the same name.
+    /// Used for runtime-computed collections (Parse results, temp aggregated collections).
+    /// These are NOT namespace-qualified and take priority over namespaced collections.
     /// </summary>
     public void RegisterGlobalCollection(string name, List<object> items)
     {
@@ -223,40 +236,145 @@ public class TypeRegistry
     }
 
     /// <summary>
-    /// Appends items to an existing global collection, or creates a new one.
-    /// Used by provider loading to merge collections from multiple providers
-    /// (e.g., csharp + python both contributing to Types).
+    /// Appends items to a namespace-qualified global collection.
+    /// Used by provider loading — each provider registers under its package name.
     /// </summary>
-    public void AppendGlobalCollection(string name, List<object> items)
+    public void AppendNamespacedCollection(string ns, string collName, List<object> items)
     {
-        if (_globalCollections.TryGetValue(name, out var existing))
+        if (!_nsCollections.TryGetValue(ns, out var nsDict))
+        {
+            nsDict = new(StringComparer.OrdinalIgnoreCase);
+            _nsCollections[ns] = nsDict;
+        }
+        if (nsDict.TryGetValue(collName, out var existing))
             existing.AddRange(items);
         else
-            _globalCollections[name] = items;
+            nsDict[collName] = new List<object>(items);
     }
 
     /// <summary>
-    /// Gets items from a registered global collection, or null if not found.
+    /// Resolves a collection name (bare or qualified) to items.
+    /// Resolution order: flat globals first, then namespaced collections.
+    /// Bare names that exist in multiple namespaces produce Ambiguous.
+    /// </summary>
+    public CollectionResolution ResolveCollection(string name)
+    {
+        // Flat globals (runtime-computed) always win — they are local scope
+        if (_globalCollections.TryGetValue(name, out var flatItems))
+            return new CollectionResolution.Found(flatItems);
+
+        // Qualified name: "csharp.Types"
+        var dotIndex = name.IndexOf('.');
+        if (dotIndex > 0)
+        {
+            var ns = name[..dotIndex];
+            var collName = name[(dotIndex + 1)..];
+            if (_nsCollections.TryGetValue(ns, out var nsDict)
+                && nsDict.TryGetValue(collName, out var nsItems))
+                return new CollectionResolution.Found(nsItems);
+
+            return new CollectionResolution.NotFound();
+        }
+
+        // Bare name: search all namespaces
+        var matches = new List<(string Namespace, List<object> Items)>();
+        foreach (var (ns, nsDict) in _nsCollections)
+        {
+            if (nsDict.TryGetValue(name, out var nsItems))
+                matches.Add((ns, nsItems));
+        }
+
+        return matches.Count switch
+        {
+            0 => new CollectionResolution.NotFound(),
+            1 => new CollectionResolution.Found(matches[0].Items),
+            _ => new CollectionResolution.Ambiguous(
+                matches.Select(m => m.Namespace).Order().ToList(), name)
+        };
+    }
+
+    /// <summary>
+    /// Gets items from a global collection by name. For backward compatibility.
+    /// Checks flat globals first, then resolves namespaced collections (bare or qualified).
+    /// Returns null if not found. Throws if ambiguous.
     /// </summary>
     public List<object>? GetGlobalCollectionItems(string name)
     {
-        return _globalCollections.TryGetValue(name, out var items) ? items : null;
+        var resolution = ResolveCollection(name);
+        return resolution switch
+        {
+            CollectionResolution.Found f => f.Items,
+            CollectionResolution.Ambiguous a => throw new AmbiguousCollectionException(
+                $"'{a.CollectionName}' is ambiguous between: {string.Join(", ", a.Namespaces.Select(n => $"{n}.{a.CollectionName}"))}. Use a qualified name."),
+            _ => null
+        };
     }
 
     /// <summary>
-    /// Returns true if the named collection is a registered global collection.
+    /// Returns true if the named collection exists (flat or namespaced, bare or qualified).
     /// </summary>
-    public bool IsGlobalCollection(string name) => _globalCollections.ContainsKey(name);
+    public bool IsGlobalCollection(string name)
+    {
+        if (_globalCollections.ContainsKey(name))
+            return true;
+
+        var dotIndex = name.IndexOf('.');
+        if (dotIndex > 0)
+        {
+            var ns = name[..dotIndex];
+            var collName = name[(dotIndex + 1)..];
+            return _nsCollections.TryGetValue(ns, out var nsDict) && nsDict.ContainsKey(collName);
+        }
+
+        foreach (var nsDict in _nsCollections.Values)
+        {
+            if (nsDict.ContainsKey(name))
+                return true;
+        }
+        return false;
+    }
 
     /// <summary>
-    /// Removes a global collection registration.
+    /// Removes a flat global collection registration.
     /// </summary>
     public void UnregisterGlobalCollection(string name) => _globalCollections.Remove(name);
 
     /// <summary>
-    /// Gets the names of all registered global collections.
+    /// Gets the names of all registered global collections (flat + namespaced bare names).
+    /// For aggregate count computation. Returns bare names for unambiguous collections,
+    /// and qualified names for all namespaced collections.
     /// </summary>
-    public IEnumerable<string> GetGlobalCollectionNames() => _globalCollections.Keys;
+    public IEnumerable<string> GetGlobalCollectionNames()
+    {
+        // Flat globals
+        foreach (var name in _globalCollections.Keys)
+            yield return name;
+
+        // Track bare name → namespaces for ambiguity detection
+        var bareNames = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (ns, nsDict) in _nsCollections)
+        {
+            foreach (var collName in nsDict.Keys)
+            {
+                // Always yield qualified name
+                yield return $"{ns}.{collName}";
+
+                if (!bareNames.TryGetValue(collName, out var nsList))
+                {
+                    nsList = [];
+                    bareNames[collName] = nsList;
+                }
+                nsList.Add(ns);
+            }
+        }
+
+        // Yield bare names only when unambiguous and not already in flat globals
+        foreach (var (collName, nsList) in bareNames)
+        {
+            if (nsList.Count == 1 && !_globalCollections.ContainsKey(collName))
+                yield return collName;
+        }
+    }
 
     /// <summary>
     /// Registers a document loader for Load('path') calls.
@@ -492,10 +610,23 @@ public class TypeRegistry
 
     /// <summary>
     /// Gets the item type name for a registered collection, or null if not found.
+    /// Handles qualified names by stripping the namespace prefix.
     /// </summary>
     public string? GetCollectionItemType(string collectionName)
     {
-        return _collections.TryGetValue(collectionName, out var decl) ? decl.ItemType : null;
+        if (_collections.TryGetValue(collectionName, out var decl))
+            return decl.ItemType;
+
+        // Qualified name: "csharp.Types" → look up "Types"
+        var dotIndex = collectionName.IndexOf('.');
+        if (dotIndex > 0)
+        {
+            var bareName = collectionName[(dotIndex + 1)..];
+            if (_collections.TryGetValue(bareName, out decl))
+                return decl.ItemType;
+        }
+
+        return null;
     }
 
     private bool HasCycle(string typeName, string baseTypeName)
