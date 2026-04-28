@@ -1,10 +1,16 @@
-# Filesystem queries on disk files and folders.
-# Demonstrates filtering files by extension, path patterns, and size.
+# Parse a data file and query its content.
+# Demonstrates type declarations, JSON parsing, and predicate filtering.
 # Run with: cop run
-import filesystem
+import json
 
-# Find all CSV files in the project
-predicate csvFile(DiskFile) => DiskFile.Extension:equals('.csv')
-let CsvFiles = Disk.DiskFiles:csvFile
+type Person = {
+    name : string,
+    age : int
+}
 
-foreach CsvFiles => PRINT('CSV file: {item.Name} ({item.Size} bytes)')
+let Persons = Parse('people.json', [Person])
+
+predicate young(Person) => Person.age < 30
+let YoungPeople = Persons:young
+
+foreach YoungPeople => PRINT('{item.name} is {item.age}')
