@@ -199,25 +199,6 @@ public static class ProviderLoader
     }
 
     /// <summary>
-    /// Registers built-in file parsers for Parse('file.ext', [Type]).
-    /// Extension-keyed — easily extensible for new formats.
-    /// </summary>
-    public static void RegisterBuiltinFileParsers(TypeRegistry registry, string rootPath)
-    {
-        registry.RegisterFileParser("json", (filePath, typeName) =>
-        {
-            var fullPath = Path.IsPathRooted(filePath) ? filePath : Path.Combine(rootPath, filePath);
-            if (!File.Exists(fullPath))
-                throw new InvalidOperationException($"Parse() file not found: {fullPath}");
-
-            var schema = registry.ExportTypeAsSchema(typeName);
-            var items = JsonCollectionDeserializer.DeserializeArray(File.ReadAllBytes(fullPath), typeName, schema);
-            JsonCollectionDeserializer.RegisterScriptObjectAccessors(registry, schema);
-            return items;
-        });
-    }
-
-    /// <summary>
     /// Finds the provider DLL in the package's lib/ directory.
     /// Prefers a DLL matching the package name or containing "provider".
     /// </summary>

@@ -162,10 +162,9 @@ public static class Engine
             phaseSw.Restart();
         }
 
-        // Initialize provider capabilities (document loaders, etc.) and built-in file parsers
+        // Initialize provider capabilities (document loaders, etc.)
         foreach (var bp in _builtinProviders)
             ProviderLoader.InitializeCapabilities(bp.Instance, typeRegistry, rootPath);
-        ProviderLoader.RegisterBuiltinFileParsers(typeRegistry, rootPath);
 
         // Documents are empty — all collections are now global
         List<Document> documents = [];
@@ -311,10 +310,9 @@ public static class Engine
                 new ProviderQuery { RootPath = rootPath, ExcludedDirectories = ExcludedDirectoryNames });
         }
 
-        // Initialize provider capabilities (document loaders, etc.) and built-in file parsers
+        // Initialize provider capabilities (document loaders, etc.)
         foreach (var bp in _builtinProviders)
             ProviderLoader.InitializeCapabilities(bp.Instance, typeRegistry, rootPath);
-        ProviderLoader.RegisterBuiltinFileParsers(typeRegistry, rootPath);
 
         // Documents are empty — all collections are now global
         List<Document> documents = [];

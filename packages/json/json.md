@@ -5,15 +5,19 @@ title: JSON File Parsing
 description: Parse JSON files into typed collections using user-defined type schemas
 authors: cop-team
 tags: json, parsing, data
+provider: clr
+providerEntry: Cop.Providers.JsonProvider
 ---
 
 # JSON File Parsing
 
-`Parse()` is a built-in function that reads JSON files into typed collections. No import is required.
+Enables `Parse()` for JSON files. Import with `import json`.
 
 ## Usage
 
 ```cop
+import json
+
 type Person = {
     name : string,
     age : int
@@ -30,29 +34,3 @@ let People = Parse('data.json', [Person])
 - **[Type]** — A single-element list containing the target type name. The type must be defined with a `type` declaration.
 
 The JSON file must contain a top-level array of objects matching the type schema.
-
-## Supported Property Types
-
-- `string` — JSON strings
-- `int` — JSON integers
-- `number` — JSON floating-point numbers
-- `bool` — JSON booleans
-- Collection properties — JSON arrays
-- Nested types — JSON objects (define sub-types and reference them)
-
-## Example
-
-```json
-[
-    { "name": "Alice", "age": 30 },
-    { "name": "Bob", "age": 25 }
-]
-```
-
-```cop
-type Person = { name : string, age : int }
-let People = Parse('data.json', [Person])
-
-predicate young(Person) => Person.age < 30
-foreach People:young => PRINT('{item.name} is young')
-```
