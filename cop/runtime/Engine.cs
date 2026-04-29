@@ -114,7 +114,7 @@ public static class Engine
 
         // Load external providers (schema registration + data query)
         phaseSw.Restart();
-        LoadExternalProviders(typeRegistry, providerPackages, rootPath, parseErrors, fatalErrors, diagLog);
+        LoadExternalProviders(typeRegistry, providerPackages, rootPath, parseErrors, fatalErrors, ExcludedDirectoryNames);
         if (providerPackages.Count > 0)
             diagLog?.Invoke($"[diag] External providers: {phaseSw.ElapsedMilliseconds}ms ({providerPackages.Count} providers)");
 
@@ -340,10 +340,7 @@ public static class Engine
             return new EngineResult([], parseErrors, fatalErrors);
 
         // Load external providers
-        System.Console.Error.WriteLine($"[debug] providerPackages.Count before LoadExternal: {providerPackages.Count}");
-        foreach (var (dir, meta) in providerPackages)
-            System.Console.Error.WriteLine($"[debug]   provider: {meta.Name} at {dir}");
-        LoadExternalProviders(typeRegistry, providerPackages, rootPath, parseErrors, fatalErrors);
+        LoadExternalProviders(typeRegistry, providerPackages, rootPath, parseErrors, fatalErrors, ExcludedDirectoryNames);
 
         if (fatalErrors.Count > 0)
             return new EngineResult([], parseErrors, fatalErrors);
@@ -424,11 +421,9 @@ public static class Engine
                 .Where(l => l.IsExported && (!l.IsValueBinding || l.IsCollectionUnion) && !l.IsRuntime)
                 .Select(l => l.Name).ToList();
 
-            System.Console.Error.WriteLine($"[debug] explicitScriptFileCount={explicitScriptFileCount}, totalScriptFiles={scriptFiles.Count}, letNames=[{string.Join(",", letNames)}], hasCheckCommand={hasCheckCommand}");
             if (letNames.Count > 0 && hasCheckCommand)
             {
                 var runStatements = string.Join("\n", letNames.Select(name => $"RUN CHECK({name})"));
-                System.Console.Error.WriteLine($"[debug] Synthesized: {runStatements}");
                 var wrapperFile = ScriptParser.Parse(runStatements, "<project>");
                 scriptFiles.Add(wrapperFile);
             }
@@ -436,7 +431,6 @@ public static class Engine
             try
             {
                 var result = interpreter.Run(scriptFiles, documents, null, programArgs);
-                System.Console.Error.WriteLine($"[debug] Run result: Outputs={result.Outputs.Count}, Warnings={result.Warnings?.Count}");
                 return new EngineResult(result.Outputs, parseErrors, [], null, result.FileOutputs, result.Warnings);
             }
             catch (AmbiguousCollectionException ex)
@@ -445,7 +439,6 @@ public static class Engine
             }
             catch (Exception ex)
             {
-                System.Console.Error.WriteLine($"[debug] Run exception: {ex.GetType().Name}: {ex.Message}");
                 return new EngineResult([], parseErrors, [$"Error: {ex.Message}"]);
             }
         }
@@ -715,27 +708,18 @@ public static class Engine
     /// Loads external CLR providers: registers their schemas into the type registry
     /// and queries them for collection data.
     /// </summary>
-    private static void LoadExternalProviders(TypeRegistry typeRegistry, List<(string Dir, PackageMetadata Meta)> providerPackages, string rootPath, List<string> errors, List<string> fatalErrors, Action<string>? diagLog = null)
+    private static void LoadExternalProviders(TypeRegistry typeRegistry, List<(string Dir, PackageMetadata Meta)> providerPackages, string rootPath, List<string> errors, List<string> fatalErrors, IReadOnlySet<string>? excludedDirectories = null)
     {
         foreach (var (dir, meta) in providerPackages)
         {
             var loaded = ProviderLoader.Load(dir, meta, fatalErrors);
-            if (loaded is null) { System.Console.Error.WriteLine($"[debug] Provider load failed for {meta.Name}"); continue; }
+            if (loaded is null) continue;
 
             // Register schema, types, accessors, and bindings
             ProviderLoader.RegisterSchema(loaded.Instance, typeRegistry);
 
-            System.Console.Error.WriteLine($"[debug] Provider loaded: {loaded.Instance}, Format={loaded.Instance.SupportedFormats}, Collections=[{string.Join(", ", loaded.Schema.Collections.Select(c => c.Name))}]");
-
             // Query for data and register global collections
-            ProviderLoader.QueryAndRegister(loaded, typeRegistry, rootPath, errors);
-
-            // Check what got registered
-            foreach (var coll in loaded.Schema.Collections)
-            {
-                var items = typeRegistry.GetGlobalCollectionItems(coll.Name);
-                System.Console.Error.WriteLine($"[debug]   After register: {coll.Name} = {items?.Count ?? -1} items");
-            }
+            ProviderLoader.QueryAndRegister(loaded, typeRegistry, rootPath, errors, excludedDirectories);
 
             // Initialize capabilities (document loaders, file parsers, etc.)
             ProviderLoader.InitializeCapabilities(loaded.Instance, typeRegistry, rootPath);

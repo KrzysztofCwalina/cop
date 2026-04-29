@@ -33,7 +33,10 @@ let stream-suffix = Code.Types:csharp:streamMissingName
     :toWarning('FDG Naming: {item.Name} inherits from Stream but does not end with Stream')
 
 ## Classes should not use Hungarian notation (C prefix)
-predicate hungarianPrefix(Type) => Type.Kind == 'Class' && Type.Name:matches('^C[A-Z][a-z]')
+## Exclude well-known compound words: CSharp, Cli, Client, Cloud, Clone, Closure, Cluster, Config, ...
+predicate hungarianPrefix(Type) => Type.Kind == 'Class'
+    && Type.Name:matches('^C[A-Z][a-z]')
+    && !Type.Name:matches('^(CSharp|Cli[a-z]|Client|Cloud|Clone|Clos|Cluster|Collection|Column|Comma|Compar|Compil|Compo|Comput|Concat|Concurr|Config|Connect|Console|Constraint|Convert|Crypt|Custom|Context|Contract|Controller|Cursor)')
 let no-hungarian-prefix = Code.Types:csharp:hungarianPrefix
     :toWarning('FDG Naming: {item.Name} uses Hungarian C prefix — remove it')
 

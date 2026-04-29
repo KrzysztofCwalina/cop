@@ -128,8 +128,8 @@ public static class ProviderLoader
     /// Prefers the Objects format (in-process CLR objects) when available for better performance.
     /// Falls back to JSON format with deserialization.
     /// </summary>
-    public static void QueryAndRegister(LoadedProvider provider, TypeRegistry registry, string? rootPath, List<string> errors)
-        => QueryAndRegister(provider.Instance, provider.Schema, provider.PackageName, registry, new ProviderQuery { RootPath = rootPath }, errors);
+    public static void QueryAndRegister(LoadedProvider provider, TypeRegistry registry, string? rootPath, List<string> errors, IReadOnlySet<string>? excludedDirectories = null)
+        => QueryAndRegister(provider.Instance, provider.Schema, provider.PackageName, registry, new ProviderQuery { RootPath = rootPath, ExcludedDirectories = excludedDirectories }, errors);
 
     /// <summary>
     /// Queries a provider with the given query and registers the resulting collections.
