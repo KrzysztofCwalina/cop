@@ -2,7 +2,7 @@
 
 export predicate client(Type) => Type.Name:endsWith('Client')
 export predicate clientOptionsType(Type) => Type.Name:endsWith('ClientOptions')
-export predicate Clients(Types) => csharp && client && !clientOptionsType
+export predicate Clients(Types) => csharp && client
 
 predicate optionsParam(Parameter) => Parameter.Type:endsWith('Options')
 predicate constructorAcceptsOptions(Constructor) => Constructor.Parameters:any(optionsParam)

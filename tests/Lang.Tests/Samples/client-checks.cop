@@ -2,7 +2,7 @@
 
 predicate client(Type) => Type.Name:endsWith('Client')
 predicate clientOptionsType(Type) => Type.Name:endsWith('ClientOptions')
-predicate Clients(Types) => client && !clientOptionsType
+predicate Clients(Types) => client
 predicate optionsParam(Parameter) => Parameter.Type:endsWith('Options')
 predicate constructorAcceptsOptions(Constructor) => Constructor.Parameters:any(optionsParam)
 predicate missingOptionsConstructor(Type) => Type.Constructors:!any(constructorAcceptsOptions)
