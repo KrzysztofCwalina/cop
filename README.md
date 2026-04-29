@@ -8,6 +8,16 @@ Download `cop.exe` from the [releases](https://github.com/KrzysztofCwalina/cop/r
 
 Cop comes with a default package feed (`github.com/KrzysztofCwalina/cop`) so all standard packages are available out of the box.
 
+### VS Code Extension
+
+For syntax highlighting and completions, install the VS Code extension:
+
+1. Open VS Code
+2. Press `Ctrl+Shift+P` → **Extensions: Install from VSIX...**
+3. Select `install/vscode-cop/` from this repository (or package it first with `cd install/vscode-cop && npx @vscode/vsce package`)
+
+The extension provides syntax highlighting, keyword completions, and snippet support for `.cop` files.
+
 ## Hello World
 
 Create a file called `checks.cop` in any project folder:
