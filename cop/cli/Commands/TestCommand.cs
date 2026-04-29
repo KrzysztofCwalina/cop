@@ -43,7 +43,7 @@ public static class TestCommand
             rootPath = scriptsDir;
         }
 
-        Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(msg) : null;
+        Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(RunCommand.ColorDiagLine(msg)) : null;
         var result = Engine.Run(scriptsDir, rootPath, diagLog: diagLog, assertMode: true);
 
         foreach (var error in result.ParseErrors)

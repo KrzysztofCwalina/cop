@@ -88,7 +88,7 @@ public static class RunCommand
         if (!string.IsNullOrEmpty(commands))
             commandFilter = commands.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(msg) : null;
+        Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(ColorDiagLine(msg)) : null;
         var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog);
 
         return HandleResult(result, format, rootPath);
@@ -146,7 +146,7 @@ public static class RunCommand
             // Pass CWD feed paths so locally-restored packages can resolve
             var additionalFeedPaths = FindFeedPathsFromCwd();
 
-            Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(msg) : null;
+            Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(ColorDiagLine(msg)) : null;
             var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog, additionalFeedPaths: additionalFeedPaths);
 
             return HandleResult(result, format, rootPath);
@@ -250,5 +250,23 @@ public static class RunCommand
         var items = outputs.Select(o => new { message = o.Message });
         var json = JsonSerializer.Serialize(items, new JsonSerializerOptions { WriteIndented = true });
         Console.WriteLine(json);
+    }
+
+    /// <summary>
+    /// Apply ANSI colors to diagnostic lines: [diag] in gray, [trace] in cyan, [debug] in magenta.
+    /// </summary>
+    internal static string ColorDiagLine(string msg)
+    {
+        const string gray = "\x1b[90m";
+        const string cyan = "\x1b[36m";
+        const string magenta = "\x1b[35m";
+        const string reset = "\x1b[0m";
+
+        if (msg.StartsWith("[trace]"))
+            return $"{cyan}{msg}{reset}";
+        if (msg.StartsWith("[debug]"))
+            return $"{magenta}{msg}{reset}";
+        // [diag] and everything else
+        return $"{gray}{msg}{reset}";
     }
 }

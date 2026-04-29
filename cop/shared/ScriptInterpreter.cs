@@ -841,6 +841,7 @@ public class ScriptInterpreter
             FunctionCallExpr fc => fc.Name,
             IdentifierExpr id => id.Name,
             MemberAccessExpr ma => ma.Member,
+            UnaryExpr { Operator: "!" } neg => $"!{GetFilterDisplayName(neg.Operand)}",
             _ => filter.ToString() ?? "filter"
         };
     }

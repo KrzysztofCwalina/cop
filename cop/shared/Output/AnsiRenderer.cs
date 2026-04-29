@@ -16,6 +16,10 @@ public static class AnsiRenderer
         ["cyan"] = "\x1b[36m",
         ["white"] = "\x1b[37m",
         ["gray"] = "\x1b[90m",
+        // Semantic aliases — usable in @style annotations (e.g., {text@warning-bold})
+        ["error"] = "\x1b[31m",     // red
+        ["warning"] = "\x1b[33m",   // yellow
+        ["info"] = "\x1b[36m",      // cyan
     };
 
     private static readonly Dictionary<string, string> WeightCodes = new(StringComparer.OrdinalIgnoreCase)

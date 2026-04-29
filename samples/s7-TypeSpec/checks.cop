@@ -10,4 +10,4 @@ predicate isPut(HttpOperation) => HttpOperation.Verb == 'put'
 predicate evenSegments(HttpOperation) => HttpOperation.Path:matches('^((/[^/]+){2})+$')
 
 let put-odd-segments = Operations:isPut:!evenSegments
-foreach put-odd-segments => PRINT('{warning-bold@WARNING}: PUT {item.Name} ({item.Path}) has odd number of path segments')
+foreach put-odd-segments => PRINT('{warning:@warning-bold} PUT {item.Name} ({item.Path}) has odd number of path segments')
