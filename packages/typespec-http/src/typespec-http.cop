@@ -1,5 +1,10 @@
 # TypeSpec HTTP protocol graph types
 
+export type TspDecorator = {
+    Name : string,
+    Arguments : [string]
+}
+
 export type HttpParameter = {
     Name : string,
     Type : string,
@@ -27,7 +32,8 @@ export type HttpOperation = {
     UriTemplate : string,
     Parameters : [HttpParameter],
     Responses : [HttpResponse],
-    Interface : string?
+    Interface : string?,
+    Decorators : [TspDecorator]
 }
 
 export type HttpService = {

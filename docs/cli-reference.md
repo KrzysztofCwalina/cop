@@ -41,7 +41,7 @@ cop run [<command>] [<args>] [-t <target>] [-c <commands>] [-f text|json] [-d]
 
 | Argument / Option | Description |
 |-------------------|-------------|
-| `<command>` | Command name or `.cop` file to run. When omitted, all `.cop` files in the current directory are loaded. |
+| `<command>` | Command name, `.cop` file path, or HTTPS URL to run. When omitted, all `.cop` files in the current directory are loaded. |
 | `<args>` | Extra arguments passed to the program |
 | `-t <target>` | Target directory, file, or comma-separated file list. Overrides the root path that providers scan. Defaults to the current directory. |
 | `-f <format>` | Output format: `text` (default) or `json` |
@@ -53,6 +53,8 @@ cop run [<command>] [<args>] [-t <target>] [-c <commands>] [-f text|json] [-d]
 When no `<command>` argument is given, cop discovers and loads all `.cop` files in the current directory. Unnamed statements (bare `PRINT`, `CHECK`, `foreach`) always execute. Named commands (`command my-check = ...`) only execute when invoked by name or listed in `-c`.
 
 When a `.cop` file path is given, cop loads scripts from that file's directory.
+
+When an HTTPS URL is given, cop downloads the remote `.cop` file, executes it against the current directory (or `-t` target), and resolves imports from locally available packages.
 
 ### Examples
 
@@ -90,6 +92,18 @@ Target specific files:
 
 ```bash
 cop run checks.cop -t Program.cs,Startup.cs
+```
+
+Run a remote `.cop` file from a URL:
+
+```bash
+cop run https://raw.githubusercontent.com/owner/repo/main/checks.cop
+```
+
+Run a remote file against a specific target:
+
+```bash
+cop run https://raw.githubusercontent.com/owner/repo/main/checks.cop -t src/
 ```
 
 Output as JSON:
@@ -237,7 +251,7 @@ cop package <subcommand>
 
 ### cop package restore
 
-Restore packages declared in a `.cop` file.
+Restore packages declared in a `.cop` file. Downloads packages from GitHub feeds, resolves transitive dependencies, and places files in the local `packages/` directory.
 
 ```bash
 cop package restore [<file>]
@@ -247,10 +261,14 @@ cop package restore [<file>]
 |----------|-------------|
 | `<file>` | `.cop` file whose package declarations to restore. When omitted, all `.cop` files in the current directory are used. |
 
+The `.cop` file must declare at least one GitHub feed (`feed 'github.com/owner/repo'`) and one or more `import` statements. The restore command reads these declarations, downloads the packages, and resolves dependencies transitively.
+
 ```bash
 cop package restore
 cop package restore checks.cop
 ```
+
+Set `GITHUB_TOKEN` environment variable for private repos or to avoid rate limits.
 
 ### cop package new
 

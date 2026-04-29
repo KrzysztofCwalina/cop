@@ -39,7 +39,7 @@ public static class Engine
     /// <summary>
     /// Discovers .cop scripts and source files, then runs all commands.
     /// </summary>
-    public static EngineResult Run(string scriptsDir, string rootPath, string? commandName = null, string[]? programArgs = null, string[]? commandFilter = null, Action<string>? diagLog = null, bool assertMode = false)
+    public static EngineResult Run(string scriptsDir, string rootPath, string? commandName = null, string[]? programArgs = null, string[]? commandFilter = null, Action<string>? diagLog = null, bool assertMode = false, string[]? additionalFeedPaths = null)
     {
         var totalSw = Stopwatch.StartNew();
         var phaseSw = Stopwatch.StartNew();
@@ -103,7 +103,7 @@ public static class Engine
         // Create type registry, resolve imports, and detect provider packages
         phaseSw.Restart();
         var providerPackages = new List<(string Dir, PackageMetadata Meta)>();
-        var typeRegistry = CreateTypeRegistry(scriptFiles, scriptsDir, parseErrors, fatalErrors, providerPackages: providerPackages);
+        var typeRegistry = CreateTypeRegistry(scriptFiles, scriptsDir, parseErrors, fatalErrors, providerPackages: providerPackages, additionalFeedPaths: additionalFeedPaths);
         diagLog?.Invoke($"[diag] Type registry & imports: {phaseSw.ElapsedMilliseconds}ms");
 
         if (fatalErrors.Count > 0)
@@ -201,7 +201,7 @@ public static class Engine
     /// <summary>
     /// Creates and populates a TypeRegistry with type definitions from imports and script files.
     /// </summary>
-    private static TypeRegistry CreateTypeRegistry(List<ScriptFile> scriptFiles, string scriptsDir, List<string> errors, List<string> fatalErrors, List<(string Dir, PackageMetadata Meta)>? providerPackages = null)
+    private static TypeRegistry CreateTypeRegistry(List<ScriptFile> scriptFiles, string scriptsDir, List<string> errors, List<string> fatalErrors, List<(string Dir, PackageMetadata Meta)>? providerPackages = null, string[]? additionalFeedPaths = null)
     {
         var feedPaths = FindFeedPaths(scriptsDir);
 
@@ -217,6 +217,16 @@ public static class Engine
                     : Path.GetFullPath(Path.Combine(scriptDir, fp));
                 if (Directory.Exists(resolved) && !feedPaths.Contains(resolved))
                     feedPaths.Add(resolved);
+            }
+        }
+
+        // Append caller-supplied feed paths (e.g., from CWD when running remote scripts)
+        if (additionalFeedPaths is not null)
+        {
+            foreach (var fp in additionalFeedPaths)
+            {
+                if (Directory.Exists(fp) && !feedPaths.Contains(fp))
+                    feedPaths.Add(fp);
             }
         }
 

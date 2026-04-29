@@ -235,6 +235,153 @@ const TYPES = {
         { name: 'Folders', type: '[Folder]' },
         { name: 'Files', type: '[DiskFile]' },
     ]},
+    // TypeSpec raw types
+    TspDecorator: { properties: [
+        { name: 'Name', type: 'string' },
+        { name: 'Arguments', type: '[string]' },
+    ]},
+    TspProperty: { properties: [
+        { name: 'Name', type: 'string' },
+        { name: 'Type', type: 'string' },
+        { name: 'Optional', type: 'bool' },
+        { name: 'Default', type: 'string?' },
+        { name: 'Decorators', type: '[TspDecorator]' },
+    ]},
+    TspModel: { properties: [
+        { name: 'Name', type: 'string' },
+        { name: 'Namespace', type: 'string?' },
+        { name: 'Properties', type: '[TspProperty]' },
+        { name: 'BaseModel', type: 'string?' },
+        { name: 'Decorators', type: '[TspDecorator]' },
+    ]},
+    TspOperation: { properties: [
+        { name: 'Name', type: 'string' },
+        { name: 'Namespace', type: 'string?' },
+        { name: 'Interface', type: 'string?' },
+        { name: 'Parameters', type: '[TspProperty]' },
+        { name: 'ReturnType', type: 'string' },
+        { name: 'Decorators', type: '[TspDecorator]' },
+    ]},
+    TspInterface: { properties: [
+        { name: 'Name', type: 'string' },
+        { name: 'Namespace', type: 'string?' },
+        { name: 'Operations', type: '[TspOperation]' },
+        { name: 'Decorators', type: '[TspDecorator]' },
+    ]},
+    TspEnumMember: { properties: [
+        { name: 'Name', type: 'string' },
+        { name: 'Value', type: 'string?' },
+        { name: 'Decorators', type: '[TspDecorator]' },
+    ]},
+    TspEnum: { properties: [
+        { name: 'Name', type: 'string' },
+        { name: 'Namespace', type: 'string?' },
+        { name: 'Members', type: '[TspEnumMember]' },
+        { name: 'Decorators', type: '[TspDecorator]' },
+    ]},
+    TspUnionVariant: { properties: [
+        { name: 'Name', type: 'string' },
+        { name: 'Type', type: 'string' },
+    ]},
+    TspUnion: { properties: [
+        { name: 'Name', type: 'string' },
+        { name: 'Namespace', type: 'string?' },
+        { name: 'Variants', type: '[TspUnionVariant]' },
+        { name: 'Decorators', type: '[TspDecorator]' },
+    ]},
+    TspScalar: { properties: [
+        { name: 'Name', type: 'string' },
+        { name: 'Namespace', type: 'string?' },
+        { name: 'BaseScalar', type: 'string?' },
+        { name: 'Decorators', type: '[TspDecorator]' },
+    ]},
+    TspNamespace: { properties: [
+        { name: 'Name', type: 'string' },
+        { name: 'FullName', type: 'string' },
+        { name: 'Decorators', type: '[TspDecorator]' },
+    ]},
+    // TypeSpec HTTP types
+    HttpParameter: { properties: [
+        { name: 'Name', type: 'string' },
+        { name: 'Type', type: 'string' },
+        { name: 'In', type: 'string' },
+        { name: 'Optional', type: 'bool' },
+        { name: 'Style', type: 'string?' },
+    ]},
+    HttpHeader: { properties: [
+        { name: 'Name', type: 'string' },
+        { name: 'Type', type: 'string' },
+    ]},
+    HttpResponse: { properties: [
+        { name: 'StatusCode', type: 'string' },
+        { name: 'Description', type: 'string?' },
+        { name: 'Body', type: 'string?' },
+        { name: 'Headers', type: '[HttpHeader]' },
+    ]},
+    HttpOperation: { properties: [
+        { name: 'Name', type: 'string' },
+        { name: 'Verb', type: 'string' },
+        { name: 'Path', type: 'string' },
+        { name: 'UriTemplate', type: 'string' },
+        { name: 'Parameters', type: '[HttpParameter]' },
+        { name: 'Responses', type: '[HttpResponse]' },
+        { name: 'Interface', type: 'string?' },
+        { name: 'Decorators', type: '[TspDecorator]' },
+    ]},
+    HttpService: { properties: [
+        { name: 'Name', type: 'string' },
+        { name: 'Namespace', type: 'string' },
+        { name: 'Operations', type: '[HttpOperation]' },
+        { name: 'Auth', type: 'string?' },
+    ]},
+    // Markdown types
+    Heading: { properties: [
+        { name: 'Text', type: 'string' },
+        { name: 'Level', type: 'int' },
+        { name: 'Line', type: 'int' },
+        { name: 'File', type: 'File?' },
+        { name: 'Source', type: 'string' },
+    ]},
+    Link: { properties: [
+        { name: 'Url', type: 'string' },
+        { name: 'Text', type: 'string?' },
+        { name: 'Line', type: 'int' },
+        { name: 'File', type: 'File?' },
+        { name: 'Source', type: 'string' },
+    ]},
+    Section: { properties: [
+        { name: 'Heading', type: 'string' },
+        { name: 'Level', type: 'int' },
+        { name: 'Content', type: 'string' },
+        { name: 'StartLine', type: 'int' },
+        { name: 'EndLine', type: 'int' },
+        { name: 'File', type: 'File?' },
+        { name: 'Source', type: 'string' },
+    ]},
+    FenceBlock: { properties: [
+        { name: 'Language', type: 'string?' },
+        { name: 'Tag', type: 'string?' },
+        { name: 'StartLine', type: 'int' },
+        { name: 'EndLine', type: 'int' },
+        { name: 'Content', type: 'string' },
+        { name: 'ContentHash', type: 'string' },
+        { name: 'File', type: 'File?' },
+        { name: 'Source', type: 'string' },
+    ]},
+    MarkdownContent: { properties: [
+        { name: 'Headings', type: '[Heading]' },
+        { name: 'Links', type: '[Link]' },
+        { name: 'Sections', type: '[Section]' },
+        { name: 'FenceBlocks', type: '[FenceBlock]' },
+    ]},
+    // Code-analysis Violation type
+    Violation: { properties: [
+        { name: 'Severity', type: 'string' },
+        { name: 'Message', type: 'string' },
+        { name: 'File', type: 'string' },
+        { name: 'Line', type: 'int' },
+        { name: 'Source', type: 'string' },
+    ]},
 };
 
 // ── Completion catalogs ────────────────────────────────────────────────────
@@ -354,11 +501,28 @@ const RUNTIME_TYPES = [
 
 const KNOWN_PACKAGES = [
     { label: 'code', detail: 'Source code structural analysis', kind: Kind.Module },
+    { label: 'csharp', detail: 'C# coding conventions', kind: Kind.Module },
+    { label: 'python', detail: 'Python coding conventions', kind: Kind.Module },
+    { label: 'javascript', detail: 'JavaScript/TypeScript coding conventions', kind: Kind.Module },
     { label: 'filesystem', detail: 'Filesystem structural analysis', kind: Kind.Module },
     { label: 'code-analysis', detail: 'Code analysis utilities', kind: Kind.Module },
+    { label: 'markdown', detail: 'Markdown document analysis', kind: Kind.Module },
     { label: 'typespec', detail: 'TypeSpec analysis', kind: Kind.Module },
     { label: 'typespec-http', detail: 'TypeSpec HTTP analysis', kind: Kind.Module },
 ];
+
+// Collections provided by each package: package name → { collectionName → elementType }
+const PACKAGE_COLLECTIONS = {
+    'code': { Types: 'Type', Statements: 'Statement', Lines: 'Line', Files: 'File' },
+    'csharp': { Types: 'Type', Statements: 'Statement', Lines: 'Line', Files: 'File' },
+    'python': { Types: 'Type', Statements: 'Statement', Lines: 'Line', Files: 'File' },
+    'javascript': { Types: 'Type', Statements: 'Statement', Lines: 'Line', Files: 'File' },
+    'code-analysis': { Types: 'Type', Statements: 'Statement', Lines: 'Line', Files: 'File' },
+    'filesystem': { Folders: 'Folder', DiskFiles: 'DiskFile' },
+    'markdown': { Headings: 'Heading', Links: 'Link', Sections: 'Section', FenceBlocks: 'FenceBlock' },
+    'typespec': { Models: 'TspModel', Operations: 'TspOperation', Interfaces: 'TspInterface', Enums: 'TspEnum', Unions: 'TspUnion', Scalars: 'TspScalar', Namespaces: 'TspNamespace' },
+    'typespec-http': { Operations: 'HttpOperation', Services: 'HttpService' },
+};
 
 const MODIFIER_FLAGS = [
     { label: 'Public', detail: 'Modifier flag', kind: Kind.EnumMember },
@@ -410,6 +574,7 @@ function scanDocument(doc) {
     const lets = new Map();
     const predicates = new Map();
     const functions = new Map();
+    const types = new Map();
     const imports = [];
 
     for (let i = 0; i < doc.lineCount; i++) {
@@ -423,24 +588,52 @@ function scanDocument(doc) {
         if ((m = text.match(/^(?:export\s+)?let\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s*=\s*(.+)/))) {
             lets.set(m[1], m[2].trim());
         }
-        if ((m = text.match(/^(?:export\s+)?predicate\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s*\(([A-Z][a-zA-Z0-9_]*)\)/))) {
+        if ((m = text.match(/^(?:export\s+)?predicate\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s*\(([A-Z][a-zA-Z0-9_]*)/))) {
             predicates.set(m[1], m[2]);
         }
-        if ((m = text.match(/^(?:export\s+)?function\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s*\(([A-Z][a-zA-Z0-9_]*)\)/))) {
+        if ((m = text.match(/^(?:export\s+)?function\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s*\(([A-Z][a-zA-Z0-9_]*)/))) {
             functions.set(m[1], m[2]);
+        }
+        if ((m = text.match(/^(?:export\s+)?type\s+([A-Z][a-zA-Z0-9_]*)\s*=\s*\{/))) {
+            // Parse type fields
+            const typeName = m[1];
+            const properties = [];
+            for (let j = i + 1; j < doc.lineCount; j++) {
+                const fieldLine = doc.lineAt(j).text.trim();
+                if (fieldLine === '}') break;
+                const fm = fieldLine.match(/^([A-Z][a-zA-Z0-9_]*)\s*:\s*(.+?),?\s*$/);
+                if (fm) {
+                    properties.push({ name: fm[1], type: fm[2].replace(/,$/, '').trim() });
+                }
+            }
+            types.set(typeName, { properties });
         }
     }
 
-    return { lets, predicates, functions, imports };
+    return { lets, predicates, functions, types, imports };
 }
 
 function resolveIdentifierType(name, symbols) {
     if (name === 'Code') return 'Codebase';
     if (name === 'Disk') return 'Filesystem';
+    if (name === 'Markdown') return 'MarkdownContent';
     if (TYPES[name]) return name;
 
     const letExpr = symbols.lets.get(name);
     if (letExpr) return inferExprType(letExpr, symbols);
+
+    // Check if it's a collection from an imported package
+    for (const pkg of symbols.imports) {
+        const collections = PACKAGE_COLLECTIONS[pkg];
+        if (collections && collections[name]) {
+            return `[${collections[name]}]`;
+        }
+    }
+
+    // Check document-defined types
+    if (symbols.types && symbols.types.has(name)) {
+        return name;
+    }
 
     return undefined;
 }
@@ -462,6 +655,11 @@ function inferExprType(expr, symbols) {
                 if (prop) return prop.type;
             }
         }
+        // Namespace-qualified collection: package.Collection (e.g. csharp.Types)
+        const collections = PACKAGE_COLLECTIONS[m[1]];
+        if (collections && collections[m[2]]) {
+            return `[${collections[m[2]]}]`;
+        }
     }
 
     // Bare identifier or identifier:filter:filter...
@@ -475,11 +673,29 @@ function resolvePropertyChain(chain, symbols) {
     if (parts.length < 2) return undefined;
 
     let currentType = resolveIdentifierType(parts[0], symbols);
-    if (!currentType) return undefined;
+    if (!currentType) {
+        // Check namespace-qualified collection: package.Collection
+        const collections = PACKAGE_COLLECTIONS[parts[0]];
+        if (collections && collections[parts[1]]) {
+            currentType = `[${collections[parts[1]]}]`;
+            if (parts.length === 2) return currentType;
+            // Continue resolving from parts[2] onward
+            for (let i = 2; i < parts.length; i++) {
+                const bt = stripNullable(isCollection(currentType) ? elementType(currentType) : currentType);
+                const typeDef = TYPES[bt] || (symbols.types && symbols.types.get(bt));
+                if (!typeDef) return undefined;
+                const prop = typeDef.properties.find(p => p.name === parts[i]);
+                if (!prop) return undefined;
+                currentType = prop.type;
+            }
+            return currentType;
+        }
+        return undefined;
+    }
 
     for (let i = 1; i < parts.length; i++) {
         const bt = stripNullable(isCollection(currentType) ? elementType(currentType) : currentType);
-        const typeDef = TYPES[bt];
+        const typeDef = TYPES[bt] || (symbols.types && symbols.types.get(bt));
         if (!typeDef) return undefined;
         const prop = typeDef.properties.find(p => p.name === parts[i]);
         if (!prop) return undefined;
@@ -682,6 +898,230 @@ function getGeneralCompletions(document) {
     return toItems(items);
 }
 
+// ── Hover provider ─────────────────────────────────────────────────────────
+
+const hoverProvider = {
+    provideHover(document, position, _token) {
+        const symbols = scanDocument(document);
+        const lineText = document.lineAt(position).text;
+        const wordRange = document.getWordRangeAtPosition(position, /[A-Za-z_][A-Za-z0-9_-]*/);
+        if (!wordRange) return undefined;
+
+        const word = document.getText(wordRange);
+
+        // Expand to full dot-chain (e.g. Code.Types.Name)
+        const chain = expandDotChain(lineText, wordRange.start.character, wordRange.end.character);
+
+        // 1. Predicate definition: `predicate name(Type)`
+        if (symbols.predicates.has(word)) {
+            const paramType = symbols.predicates.get(word);
+            const constraint = getPredicateConstraint(document, word);
+            const sig = constraint
+                ? `predicate ${word}(${paramType}:${constraint}) => bool`
+                : `predicate ${word}(${paramType}) => bool`;
+            return new vscode.Hover(
+                new vscode.MarkdownString().appendCodeblock(sig, 'cop')
+            );
+        }
+
+        // 2. Function definition: `function name(Type) => ReturnType`
+        if (symbols.functions.has(word)) {
+            const paramType = symbols.functions.get(word);
+            const retType = getFunctionReturnType(document, word);
+            const sig = retType
+                ? `function ${word}(${paramType}) => ${retType}`
+                : `function ${word}(${paramType})`;
+            return new vscode.Hover(
+                new vscode.MarkdownString().appendCodeblock(sig, 'cop')
+            );
+        }
+
+        // 3. Let bindings
+        if (symbols.lets.has(word)) {
+            const expr = symbols.lets.get(word);
+            const resolvedType = inferExprType(expr, symbols);
+            const typeStr = resolvedType || 'unknown';
+            const md = new vscode.MarkdownString();
+            md.appendCodeblock(`let ${word}: ${typeStr}`, 'cop');
+            if (resolvedType && resolvedType !== expr) {
+                md.appendMarkdown(`\n\n= \`${expr}\``);
+            }
+            return new vscode.Hover(md);
+        }
+
+        // 4. Dot-chain property resolution (e.g. hovering over "Name" in Code.Types.Name)
+        if (chain && chain.includes('.')) {
+            const dotParts = chain.split('.');
+            const propName = dotParts[dotParts.length - 1];
+            const parentChain = dotParts.slice(0, -1).join('.');
+
+            let parentType;
+            if (dotParts.length === 2) {
+                parentType = resolveIdentifierType(dotParts[0], symbols);
+            } else {
+                parentType = resolvePropertyChain(parentChain, symbols);
+            }
+
+            if (parentType) {
+                const bt = stripNullable(isCollection(parentType) ? elementType(parentType) : parentType);
+                const typeDef = TYPES[bt];
+                if (typeDef) {
+                    const prop = typeDef.properties.find(p => p.name === propName);
+                    if (prop) {
+                        const md = new vscode.MarkdownString();
+                        md.appendCodeblock(`(property) ${bt}.${prop.name}: ${prop.type}`, 'cop');
+                        return new vscode.Hover(md);
+                    }
+                }
+                // String/collection built-in properties
+                if (isString(parentType)) {
+                    const sp = STRING_PROPERTIES.find(p => p.label === propName);
+                    if (sp) return new vscode.Hover(new vscode.MarkdownString().appendCodeblock(`(property) string.${propName}${sp.detail}`, 'cop'));
+                }
+                if (isCollection(parentType)) {
+                    const cp = COLLECTION_PROPERTIES.find(p => p.label === propName);
+                    if (cp) return new vscode.Hover(new vscode.MarkdownString().appendCodeblock(`(property) [${elementType(parentType)}].${propName}${cp.detail}`, 'cop'));
+                }
+            }
+        }
+
+        // 5. Runtime variables
+        if (word === 'Code') {
+            return new vscode.Hover(
+                new vscode.MarkdownString().appendCodeblock('(runtime) Code: Codebase', 'cop')
+            );
+        }
+        if (word === 'Disk') {
+            return new vscode.Hover(
+                new vscode.MarkdownString().appendCodeblock('(runtime) Disk: Filesystem', 'cop')
+            );
+        }
+
+        // 6. Type names (built-in and document-defined)
+        const typeDef = TYPES[word] || (symbols.types && symbols.types.get(word));
+        if (typeDef) {
+            const md = new vscode.MarkdownString();
+            md.appendCodeblock(`type ${word}`, 'cop');
+            const propLines = typeDef.properties.map(p => `  ${p.name}: ${p.type}`);
+            if (propLines.length > 0) {
+                md.appendMarkdown('\n\n**Properties:**\n');
+                md.appendCodeblock(propLines.join('\n'), 'cop');
+            }
+            return new vscode.Hover(md);
+        }
+
+        // 7. Predicate parameter variable (the iteration variable in a predicate body)
+        const paramInfo = getEnclosingPredicateParam(document, position);
+        if (paramInfo && word === paramInfo.varName) {
+            return new vscode.Hover(
+                new vscode.MarkdownString().appendCodeblock(`(parameter) ${paramInfo.varName}: ${paramInfo.typeName}`, 'cop')
+            );
+        }
+
+        // 8. Collection names from foreach/let that reference collections
+        const foreachType = resolveForeachVariable(document, position, word, symbols);
+        if (foreachType) {
+            return new vscode.Hover(
+                new vscode.MarkdownString().appendCodeblock(`(variable) ${word}: ${foreachType}`, 'cop')
+            );
+        }
+
+        // 9. Keywords
+        const kw = KEYWORDS.find(k => k.label === word);
+        if (kw) {
+            return new vscode.Hover(
+                new vscode.MarkdownString().appendCodeblock(`(keyword) ${word}`, 'cop').appendMarkdown(`\n\n${kw.detail}`)
+            );
+        }
+
+        return undefined;
+    }
+};
+
+/** Expand the word at cursor to include surrounding dot-chain */
+function expandDotChain(lineText, startChar, endChar) {
+    // Walk left across dots and identifiers
+    let left = startChar;
+    while (left > 0) {
+        if (lineText[left - 1] === '.') {
+            let j = left - 2;
+            while (j >= 0 && /[A-Za-z0-9_-]/.test(lineText[j])) j--;
+            if (j < left - 2) { left = j + 1; } else break;
+        } else break;
+    }
+    // Walk right across dots and identifiers
+    let right = endChar;
+    while (right < lineText.length) {
+        if (lineText[right] === '.') {
+            let j = right + 1;
+            while (j < lineText.length && /[A-Za-z0-9_-]/.test(lineText[j])) j++;
+            if (j > right + 1) { right = j; } else break;
+        } else break;
+    }
+    const chain = lineText.substring(left, right);
+    return /^[A-Za-z_]/.test(chain) ? chain : undefined;
+}
+
+/** Get the constraint (language) for a predicate definition */
+function getPredicateConstraint(doc, predName) {
+    for (let i = 0; i < doc.lineCount; i++) {
+        const text = doc.lineAt(i).text.trim();
+        const m = text.match(new RegExp(`^(?:export\\s+)?predicate\\s+${escapeRegex(predName)}\\s*\\([A-Z][a-zA-Z0-9_]*\\s*:\\s*([a-z][a-zA-Z0-9_]*)\\)`));
+        if (m) return m[1];
+    }
+    return undefined;
+}
+
+/** Get the return type for a function definition */
+function getFunctionReturnType(doc, funcName) {
+    for (let i = 0; i < doc.lineCount; i++) {
+        const text = doc.lineAt(i).text.trim();
+        const m = text.match(new RegExp(`^(?:export\\s+)?function\\s+${escapeRegex(funcName)}\\s*\\([^)]*\\)\\s*=>\\s*([A-Z][a-zA-Z0-9_]*)`));
+        if (m) return m[1];
+    }
+    return undefined;
+}
+
+/** Find the predicate/function enclosing a position and return param info */
+function getEnclosingPredicateParam(doc, position) {
+    for (let i = position.line; i >= 0; i--) {
+        const text = doc.lineAt(i).text.trim();
+        let m = text.match(/^(?:export\s+)?predicate\s+\w+\s*\(([A-Z][a-zA-Z0-9_]*)\)/);
+        if (m) {
+            // Parameter variable is lowercase of the type name by convention: Type -> type, or use the predicate's implicit 'it' variable
+            return { varName: m[1][0].toLowerCase() + m[1].slice(1), typeName: m[1] };
+        }
+        m = text.match(/^(?:export\s+)?predicate\s+\w+\s*\(([A-Z][a-zA-Z0-9_]*)\s*:\s*\w+\)/);
+        if (m) {
+            return { varName: m[1][0].toLowerCase() + m[1].slice(1), typeName: m[1] };
+        }
+        // Stop at another top-level declaration
+        if (i < position.line && /^(?:export\s+)?(?:predicate|function|command|let|type|flags)\b/.test(text)) break;
+    }
+    return undefined;
+}
+
+/** Resolve a foreach iteration variable to its element type */
+function resolveForeachVariable(doc, position, word, symbols) {
+    for (let i = position.line; i >= 0; i--) {
+        const text = doc.lineAt(i).text.trim();
+        const m = text.match(/^foreach\s+([A-Za-z_][A-Za-z0-9_-]*)\s+in\s+(.+)/);
+        if (m && m[1] === word) {
+            const collectionExpr = m[2].trim();
+            const collType = inferExprType(collectionExpr, symbols);
+            if (collType && isCollection(collType)) {
+                return elementType(collType);
+            }
+            return collType || 'unknown';
+        }
+    }
+    return undefined;
+}
+
+function escapeRegex(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // ── Extension entry points ─────────────────────────────────────────────────
 
 function activate(context) {
@@ -690,6 +1130,12 @@ function activate(context) {
             { language: 'cop', scheme: 'file' },
             provider,
             '.', ':', ' '
+        )
+    );
+    context.subscriptions.push(
+        vscode.languages.registerHoverProvider(
+            { language: 'cop', scheme: 'file' },
+            hoverProvider
         )
     );
 }

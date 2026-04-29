@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
+using System.Net.Http;
 using System.Text.Json;
 using Cop.Lang;
 using Cop.Providers;
@@ -13,7 +14,7 @@ public static class RunCommand
         var commandArg = new Argument<string>("command")
         {
             Arity = ArgumentArity.ZeroOrOne,
-            Description = "Command name or .cop file to run"
+            Description = "Command name, .cop file, or HTTPS URL to run"
         };
         var extraArgsArg = new Argument<string[]>("args")
         {
@@ -46,6 +47,9 @@ public static class RunCommand
 
     public static int Execute(string? command, string[]? programArgs = null, string? target = null, string? format = null, string? commands = null, bool diag = false)
     {
+        if (command != null && IsUri(command))
+            return ExecuteFromUri(command, programArgs, target, format, commands, diag);
+
         string? commandName = null;
         string scriptsDir;
         string rootPath;
@@ -87,6 +91,101 @@ public static class RunCommand
         Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(msg) : null;
         var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog);
 
+        return HandleResult(result, format, rootPath);
+    }
+
+    private static int ExecuteFromUri(string uri, string[]? programArgs, string? target, string? format, string? commands, bool diag)
+    {
+        if (!uri.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Error.WriteLine("Error: Only HTTPS URLs are supported for remote .cop files");
+            return 1;
+        }
+
+        string? tempDir = null;
+        try
+        {
+            // Download the .cop file
+            using var httpClient = new HttpClient();
+            httpClient.DefaultRequestHeaders.Add("User-Agent", "cop-cli");
+
+            var response = httpClient.GetAsync(uri).GetAwaiter().GetResult();
+            if (!response.IsSuccessStatusCode)
+            {
+                Console.Error.WriteLine($"Error: Failed to download '{uri}' (HTTP {(int)response.StatusCode})");
+                return 1;
+            }
+
+            var content = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+
+            // Save to temp directory with .cop extension
+            tempDir = Path.Combine(Path.GetTempPath(), $"cop-remote-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(tempDir);
+            var tempFile = Path.Combine(tempDir, "remote.cop");
+            File.WriteAllText(tempFile, content);
+
+            // scriptsDir = temp dir, rootPath = CWD (or -t override)
+            var scriptsDir = tempDir;
+            var rootPath = !string.IsNullOrEmpty(target)
+                ? Path.GetFullPath(target)
+                : Directory.GetCurrentDirectory();
+
+            // Parse command name from extra args
+            string? commandName = null;
+            if (programArgs is { Length: > 0 } && !programArgs[0].StartsWith('/') && !programArgs[0].StartsWith('-'))
+            {
+                commandName = programArgs[0];
+                programArgs = programArgs[1..];
+            }
+
+            // Parse -c filter
+            string[]? commandFilter = null;
+            if (!string.IsNullOrEmpty(commands))
+                commandFilter = commands.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            // Pass CWD feed paths so locally-restored packages can resolve
+            var additionalFeedPaths = FindFeedPathsFromCwd();
+
+            Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(msg) : null;
+            var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog, additionalFeedPaths: additionalFeedPaths);
+
+            return HandleResult(result, format, rootPath);
+        }
+        catch (HttpRequestException ex)
+        {
+            Console.Error.WriteLine($"Error: Failed to download '{uri}': {ex.Message}");
+            return 1;
+        }
+        finally
+        {
+            if (tempDir is not null && Directory.Exists(tempDir))
+            {
+                try { Directory.Delete(tempDir, recursive: true); }
+                catch { /* best-effort cleanup */ }
+            }
+        }
+    }
+
+    private static bool IsUri(string value)
+        => value.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+        || value.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
+
+    private static string[] FindFeedPathsFromCwd()
+    {
+        var paths = new List<string>();
+        var dir = Directory.GetCurrentDirectory();
+        while (dir is not null)
+        {
+            var packagesDir = Path.Combine(dir, "packages");
+            if (Directory.Exists(packagesDir))
+                paths.Add(packagesDir);
+            dir = Path.GetDirectoryName(dir);
+        }
+        return paths.ToArray();
+    }
+
+    private static int HandleResult(EngineResult result, string? format, string rootPath)
+    {
         foreach (var error in result.ParseErrors)
             Console.Error.WriteLine(error);
 

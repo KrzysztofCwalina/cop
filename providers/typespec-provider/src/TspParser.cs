@@ -312,6 +312,23 @@ public class TspParser
             Decorators = decorators,
         };
 
+        // Template parameters: interface Foo<T, U>
+        if (Current.Kind == TspTokenKind.Unknown_Token && Current.Value == "<")
+        {
+            iface.TemplateParameters = ParseTemplateParameterNames();
+        }
+
+        // Extends: interface Foo extends Bar, Baz<T>
+        if (Current.Kind == TspTokenKind.Extends)
+        {
+            Advance();
+            iface.Extends.Add(ParseTypeReference());
+            while (ConsumeOptional(TspTokenKind.Comma))
+            {
+                iface.Extends.Add(ParseTypeReference());
+            }
+        }
+
         Expect(TspTokenKind.OpenBrace);
         while (Current.Kind != TspTokenKind.CloseBrace && Current.Kind != TspTokenKind.EndOfFile)
         {
@@ -722,6 +739,43 @@ public class TspParser
         }
 
         return "<" + string.Join(", ", args) + ">";
+    }
+
+    /// <summary>
+    /// Parses template parameter names from &lt;T, U, V&gt;.
+    /// Returns just the bare parameter names (no constraints).
+    /// </summary>
+    private List<string> ParseTemplateParameterNames()
+    {
+        // < already detected as Unknown_Token "<"
+        Advance(); // skip <
+        var names = new List<string>();
+
+        while (_pos < _tokens.Count)
+        {
+            if (Current.Kind == TspTokenKind.Unknown_Token && Current.Value == ">")
+            {
+                Advance(); // skip >
+                break;
+            }
+
+            if (Current.Kind == TspTokenKind.Identifier)
+            {
+                names.Add(Current.Value!);
+                Advance();
+
+                // Skip optional constraint: extends Type or = DefaultType
+                if (Current.Kind == TspTokenKind.Extends || Current.Kind == TspTokenKind.Equals)
+                {
+                    Advance();
+                    ParseTypeReference(); // skip the constraint type
+                }
+            }
+
+            ConsumeOptional(TspTokenKind.Comma);
+        }
+
+        return names;
     }
 
     // --- Helpers ---

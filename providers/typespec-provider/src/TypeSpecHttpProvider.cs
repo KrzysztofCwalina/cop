@@ -103,15 +103,14 @@ public class TypeSpecHttpProvider : DataProvider
         // Top-level tables
         var services = Want("Services") ? db.AddTable("Services", "HttpService", 4) : null;
 
-        // Populate operations (used both top-level and as child of Services)
-        if (Want("Operations"))
+        // Populate all operations once (shared by both top-level Operations and Services.Operations)
+        var opIndexMap = new Dictionary<HttpOperation, int>(ReferenceEqualityComparer.Instance);
+        foreach (var o in httpSpec.Operations)
         {
-            foreach (var o in httpSpec.Operations)
-            {
-                if (!MatchesFilter(query.Filter, "Name", o.Name, "Verb", o.Verb))
-                    continue;
-                AddOperation(operations, parameters, responses, headers, decorators, decArgs, o);
-            }
+            if (!MatchesFilter(query.Filter, "Name", o.Name, "Verb", o.Verb))
+                continue;
+            opIndexMap[o] = operations.Count;
+            AddOperation(operations, parameters, responses, headers, decorators, decArgs, o);
         }
 
         // Services: Name(0), Namespace(1), Operations(2→Operations), Auth(3)
@@ -124,10 +123,19 @@ public class TypeSpecHttpProvider : DataProvider
                 int row = services.AddRow();
                 services.SetString(row, 0, s.Name);
                 services.SetString(row, 1, s.Namespace);
-                int opStart = operations.Count;
+
+                // Find the range of this service's operations in the shared operations table
+                int opStart = -1;
+                int opCount = 0;
                 foreach (var o in s.Operations)
-                    AddOperation(operations, parameters, responses, headers, decorators, decArgs, o);
-                services.SetRange(row, 2, opStart, s.Operations.Count);
+                {
+                    if (opIndexMap.TryGetValue(o, out var idx))
+                    {
+                        if (opStart < 0) opStart = idx;
+                        opCount++;
+                    }
+                }
+                services.SetRange(row, 2, opStart < 0 ? 0 : opStart, opCount);
                 services.SetString(row, 3, s.Auth);
             }
         }

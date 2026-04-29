@@ -62,6 +62,8 @@ public class TspInterface
     public string? Namespace { get; set; }
     public List<TspOperation> Operations { get; set; } = [];
     public List<TspDecorator> Decorators { get; set; } = [];
+    public List<string> Extends { get; set; } = [];
+    public List<string> TemplateParameters { get; set; } = [];
 }
 
 public class TspEnum

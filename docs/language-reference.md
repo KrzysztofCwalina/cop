@@ -97,7 +97,35 @@ feed 'github.com/owner/repo'     # remote GitHub feed
 feed '../my-packages'             # local relative path
 ```
 
-Remote feeds point to GitHub repos containing package directories. Local feeds point to directories on disk. Feed directives must appear before `import` statements.
+Remote feeds point to GitHub repos containing a `packages/` directory. Local feeds point to directories on disk. Feed directives must appear before `import` statements.
+
+#### Importing packages from GitHub
+
+To use packages hosted in a GitHub repository:
+
+1. Declare the feed and imports in your `.cop` file:
+
+```ruby
+feed 'github.com/KrzysztofCwalina/cop'
+import code
+import csharp-library
+```
+
+2. Restore packages locally (downloads them into your project's `packages/` directory):
+
+```bash
+cop package restore my-checks.cop
+```
+
+3. Run your program (imports resolve from the local `packages/` directory):
+
+```bash
+cop run my-checks.cop
+```
+
+The `cop restore` command reads `feed` and `import` declarations, downloads the referenced packages from GitHub, resolves transitive dependencies, and places all files under `packages/` in your project root. After restore, `cop run` resolves imports entirely from local directories — no network access is required at runtime.
+
+> **Tip:** Commit the restored `packages/` directory to version control so CI/CD pipelines and teammates don't need to run `cop restore` separately.
 
 ### Export
 
