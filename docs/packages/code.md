@@ -209,8 +209,7 @@ import code
 
 # Client library design checks
 predicate client(Type) => Type.Name:endsWith('Client')
-predicate clientOptions(Type) => Type.Name:endsWith('ClientOptions')
-predicate Clients(Types) => client && !clientOptions
+predicate Clients(Types) => client && !isAbstract
 predicate optionsType(Parameter) => Parameter.Type.Name:endsWith('Options')
 predicate hasOptions(Constructor) => Constructor.Parameters:any(optionsType)
 predicate missingOptions(Type) => Type.Constructors:none(hasOptions)

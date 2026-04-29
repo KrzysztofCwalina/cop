@@ -21,12 +21,10 @@ command test-long-method-no-crash = ASSERT_EMPTY(csharp.Types:hasLongMethod)
 # --- README: Writing Checks ---
 
 predicate client(Type) => Type.Name:endsWith('Client')
-predicate clientOptions(Type) => Type.Name:endsWith('ClientOptions')
-let CsClients = csharp.Types:client:!clientOptions
+let CsClients = csharp.Types:client
 
 command test-client-found = ASSERT(csharp.Types:client)
-command test-client-options-found = ASSERT(csharp.Types:clientOptions)
-command test-clients-not-options = ASSERT(CsClients)
+command test-clients = ASSERT(CsClients)
 
 # Predicate composition
 predicate optionsType(Parameter) => Parameter.Type.Name:endsWith('Options')

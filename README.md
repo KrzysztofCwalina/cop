@@ -164,10 +164,9 @@ import code
 
 # Predicates test individual items
 predicate client(Type) => Type.Name:endsWith('Client')
-predicate clientOptions(Type) => Type.Name:endsWith('ClientOptions')
 
 # Let declarations create filtered subsets
-let Clients = Code.Types:client:!clientOptions
+let Clients = Code.Types:client
 
 # foreach iterates over the subset — one line per item
 foreach Clients:csharp:!isSealed => PRINT('{error:@red} {item.Name} should be sealed')

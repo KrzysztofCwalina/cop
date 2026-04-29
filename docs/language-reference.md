@@ -205,10 +205,10 @@ predicate missingOptions(Type) => Type.Constructors:none(hasOptions)
 **Subset predicates** — a predicate over a list name creates a named subset. The predicate’s body filters are AND-combined with the base list:
 
 ```ruby
-predicate Clients(Types) => client && !clientOptions
+predicate Clients(Types) => client && !isAbstract
 ```
 
-This declares `Clients` as a subset of `Types` where `client` is true and `clientOptions` is false.
+This declares `Clients` as a subset of `Types` where `client` is true and `isAbstract` is false.
 
 **Narrowing predicates** — a predicate can narrow items to a more specific type using `: NarrowedType`:
 
