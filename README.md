@@ -163,8 +163,8 @@ Most checks follow the same pattern: import a package, define predicates, filter
 import code
 
 # Predicates test individual items
-predicate client(Type) => Type.Name:ew('Client')
-predicate clientOptions(Type) => Type.Name:ew('ClientOptions')
+predicate client(Type) => Type.Name:endsWith('Client')
+predicate clientOptions(Type) => Type.Name:endsWith('ClientOptions')
 
 # Let declarations create filtered subsets
 let Clients = Code.Types:client:!clientOptions
@@ -176,7 +176,7 @@ foreach Clients:csharp:!isSealed => PRINT('{error:@red} {item.Name} should be se
 Predicates compose — you can reference one predicate from another:
 
 ```ruby
-predicate optionsType(Parameter) => Parameter.Type.Name:ew('Options')
+predicate optionsType(Parameter) => Parameter.Type.Name:endsWith('Options')
 predicate hasOptions(Constructor) => Constructor.Parameters:any(optionsType)
 predicate missingOptions(Type) => Type.Constructors:none(hasOptions)
 
@@ -226,8 +226,8 @@ Cop has two string comparison modes to make cross-language checks easy:
 
 | Mode | Syntax | Behavior |
 |---|---|---|
-| **CaseInsensitive** | `==`, `!=`, `ct`, etc. | Ignores letter case (default for all operations) |
-| **ConventionInsensitive** | `:sm()` or `.Normalized` | Ignores case AND naming convention (`FooBar` = `foo_bar` = `fooBar`) |
+| **CaseInsensitive** | `==`, `!=`, `contains`, etc. | Ignores letter case (default for all operations) |
+| **ConventionInsensitive** | `:sameAs()` or `.Normalized` | Ignores case AND naming convention (`FooBar` = `foo_bar` = `fooBar`) |
 
 ### CaseInsensitive (Default)
 
@@ -236,20 +236,20 @@ All string comparisons ignore case by default:
 | Operation | Example | Behavior |
 |---|---|---|
 | `==`, `!=` | `item.Name == 'foo'` | Case-insensitive equality |
-| `ct` | `Name:ct('task')` | Case-insensitive substring |
-| `sw` | `Name:sw('i')` | Case-insensitive prefix |
-| `ew` | `Name:ew('Client')` | Case-insensitive suffix |
-| `rx` | `Name:rx('^Foo$')` | **Case-sensitive** regex (escape hatch) |
+| `contains` | `Name:contains('task')` | Case-insensitive substring |
+| `startsWith` | `Name:startsWith('i')` | Case-insensitive prefix |
+| `endsWith` | `Name:endsWith('Client')` | Case-insensitive suffix |
+| `matches` | `Name:matches('^Foo$')` | **Case-sensitive** regex (escape hatch) |
 
 ### ConventionInsensitive
 
-Use `:sm()` to compare identifiers regardless of naming convention:
+Use `:sameAs()` to compare identifiers regardless of naming convention:
 
 ```ruby
 # All of these are true — FooBar, foo_bar, fooBar, FOO_BAR all normalize to the same form
-Type.Name:sm('foo_bar')
-Type.Name:sm('FooBar')
-Type.Name:sm('fooBar')
+Type.Name:sameAs('foo_bar')
+Type.Name:sameAs('FooBar')
+Type.Name:sameAs('fooBar')
 ```
 
 This is ideal for cross-language rules where C# uses `PascalCase`, Python uses `snake_case`, and JS uses `camelCase`.

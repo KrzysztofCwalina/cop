@@ -44,9 +44,9 @@ command test-starts-with = ASSERT(csharp.Types:startsWithBlob)
 command test-contains = ASSERT(csharp.Types:containsClient)
 command test-matches = ASSERT(csharp.Types:matchesPattern)
 
-# Short aliases
-predicate swBlob(Type) => Type.Name:sw('Blob')
-predicate ewClient(Type) => Type.Name:ew('Client')
+# Short aliases (documented in language-reference.md alias table)
+predicate swBlob(Type) => Type.Name:startsWith('Blob')
+predicate ewClient(Type) => Type.Name:endsWith('Client')
 command test-sw-alias = ASSERT(csharp.Types:swBlob)
 command test-ew-alias = ASSERT(csharp.Types:ewClient)
 

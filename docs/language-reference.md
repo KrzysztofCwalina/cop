@@ -387,7 +387,7 @@ For brevity, predicates also accept short aliases:
 | `contains` | `ct` | `containsAny` | `ca` |
 | `matches` | `rx` | `sameAs` | `sm` |
 
-Example: `Type.Name:sw('I')` is equivalent to `Type.Name:startsWith('I')`.
+Example: `Type.Name:startsWith('I')` is equivalent to the short alias `Type.Name:sw('I')`.
 
 ### String Properties
 

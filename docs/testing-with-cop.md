@@ -8,6 +8,7 @@ Cop provides built-in test commands that verify collection properties. Tests are
 
 ```ruby
 import csharp
+import code
 
 command test-has-types = ASSERT(csharp.Types)
 command test-has-public = ASSERT(csharp.Types:isPublic)
