@@ -354,6 +354,13 @@ public class GitHubPackageSource
                     {
                         files[itemRelativePath] = Convert.FromBase64String(item.Content);
                     }
+                    else if (item.DownloadUrl != null)
+                    {
+                        // Directory listings don't include content; download each file individually
+                        var fileResponse = await _httpClient.GetAsync(item.DownloadUrl, ct);
+                        if (fileResponse.IsSuccessStatusCode)
+                            files[itemRelativePath] = await fileResponse.Content.ReadAsByteArrayAsync(ct);
+                    }
                 }
             }
         }
