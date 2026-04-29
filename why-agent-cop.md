@@ -59,13 +59,13 @@ The DSL is intentionally a **formal specification language** — readable by any
 
 ## The Strategic Opportunity: Benchmarking Agents
 
-Agent Cop creates a **quantitative framework for measuring agent quality**. By running the same rule sets against code produced by different agents (GitHub Copilot, Claude, Codex, etc.), we can:
+Agent Cop creates a **quantitative framework for measuring agent quality**. By running the same architect-defined checks against code produced by different agents (GitHub Copilot, Claude, Codex, etc.), we can:
 
-- Produce objective "slop scores" that compare agent output quality
-- Demonstrate that **Microsoft Copilot produces less slop** than competitors
+- Produce objective pass/fail results that compare how well each agent respects architectural rules
+- Demonstrate that **Microsoft Copilot produces fewer violations** than competitors
 - Give customers a data-driven reason to choose Copilot — not just speed, but *quality*
 
-This shifts the competitive narrative from "which agent writes code fastest" to "which agent writes code that architects actually trust."
+This shifts the competitive narrative from "which agent writes code fastest" to "which agent writes code that passes the checks architects care about."
 
 ## Summary
 
@@ -74,7 +74,7 @@ This shifts the competitive narrative from "which agent writes code fastest" to 
 | **Agent output** | Unchecked, requires manual review | Deterministically validated |
 | **Architect role** | Bottleneck reviewer of all code | Defines rules once, trusts enforcement |
 | **Feedback loop** | Human reviews → files issue → agent may fix | Tool detects → agent auto-fixes |
-| **Agent comparison** | Subjective ("feels better") | Quantitative slop scores |
+| **Agent comparison** | Subjective ("feels better") | Objective: passes or fails architect-defined checks |
 | **Copilot positioning** | Feature parity race | Quality differentiation |
 
 ## Prototype
