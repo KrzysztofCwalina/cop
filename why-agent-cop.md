@@ -32,14 +32,15 @@ We propose **Agent Cop** — a static analysis tool purpose-built to detect and 
 
 The key insight: architects already *know* the rules — they just have no way to encode them into something deterministic. Today they write wiki pages, leave PR comments, and repeat themselves in every review. Agent Cop gives them a direct path from architectural intent to a **formal specification** that is enforced automatically.
 
-For example, an architect building a web application who wants "all controller actions must validate input" or "never call the database directly from a controller" doesn't need to file a tooling request or wait for a custom analyzer. They write a short formal specification:
+For example, an architect who wants "if a method has both sync and async variants, always call the async one" doesn't need to file a tooling request or wait for a custom analyzer. They write a short formal specification:
 
 ```
-predicate controller-direct-db-call(Statement) =>
-    Statement.File.Path contains 'Controllers'
-    and Statement.TypeName in ['DbContext', 'SqlConnection', 'IDbCommand']
+predicate callsSync(Statement:csharp) =>
+    Statement.Text:matches('\\.(Read|Write|Send|Get|Post|Execute)\\(')
+    && Statement.InMethod
+    && Statement.File.Text:contains('Async')
 
-CHECK controller-db-calls => error('Controllers must not call the database directly — use a service layer')
+CHECK prefer-async => Code.Statements:callsSync:toError('Use the Async variant instead of the sync call')
 ```
 
 This is the entire specification — not a plugin, not a code review checklist item, not a Copilot instruction that may be ignored. It runs in CI, blocks the PR, and tells the agent exactly what to fix. The architect writes it once; it's enforced forever.
