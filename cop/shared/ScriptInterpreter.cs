@@ -29,14 +29,18 @@ public class ScriptInterpreter
             $"Unsupported union element: expected a collection name like 'Types' or 'csharp.Types', got {expr.GetType().Name}")
     };
 
+    private readonly Action<string>? _diagLog;
+
     public ScriptInterpreter(
         TypeRegistry typeRegistry,
         int maxOutputsPerCommand = 1000,
-        TimeSpan? timeout = null)
+        TimeSpan? timeout = null,
+        Action<string>? diagLog = null)
     {
         _typeRegistry = typeRegistry;
         _maxOutputsPerCommand = maxOutputsPerCommand;
         _timeout = timeout ?? TimeSpan.FromSeconds(30);
+        _diagLog = diagLog;
     }
 
     public InterpreterResult Run(
@@ -301,6 +305,10 @@ public class ScriptInterpreter
                 return;
         }
 
+        // DEBUG action: skip entirely if diagLog is not active
+        if (IsDebugAction(cmd.ActionName) && _diagLog is null)
+            return;
+
         // ASSERT / ASSERT_EMPTY: resolve collection, count items, record result
         if (IsAssertAction(cmd.ActionName) && cmd.Collection is not null)
         {
@@ -313,7 +321,11 @@ public class ScriptInterpreter
         {
             var richMessage = ResolveAggregateTemplate(cmd.MessageTemplate, aggregateCounts);
 
-            if (IsSaveAction(cmd.ActionName) && cmd.OutputPath is not null)
+            if (IsDebugAction(cmd.ActionName))
+            {
+                _diagLog!.Invoke($"[debug] {richMessage.ToPlainText()}");
+            }
+            else if (IsSaveAction(cmd.ActionName) && cmd.OutputPath is not null)
             {
                 WriteSaveOutput(cmd, richMessage, null, fileOutputs);
             }
@@ -335,10 +347,13 @@ public class ScriptInterpreter
         {
             var evaluator = new PredicateEvaluator(predicateGroups, "", _typeRegistry, letDeclarations, functionGroups);
             var items = ResolveGlobalCollection(cmd.Collection, evaluator, predicateGroups, letDeclarations, functionGroups);
+            _diagLog?.Invoke($"[trace] resolve: {cmd.Collection} → {items.Count} items");
             items = ApplyFilters(items, itemType, cmd.Filters, evaluator, functionGroups);
 
             if (cmd.Exclusions != null)
                 items = ApplyExclusions(items, finalItemType, cmd.Exclusions, evaluator, letDeclarations);
+
+            _diagLog?.Invoke($"[trace] foreach: {cmd.Name ?? cmd.ActionName ?? "command"} iterating {items.Count} items");
 
             foreach (var item in items)
             {
@@ -352,7 +367,11 @@ public class ScriptInterpreter
                     CaptureAlanObjectFields(finalCtx, ao);
 
                 var richMessage = ResolveTemplate(cmd.MessageTemplate, finalCtx);
-                if (IsSaveAction(cmd.ActionName))
+                if (IsDebugAction(cmd.ActionName))
+                {
+                    _diagLog!.Invoke($"[debug] {richMessage.ToPlainText()}");
+                }
+                else if (IsSaveAction(cmd.ActionName))
                 {
                     WriteSaveOutput(cmd, richMessage, item, fileOutputs);
                 }
@@ -414,7 +433,11 @@ public class ScriptInterpreter
                     CaptureAlanObjectFields(finalCtx, ao);
 
                 var richMessage = ResolveTemplate(cmd.MessageTemplate, finalCtx);
-                if (IsSaveAction(cmd.ActionName))
+                if (IsDebugAction(cmd.ActionName))
+                {
+                    _diagLog!.Invoke($"[debug] {richMessage.ToPlainText()}");
+                }
+                else if (IsSaveAction(cmd.ActionName))
                 {
                     WriteSaveOutput(cmd, richMessage, item, fileOutputs);
                 }
@@ -627,6 +650,7 @@ public class ScriptInterpreter
     {
         IEnumerable<object> current = items;
         var currentType = itemType;
+        int beforeCount = items.Count;
 
         foreach (var filter in filters)
         {
@@ -646,6 +670,7 @@ public class ScriptInterpreter
                         var value = evaluator.EvaluateField(fieldArgs[0], item, currentType);
                         return (object)(value?.ToString() ?? "");
                     }).ToList();
+                    _diagLog?.Invoke($"[trace] filter: .Select → {materialized.Count} → {((List<object>)current).Count} items (→ string)");
                     currentType = "string";
                     continue;
                 }
@@ -668,6 +693,7 @@ public class ScriptInterpreter
                             return ResolveTemplate(template, ctx).ToPlainText();
                         })
                         .ToList();
+                    _diagLog?.Invoke($"[trace] filter: .Text → {lines.Count} items → 1 string");
                     current = [(object)string.Join(Environment.NewLine, lines)];
                     currentType = "string";
                     continue;
@@ -678,20 +704,42 @@ public class ScriptInterpreter
                 // Barrier: function map transforms items (type changes)
                 var funcArgs = GetFilterArgs(filter);
                 var capturedType = currentType;
-                current = current.Select(item =>
+                var mapped = current.Select(item =>
                     (object)evaluator.ApplyFunction(funcName, item, capturedType, funcArgs)).ToList();
                 currentType = evaluator.GetFunctionReturnType(funcName) ?? currentType;
+                _diagLog?.Invoke($"[trace] filter: :{funcName} → {beforeCount} → {mapped.Count} items (→ {currentType})");
+                current = mapped;
+                beforeCount = mapped.Count;
             }
             else
             {
-                // Predicate filter: compose lazily — no materialization
-                var capturedType = currentType;
-                var capturedFilter = filter;
-                current = current.Where(item =>
+                // Predicate filter
+                if (_diagLog is not null)
                 {
-                    var (result, _) = evaluator.EvaluateAsBool(capturedFilter, item, capturedType);
-                    return result;
-                });
+                    // Materialize to get counts for trace output
+                    var capturedType = currentType;
+                    var capturedFilter = filter;
+                    var materialized = current.Where(item =>
+                    {
+                        var (result, _) = evaluator.EvaluateAsBool(capturedFilter, item, capturedType);
+                        return result;
+                    }).ToList();
+                    var filterName = GetFilterDisplayName(filter);
+                    _diagLog($"[trace] filter: :{filterName} → {beforeCount} → {materialized.Count} items");
+                    beforeCount = materialized.Count;
+                    current = materialized;
+                }
+                else
+                {
+                    // No tracing: compose lazily — no materialization
+                    var capturedType = currentType;
+                    var capturedFilter = filter;
+                    current = current.Where(item =>
+                    {
+                        var (result, _) = evaluator.EvaluateAsBool(capturedFilter, item, capturedType);
+                        return result;
+                    });
+                }
             }
         }
 
@@ -779,6 +827,21 @@ public class ScriptInterpreter
             PredicateCallExpr pc => pc.Args,
             FunctionCallExpr fc => fc.Args,
             _ => []
+        };
+    }
+
+    /// <summary>
+    /// Get a human-readable display name for a filter expression (for trace output).
+    /// </summary>
+    private static string GetFilterDisplayName(Expression filter)
+    {
+        return filter switch
+        {
+            PredicateCallExpr pc => pc.Name,
+            FunctionCallExpr fc => fc.Name,
+            IdentifierExpr id => id.Name,
+            MemberAccessExpr ma => ma.Member,
+            _ => filter.ToString() ?? "filter"
         };
     }
 
@@ -1368,6 +1431,9 @@ public class ScriptInterpreter
 
     private static bool IsSaveAction(string? actionName) =>
         string.Equals(actionName, "SAVE", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsDebugAction(string? actionName) =>
+        string.Equals(actionName, "DEBUG", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsAssertAction(string? actionName) =>
         string.Equals(actionName, "ASSERT", StringComparison.OrdinalIgnoreCase) ||

@@ -3,6 +3,196 @@
 'use strict';
 
 const vscode = require('vscode');
+const fs = require('fs');
+const path = require('path');
+
+// ── Dynamic package resolution ─────────────────────────────────────────────
+
+/** Cache: packageDir → { types, collections } */
+const _packageCache = new Map();
+
+/**
+ * Find a package directory by name, searching up from docDir for `packages/` dirs
+ * and also checking `.cop/packages/`.
+ */
+function findPackageDir(docDir, packageName) {
+    let dir = docDir;
+    while (dir) {
+        // Check packages/{name} directly or recursively through group folders
+        const packagesDir = path.join(dir, 'packages');
+        if (fs.existsSync(packagesDir)) {
+            const found = findPackageInFeed(packagesDir, packageName);
+            if (found) return found;
+        }
+        // Check .cop/packages/{name} (restored packages)
+        const copPackages = path.join(dir, '.cop', 'packages', packageName);
+        if (fs.existsSync(copPackages)) return copPackages;
+
+        const parent = path.dirname(dir);
+        if (parent === dir) break;
+        dir = parent;
+    }
+    return undefined;
+}
+
+/**
+ * Recursively find a package in a feed directory (mirrors ImportResolver.FindPackageDir)
+ */
+function findPackageInFeed(feedPath, packageName) {
+    const direct = path.join(feedPath, packageName);
+    if (fs.existsSync(direct) && isPackageDir(direct, packageName)) return direct;
+
+    // Recurse into group folders (non-package subdirectories)
+    try {
+        for (const entry of fs.readdirSync(feedPath, { withFileTypes: true })) {
+            if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+            const subDir = path.join(feedPath, entry.name);
+            if (isPackageDir(subDir, entry.name)) continue; // skip actual packages
+            const result = findPackageInFeed(subDir, packageName);
+            if (result) return result;
+        }
+    } catch { /* ignore read errors */ }
+    return undefined;
+}
+
+function isPackageDir(dirPath, dirName) {
+    if (fs.existsSync(path.join(dirPath, `${dirName}.md`))) return true;
+    if (fs.existsSync(path.join(dirPath, 'src'))) return true;
+    if (fs.existsSync(path.join(dirPath, 'types'))) return true;
+    return false;
+}
+
+/**
+ * Parse a package directory: extract types from .cop files and collections from .md
+ */
+function parsePackageInfo(packageDir) {
+    if (_packageCache.has(packageDir)) return _packageCache.get(packageDir);
+
+    const types = {};      // typeName → { properties: [{name, type}] }
+    const collections = {}; // collectionName → elementType
+
+    // Find .cop source files in src/ or types/
+    let copDir = null;
+    for (const sub of ['src', 'types']) {
+        const candidate = path.join(packageDir, sub);
+        if (fs.existsSync(candidate)) { copDir = candidate; break; }
+    }
+
+    if (copDir) {
+        try {
+            const files = fs.readdirSync(copDir).filter(f => f.endsWith('.cop'));
+            for (const file of files) {
+                const content = fs.readFileSync(path.join(copDir, file), 'utf8');
+                parseTypesFromCop(content, types, collections);
+            }
+        } catch { /* ignore read errors */ }
+    }
+
+    // Parse .md for "Provides collections for:" and match element types
+    const dirName = path.basename(packageDir);
+    const mdPath = path.join(packageDir, `${dirName}.md`);
+    if (fs.existsSync(mdPath)) {
+        try {
+            const md = fs.readFileSync(mdPath, 'utf8');
+            const m = md.match(/Provides collections for:\s*(.+)/);
+            if (m) {
+                const names = m[1].replace(/\.$/, '').split(',').map(s => s.trim());
+                for (const collName of names) {
+                    const elType = resolveCollectionElementType(collName, types);
+                    if (elType) collections[collName] = elType;
+                }
+            }
+        } catch { /* ignore */ }
+    }
+
+    const result = { types, collections };
+    _packageCache.set(packageDir, result);
+    return result;
+}
+
+/**
+ * Parse export type definitions and collection declarations from .cop content
+ */
+function parseTypesFromCop(content, types, collections) {
+    const lines = content.split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line.startsWith('#')) continue;
+
+        // export type Name = { ... }
+        let m = line.match(/^(?:export\s+)?type\s+([A-Z][a-zA-Z0-9_]*)\s*=\s*\{/);
+        if (m) {
+            const typeName = m[1];
+            const properties = [];
+            for (let j = i + 1; j < lines.length; j++) {
+                const fieldLine = lines[j].trim();
+                if (fieldLine === '}') break;
+                if (fieldLine.startsWith('#')) continue;
+                const fm = fieldLine.match(/^([A-Z][a-zA-Z0-9_]*)\s*:\s*(.+?),?\s*$/);
+                if (fm) {
+                    properties.push({ name: fm[1], type: fm[2].replace(/,$/, '').trim() });
+                }
+            }
+            types[typeName] = { properties };
+            continue;
+        }
+
+        // export collection Name : [ElementType]
+        m = line.match(/^(?:export\s+)?collection\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*\[([A-Z][a-zA-Z0-9_]*)\]/);
+        if (m) {
+            collections[m[1]] = m[2];
+        }
+    }
+}
+
+/**
+ * Resolve a collection name to its element type by matching against known type names
+ */
+function resolveCollectionElementType(collectionName, types) {
+    const typeNames = Object.keys(types);
+
+    // Direct singular: Types → Type, Statements → Statement
+    const singular = collectionName.replace(/s$/, '');
+    if (types[singular]) return singular;
+
+    // Strip 'es' ending: DiskFiles → DiskFile
+    const singularEs = collectionName.replace(/es$/, '');
+    if (types[singularEs]) return singularEs;
+
+    // Find type whose name ends with singular: Operations → HttpOperation, TspOperation
+    const match = typeNames.find(t => t.endsWith(singular) && t !== singular);
+    if (match) return match;
+
+    // Try singularEs match
+    const matchEs = typeNames.find(t => t.endsWith(singularEs) && t !== singularEs);
+    if (matchEs) return matchEs;
+
+    return undefined;
+}
+
+/**
+ * Resolve all imports for a document: returns merged { types, collections } from all packages
+ */
+function resolveImports(docPath, imports) {
+    const docDir = path.dirname(docPath);
+    const mergedTypes = {};
+    const mergedCollections = {};
+
+    for (const pkg of imports) {
+        const pkgDir = findPackageDir(docDir, pkg);
+        if (pkgDir) {
+            const info = parsePackageInfo(pkgDir);
+            Object.assign(mergedTypes, info.types);
+            Object.assign(mergedCollections, info.collections);
+        } else {
+            // Fallback: use static PACKAGE_COLLECTIONS for packages not found on disk
+            const staticColls = STATIC_PACKAGE_COLLECTIONS[pkg];
+            if (staticColls) Object.assign(mergedCollections, staticColls);
+        }
+    }
+
+    return { types: mergedTypes, collections: mergedCollections };
+}
 
 // ── Type and property definitions ──────────────────────────────────────────
 
@@ -511,8 +701,8 @@ const KNOWN_PACKAGES = [
     { label: 'typespec-http', detail: 'TypeSpec HTTP analysis', kind: Kind.Module },
 ];
 
-// Collections provided by each package: package name → { collectionName → elementType }
-const PACKAGE_COLLECTIONS = {
+// Static fallback: collections for packages not found on disk (e.g. remote-only)
+const STATIC_PACKAGE_COLLECTIONS = {
     'code': { Types: 'Type', Statements: 'Statement', Lines: 'Line', Files: 'File' },
     'csharp': { Types: 'Type', Statements: 'Statement', Lines: 'Line', Files: 'File' },
     'python': { Types: 'Type', Statements: 'Statement', Lines: 'Line', Files: 'File' },
@@ -595,7 +785,6 @@ function scanDocument(doc) {
             functions.set(m[1], m[2]);
         }
         if ((m = text.match(/^(?:export\s+)?type\s+([A-Z][a-zA-Z0-9_]*)\s*=\s*\{/))) {
-            // Parse type fields
             const typeName = m[1];
             const properties = [];
             for (let j = i + 1; j < doc.lineCount; j++) {
@@ -610,7 +799,15 @@ function scanDocument(doc) {
         }
     }
 
-    return { lets, predicates, functions, types, imports };
+    // Resolve imported packages dynamically from disk
+    const symbols = { lets, predicates, functions, types, imports, _resolvedTypes: null, _resolvedCollections: null };
+    if (imports.length > 0 && doc.uri && doc.uri.fsPath) {
+        const resolved = resolveImports(doc.uri.fsPath, imports);
+        symbols._resolvedTypes = resolved.types;
+        symbols._resolvedCollections = resolved.collections;
+    }
+
+    return symbols;
 }
 
 function resolveIdentifierType(name, symbols) {
@@ -622,16 +819,17 @@ function resolveIdentifierType(name, symbols) {
     const letExpr = symbols.lets.get(name);
     if (letExpr) return inferExprType(letExpr, symbols);
 
-    // Check if it's a collection from an imported package
-    for (const pkg of symbols.imports) {
-        const collections = PACKAGE_COLLECTIONS[pkg];
-        if (collections && collections[name]) {
-            return `[${collections[name]}]`;
-        }
+    // Check collections from imported packages (dynamic + static fallback)
+    const colls = symbols._resolvedCollections;
+    if (colls && colls[name]) {
+        return `[${colls[name]}]`;
     }
 
-    // Check document-defined types
+    // Check document-defined types and dynamically loaded package types
     if (symbols.types && symbols.types.has(name)) {
+        return name;
+    }
+    if (symbols._resolvedTypes && symbols._resolvedTypes[name]) {
         return name;
     }
 
@@ -649,22 +847,33 @@ function inferExprType(expr, symbols) {
         const baseT = resolveIdentifierType(m[1], symbols);
         if (baseT) {
             const bt = stripNullable(baseT);
-            const typeDef = TYPES[bt];
+            const typeDef = lookupType(bt, symbols);
             if (typeDef) {
                 const prop = typeDef.properties.find(p => p.name === m[2]);
                 if (prop) return prop.type;
             }
         }
         // Namespace-qualified collection: package.Collection (e.g. csharp.Types)
-        const collections = PACKAGE_COLLECTIONS[m[1]];
-        if (collections && collections[m[2]]) {
-            return `[${collections[m[2]]}]`;
+        const colls = symbols._resolvedCollections;
+        if (colls && colls[m[2]]) {
+            // Check if m[1] is a known package namespace
+            if (symbols.imports.includes(m[1]) || STATIC_PACKAGE_COLLECTIONS[m[1]]) {
+                return `[${colls[m[2]]}]`;
+            }
         }
     }
 
     // Bare identifier or identifier:filter:filter...
     const baseName = expr.split(':')[0].trim();
     return resolveIdentifierType(baseName, symbols);
+}
+
+/** Look up a type definition from built-in TYPES, document types, or resolved package types */
+function lookupType(typeName, symbols) {
+    if (TYPES[typeName]) return TYPES[typeName];
+    if (symbols.types && symbols.types.has(typeName)) return symbols.types.get(typeName);
+    if (symbols._resolvedTypes && symbols._resolvedTypes[typeName]) return symbols._resolvedTypes[typeName];
+    return undefined;
 }
 
 /** Walk a dot chain like Code.Types to resolve the final property type */
@@ -675,27 +884,28 @@ function resolvePropertyChain(chain, symbols) {
     let currentType = resolveIdentifierType(parts[0], symbols);
     if (!currentType) {
         // Check namespace-qualified collection: package.Collection
-        const collections = PACKAGE_COLLECTIONS[parts[0]];
-        if (collections && collections[parts[1]]) {
-            currentType = `[${collections[parts[1]]}]`;
-            if (parts.length === 2) return currentType;
-            // Continue resolving from parts[2] onward
-            for (let i = 2; i < parts.length; i++) {
-                const bt = stripNullable(isCollection(currentType) ? elementType(currentType) : currentType);
-                const typeDef = TYPES[bt] || (symbols.types && symbols.types.get(bt));
-                if (!typeDef) return undefined;
-                const prop = typeDef.properties.find(p => p.name === parts[i]);
-                if (!prop) return undefined;
-                currentType = prop.type;
+        const colls = symbols._resolvedCollections;
+        if (colls && colls[parts[1]]) {
+            if (symbols.imports.includes(parts[0]) || STATIC_PACKAGE_COLLECTIONS[parts[0]]) {
+                currentType = `[${colls[parts[1]]}]`;
+                if (parts.length === 2) return currentType;
+                for (let i = 2; i < parts.length; i++) {
+                    const bt = stripNullable(isCollection(currentType) ? elementType(currentType) : currentType);
+                    const typeDef = lookupType(bt, symbols);
+                    if (!typeDef) return undefined;
+                    const prop = typeDef.properties.find(p => p.name === parts[i]);
+                    if (!prop) return undefined;
+                    currentType = prop.type;
+                }
+                return currentType;
             }
-            return currentType;
         }
         return undefined;
     }
 
     for (let i = 1; i < parts.length; i++) {
         const bt = stripNullable(isCollection(currentType) ? elementType(currentType) : currentType);
-        const typeDef = TYPES[bt] || (symbols.types && symbols.types.get(bt));
+        const typeDef = lookupType(bt, symbols);
         if (!typeDef) return undefined;
         const prop = typeDef.properties.find(p => p.name === parts[i]);
         if (!prop) return undefined;
@@ -820,7 +1030,7 @@ function getDotCompletions(document, textBefore) {
 
         if (resolvedType) {
             const bt = stripNullable(isCollection(resolvedType) ? elementType(resolvedType) : resolvedType);
-            const typeDef = TYPES[bt];
+            const typeDef = lookupType(bt, symbols);
             if (typeDef) {
                 for (const prop of typeDef.properties) {
                     items.push({ label: prop.name, detail: `: ${prop.type}`, kind: Kind.Property });
@@ -964,7 +1174,7 @@ const hoverProvider = {
 
             if (parentType) {
                 const bt = stripNullable(isCollection(parentType) ? elementType(parentType) : parentType);
-                const typeDef = TYPES[bt];
+                const typeDef = lookupType(bt, symbols);
                 if (typeDef) {
                     const prop = typeDef.properties.find(p => p.name === propName);
                     if (prop) {
@@ -1137,6 +1347,15 @@ function activate(context) {
             { language: 'cop', scheme: 'file' },
             hoverProvider
         )
+    );
+
+    // Clear package cache when .cop files are saved (types may have changed)
+    context.subscriptions.push(
+        vscode.workspace.onDidSaveTextDocument(doc => {
+            if (doc.fileName.endsWith('.cop') || doc.fileName.endsWith('.md')) {
+                _packageCache.clear();
+            }
+        })
     );
 }
 

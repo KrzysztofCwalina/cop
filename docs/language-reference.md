@@ -75,6 +75,7 @@ A `.cop` file contains these kinds of declarations:
 | `function name(Param) =>` | Define a named function that produces a record |
 | `PRINT` | Command that writes to console |
 | `SAVE` | Command that writes to a file |
+| `DEBUG` | Command that writes to console only when `-d` flag is active |
 
 Declarations are **private to the current project** (folder of `.cop` files) unless prefixed with `export`.
 
@@ -623,6 +624,23 @@ command test-clean = ASSERT_EMPTY(violations, 'should have no violations')
 Passes when zero items match. Fails when items are found.
 
 ASSERT and ASSERT_EMPTY commands only run via `cop test`, never during `cop run`. See [Testing with Cop](testing-with-cop.md) for details.
+
+### DEBUG
+
+Diagnostic output that only appears when the `-d` (diagnostic) flag is active. Works exactly like `PRINT` but produces no output during normal runs.
+
+```ruby
+foreach Types:client => DEBUG('Client found: {item.Name}')
+DEBUG('Total count: {Types.Count}')
+```
+
+Use `DEBUG` for printf-style troubleshooting of your `.cop` rules. Output is prefixed with `[debug]` and written to stderr alongside other diagnostic trace information.
+
+Run with diagnostics enabled:
+```bash
+cop run -d          # shows [trace] and [debug] output
+cop test -d         # shows [trace] and [debug] output during tests
+```
 
 ## Strings
 

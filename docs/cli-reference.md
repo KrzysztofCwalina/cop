@@ -46,7 +46,7 @@ cop run [<command>] [<args>] [-t <target>] [-c <commands>] [-f text|json] [-d]
 | `-t <target>` | Target directory, file, or comma-separated file list. Overrides the root path that providers scan. Defaults to the current directory. |
 | `-f <format>` | Output format: `text` (default) or `json` |
 | `-c <commands>` | Comma-separated list of commands to run. By default, all unnamed statements run; named commands only run when invoked by name or with `-c`. |
-| `-d` | Print diagnostic timing for each engine phase to stderr |
+| `-d` | Enable diagnostic mode: print timing, collection counts, filter traces (`[trace]`), and `DEBUG` action output (`[debug]`) to stderr |
 
 ### Discovery behavior
 
@@ -112,7 +112,7 @@ Output as JSON:
 cop run checks.cop -f json
 ```
 
-Show timing diagnostics:
+Show diagnostics (timing, collection counts, filter traces, and DEBUG output):
 
 ```bash
 cop run checks.cop -d
@@ -129,7 +129,7 @@ cop test [<file>] [-d]
 | Argument / Option | Description |
 |-------------------|-------------|
 | `<file>` | `.cop` file or directory to test. When omitted, all `.cop` files in the current directory are used. |
-| `-d` | Print diagnostic timing to stderr |
+| `-d` | Enable diagnostic mode (timing, traces, and DEBUG output) to stderr |
 
 ### Examples
 

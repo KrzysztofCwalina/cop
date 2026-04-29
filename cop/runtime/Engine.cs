@@ -165,7 +165,18 @@ public static class Engine
             }
 
             ProviderLoader.QueryAndRegister(bp.Instance, bp.Schema, bp.Name, typeRegistry, query);
-            diagLog?.Invoke($"[diag] {bp.Instance} query: {phaseSw.ElapsedMilliseconds}ms");
+
+            if (diagLog is not null)
+            {
+                // Log item counts per collection for this provider
+                foreach (var coll in bp.Schema.Collections)
+                {
+                    var collItems = typeRegistry.GetGlobalCollectionItems(coll.Name);
+                    if (collItems is not null && collItems.Count > 0)
+                        diagLog($"[trace] provider {bp.Name}: {coll.Name} → {collItems.Count} items");
+                }
+                diagLog($"[diag] {bp.Instance} query: {phaseSw.ElapsedMilliseconds}ms");
+            }
             phaseSw.Restart();
         }
 
@@ -176,7 +187,7 @@ public static class Engine
         // Documents are empty — all collections are now global
         List<Document> documents = [];
 
-        var interpreter = new ScriptInterpreter(typeRegistry);
+        var interpreter = new ScriptInterpreter(typeRegistry, diagLog: diagLog);
         HashSet<string>? filterSet = commandFilter is { Length: > 0 }
             ? new HashSet<string>(commandFilter, StringComparer.OrdinalIgnoreCase)
             : null;
