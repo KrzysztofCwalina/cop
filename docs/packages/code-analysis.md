@@ -57,22 +57,3 @@ import code-analysis
 CHECK prefer-async => Code.Statements:callsSyncWhenAsyncExists
     :toWarning('Use {item.MemberName}Async instead of {item.MemberName}')
 ```
-
-```ruby
-import code-analysis
-
-let errors = Code.Statements:csharp:varDeclaration
-    :toError('Do not use var for {item.MemberName}')
-
-CHECK(errors)
-```
-
-```ruby
-import code-analysis
-
-let violations = Code.Types:csharp:publicType
-    :!Name:endsWith('Base')
-    :toWarning('{item.Name} should not have a Base suffix')
-
-CHECK(violations)
-```
