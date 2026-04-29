@@ -44,6 +44,17 @@ CHECK controller-db-calls => error('Controllers must not call the database direc
 
 This is the entire specification — not a plugin, not a code review checklist item, not a Copilot instruction that may be ignored. It runs in CI, blocks the PR, and tells the agent exactly what to fix. The architect writes it once; it's enforced forever.
 
+Another common example — enforcing dependency direction in a layered architecture ("UI never references Data, Services never reference Controllers"):
+
+```
+predicate wrong-dependency-direction(File) =>
+    File.Path contains 'UI' and File.Usings:containsAny('Data', 'Repository')
+
+CHECK layering-violations => error('UI layer must not reference the Data layer directly')
+```
+
+Agents routinely violate layering constraints because they optimize for "make it work" — they'll import whatever type gets the code to compile. A formal specification catches this instantly and forces the agent to route through the correct abstraction.
+
 The DSL is intentionally a **formal specification language** — readable by any developer, writable by any architect — because the goal is to make expressing architectural intent as easy as expressing it in a code review comment, but with the determinism and permanence of a compiler check.
 
 ## The Strategic Opportunity: Benchmarking Agents
