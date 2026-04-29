@@ -28,22 +28,23 @@ We propose **Agent Cop** — a static analysis tool purpose-built to detect and 
 
 3. **Built-in + customizable**: Agent Cop ships with checks for common architectural and code quality rules (naming, error handling, API design patterns). For organization-specific requirements, a purpose-built DSL lets architects express custom rules that are as enforceable as the built-in ones.
 
-### Architects Define the Rules — In Minutes, Not Sprints
+### Architects Write Formal Specifications — In Minutes, Not Sprints
 
-The key insight: architects already *know* the rules — they just have no way to encode them into something deterministic. Today they write wiki pages, leave PR comments, and repeat themselves in every review. Agent Cop gives them a direct path from intent to enforcement.
+The key insight: architects already *know* the rules — they just have no way to encode them into something deterministic. Today they write wiki pages, leave PR comments, and repeat themselves in every review. Agent Cop gives them a direct path from architectural intent to a **formal specification** that is enforced automatically.
 
-For example, an architect who wants "all client types must be sealed" or "never call Thread.Sleep in async code" doesn't need to file a tooling request or wait for a custom Roslyn analyzer. They write a short declarative rule:
+For example, an architect building a web application who wants "all controller actions must validate input" or "never call the database directly from a controller" doesn't need to file a tooling request or wait for a custom analyzer. They write a short formal specification:
 
 ```
-predicate unsealed-client(Type) =>
-    Type.Name ends with 'Client' and Type is not sealed
+predicate controller-direct-db-call(Statement) =>
+    Statement.File.Path contains 'Controllers'
+    and Statement.TypeName in ['DbContext', 'SqlConnection', 'IDbCommand']
 
-CHECK unsealed-clients => error('Client types must be sealed')
+CHECK controller-db-calls => error('Controllers must not call the database directly — use a service layer')
 ```
 
-This is the entire rule — not a plugin, not a code review checklist item, not a Copilot instruction that may be ignored. It runs in CI, blocks the PR, and tells the agent exactly what to fix. The architect writes it once; it's enforced forever.
+This is the entire specification — not a plugin, not a code review checklist item, not a Copilot instruction that may be ignored. It runs in CI, blocks the PR, and tells the agent exactly what to fix. The architect writes it once; it's enforced forever.
 
-The DSL is intentionally simple — readable by any developer, writable by any architect — because the goal is to make expressing architectural intent as easy as expressing it in a code review comment, but with the permanence of a compiler check.
+The DSL is intentionally a **formal specification language** — readable by any developer, writable by any architect — because the goal is to make expressing architectural intent as easy as expressing it in a code review comment, but with the determinism and permanence of a compiler check.
 
 ## The Strategic Opportunity: Benchmarking Agents
 
