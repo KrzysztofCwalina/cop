@@ -651,4 +651,12 @@ Packages provide domain-specific types, lists, and runtime data. Import a packag
 | `json` | `import json` | JSON file parsing into typed collections — see [JSON Package Reference](packages/json.md) |
 | `filesystem` | `import filesystem` | File and folder analysis — see [Filesystem Package Reference](packages/filesystem.md) |
 
-More packages are listed in the [Getting Started](getting-started.md#available-packages) guide.
+More packages are listed in the [Getting Started](../README.md#available-packages) guide.
+
+## Further Reading
+
+- [Getting Started](../README.md) — walkthrough with practical examples
+- [CLI Reference](cli-reference.md) — all commands and options for `cop.exe`
+- [Static Analysis](static-analysis-with-cop.md) — writing and organizing checks
+- [Testing](testing-with-cop.md) — writing and running tests with ASSERT
+- [Code Package Reference](packages/code.md) — Type, Statement, File, etc.

@@ -68,6 +68,45 @@ predicate swallowsError(ErrorHandler) => ErrorHandler.Generic && !ErrorHandler.R
 foreach ErrorHandlers:swallowsError => PRINT('{error:@red} {ErrorHandler.File.Path}:{ErrorHandler.Line} swallows error')
 ```
 
+## Filesystem Analysis
+
+Import the `filesystem` package to work with folders and files on disk:
+
+```ruby
+import filesystem
+
+# Find empty folders
+foreach Disk.Folders:empty => PRINT('{warning:@yellow} Empty folder: {item.Path}')
+
+# Find large files (over 1MB)
+predicate large(DiskFile) => DiskFile.Size > 1048576
+foreach Disk.Files:large => PRINT('{item.Path} ({item.Size} bytes)')
+
+# Find stale folders not modified in 24+ hours
+foreach Disk.Folders:stale => PRINT('{item.Path} — last modified {item.MinutesSinceModified} min ago')
+```
+
+Available collections: `Disk.Folders` (all folders) and `Disk.Files` (all files). Each has properties like `Path`, `Name`, `Depth`, `Size`, `Extension`, `MinutesSinceModified`.
+
+## Working with JSON Data
+
+Load and process JSON files with the `json` package:
+
+```ruby
+import json
+
+type Task = { id : int, title : string, status : string, assignee : string }
+let Tasks = Parse('tasks.json', [Task])
+
+predicate blocked(Task) => Task.status == 'blocked'
+predicate unassigned(Task) => Task.assignee:empty
+
+foreach Tasks:blocked => PRINT('{warning:@yellow} Blocked: {item.title}')
+foreach Tasks:unassigned => PRINT('{item.title} has no assignee')
+```
+
+`Parse(path, [Type])` reads a JSON array file and deserializes each element into a typed object.
+
 ## Core Concepts
 
 A `.cop` file is a program that filters collections of items and produces output. The building blocks are:
@@ -78,6 +117,41 @@ A `.cop` file is a program that filters collections of items and produces output
 - **`foreach`** — iterate over a collection
 - **`PRINT`** / **`SAVE`** — commands that produce output
 - **`command`** — a named command that can be invoked individually
+
+## Filtering and Subsets
+
+The `:` operator is the core of cop — it filters a list to a subset:
+
+```ruby
+import code
+
+# Chain predicates to narrow results (each : is AND)
+let PublicClients = Code.Types:csharp:client:isPublic
+
+# Negate with !
+let InternalTypes = Code.Types:csharp:!isPublic
+
+# Use built-in predicates directly on properties
+let LongNames = Code.Types:csharp:Name:startsWith('Azure')
+let RecentFiles = Disk.Files:recentlyModified
+```
+
+### Collection Operations
+
+```ruby
+# Concatenate collections with +
+let allChecks = csharp-checks + javascript-checks + python-checks
+
+# Project to a list of values
+let typeNames = Code.Types.Select(item.Name)
+
+# Format and join into a single string
+let report = Code.Types:client.Text('{item.Name} — {item.File.Path}')
+
+# Test sub-collections
+predicate hasPublicCtor(Type) => Type.Constructors:any(isPublic)
+predicate noMethods(Type) => Type.Methods:empty
+```
 
 ## Writing Checks
 
@@ -105,6 +179,43 @@ predicate hasOptions(Constructor) => Constructor.Parameters:any(optionsType)
 predicate missingOptions(Type) => Type.Constructors:none(hasOptions)
 
 foreach Clients:missingOptions => PRINT('{warning:@yellow} {item.Name} needs an options constructor')
+```
+
+### Styled Output
+
+Use `{text@style}` to colorize output:
+
+```ruby
+foreach Code.Types:csharp:!Sealed => PRINT('{error:@red} {item.Name} should be sealed')
+foreach Code.Lines:python:todoComment => PRINT('{info:@cyan} {item.File.Path}:{item.Number} {item.Text}')
+```
+
+Available styles: `@red`, `@yellow`, `@green`, `@cyan`, `@dim`, `@bold`, `@auto` (auto-colors by severity keyword).
+
+### Saving Output to Files
+
+Use `SAVE` to write results to a file instead of the console:
+
+```ruby
+command export-types = foreach Code.Types:csharp => SAVE('types.txt', '{item.Name}')
+```
+
+Run it explicitly: `cop run export-types`.
+
+## Excluding Files
+
+Skip paths from scanning with `exclude`:
+
+```ruby
+exclude '**/node_modules/**'
+exclude '**/bin/**'
+exclude '**/generated/**'
+```
+
+Or filter inline:
+
+```ruby
+let prodCode = Code.Statements:sleepCall:!Path('**/test/**')
 ```
 
 ## Strings and Identifiers
@@ -197,14 +308,24 @@ CHECK(errors)
 Give commands a name so they can be run individually:
 
 ```ruby
-command check-var = foreach Code.Statements:csharp:varDeclaration => PRINT('{error:@red} {item.File.Path} uses var')
-command check-clients = foreach Clients:csharp:!Sealed => PRINT('{error:@red} {item.Name} must be sealed')
+import code
+
+predicate client(Type) => Type.Name:endsWith('Client')
+
+# Named commands — only run when invoked explicitly
+command list-types = foreach Code.Types => PRINT('{item.Name} ({item.Kind}) — {item.File.Path}')
+command list-clients = foreach Code.Types:client => PRINT('{item.Name}')
+command count-files = PRINT('{Code.Files.Count} source files')
 ```
 
 ```bash
-cop run rules.cop -c check-clients     # run only check-clients
-cop run rules.cop -f json                 # JSON output
+cop run list-types              # run just that command
+cop run -c list-clients         # run by name with -c
+cop run -f json                 # all output as JSON
+cop run -t src/                 # scan only the src/ directory
 ```
+
+Unnamed statements (bare `foreach`) always run. Named commands only run when invoked by name or with `-c`.
 
 ## Available Packages
 
@@ -242,6 +363,59 @@ cop run rules.cop -f json                 # JSON output
 |---------|-------------|
 | [`python`](docs/packages/python/python.md) | Python coding conventions and best practices |
 | [`python-library`](docs/packages/python/python-library.md) | Library design conventions for Python packages |
+
+## Testing
+
+Write tests with `ASSERT` and `ASSERT_EMPTY`, run them with `cop test`:
+
+```ruby
+import csharp
+
+command test-has-types = ASSERT(csharp.Types)
+command test-no-var = ASSERT_EMPTY(csharp.Statements:varDeclaration)
+command test-public = ASSERT(csharp.Types:isPublic, 'expected public types')
+```
+
+```bash
+cop test
+```
+
+```
+  ✓ test-has-types
+  ✓ test-no-var
+  ✗ test-public: expected public types (found 0 items)
+
+  3 tests, 2 passed, 1 failed
+```
+
+See [Testing with Cop](docs/testing-with-cop.md) for the full testing guide.
+
+## CI Integration
+
+Cop's exit codes make it easy to integrate into CI pipelines:
+
+```yaml
+# GitHub Actions
+- name: Install cop
+  run: |
+    curl -L https://github.com/KrzysztofCwalina/cop/releases/latest/download/cop-linux-x64.zip -o cop.zip
+    unzip cop.zip && chmod +x cop && mv cop /usr/local/bin/
+
+- name: Restore packages
+  run: cop package restore
+
+- name: Run checks
+  run: cop run
+
+- name: Run tests
+  run: cop test
+```
+
+| Exit Code | Meaning |
+|-----------|---------|
+| `0` | Clean — no output, all tests pass |
+| `1` | Violations found or tests failed |
+| `2` | Fatal error (parse error, missing package) |
 
 ## Next Steps
 
