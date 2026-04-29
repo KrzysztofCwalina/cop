@@ -1,0 +1,49 @@
+# FDG Member Design Guidelines
+# Based on .NET Framework Design Guidelines, Chapter 5
+
+import code-analysis
+
+## Methods with more than 5 parameters
+predicate tooManyParams(Method) => Method:isPublic && Method.Parameters.Count > 5
+predicate hasTooManyParams(Type) => Type.Methods:any(tooManyParams)
+let max-parameters = Code.Types:csharp:hasTooManyParams
+    :toWarning('FDG Member Design: {item.Name} has a public method with more than 5 parameters')
+
+## Write-only properties (setter without getter)
+predicate writeOnlyProp(Property) => Property:isPublic && Property:hasSetter && !Property:hasGetter
+predicate hasWriteOnlyProp(Type) => Type.Properties:any(writeOnlyProp)
+let no-write-only-properties = Code.Types:csharp:hasWriteOnlyProp
+    :toWarning('FDG Member Design: {item.Name} has a write-only property — add a getter')
+
+## Extension methods should be in *Extensions classes
+predicate extensionIndicator(Method) => Method:isStatic && Method.Parameters.Count > 0
+    && Method.Decorators:contains('Extension')
+predicate hasExtensionMethods(Type) => Type:isStatic && Type.Methods:any(extensionIndicator)
+predicate extensionClassBadName(Type) => Type:hasExtensionMethods && !Type.Name:endsWith('Extensions')
+let extension-class-naming = Code.Types:csharp:extensionClassBadName
+    :toWarning('FDG Member Design: {item.Name} contains extension methods but does not end with Extensions')
+
+## Constructors with too many parameters (prefer options/builder)
+predicate ctorTooManyParams(Method) => Method.Parameters.Count > 5
+predicate hasComplexCtor(Type) => Type.Constructors:any(ctorTooManyParams)
+let ctor-parameter-count = Code.Types:csharp:hasComplexCtor
+    :toInfo('FDG Member Design: {item.Name} has a constructor with more than 5 parameters — consider an options type')
+
+## Boolean parameters in public methods (prefer enum or overloads)
+predicate boolParam(Parameter) => Parameter.Type.Name == 'bool'
+predicate publicMethodWithBoolParam(Method) => Method:isPublic && Method.Parameters:any(boolParam)
+predicate hasBoolParam(Type) => Type.Methods:any(publicMethodWithBoolParam)
+let avoid-bool-params = Code.Types:csharp:hasBoolParam
+    :toInfo('FDG Member Design: {item.Name} has a public method with a bool parameter — consider an enum or separate overloads')
+
+## Public methods with more than 2 overloads should have consistent first parameter
+predicate publicNonStatic(Method) => Method:isPublic && Method:!isStatic
+
+## Properties that return arrays (prefer ReadOnlyCollection or IReadOnlyList)
+predicate arrayProperty(Property) => Property:isPublic && Property.Type.Name:matches('\\[\\]$')
+predicate hasArrayProperty(Type) => Type.Properties:any(arrayProperty)
+let no-array-properties = Code.Types:csharp:hasArrayProperty
+    :toInfo('FDG Member Design: {item.Name} exposes an array property — consider IReadOnlyList<T> instead')
+
+## All member design checks combined
+let fdg-member-design = max-parameters + no-write-only-properties + extension-class-naming + ctor-parameter-count + avoid-bool-params + no-array-properties

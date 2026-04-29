@@ -1,0 +1,61 @@
+# FDG Naming Guidelines
+# Based on .NET Framework Design Guidelines, Chapter 3
+
+import code-analysis
+
+## Types inheriting from Exception must end with 'Exception'
+predicate exceptionBase(Type) => Type.BaseTypes:contains('Exception')
+    || Type.BaseTypes:contains('SystemException')
+    || Type.BaseTypes:contains('ApplicationException')
+    || Type.BaseTypes:contains('InvalidOperationException')
+    || Type.BaseTypes:contains('ArgumentException')
+    || Type.BaseTypes:contains('IOException')
+predicate exceptionMissingName(Type) => Type:exceptionBase && !Type.Name:endsWith('Exception')
+let exception-suffix = Code.Types:csharp:exceptionMissingName
+    :toWarning('FDG Naming: {item.Name} inherits from Exception but does not end with Exception')
+
+## Types inheriting from Attribute must end with 'Attribute'
+predicate attributeBase(Type) => Type.BaseTypes:contains('Attribute')
+predicate attributeMissingName(Type) => Type:attributeBase && !Type.Name:endsWith('Attribute')
+let attribute-suffix = Code.Types:csharp:attributeMissingName
+    :toWarning('FDG Naming: {item.Name} inherits from Attribute but does not end with Attribute')
+
+## Types inheriting from EventArgs must end with 'EventArgs'
+predicate eventArgsBase(Type) => Type.BaseTypes:contains('EventArgs')
+predicate eventArgsMissingName(Type) => Type:eventArgsBase && !Type.Name:endsWith('EventArgs')
+let eventargs-suffix = Code.Types:csharp:eventArgsMissingName
+    :toWarning('FDG Naming: {item.Name} inherits from EventArgs but does not end with EventArgs')
+
+## Types inheriting from Stream must end with 'Stream'
+predicate streamBase(Type) => Type.BaseTypes:contains('Stream')
+predicate streamMissingName(Type) => Type:streamBase && !Type.Name:endsWith('Stream')
+let stream-suffix = Code.Types:csharp:streamMissingName
+    :toWarning('FDG Naming: {item.Name} inherits from Stream but does not end with Stream')
+
+## Classes should not use Hungarian notation (C prefix)
+predicate hungarianPrefix(Type) => Type.Kind == 'Class' && Type.Name:matches('^C[A-Z][a-z]')
+let no-hungarian-prefix = Code.Types:csharp:hungarianPrefix
+    :toWarning('FDG Naming: {item.Name} uses Hungarian C prefix — remove it')
+
+## Parameters must use camelCase (start with lowercase)
+predicate uppercaseParam(Parameter) => Parameter.Name:matches('^[A-Z]')
+predicate hasUppercaseParam(Type) => Type.Methods.Where(isPublic).Parameters:any(uppercaseParam)
+let param-camel-case = Code.Types:csharp:hasUppercaseParam
+    :toWarning('FDG Naming: {item.Name} has a parameter that does not use camelCase')
+
+## Boolean properties should use affirmative naming (Is/Has/Can/Should/Was/Will)
+predicate boolProperty(Property) => Property:isPublic && Property.Type.Name == 'bool'
+predicate badBoolName(Property) => Property:boolProperty
+    && !Property.Name:matches('^(Is|Has|Can|Should|Was|Will|Are|Supports|Allows|Needs|Contains|Includes|Requires|Enables)')
+    && !Property.Name:matches('^(Exists|Enabled|Visible|Active|Valid|Available|Ready|Empty|Open|Closed|Connected|Locked)')
+predicate hasBadBoolProperty(Type) => Type.Properties:any(badBoolName)
+let bool-property-naming = Code.Types:csharp:hasBadBoolProperty
+    :toInfo('FDG Naming: {item.Name} has a bool property that may need affirmative naming (Is/Has/Can/Should)')
+
+## Namespace should have at least two segments (Company.Product)
+predicate shortNamespace(Type) => Type.File.Namespace != null && !Type.File.Namespace:contains('.')
+let namespace-segments = Code.Types:csharp:shortNamespace
+    :toInfo('FDG Naming: Namespace should have at least two segments (e.g., Company.Product)')
+
+## All naming checks combined
+let fdg-naming = exception-suffix + attribute-suffix + eventargs-suffix + stream-suffix + no-hungarian-prefix + param-camel-case + bool-property-naming + namespace-segments

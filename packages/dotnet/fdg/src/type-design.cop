@@ -1,0 +1,52 @@
+# FDG Type Design Guidelines
+# Based on .NET Framework Design Guidelines, Chapter 4
+
+import code-analysis
+
+## Enum types should not have 'Enum' or 'Flags' suffix
+predicate enumWithBadSuffix(Type) => Type.Kind == 'Enum'
+    && (Type.Name:endsWith('Enum') || Type.Name:endsWith('Flags'))
+let enum-no-suffix = Code.Types:csharp:enumWithBadSuffix
+    :toWarning('FDG Type Design: Enum {item.Name} should not use Enum/Flags suffix')
+
+## [Flags] enums should use plural names
+predicate flagsEnum(Type) => Type.Kind == 'Enum' && Type.Decorators:contains('Flags')
+predicate flagsSingularName(Type) => Type:flagsEnum && !Type.Name:matches('[sx]$|ies$|ata$')
+let flags-plural-name = Code.Types:csharp:flagsSingularName
+    :toWarning('FDG Type Design: [Flags] enum {item.Name} should use a plural name')
+
+## Abstract classes should have a protected constructor (not public)
+predicate publicCtor(Method) => Method.Modifiers:isSet(Public)
+predicate abstractWithPublicCtor(Type) => Type:isAbstract && Type.Constructors:any(publicCtor)
+let abstract-protected-ctor = Code.Types:csharp:abstractWithPublicCtor
+    :toWarning('FDG Type Design: Abstract class {item.Name} should have protected constructors, not public')
+
+## Static classes should not have instance members
+predicate instanceMethod(Method) => Method:!isStatic && Method.Name != '.ctor'
+predicate staticWithInstanceMember(Type) => Type:isStatic && Type.Methods:any(instanceMethod)
+let static-no-instance = Code.Types:csharp:staticWithInstanceMember
+    :toWarning('FDG Type Design: Static class {item.Name} should not have instance members')
+
+## Marker interfaces (no members) should be avoided
+predicate markerInterface(Type) => Type.Kind == 'Interface'
+    && Type.Methods.Count == 0 && Type.Properties.Count == 0 && Type.Events.Count == 0
+let no-marker-interfaces = Code.Types:csharp:markerInterface
+    :toInfo('FDG Type Design: Interface {item.Name} has no members — consider using an attribute instead')
+
+## Classes with only static members should be marked static
+predicate allMethodsStatic(Type) => Type.Kind == 'Class'
+    && Type:!isStatic && Type:!isAbstract
+    && Type.Methods.Count > 0
+    && Type.Methods:none(instanceMethod)
+    && Type.Properties.Count == 0
+    && Type.Events.Count == 0
+let should-be-static = Code.Types:csharp:allMethodsStatic
+    :toInfo('FDG Type Design: {item.Name} has only static members — consider making it a static class')
+
+## Structs should be small (4 or fewer fields)
+predicate largeStruct(Type) => Type.Kind == 'Struct' && Type.Fields.Count > 4
+let struct-size = Code.Types:csharp:largeStruct
+    :toInfo('FDG Type Design: Struct {item.Name} has {item.Fields.Count} fields — consider using a class for large data types')
+
+## All type design checks combined
+let fdg-type-design = enum-no-suffix + flags-plural-name + abstract-protected-ctor + static-no-instance + no-marker-interfaces + should-be-static + struct-size

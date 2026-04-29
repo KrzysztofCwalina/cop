@@ -1,5 +1,6 @@
 # StyleCop checks for C#
 
+import csharp
 import code-analysis
 
 ## SA1302: Interface names must begin with 'I' followed by an uppercase letter

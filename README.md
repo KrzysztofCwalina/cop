@@ -360,6 +360,7 @@ Unnamed statements (bare `foreach`) always run. Named commands only run when inv
 |---------|-------------|
 | [`csharp`](docs/packages/dotnet/csharp.md) | C# language provider (scans .cs files) and coding conventions |
 | [`csharp-style`](docs/packages/dotnet/csharp-style.md) | C# style rules (naming, formatting) |
+| [`fdg`](docs/packages/dotnet/fdg.md) | .NET Framework Design Guidelines (~26 checks: naming, type/member/exception design) |
 | [`csharp-library`](docs/packages/dotnet/csharp-library.md) | Library design conventions for .NET class libraries |
 | [`csharp-library-client`](docs/packages/dotnet/csharp-library-client.md) | Patterns for .NET client libraries (retry, pagination, LROs) |
 | [`csharp-library-client-azure`](docs/packages/dotnet/csharp-library-client-azure.md) | Azure SDK patterns (TokenCredential, Azure.Core integration) |

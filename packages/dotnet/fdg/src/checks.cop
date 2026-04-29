@@ -1,0 +1,7 @@
+# .NET Framework Design Guidelines — All checks combined
+
+import csharp
+import code-analysis
+
+## All FDG checks
+export let fdg = fdg-naming + fdg-type-design + fdg-member-design + fdg-exceptions

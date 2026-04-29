@@ -1,5 +1,6 @@
 # Client library design checks for C#
 
+import csharp
 import code-analysis
 
 predicate missingOptionsConstructor(Type) => Type.Constructors:!any(constructorAcceptsOptions)

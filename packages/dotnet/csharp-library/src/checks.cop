@@ -1,5 +1,6 @@
 # Library API design checks for C#
 
+import csharp
 import code-analysis
 
 predicate missingAsyncParam(Method) => Method.Parameters:!any(asyncBoolParam)

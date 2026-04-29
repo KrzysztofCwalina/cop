@@ -1,0 +1,58 @@
+# FDG Exception Design Guidelines
+# Based on .NET Framework Design Guidelines, Chapter 7
+
+import code-analysis
+
+## Custom exceptions must end in 'Exception'
+predicate exceptionType(Type) => Type.Kind == 'Class'
+    && (Type.BaseTypes:contains('Exception')
+        || Type.BaseTypes:contains('SystemException')
+        || Type.BaseTypes:contains('ApplicationException')
+        || Type.BaseTypes:contains('InvalidOperationException')
+        || Type.BaseTypes:contains('ArgumentException')
+        || Type.BaseTypes:contains('IOException')
+        || Type.BaseTypes:contains('FormatException')
+        || Type.BaseTypes:contains('NotSupportedException')
+        || Type.BaseTypes:contains('UnauthorizedAccessException'))
+predicate exceptionBadName(Type) => Type:exceptionType && !Type.Name:endsWith('Exception')
+let exception-naming = Code.Types:csharp:exceptionBadName
+    :toError('FDG Exceptions: {item.Name} derives from Exception but does not end with Exception')
+
+## Custom exceptions should have standard constructors (parameterless, message, message+inner)
+predicate parameterlessCtor(Method) => Method.Parameters.Count == 0
+predicate messageCtor(Method) => Method.Parameters.Count == 1
+predicate messageAndInnerCtor(Method) => Method.Parameters.Count == 2
+predicate missingStandardCtors(Type) => Type:exceptionType
+    && (!Type.Constructors:any(parameterlessCtor)
+        || !Type.Constructors:any(messageCtor)
+        || !Type.Constructors:any(messageAndInnerCtor))
+let exception-standard-ctors = Code.Types:csharp:missingStandardCtors
+    :toWarning('FDG Exceptions: {item.Name} should have 3 standard constructors: (), (string), (string, Exception)')
+
+## Do not throw System.Exception, SystemException, NullReferenceException, IndexOutOfRangeException, StackOverflowException
+predicate throwsBannedException(Statement) => Statement.Kind == 'throw'
+    && (Statement.TypeName == 'Exception'
+        || Statement.TypeName == 'SystemException'
+        || Statement.TypeName == 'NullReferenceException'
+        || Statement.TypeName == 'IndexOutOfRangeException'
+        || Statement.TypeName == 'StackOverflowException'
+        || Statement.TypeName == 'OutOfMemoryException'
+        || Statement.TypeName == 'AccessViolationException')
+let no-banned-throws = Code.Statements:csharp:throwsBannedException
+    :toError('FDG Exceptions: Do not throw {item.TypeName} — use a more specific exception type')
+
+## Methods with Try* prefix should return bool
+predicate tryMethod(Method) => Method:isPublic && Method.Name:startsWith('Try')
+    && Method.ReturnType != null && Method.ReturnType.Name != 'bool'
+predicate hasBadTryMethod(Type) => Type.Methods:any(tryMethod)
+let try-pattern-returns-bool = Code.Types:csharp:hasBadTryMethod
+    :toWarning('FDG Exceptions: {item.Name} has a Try* method that does not return bool')
+
+## Do not catch OperationCanceledException without rethrowing
+predicate catchesCancellation(Statement) => Statement.ErrorHandler == true
+    && Statement.TypeName == 'OperationCanceledException' && !Statement.Rethrows
+let no-swallow-cancellation = Code.Statements:csharp:catchesCancellation
+    :toError('FDG Exceptions: Do not swallow OperationCanceledException — always rethrow')
+
+## All exception design checks combined
+let fdg-exceptions = exception-naming + exception-standard-ctors + no-banned-throws + try-pattern-returns-bool + no-swallow-cancellation

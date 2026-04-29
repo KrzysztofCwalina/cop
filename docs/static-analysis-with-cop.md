@@ -8,8 +8,8 @@ The fastest way to analyze your code:
 
 ```bash
 cop check csharp-style            # run C# style checks (naming, formatting, docs)
-cop check csharp-library          # run C# library design checks
-cop check csharp-style csharp-library   # run multiple packages at once
+cop check fdg                     # run .NET Framework Design Guidelines checks
+cop check csharp-style fdg        # run multiple packages at once
 cop check csharp-style -t src/    # analyze a specific directory
 ```
 
@@ -18,6 +18,7 @@ cop check csharp-style -t src/    # analyze a specific directory
 | Package | What it checks |
 |---|---|
 | `csharp-style` | StyleCop-style rules: naming, formatting, documentation, braces |
+| `fdg` | .NET Framework Design Guidelines: naming, type/member/exception design (~26 rules) |
 | `csharp-library` | Library design: sealed clients, method conventions, constructor patterns |
 | `csharp-library-client` | Client library patterns: client naming, options types, service methods |
 
