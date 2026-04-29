@@ -37,7 +37,9 @@ public static class CodeCollectionBuilder
                 SourceFile? sourceFile;
                 try
                 {
-                    var text = File.ReadAllText(filePath);
+                    using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    using var reader = new StreamReader(stream);
+                    var text = reader.ReadToEnd();
                     sourceFile = parser.Parse(filePath, text);
                 }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
