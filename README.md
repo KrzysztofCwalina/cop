@@ -296,11 +296,16 @@ import javascript        # JavaScript/TypeScript conventions and checks
 import python            # Python coding conventions and checks
 ```
 
-Cop auto-discovers a `packages/` directory by walking up from the current folder. You can also point to a specific directory with `feed`:
+Cop auto-discovers a `packages/` directory by walking up from the current folder. You can also point to a local directory or a GitHub repository with `feed`:
 
 ```ruby
+# Local package directory
 feed '../my-packages'
-import csharp
+
+# GitHub repository (packages are fetched on first use)
+feed 'github.com/my-org/my-packages'
+
+import my-custom-package
 ```
 
 The `code-analysis` package provides the `CHECK` command for structured violation output:
