@@ -161,7 +161,7 @@ public class ScriptInterpreter
                     continue;
 
                 // If ActionName matches a parameterized command, resolve as invocation
-                // e.g., CHECK(console-calls:notTest) → bind console-calls:notTest to CHECK's parameter
+                // e.g., CHECK(console-calls:notTest) -> bind console-calls:notTest to CHECK's parameter
                 if (cmd.ActionName != null
                     && allCommands.TryGetValue(cmd.ActionName, out var targetCmds)
                     && targetCmds.Count > 0
@@ -205,7 +205,7 @@ public class ScriptInterpreter
                 {
                     // Bind parameters as temporary let declarations
                     // e.g., command CHECK(violations) + RUN CHECK(var-usage)
-                    // → let violations = var-usage
+                    // -> let violations = var-usage
                     var tempLets = new Dictionary<string, LetDeclaration>(letDeclarations);
                     for (int i = 0; i < Math.Min(cmdTemplate.Parameters.Count, run.Arguments.Count); i++)
                     {
@@ -347,7 +347,7 @@ public class ScriptInterpreter
         {
             var evaluator = new PredicateEvaluator(predicateGroups, "", _typeRegistry, letDeclarations, functionGroups);
             var items = ResolveGlobalCollection(cmd.Collection, evaluator, predicateGroups, letDeclarations, functionGroups);
-            _diagLog?.Invoke($"[trace] resolve: {cmd.Collection} → {items.Count} items");
+            _diagLog?.Invoke($"[trace] resolve: {cmd.Collection} -> {items.Count} items");
             items = ApplyFilters(items, itemType, cmd.Filters, evaluator, functionGroups);
 
             if (cmd.Exclusions != null)
@@ -463,7 +463,7 @@ public class ScriptInterpreter
         var loadItems = TryResolveLoadCollection(collection, letDeclarations);
         if (loadItems != null) return loadItems;
 
-        // Resolve dotted collection names (e.g., "Source.Statements" → "Statements")
+        // Resolve dotted collection names (e.g., "Source.Statements" -> "Statements")
         collection = ResolveDottedCollection(collection, letDeclarations);
 
         // Built-in collections
@@ -670,7 +670,7 @@ public class ScriptInterpreter
                         var value = evaluator.EvaluateField(fieldArgs[0], item, currentType);
                         return (object)(value?.ToString() ?? "");
                     }).ToList();
-                    _diagLog?.Invoke($"[trace] filter: .Select → {materialized.Count} → {((List<object>)current).Count} items (→ string)");
+                    _diagLog?.Invoke($"[trace] filter: .Select -> {materialized.Count} -> {((List<object>)current).Count} items (-> string)");
                     currentType = "string";
                     continue;
                 }
@@ -693,7 +693,7 @@ public class ScriptInterpreter
                             return ResolveTemplate(template, ctx).ToPlainText();
                         })
                         .ToList();
-                    _diagLog?.Invoke($"[trace] filter: .Text → {lines.Count} items → 1 string");
+                    _diagLog?.Invoke($"[trace] filter: .Text -> {lines.Count} items -> 1 string");
                     current = [(object)string.Join(Environment.NewLine, lines)];
                     currentType = "string";
                     continue;
@@ -707,7 +707,7 @@ public class ScriptInterpreter
                 var mapped = current.Select(item =>
                     (object)evaluator.ApplyFunction(funcName, item, capturedType, funcArgs)).ToList();
                 currentType = evaluator.GetFunctionReturnType(funcName) ?? currentType;
-                _diagLog?.Invoke($"[trace] filter: :{funcName} → {beforeCount} → {mapped.Count} items (→ {currentType})");
+                _diagLog?.Invoke($"[trace] filter: :{funcName} -> {beforeCount} -> {mapped.Count} items (-> {currentType})");
                 current = mapped;
                 beforeCount = mapped.Count;
             }
@@ -725,7 +725,7 @@ public class ScriptInterpreter
                         return result;
                     }).ToList();
                     var filterName = GetFilterDisplayName(filter);
-                    _diagLog($"[trace] filter: :{filterName} → {beforeCount} → {materialized.Count} items");
+                    _diagLog($"[trace] filter: :{filterName} -> {beforeCount} -> {materialized.Count} items");
                     beforeCount = materialized.Count;
                     current = materialized;
                 }
@@ -1060,11 +1060,11 @@ public class ScriptInterpreter
             return _typeRegistry.GetCollectionItemType(subCollectionName) ?? "Unknown";
         }
 
-        // Resolve dotted collection names (e.g., "Source.Statements" → "Statements")
+        // Resolve dotted collection names (e.g., "Source.Statements" -> "Statements")
         if (letDeclarations != null)
             collection = ResolveDottedCollection(collection, letDeclarations);
 
-        // Check registry for built-in collection → known item type
+        // Check registry for built-in collection -> known item type
         var registryType = _typeRegistry.GetCollectionItemType(collection);
         if (registryType is not null) return registryType;
 
@@ -1258,8 +1258,8 @@ public class ScriptInterpreter
     /// <summary>
     /// Follow let-declaration chains to find the root collection name(s).
     /// For unions (a + b + c), returns all root collections.
-    /// e.g., "public-types" → let public-types = Types:isPublic → ["Types"]
-    /// e.g., "all" → let all = a + b → resolves each branch recursively
+    /// e.g., "public-types" -> let public-types = Types:isPublic -> ["Types"]
+    /// e.g., "all" -> let all = a + b -> resolves each branch recursively
     /// </summary>
     private static List<string> ResolveRootCollections(string name, Dictionary<string, LetDeclaration> letDeclarations)
     {

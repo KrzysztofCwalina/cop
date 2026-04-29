@@ -173,7 +173,7 @@ public static class Engine
                 {
                     var collItems = typeRegistry.GetGlobalCollectionItems(coll.Name);
                     if (collItems is not null && collItems.Count > 0)
-                        diagLog($"[trace] provider {bp.Name}: {coll.Name} → {collItems.Count} items");
+                        diagLog($"[trace] provider {bp.Name}: {coll.Name} -> {collItems.Count} items");
                 }
                 diagLog($"[diag] {bp.Instance} query: {phaseSw.ElapsedMilliseconds}ms");
             }
@@ -671,7 +671,7 @@ public static class Engine
 
     /// <summary>
     /// Walks let bindings to find the base collection name, accumulating filters along the way.
-    /// For example: let x = Types:Public → base="Types", filters=[Public].
+    /// For example: let x = Types:Public -> base="Types", filters=[Public].
     /// </summary>
     private static string ResolveBaseCollection(
         string name, Dictionary<string, LetDeclaration> letDeclarations, List<Expression> filters,
