@@ -36,7 +36,7 @@ When cop runs, it parses every source file in your project and populates four li
 | `Code.Lines` | `Line` | Raw text lines |
 | `Code.Files` | `File` | Source files |
 
-Every item in these lists has properties you can filter on. A `Type` has `Name`, `Public`, `Sealed`, `Methods`, `Constructors`, `BaseTypes`. A `Statement` has `Kind`, `TypeName`, `MemberName`, `Arguments`, `Line`. See the [Code Package Reference](packages/code.md) for the full property catalog.
+Every item in these lists has properties you can filter on. A `Type` has `Name`, `Kind`, `Modifiers`, `Methods`, `Constructors`, `BaseTypes` (use `isPublic`, `isSealed` predicates from the code package for modifier checks). A `Statement` has `Kind`, `TypeName`, `MemberName`, `Arguments`, `Line`. See the [Code Package Reference](packages/code.md) for the full property catalog.
 
 The key insight: **the same data model works across all languages**. A C# class and a Python class both produce `Type` items with the same properties. A `console.log()` call in JavaScript and a `Console.WriteLine()` call in C# both produce `Statement` items with `Kind == 'call'`.
 

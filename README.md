@@ -170,7 +170,7 @@ predicate clientOptions(Type) => Type.Name:ew('ClientOptions')
 let Clients = Code.Types:client:!clientOptions
 
 # foreach iterates over the subset — one line per item
-foreach Clients:csharp:!Sealed => PRINT('{error:@red} {item.Name} should be sealed')
+foreach Clients:csharp:!isSealed => PRINT('{error:@red} {item.Name} should be sealed')
 ```
 
 Predicates compose — you can reference one predicate from another:
@@ -188,7 +188,7 @@ foreach Clients:missingOptions => PRINT('{warning:@yellow} {item.Name} needs an 
 Use `{text@style}` to colorize output:
 
 ```ruby
-foreach Code.Types:csharp:!Sealed => PRINT('{error:@red} {item.Name} should be sealed')
+foreach Code.Types:csharp:!isSealed => PRINT('{error:@red} {item.Name} should be sealed')
 foreach Code.Lines:python:todoComment => PRINT('{info:@cyan} {item.File.Path}:{item.Number} {item.Text}')
 ```
 
@@ -299,7 +299,7 @@ The `code-analysis` package provides the `CHECK` command for structured violatio
 ```ruby
 import code-analysis
 
-let errors = Code.Types:csharp:client:!Sealed
+let errors = Code.Types:csharp:client:!isSealed
     :toError('{item.Name} must be sealed')
 
 CHECK(errors)

@@ -44,12 +44,12 @@ Examples:
 
 ```ruby
 import csharp
+import code
 
 # Basic: assert types exist
 command test-has-types = ASSERT(csharp.Types)
 
-# Filtered: assert at least one public type exists
-predicate isPublic(Type) => Type.Public
+# Filtered: assert at least one public type exists (isPublic comes from code package)
 command test-public-types = ASSERT(csharp.Types:isPublic)
 
 # With message
@@ -122,12 +122,12 @@ The most valuable tests verify that predicates match the right items:
 
 ```ruby
 import csharp
+import code
 
 # ── Predicates under test ──
 predicate isClient(Type) => Type.Name:endsWith('Client')
-predicate isPublic(Type) => Type.Public
 
-# ── Tests ──
+# ── Tests (isPublic comes from the code package) ──
 command test-clients-found = ASSERT(csharp.Types:isClient, 'expected Client types in sample')
 command test-public-clients = ASSERT(csharp.Types:isClient:isPublic)
 ```
@@ -137,6 +137,7 @@ command test-public-clients = ASSERT(csharp.Types:isClient:isPublic)
 ```ruby
 import csharp
 import python
+import code
 
 let public-csharp = csharp.Types:isPublic
 let public-python = python.Types:isPublic

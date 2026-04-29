@@ -540,7 +540,7 @@ foreach Types:client => INFO('{info:@cyan} {item.Name} found')             # sam
 Use a language name as a filter (`:csharp`, `:python`, etc.) to scope iteration to files of that language:
 
 ```ruby
-foreach Clients:csharp:!Sealed => PRINT('{error:@red} {item.Name} should be sealed')
+foreach Clients:csharp:!isSealed => PRINT('{error:@red} {item.Name} should be sealed')
 foreach Lines:python:matches(@'\bprint\s*\(') => PRINT('{warning:@yellow} Use logging instead of print')
 ```
 
@@ -551,7 +551,7 @@ Writes output to a file. The first argument is the file path (relative to the co
 ```ruby
 SAVE('output.txt', 'Hello World')                                                      # bare — writes once
 foreach Types:csharp:client => SAVE('clients.txt', '{item.Name}')                      # list — one line per item
-foreach Clients:csharp:!Sealed => SAVE('report.txt', '{item.Name}: not sealed')        # filtered subset
+foreach Clients:csharp:!isSealed => SAVE('report.txt', '{item.Name}: not sealed')        # filtered subset
 ```
 
 | Part | Required | Description |
@@ -606,7 +606,7 @@ ASSERT and ASSERT_EMPTY commands only run via `cop test`, never during `cop run`
 Interpolated strings in commands use `{Expr}` placeholders:
 
 ```ruby
-foreach Clients:!Sealed => PRINT('{error:@red} {item.Name} should be sealed')
+foreach Clients:!isSealed => PRINT('{error:@red} {item.Name} should be sealed')
 foreach Clients:hasAsyncWithoutCancellation => PRINT('{warning:@yellow} {item.File.Path}:{item.Line} {item.Name} missing cancellation token')
 ```
 
