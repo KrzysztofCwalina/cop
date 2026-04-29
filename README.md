@@ -202,8 +202,8 @@ command check-clients = foreach Clients:csharp:!Sealed => PRINT('{error:@red} {i
 ```
 
 ```bash
-cop run rules.cop --commands:check-clients     # run only check-clients
-cop run rules.cop --format:json                 # JSON output
+cop run rules.cop -c check-clients     # run only check-clients
+cop run rules.cop -f json                 # JSON output
 ```
 
 ## Available Packages
@@ -212,9 +212,9 @@ cop run rules.cop --format:json                 # JSON output
 
 | Package | Description |
 |---------|-------------|
-| [`code`](docs/packages/code-package-reference.md) | Core type definitions for source code analysis (Type, Statement, File, etc.) |
+| [`code`](docs/packages/code.md) | Core type definitions for source code analysis (Type, Statement, File, etc.) |
 | [`code-analysis`](docs/packages/code-analysis.md) | Violation type and severity functions (toError, toWarning, toInfo) |
-| [`filesystem`](docs/packages/filesystem-package-reference.md) | Type definitions for filesystem analysis (Folder, DiskFile) |
+| [`filesystem`](docs/packages/filesystem.md) | Type definitions for filesystem analysis (Folder, DiskFile) |
 | [`test`](docs/packages/test.md) | General testing principles and patterns |
 | [`ui-web`](docs/packages/ui-web.md) | Web UI guidance for accessibility and responsive design |
 | [`application-azure`](docs/packages/application-azure.md) | Azure app development guidance |
@@ -245,7 +245,8 @@ cop run rules.cop --format:json                 # JSON output
 
 ## Next Steps
 
-- Read the [Language Reference](docs/cop-language-reference.md) for the full syntax
-- Read the [Code Package Reference](docs/packages/code-package-reference.md) for all types, properties, and predicates
-- Read the [Filesystem Package Reference](docs/packages/filesystem-package-reference.md) for file system analysis
+- Read the [Language Reference](docs/language-reference.md) for the full syntax
+- Read the [CLI Reference](docs/cli-reference.md) for all commands and options
+- Read the [Code Package Reference](docs/packages/code.md) for all types, properties, and predicates
+- Read the [Filesystem Package Reference](docs/packages/filesystem.md) for file system analysis
 - Browse `packages/` for examples of check definitions

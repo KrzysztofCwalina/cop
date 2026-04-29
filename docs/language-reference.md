@@ -64,12 +64,15 @@ A `.cop` file contains these kinds of declarations:
 
 | Declaration | Purpose |
 |---|---|
+| `feed` | Declare where to find packages (GitHub repo or local path) |
 | `import` | Bring types and lists from a package into scope |
+| `export` | Make a declaration visible to importing packages |
 | `type` | Describe the shape of an object’s property list |
 | `flags` | Define a flags enum for bitwise operations |
 | `let` | Declare a named list (base or subset) |
 | `command name =` | Define a named command (PRINT, SAVE, or composition) |
 | `predicate name(Param) =>` | Define a named predicate for subsetting |
+| `function name(Param) =>` | Define a named function that produces a record |
 | `PRINT` | Command that writes to console |
 | `SAVE` | Command that writes to a file |
 
@@ -84,6 +87,31 @@ import code
 ```
 
 Import statements must appear before predicates and commands.
+
+### Feed
+
+`feed` directives tell cop where to find packages for `import` statements:
+
+```ruby
+feed 'github.com/owner/repo'     # remote GitHub feed
+feed '../my-packages'             # local relative path
+```
+
+Remote feeds point to GitHub repos containing package directories. Local feeds point to directories on disk. Feed directives must appear before `import` statements.
+
+### Export
+
+`export` makes declarations visible to packages that import the current package. Without `export`, declarations are private to the current project (folder of `.cop` files):
+
+```ruby
+export predicate isClient(Type) => Type.Name:endsWith('Client')
+export let Clients = Code.Types:isClient
+export command list-clients = foreach Clients => PRINT('{item.Name}')
+export type ClientInfo = { Name : string, Path : string }
+export function clientInfo(Type) => ClientInfo { Name = Type.Name, Path = Type.File.Path }
+```
+
+Any declaration — `predicate`, `let`, `command`, `type`, `flags`, or `function` — can be exported.
 
 ### Types
 
@@ -212,6 +240,23 @@ predicate sealed(Type:csharp) => Type:isSealed
 predicate sealed(Type:python) => Type.Decorators:any(Decorator:contains('final'))
 ```
 
+### Functions
+
+Functions produce record objects with field mappings. The return type comes after `=>`:
+
+```ruby
+function clientInfo(Type) => ClientInfo {
+    Name = Type.Name
+    Path = Type.File.Path
+}
+```
+
+This creates a `ClientInfo` record for each item, mapping properties from the input. Functions can be used with `.Select()` to project a collection:
+
+```ruby
+let details = Clients.Select(clientInfo)
+```
+
 ## Operations
 
 Cop uses two operators for accessing members:
@@ -329,6 +374,21 @@ Size:notEquals(0)                     # not equal to
 | `isSet(flag)` | Flags bit is set — `(value & flag) != 0` |
 | `isClear(flag)` | Flags bit is clear — `(value & flag) == 0` |
 
+#### Short Aliases
+
+For brevity, predicates also accept short aliases:
+
+| Long form | Short | Long form | Short |
+|-----------|-------|-----------|-------|
+| `equals` | `eq` | `greaterThan` | `gt` |
+| `notEquals` | `ne` | `lessThan` | `lt` |
+| `startsWith` | `sw` | `greaterOrEqual` | `ge` |
+| `endsWith` | `ew` | `lessOrEqual` | `le` |
+| `contains` | `ct` | `containsAny` | `ca` |
+| `matches` | `rx` | `sameAs` | `sm` |
+
+Example: `Type.Name:sw('I')` is equivalent to `Type.Name:startsWith('I')`.
+
 ### String Properties
 
 ```ruby
@@ -379,6 +439,34 @@ Items.Single(predicate)      # single matching item
 Items.ElementAt(n)           # item at index n
 Items.Select(template)       # project each item into a new value
 Items.Text(template)         # format each item and join into a single string
+```
+
+#### Collection Concatenation (`+`)
+
+The `+` operator concatenates two collections of the same type:
+
+```ruby
+let allChecks = csharp-checks + python-checks
+let combined = internalTypes + externalTypes
+```
+
+#### Select and Text Examples
+
+`.Select()` projects each item into a new value. `.Text()` formats each item and joins with newlines:
+
+```ruby
+let names = Code.Types.Select(item.Name)
+let summary = Code.Types:client.Text('{item.Name} — {item.File.Path}')
+```
+
+#### Predicate-Based Collection Tests
+
+Use `:any()`, `:none()`, and `:all()` to test sub-collections within predicates:
+
+```ruby
+predicate hasPublicCtor(Type) => Type.Constructors:any(isPublic)
+predicate noMethods(Type) => Type.Methods:none(isPublic)
+predicate allAbstract(Type) => Type.Methods:all(isAbstract)
 ```
 
 #### Inline Expressions
