@@ -351,33 +351,41 @@ Unnamed statements (bare `foreach`) always run. Named commands only run when inv
 | [`code`](docs/packages/code.md) | Core type definitions for source code analysis (Type, Statement, File, etc.) |
 | [`code-analysis`](docs/packages/code-analysis.md) | Violation type and severity functions (toError, toWarning, toInfo) |
 | [`filesystem`](docs/packages/filesystem.md) | Type definitions for filesystem analysis (Folder, DiskFile) |
-| [`test`](docs/packages/test.md) | General testing principles and patterns |
-| [`ui-web`](docs/packages/ui-web.md) | Web UI guidance for accessibility and responsive design |
-| [`application-azure`](docs/packages/application-azure.md) | Azure app development guidance |
+| [`json`](docs/packages/json.md) | Parse JSON files into typed collections using user-defined schemas |
+| [`markdown`](docs/packages/code.md) | Analyze markdown documents (headings, links, sections, fenced code blocks) |
 
 ### C# / .NET
 
 | Package | Description |
 |---------|-------------|
-| [`csharp`](docs/packages/dotnet/csharp.md) | C# coding conventions (var usage, exception handling, async patterns) |
+| [`csharp`](docs/packages/dotnet/csharp.md) | C# language provider (scans .cs files) and coding conventions |
 | [`csharp-style`](docs/packages/dotnet/csharp-style.md) | C# style rules (naming, formatting) |
 | [`csharp-library`](docs/packages/dotnet/csharp-library.md) | Library design conventions for .NET class libraries |
 | [`csharp-library-client`](docs/packages/dotnet/csharp-library-client.md) | Patterns for .NET client libraries (retry, pagination, LROs) |
 | [`csharp-library-client-azure`](docs/packages/dotnet/csharp-library-client-azure.md) | Azure SDK patterns (TokenCredential, Azure.Core integration) |
+| [`csharp-api`](docs/packages/dotnet/csharp.md) | API surface tracking, export, and diff for .NET libraries |
+| [`csharp-snippets`](docs/packages/dotnet/csharp.md) | Validates C# code snippets in #region blocks match markdown docs |
 | [`test-nunit`](docs/packages/dotnet/test-nunit.md) | NUnit-specific testing patterns |
 
 ### JavaScript / TypeScript
 
 | Package | Description |
 |---------|-------------|
-| [`javascript`](docs/packages/js/javascript.md) | JavaScript/TypeScript coding conventions and best practices |
+| [`javascript`](docs/packages/js/javascript.md) | JavaScript/TypeScript language provider and coding conventions |
 
 ### Python
 
 | Package | Description |
 |---------|-------------|
-| [`python`](docs/packages/python/python.md) | Python coding conventions and best practices |
+| [`python`](docs/packages/python/python.md) | Python language provider and coding conventions |
 | [`python-library`](docs/packages/python/python-library.md) | Library design conventions for Python packages |
+
+### TypeSpec
+
+| Package | Description |
+|---------|-------------|
+| [`typespec`](docs/packages/typespec.md) | TypeSpec API specification analysis (raw type graph) |
+| [`typespec-http`](docs/packages/typespec-http.md) | TypeSpec HTTP protocol graph (verbs, paths, parameters) |
 
 ## Testing
 
