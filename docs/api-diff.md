@@ -59,7 +59,7 @@ namespace MyNamespace
 }
 ```
 
-Cop parses this as normal C# source and extracts the same `Code.Api` entries it would from real source code.
+Agent Cop parses this as normal C# source and extracts the same `Code.Api` entries it would from real source code.
 
 ## Comparing Against Assemblies
 

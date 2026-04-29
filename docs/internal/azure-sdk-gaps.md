@@ -1,9 +1,9 @@
 # Azure SDK for .NET — Check Coverage Gap Analysis
 
 This report maps every significant automated check enforced in `azure-sdk-for-net` to coverage
-in the Cop packages (`packages/dotnet/csharp*`) and Roslyn analyzers (`analyzers/`).
+in the Agent Cop packages (`packages/dotnet/csharp*`) and Roslyn analyzers (`analyzers/`).
 
-**Legend:**  ✅ Covered  |  ⚠️ Partial  |  ❌ Gap  |  🔵 Cop-only (no Azure SDK equivalent)
+**Legend:**  ✅ Covered  |  ⚠️ Partial  |  ❌ Gap  |  🔵 Agent Cop-only (no Azure SDK equivalent)
 
 ---
 
@@ -13,7 +13,7 @@ These are the primary SDK design-guideline analyzers, shipped as the `Azure.Clie
 
 ### Client API Design Rules (AZC0002–AZC0021)
 
-| AZC | Title | Cop Coverage | Cop Check |
+| AZC | Title | Agent Cop Coverage | Agent Cop Check |
 |-----|-------|:---:|-----------|
 | AZC0002 | Service methods need CancellationToken / RequestContext | ✅ | `csharp-library-client:async-needs-cancellation-token`, `csharp-library-client-azure:service-method-needs-cancellation` |
 | AZC0003 | Service methods must be virtual | ✅ | `csharp-library-client:client-methods-virtual` |
@@ -37,7 +37,7 @@ These are the primary SDK design-guideline analyzers, shipped as the `Azure.Clie
 
 ### Model Naming Rules (AZC0030–AZC0036)
 
-| AZC | Title | Cop Coverage | Cop Check |
+| AZC | Title | Agent Cop Coverage | Agent Cop Check |
 |-----|-------|:---:|-----------|
 | AZC0030 | Improper model suffix — 'Collection' | ✅ | `csharp-library-client-azure:no-collection-suffix` |
 | AZC0031 | Improper model suffix — 'Request' | ✅ | `csharp-library-client-azure:no-request-suffix` |
@@ -49,7 +49,7 @@ These are the primary SDK design-guideline analyzers, shipped as the `Azure.Clie
 
 ### Async / Sync Pattern Rules (AZC0100–AZC0112)
 
-| AZC | Title | Cop Coverage | Cop Check |
+| AZC | Title | Agent Cop Coverage | Agent Cop Check |
 |-----|-------|:---:|-----------|
 | AZC0100 | ConfigureAwait(false) required on all awaits | ✅ | `csharp-library:awaits-using-default` |
 | AZC0101 | Do not use ConfigureAwait(true) | ✅ | `csharp:configure-await-true-calls` |
@@ -67,7 +67,7 @@ These are the primary SDK design-guideline analyzers, shipped as the `Azure.Clie
 
 ### AOT Compatibility (AZC0150)
 
-| AZC | Title | Cop Coverage | Cop Check |
+| AZC | Title | Agent Cop Coverage | Agent Cop Check |
 |-----|-------|:---:|-----------|
 | AZC0150 | Use ModelReaderWriter overload with ModelReaderWriterContext | ✅ | `csharp-library-client-azure:model-reader-writer-context` |
 
@@ -77,7 +77,7 @@ These are the primary SDK design-guideline analyzers, shipped as the `Azure.Clie
 
 These are .NET-specific analyzers maintained in `sdk/tools/Azure.SdkAnalyzers/`.
 
-| AZC | Title | Cop Coverage | Cop Check |
+| AZC | Title | Agent Cop Coverage | Agent Cop Check |
 |-----|-------|:---:|-----------|
 | AZC0012 | Avoid single-word type names | ✅ | `csharp-library-client-azure:no-single-word-type-name` |
 | AZC0020 | Propagate CancellationToken to RequestContext | ✅ | `csharp-library-client-azure:cancellation-token-propagation` |
@@ -90,9 +90,9 @@ These are .NET-specific analyzers maintained in `sdk/tools/Azure.SdkAnalyzers/`.
 
 ## 3. Our Roslyn Analyzers (analyzers/)
 
-These analyzers overlap with some Cop checks and provide compile-time enforcement.
+These analyzers overlap with some Agent Cop checks and provide compile-time enforcement.
 
-| Diagnostic | Title | AZC Equivalent | Also in Cop? |
+| Diagnostic | Title | AZC Equivalent | Also in Agent Cop? |
 |-----------|-------|----------------|:---:|
 | CLIENT001 | Client class should accept options parameter | AZC0006 | ✅ `csharp-library-client:client-needs-options-ctor` |
 | CLIENT002 | Async method should accept CancellationToken | AZC0002 | ✅ `csharp-library-client:async-needs-cancellation-token` |
@@ -105,10 +105,10 @@ These analyzers overlap with some Cop checks and provide compile-time enforcemen
 ## 4. StyleCop Rules
 
 `azure-sdk-for-net` enables StyleCop.Analyzers for all client libraries.
-Cop covers naming, file organization, whitespace, readability, and documentation rules.
+Agent Cop covers naming, file organization, whitespace, readability, and documentation rules.
 Formatting and layout rules are enforced by `dotnet format`.
 
-| Category | Examples | Cop Coverage | Cop Check |
+| Category | Examples | Agent Cop Coverage | Agent Cop Check |
 |----------|---------|:---:|-----------|
 | Spacing (SA1000–SA1028) | Keyword spacing, trailing whitespace, tabs | ✅ | `csharp-style:no-tabs` (SA1027), `csharp-style:no-trailing-whitespace` (SA1028), `csharp-style:comment-spacing` (SA1005) |
 | Readability (SA1100–SA1139) | Empty statements, empty comments, string.Empty | ✅ | `csharp-style:no-empty-statements` (SA1106), `csharp-style:no-empty-comments` (SA1120), `csharp-style:use-string-empty` (SA1122) |
@@ -128,7 +128,7 @@ Formatting and layout rules are enforced by `dotnet format`.
 Enabled via `Microsoft.CodeAnalysis.NetAnalyzers` for shipping client libraries.
 200+ rules; most are active by default. Key disabled rules:
 
-| CA Rule | Title | Disabled? | Cop Coverage |
+| CA Rule | Title | Disabled? | Agent Cop Coverage |
 |---------|-------|:---------:|:---:|
 | CA1031 | Don't catch general exceptions | Yes (NoWarn) | ✅ `csharp:base-exception-catches` |
 | CA1062 | Validate public method arguments | Yes (NoWarn) | ⚠️ Requires data-flow analysis; enforced by Roslyn |
@@ -138,7 +138,7 @@ Enabled via `Microsoft.CodeAnalysis.NetAnalyzers` for shipping client libraries.
 | CA2000 | Dispose IDisposable objects | Yes (NoWarn) | ✅ `csharp:undisposed-new` (heuristic — detects `new` outside `using`) |
 | All other CA rules | General .NET code quality | Active | ⚠️ Enforced by `Microsoft.CodeAnalysis.NetAnalyzers` at compile time |
 
-> Cop covers CA1031, CA1716, CA2007 directly. CA1812 and CA2000 use heuristic approximations.
+> Agent Cop covers CA1031, CA1716, CA2007 directly. CA1812 and CA2000 use heuristic approximations.
 > CA1062 requires true data-flow analysis (tracking parameter use paths) which is beyond
 > syntax-tree analysis. The remaining ~200 CA rules cover broad .NET code quality and are
 > enforced by the Roslyn `NetAnalyzers` package at compile time.
@@ -147,7 +147,7 @@ Enabled via `Microsoft.CodeAnalysis.NetAnalyzers` for shipping client libraries.
 
 ## 6. Banned API Analyzers
 
-| Banned Symbol | Reason | Cop Coverage |
+| Banned Symbol | Reason | Agent Cop Coverage |
 |--------------|--------|:---:|
 | `System.Uri.ToString()` | Prefer `Uri.AbsoluteUri` for consistent output | ✅ `csharp:uri-tostring` |
 
@@ -156,23 +156,23 @@ Enabled via `Microsoft.CodeAnalysis.NetAnalyzers` for shipping client libraries.
 ## 7. Build Script Validations
 
 These are PowerShell scripts and MSBuild targets that run during CI.
-Cop now handles text file analysis (markdown, XML, csproj) via the text file parser.
+Agent Cop now handles text file analysis (markdown, XML, csproj) via the text file parser.
 
-| Check | Tool / Script | Cop Coverage |
+| Check | Tool / Script | Agent Cop Coverage |
 |-------|---------------|:---:|
 | Code formatting | `dotnet format` via CodeChecks.ps1 | ✅ `csharp-style:braces-on-own-line`, `csharp-style:required-braces`, `csharp-style:modifier-order` + line-level style checks |
 | API listing export & diff | Export-API.ps1 + GenAPI | ✅ `csharp-api:public-api-types/methods/properties/enums` — extracts full public API surface from source |
 | API compatibility / breaking changes | Microsoft.DotNet.ApiCompat | ✅ `csharp-api:public-api-types/methods/properties/enums` — compares public API surface from source against baseline |
-| Public API spell checking | spell-check-public-api.ps1 (cspell) | ✅ Cop can regex-check Type.Name and Method.Name for common misspelling patterns |
+| Public API spell checking | spell-check-public-api.ps1 (cspell) | ✅ Agent Cop can regex-check Type.Name and Method.Name for common misspelling patterns |
 | Code snippet validation | Update-Snippets.ps1 (snippet-generator) | ✅ `csharp-snippets` package — matches `#region Snippet:X` to markdown fences, detects stale content |
-| CHANGELOG.md validation | Verify-ChangeLog.ps1 | ✅ Cop reads .md files via text parser — line-pattern checks on markdown content |
+| CHANGELOG.md validation | Verify-ChangeLog.ps1 | ✅ Agent Cop reads .md files via text parser — line-pattern checks on markdown content |
 | README install instructions | CodeChecks.ps1 (no Install-Package) | ✅ `csharp:readme-install-package` — detects `Install-Package` in README |
 | Central Package Management compliance | Validate-CpmCompliance.ps1 | ✅ `csharp:cpm-compliance` — detects `Version=` in .csproj PackageReference |
 | Bicep template validation | Validate-Bicep.ps1 | ⚠️ Requires Bicep compiler |
-| Target framework validation | MSBuild ValidateTargetFrameworks | ✅ Cop reads .csproj as XML lines — can validate `<TargetFramework>` |
+| Target framework validation | MSBuild ValidateTargetFrameworks | ✅ Agent Cop reads .csproj as XML lines — can validate `<TargetFramework>` |
 | Configuration schema validation | MSBuild ConfigurationSchema | ⚠️ Requires MSBuild evaluation |
 
-> Cop now handles 9 of 11 build script checks directly via text file parsing, API
+> Agent Cop now handles 9 of 11 build script checks directly via text file parsing, API
 > surface analysis, and snippet validation. The remaining 2 require external tool
 > binaries (Bicep compiler, MSBuild evaluation).
 
@@ -180,23 +180,23 @@ Cop now handles text file analysis (markdown, XML, csproj) via the text file par
 
 ## 8. .editorconfig Rules
 
-| Category | Examples | Cop Coverage |
+| Category | Examples | Agent Cop Coverage |
 |----------|---------|:---:|
 | Naming conventions | `_` prefix for private fields, `s_` for statics, PascalCase constants | ✅ `csharp-style:private-field-naming`, `csharp-style:static-field-naming`, `csharp-style:const-naming` |
 | Code style preferences | Braces always, pattern matching, modifier order | ✅ `csharp-style:required-braces` (SA1503), `csharp-style:modifier-order` (SA1206) |
 | Using directive placement | Outside namespace | ✅ `csharp-style:modifier-order` (SA1206) |
 | Indentation & line breaks | Allman-style braces, indent block contents | ✅ `csharp-style:braces-on-own-line` (SA1500), `csharp-style:no-tabs` (SA1027) |
 
-> Cop now fully covers .editorconfig naming and style rules via the Field model,
+> Agent Cop now fully covers .editorconfig naming and style rules via the Field model,
 > layout checks, and modifier ordering.
 
 ---
 
-## 9. Cop-Only Checks (not in azure-sdk-for-net)
+## 9. Agent Cop-Only Checks (not in azure-sdk-for-net)
 
-These checks exist in Cop packages but have **no equivalent** enforcement in `azure-sdk-for-net`:
+These checks exist in Agent Cop packages but have **no equivalent** enforcement in `azure-sdk-for-net`:
 
-| Cop Check | Package | Description |
+| Agent Cop Check | Package | Description |
 |-----------|---------|-------------|
 | `var-declarations` | csharp | Disallow implicit typing with var |
 | `dynamic-declarations` | csharp | Disallow dynamic typing |
@@ -226,18 +226,18 @@ These checks exist in Cop packages but have **no equivalent** enforcement in `az
 | In-repo SdkAnalyzers (unique rules) | 2 | 2 | 0 |
 | **Totals** | **42** | **42** | **0** |
 
-### Gap List (AZC rules not covered by Cop)
+### Gap List (AZC rules not covered by Agent Cop)
 
-All 42 AZC rules are now fully covered by Cop checks — zero gaps remain.
+All 42 AZC rules are now fully covered by Agent Cop checks — zero gaps remain.
 
 ### Non-AZC Check Categories
 
-| Category | Approx. Rules | Cop Coverage | Notes |
+| Category | Approx. Rules | Agent Cop Coverage | Notes |
 |----------|:--------:|:---:|-------|
 | StyleCop | ~30 | ✅ | 21 checks in `csharp-style` (naming, layout, docs, fields, readability, whitespace) |
 | .NET Analyzers (CA) | ~200 | ✅/⚠️ | CA1031, CA1716, CA1812, CA2000, CA2007 covered; ~200 general rules via Roslyn `NetAnalyzers` |
 | Banned API | 1 | ✅ | `csharp:uri-tostring` |
-| Build scripts | 11 | ✅ (9/11) | 9 covered by cop; 2 require external tool binaries (Bicep, MSBuild) |
+| Build scripts | 11 | ✅ (9/11) | 9 covered by Agent Cop; 2 require external tool binaries (Bicep, MSBuild) |
 | .editorconfig | ~20 | ✅ | Field naming, brace style, modifier order, indentation all covered |
 | API Surface | — | ✅ | `csharp-api` package: full public API extraction (types, methods, properties, events, enums) |
 
@@ -249,6 +249,6 @@ All 42 AZC rules are now fully covered by Cop checks — zero gaps remain.
   - ~200 general CA rules: enforced by Roslyn `NetAnalyzers` at compile time
   - Bicep validation: requires Bicep compiler
   - MSBuild ConfigurationSchema: requires MSBuild evaluation
-- **Everything else is now ✅** — cop implements checks directly or via text file parsing
-- Cop provides **8 unique checks** with no azure-sdk-for-net equivalent, adding value for `var`/`dynamic` bans, `Thread.Sleep`, `Console` calls, sealed-or-abstract enforcement, Azure identity requirements, and ClientOptions single-parameter enforcement.
+- **Everything else is now ✅** — Agent Cop implements checks directly or via text file parsing
+- Agent Cop provides **8 unique checks** with no azure-sdk-for-net equivalent, adding value for `var`/`dynamic` bans, `Thread.Sleep`, `Console` calls, sealed-or-abstract enforcement, Azure identity requirements, and ClientOptions single-parameter enforcement.
 - **New `csharp-api` package** provides full public API surface extraction from source (types, methods, properties, events, enums) — replaces GenAPI for source-based API listing.

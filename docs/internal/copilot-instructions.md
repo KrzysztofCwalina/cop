@@ -1,8 +1,8 @@
-# Cop Architecture
+# Agent Cop Architecture
 
 ## Overview
 
-Cop is a governed agentic software development system. It provides a custom scripting language (`.cop` files) for defining analysis rules over source code and filesystems, and a CLI for package management.
+Agent Cop is a governed agentic software development system. It provides a custom scripting language (`.cop` files) for defining analysis rules over source code and filesystems, and a CLI for package management.
 
 The system has two main deliverables:
 

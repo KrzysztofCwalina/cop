@@ -1,6 +1,6 @@
-# Static Analysis with Cop
+# Static Analysis with Agent Cop
 
-Cop ships with pre-built analysis packages that check your code for common issues — naming conventions, error handling, documentation gaps, and more. You can run them directly with `cop check` without writing any `.cop` files, or write custom checks using the Cop DSL.
+Agent Cop ships with pre-built analysis packages that check your code for common issues — naming conventions, error handling, documentation gaps, and more. You can run them directly with `cop check` without writing any `.cop` files, or write custom checks using the Agent Cop DSL.
 
 ## Running Pre-Built Checks
 
@@ -180,7 +180,7 @@ The `toError`, `toWarning`, and `toInfo` functions work on `Statement`, `Type`, 
 
 ## Cross-Language Checks
 
-Many coding rules apply across all languages. Cop's data model and comparison operators make it straightforward to write checks once:
+Many coding rules apply across all languages. Agent Cop's data model and comparison operators make it straightforward to write checks once:
 
 ### Case-Insensitive Comparisons (Default)
 
@@ -270,7 +270,7 @@ CHECK(csharp-checks + javascript-checks + python-checks)
 
 ### Multiple Files
 
-Cop discovers and runs all `.cop` files in a directory. Split checks across files by concern — each file shares the same scope:
+Agent Cop discovers and runs all `.cop` files in a directory. Split checks across files by concern — each file shares the same scope:
 
 ```
 checks/
@@ -307,7 +307,7 @@ CHECK(empty-catch-blocks)
 
 ### Using Built-In Packages
 
-Cop ships with packages for common languages and frameworks. Import multiple to cover a polyglot codebase:
+Agent Cop ships with packages for common languages and frameworks. Import multiple to cover a polyglot codebase:
 
 ```ruby
 import csharp
@@ -467,7 +467,7 @@ src/Helpers/QueryTestHelper.cs(1): warning: QueryTestHelper should be public so 
 
 - [CLI Reference](cli-reference.md) — all commands and options for `cop.exe`
 - [Language Reference](language-reference.md) — full DSL syntax and semantics
-- [Testing with Cop](testing-with-cop.md) — writing and running tests with ASSERT
+- [Testing with Agent Cop](testing-with-cop.md) — writing and running tests with ASSERT
 - [Code Package Reference](packages/code.md) — complete type catalog (Type, Statement, File, etc.)
 - [Filesystem Package Reference](packages/filesystem.md) — folder and file analysis types
 - [Package Documentation](packages/) — reference docs for all built-in packages

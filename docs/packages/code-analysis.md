@@ -8,7 +8,7 @@ Structured violation reporting and common analysis predicates for source code ch
 
 ### Overview
 
-The `code-analysis` package provides the foundation for writing static analysis checks in Cop. It defines the `Violation` type for structured error/warning/info reporting, severity functions (`toError`, `toWarning`, `toInfo`) for converting matched items into violations, and common analysis predicates that detect cross-cutting issues like sync-vs-async misuse.
+The `code-analysis` package provides the foundation for writing static analysis checks in Agent Cop. It defines the `Violation` type for structured error/warning/info reporting, severity functions (`toError`, `toWarning`, `toInfo`) for converting matched items into violations, and common analysis predicates that detect cross-cutting issues like sync-vs-async misuse.
 
 ---
 

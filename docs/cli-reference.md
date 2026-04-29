@@ -13,7 +13,7 @@ Global options:
 | `-h` | Show help and usage information |
 | `-v` | Show version |
 
-> **Note:** Cop uses short flags only — there are no long-form `--help` or `--version` equivalents.
+> **Note:** Agent Cop uses short flags only — there are no long-form `--help` or `--version` equivalents.
 
 ## Exit Codes
 
@@ -209,7 +209,7 @@ Sample output:
   3 tests, 2 passed, 1 failed
 ```
 
-See [Testing with Cop](testing-with-cop.md) for a full guide on writing tests.
+See [Testing with Agent Cop](testing-with-cop.md) for a full guide on writing tests.
 
 ## cop help
 

@@ -1,6 +1,6 @@
-# Cop Language Reference
+# Agent Cop Language Reference
 
-Cop is a DSL for processing data organized as **lists**. Files use the `.cop` extension.
+Agent Cop is a DSL for processing data organized as **lists**. Files use the `.cop` extension.
 
 All data in cop is either a **primitive** (string, int, bool, byte) or a **list** of items. An **object** is a list of named properties — types describe the shape of those property lists. The language provides three kinds of operations:
 
@@ -288,7 +288,7 @@ let details = Clients.Select(clientInfo)
 
 ## Operations
 
-Cop uses two operators for accessing members:
+Agent Cop uses two operators for accessing members:
 
 - **`:` (colon)** — applies a **predicate** (returns bool). Predicates use `camelCase` names: `:equals()`, `:startsWith()`, `:any()`, `:contains()`.
 - **`.` (dot)** — accesses a **property** or **transform** (returns a value). Properties and transforms use `PascalCase` names: `.Name`, `.Count`, `.Where()`, `.Select()`.
@@ -641,7 +641,7 @@ command test-clean = ASSERT_EMPTY(violations, 'should have no violations')
 
 Passes when zero items match. Fails when items are found.
 
-ASSERT and ASSERT_EMPTY commands only run via `cop test`, never during `cop run`. See [Testing with Cop](testing-with-cop.md) for details.
+ASSERT and ASSERT_EMPTY commands only run via `cop test`, never during `cop run`. See [Testing with Agent Cop](testing-with-cop.md) for details.
 
 ### DEBUG
 

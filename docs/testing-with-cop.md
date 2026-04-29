@@ -1,10 +1,10 @@
-# Testing with Cop
+# Testing with Agent Cop
 
 This guide covers how to write and run tests for cop packages and programs using the `ASSERT` and `ASSERT_EMPTY` commands.
 
 ## Overview
 
-Cop provides built-in test commands that verify collection properties. Tests are regular `.cop` files that use `ASSERT` and `ASSERT_EMPTY` instead of `PRINT` or `CHECK`. Run them with `cop test`.
+Agent Cop provides built-in test commands that verify collection properties. Tests are regular `.cop` files that use `ASSERT` and `ASSERT_EMPTY` instead of `PRINT` or `CHECK`. Run them with `cop test`.
 
 ```ruby
 import csharp
