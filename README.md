@@ -335,7 +335,7 @@ command count-files = PRINT('{Code.Files.Count} source files')
 
 ```bash
 cop run list-types              # run just that command
-cop run -c list-clients         # run by name with -c
+cop run -c list-types,count-files  # run multiple commands
 cop run -f json                 # all output as JSON
 cop run -t src/                 # scan only the src/ directory
 ```
