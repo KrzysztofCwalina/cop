@@ -32,15 +32,13 @@ We propose **Agent Cop** — a static analysis tool purpose-built to detect and 
 
 The key insight: architects already *know* the rules — they just have no way to encode them into something deterministic. Today they write wiki pages, leave PR comments, and repeat themselves in every review. Agent Cop gives them a direct path from architectural intent to a **formal specification** that is enforced automatically.
 
-For example, an architect who wants "if a method has sync and async variants, the async variant should be called" doesn't need to file a tooling request or wait for a custom analyzer. They write a short formal specification:
+For example, an architect who wants "don't use console calls — use proper logging" doesn't need to file a tooling request or wait for a custom analyzer. They write a short formal specification:
 
 ```
-predicate importsSyncClient(Statement:python) =>
-    Statement.Text:matches('from azure\\..+import .+Client')
-    && !Statement.Text:contains('.aio')
-    && Statement.File.Text:contains('async def')
+predicate consoleCall(Statement:python) =>
+    Statement.Text:startsWith('print(')
 
-CHECK prefer-async => Code.Statements:importsSyncClient:toError('Use async client from .aio subpackage')
+CHECK no-console => Code.Statements:consoleCall:toError('Use logging module instead of print()')
 ```
 
 This is the entire specification — not a plugin, not a code review checklist item, not a Copilot instruction that may be ignored. It runs in CI, blocks the PR, and tells the agent exactly what to fix. The architect writes it once; it's enforced forever.
