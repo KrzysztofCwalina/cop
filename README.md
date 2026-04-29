@@ -39,11 +39,13 @@ Import the `code` package to analyze source code across languages (C#, Python, J
 ```ruby
 import code
 
-# Works across all supported languages
+# Predicate on Method — checks statement count
 predicate longMethod(Method) => Method.Statements.Count > 50
+# Predicate on Type — checks if any method is long
+predicate hasLongMethod(Type) => Type.Methods:any(longMethod)
 
 foreach Code.Types => PRINT('{item.Name} in {item.File.Path}')
-foreach Code.Types:longMethod => PRINT('{warning:@yellow} {item.Name} has too many statements')
+foreach Code.Types:hasLongMethod => PRINT('{warning:@yellow} {item.Name} has a method with too many statements')
 ```
 
 Use language-specific packages for targeted rules. For example, a project with both C# and JavaScript:
