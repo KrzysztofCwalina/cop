@@ -444,6 +444,6 @@ Cop's exit codes make it easy to integrate into CI pipelines:
 
 - Read the [Language Reference](docs/language-reference.md) for the full syntax
 - Read the [CLI Reference](docs/cli-reference.md) for all commands and options
-- Read the [Code Package Reference](docs/packages/code.md) for all types, properties, and predicates
-- Read the [Filesystem Package Reference](docs/packages/filesystem.md) for file system analysis
+- Read [Static Analysis with Cop](docs/static-analysis-with-cop.md) for writing source code checks
+- Read [Testing with Cop](docs/testing-with-cop.md) for writing and running tests
 - Browse `packages/` for examples of check definitions
