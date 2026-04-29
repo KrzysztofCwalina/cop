@@ -40,7 +40,23 @@ Each function has overloads for [`Statement`](code.md#statement), [`Type`](code.
 
 ---
 
+### Predicates
+
+| Predicate | Description |
+|---|---|
+| `callsSyncWhenAsyncExists(Statement)` | Flags calls to sync methods when an async variant (method name + `Async`) exists on any type in the codebase |
+
+---
+
 ### Examples
+
+```ruby
+import code-analysis
+
+# Flag sync calls when async variant exists
+CHECK prefer-async => Code.Statements:callsSyncWhenAsyncExists
+    :toWarning('Use {item.MemberName}Async instead of {item.MemberName}')
+```
 
 ```ruby
 import code-analysis
