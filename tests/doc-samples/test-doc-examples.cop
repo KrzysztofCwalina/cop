@@ -1,0 +1,99 @@
+# Doc Example Tests
+# Verifies that key examples from README.md, language-reference.md,
+# and static-analysis-with-cop.md work correctly.
+# Run with: cop test tests/doc-samples/
+
+import csharp
+import python
+import javascript
+import code
+
+# --- README: Source Code Analysis ---
+
+predicate longMethod(Method) => Method.Statements.Count > 50
+predicate hasLongMethod(Type) => Type.Methods:any(longMethod)
+
+command test-cs-types = ASSERT(csharp.Types, 'should find C# types')
+command test-py-types = ASSERT(python.Types, 'should find Python types')
+command test-js-types = ASSERT(javascript.Types, 'should find JS types')
+command test-long-method-no-crash = ASSERT_EMPTY(csharp.Types:hasLongMethod)
+
+# --- README: Writing Checks ---
+
+predicate client(Type) => Type.Name:endsWith('Client')
+predicate clientOptions(Type) => Type.Name:endsWith('ClientOptions')
+let CsClients = csharp.Types:client:!clientOptions
+
+command test-client-found = ASSERT(csharp.Types:client)
+command test-client-options-found = ASSERT(csharp.Types:clientOptions)
+command test-clients-not-options = ASSERT(CsClients)
+
+# Predicate composition
+predicate optionsType(Parameter) => Parameter.Type.Name:endsWith('Options')
+predicate hasOptions(Constructor) => Constructor.Parameters:any(optionsType)
+predicate missingOptions(Type) => Type.Constructors:none(hasOptions)
+command test-composition = ASSERT(CsClients:missingOptions)
+
+# --- Language Reference: String Predicates ---
+
+predicate startsWithBlob(Type) => Type.Name:startsWith('Blob')
+predicate containsClient(Type) => Type.Name:contains('Client')
+predicate matchesPattern(Type) => Type.Name:matches('^Blob')
+
+command test-starts-with = ASSERT(csharp.Types:startsWithBlob)
+command test-contains = ASSERT(csharp.Types:containsClient)
+command test-matches = ASSERT(csharp.Types:matchesPattern)
+
+# Short aliases
+predicate swBlob(Type) => Type.Name:sw('Blob')
+predicate ewClient(Type) => Type.Name:ew('Client')
+command test-sw-alias = ASSERT(csharp.Types:swBlob)
+command test-ew-alias = ASSERT(csharp.Types:ewClient)
+
+# Convention-insensitive (sameAs)
+predicate isBlobClient(Type) => Type.Name:sameAs('blob_client')
+command test-same-as = ASSERT(csharp.Types:isBlobClient)
+
+# --- Language Reference: Collection Operations ---
+
+# Negation using isPublic from code package
+command test-negation = ASSERT(csharp.Types:!isPublic)
+
+# any on sub-collection using isPublic(Method)
+predicate hasPublicCtors(Type) => Type.Constructors:any(isPublic)
+command test-any-subcollection = ASSERT(csharp.Types:hasPublicCtors)
+
+# empty predicate
+predicate noCtors(Type) => Type.Constructors:empty
+command test-empty-predicate = ASSERT(csharp.Types:noCtors)
+
+# Collection concatenation
+let all-types = csharp.Types + python.Types + javascript.Types
+command test-union = ASSERT(all-types)
+
+# Select transform
+let typeNames = csharp.Types.Select(item.Name)
+command test-select = ASSERT(typeNames)
+
+# Constrained predicates using isSealed from code package
+command test-sealed = ASSERT(csharp.Types:isSealed)
+
+# --- Static Analysis: Cross-Language ---
+
+predicate swallowsException(Statement) => Statement.ErrorHandler == true
+    && Statement.Generic == true && !Statement.Rethrows
+command test-swallows = ASSERT(python.Statements:swallowsException)
+
+predicate consoleOutput(Statement) => Statement.Kind == 'call'
+    && (Statement.TypeName == 'Console'
+        || Statement.TypeName == 'console'
+        || Statement.MemberName == 'print')
+command test-console = ASSERT(python.Statements:consoleOutput)
+
+predicate isCall(Statement) => Statement.Kind == 'call'
+command test-cs-calls = ASSERT(csharp.Statements:isCall)
+command test-py-calls = ASSERT(python.Statements:isCall)
+command test-js-calls = ASSERT(javascript.Statements:isCall)
+
+predicate anyErrorHandler(Statement) => Statement.ErrorHandler == true
+command test-error-handlers = ASSERT(python.Statements:anyErrorHandler)
