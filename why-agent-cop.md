@@ -35,12 +35,12 @@ The key insight: architects already *know* the rules — they just have no way t
 For example, an architect who wants "if a method has both sync and async variants, always call the async one" doesn't need to file a tooling request or wait for a custom analyzer. They write a short formal specification:
 
 ```
-predicate callsSync(Statement:csharp) =>
-    Statement.Text:matches('\\.(Read|Write|Send|Get|Post|Execute)\\(')
+predicate callsSync(Statement:python) =>
+    Statement.Text:matches('\\.(read|write|send|recv|execute)\\(')
     && Statement.InMethod
-    && Statement.File.Text:contains('Async')
+    && Statement.File.Text:contains('async def')
 
-CHECK prefer-async => Code.Statements:callsSync:toError('Use the Async variant instead of the sync call')
+CHECK prefer-async => Code.Statements:callsSync:toError('Use the async variant instead of the sync call')
 ```
 
 This is the entire specification — not a plugin, not a code review checklist item, not a Copilot instruction that may be ignored. It runs in CI, blocks the PR, and tells the agent exactly what to fix. The architect writes it once; it's enforced forever.
