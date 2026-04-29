@@ -169,3 +169,11 @@ export command CHECK(violations) = PRINT(
     '{item.File@dim}({item.Line@dim}): {item.Severity@auto}: {item.Message}',
     violations
 )
+
+# Common predicates
+
+# Flags sync method calls when an async variant exists on any type in the codebase
+export predicate callsSyncWhenAsyncExists(Statement) =>
+    Statement.Kind:equals('call')
+    && Statement.MemberName:endsWith('Async') == false
+    && Types.MethodNames:ct(Statement.MemberName + 'Async')
