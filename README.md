@@ -424,10 +424,10 @@ Cop's exit codes make it easy to integrate into CI pipelines:
     curl -L https://github.com/KrzysztofCwalina/cop/releases/latest/download/cop-linux-x64.zip -o cop.zip
     unzip cop.zip && chmod +x cop && mv cop /usr/local/bin/
 
-- name: Restore packages
-  run: cop package restore
+- name: Run style checks
+  run: cop check csharp-style
 
-- name: Run checks
+- name: Run custom checks
   run: cop run
 
 - name: Run tests

@@ -20,6 +20,7 @@ var rootCommand = new RootCommand
 
         Quick reference:
           cop run [<command>] [-t <target>] [-c <commands>] [-f text|json] [-d]
+          cop check <packages> [-t <target>] [-c <rules>] [-f text|json] [-d]
           cop test [<file>] [-d]
           cop package <subcommand>
           cop <command> -h for details
@@ -37,6 +38,7 @@ if (defaultVersion != null) rootCommand.Options.Remove(defaultVersion);
 rootCommand.Options.Add(new VersionOption("-v"));
 
 rootCommand.Add(RunCommand.Create());
+rootCommand.Add(CheckCommand.Create());
 rootCommand.Add(TestCommand.Create());
 rootCommand.Add(LockCommand.Create());
 rootCommand.Add(UnlockCommand.Create());

@@ -1,29 +1,57 @@
 # Static Analysis with Cop
 
-This guide covers how to write, organize, and run static analysis checks with cop. It walks through real examples in C#, JavaScript, and Python — from simple single-file checks to multi-language packages.
+Cop ships with pre-built analysis packages that check your code for common issues — naming conventions, error handling, documentation gaps, and more. You can run them directly with `cop check` without writing any `.cop` files, or write custom checks using the Cop DSL.
 
-## Prerequisites
+## Running Pre-Built Checks
 
-Install cop (see [README](../README.md) for details) and create a project with source files to analyze. The examples in this guide assume a repo with C#, JavaScript, and Python code.
-
-## Your First Check
-
-Create a file called `checks.cop` in your project root:
-
-```ruby
-import code
-
-foreach Code.Statements:call
-    => PRINT('{item.File.Path}:{item.Line} {item.TypeName}.{item.MemberName}')
-```
-
-Run it:
+The fastest way to analyze your code:
 
 ```bash
-cop run
+cop check csharp-style            # run C# style checks (naming, formatting, docs)
+cop check csharp-library          # run C# library design checks
+cop check csharp-style csharp-library   # run multiple packages at once
+cop check csharp-style -t src/    # analyze a specific directory
 ```
 
-This prints every function call in every source file cop can parse. Not very useful yet — but it shows the core pattern: **import data, filter it, produce output**.
+### Available Check Packages
+
+| Package | What it checks |
+|---|---|
+| `csharp-style` | StyleCop-style rules: naming, formatting, documentation, braces |
+| `csharp-library` | Library design: sealed clients, method conventions, constructor patterns |
+| `csharp-library-client` | Client library patterns: client naming, options types, service methods |
+
+### Exit Codes
+
+| Code | Meaning |
+|---|---|
+| 0 | All checks pass — no violations found |
+| 1 | One or more violations found |
+| 2 | Parse error, missing package, or configuration error |
+
+This makes cop easy to integrate into CI pipelines:
+
+```yaml
+- name: Run cop checks
+  run: cop check csharp-style csharp-library
+  # Fails the build if any checks produce violations (exit code 1)
+```
+
+### Selecting Specific Rules
+
+Each check package exports named rule sets. Use `-c` to run specific ones:
+
+```bash
+cop check csharp-style -c interface-prefix,type-name-casing
+```
+
+## Writing Custom Checks
+
+For project-specific rules, create `.cop` files and run them with `cop run`.
+
+### Prerequisites
+
+Install cop (see [README](../README.md) for details) and create a project with source files to analyze.
 
 ## The Data Model
 
@@ -342,7 +370,15 @@ cop run                     # run all statements (but not named commands)
 
 ## Running Checks
 
-### Basic Usage
+### Using Pre-Built Packages
+
+```bash
+cop check csharp-style           # run style checks from a package
+cop check csharp-style -t src/   # analyze a specific directory
+cop check csharp-style -c type-name-casing  # run specific rules only
+```
+
+### Using Custom .cop Files
 
 ```bash
 cop run                      # discover and run all .cop files in the project

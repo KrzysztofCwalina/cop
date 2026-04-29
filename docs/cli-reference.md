@@ -118,6 +118,54 @@ Show diagnostics (timing, collection counts, filter traces, and DEBUG output):
 cop run checks.cop -d
 ```
 
+## cop check
+
+Run pre-built analysis checks from packages against your code. This is the fastest way to run checks without writing `.cop` files.
+
+```bash
+cop check <packages>... [-t <target>] [-c <rules>] [-f text|json] [-d]
+```
+
+| Argument / Option | Description |
+|-------------------|-------------|
+| `<packages>` | One or more package names to run (e.g., `csharp-style`, `csharp-library`) |
+| `-t <target>` | Target directory to analyze. Defaults to the current directory. |
+| `-c <rules>` | Comma-separated list of specific rules to run. When omitted, all exported checks in the package run. |
+| `-f <format>` | Output format: `text` (default) or `json` |
+| `-d` | Enable diagnostic mode |
+
+### How it works
+
+`cop check` loads the specified package's `.cop` files, resolves their imports, runs all providers against the target directory, and executes the `CHECK` command on all exported violation collections.
+
+Packages are discovered from `packages/` directories in the project tree and from the user's restored package cache (`~/.cop/packages/`).
+
+### Examples
+
+Run C# style checks on the current directory:
+
+```bash
+cop check csharp-style
+```
+
+Run multiple packages:
+
+```bash
+cop check csharp-style csharp-library
+```
+
+Target a specific directory:
+
+```bash
+cop check csharp-style -t src/
+```
+
+Run only specific rules from a package:
+
+```bash
+cop check csharp-style -c interface-prefix,type-name-casing
+```
+
 ## cop test
 
 Run `ASSERT` and `ASSERT_EMPTY` commands in `.cop` files and report pass/fail results.
