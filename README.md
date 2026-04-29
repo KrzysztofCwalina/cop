@@ -1,6 +1,14 @@
-# Getting Started with Cop
+# Agent Cop
 
-Cop is a general-purpose data processing language. It can analyze source code (C#, Python, JavaScript, and more), filesystems, and other structured data.
+**Agent Cop** is a static analysis tool that detects and prevents code slop — the architectural violations, convention drift, and design debt that coding agents introduce at machine speed. It ships with built-in checks for common rules and a formal specification language (DSL) for expressing custom requirements that are deterministically enforced in CI.
+
+Read the [product pitch](why-agent-cop.md) for the strategic rationale.
+
+## Why Agent Cop
+
+Coding agents produce 10x–100x the volume of code. Without deterministic enforcement, architects become bottlenecked reviewing everything for slop. Natural language instructions (copilot instructions, system prompts) are advisory — agents drift from them, and humans still can't trust the output without manual review.
+
+Agent Cop solves this by giving architects a way to **formally specify** their rules in a simple DSL. These rules run as a build step, produce compiler-style errors, and feed directly back to agents for auto-remediation — no human in the loop.
 
 ## Installation
 
@@ -18,20 +26,21 @@ For syntax highlighting and completions, install the VS Code extension:
 
 The extension provides syntax highlighting, keyword completions, and snippet support for `.cop` files.
 
-## Hello World
+## Quick Start
 
 Create a file called `checks.cop` in any project folder:
 
 ```ruby
-import filesystem
+import code-analysis
 
-# define a custom predicate
-predicate deep(Folder) => Folder.Depth > 5
+# Define what a "client type" means
+predicate client(Type) => Type.Name:endsWith('Client')
 
-# :empty is a built-in predicate — works on any collection or string
-foreach Disk.Folders:empty => PRINT('{warning:@yellow} Empty folder: {item.Path}')
-# :deep is the custom predicate defined above
-foreach Disk.Folders:deep => PRINT('{item.Path} is deeply nested ({item.Depth} levels)')
+# Specify the rule: clients must be sealed
+let unsealed-clients = Code.Types:csharp:client:!isSealed
+    :toError('{item.Name} must be sealed')
+
+CHECK(unsealed-clients)
 ```
 
 Run it:
@@ -40,11 +49,29 @@ Run it:
 cop run checks.cop
 ```
 
-Cop scans the filesystem, filters collections with your predicates, and prints one line per match. Exit code 1 if any output, 0 if clean — suitable for CI.
+Output:
+
+```
+src/BlobClient.cs(15): error: BlobClient must be sealed
+src/QueueClient.cs(8): error: QueueClient must be sealed
+```
+
+Exit code 1 if violations found, 0 if clean — suitable for CI. Agents see these errors and fix them automatically, just like compiler errors.
+
+## Running Built-In Checks
+
+Agent Cop ships with pre-built check packages for common rules. No `.cop` files needed:
+
+```bash
+cop check csharp-style            # naming, formatting, documentation
+cop check csharp-library          # library design conventions
+cop check csharp-style csharp-library   # run multiple packages
+cop check csharp-style -t src/    # analyze a specific directory
+```
 
 ## Source Code Analysis
 
-Import the `code` package to analyze source code across languages (C#, Python, JavaScript, and more):
+The specification language works across languages (C#, Python, JavaScript). Write rules once, enforce everywhere:
 
 ```ruby
 import code
@@ -82,7 +109,7 @@ foreach ErrorHandlers:swallowsError => PRINT('{error:@red} {ErrorHandler.File.Pa
 
 ## Filesystem Analysis
 
-Import the `filesystem` package to work with folders and files on disk:
+The same specification language works for filesystem structure rules:
 
 ```ruby
 import filesystem
@@ -121,7 +148,7 @@ foreach Tasks:unassigned => PRINT('{item.title} has no assignee')
 
 ## Core Concepts
 
-A `.cop` file is a program that filters collections of items and produces output. The building blocks are:
+A `.cop` file is a formal specification that declares rules over collections of code elements and produces deterministic pass/fail results. The building blocks are:
 
 - **`import`** — bring types and collections from a package into scope
 - **`predicate`** — a named boolean test over a typed item
@@ -165,9 +192,9 @@ predicate hasPublicCtor(Type) => Type.Constructors:any(isPublic)
 predicate noMethods(Type) => Type.Methods:empty
 ```
 
-## Writing Checks
+## Writing Custom Rules
 
-Most checks follow the same pattern: import a package, define predicates, filter collections, output violations.
+Most rules follow the same pattern: import a package, define predicates, filter collections, output violations.
 
 ```ruby
 import code
@@ -443,7 +470,8 @@ Cop's exit codes make it easy to integrate into CI pipelines:
 
 ## Next Steps
 
-- Read the [Language Reference](docs/language-reference.md) for the full syntax
+- Read [Why Agent Cop](why-agent-cop.md) for the product strategy and rationale
+- Read the [Language Reference](docs/language-reference.md) for the full specification DSL syntax
 - Read the [CLI Reference](docs/cli-reference.md) for all commands and options
 - Read [Static Analysis with Cop](docs/static-analysis-with-cop.md) for writing source code checks
 - Read [Testing with Cop](docs/testing-with-cop.md) for writing and running tests
