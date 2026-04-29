@@ -1,8 +1,14 @@
 ## code-analysis
 
-Structured violation reporting for source code checks. &nbsp; `import code-analysis`
+Structured violation reporting and common analysis predicates for source code checks. &nbsp; `import code-analysis`
 
 **Source:** [`packages/code-analysis/src/code-analysis.cop`](../../packages/code-analysis/src/code-analysis.cop) &nbsp; **Depends on:** code, filesystem
+
+---
+
+### Overview
+
+The `code-analysis` package provides the foundation for writing static analysis checks in Cop. It defines the `Violation` type for structured error/warning/info reporting, severity functions (`toError`, `toWarning`, `toInfo`) for converting matched items into violations, and common analysis predicates that detect cross-cutting issues like sync-vs-async misuse.
 
 ---
 
