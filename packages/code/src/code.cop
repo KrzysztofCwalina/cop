@@ -206,12 +206,20 @@ export type File = {
     Types : [Type]
 }
 
+export type Project = {
+    Name : string,
+    Path : string,
+    Language : string?,
+    References : [string]
+}
+
 export type Codebase = {
     Files : [File],
     Types : [Type],
     Statements : [Statement],
     Lines : [Line],
-    Regions : [Region]
+    Regions : [Region],
+    Projects : [Project]
 }
 
 # Built-in value — implementation is provided by the runtime engine

@@ -28,6 +28,7 @@ public static class CodeBindings
                 [typeof(PropertyDeclaration)] = "Property",
                 [typeof(EventDeclaration)] = "Event",
                 [typeof(RegionInfo)] = "Region",
+                [typeof(ProjectInfo)] = "Project",
             },
             Accessors = BuildAccessors(),
             CollectionExtractors = BuildExtractors(),
@@ -41,6 +42,8 @@ public static class CodeBindings
                 ["TypeReference"] = o => ((TypeReference)o).OriginalText,
                 ["Line"] = o => ((LineInfo)o).Text,
                 ["Api"] = o => ((ApiEntry)o).Signature,
+                ["File"] = o => ((SourceFile)o).Path,
+                ["Project"] = o => ((ProjectInfo)o).Name,
             },
         };
     }
@@ -183,6 +186,13 @@ public static class CodeBindings
                 ["ContentHash"] = o => ((RegionInfo)o).ContentHash,
                 ["File"] = o => ((RegionInfo)o).File,
                 ["Source"] = o => ((RegionInfo)o).Source,
+            },
+            ["Project"] = new()
+            {
+                ["Name"] = o => ((ProjectInfo)o).Name,
+                ["Path"] = o => ((ProjectInfo)o).Path,
+                ["Language"] = o => ((ProjectInfo)o).Language,
+                ["References"] = o => (object)((ProjectInfo)o).References,
             },
         };
     }

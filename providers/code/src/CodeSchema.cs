@@ -95,6 +95,10 @@ public static class CodeSchema
                     Prop("Name"), Prop("StartLine", "int"), Prop("EndLine", "int"),
                     Prop("Content"), Prop("ContentHash"),
                     Opt("File", "File"), Prop("Source")),
+
+                TypeDef("Project", null,
+                    Prop("Name"), Prop("Path"), Opt("Language"),
+                    Coll("References")),
             ],
             Collections =
             [
@@ -105,6 +109,7 @@ public static class CodeSchema
                 new() { Name = "Members", ItemType = "Member" },
                 new() { Name = "Api", ItemType = "Api" },
                 new() { Name = "Regions", ItemType = "Region" },
+                new() { Name = "Projects", ItemType = "Project" },
             ]
         };
     }

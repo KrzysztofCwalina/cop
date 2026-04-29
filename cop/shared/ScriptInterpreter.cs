@@ -195,9 +195,13 @@ public class ScriptInterpreter
             if (scriptFile.RunInvocations is null) continue;
             foreach (var run in scriptFile.RunInvocations)
             {
+                System.Console.Error.WriteLine($"[debug] Processing RUN {run.CommandName}({string.Join(",", run.Arguments.Select(a => a.GetType().Name))}) from {scriptFile.FilePath}");
                 // Look up the command by name
                 if (!allCommands.TryGetValue(run.CommandName, out var cmdList) || cmdList.Count == 0)
+                {
+                    System.Console.Error.WriteLine($"[debug] Command '{run.CommandName}' not found in allCommands");
                     continue;
+                }
 
                 var cmdTemplate = cmdList[0];
 
@@ -212,13 +216,16 @@ public class ScriptInterpreter
                         var paramName = cmdTemplate.Parameters[i];
                         var argExpr = run.Arguments[i];
                         var (collection, filters, exclusions) = ScriptParser.DecomposeCollectionExpression(argExpr);
+                        System.Console.Error.WriteLine($"[debug] Bound param '{paramName}' -> collection='{collection}', filters={filters.Count}");
                         tempLets[paramName] = new LetDeclaration(paramName, collection, filters, run.Line)
                         {
                             Exclusions = exclusions
                         };
                     }
 
+                    System.Console.Error.WriteLine($"[debug] Calling ExecuteCommand with cmd.Collection='{cmdTemplate.Collection}', docs={documents.Count}");
                     ExecuteCommand(cmdTemplate, documents, predicateGroups, tempLets, functionGroups, program, allCommands, allOutputs, fileOutputs, aggregateCounts, allAsserts);
+                    System.Console.Error.WriteLine($"[debug] After ExecuteCommand: allOutputs.Count={allOutputs.Count}");
                 }
                 else
                 {
@@ -342,11 +349,15 @@ public class ScriptInterpreter
         string itemType = ResolveItemType(cmd.Collection, predicateGroups, letDeclarations, functionGroups);
         string finalItemType = ResolveItemTypeAfterFilters(itemType, cmd.Filters, functionGroups);
 
+        bool isGlobal = IsGlobalRootCollection(cmd.Collection, predicateGroups, letDeclarations);
+        System.Console.Error.WriteLine($"[debug] ExecuteCommand: collection='{cmd.Collection}', itemType='{itemType}', isGlobal={isGlobal}, documents.Count={documents.Count}");
+
         // Global collections are processed once (not per-source-file)
-        if (IsGlobalRootCollection(cmd.Collection, predicateGroups, letDeclarations))
+        if (isGlobal)
         {
             var evaluator = new PredicateEvaluator(predicateGroups, "", _typeRegistry, letDeclarations, functionGroups);
             var items = ResolveGlobalCollection(cmd.Collection, evaluator, predicateGroups, letDeclarations, functionGroups);
+            System.Console.Error.WriteLine($"[debug] Global resolve: {cmd.Collection} -> {items.Count} items");
             _diagLog?.Invoke($"[trace] resolve: {cmd.Collection} -> {items.Count} items");
             items = ApplyFilters(items, itemType, cmd.Filters, evaluator, functionGroups);
 
@@ -946,7 +957,10 @@ public class ScriptInterpreter
         // Direct global collection
         var globalItems = _typeRegistry.GetGlobalCollectionItems(collection);
         if (globalItems is not null)
+        {
+            System.Console.Error.WriteLine($"[debug] ResolveGlobal('{collection}') -> direct global: {globalItems.Count} items");
             return globalItems;
+        }
 
         visited ??= [];
         if (!visited.Add(collection))
@@ -962,7 +976,9 @@ public class ScriptInterpreter
                 foreach (var elem in ((CollectionUnionExpr)letDecl.ValueExpression!).Elements)
                 {
                     var name = GetUnionElementName(elem);
-                    unionItems.AddRange(ResolveGlobalCollection(name, evaluator, predicateGroups, letDeclarations, functionGroups, new(visited)));
+                    var elemItems = ResolveGlobalCollection(name, evaluator, predicateGroups, letDeclarations, functionGroups, new(visited));
+                    System.Console.Error.WriteLine($"[debug] ResolveGlobal union '{collection}' elem '{name}' -> {elemItems.Count} items");
+                    unionItems.AddRange(elemItems);
                 }
                 return unionItems;
             }
@@ -1175,10 +1191,28 @@ public class ScriptInterpreter
                     }
                 }
                 var annotations = RichString.ParseAnnotation(expr.Annotation);
-                spans.Add(new TextSpan(obj?.ToString() ?? "", annotations));
+                spans.Add(new TextSpan(ConvertToText(obj), annotations));
             }
         }
         return new RichString(spans);
+    }
+
+    /// <summary>
+    /// Converts an object to its text representation for template rendering.
+    /// Uses registered TextConverter if available, otherwise falls back to ToString().
+    /// </summary>
+    private string ConvertToText(object? obj)
+    {
+        if (obj is null) return "";
+        if (obj is string s) return s;
+        var typeName = _typeRegistry.InferTypeName(obj);
+        if (typeName is not null)
+        {
+            var typeDesc = _typeRegistry.GetType(typeName);
+            if (typeDesc?.TextConverter is not null)
+                return typeDesc.TextConverter(obj);
+        }
+        return obj.ToString() ?? "";
     }
 
     private object? GetPropertyViaRegistry(object obj, string property)

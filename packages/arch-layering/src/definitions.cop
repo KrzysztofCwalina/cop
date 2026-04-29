@@ -1,0 +1,49 @@
+# Architecture Layering Package v1.0
+# Defines types and predicates for architectural layer enforcement.
+# Import with: import arch-layering
+
+import code
+import code-analysis
+
+# A LayerViolation represents a project referencing another project
+# in a disallowed layer.
+export type LayerViolation = {
+    Name : string,
+    Path : string,
+    SourceLayer : string,
+    Target : string,
+    TargetLayer : string,
+    Source : string
+}
+
+# A project that is not assigned to any defined layer.
+export type UncategorizedProject = {
+    Name : string,
+    Path : string,
+    Source : string
+}
+
+# Violation formatting functions
+export function toError(Project, message: string) => Violation {
+    Severity = 'error',
+    Message = message,
+    File = item.Path,
+    Line = 0,
+    Source = item.Path
+}
+
+export function toWarning(Project, message: string) => Violation {
+    Severity = 'warning',
+    Message = message,
+    File = item.Path,
+    Line = 0,
+    Source = item.Path
+}
+
+export function toInfo(Project, message: string) => Violation {
+    Severity = 'info',
+    Message = message,
+    File = item.Path,
+    Line = 0,
+    Source = item.Path
+}

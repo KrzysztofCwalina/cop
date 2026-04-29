@@ -19,6 +19,16 @@ public class PythonProvider : DataProvider
         var parsers = new SourceParserRegistry();
         parsers.Register(new PythonSourceParser());
         parsers.Register(new TextFileParser());
-        return CodeCollectionBuilder.CollectAndParse(parsers, query);
+        var collections = CodeCollectionBuilder.CollectAndParse(parsers, query);
+
+        // Discover projects from pyproject.toml/setup.py
+        if (query.RootPath is not null)
+        {
+            var projects = PythonProjectDiscovery.Discover(query.RootPath, query.ExcludedDirectories);
+            if (query.RequestedCollections is null || query.RequestedCollections.Contains("Projects"))
+                collections["Projects"] = projects.Cast<object>().ToList();
+        }
+
+        return collections;
     }
 }

@@ -15,6 +15,7 @@ Source code structural analysis across multiple languages. &nbsp; `import code`
 | `Code.Statements` | [`[Statement]`](#statement) | Individual code statements |
 | `Code.Lines` | [`[Line]`](#line) | Raw text lines |
 | `Code.Files` | [`[File]`](#file) | Source files |
+| `Code.Projects` | [`[Project]`](#project) | Discovered projects/packages |
 
 Convenience subsets:
 
@@ -120,6 +121,23 @@ Subset types narrow by predicate:
 | `Usings` | `[string]` | Import/using directives |
 | `Types` | [`[Type]`](#type) | Type declarations in file |
 
+#### Project
+
+| Property | Type | Description |
+|---|---|---|
+| `Name` | `string` | Project/package name (AssemblyName, package.json name, etc.) |
+| `Path` | `string` | Relative path to project manifest file |
+| `Language` | `string?` | Language (`csharp`, `python`, `javascript`) |
+| `References` | `[string]` | Names of referenced projects |
+
+Each language provider discovers projects from their manifest files:
+
+| Language | Manifest | Name Source | References Source |
+|---|---|---|---|
+| C# | `*.csproj` | `<AssemblyName>` or filename | `<ProjectReference>` (resolved by path) |
+| Python | `pyproject.toml` / `setup.py` | `[project].name` | `[project].dependencies` |
+| JavaScript | `package.json` | `name` field | `dependencies` + `devDependencies` |
+
 #### Codebase
 
 | Property | Type | Description |
@@ -128,6 +146,7 @@ Subset types narrow by predicate:
 | `Types` | [`[Type]`](#type) | All type declarations |
 | `Statements` | [`[Statement]`](#statement) | All code statements |
 | `Lines` | [`[Line]`](#line) | All text lines |
+| `Projects` | [`[Project]`](#project) | All discovered projects |
 
 ---
 

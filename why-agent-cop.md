@@ -47,13 +47,39 @@ This is the entire specification — not a plugin, not a code review checklist i
 Another common example — enforcing dependency direction in a layered architecture ("UI never references Data, Services never reference Controllers"):
 
 ```
-predicate wrong-dependency-direction(File) =>
-    File.Path contains 'UI' and File.Usings:containsAny('Data', 'Repository')
+import arch-layering
 
-CHECK layering-violations => error('UI layer must not reference the Data layer directly')
+# Define layers in terms of project names
+let ui-projects = ['MyApp.Web', 'MyApp.Api']
+let service-projects = ['MyApp.Services', 'MyApp.Domain']
+let data-projects = ['MyApp.Data', 'MyApp.EF']
+let all-known-projects = ui-projects + service-projects + data-projects
+
+# UI layer must not reference Data layer directly
+predicate uiReferencesData(Project) =>
+    Project.Name:in(ui-projects)
+    && Project.References:containsAny(data-projects)
+
+# Data layer must not reference UI layer
+predicate dataReferencesUi(Project) =>
+    Project.Name:in(data-projects)
+    && Project.References:containsAny(ui-projects)
+
+# Detect projects not assigned to any layer
+predicate notInLayer(Project) => !Project.Name:in(all-known-projects)
+
+export let layering-violations = Code.Projects:uiReferencesData
+    :toError('UI project {item.Name} must not reference Data layer directly')
+    + Code.Projects:dataReferencesUi
+    :toError('Data project {item.Name} must not reference UI layer')
+
+export let uncategorized = Code.Projects:notInLayer
+    :toWarning('Project {item.Name} is not assigned to any architectural layer')
+
+CHECK arch-layering => layering-violations + uncategorized
 ```
 
-Agents routinely violate layering constraints because they optimize for "make it work" — they'll import whatever type gets the code to compile. A formal specification catches this instantly and forces the agent to route through the correct abstraction.
+Agents routinely violate layering constraints because they optimize for "make it work" — they'll add whatever project reference gets the code to compile. A formal specification catches this instantly and forces the agent to route through the correct abstraction. It also flags new projects that haven't been assigned to a layer — preventing architectural drift as the codebase grows.
 
 The DSL is intentionally a **formal specification language** — readable by any developer, writable by any architect — because the goal is to make expressing architectural intent as easy as expressing it in a code review comment, but with the determinism and permanence of a compiler check.
 

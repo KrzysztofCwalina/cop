@@ -327,6 +327,10 @@ public static class Engine
         if (scriptFiles.Count == 0)
             return new EngineResult([], parseErrors, ["No .cop files found in packages"]);
 
+        // Track how many script files belong to the explicitly specified packages
+        // (before transitive imports are appended by CreateTypeRegistry)
+        int explicitScriptFileCount = scriptFiles.Count;
+
         // Create type registry using feed paths for import resolution
         // Pre-register directly-loaded packages to prevent re-resolution via transitive imports
         var providerPackages = new List<(string Dir, PackageMetadata Meta)>();
@@ -336,6 +340,9 @@ public static class Engine
             return new EngineResult([], parseErrors, fatalErrors);
 
         // Load external providers
+        System.Console.Error.WriteLine($"[debug] providerPackages.Count before LoadExternal: {providerPackages.Count}");
+        foreach (var (dir, meta) in providerPackages)
+            System.Console.Error.WriteLine($"[debug]   provider: {meta.Name} at {dir}");
         LoadExternalProviders(typeRegistry, providerPackages, rootPath, parseErrors, fatalErrors);
 
         if (fatalErrors.Count > 0)
@@ -409,15 +416,19 @@ public static class Engine
         }
         else
         {
-            // No rules specified: run all non-parameterized commands AND
-            // synthesize RUN CHECK(name) for all non-value let collections
-            var letNames = scriptFiles.SelectMany(sf => sf.LetDeclarations)
+            // No rules specified: synthesize RUN CHECK(name) for exported lets
+            // from the EXPLICITLY specified packages only (not transitive imports).
+            // This prevents imported helper packages (code, filesystem) from dumping raw data.
+            var explicitFiles = scriptFiles.Take(explicitScriptFileCount);
+            var letNames = explicitFiles.SelectMany(sf => sf.LetDeclarations)
                 .Where(l => l.IsExported && (!l.IsValueBinding || l.IsCollectionUnion) && !l.IsRuntime)
                 .Select(l => l.Name).ToList();
 
+            System.Console.Error.WriteLine($"[debug] explicitScriptFileCount={explicitScriptFileCount}, totalScriptFiles={scriptFiles.Count}, letNames=[{string.Join(",", letNames)}], hasCheckCommand={hasCheckCommand}");
             if (letNames.Count > 0 && hasCheckCommand)
             {
                 var runStatements = string.Join("\n", letNames.Select(name => $"RUN CHECK({name})"));
+                System.Console.Error.WriteLine($"[debug] Synthesized: {runStatements}");
                 var wrapperFile = ScriptParser.Parse(runStatements, "<project>");
                 scriptFiles.Add(wrapperFile);
             }
@@ -425,10 +436,16 @@ public static class Engine
             try
             {
                 var result = interpreter.Run(scriptFiles, documents, null, programArgs);
+                System.Console.Error.WriteLine($"[debug] Run result: Outputs={result.Outputs.Count}, Warnings={result.Warnings?.Count}");
                 return new EngineResult(result.Outputs, parseErrors, [], null, result.FileOutputs, result.Warnings);
             }
             catch (AmbiguousCollectionException ex)
             {
+                return new EngineResult([], parseErrors, [$"Error: {ex.Message}"]);
+            }
+            catch (Exception ex)
+            {
+                System.Console.Error.WriteLine($"[debug] Run exception: {ex.GetType().Name}: {ex.Message}");
                 return new EngineResult([], parseErrors, [$"Error: {ex.Message}"]);
             }
         }
@@ -703,15 +720,22 @@ public static class Engine
         foreach (var (dir, meta) in providerPackages)
         {
             var loaded = ProviderLoader.Load(dir, meta, fatalErrors);
-            if (loaded is null) continue;
+            if (loaded is null) { System.Console.Error.WriteLine($"[debug] Provider load failed for {meta.Name}"); continue; }
 
             // Register schema, types, accessors, and bindings
             ProviderLoader.RegisterSchema(loaded.Instance, typeRegistry);
 
-            diagLog?.Invoke($"[diag] {loaded.Instance} query: RootPath={rootPath}, Format={loaded.Instance.SupportedFormats}, Collections=[{string.Join(", ", loaded.Schema.Collections.Select(c => c.Name))}]");
+            System.Console.Error.WriteLine($"[debug] Provider loaded: {loaded.Instance}, Format={loaded.Instance.SupportedFormats}, Collections=[{string.Join(", ", loaded.Schema.Collections.Select(c => c.Name))}]");
 
             // Query for data and register global collections
             ProviderLoader.QueryAndRegister(loaded, typeRegistry, rootPath, errors);
+
+            // Check what got registered
+            foreach (var coll in loaded.Schema.Collections)
+            {
+                var items = typeRegistry.GetGlobalCollectionItems(coll.Name);
+                System.Console.Error.WriteLine($"[debug]   After register: {coll.Name} = {items?.Count ?? -1} items");
+            }
 
             // Initialize capabilities (document loaders, file parsers, etc.)
             ProviderLoader.InitializeCapabilities(loaded.Instance, typeRegistry, rootPath);
