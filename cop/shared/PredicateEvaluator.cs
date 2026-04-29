@@ -415,14 +415,30 @@ public class PredicateEvaluator
         // Collection properties (Count, First, Last, Single) — built-in, no registry
         if (target is IList list)
         {
-            return member switch
+            switch (member)
             {
-                "Count" => (object)list.Count,
-                "First" => list.Count > 0 ? list[0] : null,
-                "Last" => list.Count > 0 ? list[list.Count - 1] : null,
-                "Single" => list.Count == 1 ? list[0] : null,
-                _ => null
-            };
+                case "Count": return (object)list.Count;
+                case "First": return list.Count > 0 ? list[0] : null;
+                case "Last": return list.Count > 0 ? list[list.Count - 1] : null;
+                case "Single": return list.Count == 1 ? list[0] : null;
+                default:
+                    // Flatten: list.Property → SelectMany across all items
+                    var flattened = new List<object?>();
+                    foreach (var item in list)
+                    {
+                        if (item is null) continue;
+                        var memberValue = GetMember(item, member);
+                        if (memberValue is IList subList)
+                        {
+                            foreach (var sub in subList) flattened.Add(sub);
+                        }
+                        else if (memberValue is not null)
+                        {
+                            flattened.Add(memberValue);
+                        }
+                    }
+                    return flattened;
+            }
         }
 
         // String properties — built-in, no registry

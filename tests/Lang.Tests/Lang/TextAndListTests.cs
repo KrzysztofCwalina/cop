@@ -643,4 +643,99 @@ public class TextAndListTests
         var (r3, _) = evaluator.EvaluateAsBool(file.Predicates[0].Body, MakeType("CONFIGURE_AWAIT"), "Type");
         Assert.That(r3, Is.True);
     }
+
+    // --- String concatenation ---
+
+    [Test]
+    public void StringConcat_PropertyPlusLiteral()
+    {
+        var source = """predicate test(Type) => (Type.Name + 'Async'):equals('FooAsync')""";
+        var file = ScriptParser.Parse(source, "test.cop");
+        var predicates = new Dictionary<string, List<PredicateDefinition>>
+        {
+            ["test"] = [file.Predicates[0]]
+        };
+        var evaluator = new PredicateEvaluator(predicates, "test.cs", CreateTestRegistry());
+        var (result, _) = evaluator.EvaluateAsBool(file.Predicates[0].Body, MakeType("Foo"), "Type");
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public void StringConcat_UsedAsContainsArg()
+    {
+        // Test that a computed string (Name + 'Async') can be passed to :contains on a list
+        var source = """
+            let Methods = ['FooAsync', 'BarAsync', 'Baz']
+            predicate test(Type) => Methods:ct(Type.Name + 'Async')
+            """;
+        var file = ScriptParser.Parse(source, "test.cop");
+        var letDecls = new Dictionary<string, LetDeclaration>
+        {
+            ["Methods"] = file.LetDeclarations[0]
+        };
+        var predicates = new Dictionary<string, List<PredicateDefinition>>
+        {
+            ["test"] = [file.Predicates[0]]
+        };
+        var evaluator = new PredicateEvaluator(predicates, "test.cs", CreateTestRegistry(), letDeclarations: letDecls);
+        var (result, _) = evaluator.EvaluateAsBool(file.Predicates[0].Body, MakeType("Foo"), "Type");
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public void StringConcat_NoMatch()
+    {
+        var source = """
+            let Methods = ['FooAsync', 'BarAsync']
+            predicate test(Type) => Methods:ct(Type.Name + 'Async')
+            """;
+        var file = ScriptParser.Parse(source, "test.cop");
+        var letDecls = new Dictionary<string, LetDeclaration>
+        {
+            ["Methods"] = file.LetDeclarations[0]
+        };
+        var predicates = new Dictionary<string, List<PredicateDefinition>>
+        {
+            ["test"] = [file.Predicates[0]]
+        };
+        var evaluator = new PredicateEvaluator(predicates, "test.cs", CreateTestRegistry(), letDeclarations: letDecls);
+        var (result, _) = evaluator.EvaluateAsBool(file.Predicates[0].Body, MakeType("Qux"), "Type");
+        Assert.That(result, Is.False);
+    }
+
+    // --- Collection flattening ---
+
+    [Test]
+    public void CollectionFlatten_AccessPropertyAcrossListItems()
+    {
+        // Types.MethodNames should flatten all method names across all types into one list
+        var source = """predicate test(Type) => Types.MethodNames:ct(Type.Name + 'Async')""";
+        var file = ScriptParser.Parse(source, "test.cop");
+        var predicates = new Dictionary<string, List<PredicateDefinition>>
+        {
+            ["test"] = [file.Predicates[0]]
+        };
+
+        var type1 = new TypeDeclaration("Service", TypeKind.Class, Modifier.Public,
+            [], [], [], [new MethodDeclaration("ReadAsync", Modifier.Public, [], null, [], 1)], [], [], 1);
+        var type2 = new TypeDeclaration("Client", TypeKind.Class, Modifier.Public,
+            [], [], [], [new MethodDeclaration("WriteAsync", Modifier.Public, [], null, [], 1)], [], [], 1);
+
+        // Provide the Types list as a resolved collection
+        var resolvedCollections = new Dictionary<string, System.Collections.IList>
+        {
+            ["Types"] = new List<object> { type1, type2 }
+        };
+
+        var evaluator = new PredicateEvaluator(predicates, "test.cs", CreateTestRegistry(),
+            resolvedCollections: resolvedCollections);
+
+        // "Read" + "Async" = "ReadAsync" which IS in Types.MethodNames → true
+        var (result, _) = evaluator.EvaluateAsBool(file.Predicates[0].Body, MakeType("Read"), "Type");
+        Assert.That(result, Is.True);
+
+        // "Delete" + "Async" = "DeleteAsync" which is NOT in Types.MethodNames → false
+        var (result2, _) = evaluator.EvaluateAsBool(file.Predicates[0].Body, MakeType("Delete"), "Type");
+        Assert.That(result2, Is.False);
+    }
 }

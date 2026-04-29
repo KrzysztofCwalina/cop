@@ -479,6 +479,24 @@ let allChecks = csharp-checks + python-checks
 let combined = internalTypes + externalTypes
 ```
 
+#### String Concatenation (`+`)
+
+The `+` operator also concatenates strings, including property values and literals:
+
+```ruby
+predicate test(Statement) => Types.MethodNames:ct(Statement.MemberName + 'Async')
+```
+
+#### Collection Flattening (Property Access on Lists)
+
+Accessing a property on a collection flattens (SelectMany) that property across all items:
+
+```ruby
+# Types.MethodNames → flat list of all method names across all types
+predicate hasAsyncVariant(Statement) =>
+    Types.MethodNames:ct(Statement.MemberName + 'Async')
+```
+
 #### Select and Text Examples
 
 `.Select()` projects each item into a new value. `.Text()` formats each item and joins with newlines:

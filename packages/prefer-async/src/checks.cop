@@ -1,0 +1,11 @@
+import code
+
+# Detects sync method calls when an async variant exists.
+# Uses cross-collection flattening: Types.MethodNames produces a flat list
+# of all method names across all types in the codebase.
+predicate callsSyncWhenAsyncExists(Statement) =>
+    Statement.Kind:equals('call')
+    && Statement.MemberName:endsWith('Async') == false
+    && Types.MethodNames:ct(Statement.MemberName + 'Async')
+
+export let sync-calls = Code.Statements:callsSyncWhenAsyncExists

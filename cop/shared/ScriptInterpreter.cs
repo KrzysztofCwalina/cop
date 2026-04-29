@@ -415,6 +415,16 @@ public class ScriptInterpreter
                 }
             }
 
+            // Make document collections available inside predicates (e.g., Types.MethodNames)
+            resolvedCollections ??= new Dictionary<string, IList>();
+            foreach (var collName in _typeRegistry.GetDocumentCollectionNames())
+            {
+                if (resolvedCollections.ContainsKey(collName)) continue;
+                var collItems = _typeRegistry.GetCollectionItems(collName, document);
+                if (collItems is not null)
+                    resolvedCollections[collName] = collItems;
+            }
+
             var evaluator = new PredicateEvaluator(predicateGroups, document.Path, _typeRegistry,
                 letDeclarations, functionGroups, resolvedCollections);
             var items = ResolveCollection(cmd.Collection, document, evaluator, predicateGroups, letDeclarations, functionGroups);
