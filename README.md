@@ -288,12 +288,11 @@ Type.Name.Length      # string length
 Packages provide reusable types, predicates, and checks. Use `import` to bring them into scope:
 
 ```ruby
-import code              # Type, Statement, File, etc.
-import code-analysis     # Violation type, toError/toWarning/toInfo functions
+import code              # Type, Statement, File definitions and modifier predicates
 import filesystem        # Folder, DiskFile for file system analysis
-import csharp            # C# coding conventions and checks
-import javascript        # JavaScript/TypeScript conventions and checks
-import python            # Python coding conventions and checks
+import csharp            # C# language provider (scans .cs files)
+import javascript        # JavaScript/TypeScript provider (scans .js/.ts files)
+import python            # Python provider (scans .py files)
 ```
 
 Cop auto-discovers a `packages/` directory by walking up from the current folder. You can also point to a local directory or a GitHub repository with `feed`:
