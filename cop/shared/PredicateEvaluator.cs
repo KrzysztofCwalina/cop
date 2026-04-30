@@ -1167,7 +1167,7 @@ public class PredicateEvaluator
     /// Evaluates each field mapping expression with the item as context,
     /// binding function parameters from the provided arguments.
     /// </summary>
-    private ScriptObject ApplyFunction(FunctionDefinition func, object? target, List<Expression> callArgs,
+    private object? ApplyFunction(FunctionDefinition func, object? target, List<Expression> callArgs,
         object item, string paramType, EvaluationContext ctx)
     {
         // The target is the item being transformed
@@ -1188,7 +1188,21 @@ public class PredicateEvaluator
             paramBindings[func.Parameters[i].Name] = argValue;
         }
 
-        // Evaluate each field mapping with the input item as context
+        // Expression-body function: evaluate the body expression and return directly
+        if (func.BodyExpression is not null)
+        {
+            var funcCtx = ctx.Clone();
+            foreach (var (pName, pValue) in paramBindings)
+                funcCtx.PushAncestor(pName, pValue!);
+            if (inputItem is not null)
+            {
+                funcCtx.PushAncestor(inputType, inputItem);
+                funcCtx.PushAncestor("item", inputItem);
+            }
+            return EvalInFunctionContext(func.BodyExpression, inputItem!, inputType, funcCtx, paramBindings);
+        }
+
+        // Record-body function: evaluate field mappings and return ScriptObject
         var fields = new Dictionary<string, object?>();
         foreach (var (fieldName, fieldExpr) in func.FieldMappings)
         {
@@ -1280,7 +1294,7 @@ public class PredicateEvaluator
     /// Apply a function to an item, producing an ScriptObject.
     /// Used by the interpreter for map operations in collection chains.
     /// </summary>
-    public ScriptObject ApplyFunction(string funcName, object item, string itemType, List<Expression> args)
+    public object? ApplyFunction(string funcName, object item, string itemType, List<Expression> args)
     {
         if (!_functions.TryGetValue(funcName, out var group))
             throw new InvalidOperationException($"Unknown function '{funcName}'");

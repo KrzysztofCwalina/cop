@@ -97,8 +97,44 @@ public class ReplEvaluator
             }
         }
 
+        // For multi-line constructs (e.g., object literals starting with '{'), gather
+        // all lines until braces balance.
+        var snippet = GatherBalancedBlock(lines, lineNumber - 1);
+
         // Otherwise evaluate as raw expression
-        return EvaluateExpression(line);
+        return EvaluateExpression(snippet);
+    }
+
+    /// <summary>
+    /// Starting at startIndex, gather lines until braces are balanced.
+    /// Returns the joined text. If no braces are involved, returns just the single line.
+    /// </summary>
+    private static string GatherBalancedBlock(string[] lines, int startIndex)
+    {
+        var first = lines[startIndex].Trim();
+        int braceDepth = 0;
+        foreach (char c in first)
+        {
+            if (c == '{') braceDepth++;
+            else if (c == '}') braceDepth--;
+        }
+
+        if (braceDepth <= 0)
+            return first;
+
+        // Gather subsequent lines until braces balance
+        var sb = new System.Text.StringBuilder(first);
+        for (int i = startIndex + 1; i < lines.Length && braceDepth > 0; i++)
+        {
+            sb.Append(' ').Append(lines[i].Trim());
+            foreach (char c in lines[i])
+            {
+                if (c == '{') braceDepth++;
+                else if (c == '}') braceDepth--;
+            }
+        }
+
+        return sb.ToString();
     }
 
     /// <summary>

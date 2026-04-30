@@ -359,11 +359,26 @@ public class ScriptParser
         var name = Expect(TokenKind.Identifier);
         Expect(TokenKind.LParen);
 
-        // First parameter is the input type (no name, just type)
-        var inputType = Expect(TokenKind.Identifier).Value;
+        // First parameter: either just a type name (InputType) or name:type
+        var firstIdent = Expect(TokenKind.Identifier).Value;
+        string inputType;
+        var parameters = new List<FunctionParameter>();
+
+        if (Current.Kind == TokenKind.Colon)
+        {
+            // name:type syntax — first param is named
+            Advance(); // consume ':'
+            var paramTypeName = Expect(TokenKind.Identifier).Value;
+            inputType = paramTypeName;
+            parameters.Add(new FunctionParameter(firstIdent, paramTypeName));
+        }
+        else
+        {
+            // Just a type name (existing behavior)
+            inputType = firstIdent;
+        }
 
         // Additional named parameters: , name: type
-        var parameters = new List<FunctionParameter>();
         while (Current.Kind == TokenKind.Comma)
         {
             Advance(); // consume ','
@@ -375,24 +390,37 @@ public class ScriptParser
 
         Expect(TokenKind.RParen);
         Expect(TokenKind.Arrow); // =>
-        var returnType = Expect(TokenKind.Identifier).Value;
-        Expect(TokenKind.LBrace);
 
-        // Parse field mappings: FieldName = Expression, ...
-        var fieldMappings = new Dictionary<string, Expression>();
-        while (Current.Kind != TokenKind.RBrace && Current.Kind != TokenKind.Eof)
+        // Determine if this is a record-body or expression-body function
+        // Record-body: => ReturnType { Field = expr, ... }
+        // Expression-body: => expr
+        if (Current.Kind == TokenKind.Identifier && _pos + 1 < _tokens.Count && _tokens[_pos + 1].Kind == TokenKind.LBrace)
         {
-            var fieldName = Expect(TokenKind.Identifier).Value;
-            Expect(TokenKind.Equals);
-            var fieldExpr = ParseExpression();
-            fieldMappings[fieldName] = fieldExpr;
+            // Record-body function
+            var returnType = Expect(TokenKind.Identifier).Value;
+            Expect(TokenKind.LBrace);
 
-            if (Current.Kind == TokenKind.Comma)
-                Advance();
+            var fieldMappings = new Dictionary<string, Expression>();
+            while (Current.Kind != TokenKind.RBrace && Current.Kind != TokenKind.Eof)
+            {
+                var fieldName = Expect(TokenKind.Identifier).Value;
+                Expect(TokenKind.Equals);
+                var fieldExpr = ParseExpression();
+                fieldMappings[fieldName] = fieldExpr;
+
+                if (Current.Kind == TokenKind.Comma)
+                    Advance();
+            }
+
+            Expect(TokenKind.RBrace);
+            return new FunctionDefinition(name.Value, inputType, returnType, parameters, fieldMappings, line, isExported);
         }
-
-        Expect(TokenKind.RBrace);
-        return new FunctionDefinition(name.Value, inputType, returnType, parameters, fieldMappings, line, isExported);
+        else
+        {
+            // Expression-body function
+            var bodyExpr = ParseExpression();
+            return new FunctionDefinition(name.Value, inputType, "", parameters, [], line, isExported, BodyExpression: bodyExpr);
+        }
     }
 
     private LetDeclaration ParseLetDeclaration(bool isExported = false)
@@ -460,7 +488,11 @@ public class ScriptParser
     // Check if the current token is an identifier followed by '(' — action invocation
     private bool IsActionInvocation()
     {
-        return _pos + 1 < _tokens.Count && _tokens[_pos + 1].Kind == TokenKind.LParen;
+        if (_pos + 1 >= _tokens.Count || _tokens[_pos + 1].Kind != TokenKind.LParen)
+            return false;
+        // Only treat as action invocation if the identifier is ALL-UPPERCASE (SAVE, DEBUG, ASSERT, etc.)
+        var name = _tokens[_pos].Value;
+        return name.Length > 0 && name.All(c => char.IsUpper(c) || c == '_');
     }
 
     /// <summary>
@@ -1162,6 +1194,8 @@ public class ScriptParser
         while (Current.Kind != TokenKind.RBracket && Current.Kind != TokenKind.Eof)
         {
             elements.Add(ParseExpression());
+            if (Current.Kind == TokenKind.Comma)
+                Advance();
         }
         Expect(TokenKind.RBracket);
         return new ListLiteralExpr(elements);

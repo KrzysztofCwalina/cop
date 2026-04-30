@@ -302,7 +302,7 @@ export command print-text = foreach apiText => '{{item}}'
 let baseline = Load('{assemblyPath}')
 predicate anyApi(Api) => Api.Kind != ''
 let apiText = baseline.Api:anyApi.Text('{{item.Signature}}')
-export command save-api = save('api-surface.txt', apiText)
+export command save-api = SAVE('api-surface.txt', apiText)
 ";
 
         var registry = new TypeRegistry();

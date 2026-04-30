@@ -35,6 +35,24 @@ public class CompletionPopup
         _visible = true;
     }
 
+    /// <summary>
+    /// Updates the displayed items (e.g., after typing narrows the filter).
+    /// Hides the popup if no items remain.
+    /// </summary>
+    public void UpdateItems(List<string> items)
+    {
+        if (items.Count == 0)
+        {
+            Hide();
+            return;
+        }
+
+        _items = items;
+        _selectedIndex = Math.Min(_selectedIndex, _items.Count - 1);
+        _scrollOffset = Math.Min(_scrollOffset, Math.Max(0, _items.Count - _maxVisible));
+        EnsureVisible();
+    }
+
     public void Hide()
     {
         _visible = false;

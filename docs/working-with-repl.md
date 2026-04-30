@@ -70,15 +70,46 @@ This reads line 3 from `main.cop`, evaluates it, and prints the result. Use this
 
 ### Value Expressions
 
-List literals, strings, and numbers evaluate directly:
+Literals, arithmetic, function calls, and objects evaluate directly:
 
 ```
-cop> ['hello', 'world']
-hello
-world
-
 cop> 42
 42
+
+cop> 1 + 2
+3
+
+cop> 'hello world'
+hello world
+
+cop> ['red' 'green' 'blue']
+red
+green
+blue
+```
+
+#### Function Calls
+
+Functions defined in your `.cop` file can be called in the REPL:
+
+```
+cop> inc(5)
+6
+
+cop> inc(inc(5))
+7
+```
+
+#### Object Expressions
+
+Object literals output as JSON. Multi-line objects in your source file can be evaluated via line references:
+
+```
+cop> 5!
+{
+    "Name": "Chip",
+    "Age": 32
+}
 ```
 
 ### Running Commands

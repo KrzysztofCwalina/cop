@@ -122,7 +122,7 @@ A `.cop` file contains these kinds of declarations:
 | `let` | Declare a named list (base or subset) |
 | `command name =` | Define a named command (implicit output, SAVE, or composition) |
 | `predicate name(Param) =>` | Define a named predicate for subsetting |
-| `function name(Param) =>` | Define a named function that produces a record |
+| `function name(Param) =>` | Define a named function (expression-body or record-body) |
 | `SAVE` | Command that writes to a file |
 | `DEBUG` | Command that writes to console only when `-d` flag is active |
 
@@ -351,7 +351,31 @@ predicate sealed(Type:python) => Type.Decorators:any(Decorator:contains('final')
 
 ### Functions
 
-Functions produce record objects with field mappings. The return type comes after `=>`:
+Functions come in two forms: **expression-body** (returns a computed value) and **record-body** (produces a structured object).
+
+#### Expression-Body Functions
+
+An expression-body function takes a named, typed parameter and returns the result of an expression:
+
+```ruby
+function inc(x:number) => x + 1
+function double(n:number) => n * 2
+function greet(name:string) => 'Hello, ' + name
+function isLarge(t:Type) => t.Methods.Count > 20
+```
+
+Expression-body functions can be called anywhere an expression is expected:
+
+```ruby
+inc(5)                    # → 6
+inc(inc(5))               # → 7
+double(3) + 1             # → 7
+Types.Select(isLarge)     # → list of booleans
+```
+
+#### Record-Body Functions
+
+A record-body function produces a structured object with field mappings. The return type comes after `=>`:
 
 ```ruby
 function clientInfo(Type) => ClientInfo {
@@ -749,11 +773,47 @@ command test-has-types = ASSERT(csharp.Types)
 
 ### Implicit Output
 
-Output is implicit — whatever a program evaluates to is its output. A bare string literal at top level or after `=>` in a `foreach` produces one line of output per item.
+Output is implicit — whatever a program evaluates to is its output. Any expression at top level produces output without needing an explicit `PRINT` call.
+
+#### Bare Expressions
+
+A bare expression at top level evaluates and its result is printed:
 
 ```ruby
-'Hello World'                                                             # bare — outputs once
-foreach Types:csharp:client => '{error:@red} {item.Name} is a client'     # list — one line per item
+'Hello World'            # string → outputs: Hello World
+42                       # number → outputs: 42
+1 + 2                    # arithmetic → outputs: 3
+Types.Count              # property access → outputs the count
+inc(5)                   # function call → outputs: 6
+```
+
+Lists output each item on a separate line:
+
+```ruby
+[1 2 3]                  # outputs: 1, 2, 3 (one per line)
+Types:isPublic.Name      # outputs each public type name
+```
+
+Objects output as JSON:
+
+```ruby
+{
+    Name = 'Chip'
+    Age = 32
+}
+# outputs:
+# {
+#     "Name": "Chip",
+#     "Age": 32
+# }
+```
+
+#### Foreach with Templates
+
+Use `foreach` to iterate over a collection with formatted output — one line per item:
+
+```ruby
+foreach Types:csharp:client => '{error:@red} {item.Name} is a client'
 ```
 
 | Part | Required | Description |

@@ -14,4 +14,5 @@ public record FunctionDefinition(
     List<FunctionParameter> Parameters,
     Dictionary<string, Expression> FieldMappings,
     int Line,
-    bool IsExported = false);
+    bool IsExported = false,
+    Expression? BodyExpression = null);

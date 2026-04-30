@@ -538,10 +538,26 @@ public class ScriptInterpreter
         }
 
         // Fallback: if collection iteration produced nothing and we have an OutputExpression,
-        // evaluate it as a scalar/list expression (handles cases like a.Name where a is a variable)
+        // evaluate it as a scalar/list expression (handles cases like a.Name where a is a variable,
+        // or Types.Count where Types is a collection and Count is a property)
         if (count == 0 && cmd.OutputExpression is not null)
         {
-            var fallbackEvaluator = new PredicateEvaluator(predicateGroups, "", _typeRegistry, letDeclarations, functionGroups);
+            // Build resolvedCollections from all documents so collection identifiers (e.g., "Types")
+            // are accessible as lists in the expression evaluator
+            var fallbackCollections = new Dictionary<string, IList>();
+            foreach (var collName in _typeRegistry.GetDocumentCollectionNames())
+            {
+                var allItems = new List<object>();
+                foreach (var doc in documents)
+                {
+                    var docItems = _typeRegistry.GetCollectionItems(collName, doc);
+                    if (docItems is not null)
+                        allItems.AddRange(docItems);
+                }
+                fallbackCollections[collName] = allItems;
+            }
+
+            var fallbackEvaluator = new PredicateEvaluator(predicateGroups, "", _typeRegistry, letDeclarations, functionGroups, fallbackCollections);
             try
             {
                 var value = fallbackEvaluator.EvaluateField(cmd.OutputExpression, null!, "");
@@ -1051,7 +1067,7 @@ public class ScriptInterpreter
                 var funcArgs = GetFilterArgs(filter);
                 var capturedType = currentType;
                 var mapped = current.Select(item =>
-                    (object)evaluator.ApplyFunction(funcName, item, capturedType, funcArgs)).ToList();
+                    evaluator.ApplyFunction(funcName, item, capturedType, funcArgs)!).ToList();
                 currentType = evaluator.GetFunctionReturnType(funcName) ?? currentType;
                 _diagLog?.Invoke($"[trace] filter: :{funcName} -> {beforeCount} -> {mapped.Count} items (-> {currentType})");
                 current = mapped;

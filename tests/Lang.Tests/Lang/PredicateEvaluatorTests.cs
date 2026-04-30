@@ -1085,9 +1085,9 @@ public class PredicateEvaluatorTests
         var result = eval.ApplyFunction("error", stmt, "Statement", [new LiteralExpr("Do not use var")]);
 
         Assert.That(result, Is.TypeOf<ScriptObject>());
-        Assert.That(result.TypeName, Is.EqualTo("Violation"));
-        Assert.That(result.GetField("Severity"), Is.EqualTo("error"));
-        Assert.That(result.GetField("Message"), Is.EqualTo("Do not use var"));
+        Assert.That(((ScriptObject)result!).TypeName, Is.EqualTo("Violation"));
+        Assert.That(((ScriptObject)result!).GetField("Severity"), Is.EqualTo("error"));
+        Assert.That(((ScriptObject)result!).GetField("Message"), Is.EqualTo("Do not use var"));
     }
 
     [Test]
@@ -1120,8 +1120,8 @@ public class PredicateEvaluatorTests
         var ctx = new EvaluationContext();
         // Use ApplyFunction directly (chain evaluation path)
         var result = eval.ApplyFunction("error", stmt, "Statement", [new LiteralExpr("Do not use var")]);
-        Assert.That(result.TypeName, Is.EqualTo("Violation"));
-        Assert.That(result.GetField("Message"), Is.EqualTo("Do not use var"));
+        Assert.That(((ScriptObject)result!).TypeName, Is.EqualTo("Violation"));
+        Assert.That(((ScriptObject)result!).GetField("Message"), Is.EqualTo("Do not use var"));
     }
 
     [Test]
@@ -1174,7 +1174,7 @@ public class PredicateEvaluatorTests
         var result = eval.ApplyFunction("error", stmt, "Statement",
             [new LiteralExpr("Do not use var for {item.MemberName}")]);
 
-        Assert.That(result.GetField("Message"), Is.EqualTo("Do not use var for myField"));
+        Assert.That(((ScriptObject)result!).GetField("Message"), Is.EqualTo("Do not use var for myField"));
     }
 
     [Test]
@@ -1200,7 +1200,7 @@ public class PredicateEvaluatorTests
         var stmt = MakeStatement("var", "x", 42);
         var result = eval.ApplyFunction("error", stmt, "Statement", [new LiteralExpr("msg")]);
 
-        Assert.That(result.GetField("Line"), Is.EqualTo(42));
+        Assert.That(((ScriptObject)result!).GetField("Line"), Is.EqualTo(42));
     }
 
     [Test]

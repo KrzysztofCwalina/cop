@@ -47,11 +47,9 @@ public class LineEditor
         {
             var key = Console.ReadKey(intercept: true);
 
-            // Clear popup if visible and key is not a navigation/completion key
-            if (_popup.IsVisible && key.Key != ConsoleKey.Tab &&
-                key.Key != ConsoleKey.UpArrow && key.Key != ConsoleKey.DownArrow &&
-                key.Key != ConsoleKey.Enter && key.Key != ConsoleKey.Escape &&
-                key.Key != ConsoleKey.PageUp && key.Key != ConsoleKey.PageDown)
+            // Dismiss popup for keys that move cursor without changing text
+            if (_popup.IsVisible && key.Key is ConsoleKey.LeftArrow or ConsoleKey.RightArrow
+                or ConsoleKey.Home or ConsoleKey.End or ConsoleKey.Delete)
             {
                 ClearPopup();
             }
@@ -102,9 +100,12 @@ public class LineEditor
                 case ConsoleKey.Backspace:
                     if (cursor > 0)
                     {
+                        bool popupWasVisible = _popup.IsVisible;
                         buffer.Remove(cursor - 1, 1);
                         cursor--;
                         RedrawLine(prompt, buffer, cursor);
+                        if (popupWasVisible)
+                            RefreshPopupFilter(buffer, cursor, prompt);
                     }
                     break;
 
@@ -195,6 +196,7 @@ public class LineEditor
                     // Regular character
                     if (key.KeyChar >= 32)
                     {
+                        bool popupWasVisible = _popup.IsVisible;
                         buffer.Insert(cursor, key.KeyChar);
                         cursor++;
                         RedrawLine(prompt, buffer, cursor);
@@ -203,6 +205,10 @@ public class LineEditor
                         if (key.KeyChar == '.' || key.KeyChar == ':')
                         {
                             HandleTab(buffer, ref cursor, prompt);
+                        }
+                        else if (popupWasVisible)
+                        {
+                            RefreshPopupFilter(buffer, cursor, prompt);
                         }
                     }
                     break;
@@ -217,6 +223,10 @@ public class LineEditor
     {
         if (!key.Modifiers.HasFlag(ConsoleModifiers.Control))
             return false;
+
+        // Ctrl+keys change buffer/cursor in non-incremental ways; dismiss popup
+        if (_popup.IsVisible)
+            ClearPopup();
 
         switch (key.Key)
         {
@@ -303,6 +313,29 @@ public class LineEditor
 
         // Multiple candidates — show popup
         _popup.Show(candidates);
+        RenderPopup(prompt, cursor);
+    }
+
+    private void RefreshPopupFilter(StringBuilder buffer, int cursor, string prompt)
+    {
+        var input = buffer.ToString();
+        var (candidates, _) = _completer.GetCompletions(input, cursor);
+
+        if (candidates.Count == 0)
+        {
+            ClearPopup();
+            return;
+        }
+
+        if (candidates.Count == 1)
+        {
+            // Auto-accept when only one candidate remains
+            _popup.UpdateItems(candidates);
+            RenderPopup(prompt, cursor);
+            return;
+        }
+
+        _popup.UpdateItems(candidates);
         RenderPopup(prompt, cursor);
     }
 
