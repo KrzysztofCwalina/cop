@@ -120,7 +120,7 @@ cop run checks.cop -d
 
 ## cop check
 
-Run pre-built analysis checks from packages against your code. This is the fastest way to run checks without writing `.cop` files.
+Run pre-built analysis checks from packages against your code. This is the fastest way to run checks without writing `.cop` files. See the [All Checks Catalog](checks.md) for a complete list of available checks across all packages.
 
 ```bash
 cop check <packages>... [-t <target>] [-c <rules>] [-f text|json] [-d]

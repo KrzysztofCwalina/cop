@@ -1,0 +1,50 @@
+# Client library design checks for Python
+
+import python
+import code-analysis
+
+# Collect all Python client types
+export let Clients = Code.Types:python:client
+
+## Async clients should not have 'Async' in the name
+export let async-client-bad-name = Clients:clientBadAsyncName
+    :toWarning('{item.Name} — async clients should not include Async in the class name')
+
+## Client constructor must accept **kwargs
+export let client-missing-kwargs = Clients:ctorMissingKwargs
+    :toWarning('{item.Name} constructor should accept **kwargs')
+
+## Client constructor should not have a connection_string parameter (use factory method)
+export let no-connection-string-in-ctor = Clients:ctorHasConnectionString
+    :toWarning('{item.Name} should use a class method factory for connection strings, not a constructor parameter')
+
+## Client methods should not use static methods (use module-level functions)
+export let no-static-methods = Clients:hasStaticMethod
+    :toWarning('{item.Name} uses @staticmethod — prefer module-level functions')
+
+## Client methods with more than 5 positional parameters
+predicate hasTooManyParams(Type) => Type.Methods:any(tooManyPositionalParams)
+export let too-many-positional-params = Clients:hasTooManyParams
+    :toWarning('{item.Name} has a method with more than 5 positional parameters — use keyword arguments')
+
+## Async client methods should accept **kwargs
+predicate hasMethodMissingKwargs(Type) => Type.Methods:any(networkMethodMissingKwargs)
+export let async-method-missing-kwargs = Clients:hasMethodMissingKwargs
+    :toWarning('{item.Name} has an async method without **kwargs')
+
+## LRO methods should be prefixed with begin_
+predicate hasLroBadName(Type) => Type.Methods:any(lroBadName)
+export let lro-naming = Clients:hasLroBadName
+    :toWarning('{item.Name} has an LRO method not prefixed with begin_')
+
+## Paging methods should be prefixed with list_
+predicate hasPagingBadName(Type) => Type.Methods:any(pagingBadName)
+export let paging-naming = Clients:hasPagingBadName
+    :toWarning('{item.Name} has a paging method not prefixed with list_')
+
+## Type/class names should be under 40 characters
+export let name-too-long = Code.Types:python:nameTooLong
+    :toWarning('{item.Name} exceeds 40 characters — use a shorter name')
+
+## All Python client library checks combined
+export let python-library-client = async-client-bad-name + client-missing-kwargs + no-connection-string-in-ctor + no-static-methods + too-many-positional-params + async-method-missing-kwargs + lro-naming + paging-naming + name-too-long

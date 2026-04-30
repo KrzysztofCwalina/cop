@@ -9,3 +9,16 @@ predicate catchesException(Statement) => Statement.ErrorHandler == true
 
 predicate swallowsException(Statement) => Statement.ErrorHandler == true
     && Statement.Generic == true && !Statement.Rethrows
+
+# Do not import the six package (Python 2 compatibility layer)
+predicate importsSix(Line) => Line.Text:matches('^(import six|from six)')
+
+# Do not use legacy typing via comments — use Python 3.9+ type hints
+predicate legacyTypingComment(Line) => Line.Text:matches('#\\s*type:')
+
+# eval() is a security risk
+predicate evalCall(Statement) => Statement.Kind == 'call' && Statement.MemberName == 'eval'
+
+# Naming: functions/methods should use snake_case
+predicate functionNotSnakeCase(Type) => Type.Methods.Count > 0
+    && Type.Name:matches('^[a-z]') == false && Type.Kind == 'Class'

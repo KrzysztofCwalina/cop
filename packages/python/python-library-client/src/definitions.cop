@@ -1,0 +1,70 @@
+# Client library design definitions for Python
+
+# Client type detection
+export predicate client(Type) => Type.Name:endsWith('Client')
+export predicate asyncClient(Type) => Type.Name:contains('Async') && client
+
+# Naming
+export predicate clientBadAsyncName(Type) => client && Type.Name:contains('Async')
+
+# Constructor conventions
+predicate kwargsParam(Parameter) => Parameter.Kwargs
+predicate credentialParam(Parameter) => Parameter.Name == 'credential'
+predicate connectionStringParam(Parameter) => Parameter.Name:contains('connection_string')
+    || Parameter.Name:contains('conn_str')
+
+predicate ctorMissingKwargs(Type) => Type.Constructors.Count > 0
+    && Type.Constructors.First.Parameters:!any(kwargsParam)
+predicate ctorHasConnectionString(Type) => Type.Constructors.Count > 0
+    && Type.Constructors.First.Parameters:any(connectionStringParam)
+
+# Method conventions
+predicate publicMethod(Method) => Method:isPublic && !Method.Name:startsWith('_')
+predicate staticOnClient(Method) => Method:isStatic && publicMethod
+
+# Method naming: approved prefixes for client methods
+let approvedPrefixes = ['get', 'list', 'create', 'upsert', 'update', 'replace',
+    'delete', 'add', 'set', 'remove', 'begin', 'send', 'query', 'close',
+    'download', 'upload', 'analyze', 'extract', 'recognize', 'synthesize']
+
+predicate badMethodPrefix(Method) => publicMethod
+    && !Method.Name:matches('^(get|list|create|upsert|update|replace|delete|add|set|remove|begin|send|query|close|download|upload|analyze|extract|recognize|synthesize|from|__)')
+    && !Method.Name:matches('^_')
+
+# Too many positional parameters (>5)
+predicate tooManyPositionalParams(Method) => publicMethod && Method.Parameters.Count > 5
+
+# Missing **kwargs on network methods
+predicate networkMethodMissingKwargs(Method) => publicMethod
+    && Method:isAsync && Method.Parameters:!any(kwargsParam)
+
+# Static methods on client (should be module-level)
+predicate hasStaticMethod(Type) => Type.Methods:any(staticOnClient)
+
+# Method name validation
+predicate doubleUnderscoreMethod(Method) => Method.Name:startsWith('__')
+    && Method.Name != '__init__' && Method.Name != '__enter__' && Method.Name != '__exit__'
+    && Method.Name != '__aenter__' && Method.Name != '__aexit__'
+    && Method.Name != '__repr__' && Method.Name != '__str__'
+
+# Client suffix detection: classes that look like service clients but don't end with Client
+predicate looksLikeClient(Type) => Type.Kind == 'Class'
+    && Type.Methods.Count > 3
+    && !Type.Name:endsWith('Client')
+    && (Type.Name:endsWith('Service') || Type.Name:endsWith('Manager') || Type.Name:endsWith('Handler'))
+
+# LRO naming: methods returning LROPoller should be prefixed with begin_
+predicate lroMethod(Method) => publicMethod && Method.ReturnType != null
+    && (Method.ReturnType.Name:contains('LROPoller') || Method.ReturnType.Name:contains('Poller'))
+predicate lroBadName(Method) => lroMethod && !Method.Name:startsWith('begin_')
+
+# Paging: methods returning paging types should be prefixed with list_
+predicate pagingMethod(Method) => publicMethod && Method.ReturnType != null
+    && (Method.ReturnType.Name:contains('ItemPaged') || Method.ReturnType.Name:contains('Pager')
+        || Method.ReturnType.Name:contains('AsyncItemPaged'))
+predicate pagingBadName(Method) => pagingMethod && !Method.Name:startsWith('list_')
+    && !Method.Name:startsWith('_list_')
+
+# Name length
+export predicate nameTooLong(Type) => Type.Name.Length > 40
+predicate methodNameTooLong(Method) => publicMethod && Method.Name.Length > 40

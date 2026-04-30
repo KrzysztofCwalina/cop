@@ -1,0 +1,23 @@
+# Azure-specific client library checks for JavaScript/TypeScript
+
+import javascript-library-client
+import code-analysis
+
+## Azure client constructors must accept a TokenCredential parameter
+export let client-needs-credential = Clients:missingCredential
+    :toError('{item.Name} constructor must accept a TokenCredential parameter')
+
+## Source files must have a copyright header on the first line
+export let copyright-header = Code.Lines:javascript:missingCopyrightFile
+    :toWarning('Source file is missing a copyright header comment')
+
+## Client methods must only throw Error, TypeError, RangeError, or RestError
+export let error-handling = Code.Statements:javascript:throwsCustomError
+    :toError('Only throw Error, TypeError, RangeError, or RestError — do not throw custom non-Error types')
+
+## Azure clients should not use console for logging — use @azure/logger
+export let no-console-logging = Clients.Methods.Statements:usesConsoleLog
+    :toError('Do not use console for logging — use @azure/logger instead')
+
+## All Azure-specific JavaScript client library checks combined
+export let javascript-library-client-azure = client-needs-credential + copyright-header + error-handling + no-console-logging

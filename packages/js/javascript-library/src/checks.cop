@@ -1,0 +1,22 @@
+# Library design checks for JavaScript/TypeScript
+
+import code-analysis
+
+## Do not use default exports — use named exports only
+export let no-default-exports = Code.Lines:javascript:defaultExport
+    :toError('Do not use default exports — use named exports')
+
+## Do not import Promise from external libraries (use native Promise)
+export let no-external-promises = Code.Lines:javascript:importsBluebirdPromise
+    :toError('Use native Promise — do not import from bluebird or other polyfill libraries')
+
+## Do not use const enums (problematic for consumers)
+export let no-const-enums = Code.Lines:javascript:constEnumDeclaration
+    :toWarning('Do not use const enum — use regular enum instead')
+
+## Do not reference window global — use self for cross-platform compatibility
+export let no-window-reference = Code.Lines:javascript:windowReference
+    :toError('Do not use window — use self for cross-platform compatibility')
+
+## All JavaScript library checks combined
+export let javascript-library = no-default-exports + no-external-promises + no-const-enums + no-window-reference

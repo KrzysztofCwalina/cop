@@ -21,6 +21,12 @@ cop check csharp-style -t src/    # analyze a specific directory
 | `fdg` | .NET Framework Design Guidelines: naming, type/member/exception design (~26 rules) |
 | `csharp-library` | Library design: sealed clients, method conventions, constructor patterns |
 | `csharp-library-client` | Client library patterns: client naming, options types, service methods |
+| `python` | Python coding conventions: print, bare except, eval |
+| `python-library-client` | Python client library patterns: naming, kwargs, LRO, paging |
+| `javascript` | JavaScript/TypeScript conventions: console, eval, var, debugger |
+| `javascript-library-client` | JS/TS client library patterns: verbs, cancellation, pagination |
+
+For a complete list of every individual check, see the [All Checks Catalog](checks.md).
 
 ### Exit Codes
 

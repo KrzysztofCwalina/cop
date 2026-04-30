@@ -1,0 +1,62 @@
+# Azure SDK client library definitions for Python
+
+# Credential: constructor must accept a credential parameter
+predicate ctorMissingCredential(Type) => Type.Constructors.Count > 0
+    && Type.Constructors.First.Parameters:!any(credentialParam)
+
+# api_version keyword argument
+predicate apiVersionParam(Parameter) => Parameter.Name == 'api_version'
+predicate ctorMissingApiVersion(Type) => Type.Constructors.Count > 0
+    && Type.Constructors.First.Parameters:!any(apiVersionParam)
+
+# Naming conventions: snake_case for methods
+predicate methodNotSnakeCase(Method) => Method:isPublic && !Method.Name:startsWith('_')
+    && Method.Name:matches('[A-Z]')
+predicate hasNonSnakeCaseMethod(Type) => Type.Methods:any(methodNotSnakeCase)
+
+# PascalCase for types (first letter uppercase)
+predicate typeNotPascalCase(Type) => Type.Name:matches('^[a-z]')
+
+# Enum values must be uppercase
+predicate enumBase(Type) => Type.BaseTypes:contains('Enum')
+    || Type.BaseTypes:contains('str')
+predicate looksLikeEnum(Type) => Type.Kind == 'Class' && enumBase
+
+# Package name: should only contain dashes, no underscores in distribution name
+# (Checked at file/folder level in practice)
+
+# delete operations should return None
+predicate deleteMethod(Method) => Method:isPublic && (Method.Name:startsWith('delete')
+    || Method.Name:startsWith('begin_delete'))
+predicate deleteReturnsValue(Method) => deleteMethod && Method.ReturnType != null
+    && Method.ReturnType.Name != 'None' && !Method.ReturnType.Name:contains('LROPoller')
+    && !Method.ReturnType.Name:contains('Poller')
+
+# Deprecated imports: six
+predicate importsSix(Statement) => Statement.Kind == 'call'
+    && Statement.TypeName == 'six'
+
+# Legacy typing: type comments instead of annotations
+predicate legacyTypeComment(Line) => Line.Text:matches('#\\s*type:')
+
+# raise_with_traceback: use raise ... from instead
+predicate usesRaiseWithTraceback(Statement) => Statement.Kind == 'call'
+    && Statement.MemberName == 'raise_with_traceback'
+
+# asyncio import when azure.core transport sleep should be used
+predicate importsAsyncio(Statement) => Statement.Kind == 'call'
+    && Statement.TypeName == 'asyncio' && Statement.MemberName == 'sleep'
+
+# Logging exceptions at non-debug levels
+predicate logsExceptionNotDebug(Statement) => Statement.Kind == 'call'
+    && (Statement.TypeName:contains('log') || Statement.TypeName:contains('logger'))
+    && (Statement.MemberName == 'warning' || Statement.MemberName == 'error'
+        || Statement.MemberName == 'info' || Statement.MemberName == 'critical')
+    && Statement.Arguments:contains('exc_info')
+
+# Missing tracing decorator
+predicate tracingDecorator(Method) => Method.Decorators:contains('distributed_trace')
+    || Method.Decorators:contains('distributed_trace_async')
+predicate publicServiceMethod(Method) => Method:isPublic && !Method.Name:startsWith('_')
+    && Method.Name != 'close' && !Method.Name:startsWith('from_')
+predicate missingTracing(Method) => publicServiceMethod && !tracingDecorator

@@ -1,0 +1,44 @@
+# Azure-specific client library definitions for JavaScript/TypeScript
+
+# Azure credential in constructor: clients must accept TokenCredential
+predicate constructorMethod(Method) => Method.Name == 'constructor'
+predicate hasCredentialParam(Parameter) => Parameter.Name:contains('credential')
+    || (Parameter.Type != null && Parameter.Type.Name:contains('Credential'))
+predicate missingCredential(Type) => client
+    && Type.Constructors.Count > 0
+    && Type.Constructors:!any(ctorHasCredential)
+predicate ctorHasCredential(Method) => constructorMethod
+    && Method.Parameters:any(hasCredentialParam)
+
+# Client names should follow Azure pattern: <ServiceName>Client
+predicate tooShortClientName(Type) => client && Type.Name.Length < 8
+
+# Async methods must not throw string errors
+predicate usesInterfaceParam(Parameter) => Parameter.Type != null
+    && !Parameter.Type.Name:startsWith('class ')
+    && (Parameter.Type.Name:endsWith('Options')
+        || Parameter.Type.Name:endsWith('Settings')
+        || Parameter.Type.Name:endsWith('Config'))
+
+# Copyright header check
+predicate hasCopyrightHeader(Line) => Line.Number == 1
+    && Line.Text:contains('Copyright')
+predicate missingCopyrightFile(File) => File.Lines.Count > 0
+    && File.Lines:!any(hasCopyrightHeader)
+
+# Azure Core imports: clients should use @azure/core-client
+predicate importsAzureCore(File) => File.Imports:any(isAzureCoreImport)
+predicate isAzureCoreImport(Import) => Import:contains('@azure/core')
+
+# Logging: use @azure/logger, not console
+predicate usesConsoleLog(Statement) => Statement.Kind == 'call'
+    && Statement.TypeName == 'console'
+
+# Error handling: must only throw RestError or Error subclasses
+predicate throwsCustomError(Statement) => Statement.Kind == 'throw'
+    && Statement.TypeName != null
+    && Statement.TypeName != 'Error'
+    && Statement.TypeName != 'TypeError'
+    && Statement.TypeName != 'RangeError'
+    && Statement.TypeName != 'RestError'
+    && !Statement.TypeName:endsWith('Error')

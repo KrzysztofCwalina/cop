@@ -14,5 +14,17 @@ export let bare-except-clauses = Code.Statements:python:bareExcept
 export let silenced-exceptions = Code.Statements:python:swallowsException
     :toWarning('Do not silence Exception — reraise or catch a specific type')
 
+## Do not import the six package — Python 2 is no longer supported
+export let no-six-import = Code.Lines:python:importsSix
+    :toError('Do not import six — Python 2 is no longer supported')
+
+## Do not use legacy type comments — use Python 3.9+ type annotations
+export let no-legacy-typing = Code.Lines:python:legacyTypingComment
+    :toWarning('Do not use type comments — use Python 3.9+ type annotations')
+
+## Do not use eval() — it is a security risk
+export let no-eval = Code.Statements:python:evalCall
+    :toError('Do not use eval() — it is a security risk')
+
 ## All Python checks combined
-export let python-checks = print-calls + bare-except-clauses + silenced-exceptions
+export let python-checks = print-calls + bare-except-clauses + silenced-exceptions + no-six-import + no-legacy-typing + no-eval

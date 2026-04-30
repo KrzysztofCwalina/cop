@@ -1,0 +1,32 @@
+# Client library design checks for JavaScript/TypeScript
+
+import javascript
+import code-analysis
+
+## Client methods must use approved verb prefixes (not erase, fetch, make, pop, push, etc.)
+predicate hasBannedVerb(Type) => Type.Methods:any(bannedVerb)
+export let standardized-verbs = Clients:hasBannedVerb
+    :toError('{item.Name} uses a banned method verb prefix — use get, list, create, upsert, update, replace, delete, add, set, or remove')
+
+## Async client methods must support cancellation (AbortSignal or options)
+predicate hasMissingCancellation(Type) => Type.Methods:any(asyncMissingCancellation)
+export let support-cancellation = Clients:hasMissingCancellation
+    :toError('{item.Name} has an async method without cancellation support — accept AbortSignalLike or an options parameter')
+
+## Methods returning a subclient must be named get*Client
+predicate hasSubclientBadName(Type) => Type.Methods:any(subclientBadName)
+export let subclient-naming = Clients:hasSubclientBadName
+    :toError('{item.Name} returns a subclient but is not named get*Client')
+
+## LRO methods should be prefixed with begin
+predicate hasLroBadName(Type) => Type.Methods:any(lroBadName)
+export let lro-begin-prefix = Clients:hasLroBadName
+    :toError('{item.Name} returns a Poller but is not prefixed with begin')
+
+## list methods should return PagedAsyncIterableIterator
+predicate hasPagingBadReturn(Type) => Type.Methods:any(pagingBadReturn)
+export let pagination-list-return = Clients:hasPagingBadReturn
+    :toWarning('{item.Name} list method should return PagedAsyncIterableIterator')
+
+## All JavaScript client library checks combined
+export let javascript-library-client = standardized-verbs + support-cancellation + subclient-naming + lro-begin-prefix + pagination-list-return

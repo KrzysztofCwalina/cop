@@ -58,7 +58,7 @@ let bool-property-naming = Code.Types:csharp:hasBadBoolProperty
 ## Namespace should have at least two segments (Company.Product)
 predicate shortNamespace(Type) => Type.File.Namespace != null && !Type.File.Namespace:contains('.')
 let namespace-segments = Code.Types:csharp:shortNamespace
-    :toInfo('FDG Naming: Namespace should have at least two segments (e.g., Company.Product)')
+    :toInfo('FDG Naming: Namespace {item.File.Namespace} should have at least two segments (e.g., Company.Product)')
 
 ## All naming checks combined
 let fdg-naming = exception-suffix + attribute-suffix + eventargs-suffix + stream-suffix + no-hungarian-prefix + param-camel-case + bool-property-naming + namespace-segments

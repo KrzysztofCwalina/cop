@@ -1,5 +1,7 @@
 ## Package Reference
 
+For a complete list of every individual check across all packages, see the [All Checks Catalog](../checks.md).
+
 ### Core
 
 | Package | Description |
@@ -24,12 +26,17 @@
 |---|---|
 | [python](python/python.md) | Python coding convention checks |
 | [python-library](python/python-library.md) | Python library design checks |
+| python-library-client | Python client library design checks |
+| python-library-client-azure | Azure Python client library checks |
 
 ### JavaScript
 
 | Package | Description |
 |---|---|
 | [javascript](js/javascript.md) | JavaScript/TypeScript convention checks |
+| javascript-library | JavaScript/TypeScript library design checks |
+| javascript-library-client | JS/TS client library design checks |
+| javascript-library-client-azure | Azure JS/TS client library checks |
 
 ### TypeSpec
 
