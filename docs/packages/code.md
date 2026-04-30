@@ -87,7 +87,7 @@ Language keywords (`csharp`, `python`, `java`, `go`, `typescript`) scope collect
 | Property | Type | Description |
 |---|---|---|
 | `Kind` | `string` | `declaration`, `call`, `throw`, `catch`, `return`, `using`, `foreach`, `await` |
-| `Keywords` | `[string]` | Language keywords (e.g. `["var"]`, `["await"]`) |
+| `Keywords` | `[string]` | Language keywords (e.g. `['var']`, `['await']`) |
 | `TypeName` | `string?` | Receiver type (e.g. `Thread` in `Thread.Sleep`) |
 | `MemberName` | `string?` | Member name (e.g. `Sleep`, variable name) |
 | `Arguments` | `[string]` | Call arguments |
@@ -217,7 +217,7 @@ Two comparison modes for cross-language checks:
 | `.Trim(s)` | Remove suffix |
 | `.Replace(a, b)` | Replace substring |
 
-`.Words` normalizes across conventions — `TaskCompletionSource`, `task_completion_source`, and `taskCompletionSource` all yield `['task', 'completion', 'source']`. Chain collection predicates: `Name.Words:contains('task')`.
+`.Words` normalizes across conventions — `TaskCompletionSource`, `task_completion_source`, and `taskCompletionSource` all yield `['task' 'completion' 'source']`. Chain collection predicates: `Name.Words:contains('task')`.
 
 ---
 
@@ -239,9 +239,9 @@ predicate publicAsync(Method) => Method:isPublic && Method:isAsync
 predicate missingCancellationToken(Method) => Method.Parameters:none(cancellationToken)
 predicate asyncWithoutCancellation(Type) => Type.Methods.Where(publicAsync):any(missingCancellationToken)
 
-foreach Clients:csharp:missingOptions => PRINT('{warning:@yellow} {item.Name} should accept an options parameter')
-foreach Clients:csharp:notSealedOrAbstract => PRINT('{error:@red} {item.Name} should be sealed or abstract')
-foreach Clients:csharp:asyncWithoutCancellation => PRINT('{warning:@yellow} {item.Name} is async without CancellationToken')
+foreach Clients:csharp:missingOptions => '{warning:@yellow} {item.Name} should accept an options parameter'
+foreach Clients:csharp:notSealedOrAbstract => '{error:@red} {item.Name} should be sealed or abstract'
+foreach Clients:csharp:asyncWithoutCancellation => '{warning:@yellow} {item.Name} is async without CancellationToken'
 ```
 
 ```ruby
@@ -252,9 +252,9 @@ predicate usesVar(Statement) => Statement.Keywords:contains('var')
 predicate usesDynamic(Statement) => Statement.Keywords:contains('dynamic')
 predicate threadSleep(Statement) => Statement.TypeName == 'Thread' && Statement.MemberName == 'Sleep'
 
-foreach Statements:csharp:usesVar:!Path('**/Tests/**') => PRINT('{error:@red} {item.File.Path}:{item.Line} uses var')
-foreach Statements:csharp:usesDynamic => PRINT('{error:@red} Do not use dynamic')
-foreach Statements:csharp:threadSleep => PRINT('{error:@red} Use Task.Delay instead of Thread.Sleep')
+foreach Statements:csharp:usesVar:!Path('**/Tests/**') => '{error:@red} {item.File.Path}:{item.Line} uses var'
+foreach Statements:csharp:usesDynamic => '{error:@red} Do not use dynamic'
+foreach Statements:csharp:threadSleep => '{error:@red} Use Task.Delay instead of Thread.Sleep'
 ```
 
 ```ruby
@@ -264,7 +264,7 @@ import code
 predicate client(Type) => Type.Name.Words:contains('client')
 predicate notPublic(Type) => !Type:isPublic
 
-foreach Types:client:notPublic => PRINT('{warning:@yellow} {item.Name} should be public')
+foreach Types:client:notPublic => '{warning:@yellow} {item.Name} should be public'
 ```
 
 Language-specific overloads when rules differ per language:
@@ -273,7 +273,7 @@ Language-specific overloads when rules differ per language:
 predicate client(Type:csharp) => Type.Name:endsWith('Client')
 predicate client(Type:python) => Type.Name:endsWith('_client')
 
-foreach Types:client:notPublic => PRINT('{warning:@yellow} {item.Name} should be public')
+foreach Types:client:notPublic => '{warning:@yellow} {item.Name} should be public'
 ```
 
 ```ruby
@@ -282,5 +282,5 @@ import code
 # Domain architecture rules
 predicate bannedUsing(File) => Path('**/Domain/**') && File.Usings:any(Using:contains('System.IO'))
 
-foreach Files:csharp:bannedUsing => PRINT('{error:@red} Domain layer must not reference System.IO in {File.Path}')
+foreach Files:csharp:bannedUsing => '{error:@red} Domain layer must not reference System.IO in {File.Path}'
 ```

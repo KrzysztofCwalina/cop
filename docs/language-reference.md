@@ -10,7 +10,7 @@ All data in cop is either a **primitive** (string, int, bool, byte) or a **list*
 
 And one kind of side-effect:
 
-4. **Commands** — routines that produce output (`PRINT`) or write files (`SAVE`)
+4. **Commands** — routines that produce output implicitly or write files (`SAVE`)
 
 > **Note:** Most examples use the [`code` package](packages/code.md) (`import code`), which provides types for source code analysis. See [Code Package Reference](packages/code.md) for the full type catalog.
 
@@ -28,15 +28,32 @@ And one kind of side-effect:
 
 ### Lists
 
-A list is an ordered sequence of items, written as `[T]` where `T` is the item type:
+A list is an ordered sequence of items. List **types** are written as `[T]`:
 
 ```ruby
 [string]             # list of strings
 [int]                # list of integers
 [Type]               # list of Type objects
-[1, 2, 3]            # list literal
-["a", "b", "c"]      # string list literal
+```
+
+#### List Literals
+
+A list literal is written as `[elements]` — elements are space-separated (no commas):
+
+```ruby
+[1 2 3]              # int list
+['Get' 'Set' 'Create']  # string list
 []                   # empty list
+```
+
+List literals can be used anywhere an expression is expected — as predicate arguments, in `let` declarations, or combined with `+`:
+
+```ruby
+Name:containsAny(['Get' 'Set'])       # inline list as predicate argument
+Name:in(['Create' 'Update' 'Delete']) # inline list for membership check
+let Allowed = ['Get' 'Set' 'Create']  # list literal bound to a name
+let Combined = [1 2] + [3 4]         # list concatenation → [1 2 3 4]
+let Appended = [1 2] + 3             # append element → [1 2 3]
 ```
 
 Lists are the fundamental data structure. Objects contain lists of properties. Packages provide lists of items to process. Filtering produces subsets. Most operations take a list in and produce a list or boolean out.
@@ -49,7 +66,7 @@ An object is a list of named properties. Each property has a name and a value, w
 type Person = { Name : string, Age : int }
 ```
 
-A `Person` object is a list of properties: `[Property("Name", "Alice"), Property("Age", 42)]`.
+A `Person` object is a list of properties: `[Property('Name', 'Alice') Property('Age', 42)]`.
 
 The dot operator (`.`) is syntactic sugar for navigating properties:
 
@@ -70,10 +87,9 @@ A `.cop` file contains these kinds of declarations:
 | `type` | Describe the shape of an object’s property list |
 | `flags` | Define a flags enum for bitwise operations |
 | `let` | Declare a named list (base or subset) |
-| `command name =` | Define a named command (PRINT, SAVE, or composition) |
+| `command name =` | Define a named command (implicit output, SAVE, or composition) |
 | `predicate name(Param) =>` | Define a named predicate for subsetting |
 | `function name(Param) =>` | Define a named function that produces a record |
-| `PRINT` | Command that writes to console |
 | `SAVE` | Command that writes to a file |
 | `DEBUG` | Command that writes to console only when `-d` flag is active |
 
@@ -135,7 +151,7 @@ The `cop restore` command reads `feed` and `import` declarations, downloads the 
 ```ruby
 export predicate isClient(Type) => Type.Name:endsWith('Client')
 export let Clients = Code.Types:isClient
-export command list-clients = foreach Clients => PRINT('{item.Name}')
+export command list-clients = foreach Clients => '{item.Name}'
 export type ClientInfo = { Name : string, Path : string }
 export function clientInfo(Type) => ClientInfo { Name = Type.Name, Path = Type.File.Path }
 ```
@@ -187,7 +203,7 @@ The `code` package defines a `Modifier` flags enum and provides `isX` predicates
 
 ### Let Declarations
 
-`let` declares a named list. It has two forms:
+`let` declares a named list. It has several forms:
 
 **Base list** — declares a typed list whose data is provided by a package:
 
@@ -202,6 +218,21 @@ let Statements : [Statement]
 let Clients = Types:isClient              # subset of Types where isClient is true
 let Calls = Statements:call               # subset of Statements where call is true
 let PublicClients = Clients:isPublic       # subset of a subset
+```
+
+**List literal** — binds a name to an inline list value:
+
+```ruby
+let Keywords = ['Test' 'Bench' 'Perf']
+let Thresholds = [1 5 10 50]
+let Empty = []
+```
+
+List literal bindings can be used wherever a list name is expected — for example as an argument to `containsAny` or `in`:
+
+```ruby
+let Prefixes = ['Get' 'Set' 'Create']
+predicate hasBadPrefix(Method) => Method.Name:containsAny(Prefixes)
 ```
 
 **External data** — loads a JSON file into a typed collection (requires `import json`):
@@ -364,7 +395,7 @@ Name:matches(@'\bList<.*>')         # regex match (case-sensitive)
 Name:equals('Program')             # case-insensitive equality
 Name:notEquals('Object')              # case-insensitive inequality
 Name:sameAs('configure_await')     # convention-insensitive (matches ConfigureAwait, configureAwait, etc.)
-Name:containsAny(['Get', 'Set'])        # any item in list is a substring
+Name:containsAny(['Get' 'Set'])        # any item in list is a substring
 Name:in(allowedNames)          # value is a member of the list
 ```
 
@@ -466,8 +497,17 @@ Items.First(predicate)       # first matching item
 Items.Last(predicate)        # last matching item
 Items.Single(predicate)      # single matching item
 Items.ElementAt(n)           # item at index n
-Items.Select(template)       # project each item into a new value
+Items.Select(expr)           # project each item to a new value
 Items.Text(template)         # format each item and join into a single string
+Items.OrderBy(expr)          # sort ascending by expression
+Items.OrderByDescending(expr) # sort descending by expression
+Items.Distinct(expr)         # deduplicate by expression (or by value if no arg)
+Items.GroupBy(expr)          # group into Group objects with Key, Items, Count
+Items.Sum(expr)              # sum numeric values
+Items.Min(expr)              # minimum numeric value
+Items.Max(expr)              # maximum numeric value
+Items.Average(expr)          # average numeric value
+Items.Reduce(op, expr, sep?) # aggregate with operator
 ```
 
 #### Collection Concatenation (`+`)
@@ -477,6 +517,14 @@ The `+` operator concatenates two collections of the same type:
 ```ruby
 let allChecks = csharp-checks + python-checks
 let combined = internalTypes + externalTypes
+```
+
+It also works with list literals:
+
+```ruby
+let numbers = [1 2] + [3 4]           # → [1 2 3 4]
+let extended = numbers + 5            # → [1 2 3 4 5]
+let words = ['Get' 'Set'] + ['Create'] # → ['Get' 'Set' 'Create']
 ```
 
 #### String Concatenation (`+`)
@@ -499,11 +547,58 @@ predicate hasAsyncVariant(Statement) =>
 
 #### Select and Text Examples
 
-`.Select()` projects each item into a new value. `.Text()` formats each item and joins with newlines:
+`.Select()` projects each item into a new value using `item` as the element variable. `.Text()` formats each item and joins with newlines:
 
 ```ruby
 let names = Code.Types.Select(item.Name)
+let nameLengths = Code.Types.Select(item.Name.Length)
 let summary = Code.Types:client.Text('{item.Name} — {item.File.Path}')
+```
+
+#### Sorting
+
+`.OrderBy()` and `.OrderByDescending()` sort a collection by an expression:
+
+```ruby
+let sorted = Types.OrderBy(item.Name)
+let byMethodCount = Types.OrderByDescending(item.Methods.Count)
+```
+
+#### Aggregation
+
+`.Sum()`, `.Min()`, `.Max()`, `.Average()` compute aggregate values from a collection:
+
+```ruby
+let totalMethods = Types.Sum(item.Methods.Count)
+let maxParams = Methods.Max(item.Parameters.Count)
+let avgSize = Types.Average(item.Methods.Count)
+```
+
+#### Distinct
+
+`.Distinct()` deduplicates items by expression (or by value when called without arguments):
+
+```ruby
+let uniqueNamespaces = Types.Distinct(item.Namespace)
+let uniqueNames = names.Distinct()
+```
+
+#### GroupBy
+
+`.GroupBy()` groups items by an expression. Returns a list of `Group` objects with `Key`, `Items`, and `Count` properties:
+
+```ruby
+let byNamespace = Types.GroupBy(item.Namespace)
+foreach byNamespace => '{item.Key}: {item.Count} types'
+```
+
+#### Reduce
+
+`.Reduce()` aggregates a collection into a single value. The first argument is the operator (as a string), the second is the item expression, and an optional third argument is the separator for string concatenation:
+
+```ruby
+let allNames = Types.Reduce('+', item.Name, ', ')
+let total = Types.Reduce('+', item.Methods.Count)
 ```
 
 #### Predicate-Based Collection Tests
@@ -518,16 +613,27 @@ predicate allAbstract(Type) => Type.Methods:all(isAbstract)
 
 #### Inline Expressions
 
-Instead of defining a named predicate, write the condition inline. The element variable uses the singular form of the property name:
+Instead of defining a named predicate, write the condition inline using `item` as the element variable:
 
 ```ruby
-Type.Methods:any(Method:isPublic && Method:isAsync)
-Type.Constructors:none(Constructor:isProtected)
-Type.BaseTypes:any(BaseType:contains('Service'))
-File.Usings:any(Using:contains('System.IO'))
+Type.Methods:any(item:isPublic && item:isAsync)
+Type.Constructors:none(item:isProtected)
+Type.BaseTypes:any(item:contains('Service'))
+File.Usings:any(item:contains('System.IO'))
 ```
 
-Recognized singular names: `Type`, `Method`, `Constructor`, `Parameter`, `Statement`, `Line`, `BaseType`, `Decorator`, `Using`, `Package`, `File`, `NestedType`.
+The `item` keyword refers to the current element in the collection. It works with any expression — property access, predicates, arithmetic, ternary conditions:
+
+```ruby
+# Property access on item
+Type.Methods:any(item.Name:startsWith('Get'))
+
+# Arithmetic expression
+Type.Methods:any(item.Parameters.Count > 5)
+
+# Ternary expression
+Types.Select(item.Methods.Count > 0 ? item.Name | 'empty')
+```
 
 ### Built-in Functions
 
@@ -545,24 +651,24 @@ Recognized singular names: `Type`, `Method`, `Constructor`, `Parameter`, `Statem
 Commands produce side effects — output to the console, files, or test results. Use `foreach` to iterate over a collection:
 
 ```
-foreach List:filter1:filter2 => COMMAND("args...")
+foreach List:filter1:filter2 => 'template expression'
 ```
 
 Commands are **named** using `command`, which makes them invocable by name with `cop run <name>`:
 
 ```ruby
-command list-types = foreach Types => PRINT('{item.Name}')
+command list-types = foreach Types => '{item.Name}'
 command export-names = foreach Types:csharp:client => SAVE('names.txt', '{item.Name}')
 command test-has-types = ASSERT(csharp.Types)
 ```
 
-### PRINT
+### Implicit Output
 
-Writes output to the console. One line per matching item.
+Output is implicit — whatever a program evaluates to is its output. A bare string literal at top level or after `=>` in a `foreach` produces one line of output per item.
 
 ```ruby
-PRINT('Hello World')                                                      # bare — outputs once
-foreach Types:csharp:client => PRINT('{error:@red} {item.Name} is a client')  # list — one line per item
+'Hello World'                                                             # bare — outputs once
+foreach Types:csharp:client => '{error:@red} {item.Name} is a client'     # list — one line per item
 ```
 
 | Part | Required | Description |
@@ -571,24 +677,13 @@ foreach Types:csharp:client => PRINT('{error:@red} {item.Name} is a client')  # 
 | `:filter` | no | One or more predicate filters (AND-combined) |
 | `'...'` | yes | Template string with `{Expr}` interpolation |
 
-#### Action Aliases
-
-`ERROR`, `WARNING`, and `INFO` are syntactic aliases for `PRINT` (backward compatibility). They all produce the same plain text output:
-
-```ruby
-foreach Types:client => PRINT('{error:@red} {item.Name} is invalid')
-foreach Types:client => ERROR('{error:@red} {item.Name} is invalid')     # same as PRINT
-foreach Types:client => WARNING('{warning:@yellow} {item.Name} needs review')  # same as PRINT
-foreach Types:client => INFO('{info:@cyan} {item.Name} found')             # same as PRINT
-```
-
 #### Language Filtering
 
 Use a language name as a filter (`:csharp`, `:python`, etc.) to scope iteration to files of that language:
 
 ```ruby
-foreach Clients:csharp:!isSealed => PRINT('{error:@red} {item.Name} should be sealed')
-foreach Lines:python:matches(@'\bprint\s*\(') => PRINT('{warning:@yellow} Use logging instead of print')
+foreach Clients:csharp:!isSealed => '{error:@red} {item.Name} should be sealed'
+foreach Lines:python:matches(@'\bprint\s*\(') => '{warning:@yellow} Use logging instead of print'
 ```
 
 ### SAVE
@@ -645,7 +740,7 @@ ASSERT and ASSERT_EMPTY commands only run via `cop test`, never during `cop run`
 
 ### DEBUG
 
-Diagnostic output that only appears when the `-d` (diagnostic) flag is active. Works exactly like `PRINT` but produces no output during normal runs.
+Diagnostic output that only appears when the `-d` (diagnostic) flag is active. Works exactly like implicit output but produces no output during normal runs.
 
 ```ruby
 foreach Types:client => DEBUG('Client found: {item.Name}')
@@ -670,8 +765,8 @@ cop test -d         # shows [trace] and [debug] output during tests
 Interpolated strings in commands use `{Expr}` placeholders:
 
 ```ruby
-foreach Clients:!isSealed => PRINT('{error:@red} {item.Name} should be sealed')
-foreach Clients:hasAsyncWithoutCancellation => PRINT('{warning:@yellow} {item.File.Path}:{item.Line} {item.Name} missing cancellation token')
+foreach Clients:!isSealed => '{error:@red} {item.Name} should be sealed'
+foreach Clients:hasAsyncWithoutCancellation => '{warning:@yellow} {item.File.Path}:{item.Line} {item.Name} missing cancellation token'
 ```
 
 ## Comments
@@ -699,7 +794,7 @@ A `#` alone on a line opens a block comment. Another `#` alone on a line closes 
 
 ```ruby
 ## Client types must have a constructor that accepts an Options parameter
-foreach Clients:missingOptions => PRINT('{warning:@yellow} {item.Name} should accept options')
+foreach Clients:missingOptions => '{warning:@yellow} {item.Name} should accept options'
 ```
 
 `##` doc comments are captured and displayed as rule descriptions in the UI.
