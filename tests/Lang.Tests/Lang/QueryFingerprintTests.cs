@@ -258,4 +258,42 @@ public class QueryFingerprintTests
         var result = QueryFingerprint.Compute("Types", filters, null);
         Assert.That(result, Is.EqualTo("Types:['a','b']"));
     }
+
+    [Test]
+    public void PathOverride_EmptyFilters_IncludesPath()
+    {
+        var result = QueryFingerprint.Compute("Types", [], null, pathOverride: "../sdk/");
+        Assert.That(result, Is.EqualTo("Types#../sdk/"));
+    }
+
+    [Test]
+    public void PathOverride_WithFilters_IncludesPath()
+    {
+        var filters = new List<Expression> { new IdentifierExpr("Public") };
+        var result = QueryFingerprint.Compute("Types", filters, null, pathOverride: "../sdk/");
+        Assert.That(result, Is.EqualTo("Types:Public#../sdk/"));
+    }
+
+    [Test]
+    public void PathOverride_WithDocPath_IncludesBoth()
+    {
+        var result = QueryFingerprint.Compute("Types", [], "src/Foo.cs", pathOverride: "../sdk/");
+        Assert.That(result, Is.EqualTo("Types@src/Foo.cs#../sdk/"));
+    }
+
+    [Test]
+    public void DifferentPaths_ProduceDifferentFingerprints()
+    {
+        var a = QueryFingerprint.Compute("Types", [], null, pathOverride: "../sdk/");
+        var b = QueryFingerprint.Compute("Types", [], null, pathOverride: "../other/");
+        Assert.That(a, Is.Not.EqualTo(b));
+    }
+
+    [Test]
+    public void NullPathOverride_MatchesDefault()
+    {
+        var a = QueryFingerprint.Compute("Types", [], null);
+        var b = QueryFingerprint.Compute("Types", [], null, pathOverride: null);
+        Assert.That(a, Is.EqualTo(b));
+    }
 }

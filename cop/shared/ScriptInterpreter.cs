@@ -18,6 +18,9 @@ public class ScriptInterpreter
     // Bounded to prevent unbounded memory growth on large repos with many unique queries.
     private readonly BoundedCache<string, List<object>> _queryCache = new(capacity: 2048);
 
+    // Optional provider query service for path-scoped collection references
+    private readonly IProviderQueryService? _providerQueryService;
+
     /// <summary>
     /// Extracts a collection name from a union element expression.
     /// Supports IdentifierExpr ("Types") and MemberAccessExpr ("csharp.Types").
@@ -36,12 +39,25 @@ public class ScriptInterpreter
         TypeRegistry typeRegistry,
         int maxOutputsPerCommand = 1000,
         TimeSpan? timeout = null,
-        Action<string>? diagLog = null)
+        Action<string>? diagLog = null,
+        IProviderQueryService? providerQueryService = null)
     {
         _typeRegistry = typeRegistry;
         _maxOutputsPerCommand = maxOutputsPerCommand;
         _timeout = timeout ?? TimeSpan.FromSeconds(30);
         _diagLog = diagLog;
+        _providerQueryService = providerQueryService;
+    }
+
+    private PredicateEvaluator CreateEvaluator(
+        Dictionary<string, List<PredicateDefinition>> predicateGroups,
+        string filePath,
+        Dictionary<string, LetDeclaration>? letDeclarations = null,
+        Dictionary<string, List<FunctionDefinition>>? functionGroups = null,
+        Dictionary<string, IList>? resolvedCollections = null)
+    {
+        return new PredicateEvaluator(predicateGroups, filePath, _typeRegistry,
+            letDeclarations, functionGroups, resolvedCollections, _providerQueryService);
     }
 
     public InterpreterResult Run(
@@ -212,8 +228,8 @@ public class ScriptInterpreter
                     {
                         var paramName = cmdTemplate.Parameters[i];
                         var argExpr = run.Arguments[i];
-                        var (collection, filters, exclusions) = ScriptParser.DecomposeCollectionExpression(argExpr);
-                        tempLets[paramName] = new LetDeclaration(paramName, collection, filters, run.Line)
+                        var (collection, filters, exclusions, pathOverride) = ScriptParser.DecomposeCollectionExpression(argExpr);
+                        tempLets[paramName] = new LetDeclaration(paramName, collection, filters, run.Line, PathOverride: pathOverride)
                         {
                             Exclusions = exclusions
                         };
@@ -421,7 +437,7 @@ public class ScriptInterpreter
             if (cmd.OutputExpression is not null && string.IsNullOrEmpty(cmd.MessageTemplate))
             {
                 // Expression-based output: evaluate the expression directly
-                var evaluator = new PredicateEvaluator(predicateGroups, "", _typeRegistry, letDeclarations, functionGroups);
+                var evaluator = CreateEvaluator(predicateGroups, "", letDeclarations, functionGroups);
                 var value = evaluator.EvaluateField(cmd.OutputExpression, null!, "");
 
                 // If value is a list, iterate and output each item separately
@@ -441,7 +457,7 @@ public class ScriptInterpreter
             {
                 // Template output: resolve with let bindings and aggregate counts
                 EvaluationContext ctx = new();
-                var evaluator = new PredicateEvaluator(predicateGroups, "", _typeRegistry, letDeclarations, functionGroups);
+                var evaluator = CreateEvaluator(predicateGroups, "", letDeclarations, functionGroups);
                 CaptureLetValues(ctx, evaluator, letDeclarations, null!, "");
                 // Also add aggregate counts as context variables
                 foreach (var (aggName, aggCount) in aggregateCounts)
@@ -479,7 +495,7 @@ public class ScriptInterpreter
         // Global collections are processed once (not per-source-file)
         if (isGlobal)
         {
-            var evaluator = new PredicateEvaluator(predicateGroups, "", _typeRegistry, letDeclarations, functionGroups);
+            var evaluator = CreateEvaluator(predicateGroups, "", letDeclarations, functionGroups);
             var items = ResolveGlobalCollection(cmd.Collection, evaluator, predicateGroups, letDeclarations, functionGroups);
             _diagLog?.Invoke($"[trace] resolve: {cmd.Collection} -> {items.Count} items");
             items = ApplyFilters(items, itemType, cmd.Filters, evaluator, functionGroups);
@@ -578,13 +594,30 @@ public class ScriptInterpreter
                     resolvedCollections[collName] = collItems;
             }
 
-            var evaluator = new PredicateEvaluator(predicateGroups, document.Path, _typeRegistry,
-                letDeclarations, functionGroups, resolvedCollections);
+            var evaluator = CreateEvaluator(predicateGroups, document.Path, letDeclarations, functionGroups, resolvedCollections);
 
             List<object> items;
             try
             {
-                items = ResolveCollection(cmd.Collection, document, evaluator, predicateGroups, letDeclarations, functionGroups);
+                if (cmd.PathOverride is not null && _providerQueryService is not null)
+                {
+                    // Path-scoped command collection: foreach csharp.Types('../path/') => ...
+                    var dotIdx = cmd.Collection!.IndexOf('.');
+                    if (dotIdx >= 0)
+                    {
+                        var prov = cmd.Collection[..dotIdx];
+                        var coll = cmd.Collection[(dotIdx + 1)..];
+                        items = _providerQueryService.Query(prov, coll, cmd.PathOverride);
+                    }
+                    else
+                    {
+                        items = ResolveCollection(cmd.Collection, document, evaluator, predicateGroups, letDeclarations, functionGroups);
+                    }
+                }
+                else
+                {
+                    items = ResolveCollection(cmd.Collection, document, evaluator, predicateGroups, letDeclarations, functionGroups);
+                }
             }
             catch (InvalidOperationException) when (cmd.OutputExpression is not null)
             {
@@ -665,7 +698,7 @@ public class ScriptInterpreter
                 fallbackCollections[collName] = allItems;
             }
 
-            var fallbackEvaluator = new PredicateEvaluator(predicateGroups, "", _typeRegistry, letDeclarations, functionGroups, fallbackCollections);
+            var fallbackEvaluator = CreateEvaluator(predicateGroups, "", letDeclarations, functionGroups, fallbackCollections);
             try
             {
                 var value = fallbackEvaluator.EvaluateField(cmd.OutputExpression, null!, "");
@@ -753,6 +786,13 @@ public class ScriptInterpreter
                 return [];
             }
 
+            // Path-scoped collection: let x = csharp.Types('../path/'):filters
+            // Query the provider directly with the path override instead of using global collections
+            if (letDecl.PathOverride is not null && _providerQueryService is not null)
+            {
+                return ResolvePathScopedCollection(letDecl, evaluator, predicateGroups, functionGroups, useQueryCache);
+            }
+
             List<object> baseItems;
             try
             {
@@ -792,7 +832,7 @@ public class ScriptInterpreter
             if (useQueryCache)
             {
                 var functionNameSet = functionGroups.Count > 0 ? new HashSet<string>(functionGroups.Keys) : null;
-                var fingerprint = QueryFingerprint.Compute(letDecl.BaseCollection, letDecl.Filters, document.Path, functionNameSet);
+                var fingerprint = QueryFingerprint.Compute(letDecl.BaseCollection, letDecl.Filters, document.Path, functionNameSet, letDecl.PathOverride);
                 if (letDecl.Exclusions != null)
                     fingerprint += "|!" + QueryFingerprint.Serialize(letDecl.Exclusions);
 
@@ -846,6 +886,83 @@ public class ScriptInterpreter
     }
 
     /// <summary>
+    /// Resolves a path-scoped collection by querying the provider service.
+    /// The base collection name (e.g., "csharp.Types") is split into provider + collection,
+    /// queried with the path override, and then filters are applied.
+    /// </summary>
+    private List<object> ResolvePathScopedCollection(
+        LetDeclaration letDecl,
+        PredicateEvaluator evaluator,
+        Dictionary<string, List<PredicateDefinition>> predicateGroups,
+        Dictionary<string, List<FunctionDefinition>> functionGroups,
+        bool useQueryCache)
+    {
+        // Fingerprint cache check
+        if (useQueryCache)
+        {
+            var functionNameSet = functionGroups.Count > 0 ? new HashSet<string>(functionGroups.Keys) : null;
+            var fingerprint = QueryFingerprint.Compute(letDecl.BaseCollection, letDecl.Filters, null, functionNameSet, letDecl.PathOverride);
+            if (letDecl.Exclusions != null)
+                fingerprint += "|!" + QueryFingerprint.Serialize(letDecl.Exclusions);
+
+            if (_queryCache.TryGetValue(fingerprint, out var cached))
+                return cached;
+
+            var result = ResolvePathScopedCollectionCore(letDecl, evaluator, predicateGroups, functionGroups);
+            _queryCache.Set(fingerprint, result);
+            return result;
+        }
+
+        return ResolvePathScopedCollectionCore(letDecl, evaluator, predicateGroups, functionGroups);
+    }
+
+    private List<object> ResolvePathScopedCollectionCore(
+        LetDeclaration letDecl,
+        PredicateEvaluator evaluator,
+        Dictionary<string, List<PredicateDefinition>> predicateGroups,
+        Dictionary<string, List<FunctionDefinition>> functionGroups)
+    {
+        // Split "csharp.Types" into provider="csharp", collection="Types"
+        var dotIndex = letDecl.BaseCollection.IndexOf('.');
+        if (dotIndex < 0)
+            throw new InvalidOperationException($"Path-scoped collection '{letDecl.BaseCollection}' must be qualified (e.g., csharp.Types)");
+
+        var providerName = letDecl.BaseCollection[..dotIndex];
+        var collectionName = letDecl.BaseCollection[(dotIndex + 1)..];
+
+        var baseItems = _providerQueryService!.Query(providerName, collectionName, letDecl.PathOverride!);
+
+        // Apply filters if any
+        if (letDecl.Filters.Count == 0 && letDecl.Exclusions == null)
+            return baseItems;
+
+        var baseItemType = ResolveItemType(letDecl.BaseCollection, predicateGroups, new Dictionary<string, LetDeclaration>(), functionGroups);
+
+        // Apply pushdown filter optimization
+        var predicateNameSet = predicateGroups.Count > 0 ? new HashSet<string>(predicateGroups.Keys) : null;
+        var itemTypeDesc = _typeRegistry.GetType(baseItemType);
+        var (pushdownFilter, residualStart) = FilterHintExtractor.Extract(
+            letDecl.Filters, itemTypeDesc, predicateNameSet, predicateGroups.Count > 0 ? predicateGroups : null);
+
+        if (pushdownFilter is not null)
+            baseItems = _typeRegistry.ApplyPushdownFilter(baseItemType, baseItems, pushdownFilter);
+
+        var residualFilters = residualStart > 0
+            ? letDecl.Filters.GetRange(residualStart, letDecl.Filters.Count - residualStart)
+            : letDecl.Filters;
+
+        var result = ApplyFilters(baseItems, baseItemType, residualFilters, evaluator, functionGroups);
+
+        if (letDecl.Exclusions != null)
+        {
+            var finalType = ResolveItemTypeAfterFilters(baseItemType, letDecl.Filters, functionGroups);
+            result = ApplyExclusions(result, finalType, letDecl.Exclusions, evaluator, new Dictionary<string, LetDeclaration>());
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Pre-resolve collection let bindings (e.g., let factoryTypes = Source.Types:where(isFactory))
     /// so they can be accessed from within predicates. Value bindings and collection unions are skipped
     /// since they are already handled by the evaluator.
@@ -858,8 +975,7 @@ public class ScriptInterpreter
     {
         Dictionary<string, IList>? resolved = null;
         // Temporary evaluator without resolved collections for bootstrapping
-        var bootstrapEvaluator = new PredicateEvaluator(
-            predicateGroups, document.Path, _typeRegistry, letDeclarations, functionGroups);
+        var bootstrapEvaluator = CreateEvaluator(predicateGroups, document.Path, letDeclarations, functionGroups);
 
         foreach (var (name, letDecl) in letDeclarations)
         {
@@ -1516,13 +1632,19 @@ public class ScriptInterpreter
                 return [];
             }
 
+            // Path-scoped collection: query provider at specific path
+            if (letDecl.PathOverride is not null && _providerQueryService is not null)
+            {
+                return ResolvePathScopedCollection(letDecl, evaluator, predicateGroups, functionGroups, useQueryCache: true);
+            }
+
             var baseItems = ResolveGlobalCollection(
                 letDecl.BaseCollection, evaluator, predicateGroups, letDeclarations, functionGroups, visited);
             var baseItemType = ResolveItemType(letDecl.BaseCollection, predicateGroups, letDeclarations, functionGroups);
 
             // Fingerprint-based cache for global collections (docPath = null for globals)
             var functionNameSet = functionGroups.Count > 0 ? new HashSet<string>(functionGroups.Keys) : null;
-            var fingerprint = QueryFingerprint.Compute(letDecl.BaseCollection, letDecl.Filters, null, functionNameSet);
+            var fingerprint = QueryFingerprint.Compute(letDecl.BaseCollection, letDecl.Filters, null, functionNameSet, letDecl.PathOverride);
             if (letDecl.Exclusions != null)
                 fingerprint += "|!" + QueryFingerprint.Serialize(letDecl.Exclusions);
 
@@ -1773,7 +1895,7 @@ public class ScriptInterpreter
         Dictionary<string, List<FunctionDefinition>> functionGroups)
     {
         // Create a PredicateEvaluator with Program as the item
-        var evaluator = new PredicateEvaluator(predicateGroups, "", _typeRegistry, letDeclarations, functionGroups);
+        var evaluator = CreateEvaluator(predicateGroups, "", letDeclarations, functionGroups);
         var (result, _) = evaluator.EvaluateAsBool(guard, program, "Program");
         return result;
     }
@@ -1888,7 +2010,7 @@ public class ScriptInterpreter
 
         try
         {
-            var evaluator = new PredicateEvaluator(predicateGroups, "", _typeRegistry, letDeclarations, functionGroups);
+            var evaluator = CreateEvaluator(predicateGroups, "", letDeclarations, functionGroups);
             var resolved = new Dictionary<string, IList>();
 
             foreach (var (name, letDecl) in selectLets)
@@ -2016,7 +2138,7 @@ public class ScriptInterpreter
         List<object> items;
         if (IsGlobalRootCollection(cmd.Collection!, predicateGroups, letDeclarations))
         {
-            var evaluator = new PredicateEvaluator(predicateGroups, "", _typeRegistry, letDeclarations, functionGroups);
+            var evaluator = CreateEvaluator(predicateGroups, "", letDeclarations, functionGroups);
             items = ResolveGlobalCollection(cmd.Collection!, evaluator, predicateGroups, letDeclarations, functionGroups);
             items = ApplyFilters(items, itemType, cmd.Filters, evaluator, functionGroups);
 

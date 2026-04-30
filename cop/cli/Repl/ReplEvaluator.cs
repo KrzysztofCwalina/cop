@@ -223,7 +223,7 @@ public class ReplEvaluator
 
             var allFiles = new List<ScriptFile>(_context.ScriptFiles) { modifiedSnippet };
 
-            var interpreter = new ScriptInterpreter(_context.TypeRegistry);
+            var interpreter = new ScriptInterpreter(_context.TypeRegistry, providerQueryService: _context.QueryService);
             List<Document> documents = [];
 
             var result = interpreter.Run(allFiles, documents,
@@ -245,7 +245,7 @@ public class ReplEvaluator
     {
         try
         {
-            var interpreter = new ScriptInterpreter(_context.TypeRegistry);
+            var interpreter = new ScriptInterpreter(_context.TypeRegistry, providerQueryService: _context.QueryService);
             List<Document> documents = [];
             var result = interpreter.Run(_context.ScriptFiles, documents, commandName);
             return FormatResult(result);

@@ -1021,4 +1021,52 @@ public class CheckFileParserTests
         var cmd = file.Commands[0];
         Assert.That(cmd.Sink, Is.Null);
     }
+
+    [Test]
+    public void Parse_LetWithPathOverride_ExtractsPathAndCollection()
+    {
+        var source = "let types = csharp.Types('../sdk/')";
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.LetDeclarations, Has.Count.EqualTo(1));
+        var let = file.LetDeclarations[0];
+        Assert.That(let.Name, Is.EqualTo("types"));
+        Assert.That(let.BaseCollection, Is.EqualTo("csharp.Types"));
+        Assert.That(let.PathOverride, Is.EqualTo("../sdk/"));
+    }
+
+    [Test]
+    public void Parse_LetWithPathOverride_AndFilters()
+    {
+        var source = "let types = csharp.Types('../sdk/'):isPublic";
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.LetDeclarations, Has.Count.EqualTo(1));
+        var let = file.LetDeclarations[0];
+        Assert.That(let.Name, Is.EqualTo("types"));
+        Assert.That(let.BaseCollection, Is.EqualTo("csharp.Types"));
+        Assert.That(let.PathOverride, Is.EqualTo("../sdk/"));
+        Assert.That(let.Filters, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void Parse_LetWithoutPathOverride_HasNullPathOverride()
+    {
+        var source = "let types = csharp.Types:isPublic";
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.LetDeclarations, Has.Count.EqualTo(1));
+        var let = file.LetDeclarations[0];
+        Assert.That(let.BaseCollection, Is.EqualTo("csharp.Types"));
+        Assert.That(let.PathOverride, Is.Null);
+    }
+
+    [Test]
+    public void Parse_ForeachWithPathOverride()
+    {
+        var source = "foreach csharp.Types('../sdk/'):isPublic => PRINT('{item.Name}')";
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.Commands, Has.Count.EqualTo(1));
+        var cmd = file.Commands[0];
+        Assert.That(cmd.Collection, Is.EqualTo("csharp.Types"));
+        Assert.That(cmd.PathOverride, Is.EqualTo("../sdk/"));
+        Assert.That(cmd.Filters, Has.Count.EqualTo(1));
+    }
 }

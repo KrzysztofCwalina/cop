@@ -12,6 +12,7 @@ public class PredicateEvaluator
     private readonly TypeRegistry _registry;
     private readonly Dictionary<string, LetDeclaration>? _letDeclarations;
     private readonly Dictionary<string, IList>? _resolvedCollections;
+    private readonly IProviderQueryService? _providerQueryService;
     private readonly HashSet<string> _evaluatingLetValues = [];
 
     public PredicateEvaluator(
@@ -20,7 +21,8 @@ public class PredicateEvaluator
         TypeRegistry registry,
         Dictionary<string, LetDeclaration>? letDeclarations = null,
         Dictionary<string, List<FunctionDefinition>>? functions = null,
-        Dictionary<string, IList>? resolvedCollections = null)
+        Dictionary<string, IList>? resolvedCollections = null,
+        IProviderQueryService? providerQueryService = null)
     {
         _predicates = predicates;
         _filePath = filePath;
@@ -28,6 +30,7 @@ public class PredicateEvaluator
         _letDeclarations = letDeclarations;
         _functions = functions ?? [];
         _resolvedCollections = resolvedCollections;
+        _providerQueryService = providerQueryService;
     }
 
     public (bool result, EvaluationContext context) EvaluateAsBool(
@@ -101,6 +104,16 @@ public class PredicateEvaluator
             var func = ResolveFunction(funcGroup, paramType);
             var target = Eval(mc.Target, item, paramType, ctx);
             return ApplyFunction(func, target, mc.Args, item, paramType, ctx);
+        }
+
+        // Path-scoped collection: namespace.Collection('path') → query provider
+        if (_providerQueryService is not null
+            && mc.Target is IdentifierExpr provId
+            && mc.Args.Count == 1
+            && mc.Args[0] is LiteralExpr { Value: string pathValue }
+            && mc.Name.Length > 0 && char.IsUpper(mc.Name[0]))
+        {
+            return _providerQueryService.Query(provId.Name, mc.Name, pathValue);
         }
 
         var result = CallPredicate(Eval(mc.Target, item, paramType, ctx), mc.Name, mc.Args, item, paramType, ctx);

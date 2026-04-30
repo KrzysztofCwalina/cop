@@ -14,7 +14,8 @@ public record LetDeclaration(
     bool IsRuntime = false,
     Expression? ValueExpression = null,
     Expression? Exclusions = null,
-    Expression? SourceExpression = null)
+    Expression? SourceExpression = null,
+    string? PathOverride = null)
 {
     public bool IsValueBinding => ValueExpression is not null;
 

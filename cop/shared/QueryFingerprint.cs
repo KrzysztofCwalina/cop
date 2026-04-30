@@ -23,10 +23,14 @@ public static class QueryFingerprint
     /// <param name="filters">The filter chain expressions.</param>
     /// <param name="docPath">Document path for per-document collections, or null for globals.</param>
     /// <param name="functionNames">Names of user-defined functions (treated as non-commutative barriers).</param>
-    public static string Compute(string baseCollection, List<Expression> filters, string? docPath, IReadOnlySet<string>? functionNames = null)
+    /// <param name="pathOverride">Path override for path-scoped collection queries, or null for default.</param>
+    public static string Compute(string baseCollection, List<Expression> filters, string? docPath, IReadOnlySet<string>? functionNames = null, string? pathOverride = null)
     {
         if (filters.Count == 0)
-            return docPath is null ? baseCollection : $"{baseCollection}@{docPath}";
+        {
+            var key = docPath is null ? baseCollection : $"{baseCollection}@{docPath}";
+            return pathOverride is null ? key : $"{key}#{pathOverride}";
+        }
 
         var sb = new StringBuilder(baseCollection);
         var pendingPredicates = new List<string>();
@@ -53,6 +57,12 @@ public static class QueryFingerprint
         {
             sb.Append('@');
             sb.Append(docPath);
+        }
+
+        if (pathOverride is not null)
+        {
+            sb.Append('#');
+            sb.Append(pathOverride);
         }
 
         return sb.ToString();

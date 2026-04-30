@@ -293,6 +293,16 @@ let People = Parse('data.json', [Person])
 
 `Parse(path, [Type])` reads a JSON file containing a top-level array and deserializes each element into a typed object. See [JSON Package Reference](packages/json.md).
 
+**Path-scoped** — queries a provider against a specific directory:
+
+```ruby
+let sdkTypes = csharp.Types('../azure-sdk/')
+let sdkPublic = csharp.Types('../azure-sdk/'):isPublic
+let localFiles = filesystem.DiskFiles('src/lib/')
+```
+
+Path-scoped collections query the provider against the given path instead of the default root (CWD or `-t`). The path is resolved relative to the process working directory. Results are cached by `(provider, collection, absolutePath)` so repeated references with the same path are efficient. Each collection is parameterized individually — `csharp.Types('../sdk/')` does not affect `csharp.Statements`.
+
 ### Predicates
 
 A predicate is a named boolean expression that operates on a typed item. Predicates are the primary mechanism for creating subsets:

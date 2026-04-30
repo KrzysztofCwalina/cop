@@ -473,10 +473,10 @@ public class ScriptParser
         // If that fails, treat as a general value binding (arbitrary expression).
         try
         {
-            var (baseCollection, filters, exclusions) = DecomposeCollectionExpression(expr);
+            var (baseCollection, filters, exclusions, pathOverride) = DecomposeCollectionExpression(expr);
             // Store SourceExpression as fallback for cases where decomposition "succeeds"
             // but runtime can't resolve it as a collection (e.g., typeNames.Count)
-            return new LetDeclaration(name.Value, baseCollection, filters, line, isExported, isRuntime, Exclusions: exclusions, SourceExpression: expr);
+            return new LetDeclaration(name.Value, baseCollection, filters, line, isExported, isRuntime, Exclusions: exclusions, SourceExpression: expr, PathOverride: pathOverride);
         }
         catch (InvalidOperationException)
         {
@@ -650,7 +650,7 @@ public class ScriptParser
 
         // Parse the collection expression
         var expr = ParseExpression();
-        var (collection, filters, exclusions) = DecomposeCollectionExpression(expr);
+        var (collection, filters, exclusions, pathOverride) = DecomposeCollectionExpression(expr);
 
         Expect(TokenKind.Arrow); // =>
 
@@ -660,7 +660,7 @@ public class ScriptParser
             // Implicit output: foreach X => 'template'
             var template = Advance().Value;
             string name = DeriveRuleId(collection, filters);
-            block = new CommandBlock(name, template, collection, filters, line, docComment, Exclusions: exclusions);
+            block = new CommandBlock(name, template, collection, filters, line, docComment, Exclusions: exclusions, PathOverride: pathOverride);
         }
         else if (Current.Kind == TokenKind.Identifier && IsSpecialAction() && IsActionInvocation())
         {
@@ -673,7 +673,8 @@ public class ScriptParser
                 Collection = collection,
                 Filters = filters,
                 Line = line,
-                Exclusions = exclusions
+                Exclusions = exclusions,
+                PathOverride = pathOverride
             };
         }
         else if (Current.Kind == TokenKind.Identifier && IsActionInvocation())
@@ -687,7 +688,8 @@ public class ScriptParser
                 Collection = collection,
                 Filters = filters,
                 Line = line,
-                Exclusions = exclusions
+                Exclusions = exclusions,
+                PathOverride = pathOverride
             };
         }
         else
@@ -696,7 +698,7 @@ public class ScriptParser
             var outputExpr = ParseExpression();
             string name = DeriveRuleId(collection, filters);
             block = new CommandBlock(name, "", collection, filters, line, docComment,
-                Exclusions: exclusions, OutputExpression: outputExpr);
+                Exclusions: exclusions, OutputExpression: outputExpr, PathOverride: pathOverride);
         }
 
         // Check for chained sink: => sinkName or => sinkName('arg')
@@ -769,13 +771,13 @@ public class ScriptParser
         // Try to decompose as a collection expression (Types:isPublic, etc.)
         try
         {
-            var (collection, filters, exclusions) = DecomposeCollectionExpression(expr);
+            var (collection, filters, exclusions, pathOverride) = DecomposeCollectionExpression(expr);
             string name = DeriveRuleId(collection, filters);
             // Collection iteration — items will be output using their text representation
             // Also store OutputExpression so the interpreter can fall back to expression
             // evaluation if the collection doesn't resolve (e.g., a.Name where a is a variable)
             return new CommandBlock(name, "",
-                collection, filters, line, docComment, Exclusions: exclusions, OutputExpression: expr);
+                collection, filters, line, docComment, Exclusions: exclusions, OutputExpression: expr, PathOverride: pathOverride);
         }
         catch (InvalidOperationException)
         {
@@ -798,6 +800,7 @@ public class ScriptParser
         var filters = new List<Expression>();
         var stringArgs = new List<string>();
         Expression? exclusions = null;
+        string? pathOverride = null;
 
         // Parse comma-separated arguments (strings and collection expressions)
         while (Current.Kind != TokenKind.RParen && Current.Kind != TokenKind.Eof)
@@ -809,7 +812,7 @@ public class ScriptParser
             else
             {
                 var expr = ParseExpression();
-                (collection, filters, exclusions) = DecomposeCollectionExpression(expr);
+                (collection, filters, exclusions, pathOverride) = DecomposeCollectionExpression(expr);
             }
 
             if (Current.Kind == TokenKind.Comma)
@@ -837,7 +840,7 @@ public class ScriptParser
             : $"action_{line}";
 
         return new CommandBlock(name, messageTemplate,
-            collection, filters, line, docComment, ActionName: actionName, OutputPath: outputPath, Exclusions: exclusions);
+            collection, filters, line, docComment, ActionName: actionName, OutputPath: outputPath, Exclusions: exclusions, PathOverride: pathOverride);
     }
 
     // Parse: RUN <commandName>(<arg1>, <arg2>, ...)
@@ -874,12 +877,12 @@ public class ScriptParser
     }
 
     /// Decompose an expression tree (from ParseExpression) into the structured fields
-    /// that LetDeclaration and CommandBlock need: baseCollection, filters, and exclusions.
+    /// that LetDeclaration and CommandBlock need: baseCollection, filters, exclusions, and optional path override.
     /// Input: Types:csharp:isClient:!isClientOptions
-    /// → (baseCollection: "Types", filters: [csharp, isClient, !isClientOptions], exclusions: null)
-    /// Input: Types:csharp:isClient:toError("msg") - Accepted
-    /// → (baseCollection: "Types", filters: [csharp, isClient, toError("msg")], exclusions: Accepted)
-    public static (string baseCollection, List<Expression> filters, Expression? exclusions) DecomposeCollectionExpression(Expression expr)
+    /// → (baseCollection: "Types", filters: [csharp, isClient, !isClientOptions], exclusions: null, pathOverride: null)
+    /// Input: csharp.Types('../sdk/'):isPublic
+    /// → (baseCollection: "csharp.Types", filters: [isPublic], exclusions: null, pathOverride: "../sdk/")
+    public static (string baseCollection, List<Expression> filters, Expression? exclusions, string? pathOverride) DecomposeCollectionExpression(Expression expr)
     {
         // Handle set subtraction: CollectionChain - ExclusionExpr
         Expression? exclusions = null;
@@ -919,7 +922,7 @@ public class ScriptParser
                         filter = new UnaryExpr("!", filter);
                     filters.Add(filter);
                 }
-                return (dottedBase, filters, exclusions);
+                return (dottedBase, filters, exclusions, null);
             }
 
             var exprText = current switch
@@ -930,6 +933,38 @@ public class ScriptParser
             };
             throw new InvalidOperationException(
                 $"'let' declaration must start with a collection name (e.g., Statements:filter), but got {exprText} which is a filter expression, not a collection.");
+        }
+
+        // Check for path-parameterized collection: namespace.Collection('path')
+        // Pattern: innermost PredicateCallExpr has target=IdentifierExpr, PascalCase name, and single string arg
+        string? pathOverride = null;
+        if (calls.Count > 0)
+        {
+            var innermost = calls[^1]; // last = innermost (closest to identifier target)
+            if (innermost.Args.Count == 1
+                && innermost.Args[0] is LiteralExpr { Value: string pathValue }
+                && innermost.Name.Length > 0 && char.IsUpper(innermost.Name[0]))
+            {
+                // This is namespace.Collection('path') — treat as dotted base with path override
+                var dottedBase = $"{id.Name}.{innermost.Name}";
+                pathOverride = pathValue;
+                calls.RemoveAt(calls.Count - 1); // remove the collection call from filters
+
+                // Process remaining calls as filters (innermost to outermost → reverse)
+                calls.Reverse();
+                foreach (var call in calls)
+                {
+                    Expression filter;
+                    if (call.Args.Count > 0)
+                        filter = new FunctionCallExpr(call.Name, call.Args);
+                    else
+                        filter = new IdentifierExpr(call.Name);
+                    if (call.Negated)
+                        filter = new UnaryExpr("!", filter);
+                    filters.Add(filter);
+                }
+                return (dottedBase, filters, exclusions, pathOverride);
+            }
         }
 
         // Process from innermost to outermost
@@ -946,7 +981,7 @@ public class ScriptParser
             filters.Add(filter);
         }
 
-        return (id.Name, filters, exclusions);
+        return (id.Name, filters, exclusions, null);
     }
 
     // Expression parsing with operator precedence

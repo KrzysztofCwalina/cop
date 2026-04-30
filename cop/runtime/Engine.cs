@@ -112,9 +112,13 @@ public static class Engine
             return new EngineResult([], parseErrors, fatalErrors, commandName);
         }
 
+        // Create provider query service for path-scoped collections
+        var invocationDirectory = Directory.GetCurrentDirectory();
+        var queryService = new ProviderQueryService(invocationDirectory, ExcludedDirectoryNames);
+
         // Load external providers (schema registration + data query)
         phaseSw.Restart();
-        LoadExternalProviders(typeRegistry, providerPackages, rootPath, parseErrors, fatalErrors, ExcludedDirectoryNames);
+        LoadExternalProviders(typeRegistry, providerPackages, rootPath, parseErrors, fatalErrors, ExcludedDirectoryNames, queryService);
         if (providerPackages.Count > 0)
             diagLog?.Invoke($"[diag] External providers: {phaseSw.ElapsedMilliseconds}ms ({providerPackages.Count} providers)");
 
@@ -187,7 +191,11 @@ public static class Engine
         // Documents are empty — all collections are now global
         List<Document> documents = [];
 
-        var interpreter = new ScriptInterpreter(typeRegistry, diagLog: diagLog);
+        // Register built-in providers with query service for path-scoped queries
+        foreach (var bp in _builtinProviders)
+            queryService.RegisterProvider(bp.Name, bp.Instance, bp.Schema);
+
+        var interpreter = new ScriptInterpreter(typeRegistry, diagLog: diagLog, providerQueryService: queryService);
         HashSet<string>? filterSet = commandFilter is { Length: > 0 }
             ? new HashSet<string>(commandFilter, StringComparer.OrdinalIgnoreCase)
             : null;
@@ -409,8 +417,12 @@ public static class Engine
         if (fatalErrors.Count > 0)
             return new EngineResult([], parseErrors, fatalErrors);
 
+        // Create provider query service for path-scoped collections
+        var invocationDirectory = Directory.GetCurrentDirectory();
+        var queryService = new ProviderQueryService(invocationDirectory, ExcludedDirectoryNames);
+
         // Load external providers
-        LoadExternalProviders(typeRegistry, providerPackages, rootPath, parseErrors, fatalErrors, ExcludedDirectoryNames);
+        LoadExternalProviders(typeRegistry, providerPackages, rootPath, parseErrors, fatalErrors, ExcludedDirectoryNames, queryService);
 
         if (fatalErrors.Count > 0)
             return new EngineResult([], parseErrors, fatalErrors);
@@ -433,7 +445,11 @@ public static class Engine
         var allOutputs = new List<PrintOutput>();
         var allFileOutputs = new List<FileOutput>();
 
-        var interpreter = new ScriptInterpreter(typeRegistry);
+        // Register built-in providers with query service for path-scoped queries
+        foreach (var bp in _builtinProviders)
+            queryService.RegisterProvider(bp.Name, bp.Instance, bp.Schema);
+
+        var interpreter = new ScriptInterpreter(typeRegistry, providerQueryService: queryService);
 
         // Check if any specified rules are let collections (not commands).
         // If so, synthesize RUN CHECK(name) invocations for them.
@@ -620,7 +636,7 @@ public static class Engine
     /// These are build artifacts, VCS metadata, and package caches that contain
     /// no user-authored source code worth analyzing.
     /// </summary>
-    private static readonly HashSet<string> ExcludedDirectoryNames = new(StringComparer.OrdinalIgnoreCase)
+    internal static readonly HashSet<string> ExcludedDirectoryNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "bin", "obj", ".git", ".vs", ".idea", "node_modules",
         ".nuget", ".dotnet", "packages", "TestResults",
@@ -791,7 +807,7 @@ public static class Engine
     /// Loads external CLR providers: registers their schemas into the type registry
     /// and queries them for collection data.
     /// </summary>
-    private static void LoadExternalProviders(TypeRegistry typeRegistry, List<(string Dir, PackageMetadata Meta)> providerPackages, string rootPath, List<string> errors, List<string> fatalErrors, IReadOnlySet<string>? excludedDirectories = null)
+    private static void LoadExternalProviders(TypeRegistry typeRegistry, List<(string Dir, PackageMetadata Meta)> providerPackages, string rootPath, List<string> errors, List<string> fatalErrors, IReadOnlySet<string>? excludedDirectories = null, ProviderQueryService? queryService = null)
     {
         foreach (var (dir, meta) in providerPackages)
         {
@@ -799,13 +815,16 @@ public static class Engine
             if (loaded is null) continue;
 
             // Register schema, types, accessors, and bindings
-            ProviderLoader.RegisterSchema(loaded.Instance, typeRegistry);
+            var schema = ProviderLoader.RegisterSchema(loaded.Instance, typeRegistry);
 
             // Query for data and register global collections
             ProviderLoader.QueryAndRegister(loaded, typeRegistry, rootPath, errors, excludedDirectories);
 
             // Initialize capabilities (document loaders, file parsers, etc.)
             ProviderLoader.InitializeCapabilities(loaded.Instance, typeRegistry, rootPath);
+
+            // Register with query service for path-scoped queries
+            queryService?.RegisterProvider(loaded.PackageName, loaded.Instance, schema);
         }
     }
 
@@ -901,7 +920,7 @@ public static class Engine
         var fatalErrors = new List<string>();
 
         // Load external providers
-        LoadExternalProviders(context.TypeRegistry, context.ProviderPackages, context.RootPath, errors, fatalErrors, ExcludedDirectoryNames);
+        LoadExternalProviders(context.TypeRegistry, context.ProviderPackages, context.RootPath, errors, fatalErrors, ExcludedDirectoryNames, context.QueryService);
 
         // Query all built-in providers
         foreach (var bp in _builtinProviders)
@@ -917,6 +936,10 @@ public static class Engine
         // Initialize capabilities
         foreach (var bp in _builtinProviders)
             ProviderLoader.InitializeCapabilities(bp.Instance, context.TypeRegistry, context.RootPath);
+
+        // Register built-in providers with query service for path-scoped queries
+        foreach (var bp in _builtinProviders)
+            context.QueryService.RegisterProvider(bp.Name, bp.Instance, bp.Schema);
 
         context.ProvidersLoaded = true;
 
@@ -938,6 +961,7 @@ public class ReplContext
     public bool ProvidersLoaded { get; set; }
     public List<string> Warnings { get; } = [];
     public int TotalFileCount { get; }
+    public ProviderQueryService QueryService { get; set; }
 
     public ReplContext(List<ScriptFile> scriptFiles, TypeRegistry typeRegistry, string rootPath, string scriptsDir, List<(string Dir, PackageMetadata Meta)> providerPackages, int totalFileCount = 0)
     {
@@ -947,6 +971,7 @@ public class ReplContext
         ScriptsDir = scriptsDir;
         ProviderPackages = providerPackages;
         TotalFileCount = totalFileCount > 0 ? totalFileCount : scriptFiles.Count;
+        QueryService = new ProviderQueryService(Directory.GetCurrentDirectory(), Engine.ExcludedDirectoryNames);
     }
 }
 
