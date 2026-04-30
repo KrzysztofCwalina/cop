@@ -245,7 +245,7 @@ export command types = SAVE('types.txt', '{{item.Name}}', baseline.Types)
         var assemblyPath = typeof(ApiSurfaceTests).Assembly.Location.Replace("\\", "\\\\");
         var cop = $@"
 let baseline = Load('{assemblyPath}')
-export command check = foreach baseline => PRINT('{{item.Signature}}')
+export command check = foreach baseline => '{{item.Signature}}'
 ";
 
         var registry = new TypeRegistry();
@@ -272,7 +272,7 @@ export command check = foreach baseline => PRINT('{{item.Signature}}')
 let baseline = Load('{assemblyPath}')
 predicate anyApi(Api) => Api.Kind != ''
 let apiText = baseline.Api:anyApi.Text('{{item.Signature}}')
-export command print-text = foreach apiText => PRINT('{{item}}')
+export command print-text = foreach apiText => '{{item}}'
 ";
 
         var registry = new TypeRegistry();

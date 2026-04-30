@@ -377,6 +377,20 @@ public class TypeRegistry
     }
 
     /// <summary>
+    /// Gets all known collection names: global collections, namespaced collections,
+    /// and registered collection declarations. For REPL completions.
+    /// </summary>
+    public List<string> GetAllCollectionNames()
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var n in GetGlobalCollectionNames())
+            names.Add(n);
+        foreach (var c in _collections.Keys)
+            names.Add(c);
+        return [.. names.OrderBy(n => n)];
+    }
+
+    /// <summary>
     /// Registers a document loader for Load('path') calls.
     /// Typically registered by the code provider for assembly loading.
     /// </summary>

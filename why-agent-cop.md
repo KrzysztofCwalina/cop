@@ -34,27 +34,36 @@ The key insight: architects already *know* the rules — they just have no way t
 
 For example, an architect who wants "don't use console calls — use proper logging" doesn't need to file a tooling request or wait for a custom analyzer. They write a short formal specification:
 
-```
-predicate consoleCall(Statement:python) =>
-    Statement.Text:startsWith('print(')
+```ruby
+import code
+import code-analysis
 
-CHECK no-console => Code.Statements:consoleCall:toError('Use logging module instead of print()')
+predicate consoleCall(Statement:python) =>
+    Statement.Kind == 'call' && Statement.MemberName == 'print'
+
+let violations = Code.Statements:consoleCall
+    :toError('Use logging module instead of print()')
+
+command CHECK-CONSOLE = CHECK(violations)
 ```
 
 This is the entire specification — not a plugin, not a code review checklist item, not a Copilot instruction that may be ignored. It runs in CI, blocks the PR, and tells the agent exactly what to fix. The architect writes it once; it's enforced forever.
 
 Another common example — enforcing dependency direction in a layered architecture:
 
-```
+```ruby
 import arch-layering
 
-let ui-projects   = ['MyApp.Web', 'MyApp.Api']
-let data-projects = ['MyApp.Data', 'MyApp.EF']
+let ui-projects   = ['MyApp.Web' 'MyApp.Api']
+let data-projects = ['MyApp.Data' 'MyApp.EF']
 
 predicate uiReferencesData(Project) =>
     Project.Name:in(ui-projects) && Project.References:containsAny(data-projects)
 
-CHECK arch-layering => Code.Projects:uiReferencesData:toError('UI must not reference Data directly')
+let violations = Code.Projects:uiReferencesData
+    :toError('UI must not reference Data directly')
+
+command CHECK-ARCH = CHECK(violations)
 ```
 
 Agents routinely violate layering constraints because they optimize for "make it work" — they'll add whatever project reference gets the code to compile. A formal specification catches this instantly and forces the agent to route through the correct abstraction. It also flags new projects that haven't been assigned to a layer — preventing architectural drift as the codebase grows.

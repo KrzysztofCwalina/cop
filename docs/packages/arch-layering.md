@@ -22,10 +22,10 @@ The `arch-layering` package lets architects formally define architectural layers
 import arch-layering
 
 # 1. Define layers as lists of project names
-let presentation-projects = ['MyApp.Web', 'MyApp.Api']
-let business-projects     = ['MyApp.Services', 'MyApp.Domain']
-let data-projects         = ['MyApp.Data', 'MyApp.EF']
-let infra-projects        = ['MyApp.Logging', 'MyApp.Config']
+let presentation-projects = ['MyApp.Web' 'MyApp.Api']
+let business-projects     = ['MyApp.Services' 'MyApp.Domain']
+let data-projects         = ['MyApp.Data' 'MyApp.EF']
+let infra-projects        = ['MyApp.Logging' 'MyApp.Config']
 
 # 2. Combine all known projects (for uncategorized detection)
 let all-known-projects = presentation-projects + business-projects + data-projects + infra-projects
@@ -104,9 +104,9 @@ CHECK arch-layering => layer-violations + uncategorized
 ```cop
 import arch-layering
 
-let api-projects = ['Contoso.Api', 'Contoso.Controllers']
-let domain-projects = ['Contoso.Domain', 'Contoso.Contracts']
-let infra-projects = ['Contoso.Data', 'Contoso.Messaging']
+let api-projects = ['Contoso.Api' 'Contoso.Controllers']
+let domain-projects = ['Contoso.Domain' 'Contoso.Contracts']
+let infra-projects = ['Contoso.Data' 'Contoso.Messaging']
 let all-known-projects = api-projects + domain-projects + infra-projects
 
 # Domain must not reference API or Infrastructure
@@ -134,9 +134,9 @@ CHECK arch-layering => violations + uncategorized
 ```cop
 import arch-layering
 
-let api-projects = ['myapp-api', 'myapp-routes']
-let core-projects = ['myapp-core', 'myapp-domain']
-let data-projects = ['myapp-db', 'myapp-models']
+let api-projects = ['myapp-api' 'myapp-routes']
+let core-projects = ['myapp-core' 'myapp-domain']
+let data-projects = ['myapp-db' 'myapp-models']
 let all-known-projects = api-projects + core-projects + data-projects
 
 predicate dataReferencesApi(Project) =>
@@ -157,9 +157,9 @@ CHECK arch-layering => violations + uncategorized
 ```cop
 import arch-layering
 
-let ui-projects = ['@myapp/web', '@myapp/components']
-let logic-projects = ['@myapp/services', '@myapp/store']
-let api-projects = ['@myapp/api-client', '@myapp/graphql']
+let ui-projects = ['@myapp/web' '@myapp/components']
+let logic-projects = ['@myapp/services' '@myapp/store']
+let api-projects = ['@myapp/api-client' '@myapp/graphql']
 let all-known-projects = ui-projects + logic-projects + api-projects
 
 predicate uiReferencesApi(Project) =>

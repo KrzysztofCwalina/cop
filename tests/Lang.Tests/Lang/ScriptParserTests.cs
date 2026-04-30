@@ -466,7 +466,7 @@ public class CheckFileParserTests
     [Test]
     public void Parse_ListLiteral()
     {
-        var source = """predicate test(Type) => Type.Name == [1, 2, 3]""";
+        var source = """predicate test(Type) => Type.Name == [1 2 3]""";
         var file = ScriptParser.Parse(source, "test.cop");
         var body = file.Predicates[0].Body;
         Assert.That(body, Is.InstanceOf<BinaryExpr>());
@@ -664,7 +664,7 @@ public class CheckFileParserTests
     public void Parse_SetSubtraction_DecomposesIntoExclusions()
     {
         var source = """
-            let Accepted = ['foo', 'bar']
+            let Accepted = ['foo' 'bar']
             foreach Statements:isVar:toError('msg') - Accepted => PRINT('{item.Message}')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
@@ -843,5 +843,117 @@ public class CheckFileParserTests
         Assert.That(file.Commands, Has.Count.EqualTo(1));
         Assert.That(file.Commands[0].IsExported, Is.True);
         Assert.That(file.Commands[0].Parameters, Has.Count.EqualTo(1));
+    }
+
+    // ── Implicit Output (no PRINT) Tests ──
+
+    [Test]
+    public void Parse_ForeachImplicitOutput_StringTemplate()
+    {
+        var source = """foreach Types:csharp:isClient => '{item.Name} is a client'""";
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.Commands, Has.Count.EqualTo(1));
+        var cmd = file.Commands[0];
+        Assert.That(cmd.Collection, Is.EqualTo("Types"));
+        Assert.That(cmd.MessageTemplate, Is.EqualTo("{item.Name} is a client"));
+        Assert.That(cmd.ActionName, Is.Null);
+    }
+
+    [Test]
+    public void Parse_BareStringLiteral_ImplicitOutput()
+    {
+        var source = """'Hello World'""";
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.Commands, Has.Count.EqualTo(1));
+        var cmd = file.Commands[0];
+        Assert.That(cmd.Collection, Is.Null);
+        Assert.That(cmd.MessageTemplate, Is.EqualTo("Hello World"));
+        Assert.That(cmd.ActionName, Is.Null);
+    }
+
+    [Test]
+    public void Parse_CommandWithImplicitForeach()
+    {
+        var source = """command CHECK(violations) = foreach violations => '{item.File}({item.Line}): {item.Message}'""";
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.Commands, Has.Count.EqualTo(1));
+        var cmd = file.Commands[0];
+        Assert.That(cmd.Parameters, Has.Count.EqualTo(1));
+        Assert.That(cmd.Parameters![0], Is.EqualTo("violations"));
+        Assert.That(cmd.Collection, Is.EqualTo("violations"));
+        Assert.That(cmd.MessageTemplate, Is.EqualTo("{item.File}({item.Line}): {item.Message}"));
+        Assert.That(cmd.ActionName, Is.Null);
+    }
+
+    [Test]
+    public void Parse_CommandWithBareTemplate()
+    {
+        var source = """command GREET = 'hello world'""";
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.Commands, Has.Count.EqualTo(1));
+        var cmd = file.Commands[0];
+        Assert.That(cmd.Name, Is.EqualTo("GREET"));
+        Assert.That(cmd.Collection, Is.Null);
+        Assert.That(cmd.MessageTemplate, Is.EqualTo("hello world"));
+        Assert.That(cmd.ActionName, Is.Null);
+    }
+
+    [Test]
+    public void Parse_ForeachImplicitOutput_WithAnnotations()
+    {
+        var source = """foreach Types => '{item.Name@red-bold}: {item.Line@dim}'""";
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.Commands, Has.Count.EqualTo(1));
+        var cmd = file.Commands[0];
+        Assert.That(cmd.MessageTemplate, Is.EqualTo("{item.Name@red-bold}: {item.Line@dim}"));
+        Assert.That(cmd.ActionName, Is.Null);
+    }
+
+    [Test]
+    public void Parse_ForeachWithSAVE_StillWorks()
+    {
+        var source = """foreach Types => SAVE('output.txt', '{item.Name}')""";
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.Commands, Has.Count.EqualTo(1));
+        var cmd = file.Commands[0];
+        Assert.That(cmd.ActionName, Is.EqualTo("SAVE"));
+        Assert.That(cmd.OutputPath, Is.EqualTo("output.txt"));
+        Assert.That(cmd.MessageTemplate, Is.EqualTo("{item.Name}"));
+    }
+
+    [Test]
+    public void Parse_BareIdentifier_Expression()
+    {
+        var source = "Types";
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.Commands, Has.Count.EqualTo(1));
+        var cmd = file.Commands[0];
+        Assert.That(cmd.Collection, Is.EqualTo("Types"));
+        Assert.That(cmd.MessageTemplate, Is.EqualTo(""));
+    }
+
+    [Test]
+    public void Parse_BareCollectionWithFilter_Expression()
+    {
+        var source = "Types:isPublic";
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.Commands, Has.Count.EqualTo(1));
+        var cmd = file.Commands[0];
+        Assert.That(cmd.Collection, Is.EqualTo("Types"));
+        Assert.That(cmd.Filters, Has.Count.EqualTo(1));
+        Assert.That(cmd.MessageTemplate, Is.EqualTo(""));
+    }
+
+    [Test]
+    public void Parse_ForeachWithExpression_Output()
+    {
+        var source = "foreach Types:isPublic => item.Name";
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.Commands, Has.Count.EqualTo(1));
+        var cmd = file.Commands[0];
+        Assert.That(cmd.Collection, Is.EqualTo("Types"));
+        Assert.That(cmd.Filters, Has.Count.EqualTo(1));
+        Assert.That(cmd.OutputExpression, Is.Not.Null);
+        Assert.That(cmd.MessageTemplate, Is.EqualTo(""));
     }
 }

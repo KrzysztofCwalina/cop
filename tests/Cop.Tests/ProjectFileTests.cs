@@ -47,9 +47,7 @@ public class RunProjectTests
                 }
                 export let Disk = runtime::Filesystem
                 export predicate isEmpty(Folder) => Folder.Empty == true
-                command empty-folders = foreach Folders:isEmpty => PRINT(
-                    'Empty folder: {item.Path}'
-                )
+                command empty-folders = foreach Folders:isEmpty => 'Empty folder: {item.Path}'
                 """);
     }
 
@@ -122,9 +120,7 @@ public class RunProjectTests
         var csharpSrc = Path.Combine(_feedDir, "csharp", "src");
         Directory.CreateDirectory(csharpSrc);
         File.WriteAllText(Path.Combine(csharpSrc, "checks.cop"), """
-            command TEST-RULE = foreach Folders:isEmpty => PRINT(
-                'Test diagnostic'
-            )
+            command TEST-RULE = foreach Folders:isEmpty => 'Test diagnostic'
             """);
 
         var codebase = Path.Combine(_tempDir, "project");

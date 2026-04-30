@@ -3,7 +3,7 @@ namespace Cop.Lang;
 /// <summary>
 /// Static type validation pass for cop script files using 'import' (strict mode).
 /// Validates that predicate parameter types exist, property access chains resolve
-/// through the type schema, and PRINT placeholders reference valid properties.
+/// through the type schema, and output template placeholders reference valid properties.
 /// </summary>
 public class TypeBinder
 {
@@ -68,7 +68,7 @@ public class TypeBinder
         // Validate command blocks
         foreach (var cmd in file.Commands)
         {
-            // Bare PRINT("message") — no collection to validate
+            // Bare output ("message") — no collection to validate
             if (cmd.Collection is null)
             {
                 ValidateTemplate(cmd.MessageTemplate, null, file.FilePath, cmd.Line);
@@ -90,7 +90,7 @@ public class TypeBinder
             // Resolve the final item type after filters (may differ from base type after map functions)
             var finalItemType = ResolveItemTypeAfterFilters(collectionItemType, cmd.Filters, file);
 
-            // Validate PRINT message template placeholders
+            // Validate output message template placeholders
             ValidateTemplate(cmd.MessageTemplate, finalItemType, file.FilePath, cmd.Line);
         }
 
@@ -132,6 +132,7 @@ public class TypeBinder
 
             case IdentifierExpr:
             case LiteralExpr:
+            case NicExpr:
                 // These are always valid
                 break;
 
@@ -160,6 +161,16 @@ public class TypeBinder
                 ValidateExpression(cond.Condition, contextType, filePath, line);
                 ValidateExpression(cond.TrueExpr, contextType, filePath, line);
                 ValidateExpression(cond.FalseExpr, contextType, filePath, line);
+                break;
+
+            case MatchExpr match:
+                ValidateExpression(match.Discriminant, contextType, filePath, line);
+                foreach (var arm in match.Arms)
+                {
+                    if (arm.Pattern is not null)
+                        ValidateExpression(arm.Pattern, contextType, filePath, line);
+                    ValidateExpression(arm.Result, contextType, filePath, line);
+                }
                 break;
         }
     }
@@ -195,7 +206,9 @@ public class TypeBinder
             IdentifierExpr id => ResolveIdentifierType(id.Name, contextType),
             MemberAccessExpr ma => InferMemberAccessType(ma, contextType),
             ConditionalExpr cond => InferExpressionType(cond.TrueExpr, contextType),
+            MatchExpr match => match.Arms.Count > 0 ? InferExpressionType(match.Arms[0].Result, contextType) : null,
             ObjectLiteralExpr obj => obj.TypeName,
+            NicExpr => null,
             LiteralExpr lit => lit.Value switch
             {
                 string => "string",

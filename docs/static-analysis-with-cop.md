@@ -134,13 +134,13 @@ let UnsealedCSharpClients = Code.Types:csharp:client:!sealed
 
 ## Producing Output
 
-### PRINT
+### Implicit Output
 
-`PRINT` writes one line per matching item. The template string uses `{Property}` for interpolation:
+Output is implicit in cop — the evaluated result of a `foreach` expression IS the output. The template string uses `{Property}` for interpolation:
 
 ```ruby
 foreach Code.Types:csharp:client:!sealed
-    => PRINT('{item.File.Path}:{item.Line} {item.Name} should be sealed')
+    => '{item.File.Path}:{item.Line} {item.Name} should be sealed'
 ```
 
 Output:
@@ -156,7 +156,7 @@ Use `{text@style}` for colored/styled output:
 
 ```ruby
 foreach Code.Statements:javascript:evalCall
-    => PRINT('{error@red} {item.File.Path}:{item.Line} Do not use eval()')
+    => '{error@red} {item.File.Path}:{item.Line} Do not use eval()'
 ```
 
 Available styles: `@red`, `@yellow`, `@green`, `@cyan`, `@dim`, `@bold`, `@auto` (auto-colors by severity keyword).
@@ -213,7 +213,7 @@ The `.Words` transform splits identifiers into lowercase words, normalizing acro
 
 ```ruby
 # "TaskCompletionSource", "task_completion_source", "taskCompletionSource" all produce:
-# ['task', 'completion', 'source']
+# ['task' 'completion' 'source']
 
 # Check if any type name contains the word "client"
 predicate client(Type) => Type.Name.Words:contains('client')
@@ -364,9 +364,9 @@ Define named commands that can be run individually:
 ```ruby
 import code
 
-command list-types = foreach Code.Types => PRINT('{item.Name} ({item.Kind}) — {item.File.Path}')
-command list-clients = foreach Code.Types:client => PRINT('{item.Name}')
-command count-files = PRINT('{Code.Files.Count} source files')
+command list-types = foreach Code.Types => '{item.Name} ({item.Kind}) — {item.File.Path}'
+command list-clients = foreach Code.Types:client => '{item.Name}'
+command count-files = '{Code.Files.Count} source files'
 ```
 
 ```bash
@@ -399,7 +399,7 @@ cop test                     # run ASSERT commands and report results
 
 | Code | Meaning |
 |---|---|
-| 0 | All PRINT/CHECK commands produced zero output — all checks pass |
+| 0 | All commands produced zero output — all checks pass |
 | 1 | One or more checks produced output — violations found |
 | 2 | Parse error, missing package, or configuration error |
 

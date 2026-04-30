@@ -1,3 +1,4 @@
+using System.Collections;
 using Cop.Lang;
 using Cop.Providers;
 using Cop.Providers.SourceModel;
@@ -680,11 +681,11 @@ public class PredicateEvaluatorTests
             new MethodDeclaration("AsyncMethod", Modifier.Public | Modifier.Async, [], TR("Task"), [], 2)
         ]);
 
-        // Type.Methods:any(Method:isPublic && Method:isAsync) — inline expression, no named predicate
+        // Type.Methods:any(item:isPublic && item:isAsync) — inline expression with item keyword
         var inlineExpr = new BinaryExpr(
-            new PredicateCallExpr(new IdentifierExpr("Method"), "isPublic", []),
+            new PredicateCallExpr(new IdentifierExpr("item"), "isPublic", []),
             "&&",
-            new PredicateCallExpr(new IdentifierExpr("Method"), "isAsync", []));
+            new PredicateCallExpr(new IdentifierExpr("item"), "isAsync", []));
         var expr = new PredicateCallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
             "any", [inlineExpr]);
@@ -701,9 +702,9 @@ public class PredicateEvaluatorTests
             new MethodDeclaration("ListBlobs", Modifier.Public, [], TR("void"), [], 2)
         ]);
 
-        // Type.Methods:none(Method.Name:sw("Delete")) — should be true (no Delete methods)
+        // Type.Methods:none(item.Name:sw("Delete")) — should be true (no Delete methods)
         var inlineExpr = new PredicateCallExpr(
-            new MemberAccessExpr(new IdentifierExpr("Method"), "Name"),
+            new MemberAccessExpr(new IdentifierExpr("item"), "Name"),
             "startsWith", [new LiteralExpr("Delete")]);
         var expr = new PredicateCallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
@@ -721,8 +722,8 @@ public class PredicateEvaluatorTests
             new MethodDeclaration("List", Modifier.Public, [], TR("void"), [], 2)
         ]);
 
-        // Type.Methods:all(Method:isPublic) — all public
-        var inlineExpr = new PredicateCallExpr(new IdentifierExpr("Method"), "isPublic", []);
+        // Type.Methods:all(item:isPublic) — all public
+        var inlineExpr = new PredicateCallExpr(new IdentifierExpr("item"), "isPublic", []);
         var expr = new PredicateCallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
             "all", [inlineExpr]);
@@ -738,9 +739,9 @@ public class PredicateEvaluatorTests
             new MethodDeclaration("Dispose", Modifier.Public, [], TR("void"), [], 1)
         ]);
 
-        // Type.Methods:any(Method.Name == "Dispose")
+        // Type.Methods:any(item.Name == "Dispose")
         var inlineExpr = new BinaryExpr(
-            new MemberAccessExpr(new IdentifierExpr("Method"), "Name"),
+            new MemberAccessExpr(new IdentifierExpr("item"), "Name"),
             "==", new LiteralExpr("Dispose"));
         var expr = new PredicateCallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
@@ -758,8 +759,8 @@ public class PredicateEvaluatorTests
             new MethodDeclaration("internal_method", Modifier.None, [], TR("void"), [], 2)
         ]);
 
-        // Type.Methods:any(Method:!isPublic) — at least one non-public method
-        var inlineExpr = new PredicateCallExpr(new IdentifierExpr("Method"), "isPublic", [], Negated: true);
+        // Type.Methods:any(item:!isPublic) — at least one non-public method
+        var inlineExpr = new PredicateCallExpr(new IdentifierExpr("item"), "isPublic", [], Negated: true);
         var expr = new PredicateCallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
             "any", [inlineExpr]);
@@ -773,15 +774,99 @@ public class PredicateEvaluatorTests
         var eval = CreateEvaluator();
         var type = MakeType("BlobClient", baseTypes: ["ServiceClient", "IDisposable"]);
 
-        // Type.BaseTypes:any(BaseType:ct("Service"))
+        // Type.BaseTypes:any(item:ct("Service"))
         var inlineExpr = new PredicateCallExpr(
-            new IdentifierExpr("BaseType"),
+            new IdentifierExpr("item"),
             "contains", [new LiteralExpr("Service")]);
         var expr = new PredicateCallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "BaseTypes"),
             "any", [inlineExpr]);
         var (result, _) = eval.EvaluateAsBool(expr, type, "Type");
         Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public void CollectionOp_OrderBy_SortsByName()
+    {
+        var eval = CreateEvaluator();
+        var type = MakeType("TestClient", methods: [
+            new MethodDeclaration("Zebra", Modifier.Public, [], TR("void"), [], 1),
+            new MethodDeclaration("Alpha", Modifier.Public, [], TR("void"), [], 2),
+            new MethodDeclaration("Middle", Modifier.Public, [], TR("void"), [], 3)
+        ]);
+
+        // Type.Methods.OrderBy(item.Name) — sort by name ascending
+        var fieldExpr = new MemberAccessExpr(new IdentifierExpr("item"), "Name");
+        var expr = new PredicateCallExpr(
+            new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
+            "OrderBy", [fieldExpr]);
+        var result = eval.EvaluateField(expr, type, "Type") as IList;
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Count, Is.EqualTo(3));
+        Assert.That(((dynamic)result[0]!).Name, Is.EqualTo("Alpha"));
+        Assert.That(((dynamic)result[2]!).Name, Is.EqualTo("Zebra"));
+    }
+
+    [Test]
+    public void CollectionOp_OrderByDescending_SortsByNameDesc()
+    {
+        var eval = CreateEvaluator();
+        var type = MakeType("TestClient", methods: [
+            new MethodDeclaration("Alpha", Modifier.Public, [], TR("void"), [], 1),
+            new MethodDeclaration("Zebra", Modifier.Public, [], TR("void"), [], 2)
+        ]);
+
+        var fieldExpr = new MemberAccessExpr(new IdentifierExpr("item"), "Name");
+        var expr = new PredicateCallExpr(
+            new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
+            "OrderByDescending", [fieldExpr]);
+        var result = eval.EvaluateField(expr, type, "Type") as IList;
+        Assert.That(result, Is.Not.Null);
+        Assert.That(((dynamic)result![0]!).Name, Is.EqualTo("Zebra"));
+        Assert.That(((dynamic)result[1]!).Name, Is.EqualTo("Alpha"));
+    }
+
+    [Test]
+    public void CollectionOp_Select_PreservesTypedValues()
+    {
+        var eval = CreateEvaluator();
+        var type = MakeType("TestClient", methods: [
+            new MethodDeclaration("A", Modifier.Public, [], TR("void"), [], 1),
+            new MethodDeclaration("BB", Modifier.Public, [], TR("void"), [], 2),
+            new MethodDeclaration("CCC", Modifier.Public, [], TR("void"), [], 3)
+        ]);
+
+        // Type.Methods.Select(item.Name) — returns actual string values, not ToString()
+        var fieldExpr = new MemberAccessExpr(new IdentifierExpr("item"), "Name");
+        var expr = new PredicateCallExpr(
+            new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
+            "Select", [fieldExpr]);
+        var result = eval.EvaluateField(expr, type, "Type") as IList;
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Count, Is.EqualTo(3));
+        Assert.That(result[0], Is.EqualTo("A"));
+        Assert.That(result[1], Is.EqualTo("BB"));
+        Assert.That(result[2], Is.EqualTo("CCC"));
+    }
+
+    [Test]
+    public void CollectionOp_Distinct_DeduplicatesByExpression()
+    {
+        var eval = CreateEvaluator();
+        var type = MakeType("TestClient", methods: [
+            new MethodDeclaration("GetA", Modifier.Public, [], TR("void"), [], 1),
+            new MethodDeclaration("GetB", Modifier.Public, [], TR("void"), [], 2),
+            new MethodDeclaration("GetA", Modifier.Public, [], TR("void"), [], 3)
+        ]);
+
+        // Type.Methods.Distinct(item.Name) — deduplicate by name
+        var fieldExpr = new MemberAccessExpr(new IdentifierExpr("item"), "Name");
+        var expr = new PredicateCallExpr(
+            new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
+            "Distinct", [fieldExpr]);
+        var result = eval.EvaluateField(expr, type, "Type") as IList;
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Count, Is.EqualTo(2)); // GetA deduplicated
     }
 
     #endregion
@@ -846,9 +931,9 @@ public class PredicateEvaluatorTests
             Usings = ["System", "System.IO", "Microsoft.Extensions"]
         };
 
-        // File.Usings:any(Using:ct("System.IO"))
+        // File.Usings:any(item:ct("System.IO"))
         var inlineExpr = new PredicateCallExpr(
-            new IdentifierExpr("Using"),
+            new IdentifierExpr("item"),
             "contains", [new LiteralExpr("System.IO")]);
         var expr = new PredicateCallExpr(
             new MemberAccessExpr(new IdentifierExpr("File"), "Usings"),
@@ -866,9 +951,9 @@ public class PredicateEvaluatorTests
             Usings = ["System", "System.Collections"]
         };
 
-        // File.Usings:none(Using:sw("Microsoft"))
+        // File.Usings:none(item:sw("Microsoft"))
         var inlineExpr = new PredicateCallExpr(
-            new IdentifierExpr("Using"),
+            new IdentifierExpr("item"),
             "startsWith", [new LiteralExpr("Microsoft")]);
         var expr = new PredicateCallExpr(
             new MemberAccessExpr(new IdentifierExpr("File"), "Usings"),
@@ -1146,6 +1231,118 @@ public class PredicateEvaluatorTests
             new BinaryExpr(expr, "==", new LiteralExpr("error")),
             obj, "Violation");
         Assert.That(result, Is.True);
+    }
+
+    #endregion
+
+    #region Map/Dictionary Tests
+
+    [Test]
+    public void Map_StringLiteralKeys_Parse()
+    {
+        // Parser should accept string-literal keys in object literal
+        var file = ScriptParser.Parse(
+            "let colors = { 'error': 'red', 'warning': 'yellow', 'info': 'white' }\n" +
+            "predicate test(Type) => true\n", "test.cop");
+        Assert.That(file.LetDeclarations, Has.Count.EqualTo(1));
+        Assert.That(file.LetDeclarations[0].IsValueBinding, Is.True);
+    }
+
+    [Test]
+    public void Map_Get_DynamicLookup()
+    {
+        var eval = CreateEvaluator();
+        // Create a map: { error: 'red', warning: 'yellow' }
+        var mapExpr = new ObjectLiteralExpr(null, new Dictionary<string, Expression>
+        {
+            ["error"] = new LiteralExpr("red"),
+            ["warning"] = new LiteralExpr("yellow")
+        });
+        var map = eval.EvaluateField(mapExpr, MakeType("Dummy"), "Type");
+        Assert.That(map, Is.TypeOf<ScriptObject>());
+
+        // Get with a literal key
+        var getExpr = new PredicateCallExpr(mapExpr, "Get", [new LiteralExpr("error")]);
+        var result = eval.EvaluateField(getExpr, MakeType("Dummy"), "Type");
+        Assert.That(result, Is.EqualTo("red"));
+    }
+
+    [Test]
+    public void Map_Get_CaseInsensitive()
+    {
+        var eval = CreateEvaluator();
+        var mapExpr = new ObjectLiteralExpr(null, new Dictionary<string, Expression>
+        {
+            ["Error"] = new LiteralExpr("red")
+        });
+        // ScriptObject field lookup is case-insensitive by default
+        var getExpr = new PredicateCallExpr(mapExpr, "Get", [new LiteralExpr("error")]);
+        var result = eval.EvaluateField(getExpr, MakeType("Dummy"), "Type");
+        Assert.That(result, Is.EqualTo("red"));
+    }
+
+    [Test]
+    public void Map_ContainsKey_TrueAndFalse()
+    {
+        var eval = CreateEvaluator();
+        var mapExpr = new ObjectLiteralExpr(null, new Dictionary<string, Expression>
+        {
+            ["error"] = new LiteralExpr("red")
+        });
+        var containsTrue = new PredicateCallExpr(mapExpr, "containsKey", [new LiteralExpr("error")]);
+        var containsFalse = new PredicateCallExpr(mapExpr, "containsKey", [new LiteralExpr("missing")]);
+
+        Assert.That(eval.EvaluateField(containsTrue, MakeType("Dummy"), "Type"), Is.EqualTo(true));
+        Assert.That(eval.EvaluateField(containsFalse, MakeType("Dummy"), "Type"), Is.EqualTo(false));
+    }
+
+    [Test]
+    public void Map_Keys_ReturnsKeyList()
+    {
+        var eval = CreateEvaluator();
+        var mapExpr = new ObjectLiteralExpr(null, new Dictionary<string, Expression>
+        {
+            ["a"] = new LiteralExpr(1),
+            ["b"] = new LiteralExpr(2)
+        });
+        var keysExpr = new MemberAccessExpr(mapExpr, "Keys");
+        var result = eval.EvaluateField(keysExpr, MakeType("Dummy"), "Type") as IList;
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result, Has.Count.EqualTo(2));
+        Assert.That(result, Does.Contain("a"));
+        Assert.That(result, Does.Contain("b"));
+    }
+
+    [Test]
+    public void Map_Values_ReturnsValueList()
+    {
+        var eval = CreateEvaluator();
+        var mapExpr = new ObjectLiteralExpr(null, new Dictionary<string, Expression>
+        {
+            ["a"] = new LiteralExpr("x"),
+            ["b"] = new LiteralExpr("y")
+        });
+        var valuesExpr = new MemberAccessExpr(mapExpr, "Values");
+        var result = eval.EvaluateField(valuesExpr, MakeType("Dummy"), "Type") as IList;
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result, Has.Count.EqualTo(2));
+        Assert.That(result, Does.Contain("x"));
+        Assert.That(result, Does.Contain("y"));
+    }
+
+    [Test]
+    public void Map_Count_Property()
+    {
+        var eval = CreateEvaluator();
+        var mapExpr = new ObjectLiteralExpr(null, new Dictionary<string, Expression>
+        {
+            ["a"] = new LiteralExpr(1),
+            ["b"] = new LiteralExpr(2),
+            ["c"] = new LiteralExpr(3)
+        });
+        var countExpr = new MemberAccessExpr(mapExpr, "Count");
+        var result = eval.EvaluateField(countExpr, MakeType("Dummy"), "Type");
+        Assert.That(result, Is.EqualTo(3));
     }
 
     #endregion

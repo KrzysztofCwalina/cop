@@ -31,6 +31,16 @@ Use exit codes in CI pipelines:
 cop run checks.cop || exit 1
 ```
 
+## cop (REPL)
+
+Start an interactive REPL session. Loads `.cop` files from the current directory.
+
+```bash
+cop
+```
+
+See [Working with the REPL](working-with-repl.md) for a full walkthrough.
+
 ## cop run
 
 Run `.cop` programs. This is the primary command for executing checks, queries, and transformations.
@@ -50,7 +60,7 @@ cop run [<command>] [<args>] [-t <target>] [-c <commands>] [-f text|json] [-d]
 
 ### Discovery behavior
 
-When no `<command>` argument is given, cop discovers and loads all `.cop` files in the current directory. Unnamed statements (bare `PRINT`, `CHECK`, `foreach`) always execute. Named commands (`command my-check = ...`) only execute when invoked by name or listed in `-c`.
+When no `<command>` argument is given, cop discovers and loads all `.cop` files in the current directory. Unnamed statements (bare expressions, `CHECK`, `foreach`) always execute. Named commands (`command my-check = ...`) only execute when invoked by name or listed in `-c`.
 
 When a `.cop` file path is given, cop loads scripts from that file's directory.
 

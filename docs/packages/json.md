@@ -67,11 +67,11 @@ type Person = {
 
 let People = Parse('data.json', [Person])
 
-predicate young(Person) => Person.age < 30
-predicate activeYoung(Person) => Person:young && Person.active == true
+predicate canVote(Person) => Person.age >= 18
+predicate activeVoter(Person) => Person:canVote && Person.active == true
 
-let ActiveYoungPeople = People:activeYoung
-foreach ActiveYoungPeople => PRINT('{item.name} is young and active')
+let ActiveVoters = People:activeVoter
+foreach ActiveVoters => '{item.name} is an active voter'
 ```
 
 ---
@@ -90,7 +90,7 @@ type Employee = {
 }
 
 let Staff = Parse('employees.json', [Employee])
-foreach Staff => PRINT('{item.name} lives in {item.address.city}')
+foreach Staff => '{item.name} lives in {item.address.city}'
 ```
 
 ---

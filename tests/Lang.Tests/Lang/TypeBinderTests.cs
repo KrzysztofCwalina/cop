@@ -54,7 +54,7 @@ public class TypeBinderTests
         var file = ScriptParser.Parse(
             """
             import code
-            foreach Types => PRINT('ERROR: {item.FakeProperty}')
+            foreach Types => 'ERROR: {item.FakeProperty}'
             """, "test.cop");
 
         var errors = binder.Bind(file);
@@ -70,7 +70,7 @@ public class TypeBinderTests
         var file = ScriptParser.Parse(
             """
             import code
-            foreach Types => PRINT('INFO: {item.Name} has {item.Modifiers} modifiers')
+            foreach Types => 'INFO: {item.Name} has {item.Modifiers} modifiers'
             """, "test.cop");
 
         var errors = binder.Bind(file);
@@ -86,7 +86,7 @@ public class TypeBinderTests
         var file = ScriptParser.Parse(
             """
             predicate bad(Type) => Type.CompletelyWrong == 'foo'
-            foreach Types => PRINT('ERROR: {item.BadProp}')
+            foreach Types => 'ERROR: {item.BadProp}'
             """, "test.cop");
 
         var errors = binder.Bind(file);
@@ -101,7 +101,7 @@ public class TypeBinderTests
         var file = ScriptParser.Parse(
             """
             import code
-            foreach NonExistentCollection => PRINT('ERROR: something')
+            foreach NonExistentCollection => 'ERROR: something'
             """, "test.cop");
 
         var errors = binder.Bind(file);
@@ -149,7 +149,7 @@ public class TypeBinderTests
             import code
             predicate hasDoc(Type) => Type.Documented
             let DocTypes = FakeCollection:hasDoc
-            foreach DocTypes => PRINT('INFO: {item.Name}')
+            foreach DocTypes => 'INFO: {item.Name}'
             """, "test.cop");
 
         var errors = binder.Bind(file);
@@ -167,7 +167,7 @@ public class TypeBinderTests
             import code
             predicate hasDoc(Type) => Type.Documented
             let DocTypes = Types:hasDoc
-            foreach DocTypes => PRINT('INFO: {item.Name}')
+            foreach DocTypes => 'INFO: {item.Name}'
             """, "test.cop");
 
         var errors = binder.Bind(file);

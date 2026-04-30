@@ -23,9 +23,9 @@ predicate publicMethod(Method) => Method:isPublic && !Method.Name:startsWith('_'
 predicate staticOnClient(Method) => Method:isStatic && publicMethod
 
 # Method naming: approved prefixes for client methods
-let approvedPrefixes = ['get', 'list', 'create', 'upsert', 'update', 'replace',
-    'delete', 'add', 'set', 'remove', 'begin', 'send', 'query', 'close',
-    'download', 'upload', 'analyze', 'extract', 'recognize', 'synthesize']
+let approvedPrefixes = ['get' 'list' 'create' 'upsert' 'update' 'replace'
+    'delete' 'add' 'set' 'remove' 'begin' 'send' 'query' 'close'
+    'download' 'upload' 'analyze' 'extract' 'recognize' 'synthesize']
 
 predicate badMethodPrefix(Method) => publicMethod
     && !Method.Name:matches('^(get|list|create|upsert|update|replace|delete|add|set|remove|begin|send|query|close|download|upload|analyze|extract|recognize|synthesize|from|__)')

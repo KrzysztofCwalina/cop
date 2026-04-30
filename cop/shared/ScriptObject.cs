@@ -12,8 +12,22 @@ public class ScriptObject
     public ScriptObject(string typeName, Dictionary<string, object?> fields)
     {
         TypeName = typeName;
-        _fields = fields;
+        // Ensure case-insensitive field lookup (consistent with Cop string semantics)
+        if (fields.Comparer != StringComparer.OrdinalIgnoreCase)
+        {
+            _fields = new Dictionary<string, object?>(fields, StringComparer.OrdinalIgnoreCase);
+        }
+        else
+        {
+            _fields = fields;
+        }
     }
+
+    public ScriptObject(string typeName) : this(typeName, new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase))
+    {
+    }
+
+    public void Set(string name, object? value) => _fields[name] = value;
 
     public object? GetField(string name) =>
         _fields.TryGetValue(name, out var value) ? value : null;

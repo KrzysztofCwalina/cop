@@ -13,7 +13,8 @@ public record LetDeclaration(
     bool IsExported = false,
     bool IsRuntime = false,
     Expression? ValueExpression = null,
-    Expression? Exclusions = null)
+    Expression? Exclusions = null,
+    Expression? SourceExpression = null)
 {
     public bool IsValueBinding => ValueExpression is not null;
 

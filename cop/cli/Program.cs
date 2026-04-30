@@ -3,6 +3,7 @@ using System.CommandLine.Help;
 using System.Diagnostics;
 using System.Linq;
 using Cop.Cli.Commands;
+using Cop.Repl;
 
 bool diag = args.Contains("-d");
 long clrStartupMs = 0;
@@ -11,6 +12,14 @@ if (diag)
     var process = Process.GetCurrentProcess();
     clrStartupMs = (long)(DateTime.UtcNow - process.StartTime.ToUniversalTime()).TotalMilliseconds;
     Console.Error.WriteLine($"[diag] Process startup: {clrStartupMs}ms");
+}
+
+// Bare invocation (no arguments): launch REPL
+if (args.Length == 0)
+{
+    var scriptsDir = Directory.GetCurrentDirectory();
+    var session = new ReplSession(scriptsDir, scriptsDir);
+    return session.Run();
 }
 
 var rootCommand = new RootCommand

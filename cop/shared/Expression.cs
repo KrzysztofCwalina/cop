@@ -23,3 +23,15 @@ public record CollectionUnionExpr(List<Expression> Elements) : Expression;
 public record ObjectLiteralExpr(string? TypeName, Dictionary<string, Expression> Fields) : Expression;
 
 public record ConditionalExpr(Expression Condition, Expression TrueExpr, Expression FalseExpr) : Expression;
+
+/// <summary>
+/// Multi-branch match expression: discriminant ? pattern1 => result1 | pattern2 => result2 | _ => default
+/// </summary>
+public record MatchExpr(Expression Discriminant, List<MatchArm> Arms) : Expression;
+
+/// <summary>
+/// A single arm in a match expression. Pattern is null for the wildcard (_) arm.
+/// </summary>
+public record MatchArm(Expression? Pattern, Expression Result);
+
+public record NicExpr() : Expression;

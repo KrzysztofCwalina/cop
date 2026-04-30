@@ -8,6 +8,7 @@ public enum TokenKind
     NumberLiteral,
     True,
     False,
+    Nic,
 
     TypeKeyword,
     CollectionKeyword,
@@ -366,6 +367,7 @@ public class Tokenizer
         {
             "true" => TokenKind.True,
             "false" => TokenKind.False,
+            "nic" => TokenKind.Nic,
             "type" => TokenKind.TypeKeyword,
             "collection" => TokenKind.CollectionKeyword,
             "import" => TokenKind.ImportKeyword,

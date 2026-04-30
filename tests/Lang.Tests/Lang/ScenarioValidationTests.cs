@@ -22,7 +22,7 @@ public class ScenarioValidationTests
     public void S1_HelloWorld_DetectsVarUsage()
     {
         // Arrange: samples/s1-HelloWorld has rules.cop and app.cs
-        // rules.cop: import code, usesVar predicate, PRINT with file path and line
+        // rules.cop: import code, usesVar predicate, foreach with file path and line
         // app.cs: "var x = 1;" on line 1
         var sampleDir = GetSamplesDir("s1-HelloWorld");
 

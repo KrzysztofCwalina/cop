@@ -662,6 +662,7 @@ const KEYWORDS = [
     { label: 'RUN', detail: 'Invoke another command', kind: Kind.Keyword },
     { label: 'true', detail: 'Boolean true', kind: Kind.Constant },
     { label: 'false', detail: 'Boolean false', kind: Kind.Constant },
+    { label: 'nic', detail: 'Null value', kind: Kind.Constant },
 ];
 
 const ACTIONS = [

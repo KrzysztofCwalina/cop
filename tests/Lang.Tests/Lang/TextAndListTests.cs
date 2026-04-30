@@ -64,7 +64,7 @@ public class TextAndListTests
     [Test]
     public void ListLiteral_ParsedAndEvaluated()
     {
-        var source = """predicate test(Type) => [1, 2, 3]""";
+        var source = """predicate test(Type) => [1 2 3]""";
         var file = ScriptParser.Parse(source, "test.cop");
         var body = file.Predicates[0].Body;
         Assert.That(body, Is.InstanceOf<ListLiteralExpr>());
@@ -85,7 +85,7 @@ public class TextAndListTests
     [Test]
     public void ListLiteral_EvaluatesToList()
     {
-        var source = """predicate test(Type) => ['a', 'b']""";
+        var source = """predicate test(Type) => ['a' 'b']""";
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -102,7 +102,7 @@ public class TextAndListTests
     public void LetListLiteral_Parsed()
     {
         var source = """
-            let Keywords = ['Test', 'Bench', 'Perf']
+            let Keywords = ['Test' 'Bench' 'Perf']
             predicate test(Type) => Type.Name:ca(Keywords)
             """;
         var file = ScriptParser.Parse(source, "test.cop");
@@ -131,7 +131,7 @@ public class TextAndListTests
     [Test]
     public void ContainsAny_InlineList_Match()
     {
-        var source = """predicate test(Type) => Type.Name:ca(['Fo', 'Bar'])""";
+        var source = """predicate test(Type) => Type.Name:ca(['Fo' 'Bar'])""";
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -145,7 +145,7 @@ public class TextAndListTests
     [Test]
     public void ContainsAny_InlineList_NoMatch()
     {
-        var source = """predicate test(Type) => Type.Name:ca(['Bar', 'Baz'])""";
+        var source = """predicate test(Type) => Type.Name:ca(['Bar' 'Baz'])""";
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -174,7 +174,7 @@ public class TextAndListTests
     public void ContainsAny_NamedList_Match()
     {
         var source = """
-            let Keywords = ['Fo', 'Bar']
+            let Keywords = ['Fo' 'Bar']
             predicate test(Type) => Type.Name:ca(Keywords)
             """;
         var file = ScriptParser.Parse(source, "test.cop");
@@ -195,7 +195,7 @@ public class TextAndListTests
     public void ContainsAny_NamedList_NoMatch()
     {
         var source = """
-            let Keywords = ['Bar', 'Baz']
+            let Keywords = ['Bar' 'Baz']
             predicate test(Type) => Type.Name:ca(Keywords)
             """;
         var file = ScriptParser.Parse(source, "test.cop");
@@ -215,7 +215,7 @@ public class TextAndListTests
     [Test]
     public void ContainsAny_Negated()
     {
-        var source = """predicate test(Type) => !Type.Name:ca(['Test', 'Bench'])""";
+        var source = """predicate test(Type) => !Type.Name:ca(['Test' 'Bench'])""";
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -237,7 +237,7 @@ public class TextAndListTests
     [Test]
     public void In_InlineList_Match()
     {
-        var source = """predicate test(Type) => Type.Name:in(['Foo', 'Bar'])""";
+        var source = """predicate test(Type) => Type.Name:in(['Foo' 'Bar'])""";
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -251,7 +251,7 @@ public class TextAndListTests
     [Test]
     public void In_InlineList_NoMatch()
     {
-        var source = """predicate test(Type) => Type.Name:in(['Bar', 'Baz'])""";
+        var source = """predicate test(Type) => Type.Name:in(['Bar' 'Baz'])""";
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -266,7 +266,7 @@ public class TextAndListTests
     public void In_NamedList_Match()
     {
         var source = """
-            let AllowedNames = ['Foo', 'Bar']
+            let AllowedNames = ['Foo' 'Bar']
             predicate test(Type) => Type.Name:in(AllowedNames)
             """;
         var file = ScriptParser.Parse(source, "test.cop");
@@ -287,7 +287,7 @@ public class TextAndListTests
     public void In_ExactMatch_NotSubstring()
     {
         // "in" does exact match, not substring — "Fo" should NOT match "Foo"
-        var source = """predicate test(Type) => Type.Name:in(['Fo', 'Ba'])""";
+        var source = """predicate test(Type) => Type.Name:in(['Fo' 'Ba'])""";
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -387,7 +387,7 @@ public class TextAndListTests
     [Test]
     public void In_CaseInsensitive_ByDefault()
     {
-        var source = """predicate test(Type) => Type.Name:in(['foo', 'bar'])""";
+        var source = """predicate test(Type) => Type.Name:in(['foo' 'bar'])""";
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -665,7 +665,7 @@ public class TextAndListTests
     {
         // Test that a computed string (Name + 'Async') can be passed to :contains on a list
         var source = """
-            let Methods = ['FooAsync', 'BarAsync', 'Baz']
+            let Methods = ['FooAsync' 'BarAsync' 'Baz']
             predicate test(Type) => Methods:ct(Type.Name + 'Async')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
@@ -686,7 +686,7 @@ public class TextAndListTests
     public void StringConcat_NoMatch()
     {
         var source = """
-            let Methods = ['FooAsync', 'BarAsync']
+            let Methods = ['FooAsync' 'BarAsync']
             predicate test(Type) => Methods:ct(Type.Name + 'Async')
             """;
         var file = ScriptParser.Parse(source, "test.cop");

@@ -1,16 +1,14 @@
 # Agent Cop Language Reference
 
-Agent Cop is a DSL for processing data organized as **lists**. Files use the `.cop` extension.
+Agent Cop is a data processing DSL optimized for writing static analysis and report generation programs. Files use the `.cop` extension.
 
-All data in cop is either a **primitive** (string, int, bool, byte) or a **list** of items. An **object** is a list of named properties — types describe the shape of those property lists. The language provides three kinds of operations:
+The language combines **declarative filtering** with **functional expressions** for data transformation and analysis:
 
-1. **Subset** (`:`) — filter a list with a predicate to produce a smaller list
-2. **Superset** (`&`) — merge property schemas or combine lists into a larger set
-3. **Primitive operations** — comparisons, string predicates, arithmetic
-
-And one kind of side-effect:
-
-4. **Commands** — routines that produce output implicitly or write files (`SAVE`)
+- **Data types** — primitives, lists, and objects (maps with named properties)
+- **Declarations** — `let` bindings, `type` definitions, `predicate` and `function` definitions, `import`/`export`
+- **Filtering** — subset (`:`) narrows collections with predicates; superset (`&`) combines schemas
+- **Expressions** — member access, lambdas (`.Select(expr)`), ternary conditionals, match expressions, arithmetic, string predicates
+- **Commands** — `foreach` for iteration with templates, `SAVE` for file output
 
 > **Note:** Most examples use the [`code` package](packages/code.md) (`import code`), which provides types for source code analysis. See [Code Package Reference](packages/code.md) for the full type catalog.
 
@@ -25,6 +23,7 @@ And one kind of side-effect:
 | `number` | Floating-point values (64-bit double) |
 | `bool` | `true` or `false` |
 | `byte` | Integer 0-255 |
+| `nic` | Null — absence of a value |
 
 ### Lists
 
@@ -38,7 +37,7 @@ A list is an ordered sequence of items. List **types** are written as `[T]`:
 
 #### List Literals
 
-A list literal is written as `[elements]` — elements are space-separated (no commas):
+A list literal is written as `[elements]` — elements are space-separated:
 
 ```ruby
 [1 2 3]              # int list
@@ -56,23 +55,57 @@ let Combined = [1 2] + [3 4]         # list concatenation → [1 2 3 4]
 let Appended = [1 2] + 3             # append element → [1 2 3]
 ```
 
-Lists are the fundamental data structure. Objects contain lists of properties. Packages provide lists of items to process. Filtering produces subsets. Most operations take a list in and produce a list or boolean out.
+Lists and objects are the fundamental data structures. Packages provide collections of objects to process. Filtering produces subsets. Expressions transform individual values.
 
 ### Objects
 
-An object is a list of named properties. Each property has a name and a value, where the value is either a primitive or a list. **Types** describe the shape of an object’s property list:
+An object is a map of named properties. Each property has a name (key) and a value. Keys can be identifiers or quoted strings:
+
+```ruby
+let person = {
+    Name = 'Alice'
+    Age = 42
+}
+let colors = {
+    'error' = 'red'
+    'warning' = 'yellow'
+    'info' = 'blue'
+}
+```
+
+Both forms produce the same runtime type. Use quoted keys when names contain special characters (e.g., `'content-type'`).
+
+**Types** describe the expected shape of an object:
 
 ```ruby
 type Person = { Name : string, Age : int }
 ```
 
-A `Person` object is a list of properties: `[Property('Name', 'Alice') Property('Age', 42)]`.
+#### Property Access
 
-The dot operator (`.`) is syntactic sugar for navigating properties:
+The dot operator (`.`) accesses properties by name:
 
 ```ruby
-Person.Name          # the value of the "Name" property
-Person.Age           # the value of the "Age" property
+person.Name              # 'Alice'
+person.Age               # 42
+```
+
+Dynamic access uses `.Get(key)`:
+
+```ruby
+person.Get('Name')       # same as person.Name
+```
+
+#### Object Operations
+
+These work on all objects — literals, function results, and provider objects (Types, Methods, etc.):
+
+```ruby
+obj.Get('Name')          # dynamic property lookup (case-insensitive)
+obj:containsKey('Name')  # true if property exists
+obj.Keys                 # list of all property names
+obj.Values               # list of all property values
+obj.Count                # number of properties
 ```
 
 ## Declarations
@@ -235,6 +268,22 @@ let Prefixes = ['Get' 'Set' 'Create']
 predicate hasBadPrefix(Method) => Method.Name:containsAny(Prefixes)
 ```
 
+**Expression** — binds a name to an arbitrary computed value:
+
+```ruby
+let count = Types.Count                       # scalar from collection property
+let names = Types.Select(item.Name)           # derived list
+let total = Types.Sum(item.Methods.Count)     # aggregate
+let label = 'Total: ' + count                 # string concatenation
+```
+
+Expression bindings can be referenced in templates using `{name}`:
+
+```ruby
+let count = Types.Count
+foreach Types => '{count} types in total, current: {item.Name}'
+```
+
 **External data** — loads a JSON file into a typed collection (requires `import json`):
 
 ```ruby
@@ -384,6 +433,42 @@ X < 10          # less than
 X >= 5          # greater than or equal
 X <= 100        # less than or equal
 ```
+
+#### Ternary Conditional
+
+```ruby
+condition ? trueExpr | falseExpr
+```
+
+Binary choice: if `condition` is truthy, evaluates `trueExpr`; otherwise `falseExpr`.
+
+```ruby
+Type.IsPublic ? 'public' | 'internal'
+isAbstract ? Type.IsPublic ? 'abs-pub' | 'abs-priv' | 'concrete'   # nested
+```
+
+#### Match Expression
+
+Multi-branch conditional that tests a discriminant against patterns:
+
+```ruby
+discriminant ? pattern1 => result1 | pattern2 => result2 | _ => default
+```
+
+Each arm is `pattern => result`. Arms are evaluated left to right; the first matching pattern wins. `_` is the wildcard (matches anything). String matching is case-insensitive.
+
+```ruby
+# Map severity to color
+item.Severity ? 'error' => 'red' | 'warning' => 'yellow' | _ => 'white'
+
+# Classify types
+Type.Methods.Count ? 0 => 'empty' | _ => 'has-methods'
+
+# Use in templates
+foreach Types => '{item.Name}: {item.Accessibility ? 'public' => '🟢' | _ => '⚪'}'
+```
+
+If no arm matches and no `_` default exists, the expression returns null (falsy).
 
 #### String Predicates
 
@@ -686,6 +771,20 @@ foreach Clients:csharp:!isSealed => '{error:@red} {item.Name} should be sealed'
 foreach Lines:python:matches(@'\bprint\s*\(') => '{warning:@yellow} Use logging instead of print'
 ```
 
+### PRINT
+
+Explicitly prints output with full template interpolation and styling support. Use when a program needs to emit additional output beyond what expressions produce implicitly:
+
+```ruby
+PRINT('{Analysis complete@green-bold}')
+PRINT('Found {Types.Count} types')
+
+let status = 'OK'
+PRINT('{status@green}: all checks passed')
+```
+
+PRINT honors styled interpolated strings — use `{text@style}` for colored/styled output.
+
 ### SAVE
 
 Writes output to a file. The first argument is the file path (relative to the codebase root), followed by a content template. Use `foreach` to iterate.
@@ -768,6 +867,18 @@ Interpolated strings in commands use `{Expr}` placeholders:
 foreach Clients:!isSealed => '{error:@red} {item.Name} should be sealed'
 foreach Clients:hasAsyncWithoutCancellation => '{warning:@yellow} {item.File.Path}:{item.Line} {item.Name} missing cancellation token'
 ```
+
+## Null (`nic`)
+
+The keyword `nic` represents the absence of a value:
+
+```ruby
+let x = nic                          # null binding
+let obj = { name = 'hello', value = nic }  # null field in an object
+Type.Base == nic ? 'none' | Type.Base      # null comparison in ternary
+```
+
+`nic` is falsy — `ToBool(nic)` evaluates to `false`. In JSON output, `nic` serializes as `null`.
 
 ## Comments
 

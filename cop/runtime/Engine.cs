@@ -725,6 +725,146 @@ public static class Engine
             ProviderLoader.InitializeCapabilities(loaded.Instance, typeRegistry, rootPath);
         }
     }
+
+    /// <summary>
+    /// Prepares a REPL session: parses .cop files, resolves imports, builds type registry,
+    /// but does NOT query providers (lazy loading). Returns a ReplContext for interactive use.
+    /// </summary>
+    public static ReplContext? PrepareRepl(string scriptsDir, string rootPath, List<string> errors)
+    {
+        scriptsDir = Path.GetFullPath(scriptsDir);
+        rootPath = Path.GetFullPath(rootPath);
+
+        if (!Directory.Exists(scriptsDir))
+        {
+            errors.Add($"Scripts directory not found: {scriptsDir}");
+            return null;
+        }
+
+        // REPL only loads top-level .cop files; packages are resolved via import directives
+        var scriptFilePaths = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.TopDirectoryOnly);
+        var scriptFiles = new List<ScriptFile>();
+        var parseErrors = new List<string>();
+
+        foreach (var path in scriptFilePaths)
+        {
+            try
+            {
+                var source = File.ReadAllText(path);
+                scriptFiles.Add(ScriptParser.Parse(source, path));
+            }
+            catch (ParseException ex)
+            {
+                // Suppress warnings for files containing only value expressions (lists, strings, numbers)
+                // These are valid REPL content accessible via <N>! line references
+                if (!IsValueOnlyFile(path))
+                    parseErrors.Add(ex.Message);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                if (!IsValueOnlyFile(path))
+                    parseErrors.Add($"Error parsing {path}: {ex.Message}");
+            }
+        }
+
+        errors.AddRange(parseErrors);
+
+        var fatalErrors = new List<string>();
+        var providerPackages = new List<(string Dir, PackageMetadata Meta)>();
+
+        // Include ~/.cop/packages/ as a feed path (same as CheckCommand does)
+        var globalCachePath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".cop", "packages");
+        string[]? additionalFeeds = Directory.Exists(globalCachePath) ? [globalCachePath] : null;
+
+        var typeRegistry = CreateTypeRegistry(scriptFiles, scriptsDir, parseErrors, fatalErrors, providerPackages: providerPackages, additionalFeedPaths: additionalFeeds);
+
+        if (fatalErrors.Count > 0)
+        {
+            errors.AddRange(fatalErrors);
+            // Still return context even with some errors — REPL can still be useful
+        }
+
+        return new ReplContext(scriptFiles, typeRegistry, rootPath, scriptsDir, providerPackages,
+            totalFileCount: scriptFilePaths.Length);
+    }
+
+    /// <summary>
+    /// Returns true if a .cop file contains only value expressions (list literals, strings, numbers)
+    /// that are valid REPL content but not valid top-level cop statements.
+    /// </summary>
+    private static bool IsValueOnlyFile(string path)
+    {
+        try
+        {
+            var firstLine = File.ReadLines(path).FirstOrDefault()?.TrimStart();
+            if (firstLine is null) return false;
+            return firstLine.StartsWith('[') || firstLine.StartsWith('\'') ||
+                   (firstLine.Length > 0 && (char.IsDigit(firstLine[0]) ||
+                    (firstLine[0] == '-' && firstLine.Length > 1 && char.IsDigit(firstLine[1]))));
+        }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// Loads provider data into the REPL context (lazy loading on first reference).
+    /// </summary>
+    public static void LoadProviders(ReplContext context)
+    {
+        if (context.ProvidersLoaded) return;
+
+        var errors = new List<string>();
+        var fatalErrors = new List<string>();
+
+        // Load external providers
+        LoadExternalProviders(context.TypeRegistry, context.ProviderPackages, context.RootPath, errors, fatalErrors, ExcludedDirectoryNames);
+
+        // Query all built-in providers
+        foreach (var bp in _builtinProviders)
+        {
+            var query = new ProviderQuery
+            {
+                RootPath = context.RootPath,
+                ExcludedDirectories = ExcludedDirectoryNames
+            };
+            ProviderLoader.QueryAndRegister(bp.Instance, bp.Schema, bp.Name, context.TypeRegistry, query);
+        }
+
+        // Initialize capabilities
+        foreach (var bp in _builtinProviders)
+            ProviderLoader.InitializeCapabilities(bp.Instance, context.TypeRegistry, context.RootPath);
+
+        context.ProvidersLoaded = true;
+
+        if (errors.Count > 0)
+            context.Warnings.AddRange(errors);
+    }
+}
+
+/// <summary>
+/// Context object for a REPL session — holds parsed state and supports lazy provider loading.
+/// </summary>
+public class ReplContext
+{
+    public List<ScriptFile> ScriptFiles { get; }
+    public TypeRegistry TypeRegistry { get; }
+    public string RootPath { get; }
+    public string ScriptsDir { get; }
+    public List<(string Dir, PackageMetadata Meta)> ProviderPackages { get; }
+    public bool ProvidersLoaded { get; set; }
+    public List<string> Warnings { get; } = [];
+    public int TotalFileCount { get; }
+
+    public ReplContext(List<ScriptFile> scriptFiles, TypeRegistry typeRegistry, string rootPath, string scriptsDir, List<(string Dir, PackageMetadata Meta)> providerPackages, int totalFileCount = 0)
+    {
+        ScriptFiles = scriptFiles;
+        TypeRegistry = typeRegistry;
+        RootPath = rootPath;
+        ScriptsDir = scriptsDir;
+        ProviderPackages = providerPackages;
+        TotalFileCount = totalFileCount > 0 ? totalFileCount : scriptFiles.Count;
+    }
 }
 
 /// <summary>

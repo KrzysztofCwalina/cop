@@ -5,15 +5,6 @@ namespace Cop.Lang;
 
 public class PredicateEvaluator
 {
-    // Singular convention names for inline expressions in collection methods.
-    // When evaluating Any(Constructor.Protected), the root identifier "Constructor"
-    // is recognized as a singular name and used as the paramType for the collection item.
-    private static readonly HashSet<string> SingularNames =
-    [
-        "Type", "Method", "Constructor", "Parameter", "Statement", "Line",
-        "BaseType", "Decorator", "Using", "Package", "File", "NestedType",
-        "Member", "Program", "Folder", "DiskFile"
-    ];
 
     private readonly Dictionary<string, List<PredicateDefinition>> _predicates;
     private readonly Dictionary<string, List<FunctionDefinition>> _functions;
@@ -61,6 +52,7 @@ public class PredicateEvaluator
     {
         return expr switch
         {
+            NicExpr => null,
             LiteralExpr lit => lit.Value,
             ListLiteralExpr list => list.Elements.Select(e => Eval(e, item, paramType, ctx)).ToList(),
             ObjectLiteralExpr obj => EvalObjectLiteral(obj, item, paramType, ctx),
@@ -73,6 +65,7 @@ public class PredicateEvaluator
             ConditionalExpr cond => ToBool(Eval(cond.Condition, item, paramType, ctx))
                 ? Eval(cond.TrueExpr, item, paramType, ctx)
                 : Eval(cond.FalseExpr, item, paramType, ctx),
+            MatchExpr match => EvalMatch(match, item, paramType, ctx),
             _ => throw new InvalidOperationException($"Unsupported expression: {expr}")
         };
     }
@@ -160,6 +153,28 @@ public class PredicateEvaluator
             }
         }
 
+        // Let with SourceExpression fallback (decomposed as collection but actually a value expr)
+        if (_letDeclarations is not null &&
+            _letDeclarations.TryGetValue(name, out var letDeclExpr) &&
+            !letDeclExpr.IsValueBinding &&
+            letDeclExpr.SourceExpression is not null)
+        {
+            // Only treat as value if it's not resolved as a collection
+            if (_resolvedCollections is null || !_resolvedCollections.ContainsKey(name))
+            {
+                if (!_evaluatingLetValues.Add(name))
+                    throw new InvalidOperationException($"Circular let value reference: '{name}'");
+                try
+                {
+                    return Eval(letDeclExpr.SourceExpression, item, paramType, ctx);
+                }
+                finally
+                {
+                    _evaluatingLetValues.Remove(name);
+                }
+            }
+        }
+
         // Resolved collection binding (e.g., let factoryTypes = Code.Types:where(isFactory))
         if (_resolvedCollections is not null &&
             _resolvedCollections.TryGetValue(name, out var resolvedList))
@@ -210,9 +225,15 @@ public class PredicateEvaluator
     /// <summary>
     /// Resolves the best predicate overload: constrained match first, then unconstrained fallback.
     /// A constraint (e.g., predicate client(Type:csharp)) is evaluated as a predicate against the item.
+    /// When paramType is "item" (inline lambda context), infers actual type for matching.
     /// </summary>
     private PredicateDefinition? ResolvePredicate(List<PredicateDefinition> group, object item, string paramType, EvaluationContext ctx)
     {
+        // In inline lambda contexts, infer actual type for overload matching
+        var matchType = paramType == "item"
+            ? (_registry.InferTypeName(item) ?? "item")
+            : paramType;
+
         PredicateDefinition? typeMatch = null;
         PredicateDefinition? unconstrained = null;
         foreach (var pred in group)
@@ -228,7 +249,7 @@ public class PredicateEvaluator
                         return pred;
                 }
             }
-            else if (pred.ParameterType == paramType)
+            else if (pred.ParameterType == matchType)
             {
                 typeMatch = pred;
             }
@@ -270,6 +291,21 @@ public class PredicateEvaluator
                 Eval(bin.Right, item, paramType, ctx)),
             _ => throw new InvalidOperationException($"Unknown operator '{bin.Operator}'")
         };
+    }
+
+    private object? EvalMatch(MatchExpr match, object item, string paramType, EvaluationContext ctx)
+    {
+        var discriminant = Eval(match.Discriminant, item, paramType, ctx);
+        foreach (var arm in match.Arms)
+        {
+            if (arm.Pattern is null)
+                return Eval(arm.Result, item, paramType, ctx); // wildcard _ matches everything
+
+            var pattern = Eval(arm.Pattern, item, paramType, ctx);
+            if (ValuesEqual(discriminant, pattern))
+                return Eval(arm.Result, item, paramType, ctx);
+        }
+        return null; // no match, no default
     }
 
     private static bool CompareValues(object? a, string op, object? b)
@@ -337,6 +373,15 @@ public class PredicateEvaluator
         string s when double.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double n) => n,
         _ => 0.0
     };
+
+    private static int CompareForSort(object? a, object? b)
+    {
+        if (a is int ai && b is int bi) return ai.CompareTo(bi);
+        if (a is double or int && b is double or int) return ToDouble(a).CompareTo(ToDouble(b));
+        var sa = a?.ToString() ?? "";
+        var sb = b?.ToString() ?? "";
+        return string.Compare(sa, sb, StringComparison.OrdinalIgnoreCase);
+    }
 
     private static bool ContainsAny(string str, object? listArg)
     {
@@ -408,9 +453,17 @@ public class PredicateEvaluator
     {
         if (target is null) return null;
 
-        // ScriptObject: resolve fields by name
+        // ScriptObject: resolve fields by name, plus map properties
         if (target is ScriptObject ao)
-            return ao.GetField(member);
+        {
+            return member switch
+            {
+                "Keys" => ao.Fields.Keys.ToList<object>(),
+                "Values" => ao.Fields.Values.Where(v => v is not null).Cast<object>().ToList(),
+                "Count" => ao.Fields.Count,
+                _ => ao.GetField(member)
+            };
+        }
 
         // Collection properties (Count, First, Last, Single) — built-in, no registry
         if (target is IList list)
@@ -459,9 +512,23 @@ public class PredicateEvaluator
         var typeName = _registry.InferTypeName(target);
         if (typeName is not null)
         {
-            var desc = _registry.GetType(typeName)?.GetProperty(member);
-            if (desc?.Accessor is not null)
-                return desc.Accessor(target);
+            var typeDesc = _registry.GetType(typeName);
+            if (typeDesc is not null)
+            {
+                // Map-like properties on any typed object
+                if (member == "Keys")
+                    return typeDesc.GetAllProperties().Select(p => (object)p.Name).ToList();
+                if (member == "Values")
+                    return typeDesc.GetAllProperties()
+                        .Select(p => p.Accessor is not null ? p.Accessor(target) : null)
+                        .Where(v => v is not null).Cast<object>().ToList();
+                if (member == "Count")
+                    return typeDesc.GetAllProperties().Count();
+
+                var desc = typeDesc.GetProperty(member);
+                if (desc?.Accessor is not null)
+                    return desc.Accessor(target);
+            }
         }
 
         return null;
@@ -471,6 +538,42 @@ public class PredicateEvaluator
         object item, string paramType, EvaluationContext ctx)
     {
         if (target is null) return null;
+
+        // Map/ScriptObject operations
+        if (target is ScriptObject so)
+        {
+            switch (predicate)
+            {
+                case "Get":
+                    var key = args.Count > 0 ? Eval(args[0], item, paramType, ctx)?.ToString() : null;
+                    return key is not null ? so.GetField(key) : null;
+                case "containsKey":
+                    var ck = args.Count > 0 ? Eval(args[0], item, paramType, ctx)?.ToString() : null;
+                    return ck is not null && so.HasField(ck);
+            }
+        }
+
+        // Universal object operations: Get/containsKey work on any typed object via registry
+        if (predicate is "Get" or "containsKey")
+        {
+            var objTypeName = _registry.InferTypeName(target);
+            if (objTypeName is not null)
+            {
+                var typeDesc = _registry.GetType(objTypeName);
+                if (typeDesc is not null)
+                {
+                    var propName = args.Count > 0 ? Eval(args[0], item, paramType, ctx)?.ToString() : null;
+                    if (propName is null) return predicate == "containsKey" ? false : null;
+                    if (predicate == "containsKey")
+                        return typeDesc.GetProperty(propName) is not null;
+                    else // Get
+                    {
+                        var propDesc = typeDesc.GetProperty(propName);
+                        return propDesc?.Accessor is not null ? propDesc.Accessor(target) : null;
+                    }
+                }
+            }
+        }
 
         // Universal predicates (work on any value type)
         if (predicate == "in" && args.Count > 0)
@@ -702,8 +805,7 @@ public class PredicateEvaluator
             }
             case "Select":
             {
-                // Project each item to a string value via a field accessor expression.
-                // Returns a List<object> (of strings) suitable for use with :in() or :ct().
+                // Project each item via a field/expression. Preserves value types.
                 var fieldExpr = args[0];
                 var result = new List<object>();
                 foreach (var collItem in collection)
@@ -712,52 +814,220 @@ public class PredicateEvaluator
                     string itemType = InferItemType(fieldExpr, collItem);
                     var value = Eval(fieldExpr, collItem, itemType, ctx);
                     if (value is not null)
-                        result.Add(value.ToString()!);
+                        result.Add(value);
                 }
                 return result;
+            }
+            case "OrderBy":
+            {
+                var fieldExpr = args[0];
+                var sorted = collection.Cast<object>().Where(x => x is not null).ToList();
+                sorted.Sort((a, b) =>
+                {
+                    string aType = InferItemType(fieldExpr, a);
+                    string bType = InferItemType(fieldExpr, b);
+                    var aVal = Eval(fieldExpr, a, aType, ctx);
+                    var bVal = Eval(fieldExpr, b, bType, ctx);
+                    return CompareForSort(aVal, bVal);
+                });
+                return sorted;
+            }
+            case "OrderByDescending":
+            {
+                var fieldExpr = args[0];
+                var sorted = collection.Cast<object>().Where(x => x is not null).ToList();
+                sorted.Sort((a, b) =>
+                {
+                    string aType = InferItemType(fieldExpr, a);
+                    string bType = InferItemType(fieldExpr, b);
+                    var aVal = Eval(fieldExpr, a, aType, ctx);
+                    var bVal = Eval(fieldExpr, b, bType, ctx);
+                    return CompareForSort(bVal, aVal); // reversed
+                });
+                return sorted;
+            }
+            case "Sum":
+            {
+                var fieldExpr = args[0];
+                double sum = 0;
+                foreach (var collItem in collection)
+                {
+                    if (collItem is null) continue;
+                    string itemType = InferItemType(fieldExpr, collItem);
+                    sum += ToDouble(Eval(fieldExpr, collItem, itemType, ctx));
+                }
+                return (int)sum == sum ? (object)(int)sum : sum;
+            }
+            case "Min":
+            {
+                var fieldExpr = args[0];
+                double? min = null;
+                foreach (var collItem in collection)
+                {
+                    if (collItem is null) continue;
+                    string itemType = InferItemType(fieldExpr, collItem);
+                    var val = ToDouble(Eval(fieldExpr, collItem, itemType, ctx));
+                    if (min is null || val < min) min = val;
+                }
+                return min is null ? 0 : ((int)min.Value == min.Value ? (object)(int)min.Value : min.Value);
+            }
+            case "Max":
+            {
+                var fieldExpr = args[0];
+                double? max = null;
+                foreach (var collItem in collection)
+                {
+                    if (collItem is null) continue;
+                    string itemType = InferItemType(fieldExpr, collItem);
+                    var val = ToDouble(Eval(fieldExpr, collItem, itemType, ctx));
+                    if (max is null || val > max) max = val;
+                }
+                return max is null ? 0 : ((int)max.Value == max.Value ? (object)(int)max.Value : max.Value);
+            }
+            case "Average":
+            {
+                var fieldExpr = args[0];
+                double sum = 0;
+                int count = 0;
+                foreach (var collItem in collection)
+                {
+                    if (collItem is null) continue;
+                    string itemType = InferItemType(fieldExpr, collItem);
+                    sum += ToDouble(Eval(fieldExpr, collItem, itemType, ctx));
+                    count++;
+                }
+                return count > 0 ? sum / count : 0.0;
+            }
+            case "Distinct":
+            {
+                if (args.Count > 0)
+                {
+                    // Distinct by expression: deduplicate by projected value
+                    var fieldExpr = args[0];
+                    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var result = new List<object>();
+                    foreach (var collItem in collection)
+                    {
+                        if (collItem is null) continue;
+                        string itemType = InferItemType(fieldExpr, collItem);
+                        var key = Eval(fieldExpr, collItem, itemType, ctx)?.ToString() ?? "";
+                        if (seen.Add(key))
+                            result.Add(collItem);
+                    }
+                    return result;
+                }
+                else
+                {
+                    // Distinct without args: deduplicate by string representation
+                    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var result = new List<object>();
+                    foreach (var collItem in collection)
+                    {
+                        if (collItem is null) continue;
+                        var key = collItem.ToString() ?? "";
+                        if (seen.Add(key))
+                            result.Add(collItem);
+                    }
+                    return result;
+                }
+            }
+            case "GroupBy":
+            {
+                var fieldExpr = args[0];
+                var groups = new Dictionary<string, List<object>>(StringComparer.OrdinalIgnoreCase);
+                var groupOrder = new List<string>();
+                foreach (var collItem in collection)
+                {
+                    if (collItem is null) continue;
+                    string itemType = InferItemType(fieldExpr, collItem);
+                    var key = Eval(fieldExpr, collItem, itemType, ctx)?.ToString() ?? "";
+                    if (!groups.TryGetValue(key, out var groupList))
+                    {
+                        groupList = new List<object>();
+                        groups[key] = groupList;
+                        groupOrder.Add(key);
+                    }
+                    groupList.Add(collItem);
+                }
+                // Return as list of ScriptObjects with Key and Items properties
+                var result = new List<object>();
+                foreach (var key in groupOrder)
+                {
+                    var groupObj = new ScriptObject("Group");
+                    groupObj.Set("Key", key);
+                    groupObj.Set("Items", groups[key]);
+                    groupObj.Set("Count", groups[key].Count);
+                    result.Add(groupObj);
+                }
+                return result;
+            }
+            case "Reduce":
+            {
+                // Reduce(operator, itemExpr, separator?, seed?)
+                // operator is passed as a string literal ('+')
+                // For now, support string concatenation with separator
+                if (args.Count < 2)
+                    throw new InvalidOperationException("Reduce requires at least operator and item expression");
+
+                var opExpr = args[0];
+                var fieldExpr = args[1];
+                var separator = args.Count > 2 ? Eval(args[2], item, paramType, ctx)?.ToString() ?? "" : "";
+                var seed = args.Count > 3 ? Eval(args[3], item, paramType, ctx) : null;
+
+                var op = opExpr is LiteralExpr lit ? lit.Value?.ToString() : 
+                         opExpr is IdentifierExpr id2 ? id2.Name : "+";
+
+                var values = new List<object?>();
+                foreach (var collItem in collection)
+                {
+                    if (collItem is null) continue;
+                    string itemType = InferItemType(fieldExpr, collItem);
+                    values.Add(Eval(fieldExpr, collItem, itemType, ctx));
+                }
+
+                if (op == "+")
+                {
+                    // Check if numeric or string based on first value or seed
+                    bool isNumeric = seed is int or double || (seed is null && values.Count > 0 && values[0] is int or double);
+                    if (isNumeric)
+                    {
+                        double result = ToDouble(seed);
+                        foreach (var val in values)
+                            result += ToDouble(val);
+                        return (int)result == result ? (object)(int)result : result;
+                    }
+                    else
+                    {
+                        // String concatenation with separator
+                        var seedStr = seed?.ToString() ?? "";
+                        var parts = values.Where(v => v is not null).Select(v => v!.ToString()!).ToList();
+                        return seedStr + string.Join(separator, parts);
+                    }
+                }
+
+                throw new InvalidOperationException($"Unsupported Reduce operator: '{op}'");
             }
             default:
                 throw new InvalidOperationException($"Unknown collection predicate '{predicate}'");
         }
     }
 
+    /// <summary>
+    /// In inline lambda contexts (Where, Select, any, etc.), only "item" is the
+    /// implicit variable. Named predicates still resolve via their declared ParameterType.
+    /// </summary>
     private string InferItemType(Expression predExpr, object collItem)
     {
+        // Named predicate reference — use its declared parameter type for constraint resolution
         if (predExpr is IdentifierExpr id && _predicates.TryGetValue(id.Name, out var group))
         {
             var pred = group.FirstOrDefault();
             if (pred is not null) return pred.ParameterType;
         }
 
-        // For inline expressions, extract the root identifier and check if it's
-        // a known singular convention name (e.g., Constructor in Constructor.IsProtected).
-        var rootName = ExtractRootIdentifier(predExpr);
-        if (rootName is not null && SingularNames.Contains(rootName))
-            return rootName;
-
-        // Use registry CLR type mapping as fallback
-        var typeName = _registry.InferTypeName(collItem);
-        if (typeName is not null) return typeName;
-
-        return "Unknown";
-    }
-
-    /// <summary>
-    /// Walks the expression tree to find the leftmost IdentifierExpr name.
-    /// Used for singular convention: Any(Package.Name == "Foo") → "Package".
-    /// </summary>
-    private static string? ExtractRootIdentifier(Expression expr)
-    {
-        return expr switch
-        {
-            IdentifierExpr id => id.Name,
-            MemberAccessExpr ma => ExtractRootIdentifier(ma.Target),
-            PredicateCallExpr mc => ExtractRootIdentifier(mc.Target),
-            BinaryExpr bin => ExtractRootIdentifier(bin.Left),
-            UnaryExpr un => ExtractRootIdentifier(un.Operand),
-            ConditionalExpr cond => ExtractRootIdentifier(cond.Condition),
-            _ => null
-        };
+        // For inline expressions (item.Name, item:isPublic, etc.), use "item" as the
+        // lambda variable. The actual type is inferred dynamically in ResolvePredicate.
+        return "item";
     }
 
     private object? CallFunction(string name, List<Expression> args,

@@ -9,7 +9,7 @@ Create a file called `api-listing.cop` in your project:
 ```ruby
 import csharp-api
 
-export command api-listing = foreach Code.Api:csharp:publicApi => PRINT('{item.ApiAsText}')
+export command api-listing = foreach Code.Api:csharp:publicApi => '{item.ApiAsText}'
 ```
 
 ```bash
@@ -74,7 +74,7 @@ import csharp-api
 
 let dll = Code.Load('bin/Release/net8.0/MyPackage.dll')
 
-export command list-dll = foreach dll.Api:publicApi => PRINT('{item.ApiAsText}')
+export command list-dll = foreach dll.Api:publicApi => '{item.ApiAsText}'
 ```
 
 To save assembly API to a file:
@@ -109,7 +109,7 @@ For API diff comparison, use `item.Signature` instead of `item.ApiAsText`. Signa
 ```ruby
 import csharp-api
 
-export command api-signatures = foreach Code.Api:csharp:publicApi => PRINT('{item.Signature}')
+export command api-signatures = foreach Code.Api:csharp:publicApi => '{item.Signature}'
 ```
 
 ```
@@ -163,7 +163,7 @@ List only methods:
 ```ruby
 import csharp-api
 
-export command list-methods = foreach Code.Api:csharp:apiMethod => PRINT('{item.Signature}')
+export command list-methods = foreach Code.Api:csharp:apiMethod => '{item.Signature}'
 ```
 
 ## Diagnostics vs. Listings

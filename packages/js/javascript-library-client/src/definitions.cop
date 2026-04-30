@@ -5,7 +5,7 @@ export predicate client(Type) => Type.Name:endsWith('Client')
 export predicate Clients(Types) => javascript && client
 
 # Banned verb prefixes for client methods
-let bannedPrefixes = ['erase', 'fetch', 'getAll', 'insertOrUpdate', 'make', 'pop', 'push', 'updateOrInsert']
+let bannedPrefixes = ['erase' 'fetch' 'getAll' 'insertOrUpdate' 'make' 'pop' 'push' 'updateOrInsert']
 predicate publicMethod(Method) => Method:isPublic && !Method.Name:startsWith('_')
 predicate bannedVerb(Method) => publicMethod
     && (Method.Name:startsWith('erase')

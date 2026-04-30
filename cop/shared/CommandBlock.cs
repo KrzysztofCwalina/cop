@@ -14,4 +14,5 @@ public record CommandBlock(
     Expression? Guard = null,
     string? CommandRef = null,
     Expression? Exclusions = null,
-    List<string>? Parameters = null);
+    List<string>? Parameters = null,
+    Expression? OutputExpression = null);

@@ -136,9 +136,29 @@ public class ScriptParser
                 commands.Add(ParseForeachBlock(pendingDocComment));
                 pendingDocComment = null;
             }
+            else if (Current.Kind == TokenKind.StringLiteral)
+            {
+                // Bare string literal = implicit output statement
+                int line = Current.Line;
+                var template = Advance().Value;
+                commands.Add(new CommandBlock($"output_{line}", template,
+                    null, [], line, pendingDocComment));
+                pendingDocComment = null;
+            }
             else if (Current.Kind == TokenKind.Identifier && IsActionInvocation())
             {
                 commands.Add(ParseActionInvocation(pendingDocComment));
+                pendingDocComment = null;
+            }
+            else if (Current.Kind == TokenKind.Identifier
+                || Current.Kind == TokenKind.IntLiteral
+                || Current.Kind == TokenKind.NumberLiteral
+                || Current.Kind == TokenKind.LBracket
+                || Current.Kind == TokenKind.LBrace
+                || Current.Kind == TokenKind.StringLiteral)
+            {
+                // Bare expression = implicit output (e.g., Types:isPublic.Count, 42, [1 2 3], {Name='x'}, 'hello')
+                commands.Add(ParseBareExpression(pendingDocComment));
                 pendingDocComment = null;
             }
             else if (Current.Kind == TokenKind.RunKeyword)
@@ -421,8 +441,20 @@ public class ScriptParser
             return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: unionExpr);
         }
 
-        var (baseCollection, filters, exclusions) = DecomposeCollectionExpression(expr);
-        return new LetDeclaration(name.Value, baseCollection, filters, line, isExported, isRuntime, Exclusions: exclusions);
+        // Try to decompose as a collection expression (base:filter1:filter2).
+        // If that fails, treat as a general value binding (arbitrary expression).
+        try
+        {
+            var (baseCollection, filters, exclusions) = DecomposeCollectionExpression(expr);
+            // Store SourceExpression as fallback for cases where decomposition "succeeds"
+            // but runtime can't resolve it as a collection (e.g., typeNames.Count)
+            return new LetDeclaration(name.Value, baseCollection, filters, line, isExported, isRuntime, Exclusions: exclusions, SourceExpression: expr);
+        }
+        catch (InvalidOperationException)
+        {
+            // Not a collection expression — store as a value binding
+            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: expr);
+        }
     }
 
     // Check if the current token is an identifier followed by '(' — action invocation
@@ -523,7 +555,7 @@ public class ScriptParser
         return block with { Parameters = parameters, IsExported = isExported };
     }
 
-    // Parse a single command atom: foreach..., <identifier>(...), or a command reference
+    // Parse a single command atom: foreach..., 'template', <identifier>(...), or a command reference
     private CommandBlock ParseCommandAtom(string commandName, string? docComment, int line)
     {
         CommandBlock block;
@@ -531,6 +563,12 @@ public class ScriptParser
         {
             block = ParseForeachBlock(docComment);
             block = block with { Name = commandName, IsCommand = true };
+        }
+        else if (Current.Kind == TokenKind.StringLiteral)
+        {
+            // Implicit output: command X = 'template'
+            var template = Advance().Value;
+            block = new CommandBlock(commandName, template, null, [], line, docComment, IsCommand: true);
         }
         else if (Current.Kind == TokenKind.Identifier && IsActionInvocation())
         {
@@ -572,7 +610,7 @@ public class ScriptParser
         return commands;
     }
 
-    // Parse: foreach <collection-expr> => <action-invocation>
+    // Parse: foreach <collection-expr> => <expression> | <action-invocation>
     private CommandBlock ParseForeachBlock(string? docComment)
     {
         int line = Current.Line;
@@ -584,19 +622,91 @@ public class ScriptParser
 
         Expect(TokenKind.Arrow); // =>
 
-        // Parse the action invocation (string-args only)
-        var block = ParseActionInvocation(docComment);
-
-        // Merge collection info from foreach into the block
-        string name = DeriveRuleId(collection, filters);
-        return block with
+        CommandBlock block;
+        if (Current.Kind == TokenKind.StringLiteral)
         {
-            Name = name,
-            Collection = collection,
-            Filters = filters,
-            Line = line,
-            Exclusions = exclusions
-        };
+            // Implicit output: foreach X => 'template'
+            var template = Advance().Value;
+            string name = DeriveRuleId(collection, filters);
+            block = new CommandBlock(name, template, collection, filters, line, docComment, Exclusions: exclusions);
+        }
+        else if (Current.Kind == TokenKind.Identifier && IsSpecialAction() && IsActionInvocation())
+        {
+            // Explicit action: foreach X => SAVE('path', 'template') or DEBUG('msg')
+            block = ParseActionInvocation(docComment);
+            string name = DeriveRuleId(collection, filters);
+            block = block with
+            {
+                Name = name,
+                Collection = collection,
+                Filters = filters,
+                Line = line,
+                Exclusions = exclusions
+            };
+        }
+        else if (Current.Kind == TokenKind.Identifier && IsActionInvocation())
+        {
+            // Backward compatibility: treat any other action invocation (e.g., PRINT) as implicit output
+            block = ParseActionInvocation(docComment);
+            string name = DeriveRuleId(collection, filters);
+            block = block with
+            {
+                Name = name,
+                Collection = collection,
+                Filters = filters,
+                Line = line,
+                Exclusions = exclusions
+            };
+        }
+        else
+        {
+            // Expression-based output: foreach X => expr
+            var outputExpr = ParseExpression();
+            string name = DeriveRuleId(collection, filters);
+            block = new CommandBlock(name, "", collection, filters, line, docComment,
+                Exclusions: exclusions, OutputExpression: outputExpr);
+        }
+
+        return block;
+    }
+
+    /// <summary>
+    /// Returns true if the current identifier is a special action keyword (SAVE, DEBUG, ASSERT, ASSERT_EMPTY).
+    /// These are the only actions that retain explicit invocation syntax.
+    /// </summary>
+    private bool IsSpecialAction()
+    {
+        var value = Current.Value;
+        return value is "SAVE" or "DEBUG" or "ASSERT" or "ASSERT_EMPTY" or "PRINT";
+    }
+
+    /// <summary>
+    /// Parse a bare expression at top level as an implicit output statement.
+    /// The expression is parsed and decomposed: if it resolves to a collection,
+    /// the command iterates it; otherwise it evaluates once as a scalar.
+    /// </summary>
+    private CommandBlock ParseBareExpression(string? docComment)
+    {
+        int line = Current.Line;
+        var expr = ParseExpression();
+
+        // Try to decompose as a collection expression (Types:isPublic, etc.)
+        try
+        {
+            var (collection, filters, exclusions) = DecomposeCollectionExpression(expr);
+            string name = DeriveRuleId(collection, filters);
+            // Collection iteration — items will be output using their text representation
+            // Also store OutputExpression so the interpreter can fall back to expression
+            // evaluation if the collection doesn't resolve (e.g., a.Name where a is a variable)
+            return new CommandBlock(name, "",
+                collection, filters, line, docComment, Exclusions: exclusions, OutputExpression: expr);
+        }
+        catch (InvalidOperationException)
+        {
+            // Not a collection expression — treat as scalar output
+            return new CommandBlock($"output_{line}", "",
+                null, [], line, docComment, OutputExpression: expr);
+        }
     }
 
     // Generic action invocation: <identifier>(<args>)
@@ -771,14 +881,59 @@ public class ScriptParser
         var expr = ParseOr();
         if (Current.Kind != TokenKind.QuestionMark) return expr;
         Advance(); // consume ?
+
         var savedSkipPipe = _skipPipe;
         _skipPipe = true;
-        var trueExpr = ParseTernary(); // recursive for nesting in true branch
+
+        // Parse the first expression after '?'
+        var firstExpr = ParseOr();
+
+        if (Current.Kind == TokenKind.Arrow)
+        {
+            // Match expression: discriminant ? pattern => result | pattern => result | _ => default
+            var arms = new List<MatchArm>();
+            var firstPattern = IsWildcard(firstExpr) ? null : firstExpr;
+            Advance(); // consume =>
+            var firstResult = ParseOr();
+            arms.Add(new MatchArm(firstPattern, firstResult));
+
+            _skipPipe = savedSkipPipe;
+            while (Current.Kind == TokenKind.Pipe)
+            {
+                Advance(); // consume |
+                _skipPipe = true;
+                var pattern = ParseOr();
+                var armPattern = IsWildcard(pattern) ? null : pattern;
+                Expect(TokenKind.Arrow); // =>
+                var result = ParseOr();
+                _skipPipe = savedSkipPipe;
+                arms.Add(new MatchArm(armPattern, result));
+            }
+            return new MatchExpr(expr, arms);
+        }
+
+        // Binary ternary: cond ? trueExpr | falseExpr
+        // firstExpr is either the true branch (simple) or the condition of a nested ternary.
+        var trueExpr = firstExpr;
+        if (Current.Kind == TokenKind.QuestionMark)
+        {
+            // Nested ternary in true branch: firstExpr ? innerTrue | innerFalse
+            // Keep _skipPipe = true to protect the outer | from being consumed by ParseBitwiseOr
+            Advance(); // consume inner ?
+            var innerTrue = ParseOr(); // _skipPipe still true, stops at |
+            Expect(TokenKind.Pipe); // consume inner | explicitly
+            var innerFalse = ParseTernary(); // recursive; _skipPipe=true protects outer |
+            trueExpr = new ConditionalExpr(firstExpr, innerTrue, innerFalse);
+        }
+
         _skipPipe = savedSkipPipe;
-        Expect(TokenKind.Pipe); // consume |
+        Expect(TokenKind.Pipe); // consume outer |
         var falseExpr = ParseTernary(); // right-associative
         return new ConditionalExpr(expr, trueExpr, falseExpr);
     }
+
+    private static bool IsWildcard(Expression expr) =>
+        expr is IdentifierExpr { Name: "_" };
 
     private Expression ParseOr()
     {
@@ -928,8 +1083,8 @@ public class ScriptParser
                     Expect(TokenKind.RParen);
                     return new FunctionCallExpr(token.Value, args);
                 }
-                // Record construction: TypeName { Field: expr, ... }
-                if (Current.Kind == TokenKind.LBrace)
+                // Record construction: TypeName { Field: expr, ... } (must be on same line)
+                if (Current.Kind == TokenKind.LBrace && Current.Line == token.Line)
                 {
                     return ParseObjectLiteral(token.Value);
                 }
@@ -941,6 +1096,9 @@ public class ScriptParser
             case TokenKind.False:
                 Advance();
                 return new LiteralExpr(false);
+            case TokenKind.Nic:
+                Advance();
+                return new NicExpr();
             case TokenKind.StringLiteral:
             {
                 var token = Advance();
@@ -996,19 +1154,14 @@ public class ScriptParser
         return args;
     }
 
-    // [expr, expr, ...] or []
+    // [expr expr ...] or []
     private ListLiteralExpr ParseListLiteral()
     {
         Advance(); // consume [
         var elements = new List<Expression>();
-        if (Current.Kind != TokenKind.RBracket)
+        while (Current.Kind != TokenKind.RBracket && Current.Kind != TokenKind.Eof)
         {
             elements.Add(ParseExpression());
-            while (Current.Kind == TokenKind.Comma)
-            {
-                Advance();
-                elements.Add(ParseExpression());
-            }
         }
         Expect(TokenKind.RBracket);
         return new ListLiteralExpr(elements);
@@ -1021,11 +1174,12 @@ public class ScriptParser
         var fields = new Dictionary<string, Expression>();
         while (Current.Kind != TokenKind.RBrace && Current.Kind != TokenKind.Eof)
         {
-            // Accept identifier, true/false as field names
+            // Accept identifier, true/false, or string literal as field names
             var fieldToken = Current;
             var fieldName = Current.Kind switch
             {
-                TokenKind.Identifier or TokenKind.True or TokenKind.False => Advance().Value,
+                TokenKind.Identifier or TokenKind.True or TokenKind.False or TokenKind.Nic => Advance().Value,
+                TokenKind.StringLiteral => Advance().Value,
                 _ => Expect(TokenKind.Identifier).Value
             };
 

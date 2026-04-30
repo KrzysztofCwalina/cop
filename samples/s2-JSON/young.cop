@@ -13,7 +13,7 @@ type Person = {
 let Persons = Parse('data.json', [Person])
 
 # Filter persons by age using a predicate
-predicate young(Person) => Person.age < 30
-let YoungPeople = Persons:young
+predicate canVote(Person) => Person.age >= 18
+let Voters = Persons:canVote
 
-foreach YoungPeople => PRINT('{item.name}')
+foreach Voters => PRINT('{item.name}')

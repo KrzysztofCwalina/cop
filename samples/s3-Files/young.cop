@@ -10,7 +10,7 @@ type Person = {
 
 let Persons = Parse('people.json', [Person])
 
-predicate young(Person) => Person.age < 30
-let YoungPeople = Persons:young
+predicate canVote(Person) => Person.age >= 18
+let Voters = Persons:canVote
 
-foreach YoungPeople => PRINT('{item.name} is {item.age}')
+foreach Voters => PRINT('{item.name} is {item.age}')

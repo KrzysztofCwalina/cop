@@ -30,13 +30,13 @@ predicate badMethodName(Method) => publicService && !standardPrefix
 predicate typeBadMethodName(Type) => Type.Methods:any(badMethodName)
 
 ## Python clients must accept a credential parameter in __init__
-foreach PythonClients:python:initMissingCredential => PRINT('{warning:@yellow} {item.Name} must accept credential in __init__')
+foreach PythonClients:python:initMissingCredential => '{warning:@yellow} {item.Name} must accept credential in __init__'
 
 ## Python clients must provide a from_connection_string classmethod
-foreach PythonClients:python:missingFromConnStr => PRINT('{warning:@yellow} {item.Name} must have a from_connection_string classmethod')
+foreach PythonClients:python:missingFromConnStr => '{warning:@yellow} {item.Name} must have a from_connection_string classmethod'
 
 ## Public service methods must accept **kwargs
-foreach PythonClients:python:methodWithoutKwargs => PRINT('{warning:@yellow} {item.Name} is missing **kwargs')
+foreach PythonClients:python:methodWithoutKwargs => '{warning:@yellow} {item.Name} is missing **kwargs'
 
 ## Public service methods should use standard verb prefixes (get_, list_, create_, etc.)
-foreach PythonClients:python:typeBadMethodName => PRINT('{info:@cyan} {item.Name} doesn\'t use a standard verb prefix')
+foreach PythonClients:python:typeBadMethodName => '{info:@cyan} {item.Name} doesn\'t use a standard verb prefix'

@@ -55,48 +55,48 @@ predicate settingsCtorOverloaded(Type) => Type.Constructors:any(hasSettingsAndOt
 
 # AZC0034: Duplicate type names across SDK and .NET BCL
 let bclTypeNames = [
-    'Action', 'Activator', 'AppContext', 'AppDomain', 'Array', 'Attribute',
-    'BitConverter', 'Boolean', 'Buffer', 'Byte', 'Char', 'CharEnumerator',
-    'CLSCompliantAttribute', 'Console', 'Convert', 'DateTime', 'DateTimeOffset',
-    'Decimal', 'Delegate', 'Double', 'Enum', 'Environment', 'EventArgs',
-    'EventHandler', 'Exception', 'FlagsAttribute', 'FormattableString', 'Func',
-    'GC', 'Guid', 'Half', 'HashCode', 'IAsyncDisposable', 'IAsyncResult',
-    'ICloneable', 'IComparable', 'IConvertible', 'IDisposable', 'IEquatable',
-    'IFormattable', 'IFormatProvider', 'Index', 'Int16', 'Int32', 'Int64',
-    'IntPtr', 'InvalidCastException', 'InvalidOperationException',
-    'IObservable', 'IObserver', 'IProgress', 'IServiceProvider',
-    'Lazy', 'MarshalByRefObject', 'Math', 'MathF', 'Memory',
-    'MulticastDelegate', 'Nullable', 'Object', 'ObsoleteAttribute',
-    'OperatingSystem', 'OperationCanceledException', 'OutOfMemoryException',
-    'OverflowException', 'Path', 'Predicate', 'Progress',
-    'Random', 'Range', 'ReadOnlyMemory', 'ReadOnlySpan',
-    'SByte', 'Single', 'Span', 'StackOverflowException', 'Stream',
-    'String', 'StringComparer', 'StringComparison', 'StringBuilder',
-    'Task', 'TaskCompletionSource', 'TimeOnly', 'DateOnly',
-    'TimeProvider', 'TimeSpan', 'TimeZoneInfo', 'Timeout',
-    'Tuple', 'Type', 'TypeCode', 'UInt16', 'UInt32', 'UInt64',
-    'UIntPtr', 'UnauthorizedAccessException', 'Uri', 'UriBuilder',
-    'ValueTask', 'ValueTuple', 'Version', 'Void', 'WeakReference',
-    'BinaryReader', 'BinaryWriter', 'Directory', 'DirectoryInfo',
-    'File', 'FileInfo', 'FileStream', 'MemoryStream', 'StreamReader',
-    'StreamWriter', 'TextReader', 'TextWriter',
-    'Channel', 'Pipe', 'PipeReader', 'PipeWriter',
-    'CancellationToken', 'CancellationTokenSource', 'Mutex',
-    'Semaphore', 'SemaphoreSlim', 'Timer',
-    'Dictionary', 'HashSet', 'KeyValuePair', 'LinkedList', 'List',
-    'Queue', 'SortedDictionary', 'SortedList', 'SortedSet', 'Stack',
-    'HttpClient', 'HttpContent', 'HttpRequestMessage', 'HttpResponseMessage',
-    'JsonDocument', 'JsonElement', 'JsonSerializer', 'JsonSerializerOptions',
-    'Regex', 'Match', 'Group', 'Capture',
-    'Assembly', 'Module', 'FieldInfo', 'MethodInfo', 'PropertyInfo',
-    'IPAddress', 'IPEndPoint', 'Socket',
-    'Encoding', 'UTF8Encoding',
-    'BigInteger', 'Complex', 'Matrix', 'Vector',
-    'Color', 'Point', 'Rectangle', 'Size',
-    'Credential', 'Certificate',
-    'Configuration', 'Options', 'Settings', 'Policy',
-    'Expression', 'Claim', 'ClaimsIdentity', 'ClaimsPrincipal',
-    'Notification', 'Subscription', 'Message', 'Endpoint', 'Connection'
+    'Action' 'Activator' 'AppContext' 'AppDomain' 'Array' 'Attribute'
+    'BitConverter' 'Boolean' 'Buffer' 'Byte' 'Char' 'CharEnumerator'
+    'CLSCompliantAttribute' 'Console' 'Convert' 'DateTime' 'DateTimeOffset'
+    'Decimal' 'Delegate' 'Double' 'Enum' 'Environment' 'EventArgs'
+    'EventHandler' 'Exception' 'FlagsAttribute' 'FormattableString' 'Func'
+    'GC' 'Guid' 'Half' 'HashCode' 'IAsyncDisposable' 'IAsyncResult'
+    'ICloneable' 'IComparable' 'IConvertible' 'IDisposable' 'IEquatable'
+    'IFormattable' 'IFormatProvider' 'Index' 'Int16' 'Int32' 'Int64'
+    'IntPtr' 'InvalidCastException' 'InvalidOperationException'
+    'IObservable' 'IObserver' 'IProgress' 'IServiceProvider'
+    'Lazy' 'MarshalByRefObject' 'Math' 'MathF' 'Memory'
+    'MulticastDelegate' 'Nullable' 'Object' 'ObsoleteAttribute'
+    'OperatingSystem' 'OperationCanceledException' 'OutOfMemoryException'
+    'OverflowException' 'Path' 'Predicate' 'Progress'
+    'Random' 'Range' 'ReadOnlyMemory' 'ReadOnlySpan'
+    'SByte' 'Single' 'Span' 'StackOverflowException' 'Stream'
+    'String' 'StringComparer' 'StringComparison' 'StringBuilder'
+    'Task' 'TaskCompletionSource' 'TimeOnly' 'DateOnly'
+    'TimeProvider' 'TimeSpan' 'TimeZoneInfo' 'Timeout'
+    'Tuple' 'Type' 'TypeCode' 'UInt16' 'UInt32' 'UInt64'
+    'UIntPtr' 'UnauthorizedAccessException' 'Uri' 'UriBuilder'
+    'ValueTask' 'ValueTuple' 'Version' 'Void' 'WeakReference'
+    'BinaryReader' 'BinaryWriter' 'Directory' 'DirectoryInfo'
+    'File' 'FileInfo' 'FileStream' 'MemoryStream' 'StreamReader'
+    'StreamWriter' 'TextReader' 'TextWriter'
+    'Channel' 'Pipe' 'PipeReader' 'PipeWriter'
+    'CancellationToken' 'CancellationTokenSource' 'Mutex'
+    'Semaphore' 'SemaphoreSlim' 'Timer'
+    'Dictionary' 'HashSet' 'KeyValuePair' 'LinkedList' 'List'
+    'Queue' 'SortedDictionary' 'SortedList' 'SortedSet' 'Stack'
+    'HttpClient' 'HttpContent' 'HttpRequestMessage' 'HttpResponseMessage'
+    'JsonDocument' 'JsonElement' 'JsonSerializer' 'JsonSerializerOptions'
+    'Regex' 'Match' 'Group' 'Capture'
+    'Assembly' 'Module' 'FieldInfo' 'MethodInfo' 'PropertyInfo'
+    'IPAddress' 'IPEndPoint' 'Socket'
+    'Encoding' 'UTF8Encoding'
+    'BigInteger' 'Complex' 'Matrix' 'Vector'
+    'Color' 'Point' 'Rectangle' 'Size'
+    'Credential' 'Certificate'
+    'Configuration' 'Options' 'Settings' 'Policy'
+    'Expression' 'Claim' 'ClaimsIdentity' 'ClaimsPrincipal'
+    'Notification' 'Subscription' 'Message' 'Endpoint' 'Connection'
 ]
 predicate duplicatesBclTypeName(Type) => bclTypeNames:contains(Type.Name)
 

@@ -52,13 +52,13 @@ predicate bannedAzureCoreParams(Type) => Type.Methods:any(bannedAzureCoreParam)
 predicate missingContextArg(Statement) => Statement.Arguments.Count < 3
 
 let AllowedProtocolReturns = [
-    'Response', 'Task<Response>',
-    'Response<bool>', 'Task<Response<bool>>',
-    'Operation', 'Task<Operation>',
-    'Operation<BinaryData>', 'Task<Operation<BinaryData>>',
-    'Pageable<BinaryData>', 'AsyncPageable<BinaryData>',
-    'Operation<Pageable<BinaryData>>',
-    'Task<Operation<AsyncPageable<BinaryData>>>',
+    'Response' 'Task<Response>'
+    'Response<bool>' 'Task<Response<bool>>'
+    'Operation' 'Task<Operation>'
+    'Operation<BinaryData>' 'Task<Operation<BinaryData>>'
+    'Pageable<BinaryData>' 'AsyncPageable<BinaryData>'
+    'Operation<Pageable<BinaryData>>'
+    'Task<Operation<AsyncPageable<BinaryData>>>'
     'Task<Operation<Pageable<BinaryData>>>'
 ]
 

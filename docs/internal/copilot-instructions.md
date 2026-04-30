@@ -58,7 +58,7 @@ samples/            Example .cop scripts (s1-HelloWorld through s6-Strings)
 |---|---|---|
 | **Tokenizer** | `Tokenizer.cs` | Lexical analysis of `.cop` source text |
 | **ScriptParser** | `ScriptParser.cs` | Parses token stream into AST |
-| **ScriptInterpreter** | `ScriptInterpreter.cs` | Evaluates commands, `foreach` loops, `PRINT`/`SAVE` actions |
+| **ScriptInterpreter** | `ScriptInterpreter.cs` | Evaluates commands, `foreach` loops, implicit output, `SAVE` actions |
 | **PredicateEvaluator** | `PredicateEvaluator.cs` | Evaluates predicate chains (`:filter`, `.Where(...)`, `.Select(...)`) on collections |
 | **TypeRegistry** | `TypeRegistry.cs` | Type system — property resolution, method dispatch |
 | **ScriptObject** | `ScriptObject.cs` | Runtime value representation for all Cop values |

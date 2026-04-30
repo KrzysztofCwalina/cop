@@ -15,10 +15,10 @@ predicate inheritsClientOptions(Type) => Type:inheritsFrom('ClientOptions') || T
 predicate missingBaseClass(Type) => !inheritsClientOptions
 
 ## Azure clients must accept TokenCredential for authentication
-foreach Clients:csharp:missingTokenCredential => PRINT('{warning:@yellow} {item.Name} must accept TokenCredential')
+foreach Clients:csharp:missingTokenCredential => '{warning:@yellow} {item.Name} must accept TokenCredential'
 
 ## Client types must provide a protected parameterless constructor for mocking
-foreach Clients:csharp:missingMockingConstructor => PRINT('{warning:@yellow} {item.Name} must provide a protected parameterless constructor')
+foreach Clients:csharp:missingMockingConstructor => '{warning:@yellow} {item.Name} must provide a protected parameterless constructor'
 
 ## Options types must inherit from ClientOptions or ClientPipelineOptions
-foreach Types:csharp:clientOptionsType:missingBaseClass => PRINT('{warning:@yellow} {item.Name} must inherit from ClientOptions or ClientPipelineOptions')
+foreach Types:csharp:clientOptionsType:missingBaseClass => '{warning:@yellow} {item.Name} must inherit from ClientOptions or ClientPipelineOptions'

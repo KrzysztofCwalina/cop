@@ -4,7 +4,7 @@
 predicate publicApi(Api) => Api.Kind != ''
 
 # Filter by API kind
-predicate apiType(Api) => Api.Kind:in(['class', 'interface', 'struct', 'enum'])
+predicate apiType(Api) => Api.Kind:in(['class' 'interface' 'struct' 'enum'])
 predicate apiMethod(Api) => Api.Kind == 'method'
 predicate apiProperty(Api) => Api.Kind == 'property'
 predicate apiEvent(Api) => Api.Kind == 'event'

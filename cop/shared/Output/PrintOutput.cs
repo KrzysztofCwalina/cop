@@ -1,7 +1,7 @@
 namespace Cop.Lang;
 
 /// <summary>
-/// Represents a single line of output from a PRINT command.
+/// Represents a single line of output from program evaluation.
 /// The Content is a RichString with optional style annotations.
 /// The Message property provides backward-compatible plain text access.
 /// </summary>

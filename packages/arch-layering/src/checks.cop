@@ -11,10 +11,10 @@
 #   import arch-layering
 #
 #   # Define layer membership (project names)
-#   let presentation-projects = ['MyApp.Web', 'MyApp.Api']
-#   let business-projects     = ['MyApp.Services', 'MyApp.Domain']
-#   let data-projects         = ['MyApp.Data', 'MyApp.EF']
-#   let infra-projects        = ['MyApp.Logging', 'MyApp.Config']
+#   let presentation-projects = ['MyApp.Web' 'MyApp.Api']
+#   let business-projects     = ['MyApp.Services' 'MyApp.Domain']
+#   let data-projects         = ['MyApp.Data' 'MyApp.EF']
+#   let infra-projects        = ['MyApp.Logging' 'MyApp.Config']
 #
 #   # Combine all known projects for uncategorized detection
 #   let all-known-projects = presentation-projects + business-projects + data-projects + infra-projects

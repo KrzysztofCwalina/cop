@@ -34,7 +34,7 @@ public class PlusOperatorTests
     public void Parse_ListConcat()
     {
         var file = ScriptParser.Parse(
-            "predicate test(Type) => [1, 2] + [3]", "test.cop");
+            "predicate test(Type) => [1 2] + [3]", "test.cop");
         var body = (BinaryExpr)file.Predicates[0].Body;
         Assert.That(body.Operator, Is.EqualTo("+"));
         Assert.That(body.Left, Is.TypeOf<ListLiteralExpr>());
@@ -82,7 +82,7 @@ public class PlusOperatorTests
         // Use + in a predicate comparison: (1 + 2) == 3
         var file = ScriptParser.Parse(@"
 predicate addCheck(Type) => (1 + 2) == 3
-foreach Types:addCheck => PRINT('{item.Name}')
+foreach Types:addCheck => '{item.Name}'
 ", "test.cop");
         var interpreter = TestInterpreter.Create();
         var docs = TestInterpreter.ParseSourceFiles(SamplePath("GoodClient.cs"));
@@ -95,7 +95,7 @@ foreach Types:addCheck => PRINT('{item.Name}')
     {
         var file = ScriptParser.Parse(@"
 predicate concatCheck(Type) => ('hello' + ' world') == 'hello world'
-foreach Types:concatCheck => PRINT('{item.Name}')
+foreach Types:concatCheck => '{item.Name}'
 ", "test.cop");
         var interpreter = TestInterpreter.Create();
         var docs = TestInterpreter.ParseSourceFiles(SamplePath("GoodClient.cs"));
@@ -107,8 +107,8 @@ foreach Types:concatCheck => PRINT('{item.Name}')
     public void Eval_ListConcatenation()
     {
         var file = ScriptParser.Parse(@"
-predicate listCheck(Type) => ([1, 2] + [3, 4]).Count == 4
-foreach Types:listCheck => PRINT('{item.Name}')
+predicate listCheck(Type) => ([1 2] + [3 4]).Count == 4
+foreach Types:listCheck => '{item.Name}'
 ", "test.cop");
         var interpreter = TestInterpreter.Create();
         var docs = TestInterpreter.ParseSourceFiles(SamplePath("GoodClient.cs"));
@@ -120,8 +120,8 @@ foreach Types:listCheck => PRINT('{item.Name}')
     public void Eval_ListAppendElement()
     {
         var file = ScriptParser.Parse(@"
-predicate appendCheck(Type) => ([1, 2] + 3).Count == 3
-foreach Types:appendCheck => PRINT('{item.Name}')
+predicate appendCheck(Type) => ([1 2] + 3).Count == 3
+foreach Types:appendCheck => '{item.Name}'
 ", "test.cop");
         var interpreter = TestInterpreter.Create();
         var docs = TestInterpreter.ParseSourceFiles(SamplePath("GoodClient.cs"));
@@ -134,7 +134,7 @@ foreach Types:appendCheck => PRINT('{item.Name}')
     {
         var file = ScriptParser.Parse(@"
 predicate subCheck(Type) => (10 - 3) == 7
-foreach Types:subCheck => PRINT('{item.Name}')
+foreach Types:subCheck => '{item.Name}'
 ", "test.cop");
         var interpreter = TestInterpreter.Create();
         var docs = TestInterpreter.ParseSourceFiles(SamplePath("GoodClient.cs"));
@@ -147,8 +147,8 @@ foreach Types:subCheck => PRINT('{item.Name}')
     {
         // Both expressions should yield different counts
         var file = ScriptParser.Parse(@"
-predicate mutationCheck(Type) => [1, 2].Count == 2 && ([1, 2] + [3]).Count == 3
-foreach Types:mutationCheck => PRINT('{item.Name}')
+predicate mutationCheck(Type) => [1 2].Count == 2 && ([1 2] + [3]).Count == 3
+foreach Types:mutationCheck => '{item.Name}'
 ", "test.cop");
         var interpreter = TestInterpreter.Create();
         var docs = TestInterpreter.ParseSourceFiles(SamplePath("GoodClient.cs"));

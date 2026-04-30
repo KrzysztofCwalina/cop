@@ -91,7 +91,7 @@ public class RecordConstructionTests
         // Construct a record and access its field in the same expression
         var file = ScriptParser.Parse(@"
 predicate nameMatch(Type) => MyRecord { Name: Type.Name, Value: 42 }.Name == Type.Name
-foreach Types:csharp:nameMatch => PRINT('{item.Name}')
+foreach Types:csharp:nameMatch => '{item.Name}'
 ", "test.cop");
         var interpreter = TestInterpreter.Create();
         var docs = TestInterpreter.ParseSourceFiles(SamplePath("GoodClient.cs"));
@@ -106,7 +106,7 @@ foreach Types:csharp:nameMatch => PRINT('{item.Name}')
         // Use record construction in ternary branches
         var file = ScriptParser.Parse(@"
 predicate checkResult(Type) => (isSealed ? Result { Ok: true } | Result { Ok: false }).Ok
-foreach Types:csharp:checkResult => PRINT('{item.Name}')
+foreach Types:csharp:checkResult => '{item.Name}'
 ", "test.cop");
         var interpreter = TestInterpreter.Create();
         var docs = TestInterpreter.ParseSourceFiles(SamplePath("GoodClient.cs"));

@@ -319,7 +319,41 @@ public class ScriptInterpreter
         // Bare command — no collection, execute once
         if (cmd.Collection is null)
         {
-            var richMessage = ResolveAggregateTemplate(cmd.MessageTemplate, aggregateCounts);
+            RichString richMessage;
+            if (cmd.OutputExpression is not null && string.IsNullOrEmpty(cmd.MessageTemplate))
+            {
+                // Expression-based output: evaluate the expression directly
+                var evaluator = new PredicateEvaluator(predicateGroups, "", _typeRegistry, letDeclarations, functionGroups);
+                var value = evaluator.EvaluateField(cmd.OutputExpression, null!, "");
+
+                // If value is a list, iterate and output each item separately
+                if (value is IList listValue)
+                {
+                    foreach (var item in listValue)
+                    {
+                        var itemText = ConvertToText(item);
+                        allOutputs.Add(new PrintOutput(new RichString(new[] { new TextSpan(itemText) })));
+                    }
+                    return;
+                }
+
+                richMessage = new RichString(new[] { new TextSpan(ConvertToText(value)) });
+            }
+            else if (!string.IsNullOrEmpty(cmd.MessageTemplate))
+            {
+                // Template output: resolve with let bindings and aggregate counts
+                EvaluationContext ctx = new();
+                var evaluator = new PredicateEvaluator(predicateGroups, "", _typeRegistry, letDeclarations, functionGroups);
+                CaptureLetValues(ctx, evaluator, letDeclarations, null!, "");
+                // Also add aggregate counts as context variables
+                foreach (var (aggName, aggCount) in aggregateCounts)
+                    ctx.Capture(aggName, aggCount);
+                richMessage = ResolveTemplate(cmd.MessageTemplate, ctx);
+            }
+            else
+            {
+                richMessage = new RichString(new[] { new TextSpan("") });
+            }
 
             if (IsDebugAction(cmd.ActionName))
             {
@@ -367,8 +401,24 @@ public class ScriptInterpreter
                 finalCtx.Capture("item", item);
                 if (item is ScriptObject ao)
                     CaptureAlanObjectFields(finalCtx, ao);
+                CaptureLetValues(finalCtx, evaluator, letDeclarations, item, finalItemType);
 
-                var richMessage = ResolveTemplate(cmd.MessageTemplate, finalCtx);
+                RichString richMessage;
+                if (cmd.OutputExpression is not null && string.IsNullOrEmpty(cmd.MessageTemplate))
+                {
+                    var value = evaluator.EvaluateField(cmd.OutputExpression, item, finalItemType);
+                    richMessage = new RichString(new[] { new TextSpan(ConvertToText(value)) });
+                }
+                else if (string.IsNullOrEmpty(cmd.MessageTemplate))
+                {
+                    // Bare collection expression — output item's text representation
+                    richMessage = new RichString(new[] { new TextSpan(ConvertToText(item)) });
+                }
+                else
+                {
+                    richMessage = ResolveTemplate(cmd.MessageTemplate, finalCtx);
+                }
+
                 if (IsDebugAction(cmd.ActionName))
                 {
                     _diagLog!.Invoke($"[debug] {richMessage.ToPlainText()}");
@@ -427,7 +477,18 @@ public class ScriptInterpreter
 
             var evaluator = new PredicateEvaluator(predicateGroups, document.Path, _typeRegistry,
                 letDeclarations, functionGroups, resolvedCollections);
-            var items = ResolveCollection(cmd.Collection, document, evaluator, predicateGroups, letDeclarations, functionGroups);
+
+            List<object> items;
+            try
+            {
+                items = ResolveCollection(cmd.Collection, document, evaluator, predicateGroups, letDeclarations, functionGroups);
+            }
+            catch (InvalidOperationException) when (cmd.OutputExpression is not null)
+            {
+                // Collection couldn't be resolved — break out and let the expression fallback handle it
+                break;
+            }
+
             items = ApplyFilters(items, itemType, cmd.Filters, evaluator, functionGroups);
 
             if (cmd.Exclusions != null)
@@ -443,8 +504,23 @@ public class ScriptInterpreter
                 finalCtx.Capture("item", item);
                 if (item is ScriptObject ao)
                     CaptureAlanObjectFields(finalCtx, ao);
+                CaptureLetValues(finalCtx, evaluator, letDeclarations, item, finalItemType);
 
-                var richMessage = ResolveTemplate(cmd.MessageTemplate, finalCtx);
+                RichString richMessage;
+                if (cmd.OutputExpression is not null && string.IsNullOrEmpty(cmd.MessageTemplate))
+                {
+                    var value = evaluator.EvaluateField(cmd.OutputExpression, item, finalItemType);
+                    richMessage = new RichString(new[] { new TextSpan(ConvertToText(value)) });
+                }
+                else if (string.IsNullOrEmpty(cmd.MessageTemplate))
+                {
+                    // Bare collection expression — output item's text representation
+                    richMessage = new RichString(new[] { new TextSpan(ConvertToText(item)) });
+                }
+                else
+                {
+                    richMessage = ResolveTemplate(cmd.MessageTemplate, finalCtx);
+                }
                 if (IsDebugAction(cmd.ActionName))
                 {
                     _diagLog!.Invoke($"[debug] {richMessage.ToPlainText()}");
@@ -458,6 +534,32 @@ public class ScriptInterpreter
                     allOutputs.Add(new PrintOutput(richMessage));
                 }
                 count++;
+            }
+        }
+
+        // Fallback: if collection iteration produced nothing and we have an OutputExpression,
+        // evaluate it as a scalar/list expression (handles cases like a.Name where a is a variable)
+        if (count == 0 && cmd.OutputExpression is not null)
+        {
+            var fallbackEvaluator = new PredicateEvaluator(predicateGroups, "", _typeRegistry, letDeclarations, functionGroups);
+            try
+            {
+                var value = fallbackEvaluator.EvaluateField(cmd.OutputExpression, null!, "");
+                if (value is IList fallbackList)
+                {
+                    foreach (var item in fallbackList)
+                        allOutputs.Add(new PrintOutput(new RichString(new[] { new TextSpan(ConvertToText(item)) })));
+                }
+                else
+                {
+                    allOutputs.Add(new PrintOutput(new RichString(new[] { new TextSpan(ConvertToText(value)) })));
+                }
+                // Mark as resolved so empty-collection warning is suppressed
+                aggregateCounts[cmd.Collection!] = 1;
+            }
+            catch
+            {
+                // Expression evaluation failed — let the empty-collection warning fire
             }
         }
     }
@@ -516,12 +618,29 @@ public class ScriptInterpreter
                 return parsed;
             }
 
-            // Value bindings (let Name = [...]) are not collections — skip
+            // Value bindings (let Name = [...]) — evaluate and return as list
             if (letDecl.IsValueBinding)
-                throw new InvalidOperationException($"'{collection}' is a value binding, not a collection");
+            {
+                var value = evaluator.EvaluateField(letDecl.ValueExpression!, null!, "");
+                if (value is IList list)
+                    return list.Cast<object>().ToList();
+                if (value is not null)
+                    return [value];
+                return [];
+            }
 
-            var baseItems = ResolveCollection(
-                letDecl.BaseCollection, document, evaluator, predicateGroups, letDeclarations, functionGroups, visited, useQueryCache);
+            List<object> baseItems;
+            try
+            {
+                baseItems = ResolveCollection(
+                    letDecl.BaseCollection, document, evaluator, predicateGroups, letDeclarations, functionGroups, visited, useQueryCache);
+            }
+            catch when (letDecl.SourceExpression is not null && letDecl.Filters.Count == 0)
+            {
+                // BaseCollection resolution failed but we have the original expression —
+                // this let is actually a value expression (e.g., let count = typeNames.Count)
+                throw new InvalidOperationException($"'{collection}' is a value binding, not a collection");
+            }
             var baseItemType = ResolveItemType(letDecl.BaseCollection, predicateGroups, letDeclarations, functionGroups);
 
             // Extract pushdown hints from the filter chain.
@@ -669,7 +788,7 @@ public class ScriptInterpreter
             // Detect if this filter is a function call
             var funcName = GetFunctionNameFromFilter(filter);
 
-            // Handle .Select() — project each item to a string value
+            // Handle .Select() — project each item to a value
             if (funcName == "Select")
             {
                 var fieldArgs = GetFilterArgs(filter);
@@ -679,11 +798,226 @@ public class ScriptInterpreter
                     var materialized = current.Where(item => item is not null).ToList();
                     current = materialized.Select(item =>
                     {
-                        var value = evaluator.EvaluateField(fieldArgs[0], item, currentType);
-                        return (object)(value?.ToString() ?? "");
+                        var value = evaluator.EvaluateField(fieldArgs[0], item, "item");
+                        return value ?? (object)"";
                     }).ToList();
-                    _diagLog?.Invoke($"[trace] filter: .Select -> {materialized.Count} -> {((List<object>)current).Count} items (-> string)");
-                    currentType = "string";
+                    _diagLog?.Invoke($"[trace] filter: .Select -> {materialized.Count} -> {((List<object>)current).Count} items");
+                    currentType = "object";
+                    continue;
+                }
+            }
+            // Handle .OrderBy() — sort items by expression ascending
+            else if (funcName == "OrderBy")
+            {
+                var fieldArgs = GetFilterArgs(filter);
+                if (fieldArgs.Count > 0)
+                {
+                    var materialized = current.Where(item => item is not null).ToList();
+                    materialized.Sort((a, b) =>
+                    {
+                        var aVal = evaluator.EvaluateField(fieldArgs[0], a, "item");
+                        var bVal = evaluator.EvaluateField(fieldArgs[0], b, "item");
+                        return CompareForSort(aVal, bVal);
+                    });
+                    current = materialized;
+                    _diagLog?.Invoke($"[trace] filter: .OrderBy -> {materialized.Count} items");
+                    continue;
+                }
+            }
+            // Handle .OrderByDescending() — sort items by expression descending
+            else if (funcName == "OrderByDescending")
+            {
+                var fieldArgs = GetFilterArgs(filter);
+                if (fieldArgs.Count > 0)
+                {
+                    var materialized = current.Where(item => item is not null).ToList();
+                    materialized.Sort((a, b) =>
+                    {
+                        var aVal = evaluator.EvaluateField(fieldArgs[0], a, "item");
+                        var bVal = evaluator.EvaluateField(fieldArgs[0], b, "item");
+                        return CompareForSort(bVal, aVal); // reversed
+                    });
+                    current = materialized;
+                    _diagLog?.Invoke($"[trace] filter: .OrderByDescending -> {materialized.Count} items");
+                    continue;
+                }
+            }
+            // Handle .Sum() — aggregate numeric values
+            else if (funcName == "Sum")
+            {
+                var fieldArgs = GetFilterArgs(filter);
+                if (fieldArgs.Count > 0)
+                {
+                    double sum = 0;
+                    foreach (var item in current)
+                    {
+                        if (item is null) continue;
+                        var val = evaluator.EvaluateField(fieldArgs[0], item, "item");
+                        sum += ToDouble(val);
+                    }
+                    object result = (int)sum == sum ? (object)(int)sum : sum;
+                    current = [result];
+                    currentType = "int";
+                    _diagLog?.Invoke($"[trace] filter: .Sum -> {result}");
+                    continue;
+                }
+            }
+            // Handle .Min() — find minimum numeric value
+            else if (funcName == "Min")
+            {
+                var fieldArgs = GetFilterArgs(filter);
+                if (fieldArgs.Count > 0)
+                {
+                    double? min = null;
+                    foreach (var item in current)
+                    {
+                        if (item is null) continue;
+                        var val = ToDouble(evaluator.EvaluateField(fieldArgs[0], item, "item"));
+                        if (min is null || val < min) min = val;
+                    }
+                    object result = min is null ? 0 : ((int)min.Value == min.Value ? (object)(int)min.Value : min.Value);
+                    current = [result];
+                    currentType = "int";
+                    _diagLog?.Invoke($"[trace] filter: .Min -> {result}");
+                    continue;
+                }
+            }
+            // Handle .Max() — find maximum numeric value
+            else if (funcName == "Max")
+            {
+                var fieldArgs = GetFilterArgs(filter);
+                if (fieldArgs.Count > 0)
+                {
+                    double? max = null;
+                    foreach (var item in current)
+                    {
+                        if (item is null) continue;
+                        var val = ToDouble(evaluator.EvaluateField(fieldArgs[0], item, "item"));
+                        if (max is null || val > max) max = val;
+                    }
+                    object result = max is null ? 0 : ((int)max.Value == max.Value ? (object)(int)max.Value : max.Value);
+                    current = [result];
+                    currentType = "int";
+                    _diagLog?.Invoke($"[trace] filter: .Max -> {result}");
+                    continue;
+                }
+            }
+            // Handle .Average() — compute average numeric value
+            else if (funcName == "Average")
+            {
+                var fieldArgs = GetFilterArgs(filter);
+                if (fieldArgs.Count > 0)
+                {
+                    double sum = 0;
+                    int count = 0;
+                    foreach (var item in current)
+                    {
+                        if (item is null) continue;
+                        sum += ToDouble(evaluator.EvaluateField(fieldArgs[0], item, "item"));
+                        count++;
+                    }
+                    object result = count > 0 ? sum / count : 0.0;
+                    current = [result];
+                    currentType = "double";
+                    _diagLog?.Invoke($"[trace] filter: .Average -> {result}");
+                    continue;
+                }
+            }
+            // Handle .Distinct() — deduplicate items
+            else if (funcName == "Distinct")
+            {
+                var fieldArgs = GetFilterArgs(filter);
+                var materialized = current.Where(item => item is not null).ToList();
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var result = new List<object>();
+                foreach (var item in materialized)
+                {
+                    string key;
+                    if (fieldArgs.Count > 0)
+                        key = evaluator.EvaluateField(fieldArgs[0], item, "item")?.ToString() ?? "";
+                    else
+                        key = item.ToString() ?? "";
+                    if (seen.Add(key))
+                        result.Add(item);
+                }
+                current = result;
+                _diagLog?.Invoke($"[trace] filter: .Distinct -> {materialized.Count} -> {result.Count} items");
+                continue;
+            }
+            // Handle .GroupBy() — group items by expression
+            else if (funcName == "GroupBy")
+            {
+                var fieldArgs = GetFilterArgs(filter);
+                if (fieldArgs.Count > 0)
+                {
+                    var groups = new Dictionary<string, List<object>>(StringComparer.OrdinalIgnoreCase);
+                    var groupOrder = new List<string>();
+                    foreach (var item in current)
+                    {
+                        if (item is null) continue;
+                        var key = evaluator.EvaluateField(fieldArgs[0], item, "item")?.ToString() ?? "";
+                        if (!groups.TryGetValue(key, out var groupList))
+                        {
+                            groupList = new List<object>();
+                            groups[key] = groupList;
+                            groupOrder.Add(key);
+                        }
+                        groupList.Add(item);
+                    }
+                    var result = new List<object>();
+                    foreach (var key in groupOrder)
+                    {
+                        var groupObj = new ScriptObject("Group");
+                        groupObj.Set("Key", key);
+                        groupObj.Set("Items", groups[key]);
+                        groupObj.Set("Count", groups[key].Count);
+                        result.Add(groupObj);
+                    }
+                    current = result;
+                    currentType = "Group";
+                    _diagLog?.Invoke($"[trace] filter: .GroupBy -> {result.Count} groups");
+                    continue;
+                }
+            }
+            // Handle .Reduce() — aggregate items with operator
+            else if (funcName == "Reduce")
+            {
+                var fieldArgs = GetFilterArgs(filter);
+                if (fieldArgs.Count >= 2)
+                {
+                    var opExpr = fieldArgs[0];
+                    var fieldExpr = fieldArgs[1];
+                    var separator = fieldArgs.Count > 2 ? evaluator.EvaluateField(fieldArgs[2], null!, "item")?.ToString() ?? "" : "";
+
+                    var op = opExpr is LiteralExpr lit ? lit.Value?.ToString() :
+                             opExpr is IdentifierExpr id2 ? id2.Name : "+";
+
+                    var values = new List<object?>();
+                    foreach (var item in current)
+                    {
+                        if (item is null) continue;
+                        values.Add(evaluator.EvaluateField(fieldExpr, item, "item"));
+                    }
+
+                    if (op == "+")
+                    {
+                        bool isNumeric = values.Count > 0 && values[0] is int or double;
+                        if (isNumeric)
+                        {
+                            double sum = 0;
+                            foreach (var val in values)
+                                sum += ToDouble(val);
+                            object result = (int)sum == sum ? (object)(int)sum : sum;
+                            current = [result];
+                        }
+                        else
+                        {
+                            var parts = values.Where(v => v is not null).Select(v => v!.ToString()!).ToList();
+                            current = [(object)string.Join(separator, parts)];
+                        }
+                    }
+                    currentType = "object";
+                    _diagLog?.Invoke($"[trace] filter: .Reduce -> 1 value");
                     continue;
                 }
             }
@@ -729,11 +1063,10 @@ public class ScriptInterpreter
                 if (_diagLog is not null)
                 {
                     // Materialize to get counts for trace output
-                    var capturedType = currentType;
                     var capturedFilter = filter;
                     var materialized = current.Where(item =>
                     {
-                        var (result, _) = evaluator.EvaluateAsBool(capturedFilter, item, capturedType);
+                        var (result, _) = evaluator.EvaluateAsBool(capturedFilter, item, "item");
                         return result;
                     }).ToList();
                     var filterName = GetFilterDisplayName(filter);
@@ -744,11 +1077,10 @@ public class ScriptInterpreter
                 else
                 {
                     // No tracing: compose lazily — no materialization
-                    var capturedType = currentType;
                     var capturedFilter = filter;
                     current = current.Where(item =>
                     {
-                        var (result, _) = evaluator.EvaluateAsBool(capturedFilter, item, capturedType);
+                        var (result, _) = evaluator.EvaluateAsBool(capturedFilter, item, "item");
                         return result;
                     });
                 }
@@ -858,6 +1190,61 @@ public class ScriptInterpreter
         };
     }
 
+    private static double ToDouble(object? value) => value switch
+    {
+        int i => i,
+        double d => d,
+        bool b => b ? 1.0 : 0.0,
+        string s when double.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double n) => n,
+        _ => 0.0
+    };
+
+    private static int CompareForSort(object? a, object? b)
+    {
+        if (a is int ai && b is int bi) return ai.CompareTo(bi);
+        if (a is double or int && b is double or int) return ToDouble(a).CompareTo(ToDouble(b));
+        var sa = a?.ToString() ?? "";
+        var sb = b?.ToString() ?? "";
+        return string.Compare(sa, sb, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Pre-evaluates let value bindings (non-collection expressions) and captures them into a context.
+    /// This allows templates to reference {letName} for scalar values.
+    /// </summary>
+    private void CaptureLetValues(EvaluationContext ctx, PredicateEvaluator evaluator,
+        Dictionary<string, LetDeclaration> letDeclarations, object item, string paramType)
+    {
+        foreach (var (name, letDecl) in letDeclarations)
+        {
+            // Explicit value bindings (let Name = [...], let Name = expr)
+            if (letDecl.IsValueBinding)
+            {
+                if (letDecl.IsExternalLoad || letDecl.IsFileParse || letDecl.IsCollectionUnion) continue;
+                try
+                {
+                    var value = evaluator.EvaluateField(letDecl.ValueExpression!, item, paramType);
+                    if (value is not null)
+                        ctx.Capture(name, value);
+                }
+                catch { /* skip let values that fail to evaluate in this context */ }
+                continue;
+            }
+
+            // Non-collection lets with SourceExpression fallback (e.g., let count = typeNames.Count)
+            if (letDecl.SourceExpression is not null)
+            {
+                try
+                {
+                    var value = evaluator.EvaluateField(letDecl.SourceExpression, item, paramType);
+                    if (value is not null)
+                        ctx.Capture(name, value);
+                }
+                catch { /* not evaluable as expression — it's a real collection, skip */ }
+            }
+        }
+    }
+
     private bool TryGetBuiltinCollection(string collection, Document document, out List<object> items)
     {
         var result = _typeRegistry.GetCollectionItems(collection, document);
@@ -928,7 +1315,7 @@ public class ScriptInterpreter
             }
             if (letDecl.IsExternalLoad) return true; // Load() is self-contained, process once globally
             if (letDecl.IsFileParse) return true; // Parse() is self-contained, process once globally
-            if (letDecl.IsValueBinding) return false;
+            if (letDecl.IsValueBinding) return true; // Value bindings are document-independent
             return IsGlobalRootCollection(letDecl.BaseCollection, predicateGroups, letDeclarations, visited);
         }
 
@@ -996,7 +1383,14 @@ public class ScriptInterpreter
             }
 
             if (letDecl.IsValueBinding)
-                throw new InvalidOperationException($"'{collection}' is a value binding, not a collection");
+            {
+                var value = evaluator.EvaluateField(letDecl.ValueExpression!, null!, "");
+                if (value is IList list)
+                    return list.Cast<object>().ToList();
+                if (value is not null)
+                    return [value];
+                return [];
+            }
 
             var baseItems = ResolveGlobalCollection(
                 letDecl.BaseCollection, evaluator, predicateGroups, letDeclarations, functionGroups, visited);
@@ -1202,6 +1596,7 @@ public class ScriptInterpreter
     {
         if (obj is null) return "";
         if (obj is string s) return s;
+        if (obj is ScriptObject so) return so.ToJson();
         var typeName = _typeRegistry.InferTypeName(obj);
         if (typeName is not null)
         {

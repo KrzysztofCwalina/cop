@@ -175,7 +175,7 @@
             "name": "support.function.builtin.cop"
         },
         "constants": {
-            "match": "\\b(true|false)\\b",
+            "match": "\\b(true|false|nic)\\b",
             "name": "constant.language.cop"
         },
         "numbers": {

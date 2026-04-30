@@ -163,9 +163,9 @@ public class CheckInterpreterTests
     public void Run_CommandName_RunsOnlyMatchingCommand()
     {
         var source = """
-            let list-types = foreach Types => PRINT('{item.Name}')
-            let check-sealed = foreach Types:csharp => PRINT('{warning:@yellow} {item.Name} not sealed')
-            foreach Types => PRINT('unnamed check')
+            let list-types = foreach Types => '{item.Name}'
+            let check-sealed = foreach Types:csharp => '{warning:@yellow} {item.Name} not sealed'
+            foreach Types => 'unnamed check'
             """;
         var ScriptFile = ScriptParser.Parse(source, "test.cop");
 
@@ -182,8 +182,8 @@ public class CheckInterpreterTests
     public void Run_NoCommandName_RunsAll()
     {
         var source = """
-            let list-types = foreach Types => PRINT('{item.Name}')
-            foreach Types => PRINT('unnamed')
+            let list-types = foreach Types => '{item.Name}'
+            foreach Types => 'unnamed'
             """;
         var ScriptFile = ScriptParser.Parse(source, "test.cop");
 
@@ -199,7 +199,7 @@ public class CheckInterpreterTests
     public void Run_UnknownCommandName_ReturnsEmpty()
     {
         var source = """
-            let list-types = foreach Types => PRINT('{item.Name}')
+            let list-types = foreach Types => '{item.Name}'
             """;
         var ScriptFile = ScriptParser.Parse(source, "test.cop");
 
@@ -214,7 +214,7 @@ public class CheckInterpreterTests
     public void Run_FunctionInLetChain_ProducesTransformedOutput()
     {
         // End-to-end: define a function, use it in a let declaration chain,
-        // and verify PRINT resolves fields from the function-produced ScriptObject.
+        // and verify template resolves fields from the function-produced ScriptObject.
         var source = """
             predicate isVar(Statement) => Statement.Kind == 'declaration' && Statement.Keywords:contains('var')
             function error(Statement, message: string) => Violation {
@@ -223,7 +223,7 @@ public class CheckInterpreterTests
                 Line = Statement.Line
             }
             let VarErrors = Statements:csharp:isVar:error('Do not use var')
-            foreach VarErrors => PRINT('{item.Severity}:{item.Line} {item.Message}')
+            foreach VarErrors => '{item.Severity}:{item.Line} {item.Message}'
             """;
         var ScriptFile = ScriptParser.Parse(source, "test.cop");
 
@@ -253,7 +253,7 @@ public class CheckInterpreterTests
                 Severity = 'warning',
                 Message = message
             }
-            foreach Statements:csharp:isVar:warning('Avoid var usage') => PRINT('{item.Severity}: {item.Message}')
+            foreach Statements:csharp:isVar:warning('Avoid var usage') => '{item.Severity}: {item.Message}'
             """;
         var ScriptFile = ScriptParser.Parse(source, "test.cop");
 
@@ -280,7 +280,7 @@ public class CheckInterpreterTests
                 Severity = 'error',
                 Message = message
             }
-            foreach Statements:csharp:isVar:error('Var used for {item.MemberName}') => PRINT('{item.Message}')
+            foreach Statements:csharp:isVar:error('Var used for {item.MemberName}') => '{item.Message}'
             """;
         var ScriptFile = ScriptParser.Parse(source, "test.cop");
 
@@ -309,9 +309,7 @@ import code-analysis
 
 let Accepted = ['BadClient.cs:x']
 
-command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'var\' for {item.MemberName}') - Accepted => PRINT(
-    '{item.Message}'
-)";
+command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'var\' for {item.MemberName}') - Accepted => '{item.Message}'";
         var allFiles = ParseWithImports(source);
 
         var interpreter = TestInterpreter.Create();
@@ -333,9 +331,7 @@ import code-analysis
 
 let Accepted = ['BadClient.cs:nonExistentMember']
 
-command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'var\' for {item.MemberName}') - Accepted => PRINT(
-    '{item.Message}'
-)";
+command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'var\' for {item.MemberName}') - Accepted => '{item.Message}'";
         var allFiles = ParseWithImports(source);
 
         var interpreter = TestInterpreter.Create();
@@ -354,9 +350,7 @@ import code-analysis
 
 let Accepted = []
 
-command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'var\' for {item.MemberName}') - Accepted => PRINT(
-    '{item.Message}'
-)";
+command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'var\' for {item.MemberName}') - Accepted => '{item.Message}'";
         var allFiles = ParseWithImports(source);
 
         var interpreter = TestInterpreter.Create();
@@ -374,9 +368,7 @@ command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'
         var source = @"
 import code-analysis
 
-command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'var\' for {item.MemberName}') - ['BadClient.cs:x', 'BadClient.cs:result'] => PRINT(
-    '{item.Message}'
-)";
+command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'var\' for {item.MemberName}') - ['BadClient.cs:x' 'BadClient.cs:result'] => '{item.Message}'";
         var allFiles = ParseWithImports(source);
 
         var interpreter = TestInterpreter.Create();
@@ -393,10 +385,7 @@ command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'
         var source = @"
 import code-analysis
 
-export command CHECK(violations) = PRINT(
-    '{item.Message}',
-    violations
-)
+export command CHECK(violations) = foreach violations => '{item.Message}'
 
 export let var-usage = Statements:csharp:varDeclaration:toError('Do not use var for {item.MemberName}')
 
@@ -416,14 +405,11 @@ RUN CHECK(var-usage)
         var source = @"
 import code-analysis
 
-export command CHECK(violations) = PRINT(
-    '{item.Message}',
-    violations
-)
+export command CHECK(violations) = foreach violations => '{item.Message}'
 
 export let var-usage = Statements:csharp:varDeclaration:toError('Do not use var for {item.MemberName}')
 
-let Accepted = ['BadClient.cs:x', 'BadClient.cs:result']
+let Accepted = ['BadClient.cs:x' 'BadClient.cs:result']
 RUN CHECK(var-usage - Accepted)
 ";
         var allFiles = ParseWithImports(source);
@@ -440,7 +426,7 @@ RUN CHECK(var-usage - Accepted)
         var source = @"
 import code-analysis
 
-command GREET = PRINT('hello world')
+command GREET = 'hello world'
 
 RUN GREET()
 ";
@@ -458,10 +444,7 @@ RUN GREET()
         var source = @"
 import code-analysis
 
-export command CHECK(violations) = PRINT(
-    '{item.Message}',
-    violations
-)
+export command CHECK(violations) = foreach violations => '{item.Message}'
 
 export let var-usage = Statements:csharp:varDeclaration:toError('Do not use var for {item.MemberName}')
 
@@ -481,14 +464,11 @@ CHECK(var-usage)
         var source = @"
 import code-analysis
 
-export command CHECK(violations) = PRINT(
-    '{item.Message}',
-    violations
-)
+export command CHECK(violations) = foreach violations => '{item.Message}'
 
 export let var-usage = Statements:csharp:varDeclaration:toError('Do not use var for {item.MemberName}')
 
-let Accepted = ['BadClient.cs:x', 'BadClient.cs:result']
+let Accepted = ['BadClient.cs:x' 'BadClient.cs:result']
 CHECK(var-usage - Accepted)
 ";
         var allFiles = ParseWithImports(source);
@@ -505,10 +485,7 @@ CHECK(var-usage - Accepted)
         var source = @"
 import code-analysis
 
-export command CHECK(violations) = PRINT(
-    '{item.Message}',
-    violations
-)
+export command CHECK(violations) = foreach violations => '{item.Message}'
 
 export let var-usage = Statements:csharp:varDeclaration:toError('Do not use var')
 export let dynamic-usage = Statements:csharp:dynamicDeclaration:toError('Do not use dynamic')
@@ -538,7 +515,7 @@ import code
 
 predicate usesVar([Statement]) => Statement.Keywords:contains('var')
 let StatementsUsingVar = Code.Statements:usesVar
-foreach StatementsUsingVar => PRINT('uses var at {item.Line}')
+foreach StatementsUsingVar => 'uses var at {item.Line}'
 ";
         var allFiles = ParseWithImports(source);
         var interpreter = TestInterpreter.Create();
@@ -651,7 +628,7 @@ CHECK(var-usage)
             export let sleep-calls = Statements:csharp:threadSleep:toWarning('no sleep')
             export let all-checks = var-decls + sleep-calls
 
-            command CHECK(violations) = PRINT('{item.Message}', violations)
+            command CHECK(violations) = foreach violations => '{item.Message}'
             RUN CHECK(all-checks)
             """;
         var scriptFile = ScriptParser.Parse(source, "test.cop");
@@ -674,7 +651,7 @@ CHECK(var-usage)
             let typeNames = Code.Types.Select(item.Name)
             predicate isInList(Type) => Type.Name:in(typeNames)
             let listed = Code.Types:isInList
-            command CHECK = PRINT('{item.Name} is in the list', listed)
+            command CHECK = foreach listed => '{item.Name} is in the list'
             """;
         var scriptFile = ScriptParser.Parse(source, "test.cop");
         var interpreter = TestInterpreter.Create();
@@ -684,5 +661,131 @@ CHECK(var-usage)
         Assert.That(outputs, Is.Not.Empty, "Should produce outputs for types in list");
         Assert.That(outputs.Any(o => o.Message.Contains("GoodClient")),
             Is.True, "Should find GoodClient in projected list");
+    }
+
+    [Test]
+    public void Run_LetExpression_CountInTemplate()
+    {
+        // let count = Types.Count should be evaluable in templates
+        var copSource =
+            "let typeNames = Code.Types.Select(item.Name)\n" +
+            "let count = typeNames.Count\n" +
+            "foreach Code.Types => '{count} types found'\n";
+        var scriptFile = ScriptParser.Parse(copSource, "let-test.cop");
+        var interpreter = TestInterpreter.Create();
+
+        var outputs = interpreter.Run([TestInterpreter.CodePackage, scriptFile],
+            TestInterpreter.ParseSourceFiles(SamplePath("GoodClient.cs"))).Outputs;
+
+        // Should produce output containing the count
+        Assert.That(outputs, Is.Not.Empty, "Should produce output");
+        Assert.That(outputs.Any(o => o.Message.Contains("types found")),
+            Is.True, "Template should resolve let-bound count");
+        // The count should be a number, not empty
+        var msg = outputs.First(o => o.Message.Contains("types found")).Message;
+        Assert.That(msg, Does.Match(@"\d+ types found"), $"Expected numeric count but got: {msg}");
+    }
+
+    [Test]
+    public void Run_LetExpression_ValueBindingFromLiteral()
+    {
+        // let name = 'hello' should be evaluable in templates
+        var copSource =
+            "let greeting = 'hello world'\n" +
+            "foreach Code.Types => '{greeting}'\n";
+        var scriptFile = ScriptParser.Parse(copSource, "let-literal-test.cop");
+        var interpreter = TestInterpreter.Create();
+
+        var outputs = interpreter.Run([TestInterpreter.CodePackage, scriptFile],
+            TestInterpreter.ParseSourceFiles(SamplePath("GoodClient.cs"))).Outputs;
+
+        Assert.That(outputs, Is.Not.Empty, "Should produce output");
+        Assert.That(outputs.Any(o => o.Message.Contains("hello world")),
+            Is.True, "Template should resolve let-bound string literal");
+    }
+
+    [Test]
+    public void Run_BareNumberExpression_ProducesOutput()
+    {
+        var source = "42";
+        var scriptFile = ScriptParser.Parse(source, "test.cop");
+        var interpreter = TestInterpreter.Create();
+        var result = interpreter.Run([scriptFile], []);
+        Assert.That(result.Outputs, Has.Count.EqualTo(1));
+        Assert.That(result.Outputs[0].Message, Is.EqualTo("42"));
+    }
+
+    [Test]
+    public void Run_BareNumberExpression_WithCommandFilter_ProducesOutput()
+    {
+        // Simulates REPL flow: parse snippet, rename commands, run with commandFilter
+        var snippet = ScriptParser.Parse("1", "<repl>");
+        var userFile = ScriptParser.Parse("let x = [1 2 3]\nx", "main.cop");
+
+        // Rename snippet commands (like REPL does)
+        var snippetCommandNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var renamedCommands = new List<CommandBlock>();
+        foreach (var cmd in snippet.Commands)
+        {
+            var uniqueName = "__repl_test_" + cmd.Name;
+            renamedCommands.Add(cmd with { Name = uniqueName });
+            snippetCommandNames.Add(uniqueName);
+        }
+        var modifiedSnippet = snippet with { Commands = renamedCommands };
+
+        var allFiles = new List<ScriptFile> { userFile, modifiedSnippet };
+        var interpreter = TestInterpreter.Create();
+        var result = interpreter.Run(allFiles, [], commandFilter: snippetCommandNames);
+
+        Assert.That(result.Outputs, Has.Count.EqualTo(1));
+        Assert.That(result.Outputs[0].Message, Is.EqualTo("1"));
+    }
+
+    [Test]
+    public void Run_BareListExpression_ProducesOutput()
+    {
+        var source = "let x = [1 2 3]\nx";
+        var scriptFile = ScriptParser.Parse(source, "test.cop");
+        var interpreter = TestInterpreter.Create();
+        var result = interpreter.Run([scriptFile], []);
+        Assert.That(result.Outputs, Has.Count.EqualTo(3));
+    }
+
+    [Test]
+    public void Run_Print_BasicString()
+    {
+        var source = "PRINT('hello world')";
+        var scriptFile = ScriptParser.Parse(source, "test.cop");
+        var interpreter = TestInterpreter.Create();
+        var result = interpreter.Run([scriptFile], []);
+        Assert.That(result.Outputs, Has.Count.EqualTo(1));
+        Assert.That(result.Outputs[0].Message, Is.EqualTo("hello world"));
+    }
+
+    [Test]
+    public void Run_Print_StyledTemplate()
+    {
+        // {text with spaces@style} → AnnotatedLiteralSegment (styled literal)
+        var source = "PRINT('{Error found@red}')";
+        var scriptFile = ScriptParser.Parse(source, "test.cop");
+        var interpreter = TestInterpreter.Create();
+        var result = interpreter.Run([scriptFile], []);
+        Assert.That(result.Outputs, Has.Count.EqualTo(1));
+        var rich = result.Outputs[0].Content;
+        Assert.That(rich.Spans[0].Text, Is.EqualTo("Error found"));
+        Assert.That(rich.Spans[0].Annotations!["color"], Is.EqualTo("red"));
+    }
+
+    [Test]
+    public void Run_Print_WithLetBinding()
+    {
+        var source =
+            "let name = 'World'\n" +
+            "PRINT('Hello {name}')";
+        var scriptFile = ScriptParser.Parse(source, "test.cop");
+        var interpreter = TestInterpreter.Create();
+        var result = interpreter.Run([scriptFile], []);
+        Assert.That(result.Outputs, Has.Count.EqualTo(1));
+        Assert.That(result.Outputs[0].Message, Is.EqualTo("Hello World"));
     }
 }

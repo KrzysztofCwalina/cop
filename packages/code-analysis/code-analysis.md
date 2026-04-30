@@ -12,5 +12,5 @@ message, file path, and line number.
 import code-analysis
 
 let VarErrors = Statements:csharp:varDeclaration:toError("Do not use var for {item.MemberName}")
-foreach VarErrors => PRINT("{item.Severity}: {item.Message} ({item.File}:{item.Line})")
+foreach VarErrors => '{item.Severity}: {item.Message} ({item.File}:{item.Line})'
 ```

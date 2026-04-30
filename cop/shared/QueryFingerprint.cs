@@ -90,6 +90,7 @@ public static class QueryFingerprint
         return expr switch
         {
             IdentifierExpr id => id.Name,
+            NicExpr => "nic",
             LiteralExpr lit => SerializeLiteral(lit.Value),
             UnaryExpr un => $"{un.Operator}{Serialize(un.Operand)}",
             BinaryExpr bin => $"({Serialize(bin.Left)}{bin.Operator}{Serialize(bin.Right)})",
@@ -100,6 +101,7 @@ public static class QueryFingerprint
             CollectionUnionExpr union => $"({string.Join("+", union.Elements.Select(Serialize))})",
             ObjectLiteralExpr obj => SerializeObject(obj),
             ConditionalExpr cond => $"({Serialize(cond.Condition)}?{Serialize(cond.TrueExpr)}|{Serialize(cond.FalseExpr)})",
+            MatchExpr match => $"({Serialize(match.Discriminant)}?{string.Join("|", match.Arms.Select(a => $"{(a.Pattern is null ? "_" : Serialize(a.Pattern))}=>{Serialize(a.Result)}"))})",
             _ => expr.ToString() ?? "?"
         };
     }

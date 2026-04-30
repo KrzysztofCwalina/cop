@@ -14,10 +14,10 @@ predicate missingCancellationToken(Method) => Method.Parameters:!any(cancellatio
 predicate asyncWithoutCancellation(Type) => Type.Methods.Where(publicAsync):any(missingCancellationToken)
 
 ## Client types must have a constructor that accepts an Options parameter
-foreach Clients:csharp:missingOptionsConstructor => PRINT('{warning:@yellow} {item.Name} should accept an options parameter')
+foreach Clients:csharp:missingOptionsConstructor => '{warning:@yellow} {item.Name} should accept an options parameter'
 
 ## Client types must be sealed or abstract to prevent unintended inheritance
-foreach Clients:csharp:notSealedOrAbstract => PRINT('{warning:@yellow} {item.Name} should be sealed or abstract')
+foreach Clients:csharp:notSealedOrAbstract => '{warning:@yellow} {item.Name} should be sealed or abstract'
 
 ## Async methods on client types must accept a CancellationToken parameter
-foreach Clients:csharp:asyncWithoutCancellation => PRINT('{warning:@yellow} {item.Name} is async without CancellationToken')
+foreach Clients:csharp:asyncWithoutCancellation => '{warning:@yellow} {item.Name} is async without CancellationToken'
