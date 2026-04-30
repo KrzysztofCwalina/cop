@@ -642,7 +642,7 @@ public class ScriptParser
         return commands;
     }
 
-    // Parse: foreach <collection-expr> => <expression> | <action-invocation>
+    // Parse: foreach <collection-expr> => <expression> | <action-invocation> [=> <sink>]
     private CommandBlock ParseForeachBlock(string? docComment)
     {
         int line = Current.Line;
@@ -699,7 +699,51 @@ public class ScriptParser
                 Exclusions: exclusions, OutputExpression: outputExpr);
         }
 
+        // Check for chained sink: => sinkName or => sinkName('arg')
+        if (Current.Kind == TokenKind.Arrow)
+        {
+            Advance(); // consume =>
+            var sink = ParseSinkTarget();
+            block = block with { Sink = sink };
+        }
+
         return block;
+    }
+
+    /// <summary>
+    /// Parses a sink target: identifier.identifier or identifier.identifier('args')
+    /// Examples: http.Send, console.WriteLine, file.Write('path')
+    /// </summary>
+    private SinkTarget ParseSinkTarget()
+    {
+        var name = Advance().Value; // first identifier
+        if (Current.Kind == TokenKind.Dot)
+        {
+            Advance(); // consume .
+            name += "." + Advance().Value;
+        }
+
+        List<object>? args = null;
+        if (Current.Kind == TokenKind.LParen)
+        {
+            Advance(); // consume (
+            args = new List<object>();
+            while (Current.Kind != TokenKind.RParen && Current.Kind != TokenKind.Eof)
+            {
+                if (Current.Kind == TokenKind.StringLiteral)
+                    args.Add(Advance().Value);
+                else if (Current.Kind == TokenKind.IntLiteral)
+                    args.Add(int.Parse(Advance().Value));
+                else
+                    args.Add(Advance().Value);
+
+                if (Current.Kind == TokenKind.Comma)
+                    Advance();
+            }
+            Expect(TokenKind.RParen);
+        }
+
+        return new SinkTarget(name, args);
     }
 
     /// <summary>

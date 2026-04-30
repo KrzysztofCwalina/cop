@@ -29,6 +29,8 @@ public class TypeRegistry
     private readonly Dictionary<string, Dictionary<string, List<object>>> _nsCollections = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<(string, string), List<object>> _extractorCache = new();
     private readonly Dictionary<string, Func<string, string, List<object>>> _fileParsers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Dictionary<string, DataSink>> _nsSinks = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, IStreamingCollectionSource> _streamingSources = new(StringComparer.OrdinalIgnoreCase);
     private Func<string, List<Document>>? _documentLoader;
 
     public TypeRegistry()
@@ -338,6 +340,81 @@ public class TypeRegistry
     /// Removes a flat global collection registration.
     /// </summary>
     public void UnregisterGlobalCollection(string name) => _globalCollections.Remove(name);
+
+    /// <summary>
+    /// Registers a sink under a namespace (e.g., "http", "Send").
+    /// </summary>
+    public void RegisterSink(string ns, DataSink sink)
+    {
+        if (!_nsSinks.TryGetValue(ns, out var nsDict))
+        {
+            nsDict = new(StringComparer.OrdinalIgnoreCase);
+            _nsSinks[ns] = nsDict;
+        }
+        nsDict[sink.Name] = sink;
+    }
+
+    /// <summary>
+    /// Resolves a sink by qualified or bare name.
+    /// Qualified: "http.Send" → namespace "http", name "Send".
+    /// Bare: "WriteLine" → searches all namespaces, returns null if ambiguous.
+    /// </summary>
+    public DataSink? ResolveSink(string name)
+    {
+        var dotIndex = name.IndexOf('.');
+        if (dotIndex > 0)
+        {
+            var ns = name[..dotIndex];
+            var sinkName = name[(dotIndex + 1)..];
+            if (_nsSinks.TryGetValue(ns, out var nsDict) && nsDict.TryGetValue(sinkName, out var sink))
+                return sink;
+            return null;
+        }
+
+        // Bare name: search all namespaces
+        DataSink? found = null;
+        foreach (var nsDict in _nsSinks.Values)
+        {
+            if (nsDict.TryGetValue(name, out var sink))
+            {
+                if (found != null) return null; // ambiguous
+                found = sink;
+            }
+        }
+        return found;
+    }
+
+    /// <summary>
+    /// Registers a streaming collection source under a qualified name (e.g., "http.Receive").
+    /// </summary>
+    public void RegisterStreamingSource(string qualifiedName, IStreamingCollectionSource source)
+    {
+        _streamingSources[qualifiedName] = source;
+    }
+
+    /// <summary>
+    /// Resolves a streaming collection source by qualified or bare name.
+    /// Returns null if not found or not a streaming source.
+    /// </summary>
+    public IStreamingCollectionSource? ResolveStreamingSource(string name)
+    {
+        if (_streamingSources.TryGetValue(name, out var source))
+            return source;
+
+        // Try bare name match
+        foreach (var (key, src) in _streamingSources)
+        {
+            var dot = key.LastIndexOf('.');
+            if (dot >= 0 && string.Equals(key[(dot + 1)..], name, StringComparison.OrdinalIgnoreCase))
+                return src;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Returns true if the named collection is a streaming source.
+    /// </summary>
+    public bool IsStreamingCollection(string name) => ResolveStreamingSource(name) != null;
 
     /// <summary>
     /// Gets the names of all registered global collections (flat + namespaced bare names).

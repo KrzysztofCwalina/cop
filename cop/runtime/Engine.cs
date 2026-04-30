@@ -210,6 +210,76 @@ public static class Engine
     }
 
     /// <summary>
+    /// Runs a streaming command (e.g., HTTP server) that processes items indefinitely.
+    /// Returns only when cancelled via the CancellationToken.
+    /// </summary>
+    public static async Task RunStreamingAsync(
+        string scriptsDir,
+        string commandName,
+        CancellationToken cancellationToken,
+        Action<string>? diagLog = null)
+    {
+        scriptsDir = Path.GetFullPath(scriptsDir);
+        if (!Directory.Exists(scriptsDir))
+            throw new InvalidOperationException($"Scripts directory not found: {scriptsDir}");
+
+        var scriptFilePaths = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
+        if (scriptFilePaths.Length == 0)
+            throw new InvalidOperationException("No .cop files found.");
+
+        var scriptFiles = new List<ScriptFile>();
+        var parseErrors = new List<string>();
+
+        foreach (var path in scriptFilePaths)
+        {
+            try
+            {
+                var source = File.ReadAllText(path);
+                scriptFiles.Add(ScriptParser.Parse(source, path));
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                parseErrors.Add(ex.Message);
+            }
+        }
+
+        if (parseErrors.Count > 0)
+            throw new InvalidOperationException($"Parse errors: {string.Join("; ", parseErrors)}");
+
+        var fatalErrors = new List<string>();
+        var typeRegistry = CreateTypeRegistry(scriptFiles, scriptsDir, parseErrors, fatalErrors);
+        if (fatalErrors.Count > 0)
+            throw new InvalidOperationException($"Fatal errors: {string.Join("; ", fatalErrors)}");
+
+        // Register built-in sinks
+        typeRegistry.RegisterSink("console", ConsoleWriteLineSink.Instance);
+        typeRegistry.RegisterSink("file", new FileWriteSink());
+
+        // Find the streaming command
+        CommandBlock? streamingCmd = null;
+        foreach (var sf in scriptFiles)
+        {
+            foreach (var cmd in sf.Commands)
+            {
+                if (cmd.IsCommand && string.Equals(cmd.Name, commandName, StringComparison.OrdinalIgnoreCase)
+                    && cmd.Collection is not null
+                    && typeRegistry.IsStreamingCollection(cmd.Collection))
+                {
+                    streamingCmd = cmd;
+                    break;
+                }
+            }
+            if (streamingCmd != null) break;
+        }
+
+        if (streamingCmd is null)
+            throw new InvalidOperationException($"Streaming command '{commandName}' not found.");
+
+        var interpreter = new ScriptInterpreter(typeRegistry, diagLog: diagLog);
+        await interpreter.RunStreamingAsync(streamingCmd, scriptFiles, cancellationToken);
+    }
+
+    /// <summary>
     /// Creates and populates a TypeRegistry with type definitions from imports and script files.
     /// </summary>
     private static TypeRegistry CreateTypeRegistry(List<ScriptFile> scriptFiles, string scriptsDir, List<string> errors, List<string> fatalErrors, List<(string Dir, PackageMetadata Meta)>? providerPackages = null, string[]? additionalFeedPaths = null)
@@ -528,6 +598,19 @@ public static class Engine
         foreach (var bp in _builtinProviders)
             ProviderLoader.RegisterSchema(bp.Instance, typeRegistry);
         typeRegistry.RegisterProgramType();
+
+        // Register built-in sinks
+        typeRegistry.RegisterSink("console", ConsoleWriteLineSink.Instance);
+        typeRegistry.RegisterSink("file", new FileWriteSink());
+
+        // Register provider-supplied sinks
+        foreach (var bp in _builtinProviders)
+        {
+            var sinks = bp.Instance.GetSinks();
+            if (sinks != null)
+                foreach (var sink in sinks)
+                    typeRegistry.RegisterSink(bp.Name, sink);
+        }
 
         return typeRegistry;
     }

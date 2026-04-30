@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Diagnostics;
+using Cop.Core;
 
 namespace Cop.Lang;
 
@@ -283,6 +284,103 @@ public class ScriptInterpreter
     }
 
     /// <summary>
+    /// Executes a streaming command: foreach streamingSource => transform => sink.
+    /// Runs indefinitely until cancelled. Used for push-like providers (HTTP server, etc.).
+    /// </summary>
+    public async Task RunStreamingAsync(
+        CommandBlock cmd,
+        List<ScriptFile> scriptFiles,
+        CancellationToken cancellationToken)
+    {
+        if (cmd.Collection is null)
+            throw new InvalidOperationException("Streaming command must have a collection.");
+
+        var streamingSource = _typeRegistry.ResolveStreamingSource(cmd.Collection)
+            ?? throw new InvalidOperationException($"'{cmd.Collection}' is not a streaming collection.");
+
+        var sink = cmd.Sink is not null
+            ? ResolveSink(cmd.Sink)
+            : ConsoleWriteLineSink.Instance;
+
+        // Build predicate/function/let dictionaries from script files
+        var predicateGroups = new Dictionary<string, List<PredicateDefinition>>();
+        var functionGroups = new Dictionary<string, List<FunctionDefinition>>();
+        var letDeclarations = new Dictionary<string, LetDeclaration>();
+        foreach (var sf in scriptFiles)
+        {
+            foreach (var pred in sf.Predicates)
+            {
+                if (!predicateGroups.TryGetValue(pred.Name, out var group))
+                {
+                    group = [];
+                    predicateGroups[pred.Name] = group;
+                }
+                group.Add(pred);
+            }
+            foreach (var func in sf.Functions)
+            {
+                if (!functionGroups.TryGetValue(func.Name, out var group))
+                {
+                    group = [];
+                    functionGroups[func.Name] = group;
+                }
+                group.Add(func);
+            }
+            foreach (var let in sf.LetDeclarations)
+                letDeclarations[let.Name] = let;
+        }
+
+        string itemType = ResolveItemType(cmd.Collection, predicateGroups, letDeclarations, functionGroups);
+        string finalItemType = ResolveItemTypeAfterFilters(itemType, cmd.Filters, functionGroups);
+
+        try
+        {
+            await foreach (var item in streamingSource.QueryStream(cancellationToken))
+            {
+                if (cancellationToken.IsCancellationRequested) break;
+
+                var evaluator = new PredicateEvaluator(predicateGroups, "", _typeRegistry, letDeclarations, functionGroups);
+
+                // Apply filters
+                var items = new List<object> { item };
+                items = ApplyFilters(items, itemType, cmd.Filters, evaluator, functionGroups);
+                if (items.Count == 0) continue;
+
+                var filteredItem = items[0];
+
+                // Evaluate transform
+                object result;
+                if (cmd.OutputExpression is not null)
+                {
+                    result = evaluator.EvaluateField(cmd.OutputExpression, filteredItem, finalItemType) ?? filteredItem;
+                }
+                else if (!string.IsNullOrEmpty(cmd.MessageTemplate))
+                {
+                    EvaluationContext ctx = new();
+                    ctx.Capture(finalItemType, filteredItem);
+                    ctx.Capture("item", filteredItem);
+                    if (filteredItem is ScriptObject ao)
+                        CaptureAlanObjectFields(ctx, ao);
+                    CaptureLetValues(ctx, evaluator, letDeclarations, filteredItem, finalItemType);
+                    var richMessage = ResolveTemplate(cmd.MessageTemplate, ctx);
+                    result = richMessage.ToPlainText();
+                }
+                else
+                {
+                    result = filteredItem;
+                }
+
+                // Dispatch to sink
+                await sink.WriteAsync(filteredItem, result);
+            }
+        }
+        finally
+        {
+            await sink.CompleteAsync();
+        }
+    }
+
+    /// <summary>
     /// Execute a single command block against all relevant documents.
     /// </summary>
     private void ExecuteCommand(
@@ -427,6 +525,11 @@ public class ScriptInterpreter
                 {
                     WriteSaveOutput(cmd, richMessage, item, fileOutputs);
                 }
+                else if (cmd.Sink is not null)
+                {
+                    var sink = ResolveSink(cmd.Sink);
+                    sink.WriteAsync(item, richMessage.ToPlainText()).GetAwaiter().GetResult();
+                }
                 else
                 {
                     allOutputs.Add(new PrintOutput(richMessage));
@@ -528,6 +631,11 @@ public class ScriptInterpreter
                 else if (IsSaveAction(cmd.ActionName))
                 {
                     WriteSaveOutput(cmd, richMessage, item, fileOutputs);
+                }
+                else if (cmd.Sink is not null)
+                {
+                    var sink = ResolveSink(cmd.Sink);
+                    sink.WriteAsync(item, richMessage.ToPlainText()).GetAwaiter().GetResult();
                 }
                 else
                 {
@@ -1870,6 +1978,15 @@ public class ScriptInterpreter
         }
 
         activeStack.Remove(cmd.CommandRef);
+    }
+
+    private DataSink ResolveSink(SinkTarget target)
+    {
+        var sink = _typeRegistry.ResolveSink(target.Name)
+            ?? throw new InvalidOperationException($"Sink '{target.Name}' not found. Use a qualified name like 'console.WriteLine' or 'file.Write'.");
+        if (target.Args is { Count: > 0 })
+            sink = sink.WithArgs(target.Args);
+        return sink;
     }
 
     private static bool IsSaveAction(string? actionName) =>

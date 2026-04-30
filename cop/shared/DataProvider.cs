@@ -14,6 +14,7 @@ public enum DataFormat
     // Binary = 2,   // e.g. MessagePack
     InMemoryDatabase = 4,
     ObjectCollections = 8,
+    AsyncStream = 16,
 }
 
 /// <summary>
@@ -85,6 +86,21 @@ public abstract class DataProvider
     /// </summary>
     public virtual Dictionary<string, List<object>>? QueryCollections(ProviderQuery query)
         => throw new NotSupportedException("This provider does not support CLR object collection queries.");
+
+    /// <summary>
+    /// Queries for a streaming (potentially infinite) collection as an async enumerable.
+    /// Used by push-like providers (e.g., HTTP server yielding requests).
+    /// Only callable if <see cref="SupportedFormats"/> includes <see cref="DataFormat.AsyncStream"/>.
+    /// </summary>
+    public virtual IAsyncEnumerable<object> QueryStream(ProviderQuery query, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("This provider does not support streaming queries.");
+
+    /// <summary>
+    /// Returns sinks that this provider exposes (e.g., http provider exposes "Send").
+    /// Override to register provider-specific sinks. The engine registers these
+    /// under the provider's namespace (e.g., "http.Send").
+    /// </summary>
+    public virtual IEnumerable<DataSink>? GetSinks() => null;
 }
 
 /// <summary>

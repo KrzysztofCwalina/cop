@@ -1,0 +1,57 @@
+# HTTP Server Package
+# Provides helper functions for building HTTP responses in cop pipelines.
+# Import with: import http
+# 
+# Usage:
+#   command serve = foreach http.Receive => handle => http.Send
+
+# Response type produced by helper functions
+export type Response = {
+    StatusCode : int,
+    Body : string,
+    ContentType : string
+}
+
+# Request type provided by the http streaming source
+export type Request = {
+    Method : string,
+    Path : string,
+    Body : string,
+    ContentType : string,
+    Query : string
+}
+
+# Creates a 200 OK response with JSON body
+export function ok(Request) => {
+    StatusCode = 200
+    Body = Body
+    ContentType = 'application/json'
+}
+
+# Creates a 404 Not Found response
+export function notFound(Request) => {
+    StatusCode = 404
+    Body = '{"error": "Not Found"}'
+    ContentType = 'application/json'
+}
+
+# Creates a 201 Created response
+export function created(Request) => {
+    StatusCode = 201
+    Body = Body
+    ContentType = 'application/json'
+}
+
+# Creates a 400 Bad Request response
+export function badRequest(Request) => {
+    StatusCode = 400
+    Body = '{"error": "Bad Request"}'
+    ContentType = 'application/json'
+}
+
+# Creates a 500 Internal Server Error response
+export function serverError(Request) => {
+    StatusCode = 500
+    Body = '{"error": "Internal Server Error"}'
+    ContentType = 'application/json'
+}

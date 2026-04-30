@@ -956,4 +956,69 @@ public class CheckFileParserTests
         Assert.That(cmd.OutputExpression, Is.Not.Null);
         Assert.That(cmd.MessageTemplate, Is.EqualTo(""));
     }
+
+    [Test]
+    public void Parse_ForeachWithSinkTarget_Simple()
+    {
+        var source = "foreach Types => '{item.Name}' => console.WriteLine";
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.Commands, Has.Count.EqualTo(1));
+        var cmd = file.Commands[0];
+        Assert.That(cmd.Collection, Is.EqualTo("Types"));
+        Assert.That(cmd.MessageTemplate, Is.EqualTo("{item.Name}"));
+        Assert.That(cmd.Sink, Is.Not.Null);
+        Assert.That(cmd.Sink!.Name, Is.EqualTo("console.WriteLine"));
+        Assert.That(cmd.Sink.Args, Is.Null);
+    }
+
+    [Test]
+    public void Parse_ForeachWithSinkTarget_WithArgs()
+    {
+        var source = "foreach Types => '{item.Name}' => file.Write('output.txt')";
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.Commands, Has.Count.EqualTo(1));
+        var cmd = file.Commands[0];
+        Assert.That(cmd.Collection, Is.EqualTo("Types"));
+        Assert.That(cmd.Sink, Is.Not.Null);
+        Assert.That(cmd.Sink!.Name, Is.EqualTo("file.Write"));
+        Assert.That(cmd.Sink.Args, Has.Count.EqualTo(1));
+        Assert.That(cmd.Sink.Args![0], Is.EqualTo("output.txt"));
+    }
+
+    [Test]
+    public void Parse_ForeachWithExpressionAndSink()
+    {
+        var source = "foreach http.Receive => handle => http.Send";
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.Commands, Has.Count.EqualTo(1));
+        var cmd = file.Commands[0];
+        Assert.That(cmd.Collection, Is.EqualTo("http.Receive"));
+        Assert.That(cmd.OutputExpression, Is.Not.Null);
+        Assert.That(cmd.Sink, Is.Not.Null);
+        Assert.That(cmd.Sink!.Name, Is.EqualTo("http.Send"));
+    }
+
+    [Test]
+    public void Parse_CommandWithSinkTarget()
+    {
+        var source = "command serve = foreach http.Receive => handle => http.Send";
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.Commands, Has.Count.EqualTo(1));
+        var cmd = file.Commands[0];
+        Assert.That(cmd.Name, Is.EqualTo("serve"));
+        Assert.That(cmd.IsCommand, Is.True);
+        Assert.That(cmd.Collection, Is.EqualTo("http.Receive"));
+        Assert.That(cmd.OutputExpression, Is.Not.Null);
+        Assert.That(cmd.Sink, Is.Not.Null);
+        Assert.That(cmd.Sink!.Name, Is.EqualTo("http.Send"));
+    }
+
+    [Test]
+    public void Parse_ForeachWithNoSink_HasNullSink()
+    {
+        var source = "foreach Types => '{item.Name}'";
+        var file = ScriptParser.Parse(source, "test.cop");
+        var cmd = file.Commands[0];
+        Assert.That(cmd.Sink, Is.Null);
+    }
 }

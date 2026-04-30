@@ -43,3 +43,20 @@ public interface ICollectionSource
     /// </summary>
     bool IsPerDocument { get; }
 }
+
+/// <summary>
+/// A streaming (potentially infinite) data source. Used by push-like providers
+/// such as HTTP servers that yield items indefinitely.
+/// </summary>
+public interface IStreamingCollectionSource
+{
+    /// <summary>
+    /// Returns an async enumerable of items. The stream may be infinite (e.g., HTTP requests).
+    /// </summary>
+    IAsyncEnumerable<object> QueryStream(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The name of the collection (e.g., "Receive").
+    /// </summary>
+    string CollectionName { get; }
+}
