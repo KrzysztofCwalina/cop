@@ -90,21 +90,18 @@ public static class RunCommand
 
         Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(ColorDiagLine(msg)) : null;
 
-        // Try streaming mode for named commands (e.g., `cop run serve`)
-        if (commandName != null)
+        // Try streaming mode (auto-detect or by command name)
+        try
         {
-            try
-            {
-                using var cts = new CancellationTokenSource();
-                Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+            using var cts = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 
-                Engine.RunStreamingAsync(scriptsDir, commandName, cts.Token, diagLog).GetAwaiter().GetResult();
-                return 0;
-            }
-            catch (InvalidOperationException ex) when (ex.Message.Contains("not found") || ex.Message.Contains("not a streaming"))
-            {
-                // Not a streaming command — fall through to normal execution
-            }
+            Engine.RunStreamingAsync(scriptsDir, commandName, cts.Token, diagLog).GetAwaiter().GetResult();
+            return 0;
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not found"))
+        {
+            // No streaming command — fall through to normal execution
         }
 
         var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog);

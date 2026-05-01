@@ -223,7 +223,7 @@ public static class Engine
     /// </summary>
     public static async Task RunStreamingAsync(
         string scriptsDir,
-        string commandName,
+        string? commandName,
         CancellationToken cancellationToken,
         Action<string>? diagLog = null)
     {
@@ -267,25 +267,28 @@ public static class Engine
         typeRegistry.RegisterSink("console", ConsoleWriteLineSink.Instance);
         typeRegistry.RegisterSink("file", new FileWriteSink());
 
-        // Find the streaming command
+        // Find the streaming command (by name, or auto-detect the first one)
         CommandBlock? streamingCmd = null;
         foreach (var sf in scriptFiles)
         {
             foreach (var cmd in sf.Commands)
             {
-                if (cmd.IsCommand && string.Equals(cmd.Name, commandName, StringComparison.OrdinalIgnoreCase)
-                    && cmd.Collection is not null
-                    && typeRegistry.IsStreamingCollection(cmd.Collection))
+                if (cmd.Collection is not null && typeRegistry.IsStreamingCollection(cmd.Collection))
                 {
-                    streamingCmd = cmd;
-                    break;
+                    if (commandName is null || (cmd.IsCommand && string.Equals(cmd.Name, commandName, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        streamingCmd = cmd;
+                        break;
+                    }
                 }
             }
             if (streamingCmd != null) break;
         }
 
         if (streamingCmd is null)
-            throw new InvalidOperationException($"Streaming command '{commandName}' not found.");
+            throw new InvalidOperationException(commandName is not null
+                ? $"Streaming command '{commandName}' not found."
+                : "No streaming command found.");
 
         var interpreter = new ScriptInterpreter(typeRegistry, diagLog: diagLog);
         await interpreter.RunStreamingAsync(streamingCmd, scriptFiles, cancellationToken);

@@ -267,7 +267,7 @@ public class ReplEvaluator
                 output.Add($"\x1b[33m{w}\x1b[0m");
 
         if (output.Count == 0)
-            output.Add("(no output)");
+            output.Add("nic");
 
         return output;
     }
