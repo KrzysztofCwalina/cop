@@ -440,6 +440,8 @@ foreach csharp.Types:bracketed(']') => '{item}'
 
 Closures can be used in filter chains just like regular functions. They remember their bound arguments and apply them when invoked with the remaining ones.
 
+> **Sample:** See [`samples/s17-Currying/`](../samples/s17-Currying/) for a runnable example.
+
 #### Code() Aggregator Function
 
 The built-in `Code()` function creates a lazy proxy that queries one or more code providers and unions their results:
@@ -460,6 +462,8 @@ foreach codebase.Types => '{item.Name}'
 Provider identifiers must be imported packages. The proxy exposes the same collections as the providers (Types, Methods, Statements, etc.). Collections are queried lazily — only when accessed.
 
 > **Note:** `Code.Types` (the legacy syntax) still works and resolves to the ambient code collections. `Code([csharp])` is the explicit, composable alternative.
+>
+> **Sample:** See [`samples/s16-CodeAggregator/`](../samples/s16-CodeAggregator/) for a runnable example.
 
 ## Operations
 

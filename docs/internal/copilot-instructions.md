@@ -47,7 +47,7 @@ install/            Publish script and platform subfolders for self-contained bi
                       install/publish.ps1 builds cop.exe for all platforms
                       install/vscode-cop/ — VS Code syntax highlighting extension
 docs/               Documentation
-samples/            Example .cop scripts (s1-HelloWorld through s6-Strings)
+samples/            Example .cop scripts (s1-HelloWorld through s17-Currying)
 ```
 
 ## Key Classes

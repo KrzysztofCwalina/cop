@@ -1,0 +1,18 @@
+# Demonstrates the Code() aggregator function.
+# Code() creates a lazy proxy that queries providers on demand
+# and unions their results.
+# Run with: cop run
+import csharp
+import python
+
+# Query a single provider explicitly
+let cs = Code([csharp])
+foreach cs.Types => PRINT('[C#] {item.Name}')
+
+# Query multiple providers — results are unioned
+let codebase = Code([csharp, python])
+foreach codebase.Types => PRINT('[All] {item.Name}')
+
+# Filters work through the proxy just like direct collections
+let public-types = codebase.Types:isPublic
+foreach public-types => PRINT('[Public] {item.Name}')

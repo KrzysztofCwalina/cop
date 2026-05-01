@@ -510,7 +510,7 @@ public class ScriptParser
         var expr = ParseExpression();
 
         // Handle Load('path') and Parse('file', [Type]) as value bindings
-        if (expr is FunctionCallExpr call && call.Name is "Load" or "Parse")
+        if (expr is FunctionCallExpr call && call.Name is "Load" or "Parse" or "Code")
         {
             return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: call);
         }

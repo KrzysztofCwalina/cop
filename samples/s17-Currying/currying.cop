@@ -1,0 +1,16 @@
+# Demonstrates partial application (currying).
+# Calling a function with fewer arguments than required returns a closure.
+# The closure remembers the bound arguments and completes the call later.
+# Run with: cop run BRACKETS PARENS
+import csharp
+
+# A function that wraps a type name with prefix and suffix
+function wrap(Type, prefix: String, suffix: String) => '{prefix}{item.Name}{suffix}'
+
+# Partial application: bind prefix, get a closure waiting for suffix
+let bracket = wrap('[')
+let paren = wrap('(')
+
+# Use closures in filter chains — the remaining argument completes the call
+command BRACKETS = foreach csharp.Types:bracket(']') => '{item}'
+command PARENS = foreach csharp.Types:paren(')') => '{item}'
