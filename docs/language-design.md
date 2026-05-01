@@ -104,15 +104,22 @@ A "field" is simply syntactic sugar for calling a curried (zero-remaining-args) 
 
 ### What is `csharp`?
 
-`import csharp` binds the name `csharp` to a **function**: `string → CSharpCodebase`. You call it with a path to get a path-bound codebase:
+`import csharp` binds the name `csharp` to a **function**: `string? → CSharpCodebase`. You call it with an optional path:
 
 ```cop
 import csharp
 
+# Explicit path — analyze a specific folder tree:
 let code = csharp('c:\git\myapp')
 code.Types       # nullary — all types in that codebase
 code.Methods     # nullary — all methods, same codebase (guaranteed consistent)
+
+# No argument — uses cwd (where the cop file lives / where cop was invoked):
+let code = csharp()
+code.Types       # types found under current directory
 ```
+
+The **no-arg form** preserves the simplicity of dropping a `.cop` file at a repo root and just running it — the codebase is implicitly "here." The explicit form supports cross-repo analysis and multi-codebase scenarios.
 
 The returned `CSharpCodebase` has **nullary** members — they're already bound to the path. No risk of accidentally mixing paths across collections.
 
@@ -397,10 +404,10 @@ Providers are the bridge between external data and the Cop type system.
 
 ### What is `csharp`?
 
-`csharp` is a **function** (string → CSharpCodebase). Calling it with a path returns a path-bound codebase:
+`csharp` is a **function** (string? → CSharpCodebase). Calling it returns a path-bound codebase:
 
 ```cop
-# csharp is a function: path → bound codebase
+# csharp is a function: path? → bound codebase
 type CSharpCodebase = {
     Types: [Type],           # nullary — bound to the codebase path
     Methods: [Method],       # nullary — same codebase
@@ -416,10 +423,12 @@ All members on the returned codebase are **nullary** — they're already curried
 ```cop
 import csharp
 
-# Bind to a codebase — csharp is callable:
-let code = csharp('c:\git\myapp')
+# Simple case — just analyze "here" (cwd):
+let code = csharp()
+let publicTypes = code.Types:isPublic
 
-# All collections are now nullary (path already bound):
+# Explicit path for cross-repo analysis:
+let code = csharp('c:\git\myapp')
 let types = code.Types         # → [Type, ...]
 let methods = code.Methods     # → [Method, ...] — same codebase, guaranteed
 
@@ -428,10 +437,6 @@ let frontend = csharp('c:\git\frontend')
 let backend = csharp('c:\git\backend')
 frontend.Types    # types from frontend
 backend.Methods   # methods from backend — no confusion
-
-# Filter as usual:
-let publicTypes = code.Types:isPublic
-let bigTypes = code.Types:Methods.Count > 20
 ```
 
 ### `import` — formal definition
