@@ -368,95 +368,57 @@ These are the explicit operations on iterable DataObjects — like Haskell's `fi
 
 ## Providers
 
-Providers are the bridge between external data and the Cop type system. A provider **reads external sources** (source code, file systems, APIs) and **produces typed object instances** — so Cop code never needs to manually construct them.
+Providers are the bridge between external data and the Cop type system.
 
-### How Providers Create Objects
+### What is `csharp`?
 
-When you access `csharp.Types`, the provider:
-1. Scans C# source files
-2. Parses them into an AST
-3. Creates a `Type` instance for each class/struct/interface found
-4. Returns them as a typed collection
-
-**The user never instantiates provider types.** The provider does it:
+`csharp` is an **object**. Its type is defined by the csharp provider package:
 
 ```cop
-import csharp
-
-# The csharp provider creates Type instances by reading source code.
-# Each Type has fields: Name, Namespace, Methods, Properties, Visibility, etc.
-# The user just accesses the pre-populated collection:
-let types = csharp.Types        # → [Type, Type, Type, ...] (created by provider)
-let methods = csharp.Methods    # → [Method, Method, ...] (created by provider)
-
-# Scoped: provider reads only the specified path
-let codebase = csharp.Code('path/to/project')
-let types = codebase.Types      # → Types from that project only
-```
-
-This is the key distinction between **provider types** and **user-defined types**:
-
-| | Provider types (e.g., Type, Method, File) | User-defined types (e.g., Violation, Summary) |
-|---|---|---|
-| **Who creates instances?** | The provider (by reading external data) | User code (via record construction or functions) |
-| **Who defines the type?** | The provider package (schema) | The user/package (type declaration) |
-| **How do instances appear?** | Access a provider collection (`.Types`) | Construct explicitly (`TypeName { ... }`) or return from a function |
-| **Mutable?** | No — read-only snapshot | No — all values are immutable |
-
-### Provider Type Schema
-
-Providers declare their types in their package. For example, the `csharp` provider package defines:
-
-```cop
-# Defined by the csharp provider package (not by the user):
-type Type = {
-    Name: string,
-    Namespace: string,
-    Visibility: string,
-    Modifiers: int,
+# Defined by the csharp package (simplified):
+type CSharpProvider = {
+    Types: [Type],
     Methods: [Method],
-    Properties: [Property],
     Fields: [Field],
+    Properties: [Property],
     Events: [Event],
-    File: string,
-    Line: int
-}
-
-type Method = {
-    Name: string,
-    Parameters: [Parameter],
-    ReturnType: string,
-    Visibility: string,
-    Modifiers: int,
     Statements: [Statement],
-    File: string,
-    Line: int
+    Code: function(string) => CSharpProvider    # scoped constructor
 }
 ```
 
-These type definitions serve the same four purposes as any type: shape description, parameter matching, pattern matching, and tooling (completion/docs). The only difference is that the PROVIDER creates instances, not user code.
+**`import` is the instantiation statement.** When you write `import csharp`, the runtime:
+1. Loads the csharp package
+2. Creates an instance of `CSharpProvider` (with lazy fields that scan source files on demand)
+3. Binds it to the name `csharp`
+4. Brings the package's exported types, predicates, and functions into scope
 
-### Import and Access
+So `csharp` is just an object of type `CSharpProvider`. And `csharp.Types` is field access on that object — returns the `[Type]` collection. No magic.
 
 ```cop
 import csharp
 
-# csharp is a provider DataObject with lazy fields:
-csharp.Types             # collection of Type instances (created by provider)
-csharp.Methods           # collection of Method instances (created by provider)
+# csharp is now a CSharpProvider instance.
+# Its fields are lazy — source scanning happens on first access:
+csharp.Types             # forces: scan files → create Type instances → return [Type]
+csharp.Methods           # forces: return [Method] (may reuse cached parse)
 
-# Scoped to a path:
+# Code() returns another CSharpProvider, scoped to a path:
 let codebase = csharp.Code('path/to/project')
 codebase.Types           # types in that project only
 ```
 
-### Provider Contract
+### Who creates what?
 
-A provider:
-1. **Defines types** (schema) — what shape of objects it produces
-2. **Creates instances** — by reading external sources on demand (lazy)
-3. **Supports filter pushdown** — `:` predicates passed down for optimization
-4. **Operates read-only** — providers never mutate external data
+| What | Who creates it | When |
+|------|---------------|------|
+| The provider object (`csharp`) | The runtime, triggered by `import` | At import time |
+| Objects in provider collections (`csharp.Types[0]`) | The provider, by reading external data | On first field access (lazy) |
+| User-defined objects (`Violation { ... }`) | User code, via record construction | When the expression is evaluated |
+| Function results (`checkMethodCount(type)`) | The function body | When the function is called |
+
+The runtime is the only "magic" — it instantiates the provider when you `import`. Everything after that is regular field access, function calls, and record construction.
+
 
 
 ---
