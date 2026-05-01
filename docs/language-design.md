@@ -387,26 +387,31 @@ type CSharpProvider = {
 }
 ```
 
-**`import` is the instantiation statement.** When you write `import csharp`, the runtime:
-1. Loads the csharp package
-2. Creates an instance of `CSharpProvider` (with lazy fields that scan source files on demand)
-3. Binds it to the name `csharp`
-4. Brings the package's exported types, predicates, and functions into scope
+### `import` — formal definition
 
-So `csharp` is just an object of type `CSharpProvider`. And `csharp.Types` is field access on that object — returns the `[Type]` collection. No magic.
+`import <package>` does three things:
+
+1. **Instantiates** — the runtime creates an instance of the package's module type (e.g., `CSharpProvider`), with lazy fields
+2. **Binds a name** — the instance is bound to a variable named after the package (e.g., `csharp`). This variable is immutable and available throughout the file.
+3. **Brings exports into scope** — the package's exported types, predicates, and functions become available by name (for extension method resolution, type construction, etc.)
 
 ```cop
 import csharp
-
-# csharp is now a CSharpProvider instance.
-# Its fields are lazy — source scanning happens on first access:
-csharp.Types             # forces: scan files → create Type instances → return [Type]
-csharp.Methods           # forces: return [Method] (may reuse cached parse)
-
-# Code() returns another CSharpProvider, scoped to a path:
-let codebase = csharp.Code('path/to/project')
-codebase.Types           # types in that project only
+#        │
+#        ├─ (1) runtime creates: CSharpProvider { Types = <lazy>, Methods = <lazy>, ... }
+#        ├─ (2) binds variable:  let csharp = <that instance>
+#        └─ (3) scope injection: Type, Method, isPublic, ... are now resolvable names
 ```
+
+So `import csharp` is equivalent to:
+```cop
+let csharp = <runtime-created CSharpProvider instance>
+use csharp.[Type, Method, Statement, ...]     # bring exported types into scope
+use csharp.[isPublic, isAbstract, ...]         # bring exported predicates into scope
+```
+
+(The `use` lines are not real syntax — they illustrate what `import` does behind the scenes.)
+
 
 ### Who creates what?
 
