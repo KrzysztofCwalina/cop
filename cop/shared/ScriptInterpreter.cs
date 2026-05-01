@@ -754,6 +754,10 @@ public class ScriptInterpreter
         HashSet<string>? visited = null,
         bool useQueryCache = true)
     {
+        // CodeProxy dotted access: codebase.Types → query all bound providers
+        var proxyItems = TryResolveCodeProxyCollection(collection, letDeclarations, evaluator);
+        if (proxyItems != null) return proxyItems;
+
         // Load() dotted access (e.g., "dll.Api", "dll.Types") — resolve from loaded documents
         var loadItems = TryResolveLoadCollection(collection, letDeclarations);
         if (loadItems != null) return loadItems;
@@ -1321,6 +1325,17 @@ public class ScriptInterpreter
                 current = mapped;
                 beforeCount = mapped.Count;
             }
+            else if (funcName != null && evaluator.IsClosureLet(funcName))
+            {
+                // Closure (partially-applied function) used as a transform filter
+                var funcArgs = GetFilterArgs(filter);
+                var capturedType = currentType;
+                var mapped = current.Select(item =>
+                    evaluator.ApplyClosureFilter(funcName, item, capturedType, funcArgs)!).ToList();
+                _diagLog?.Invoke($"[trace] filter: :{funcName}(closure) -> {beforeCount} -> {mapped.Count} items");
+                current = mapped;
+                beforeCount = mapped.Count;
+            }
             else
             {
                 // Predicate filter
@@ -1561,6 +1576,10 @@ public class ScriptInterpreter
         if (IsLoadDottedReference(collection, letDeclarations))
             return true;
 
+        // CodeProxy dotted access (e.g., "codebase.Types") is always global
+        if (IsCodeProxyDottedReference(collection, letDeclarations))
+            return true;
+
         collection = ResolveDottedCollection(collection, letDeclarations);
 
         if (_typeRegistry.IsGlobalCollection(collection))
@@ -1600,6 +1619,10 @@ public class ScriptInterpreter
         Dictionary<string, List<FunctionDefinition>> functionGroups,
         HashSet<string>? visited = null)
     {
+        // CodeProxy dotted access: codebase.Types → query all bound providers
+        var proxyItems = TryResolveCodeProxyCollection(collection, letDeclarations, evaluator);
+        if (proxyItems != null) return proxyItems;
+
         // Load() dotted access (e.g., "dll.Api", "dll.Types") — resolve from loaded documents
         var loadItems = TryResolveLoadCollection(collection, letDeclarations);
         if (loadItems != null) return loadItems;
@@ -2233,10 +2256,50 @@ public class ScriptInterpreter
         return letDeclarations.TryGetValue(parentName, out var letDecl) && letDecl.IsExternalLoad;
     }
 
+    private static bool IsCodeProxyDottedReference(string collection, Dictionary<string, LetDeclaration> letDeclarations)
+    {
+        var dotIndex = collection.IndexOf('.');
+        if (dotIndex < 0) return false;
+
+        var parentName = collection[..dotIndex];
+        return letDeclarations.TryGetValue(parentName, out var letDecl)
+            && letDecl.IsValueBinding
+            && letDecl.ValueExpression is FunctionCallExpr { Name: "Code" };
+    }
+
     /// <summary>
     /// Resolves a Load() dotted collection (e.g., "dll.Api") by extracting the sub-collection
     /// from the loaded documents using the same collection extractors as document loading.
     /// </summary>
+    /// <summary>
+    /// Resolves a dotted collection reference where the parent is a CodeProxy value binding.
+    /// e.g., "codebase.Types" where let codebase = Code([csharp, python])
+    /// </summary>
+    private List<object>? TryResolveCodeProxyCollection(
+        string collection,
+        Dictionary<string, LetDeclaration> letDeclarations,
+        PredicateEvaluator evaluator)
+    {
+        var dotIndex = collection.IndexOf('.');
+        if (dotIndex < 0) return null;
+
+        var parentName = collection[..dotIndex];
+        var propertyName = collection[(dotIndex + 1)..];
+
+        if (!letDeclarations.TryGetValue(parentName, out var letDecl) || !letDecl.IsValueBinding)
+            return null;
+
+        // Only evaluate if the expression is a Code(...) function call
+        if (letDecl.ValueExpression is not FunctionCallExpr { Name: "Code" })
+            return null;
+
+        var value = evaluator.EvaluateField(letDecl.ValueExpression!, null!, "");
+        if (value is not CodeProxy proxy)
+            return null;
+
+        return proxy.GetCollection(propertyName, _typeRegistry, _providerQueryService);
+    }
+
     private List<object>? TryResolveLoadCollection(
         string collection,
         Dictionary<string, LetDeclaration> letDeclarations)

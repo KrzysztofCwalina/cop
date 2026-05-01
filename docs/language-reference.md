@@ -423,6 +423,44 @@ function handle(Request) => Response {
 
 The constraint syntax is the same filter chain used elsewhere: `Type:Field:predicate(args)`. Constrained overloads are evaluated in order; the unconstrained overload serves as the default fallback.
 
+#### Partial Application (Currying)
+
+When a function is called with fewer arguments than it requires, it returns a **closure** — a partially-applied function that waits for the remaining arguments:
+
+```ruby
+function format(Type, prefix: String, suffix: String) => '{prefix}{item.Name}{suffix}'
+
+# Partial application: binds prefix, returns closure waiting for suffix
+let bracketed = format('[')
+
+# Complete the call by supplying the remaining argument
+foreach csharp.Types:bracketed(']') => '{item}'
+# Output: [MyClass], [MyInterface], etc.
+```
+
+Closures can be used in filter chains just like regular functions. They remember their bound arguments and apply them when invoked with the remaining ones.
+
+#### Code() Aggregator Function
+
+The built-in `Code()` function creates a lazy proxy that queries one or more code providers and unions their results:
+
+```ruby
+import csharp
+import python
+
+# Query a single provider
+let cs = Code([csharp])
+foreach cs.Types:isPublic => '{item.Name}'
+
+# Query multiple providers — results are unioned
+let codebase = Code([csharp, python])
+foreach codebase.Types => '{item.Name}'
+```
+
+Provider identifiers must be imported packages. The proxy exposes the same collections as the providers (Types, Methods, Statements, etc.). Collections are queried lazily — only when accessed.
+
+> **Note:** `Code.Types` (the legacy syntax) still works and resolves to the ambient code collections. `Code([csharp])` is the explicit, composable alternative.
+
 ## Operations
 
 Agent Cop uses two operators for accessing members:

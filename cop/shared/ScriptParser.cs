@@ -591,9 +591,13 @@ public class ScriptParser
         // foreach after = means this is a let-command
         if (i < _tokens.Count && _tokens[i].Kind == TokenKind.ForeachKeyword) return true;
         // Check for identifier followed by ( — this is an action invocation
-        // But Load() is a value binding, not a command action
+        // But Load(), Parse(), Code() are value bindings, not command actions
+        // Also, lowercase function names are value bindings (currying/partial application)
         if (i >= _tokens.Count || _tokens[i].Kind != TokenKind.Identifier) return false;
-        if (_tokens[i].Value is "Load" or "Parse") return false;
+        var name = _tokens[i].Value;
+        if (name is "Load" or "Parse" or "Code") return false;
+        // Lowercase-starting names are function calls (value bindings), not commands
+        if (name.Length > 0 && char.IsLower(name[0])) return false;
         i++;
         return i < _tokens.Count && _tokens[i].Kind == TokenKind.LParen;
     }

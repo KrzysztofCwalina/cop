@@ -83,12 +83,23 @@ public class PredicateEvaluator
 
     private object? EvalFunctionCall(FunctionCallExpr fc, object item, string paramType, EvaluationContext ctx)
     {
+        // Built-in Code() aggregator function
+        if (fc.Name == "Code")
+            return EvalCodeFunction(fc.Args, item, paramType, ctx);
+
         // Check user-defined functions first
         if (_functions.TryGetValue(fc.Name, out var funcGroup))
         {
             var func = ResolveFunction(funcGroup, paramType, item, ctx);
             return ApplyFunction(func, item, fc.Args, item, paramType, ctx);
         }
+
+        // Check if the name resolves to a CopClosure (curried function)
+        var closureValue = ctx.GetAncestor(fc.Name);
+        if (closureValue is not CopClosure)
+            closureValue = TryResolveClosure(fc.Name, item, paramType, ctx);
+        if (closureValue is CopClosure closure)
+            return ApplyClosure(closure, item, fc.Args, paramType, ctx);
 
         // Path-scoped collection: Types('path') → resolve namespace and query provider
         if (_providerQueryService is not null
@@ -105,6 +116,48 @@ public class PredicateEvaluator
         return CallFunction(fc.Name, fc.Args, item, paramType, ctx);
     }
 
+    /// <summary>
+    /// Evaluates the built-in Code([providers], path?) function.
+    /// Returns a CodeProxy that lazily queries the specified providers.
+    /// </summary>
+    private object EvalCodeFunction(List<Expression> args, object item, string paramType, EvaluationContext ctx)
+    {
+        if (args.Count == 0 || args.Count > 2)
+            throw new InvalidOperationException("Code() requires 1-2 arguments: Code([providers], path?)");
+
+        // First arg must be a list of provider identifiers
+        var listArg = args[0] is ListLiteralExpr list
+            ? list
+            : throw new InvalidOperationException("Code() first argument must be a list of providers: Code([csharp, python])");
+
+        var providers = new string[list.Elements.Count];
+        var knownNamespaces = _registry.GetProviderNamespaces();
+
+        for (int i = 0; i < list.Elements.Count; i++)
+        {
+            var elem = list.Elements[i];
+            var name = elem is IdentifierExpr id
+                ? id.Name
+                : throw new InvalidOperationException($"Code() provider list must contain identifiers, got {elem.GetType().Name}");
+
+            if (!knownNamespaces.Contains(name, StringComparer.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Provider '{name}' is not imported. Add 'import {name}' to your .cop file.");
+
+            providers[i] = name;
+        }
+
+        // Optional second arg: path string
+        string? path = null;
+        if (args.Count == 2)
+        {
+            var pathVal = Eval(args[1], item, paramType, ctx);
+            path = pathVal?.ToString()
+                ?? throw new InvalidOperationException("Code() path argument must be a string");
+        }
+
+        return new CodeProxy(providers, path);
+    }
+
     private object? EvalPredicateCall(PredicateCallExpr mc, object item, string paramType, EvaluationContext ctx)
     {
         // Check if this is a function call (transforms type, not a boolean filter)
@@ -115,6 +168,20 @@ public class PredicateEvaluator
             var func = ResolveFunction(funcGroup, paramType, item, ctx);
             var target = Eval(mc.Target, item, paramType, ctx);
             return ApplyFunction(func, target, mc.Args, item, paramType, ctx);
+        }
+
+        // Check if this is a closure call (curried function)
+        var closureVal = ctx.GetAncestor(mc.Name);
+        if (closureVal is not CopClosure)
+        {
+            // Try resolving from let declarations
+            closureVal = TryResolveClosure(mc.Name, item, paramType, ctx);
+        }
+        if (closureVal is CopClosure closure)
+        {
+            if (mc.Negated)
+                throw new InvalidOperationException($"Cannot negate closure call '{mc.Name}' — closures produce values, not booleans");
+            return ApplyClosure(closure, item, mc.Args, paramType, ctx);
         }
 
         // Path-scoped collection: namespace.Collection('path') → query provider
@@ -1201,6 +1268,15 @@ public class PredicateEvaluator
     private object? ApplyFunction(FunctionDefinition func, object? target, List<Expression> callArgs,
         object item, string paramType, EvaluationContext ctx)
     {
+        // Currying: if fewer args than parameters, return a closure
+        if (callArgs.Count < func.Parameters.Count)
+        {
+            var boundArgs = new List<object?>();
+            for (int i = 0; i < callArgs.Count; i++)
+                boundArgs.Add(Eval(callArgs[i], item, paramType, ctx));
+            return new CopClosure(func, boundArgs);
+        }
+
         // The target is the item being transformed
         var inputItem = target ?? item;
         var inputType = func.InputType;
@@ -1253,6 +1329,47 @@ public class PredicateEvaluator
     }
 
     /// <summary>
+    /// Apply a closure (partially-applied function) with additional arguments.
+    /// Concatenates the bound args with the new args and calls the underlying function.
+    /// If still not enough args, returns a new closure with more args bound.
+    /// </summary>
+    private object? ApplyClosure(CopClosure closure, object item, List<Expression> newArgs,
+        string paramType, EvaluationContext ctx)
+    {
+        var allArgs = new List<Expression>();
+        // Convert bound args to literal expressions
+        foreach (var bound in closure.BoundArgs)
+            allArgs.Add(new LiteralExpr(bound));
+        allArgs.AddRange(newArgs);
+
+        return ApplyFunction(closure.Function, null, allArgs, item, paramType, ctx);
+    }
+
+    /// <summary>
+    /// Try to resolve a name to a CopClosure via let declarations.
+    /// Returns null if not found or if the let value doesn't evaluate to a closure.
+    /// </summary>
+    private object? TryResolveClosure(string name, object item, string paramType, EvaluationContext ctx)
+    {
+        if (_letDeclarations is not null &&
+            _letDeclarations.TryGetValue(name, out var letDecl) &&
+            letDecl.IsValueBinding)
+        {
+            if (!_evaluatingLetValues.Add(name))
+                return null;
+            try
+            {
+                return Eval(letDecl.ValueExpression!, item, paramType, ctx);
+            }
+            finally
+            {
+                _evaluatingLetValues.Remove(name);
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Evaluate an expression in function body context, where function parameters
     /// are available as plain identifiers (e.g., "message" resolves to the parameter value).
     /// </summary>
@@ -1263,14 +1380,98 @@ public class PredicateEvaluator
         if (expr is IdentifierExpr id && paramBindings.ContainsKey(id.Name))
             return paramBindings[id.Name];
 
-        // For member access on the input type, resolve normally
-        return Eval(expr, item, paramType, ctx);
+        var result = Eval(expr, item, paramType, ctx);
+
+        // Resolve string templates with function parameters (e.g., '{a}{b}' → parameter values)
+        if (result is string str && str.Contains('{'))
+        {
+            var segments = TemplateParser.Parse(str);
+            var sb = new System.Text.StringBuilder();
+            foreach (var segment in segments)
+            {
+                if (segment is LiteralSegment lit)
+                    sb.Append(lit.Text);
+                else if (segment is ExpressionSegment exprSeg)
+                {
+                    var path = exprSeg.PropertyPath;
+                    // Try parameter bindings first (single name like {a})
+                    if (path.Length == 1 && paramBindings.TryGetValue(path[0], out var paramVal))
+                        sb.Append(paramVal?.ToString() ?? "");
+                    else
+                    {
+                        // Try resolving via context/item property path
+                        sb.Append(ResolveExprSegment(path, item, paramType, ctx));
+                    }
+                }
+                else if (segment is AnnotatedLiteralSegment annLit)
+                    sb.Append(annLit.Text);
+            }
+            return sb.ToString();
+        }
+
+        return result;
+    }
+
+    private string ResolveExprSegment(string[] path, object item, string paramType, EvaluationContext ctx)
+    {
+        // Handle dotted expressions like item.Name
+        var root = path[0];
+        var target = root == "item" ? item : ctx.GetAncestor(root) ?? item;
+        if (path.Length > 1 && target is not null)
+        {
+            for (int i = 1; i < path.Length; i++)
+            {
+                var typeName = _registry.InferTypeName(target);
+                if (typeName is not null)
+                {
+                    var prop = _registry.GetType(typeName)?.GetProperty(path[i]);
+                    if (prop?.Accessor is not null)
+                    {
+                        target = prop.Accessor(target);
+                        continue;
+                    }
+                }
+                if (target is ScriptObject so && so.Fields.TryGetValue(path[i], out var fieldVal))
+                {
+                    target = fieldVal;
+                    continue;
+                }
+                return $"{{{string.Join(".", path)}}}"; // leave unresolved
+            }
+        }
+        return target?.ToString() ?? "";
     }
 
     /// <summary>
     /// Check if a name refers to a function definition.
     /// </summary>
     public bool IsFunction(string name) => _functions.ContainsKey(name);
+
+    /// <summary>
+    /// Check if a let declaration resolves to a closure (partially-applied function).
+    /// </summary>
+    public bool IsClosureLet(string name)
+    {
+        if (_letDeclarations is null || !_letDeclarations.TryGetValue(name, out var letDecl))
+            return false;
+        if (!letDecl.IsValueBinding || letDecl.ValueExpression is not FunctionCallExpr fc)
+            return false;
+        // It's a closure if the function call name maps to a known function
+        return _functions.ContainsKey(fc.Name);
+    }
+
+    /// <summary>
+    /// Apply a closure (from a let binding) as a transform filter on an item.
+    /// Resolves the let value to a CopClosure, then applies remaining args + item.
+    /// </summary>
+    public object? ApplyClosureFilter(string name, object item, string itemType, List<Expression> args)
+    {
+        var ctx = new EvaluationContext();
+        var closureValue = TryResolveClosure(name, item, itemType, ctx);
+        if (closureValue is CopClosure closure)
+            return ApplyClosure(closure, item, args, itemType, ctx);
+        return item; // fallback: pass through unchanged
+    }
 
     /// <summary>
     /// Resolve {item.Prop} patterns in a string, using the current item as context.
