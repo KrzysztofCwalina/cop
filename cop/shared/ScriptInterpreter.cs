@@ -1902,6 +1902,10 @@ public class ScriptInterpreter
 
     private object? GetPropertyViaRegistry(object obj, string property)
     {
+        // CodeProxy: resolve collection by name (e.g., codebase.Types)
+        if (obj is CodeProxy proxy)
+            return proxy.GetCollection(property, _typeRegistry, _providerQueryService);
+
         // ScriptObject: resolve fields by name
         if (obj is ScriptObject ao)
             return ao.GetField(property);

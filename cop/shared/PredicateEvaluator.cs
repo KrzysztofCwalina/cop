@@ -551,6 +551,10 @@ public class PredicateEvaluator
     {
         if (target is null) return null;
 
+        // CodeProxy: resolve collection by name (e.g., codebase.Types)
+        if (target is CodeProxy proxy)
+            return proxy.GetCollection(member, _registry, _providerQueryService);
+
         // ScriptObject: resolve fields by name, plus map properties
         if (target is ScriptObject ao)
         {
