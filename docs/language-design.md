@@ -395,23 +395,153 @@ A provider:
 
 ---
 
-## Packages
+## Packages and User-Defined Types
 
-Packages are reusable collections of predicates, functions, types, and commands.
+Packages are reusable libraries of types, predicates, functions, and commands. They define **namespaces** — when you import a package, its exports become available under the package name.
 
-```cop
-import my-package
+### Defining a Package
 
-# All exported predicates become extension methods in scope
-# All exported functions, types, commands become available
+A package is a directory with a `package.cop` manifest and source files:
+
+```
+packages/
+  validation/
+    package.cop
+    src/
+      types.cop
+      predicates.cop
+      rules.cop
 ```
 
-### Visibility
+**package.cop** — metadata:
+```cop
+name = 'validation'
+version = '1.0.0'
+description = 'Common validation types and predicates'
+```
+
+**src/types.cop** — define and export types:
+```cop
+type Severity = enum { Error, Warning, Info }
+
+type Violation = {
+    Rule: string,
+    Message: string,
+    Severity: Severity,
+    File: string?,
+    Line: int?
+}
+
+type ValidationResult = {
+    Violations: [Violation],
+    Passed: bool
+}
+
+export type Severity
+export type Violation
+export type ValidationResult
+```
+
+**src/predicates.cop** — extension methods on the types:
+```cop
+export predicate isError(Violation) => item.Severity.equals('Error')
+export predicate isWarning(Violation) => item.Severity.equals('Warning')
+export predicate isInFile(file: string, item: Violation) => item.File.equals(file)
+
+export function violation(rule: string, message: string, severity: Severity) => Violation {
+    Rule = rule
+    Message = message
+    Severity = severity
+    File = null
+    Line = null
+}
+
+export function validate(violations: [Violation]) => ValidationResult {
+    Violations = violations
+    Passed = violations:isError.Count.equals(0)
+}
+```
+
+**src/rules.cop** — analysis rules using the types:
+```cop
+import csharp
+
+export predicate tooManyMethods(Type) => item.Methods.Count > 20
+
+export function checkMethodCount(item: Type) => Violation {
+    Rule = 'method-count'
+    Message = '{item.Name} has {item.Methods.Count} methods (max 20)'
+    Severity = 'Warning'
+    File = item.File
+    Line = item.Line
+}
+```
+
+### Using a Package
+
+A consumer imports the package. All exported types, predicates, and functions become available under the package namespace:
 
 ```cop
-export predicate isClient(Type) => item.Name.endsWith('Client')   # visible to importers
-predicate helper(Type) => ...                                      # internal only
+import csharp
+import validation
+
+# Types from the package are now available for pattern matching:
+let codebase = csharp.Code('c:\projects\myapp')
+
+# Use exported predicates as extension methods:
+let violations = codebase.Types:tooManyMethods.map(checkMethodCount)
+
+# Use exported types for filtering/querying:
+let errors = violations:isError
+let warnings = violations:isWarning
+let fileIssues = violations:isInFile('UserService.cs')
+
+# Use exported functions to create typed objects:
+let result = violations:validate
+
+# Higher-order ops work on the typed collection:
+let hasErrors = violations.any(isError)
+let errorCount = violations.count(isError)
+
+# Output:
+command CHECK = foreach violations => '{item.Severity}: [{item.Rule}] {item.Message}'
 ```
+
+### Namespaces
+
+When two packages export the same name, qualify with the package namespace:
+
+```cop
+import csharp
+import python
+import validation
+
+# Both csharp and python might export a 'Type' type.
+# Collections are qualified by provider:
+let csTypes = csharp.Types
+let pyTypes = python.Types
+
+# Predicates resolve by parameter type — no ambiguity if types differ.
+# But if names collide, qualify:
+let errors = violations:validation.isError
+```
+
+### Visibility Rules
+
+```cop
+# Exported — visible to importers:
+export type Violation = { ... }
+export predicate isError(Violation) => ...
+export function validate(...) => ...
+export command CHECK = ...
+
+# Internal — only visible within the package:
+type InternalHelper = { ... }
+predicate helper(Violation) => ...
+```
+
+Only `export`-marked declarations are accessible to importing code. Everything else is package-internal.
+
 
 ---
 
