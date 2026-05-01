@@ -9,6 +9,13 @@ public class ScriptObject
     public string TypeName { get; }
     private readonly Dictionary<string, object?> _fields;
 
+    /// <summary>
+    /// Optional lazy field resolver. Called when a field is not found in the dictionary.
+    /// The result is memoized — subsequent accesses return the cached value.
+    /// This enables Haskell-style lazy evaluation: fields are thunks forced on first access.
+    /// </summary>
+    private Func<string, object?>? _fieldResolver;
+
     public ScriptObject(string typeName, Dictionary<string, object?> fields)
     {
         TypeName = typeName;
@@ -27,12 +34,32 @@ public class ScriptObject
     {
     }
 
+    /// <summary>
+    /// Sets a lazy field resolver for on-demand field evaluation.
+    /// When GetField is called for a field not in the dictionary, the resolver is invoked
+    /// and the result is memoized (stored in the dictionary for future access).
+    /// </summary>
+    public ScriptObject WithFieldResolver(Func<string, object?> resolver)
+    {
+        _fieldResolver = resolver;
+        return this;
+    }
+
     public void Set(string name, object? value) => _fields[name] = value;
 
-    public object? GetField(string name) =>
-        _fields.TryGetValue(name, out var value) ? value : null;
+    public object? GetField(string name)
+    {
+        if (_fields.TryGetValue(name, out var value)) return value;
+        if (_fieldResolver is not null)
+        {
+            var resolved = _fieldResolver(name);
+            _fields[name] = resolved; // memoize
+            return resolved;
+        }
+        return null;
+    }
 
-    public bool HasField(string name) => _fields.ContainsKey(name);
+    public bool HasField(string name) => _fields.ContainsKey(name) || _fieldResolver is not null;
 
     public IReadOnlyDictionary<string, object?> Fields => _fields;
 

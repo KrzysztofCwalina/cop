@@ -118,7 +118,7 @@ public class PredicateEvaluator
 
     /// <summary>
     /// Evaluates the built-in Code([providers], path?) function.
-    /// Returns a CodeProxy that lazily queries the specified providers.
+    /// Returns a ScriptObject with a lazy field resolver that queries providers on demand.
     /// </summary>
     private object EvalCodeFunction(List<Expression> args, object item, string paramType, EvaluationContext ctx)
     {
@@ -155,7 +155,7 @@ public class PredicateEvaluator
                 ?? throw new InvalidOperationException("Code() path argument must be a string");
         }
 
-        return new CodeProxy(providers, path);
+        return CreateCodeObject(providers, path);
     }
 
     private object? EvalPredicateCall(PredicateCallExpr mc, object item, string paramType, EvaluationContext ctx)
@@ -184,14 +184,14 @@ public class PredicateEvaluator
             return ApplyClosure(closure, item, mc.Args, paramType, ctx);
         }
 
-        // Provider-scoped Code proxy: namespace.Code('path') → CodeProxy([namespace], path)
+        // Provider-scoped Code: namespace.Code('path') → ScriptObject with lazy resolver
         if (mc.Name == "Code" && mc.Target is IdentifierExpr nsId)
         {
             var knownNamespaces = _registry.GetProviderNamespaces();
             if (knownNamespaces.Contains(nsId.Name, StringComparer.OrdinalIgnoreCase))
             {
                 string? path = mc.Args.Count == 1 ? Eval(mc.Args[0], item, paramType, ctx)?.ToString() : null;
-                return new CodeProxy([nsId.Name], path);
+                return CreateCodeObject([nsId.Name], path);
             }
         }
 
@@ -561,10 +561,6 @@ public class PredicateEvaluator
     private object? GetMember(object? target, string member)
     {
         if (target is null) return null;
-
-        // CodeProxy: resolve collection by name (e.g., codebase.Types)
-        if (target is CodeProxy proxy)
-            return proxy.GetCollection(member, _registry, _providerQueryService);
 
         // ScriptObject: resolve fields by name, plus map properties
         if (target is ScriptObject ao)
@@ -1585,5 +1581,38 @@ public class PredicateEvaluator
         }
         // Last resort: first unconstrained, then first overall
         return group.FirstOrDefault(f => f.Constraint is null) ?? group[0];
+    }
+
+    /// <summary>
+    /// Creates a ScriptObject representing a Code([providers], path?) result.
+    /// The object has a lazy field resolver that queries providers on demand and memoizes results.
+    /// </summary>
+    private ScriptObject CreateCodeObject(string[] providers, string? path)
+    {
+        var registry = _registry;
+        var queryService = _providerQueryService;
+
+        var obj = new ScriptObject("Code");
+        obj.WithFieldResolver(collectionName =>
+        {
+            var results = new List<object>();
+            foreach (var provider in providers)
+            {
+                if (path is not null && queryService is not null)
+                {
+                    var items = queryService.Query(provider, collectionName, path);
+                    results.AddRange(items);
+                }
+                else
+                {
+                    var qualified = $"{provider}.{collectionName}";
+                    var items = registry.GetGlobalCollectionItems(qualified);
+                    if (items is not null)
+                        results.AddRange(items);
+                }
+            }
+            return results;
+        });
+        return obj;
     }
 }

@@ -82,7 +82,10 @@ public class ScriptParser
                 else if (Current.Kind == TokenKind.CollectionKeyword)
                     collectionDeclarations.Add(ParseCollectionDeclaration(isExported: true));
                 else if (Current.Kind == TokenKind.LetKeyword)
-                    letDeclarations.Add(ParseLetDeclaration(isExported: true));
+                {
+                    var decl = ParseLetDeclaration(isExported: true);
+                    letDeclarations.Add(decl);
+                }
                 else if (Current.Kind == TokenKind.CommandKeyword)
                     commands.AddRange(ParseLetCommandChain(pendingDocComment, isExported: true));
                 else if (Current.Kind == TokenKind.PredicateKeyword)
@@ -127,7 +130,8 @@ public class ScriptParser
                 }
                 else
                 {
-                    letDeclarations.Add(ParseLetDeclaration());
+                    var decl = ParseLetDeclaration();
+                    letDeclarations.Add(decl);
                 }
                 pendingDocComment = null;
             }
@@ -515,7 +519,7 @@ public class ScriptParser
             return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: call);
         }
 
-        // Handle namespace.Code('path') — provider-scoped Code proxy (e.g., csharp.Code('path'))
+        // Handle namespace.Code('path') — provider-scoped Code (e.g., csharp.Code('path'))
         if (expr is PredicateCallExpr { Name: "Code" } nsCode && nsCode.Target is IdentifierExpr)
         {
             return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: nsCode);
@@ -530,11 +534,12 @@ public class ScriptParser
 
         // Try to decompose as a collection expression (base:filter1:filter2).
         // If that fails, treat as a general value binding (arbitrary expression).
+        // SourceExpression is always stored as fallback — the runtime uses it when
+        // the parent turns out to be a value binding (e.g., codebase.Types where
+        // codebase is a ScriptObject from Code()).
         try
         {
             var (baseCollection, filters, exclusions, pathOverride) = DecomposeCollectionExpression(expr);
-            // Store SourceExpression as fallback for cases where decomposition "succeeds"
-            // but runtime can't resolve it as a collection (e.g., typeNames.Count)
             return new LetDeclaration(name.Value, baseCollection, filters, line, isExported, isRuntime, Exclusions: exclusions, SourceExpression: expr, PathOverride: pathOverride);
         }
         catch (InvalidOperationException)

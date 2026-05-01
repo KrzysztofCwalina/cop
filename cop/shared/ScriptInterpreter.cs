@@ -754,9 +754,9 @@ public class ScriptInterpreter
         HashSet<string>? visited = null,
         bool useQueryCache = true)
     {
-        // CodeProxy dotted access: codebase.Types → query all bound providers
-        var proxyItems = TryResolveCodeProxyCollection(collection, letDeclarations, evaluator);
-        if (proxyItems != null) return proxyItems;
+        // Dotted value-binding access: codebase.Types, types.Count, types.First
+        var dottedItems = TryResolveDottedValueBinding(collection, letDeclarations, evaluator);
+        if (dottedItems != null) return dottedItems;
 
         // Load() dotted access (e.g., "dll.Api", "dll.Types") — resolve from loaded documents
         var loadItems = TryResolveLoadCollection(collection, letDeclarations);
@@ -1576,8 +1576,8 @@ public class ScriptInterpreter
         if (IsLoadDottedReference(collection, letDeclarations))
             return true;
 
-        // CodeProxy dotted access (e.g., "codebase.Types") is always global
-        if (IsCodeProxyDottedReference(collection, letDeclarations))
+        // Value-binding dotted access (e.g., "codebase.Types") is always global
+        if (IsValueBindingDottedReference(collection, letDeclarations))
             return true;
 
         collection = ResolveDottedCollection(collection, letDeclarations);
@@ -1619,26 +1619,22 @@ public class ScriptInterpreter
         Dictionary<string, List<FunctionDefinition>> functionGroups,
         HashSet<string>? visited = null)
     {
-        // CodeProxy dotted access: codebase.Types → query all bound providers
-        var proxyItems = TryResolveCodeProxyCollection(collection, letDeclarations, evaluator);
-        if (proxyItems != null) return proxyItems;
+        // Dotted value-binding access: codebase.Types, types.Count, types.First
+        // Dispatches on RUNTIME TYPE of parent (ScriptObject, IList, etc.)
+        var dottedItems = TryResolveDottedValueBinding(collection, letDeclarations, evaluator);
+        if (dottedItems != null) return dottedItems;
 
-        // Load() dotted access (e.g., "dll.Api", "dll.Types") — resolve from loaded documents
+        // Load() dotted access (e.g., "dll.Api") 
         var loadItems = TryResolveLoadCollection(collection, letDeclarations);
         if (loadItems != null) return loadItems;
 
         collection = ResolveDottedCollection(collection, letDeclarations);
 
-        // Direct global collection
-        var globalItems = _typeRegistry.GetGlobalCollectionItems(collection);
-        if (globalItems is not null)
-            return globalItems;
-
         visited ??= [];
         if (!visited.Add(collection))
             throw new InvalidOperationException($"Circular collection reference: {collection}");
 
-        // Let declaration
+        // Let declaration (check before global collections to avoid ambiguity on bare names)
         if (letDeclarations.TryGetValue(collection, out var letDecl))
         {
             // Collection union: let Name = a + b + c
@@ -1710,18 +1706,23 @@ public class ScriptInterpreter
             return result;
         }
 
+        // Direct global collection
+        var globalItems = _typeRegistry.GetGlobalCollectionItems(collection);
+        if (globalItems is not null)
+            return globalItems;
+
         // Derived from predicate
         if (predicateGroups.TryGetValue(collection, out var preds))
         {
             var pred = preds[0];
-            var baseItems = ResolveGlobalCollection(
+            var predBaseItems = ResolveGlobalCollection(
                 pred.ParameterType, evaluator, predicateGroups, letDeclarations, functionGroups, visited);
-            var baseItemType = ResolveItemType(pred.ParameterType, predicateGroups, letDeclarations, functionGroups);
+            var predBaseItemType = ResolveItemType(pred.ParameterType, predicateGroups, letDeclarations, functionGroups);
 
-            return baseItems.Where(item =>
+            return predBaseItems.Where(item =>
             {
-                var (result, _) = evaluator.EvaluateAsBool(pred.Body, item, baseItemType);
-                return result;
+                var (r, _) = evaluator.EvaluateAsBool(pred.Body, item, predBaseItemType);
+                return r;
             }).ToList();
         }
 
@@ -1902,11 +1903,7 @@ public class ScriptInterpreter
 
     private object? GetPropertyViaRegistry(object obj, string property)
     {
-        // CodeProxy: resolve collection by name (e.g., codebase.Types)
-        if (obj is CodeProxy proxy)
-            return proxy.GetCollection(property, _typeRegistry, _providerQueryService);
-
-        // ScriptObject: resolve fields by name
+        // ScriptObject: resolve fields by name (includes lazy resolver)
         if (obj is ScriptObject ao)
             return ao.GetField(property);
 
@@ -2260,27 +2257,30 @@ public class ScriptInterpreter
         return letDeclarations.TryGetValue(parentName, out var letDecl) && letDecl.IsExternalLoad;
     }
 
-    private static bool IsCodeProxyDottedReference(string collection, Dictionary<string, LetDeclaration> letDeclarations)
+    /// <summary>
+    /// Checks if a collection name is a dotted reference to a value-binding let (e.g., "codebase.Types").
+    /// Only returns true for explicit value bindings — SourceExpression fallbacks are handled
+    /// at resolution time by TryResolveDottedValueBinding (with try/catch for ambiguous cases).
+    /// </summary>
+    private static bool IsValueBindingDottedReference(string collection, Dictionary<string, LetDeclaration> letDeclarations)
     {
         var dotIndex = collection.IndexOf('.');
         if (dotIndex < 0) return false;
 
         var parentName = collection[..dotIndex];
-        return letDeclarations.TryGetValue(parentName, out var letDecl)
-            && letDecl.IsValueBinding
-            && (letDecl.ValueExpression is FunctionCallExpr { Name: "Code" }
-                || letDecl.ValueExpression is PredicateCallExpr { Name: "Code" });
+        if (!letDeclarations.TryGetValue(parentName, out var letDecl)) return false;
+        // Only non-Load/Parse value bindings — Load and Parse have their own dotted resolution
+        return letDecl.IsValueBinding && !letDecl.IsExternalLoad && !letDecl.IsFileParse;
     }
 
     /// <summary>
-    /// Resolves a Load() dotted collection (e.g., "dll.Api") by extracting the sub-collection
-    /// from the loaded documents using the same collection extractors as document loading.
+    /// Resolves a dotted collection reference where the parent is a let-bound value.
+    /// Uses the evaluator for member access — ScriptObject's lazy field resolver
+    /// handles Code() objects, IList handles .Count/.First, etc.
+    /// e.g., "codebase.Types" where codebase is a ScriptObject with lazy fields,
+    ///        "types.First" where types evaluates to IList.
     /// </summary>
-    /// <summary>
-    /// Resolves a dotted collection reference where the parent is a CodeProxy value binding.
-    /// e.g., "codebase.Types" where let codebase = Code([csharp, python])
-    /// </summary>
-    private List<object>? TryResolveCodeProxyCollection(
+    private List<object>? TryResolveDottedValueBinding(
         string collection,
         Dictionary<string, LetDeclaration> letDeclarations,
         PredicateEvaluator evaluator)
@@ -2289,21 +2289,37 @@ public class ScriptInterpreter
         if (dotIndex < 0) return null;
 
         var parentName = collection[..dotIndex];
-        var propertyName = collection[(dotIndex + 1)..];
+        var memberName = collection[(dotIndex + 1)..];
 
-        if (!letDeclarations.TryGetValue(parentName, out var letDecl) || !letDecl.IsValueBinding)
+        if (!letDeclarations.TryGetValue(parentName, out var letDecl))
             return null;
 
-        // Only evaluate if the expression is a Code(...) function call
-        if (letDecl.ValueExpression is not FunctionCallExpr { Name: "Code" }
-            && letDecl.ValueExpression is not PredicateCallExpr { Name: "Code" })
-            return null;
+        // Load() and Parse() have their own resolution paths
+        if (letDecl.IsExternalLoad || letDecl.IsFileParse) return null;
 
-        var value = evaluator.EvaluateField(letDecl.ValueExpression!, null!, "");
-        if (value is not CodeProxy proxy)
-            return null;
+        // Get the parent's evaluable expression (value binding or SourceExpression fallback)
+        var parentExpr = letDecl.IsValueBinding ? letDecl.ValueExpression
+                       : letDecl.SourceExpression;
+        if (parentExpr is null) return null;
 
-        return proxy.GetCollection(propertyName, _typeRegistry, _providerQueryService);
+        // Evaluate parent.member through the evaluator's member access dispatch
+        var memberExpr = new MemberAccessExpr(parentExpr, memberName);
+        try
+        {
+            var memberResult = evaluator.EvaluateField(memberExpr, null!, "");
+            if (memberResult is IList<object> typedList) return typedList.ToList();
+            if (memberResult is IList list) return list.Cast<object>().ToList();
+            if (memberResult is not null) return [memberResult];
+            return [];
+        }
+        catch
+        {
+            // For real value bindings (Code(), csharp.Code(), etc.), propagate errors
+            // so user sees meaningful messages like "provider not imported"
+            if (letDecl.IsValueBinding) throw;
+            // For SourceExpression fallbacks (speculative), silently fall through
+            return null;
+        }
     }
 
     private List<object>? TryResolveLoadCollection(
