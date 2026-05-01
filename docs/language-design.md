@@ -42,29 +42,63 @@ Scalars are the terminal values — the base case where navigation stops:
 | `bool` | `true`, `false` | |
 | `null` | `null` | Absence of value |
 
+### Types (Shape Descriptors)
+
+Types describe the **shape** of objects — what fields they have and what kind of values those fields hold. DataObject is the invisible runtime representation; users think in terms of types.
+
+```cop
+type Request = {
+    Method: string,
+    Path: string,
+    Headers: [Header],
+    Body: string?
+}
+
+type Response = {
+    StatusCode: int,
+    Body: string,
+    ContentType: string
+}
+
+type Type = {
+    Name: string,
+    Namespace: string,
+    Methods: [Method],
+    Properties: [Property],
+    Visibility: string
+}
+```
+
+Types serve four purposes:
+1. **Shape description** — what fields an object has
+2. **Parameter matching** — `function f(Type) =>` means "accepts objects shaped like Type"
+3. **Pattern matching** — constrained dispatch based on value (see below)
+4. **Tooling** — library documentation, statement completion, type-ahead suggestions
+
 ### The Object Tree (Uniform Thunks)
 
-Everything from providers down to leaf fields is a DataObject. The tree is uniform — no level is special:
+At runtime, everything from providers down to leaf fields is a DataObject. The tree is uniform:
 
 ```
-csharp                → DataObject (provider; fields: Types, Methods, ...)
-  .Types              → DataObject (iterable; each item is a DataObject)
-    [0]               → DataObject (a Type; fields: Name, Methods, Properties, ...)
-      .Methods        → DataObject (iterable; each item is a DataObject)
-        [0]           → DataObject (a Method; fields: Name, Parameters, ...)
+csharp                → DataObject (typed as Provider; fields: Types, Methods, ...)
+  .Types              → DataObject (iterable of Type-shaped DataObjects)
+    [0]               → DataObject (typed as Type; fields: Name, Methods, ...)
+      .Methods        → DataObject (iterable of Method-shaped DataObjects)
+        [0]           → DataObject (typed as Method; fields: Name, Parameters, ...)
           .Name       → scalar (string — terminal)
 ```
 
-**Every `.` is the same operation** at every level. There is no distinction between "accessing a provider collection" and "accessing a field on an object." It's all field access on a DataObject.
+**Every `.` is the same operation** at every level. DataObject is the uniform runtime mechanism, but the USER sees typed objects (Type, Method, Request, etc.).
 
 ### What is `csharp`?
 
-`import csharp` binds the name `csharp` to a DataObject. That DataObject has lazy fields:
-- `.Types` — forces to an iterable DataObject (collection of Type DataObjects)
-- `.Methods` — forces to an iterable DataObject (collection of Method DataObjects)
-- `.Code('path')` — a callable field (function) that returns a scoped DataObject
+`import csharp` binds the name `csharp` to a provider — a DataObject with typed, lazy fields:
+- `.Types` — iterable of Type objects (loaded on demand)
+- `.Methods` — iterable of Method objects (loaded on demand)
+- `.Code('path')` — function that returns a scoped view
 
-There is no "namespace" concept. There is no special resolution path. `csharp` is a DataObject like any other. `csharp.Types` is field access like any other.
+`csharp.Types` is field access. The same `.` operation at every level. But `csharp` is typed (it's a Provider), and `csharp.Types` returns objects typed as Type.
+
 
 ---
 
@@ -178,6 +212,82 @@ types.map(summarize)    # apply to each item → list of Summaries
 ### Predicates ARE Functions
 
 A predicate is just a function that returns bool. The `predicate` keyword is syntactic sugar — it signals that `:` can use this as a filter.
+
+---
+
+## Pattern Matching (Value-Based Dispatch)
+
+Functions can have **multiple overloads** with the same name and parameter type. The runtime selects the most specific match based on **value constraints** — like Haskell's pattern matching with guards.
+
+### Basic pattern matching
+
+```cop
+function handle(Request:Path.equals('/')) => Response {
+    StatusCode = 200
+    Body = '{"message":"hello world!"}'
+    ContentType = 'application/json'
+}
+
+function handle(Request:Path.equals('/health')) => Response {
+    StatusCode = 200
+    Body = '{"status":"healthy"}'
+    ContentType = 'application/json'
+}
+
+function handle(Request) => Response {
+    StatusCode = 404
+    Body = '{"error":"not found"}'
+    ContentType = 'application/json'
+}
+```
+
+The runtime tries each overload top-to-bottom. The first match wins. The unconstrained overload is the fallback (like Haskell's `_`).
+
+### Constraint syntax
+
+The parameter type can be followed by `:` constraints — the same filter syntax used on collections:
+
+```cop
+function f(Type:isPublic) => ...             # matches when item is public
+function f(Type:Name.startsWith('I')) => ... # matches when name starts with 'I'
+function f(Type) => ...                      # matches any Type (fallback)
+```
+
+This is the `:` (filter/Where) operator applied to the parameter: "this function handles the subset of Type values where the constraint holds."
+
+### Analogy to Haskell
+
+```haskell
+-- Haskell:
+handle req | path req == "/"       = Response 200 "hello"
+handle req | path req == "/health" = Response 200 "healthy"
+handle req                         = Response 404 "not found"
+```
+
+```cop
+-- Cop:
+function handle(Request:Path.equals('/'))       => Response { ... }
+function handle(Request:Path.equals('/health')) => Response { ... }
+function handle(Request)                        => Response { ... }
+```
+
+The semantics are identical. The constraint after the type IS the guard.
+
+### Why this works with extension methods
+
+Since predicates are extension methods, they can be used as constraints:
+
+```cop
+predicate isGetRequest(Request) => item.Method.equals('GET')
+predicate isPostRequest(Request) => item.Method.equals('POST')
+
+function handle(Request:isGetRequest:Path.equals('/users')) => Response { ... }
+function handle(Request:isPostRequest:Path.equals('/users')) => Response { ... }
+function handle(Request) => Response { StatusCode = 405, ... }
+```
+
+The `:` chain in the parameter is an AND of conditions — same semantics as collection filtering.
+
 
 ---
 
