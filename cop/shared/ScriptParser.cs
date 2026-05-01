@@ -515,6 +515,12 @@ public class ScriptParser
             return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: call);
         }
 
+        // Handle namespace.Code('path') — provider-scoped Code proxy (e.g., csharp.Code('path'))
+        if (expr is PredicateCallExpr { Name: "Code" } nsCode && nsCode.Target is IdentifierExpr)
+        {
+            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: nsCode);
+        }
+
         // Collection union with + operator: let x = a + b + c
         if (expr is BinaryExpr && FlattenUnionOperands(expr) is { } unionElements)
         {

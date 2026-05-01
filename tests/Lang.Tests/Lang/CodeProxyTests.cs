@@ -139,4 +139,52 @@ foreach codebase.Types => '{item.Name}'
         var proxy = new CodeProxy(["csharp", "python"], "../sdk");
         Assert.That(proxy.ToString(), Is.EqualTo("Code([csharp, python], '../sdk')"));
     }
+
+    [Test]
+    public void Code_ProviderScoped_ParsesAndEvaluates()
+    {
+        var registry = CreateRegistryWithProviders();
+        var codeFile = TestInterpreter.CodePackage;
+        if (codeFile.FlagsDefinitions != null)
+            registry.LoadFlagsDefinitions(codeFile.FlagsDefinitions);
+
+        // csharp.Code() — provider-scoped syntax (no path)
+        var script = ScriptParser.Parse(@"
+import code
+
+let codebase = csharp.Code()
+foreach codebase.Types => '{item.Name}'
+", "test.cop");
+
+        var interpreter = new ScriptInterpreter(registry);
+        var result = interpreter.Run([codeFile, script], []);
+
+        Assert.That(result.Outputs, Has.Count.EqualTo(2));
+        Assert.That(result.Outputs.Any(o => o.Message.Contains("MyClass")), Is.True);
+        Assert.That(result.Outputs.Any(o => o.Message.Contains("MyInterface")), Is.True);
+    }
+
+    [Test]
+    public void Code_ProviderScoped_WithPath_ParsesAndEvaluates()
+    {
+        var registry = CreateRegistryWithProviders();
+        var codeFile = TestInterpreter.CodePackage;
+        if (codeFile.FlagsDefinitions != null)
+            registry.LoadFlagsDefinitions(codeFile.FlagsDefinitions);
+
+        // csharp.Code('somepath') — provider-scoped with path
+        var script = ScriptParser.Parse(@"
+import code
+
+let codebase = csharp.Code('somepath')
+foreach codebase.Types => '{item.Name}'
+", "test.cop");
+
+        var interpreter = new ScriptInterpreter(registry);
+        var result = interpreter.Run([codeFile, script], []);
+
+        // Since the path doesn't affect registry-based resolution in tests,
+        // the CodeProxy stores the path but still queries the same collections
+        Assert.That(result.Outputs, Has.Count.EqualTo(2));
+    }
 }

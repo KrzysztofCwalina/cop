@@ -2268,7 +2268,8 @@ public class ScriptInterpreter
         var parentName = collection[..dotIndex];
         return letDeclarations.TryGetValue(parentName, out var letDecl)
             && letDecl.IsValueBinding
-            && letDecl.ValueExpression is FunctionCallExpr { Name: "Code" };
+            && (letDecl.ValueExpression is FunctionCallExpr { Name: "Code" }
+                || letDecl.ValueExpression is PredicateCallExpr { Name: "Code" });
     }
 
     /// <summary>
@@ -2294,7 +2295,8 @@ public class ScriptInterpreter
             return null;
 
         // Only evaluate if the expression is a Code(...) function call
-        if (letDecl.ValueExpression is not FunctionCallExpr { Name: "Code" })
+        if (letDecl.ValueExpression is not FunctionCallExpr { Name: "Code" }
+            && letDecl.ValueExpression is not PredicateCallExpr { Name: "Code" })
             return null;
 
         var value = evaluator.EvaluateField(letDecl.ValueExpression!, null!, "");

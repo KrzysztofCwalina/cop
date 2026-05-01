@@ -184,6 +184,17 @@ public class PredicateEvaluator
             return ApplyClosure(closure, item, mc.Args, paramType, ctx);
         }
 
+        // Provider-scoped Code proxy: namespace.Code('path') → CodeProxy([namespace], path)
+        if (mc.Name == "Code" && mc.Target is IdentifierExpr nsId)
+        {
+            var knownNamespaces = _registry.GetProviderNamespaces();
+            if (knownNamespaces.Contains(nsId.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                string? path = mc.Args.Count == 1 ? Eval(mc.Args[0], item, paramType, ctx)?.ToString() : null;
+                return new CodeProxy([nsId.Name], path);
+            }
+        }
+
         // Path-scoped collection: namespace.Collection('path') → query provider
         if (_providerQueryService is not null
             && mc.Target is IdentifierExpr provId
