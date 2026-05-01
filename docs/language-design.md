@@ -106,30 +106,28 @@ A "field" is simply a nullary function called without parens. There is no semant
 
 ### What is `csharp`?
 
-`import csharp` binds the name `csharp` to a **CSharpCodebase instance** scoped to cwd. The binding is evaluated once (like all `let` bindings) — every use of `csharp` in the file refers to the same instance.
+`csharp` is a **fully curried function**. The `import` statement supplies the implicit argument (cwd), making it nullary. Per our rule — nullary functions are lowered to fields — `csharp` becomes a **global static field** holding a CSharpCodebase instance.
+
+This is not a special case. It's the same principle applied everywhere:
+- `type.Name` — nullary function → lowered to a field on the object
+- `csharp` — nullary function (cwd already applied) → lowered to a global static field
+- `csharp.Types` — nullary function on the codebase → lowered to a field
 
 ```cop
 import csharp
 
-# csharp is already a CSharpCodebase (bound to cwd at import time).
-# Using it multiple times does NOT re-instantiate:
-csharp.Types       # same instance, same scan
+# csharp is a fully curried function → static field → CSharpCodebase(cwd):
+csharp.Types       # same instance, same memoized result
 csharp.Methods     # same instance
 
-# To analyze a different path, call csharp as a constructor:
+# Partial application with a different path → new instance:
 let other = csharp('c:\git\other')
 other.Types        # different codebase
 ```
 
-**Key distinction:**
-- **`csharp`** (bare name) — the import-time instance, bound to cwd. One instance per file. No re-evaluation.
-- **`csharp('path')`** — constructor call, creates a new CSharpCodebase bound to that path. Each call with a different path creates a new instance. Bind with `let` to avoid redundant instantiation.
+**No special "dual nature."** `csharp` without parens is the evaluated (lowered) result. `csharp('path')` is re-applying the underlying function with an explicit argument — overriding the curried-in default.
 
-The **bare form** preserves the simplicity of dropping a `.cop` file at a repo root and just running it — the codebase is implicitly "here." The constructor form supports cross-repo analysis and multi-codebase scenarios.
-
-The returned `CSharpCodebase` has **nullary** members — they're already bound to the path. No risk of accidentally mixing paths across collections.
-
-Multiple codebases work naturally:
+Multiple codebases:
 ```cop
 let frontend = csharp('c:\git\frontend')
 let backend = csharp('c:\git\backend')
@@ -410,7 +408,7 @@ Providers are the bridge between external data and the Cop type system.
 
 ### What is `csharp`?
 
-After `import csharp`, the name `csharp` is a **CSharpCodebase** instance (bound to cwd). It's also callable as a constructor to create instances for other paths:
+`csharp` is a **fully curried function** — `import` supplies cwd as the implicit argument, making it nullary. It's lowered to a global static field (the same optimization as any nullary function):
 
 ```cop
 type CSharpCodebase = {
@@ -423,70 +421,54 @@ type CSharpCodebase = {
 }
 ```
 
-All members are **nullary** — they're already curried with the path. This guarantees consistency: Types and Methods always come from the same codebase.
+All members are **nullary** — curried with the path. Types and Methods always come from the same codebase.
 
 ### Memoization
 
-`csharp` (the import binding) is evaluated once — it's a single instance for the file. Using `csharp.Types` ten times doesn't re-scan; it's the same memoized value.
+`csharp` is a static field — evaluated once, memoized. `csharp.Types` used repeatedly returns the same cached collection.
 
-`csharp('path')` is a constructor call — each unique call creates a new instance. Bind with `let` to avoid redundant work:
+`csharp('path')` re-applies the underlying function with an explicit path. Each call with a new path creates a new instance. Bind with `let` to cache:
 
 ```cop
 import csharp
 
-# csharp is already a codebase (cwd). One instance, reused:
-csharp.Types              # scans once, memoizes
-csharp.Types              # same cached result
+# csharp is a static field (fully curried → lowered):
+csharp.Types              # memoized
+csharp.Types              # same result
 
-# Explicit path — bind once, reuse:
+# Re-apply with explicit path:
 let other = csharp('c:\git\other')
-other.Types               # scans once
-other.Types               # cached
-
-# Multiple codebases:
-let frontend = csharp('c:\git\frontend')
-let backend = csharp('c:\git\backend')
-frontend.Types    # types from frontend
-backend.Methods   # methods from backend
+other.Types               # new codebase, memoized within this binding
 ```
 
 ### `import` — formal definition
 
-`import <package>` does three things:
+`import <package>` does two things:
 
-1. **Creates and binds a default instance** — for providers, this is an instance bound to cwd (evaluated lazily). The name `csharp` IS a CSharpCodebase, usable directly.
-2. **Makes the name callable** — `csharp('path')` constructs a new instance bound to a different path.
-3. **Brings exports into scope** — the package's exported types, predicates, and functions become resolvable names.
+1. **Curries and binds** — supplies the default argument (e.g., cwd for providers), creating a fully curried function that is lowered to a global static field. `csharp` IS a CSharpCodebase.
+2. **Brings exports into scope** — the package's exported types, predicates, and functions become resolvable names.
+
+The name remains callable with an explicit argument to override the default:
 
 ```cop
 import csharp
 #        │
-#        ├─ (1) binds:  let csharp = CSharpCodebase(cwd)  — lazy, one instance
-#        ├─ (2) callable: csharp('path') → new CSharpCodebase(path)
-#        └─ (3) scope:  Type, Method, isPublic, ... are now resolvable names
+#        ├─ (1) binds:  csharp = fully curried function → static field (CSharpCodebase @ cwd)
+#        ├─     also:   csharp('path') re-applies with explicit arg → new CSharpCodebase
+#        └─ (2) scope:  Type, Method, isPublic, ... are now resolvable names
 ```
-
-So `import csharp` is equivalent to:
-```cop
-let csharp = <cwd-bound CSharpCodebase instance, also callable as constructor>
-use csharp.[Type, Method, Statement, ...]     # bring exported types into scope
-use csharp.[isPublic, isAbstract, ...]         # bring exported predicates into scope
-```
-
-(The `use` lines are not real syntax — they illustrate what `import` does behind the scenes.)
-
 
 ### Who creates what?
 
 | What | Who creates it | When |
 |------|---------------|------|
-| The provider function (`csharp`) | The runtime, triggered by `import` | At import time (binds factory) |
-| The bound codebase (`csharp('path')`) | The provider, when called | When user applies the function |
-| Objects in collections (`code.Types[0]`) | The provider, by reading external data | On first access (lazy) |
+| The static field (`csharp`) | `import` curries cwd → lowered to field | At import time (lazy) |
+| A new codebase (`csharp('path')`) | Re-application of the function | When user supplies explicit arg |
+| Objects in collections (`csharp.Types[0]`) | The provider, by reading external data | On first access (lazy) |
 | User-defined objects (`Violation { ... }`) | User code, via record construction | When the expression is evaluated |
 | Function results (`checkMethodCount(type)`) | The function body | When the function is called |
 
-The runtime's only "magic" is binding the factory function at `import` time. Everything after that is regular function application and record construction.
+The runtime's only "magic" is currying the default arg at `import` time. Everything after that is regular function application, field lowering, and record construction.
 
 
 
