@@ -1346,4 +1346,50 @@ public class PredicateEvaluatorTests
     }
 
     #endregion
+
+    #region Function Constraint Resolution
+
+    [Test]
+    public void ResolveFunction_ConstrainedOverload_MatchesFirst()
+    {
+        var registry = new TypeRegistry();
+
+        // Two overloads: one constrained to Path:eq('/'), one unconstrained
+        // Constraint: PredicateCallExpr(MemberAccessExpr(IdentifierExpr("item"), "Path"), "equals", ["/"])
+        var constrained = new FunctionDefinition(
+            "handle", "Request", "Response", [],
+            new() { ["StatusCode"] = new LiteralExpr(200) }, 1,
+            Constraint: new PredicateCallExpr(
+                new MemberAccessExpr(new IdentifierExpr("item"), "Path"),
+                "equals", [new LiteralExpr("/")], false));
+
+        var fallback = new FunctionDefinition(
+            "handle", "Request", "Response", [],
+            new() { ["StatusCode"] = new LiteralExpr(404) }, 2);
+
+        var functions = new Dictionary<string, List<FunctionDefinition>>
+        {
+            ["handle"] = [constrained, fallback]
+        };
+
+        var eval = new PredicateEvaluator(
+            new Dictionary<string, List<PredicateDefinition>>(),
+            "test.cop",
+            registry,
+            functions: functions);
+
+        // Item with Path = "/" → should match constrained overload
+        var matchItem = new ScriptObject("Request", new() { ["Path"] = "/", ["Method"] = "GET" });
+        var result = eval.ApplyFunction("handle", matchItem, "Request", []);
+        Assert.That(result, Is.TypeOf<ScriptObject>());
+        Assert.That(((ScriptObject)result!).GetField("StatusCode"), Is.EqualTo(200));
+
+        // Item with Path = "/other" → should fall through to unconstrained
+        var noMatchItem = new ScriptObject("Request", new() { ["Path"] = "/other", ["Method"] = "GET" });
+        var result2 = eval.ApplyFunction("handle", noMatchItem, "Request", []);
+        Assert.That(result2, Is.TypeOf<ScriptObject>());
+        Assert.That(((ScriptObject)result2!).GetField("StatusCode"), Is.EqualTo(404));
+    }
+
+    #endregion
 }

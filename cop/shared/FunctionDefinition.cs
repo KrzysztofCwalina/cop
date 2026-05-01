@@ -15,4 +15,5 @@ public record FunctionDefinition(
     Dictionary<string, Expression> FieldMappings,
     int Line,
     bool IsExported = false,
-    Expression? BodyExpression = null);
+    Expression? BodyExpression = null,
+    Expression? Constraint = null);

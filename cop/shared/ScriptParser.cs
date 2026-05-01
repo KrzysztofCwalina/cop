@@ -363,8 +363,61 @@ public class ScriptParser
         var firstIdent = Expect(TokenKind.Identifier).Value;
         string inputType;
         var parameters = new List<FunctionParameter>();
+        Expression? constraint = null;
 
-        if (Current.Kind == TokenKind.Colon)
+        if (Current.Kind == TokenKind.Colon && char.IsUpper(firstIdent[0]))
+        {
+            // Type with constraint filter chain: Request:Path:eq('/')
+            inputType = firstIdent;
+            Advance(); // consume first ':'
+            bool negated = Current.Kind == TokenKind.Not;
+            if (negated) Advance();
+            var constraintIdent = Expect(TokenKind.Identifier);
+            var normalizedName = NormalizePredicateName(constraintIdent.Value);
+
+            // First segment could be a field name (followed by another ':' or '(') or a bare predicate
+            if (Current.Kind == TokenKind.LParen)
+            {
+                // Predicate with args applied to item: Request:eq('/') or Request:sw('/api')
+                Advance();
+                var args = ParseArgList();
+                Expect(TokenKind.RParen);
+                constraint = new PredicateCallExpr(new IdentifierExpr("item"), normalizedName, args, negated);
+            }
+            else if (Current.Kind == TokenKind.Colon)
+            {
+                // It's a field name followed by more chain: Request:Path:eq('/')
+                // Emit MemberAccessExpr(IdentifierExpr("item"), "Path") as the chain base
+                Expression chainExpr = new MemberAccessExpr(new IdentifierExpr("item"), constraintIdent.Value);
+                while (Current.Kind == TokenKind.Colon && _pos + 1 < _tokens.Count
+                    && (_tokens[_pos + 1].Kind == TokenKind.Identifier || _tokens[_pos + 1].Kind == TokenKind.Not))
+                {
+                    Advance(); // consume ':'
+                    bool neg = Current.Kind == TokenKind.Not;
+                    if (neg) Advance();
+                    var predName = Expect(TokenKind.Identifier);
+                    var normalized = NormalizePredicateName(predName.Value);
+                    if (Current.Kind == TokenKind.LParen)
+                    {
+                        Advance();
+                        var args = ParseArgList();
+                        Expect(TokenKind.RParen);
+                        chainExpr = new PredicateCallExpr(chainExpr, normalized, args, neg);
+                    }
+                    else
+                    {
+                        chainExpr = new PredicateCallExpr(chainExpr, normalized, [], neg);
+                    }
+                }
+                constraint = chainExpr;
+            }
+            else
+            {
+                // Bare predicate name (no args, no further chain): e.g., Request:isPublic
+                constraint = new IdentifierExpr(normalizedName);
+            }
+        }
+        else if (Current.Kind == TokenKind.Colon)
         {
             // name:type syntax — first param is named
             Advance(); // consume ':'
@@ -413,13 +466,13 @@ public class ScriptParser
             }
 
             Expect(TokenKind.RBrace);
-            return new FunctionDefinition(name.Value, inputType, returnType, parameters, fieldMappings, line, isExported);
+            return new FunctionDefinition(name.Value, inputType, returnType, parameters, fieldMappings, line, isExported, Constraint: constraint);
         }
         else
         {
             // Expression-body function
             var bodyExpr = ParseExpression();
-            return new FunctionDefinition(name.Value, inputType, "", parameters, [], line, isExported, BodyExpression: bodyExpr);
+            return new FunctionDefinition(name.Value, inputType, "", parameters, [], line, isExported, BodyExpression: bodyExpr, Constraint: constraint);
         }
     }
 

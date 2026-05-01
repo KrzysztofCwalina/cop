@@ -1069,4 +1069,67 @@ public class CheckFileParserTests
         Assert.That(cmd.PathOverride, Is.EqualTo("../sdk/"));
         Assert.That(cmd.Filters, Has.Count.EqualTo(1));
     }
+
+    [Test]
+    public void Parse_FunctionWithConstraint_FieldPredicate()
+    {
+        var source = "function handle(Request:Path:eq('/')) => Response {\n    StatusCode = 200\n}";
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.Functions, Has.Count.EqualTo(1));
+        var func = file.Functions[0];
+        Assert.That(func.Name, Is.EqualTo("handle"));
+        Assert.That(func.InputType, Is.EqualTo("Request"));
+        Assert.That(func.Constraint, Is.Not.Null);
+        Assert.That(func.Constraint, Is.TypeOf<PredicateCallExpr>());
+        var pc = (PredicateCallExpr)func.Constraint!;
+        Assert.That(pc.Name, Is.EqualTo("equals"));
+        Assert.That(pc.Target, Is.TypeOf<MemberAccessExpr>());
+        var ma = (MemberAccessExpr)pc.Target;
+        Assert.That(ma.Member, Is.EqualTo("Path"));
+        Assert.That(ma.Target, Is.TypeOf<IdentifierExpr>());
+        Assert.That(((IdentifierExpr)ma.Target).Name, Is.EqualTo("item"));
+    }
+
+    [Test]
+    public void Parse_FunctionWithConstraint_BarePredicate()
+    {
+        var source = "function check(Type:isPublic) => Response {\n    Name = item.Name\n}";
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.Functions, Has.Count.EqualTo(1));
+        var func = file.Functions[0];
+        Assert.That(func.InputType, Is.EqualTo("Type"));
+        Assert.That(func.Constraint, Is.Not.Null);
+        Assert.That(func.Constraint, Is.TypeOf<IdentifierExpr>());
+        Assert.That(((IdentifierExpr)func.Constraint!).Name, Is.EqualTo("isPublic"));
+    }
+
+    [Test]
+    public void Parse_FunctionWithoutConstraint_Unchanged()
+    {
+        var source = "function handle(Request) => Response {\n    StatusCode = 404\n}";
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.Functions, Has.Count.EqualTo(1));
+        var func = file.Functions[0];
+        Assert.That(func.InputType, Is.EqualTo("Request"));
+        Assert.That(func.Constraint, Is.Null);
+    }
+
+    [Test]
+    public void Parse_FunctionWithConstraint_ChainedFields()
+    {
+        var source = "function handle(Request:Method:eq('GET'):!empty) => Response {\n    StatusCode = 200\n}";
+        var file = ScriptParser.Parse(source, "test.cop");
+        var func = file.Functions[0];
+        Assert.That(func.Constraint, Is.Not.Null);
+        // Outer: PredicateCallExpr(inner, "empty", [], negated=true)
+        var outer = (PredicateCallExpr)func.Constraint!;
+        Assert.That(outer.Negated, Is.True);
+        Assert.That(outer.Name, Is.EqualTo("empty"));
+        // Inner: PredicateCallExpr(MemberAccessExpr(IdentifierExpr("item"), "Method"), "equals", ["GET"])
+        var inner = (PredicateCallExpr)outer.Target;
+        Assert.That(inner.Name, Is.EqualTo("equals"));
+        Assert.That(inner.Target, Is.TypeOf<MemberAccessExpr>());
+        var ma = (MemberAccessExpr)inner.Target;
+        Assert.That(ma.Member, Is.EqualTo("Method"));
+    }
 }

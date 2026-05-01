@@ -86,7 +86,7 @@ public class PredicateEvaluator
         // Check user-defined functions first
         if (_functions.TryGetValue(fc.Name, out var funcGroup))
         {
-            var func = ResolveFunction(funcGroup, paramType);
+            var func = ResolveFunction(funcGroup, paramType, item, ctx);
             return ApplyFunction(func, item, fc.Args, item, paramType, ctx);
         }
 
@@ -112,7 +112,7 @@ public class PredicateEvaluator
         {
             if (mc.Negated)
                 throw new InvalidOperationException($"Cannot negate function call '{mc.Name}' — functions produce values, not booleans");
-            var func = ResolveFunction(funcGroup, paramType);
+            var func = ResolveFunction(funcGroup, paramType, item, ctx);
             var target = Eval(mc.Target, item, paramType, ctx);
             return ApplyFunction(func, target, mc.Args, item, paramType, ctx);
         }
@@ -147,7 +147,7 @@ public class PredicateEvaluator
         // Bare function name as transform: `handle` means `handle(item)`
         if (_functions.TryGetValue(name, out var funcGroup))
         {
-            var func = ResolveFunction(funcGroup, paramType);
+            var func = ResolveFunction(funcGroup, paramType, item, ctx);
             return ApplyFunction(func, item, [], item, paramType, ctx);
         }
 
@@ -1329,22 +1329,45 @@ public class PredicateEvaluator
     {
         if (!_functions.TryGetValue(funcName, out var group))
             throw new InvalidOperationException($"Unknown function '{funcName}'");
-        var func = ResolveFunction(group, itemType);
         var ctx = new EvaluationContext();
+        var func = ResolveFunction(group, itemType, item, ctx);
         return ApplyFunction(func, item, args, item, itemType, ctx);
     }
 
     /// <summary>
-    /// Resolve a function overload by matching input type.
-    /// Prefers exact match, falls back to first definition.
+    /// Resolve a function overload by matching constraints and input type.
+    /// Constrained overloads are evaluated first; unconstrained is fallback.
     /// </summary>
-    private static FunctionDefinition ResolveFunction(List<FunctionDefinition> group, string? inputType)
+    private FunctionDefinition ResolveFunction(List<FunctionDefinition> group, string? inputType, object? item = null, EvaluationContext? ctx = null)
     {
+        // If we have an item and context, try constrained overloads first
+        if (item is not null && ctx is not null)
+        {
+            foreach (var func in group)
+            {
+                if (func.Constraint is null) continue;
+                if (func.InputType != inputType && inputType is not null
+                    && group.Any(f => f.InputType == inputType && f.Constraint is null))
+                {
+                    // Skip constraints for wrong type if there's a type-matched unconstrained overload
+                    if (func.InputType != inputType) continue;
+                }
+                try
+                {
+                    var result = Eval(func.Constraint, item, func.InputType, ctx);
+                    if (ToBool(result)) return func;
+                }
+                catch { /* constraint evaluation failed, skip */ }
+            }
+        }
+
+        // Fall back to type match or first definition
         if (inputType != null)
         {
-            var match = group.FirstOrDefault(f => f.InputType == inputType);
+            var match = group.FirstOrDefault(f => f.InputType == inputType && f.Constraint is null);
             if (match != null) return match;
         }
-        return group[0];
+        // Last resort: first unconstrained, then first overall
+        return group.FirstOrDefault(f => f.Constraint is null) ?? group[0];
     }
 }

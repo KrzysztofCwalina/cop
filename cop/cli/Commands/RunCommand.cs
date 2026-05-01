@@ -99,12 +99,12 @@ public static class RunCommand
             Engine.RunStreamingAsync(scriptsDir, commandName, cts.Token, diagLog).GetAwaiter().GetResult();
             return 0;
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("not found"))
+        catch (InvalidOperationException)
         {
-            // No streaming command — fall through to normal execution
+            // No streaming command or setup failed — fall through to normal execution
         }
 
-        var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog);
+        var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog, additionalFeedPaths: FindFeedPathsFromCwd());
 
         return HandleResult(result, format, rootPath);
     }
@@ -188,6 +188,13 @@ public static class RunCommand
     private static string[] FindFeedPathsFromCwd()
     {
         var paths = new List<string>();
+
+        // Include ~/.cop/packages/ (auto-restored packages)
+        var cachePath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cop", "packages");
+        if (Directory.Exists(cachePath))
+            paths.Add(cachePath);
+
         var dir = Directory.GetCurrentDirectory();
         while (dir is not null)
         {

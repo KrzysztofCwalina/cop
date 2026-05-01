@@ -4,10 +4,22 @@
 # Stop with: Ctrl+C
 import http
 
-# Route handler: returns a response based on the request path
+# Route handlers using constrained overloads
+function handle(Request:Path:eq('/')) => Response {
+    StatusCode = 200
+    Body = '{"message":"hello world!"}'
+    ContentType = 'application/json'
+}
+
+function handle(Request:Path:eq('/health')) => Response {
+    StatusCode = 200
+    Body = '{"status":"healthy"}'
+    ContentType = 'application/json'
+}
+
 function handle(Request) => Response {
-    StatusCode = item.Path ? '/health' => 200 | _ => 404
-    Body = item.Path ? '/health' => '{"status":"ok"}' | _ => '{"error":"not found"}'
+    StatusCode = 404
+    Body = '{"error":"not found"}'
     ContentType = 'application/json'
 }
 

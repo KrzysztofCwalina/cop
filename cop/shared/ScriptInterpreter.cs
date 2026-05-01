@@ -496,7 +496,31 @@ public class ScriptInterpreter
         if (isGlobal)
         {
             var evaluator = CreateEvaluator(predicateGroups, "", letDeclarations, functionGroups);
-            var items = ResolveGlobalCollection(cmd.Collection, evaluator, predicateGroups, letDeclarations, functionGroups);
+            List<object> items;
+
+            if (cmd.PathOverride is not null && _providerQueryService is not null)
+            {
+                var dotIdx = cmd.Collection.IndexOf('.');
+                if (dotIdx >= 0)
+                {
+                    var prov = cmd.Collection[..dotIdx];
+                    var coll = cmd.Collection[(dotIdx + 1)..];
+                    items = _providerQueryService.Query(prov, coll, cmd.PathOverride);
+                }
+                else
+                {
+                    var ns = _typeRegistry.ResolveCollectionNamespace(cmd.Collection);
+                    if (ns is not null)
+                        items = _providerQueryService.Query(ns, cmd.Collection, cmd.PathOverride);
+                    else
+                        items = ResolveGlobalCollection(cmd.Collection, evaluator, predicateGroups, letDeclarations, functionGroups);
+                }
+            }
+            else
+            {
+                items = ResolveGlobalCollection(cmd.Collection, evaluator, predicateGroups, letDeclarations, functionGroups);
+            }
+
             _diagLog?.Invoke($"[trace] resolve: {cmd.Collection} -> {items.Count} items");
             items = ApplyFilters(items, itemType, cmd.Filters, evaluator, functionGroups);
 
