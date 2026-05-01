@@ -474,9 +474,82 @@ The runtime's only "magic" is currying the default arg at `import` time. Everyth
 
 ---
 
+## Namespaces
+
+All types, functions, and predicates live in a namespace. The only exception: **built-in scalar types** (`string`, `int`, `number`, `bool`, `null`) are in the global namespace.
+
+### Package = Namespace
+
+Every package defines a namespace with the same name as the package. When you write:
+
+```cop
+import csharp
+```
+
+This brings the `csharp` namespace into scope. Types and predicates exported by the package are accessible:
+- **Unqualified**: `Type`, `Method`, `isPublic` — works because `import` brought the namespace into scope
+- **Qualified**: `csharp.Type`, `csharp.Method`, `csharp.isPublic` — always works, for disambiguation
+
+### Hierarchical Namespaces
+
+Namespaces can be hierarchical (dot-separated):
+
+```cop
+namespace validation.rules
+
+type NamingViolation = { ... }
+predicate tooShort(string) => Length < 3
+```
+
+These are referenced as `validation.rules.NamingViolation` when fully qualified, or just `NamingViolation` if the namespace is in scope.
+
+### Disambiguation
+
+When two imported packages export the same name, the compiler requires qualification:
+
+```cop
+import csharp
+import python
+
+# Both export 'Type' — must qualify:
+let csTypes = csharp.Type   # error: ambiguous. but csharp.Types returns csharp.Type instances
+let pyTypes = python.Type   # similarly for python
+
+# Or: only import one, qualify the other
+```
+
+### Built-in Types Package
+
+Built-in scalar types (`string`, `int`, `number`, `bool`) have type definitions in a built-in package (`core`). These definitions exist for documentation and intellisense — external tools see them as regular types with regular type definitions. The runtime may erase them for performance, but that is invisible to tooling.
+
+```cop
+# Defined in the built-in 'core' package (implicit import):
+namespace core
+
+type string = {
+    Length: int,
+    Lower: string,
+    Upper: string,
+    Trim: string,
+    Words: [string]
+}
+
+type int = {
+    # scalar — no named members beyond arithmetic
+}
+
+type bool = {
+    # scalar
+}
+```
+
+The `core` package is implicitly imported — its types are always available without qualification. This is the ONLY implicit import.
+
+---
+
 ## Packages and User-Defined Types
 
-Packages are reusable libraries of types, predicates, functions, and commands. They define **namespaces** — when you import a package, its exports become available under the package name.
+Packages are reusable libraries of types, predicates, functions, and commands. Each package defines a namespace matching its name.
 
 ### Defining a Package
 
@@ -499,8 +572,10 @@ version = '1.0.0'
 description = 'Common validation types and predicates'
 ```
 
-**src/types.cop** — define and export types:
+**src/types.cop** — define and export types (in the package namespace):
 ```cop
+namespace validation
+
 type Severity = enum { Error, Warning, Info }
 
 type Violation = {
