@@ -12,7 +12,7 @@ Cop is a **lazy, declarative language** for processing typed object graphs. It c
 4. **One type** — The language has exactly one composite type: DataObject. Collections, functions, providers — all DataObjects with different protocols.
 5. **Two operators** — `.` applies/navigates (calls a function on a DataObject). `:` filters (Where).
 6. **Extension methods** — Predicates and functions are extension methods resolved by their first-parameter type, like C#.
-7. **Case-insensitive** — All identifiers, string comparisons, and field lookups are case-insensitive by default.
+7. **Smart comparisons** — Identifiers are case-sensitive. String comparison functions (`same`, `similar`, etc.) are case-insensitive and normalize whitespace/symbols by default, enabling fuzzy matching without boilerplate.
 
 ---
 
