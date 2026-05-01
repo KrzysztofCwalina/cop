@@ -65,10 +65,7 @@ public class ProviderQueryService : IProviderQueryService
 
         if (!Directory.Exists(absolutePath))
         {
-            _warnings.Add($"Path '{pathOverride}' (resolved to '{absolutePath}') does not exist.");
-            var empty = new List<object>();
-            _cache[key] = empty;
-            return empty;
+            throw new InvalidOperationException($"Directory '{pathOverride}' not found.");
         }
 
         var query = new ProviderQuery

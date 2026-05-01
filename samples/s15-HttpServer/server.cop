@@ -6,8 +6,8 @@ import http
 
 # Route handler: returns a response based on the request path
 function handle(Request) => Response {
-    StatusCode = item.Path ? '/health' => 200 | 404
-    Body = item.Path ? '/health' => '{"status":"ok"}' | '{"error":"not found"}'
+    StatusCode = item.Path ? '/health' => 200 | _ => 404
+    Body = item.Path ? '/health' => '{"status":"ok"}' | _ => '{"error":"not found"}'
     ContentType = 'application/json'
 }
 

@@ -115,6 +115,11 @@ public static class ProviderLoader
                 }
             }
         }
+        else if (instance.SupportedFormats.HasFlag(DataFormat.AsyncStream))
+        {
+            // Streaming providers use ScriptObject accessors (same as JSON)
+            JsonCollectionDeserializer.RegisterScriptObjectAccessors(registry, schema);
+        }
         else if (instance.SupportedFormats.HasFlag(DataFormat.Json))
         {
             JsonCollectionDeserializer.RegisterScriptObjectAccessors(registry, schema);
@@ -139,7 +144,20 @@ public static class ProviderLoader
     {
         try
         {
-            if (instance.SupportedFormats.HasFlag(DataFormat.ObjectCollections))
+            if (instance.SupportedFormats.HasFlag(DataFormat.AsyncStream))
+            {
+                // Streaming providers don't eagerly query — register streaming sources and sinks
+                foreach (var coll in schema.Collections)
+                {
+                    var qualifiedName = $"{ns}.{coll.Name}";
+                    registry.RegisterStreamingSource(qualifiedName, new ProviderStreamingSource(instance, coll.Name));
+                }
+                var sinks = instance.GetSinks();
+                if (sinks != null)
+                    foreach (var sink in sinks)
+                        registry.RegisterSink(ns, sink);
+            }
+            else if (instance.SupportedFormats.HasFlag(DataFormat.ObjectCollections))
             {
                 var collections = instance.QueryCollections(query);
                 if (collections != null)
@@ -229,6 +247,28 @@ public static class ProviderLoader
         match ??= dlls.FirstOrDefault(d => Path.GetFileNameWithoutExtension(d)
             .Contains("provider", StringComparison.OrdinalIgnoreCase));
         return match ?? dlls[0];
+    }
+}
+
+/// <summary>
+/// Generic adapter that wraps a DataProvider's QueryStream as an IStreamingCollectionSource.
+/// Used by the engine to register streaming collections from external AsyncStream providers.
+/// </summary>
+internal class ProviderStreamingSource : IStreamingCollectionSource
+{
+    private readonly DataProvider _provider;
+
+    public ProviderStreamingSource(DataProvider provider, string collectionName)
+    {
+        _provider = provider;
+        CollectionName = collectionName;
+    }
+
+    public string CollectionName { get; }
+
+    public IAsyncEnumerable<object> QueryStream(CancellationToken cancellationToken = default)
+    {
+        return _provider.QueryStream(new ProviderQuery(), cancellationToken);
     }
 }
 

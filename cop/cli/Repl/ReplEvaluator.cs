@@ -305,6 +305,7 @@ public class ReplEvaluator
     /// </summary>
     public List<string> GetCompletionCandidates()
     {
+        EnsureProviders();
         var candidates = new List<string>();
 
         candidates.AddRange(_context.ScriptFiles
@@ -319,6 +320,7 @@ public class ReplEvaluator
             .Distinct(StringComparer.OrdinalIgnoreCase));
 
         candidates.AddRange(_context.TypeRegistry.GetAllCollectionNames());
+        candidates.AddRange(_context.TypeRegistry.GetProviderNamespaces());
 
         return candidates.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(s => s).ToList();
     }
@@ -352,5 +354,22 @@ public class ReplEvaluator
     public string? GetCollectionItemType(string collectionName)
     {
         return _context.TypeRegistry.GetCollectionItemType(collectionName);
+    }
+
+    /// <summary>
+    /// Gets all provider namespace names (e.g., "csharp", "filesystem").
+    /// </summary>
+    public List<string> GetProviderNamespaces()
+    {
+        return _context.TypeRegistry.GetProviderNamespaces();
+    }
+
+    /// <summary>
+    /// Gets collection names for a specific provider namespace.
+    /// </summary>
+    public List<string> GetNamespaceCollections(string ns)
+    {
+        EnsureProviders();
+        return _context.TypeRegistry.GetNamespaceCollections(ns);
     }
 }

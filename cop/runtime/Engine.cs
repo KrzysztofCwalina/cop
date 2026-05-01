@@ -255,9 +255,13 @@ public static class Engine
             throw new InvalidOperationException($"Parse errors: {string.Join("; ", parseErrors)}");
 
         var fatalErrors = new List<string>();
-        var typeRegistry = CreateTypeRegistry(scriptFiles, scriptsDir, parseErrors, fatalErrors);
+        var providerPackages = new List<(string Dir, PackageMetadata Meta)>();
+        var typeRegistry = CreateTypeRegistry(scriptFiles, scriptsDir, parseErrors, fatalErrors, providerPackages: providerPackages);
         if (fatalErrors.Count > 0)
             throw new InvalidOperationException($"Fatal errors: {string.Join("; ", fatalErrors)}");
+
+        // Load external providers (registers streaming sources and sinks for AsyncStream providers)
+        LoadExternalProviders(typeRegistry, providerPackages, scriptsDir, parseErrors, fatalErrors, ExcludedDirectoryNames);
 
         // Register built-in sinks
         typeRegistry.RegisterSink("console", ConsoleWriteLineSink.Instance);

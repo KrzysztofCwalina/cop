@@ -34,17 +34,16 @@ public class ProviderQueryServiceTests
     }
 
     [Test]
-    public void Query_NonExistentPath_ReturnsEmpty()
+    public void Query_NonExistentPath_ThrowsWithMessage()
     {
         var svc = new ProviderQueryService(_testDir);
         var provider = new FakeProvider();
         var schema = ProviderSchema.FromJson(provider.GetSchema());
         svc.RegisterProvider("fake", provider, schema);
 
-        var result = svc.Query("fake", "Items", Path.Combine(_testDir, "nonexistent"));
-        Assert.That(result, Is.Empty);
-        Assert.That(svc.Warnings, Has.Count.EqualTo(1));
-        Assert.That(svc.Warnings[0], Does.Contain("does not exist"));
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            svc.Query("fake", "Items", Path.Combine(_testDir, "nonexistent")));
+        Assert.That(ex!.Message, Does.Contain("not found"));
     }
 
     [Test]

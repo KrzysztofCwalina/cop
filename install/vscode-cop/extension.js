@@ -1016,10 +1016,21 @@ function getDotCompletions(document, textBefore) {
     const symbols = scanDocument(document);
     const items = [];
 
-    // Extract the full expression chain before the dot
-    const exprMatch = textBefore.match(/([A-Za-z_][A-Za-z0-9_.]*)\.\s*$/);
+    // Extract the full expression chain before the dot (including path-scoped calls)
+    const exprMatch = textBefore.match(/([A-Za-z_][A-Za-z0-9_.]*(?:\('[^']*'\))?)\.\s*$/);
     if (exprMatch) {
-        const fullExpr = exprMatch[1];
+        // Strip path arg for type resolution: "csharp.Types('path')" → "csharp.Types"
+        const fullExpr = exprMatch[1].replace(/\('[^']*'\)$/, '');
+
+        // Check if this is a provider namespace (e.g., "csharp." → show collections)
+        const nsColls = STATIC_PACKAGE_COLLECTIONS[fullExpr];
+        if (nsColls || symbols.imports.includes(fullExpr)) {
+            const colls = nsColls || symbols._resolvedCollections || {};
+            for (const [collName, itemType] of Object.entries(colls)) {
+                items.push({ label: collName, detail: `→ [${itemType}]`, kind: Kind.Field });
+            }
+            if (items.length > 0) return toItems(items);
+        }
 
         // Resolve through the chain
         let resolvedType;

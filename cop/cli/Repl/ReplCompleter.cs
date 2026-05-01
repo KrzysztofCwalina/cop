@@ -105,6 +105,24 @@ public class ReplCompleter
 
     private List<string> GetPropertyAndTransformCandidates(string textUpToCursor)
     {
+        // Check if the text before the dot is a provider namespace (e.g., "csharp.")
+        int dotPos = textUpToCursor.LastIndexOf('.');
+        if (dotPos >= 0)
+        {
+            int identStart = dotPos - 1;
+            while (identStart >= 0 && IsIdentifierChar(textUpToCursor[identStart]))
+                identStart--;
+            identStart++;
+
+            string beforeDot = textUpToCursor[identStart..dotPos];
+            if (!string.IsNullOrEmpty(beforeDot))
+            {
+                var nsCandidates = _evaluator.GetNamespaceCollections(beforeDot);
+                if (nsCandidates.Count > 0)
+                    return nsCandidates;
+            }
+        }
+
         var candidates = new List<string>(BuiltinTransforms);
         candidates.AddRange(BuiltinProperties);
 
@@ -119,22 +137,82 @@ public class ReplCompleter
         return candidates.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(s => s).ToList();
     }
 
+    // Element-extracting transforms that unwrap a collection to its item type
+    private static readonly HashSet<string> ElementTransforms = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "First", "Last", "Single", "ElementAt"
+    };
+
     private string? InferTypeFromContext(string text)
     {
-        // Find the identifier before the dot
-        int dotPos = text.LastIndexOf('.');
-        if (dotPos < 0) return null;
+        // Extract the full expression before the trailing dot
+        int trailingDot = text.LastIndexOf('.');
+        if (trailingDot < 0) return null;
 
-        int identStart = dotPos - 1;
-        while (identStart >= 0 && IsIdentifierChar(text[identStart]))
-            identStart--;
-        identStart++;
+        string fullExpr = text[..trailingDot];
 
-        string collectionName = text[identStart..dotPos];
-        if (string.IsNullOrEmpty(collectionName)) return null;
+        // Strip all parenthesized args: "csharp.Types('path')" → "csharp.Types"
+        fullExpr = StripParenArgs(fullExpr);
+        if (string.IsNullOrEmpty(fullExpr)) return null;
 
-        // Try to resolve the collection's item type
-        return _evaluator.GetCollectionItemType(collectionName);
+        // Split by dots and walk the chain
+        var parts = fullExpr.Split('.');
+        if (parts.Length == 0) return null;
+
+        // Try progressively longer prefixes as the base collection
+        // e.g., for ["csharp", "Types", "First"]:  try "csharp.Types" then "csharp"
+        string? itemType = null;
+        int chainStart = 0;
+
+        for (int prefixLen = Math.Min(parts.Length, 2); prefixLen >= 1; prefixLen--)
+        {
+            string candidate = string.Join(".", parts[..prefixLen]);
+            itemType = _evaluator.GetCollectionItemType(candidate);
+            if (itemType is not null)
+            {
+                chainStart = prefixLen;
+                break;
+            }
+        }
+
+        if (itemType is null) return null;
+
+        // Walk remaining parts as property/transform steps
+        for (int i = chainStart; i < parts.Length; i++)
+        {
+            string step = parts[i];
+
+            if (ElementTransforms.Contains(step))
+                continue; // still the same item type, just unwrapped
+
+            if (step.Equals("Count", StringComparison.OrdinalIgnoreCase))
+                return "Int"; // numeric, no properties to show
+
+            // Look up as a property on the current type
+            var props = _evaluator.GetPropertyNames(itemType);
+            if (props.Contains(step))
+            {
+                // We'd need the property's type to continue — for now just return the item type
+                // since most chains are Collection.First.Property (one transform then properties)
+                return null;
+            }
+        }
+
+        return itemType;
+    }
+
+    private static string StripParenArgs(string expr)
+    {
+        // Remove all ('...') segments
+        while (true)
+        {
+            int open = expr.IndexOf('(');
+            if (open < 0) break;
+            int close = expr.IndexOf(')', open);
+            if (close < 0) break;
+            expr = expr[..open] + expr[(close + 1)..];
+        }
+        return expr;
     }
 
     private static bool IsIdentifierChar(char c) =>

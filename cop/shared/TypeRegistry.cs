@@ -337,6 +337,24 @@ public class TypeRegistry
     }
 
     /// <summary>
+    /// Resolves a bare collection name to its provider namespace.
+    /// Returns null if not found or ambiguous.
+    /// </summary>
+    public string? ResolveCollectionNamespace(string collectionName)
+    {
+        string? found = null;
+        foreach (var (ns, nsDict) in _nsCollections)
+        {
+            if (nsDict.ContainsKey(collectionName))
+            {
+                if (found is not null) return null; // ambiguous
+                found = ns;
+            }
+        }
+        return found;
+    }
+
+    /// <summary>
     /// Removes a flat global collection registration.
     /// </summary>
     public void UnregisterGlobalCollection(string name) => _globalCollections.Remove(name);
@@ -465,6 +483,25 @@ public class TypeRegistry
         foreach (var c in _collections.Keys)
             names.Add(c);
         return [.. names.OrderBy(n => n)];
+    }
+
+    /// <summary>
+    /// Gets all registered provider namespace names (e.g., "csharp", "filesystem").
+    /// </summary>
+    public List<string> GetProviderNamespaces()
+    {
+        return [.. _nsCollections.Keys.OrderBy(n => n)];
+    }
+
+    /// <summary>
+    /// Gets collection names registered under a specific provider namespace.
+    /// Returns empty list if the namespace is not found.
+    /// </summary>
+    public List<string> GetNamespaceCollections(string ns)
+    {
+        if (_nsCollections.TryGetValue(ns, out var nsDict))
+            return [.. nsDict.Keys.OrderBy(n => n)];
+        return [];
     }
 
     /// <summary>

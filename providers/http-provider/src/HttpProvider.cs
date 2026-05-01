@@ -18,7 +18,9 @@ public class HttpProvider : DataProvider
     private readonly Channel<HttpRequestItem> _requestChannel;
     private WebApplication? _app;
 
-    public HttpProvider(int port = 5000)
+    public HttpProvider() : this(5000) { }
+
+    public HttpProvider(int port)
     {
         _port = port;
         _requestChannel = Channel.CreateUnbounded<HttpRequestItem>();
@@ -75,7 +77,15 @@ public class HttpProvider : DataProvider
 
         await foreach (var request in _requestChannel.Reader.ReadAllAsync(cancellationToken))
         {
-            yield return request;
+            // Wrap as ScriptObject so the cop evaluator can access properties
+            var so = new ScriptObject("Request");
+            so.Set("Method", request.Method);
+            so.Set("Path", request.Path);
+            so.Set("Body", request.Body);
+            so.Set("ContentType", request.ContentType);
+            so.Set("Query", request.Query);
+            so.Set("__responseCompletion", request.ResponseCompletion);
+            yield return so;
         }
     }
 
@@ -167,7 +177,12 @@ public class HttpSendSink : DataSink
 
     public override Task WriteAsync(object? originalItem, object result)
     {
-        if (originalItem is not HttpRequestItem request)
+        // Extract the response completion from the original request ScriptObject
+        TaskCompletionSource<HttpResponseItem>? tcs = null;
+        if (originalItem is ScriptObject origSo)
+            tcs = origSo.GetField("__responseCompletion") as TaskCompletionSource<HttpResponseItem>;
+
+        if (tcs is null)
             throw new InvalidOperationException("http.Send can only be used with items from http.Receive.");
 
         HttpResponseItem response;
@@ -185,7 +200,7 @@ public class HttpSendSink : DataSink
             response = new HttpResponseItem { Body = result?.ToString() ?? "", ContentType = "text/plain" };
         }
 
-        request.ResponseCompletion.TrySetResult(response);
+        tcs.TrySetResult(response);
         return Task.CompletedTask;
     }
 

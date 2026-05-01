@@ -90,6 +90,17 @@ public class PredicateEvaluator
             return ApplyFunction(func, item, fc.Args, item, paramType, ctx);
         }
 
+        // Path-scoped collection: Types('path') → resolve namespace and query provider
+        if (_providerQueryService is not null
+            && fc.Args.Count == 1
+            && fc.Args[0] is LiteralExpr { Value: string pathValue }
+            && fc.Name.Length > 0 && char.IsUpper(fc.Name[0]))
+        {
+            var ns = _registry.ResolveCollectionNamespace(fc.Name);
+            if (ns is not null)
+                return _providerQueryService.Query(ns, fc.Name, pathValue);
+        }
+
         // Fall back to built-in functions
         return CallFunction(fc.Name, fc.Args, item, paramType, ctx);
     }
@@ -131,6 +142,13 @@ public class PredicateEvaluator
             var pred = ResolvePredicate(group, item, paramType, ctx);
             if (pred is null) return false; // no matching overload
             return ToBool(Eval(pred.Body, item, pred.ParameterType, ctx));
+        }
+
+        // Bare function name as transform: `handle` means `handle(item)`
+        if (_functions.TryGetValue(name, out var funcGroup))
+        {
+            var func = ResolveFunction(funcGroup, paramType);
+            return ApplyFunction(func, item, [], item, paramType, ctx);
         }
 
         // Built-in 'empty' predicate — checks collections and strings on the item
