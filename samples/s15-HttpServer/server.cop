@@ -1,0 +1,15 @@
+# Simple HTTP server using the push-provider pipeline.
+# Listens on port 5000 and responds to incoming requests.
+# Run with: cop run
+# Stop with: Ctrl+C
+import http
+
+# Route handler: returns a response based on the request path
+function handle(Request) => Response {
+    StatusCode = item.Path ? '/health' => 200 | 404
+    Body = item.Path ? '/health' => '{"status":"ok"}' | '{"error":"not found"}'
+    ContentType = 'application/json'
+}
+
+# Start the server pipeline: receive requests, handle them, send responses
+command serve = foreach http.Receive => handle => http.Send
