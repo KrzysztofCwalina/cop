@@ -99,6 +99,8 @@ csharp                → DataObject (typed as CSharpProvider)
 
 A "field" is simply syntactic sugar for calling a curried (zero-remaining-args) function. There is no semantic distinction between `obj.Name` and `obj.compute()` — both are `.` applied to a function member.
 
+> **Implementation note:** Semantically everything is a function, but for performance, nullary members are represented as evaluated values (actual fields) at runtime — not as closures that get invoked on each access. This is analogous to Haskell's thunk evaluation: once forced, a thunk is replaced by its value. The user never observes the difference, but the runtime avoids per-access function-call overhead for fully-curried members.
+
 ### What is `csharp`?
 
 `import csharp` binds the name `csharp` to a DataObject whose members are functions:
