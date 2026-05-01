@@ -442,6 +442,43 @@ export type Violation
 export type ValidationResult
 ```
 
+### Instantiating Types
+
+Objects are created by naming the type and providing field values (like a record constructor):
+
+```cop
+# Direct construction — type name followed by field assignments:
+let v = Violation {
+    Rule = 'naming'
+    Message = 'Type name too short'
+    Severity = 'Warning'
+    File = 'Foo.cs'
+    Line = 12
+}
+
+# Optional fields can be omitted (default to null):
+let v2 = Violation {
+    Rule = 'naming'
+    Message = 'Bad name'
+    Severity = 'Error'
+}
+
+# Functions that return typed objects use the same syntax in their body:
+function checkMethodCount(item: Type) => Violation {
+    Rule = 'method-count'
+    Message = '{item.Name} has {item.Methods.Count} methods'
+    Severity = 'Warning'
+    File = item.File
+    Line = item.Line
+}
+```
+
+Three ways instances come into existence:
+1. **Record construction** — `TypeName { Field = value, ... }` (explicit)
+2. **Function return** — a function body is a record constructor for its return type
+3. **From providers** — providers produce typed objects (e.g., `csharp.Types` yields Type instances)
+
+
 **src/predicates.cop** — extension methods on the types:
 ```cop
 export predicate isError(Violation) => item.Severity.equals('Error')
