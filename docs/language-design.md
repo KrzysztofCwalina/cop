@@ -377,28 +377,41 @@ Providers are the bridge between external data and the Cop type system.
 ```cop
 # Defined by the csharp package (simplified):
 type CSharpProvider = {
-    Types: [Type],
-    Methods: [Method],
-    Fields: [Field],
-    Properties: [Property],
-    Events: [Event],
-    Statements: [Statement],
-    Code: function(string) => CSharpProvider    # scoped constructor
+    Types: function(path: string) => [Type],
+    Methods: function(path: string) => [Method],
+    Fields: function(path: string) => [Field],
+    Properties: function(path: string) => [Property],
+    Events: function(path: string) => [Event],
+    Statements: function(path: string) => [Statement]
 }
+```
+
+The fields are **functions** — they take a path and return typed collections:
+
+```cop
+import csharp
+
+# Types is a function that takes a path to scan:
+let types = csharp.Types('c:\git\myproject')     # → [Type, Type, ...]
+let methods = csharp.Methods('c:\git\myproject') # → [Method, Method, ...]
+
+# Filter as usual:
+let publicTypes = types:isPublic
+let bigTypes = types:Methods.Count > 20
 ```
 
 ### `import` — formal definition
 
 `import <package>` does three things:
 
-1. **Instantiates** — the runtime creates an instance of the package's module type (e.g., `CSharpProvider`), with lazy fields
-2. **Binds a name** — the instance is bound to a variable named after the package (e.g., `csharp`). This variable is immutable and available throughout the file.
-3. **Brings exports into scope** — the package's exported types, predicates, and functions become available by name (for extension method resolution, type construction, etc.)
+1. **Instantiates** — the runtime creates an instance of the package's module type (e.g., `CSharpProvider`)
+2. **Binds a name** — the instance is bound to an immutable variable named after the package (e.g., `csharp`)
+3. **Brings exports into scope** — the package's exported types, predicates, and functions become resolvable names
 
 ```cop
 import csharp
 #        │
-#        ├─ (1) runtime creates: CSharpProvider { Types = <lazy>, Methods = <lazy>, ... }
+#        ├─ (1) runtime creates: CSharpProvider { Types = <func>, Methods = <func>, ... }
 #        ├─ (2) binds variable:  let csharp = <that instance>
 #        └─ (3) scope injection: Type, Method, isPublic, ... are now resolvable names
 ```
