@@ -106,23 +106,26 @@ A "field" is simply a nullary function called without parens. There is no semant
 
 ### What is `csharp`?
 
-`import csharp` binds the name `csharp` to a **function**: `string? → CSharpCodebase`. You call it with an optional path:
+`import csharp` binds the name `csharp` to a **CSharpCodebase instance** scoped to cwd. The binding is evaluated once (like all `let` bindings) — every use of `csharp` in the file refers to the same instance.
 
 ```cop
 import csharp
 
-# Explicit path — analyze a specific folder tree:
-let code = csharp('c:\git\myapp')
-code.Types       # nullary — all types in that codebase
-code.Methods     # nullary — all methods, same codebase (guaranteed consistent)
+# csharp is already a CSharpCodebase (bound to cwd at import time).
+# Using it multiple times does NOT re-instantiate:
+csharp.Types       # same instance, same scan
+csharp.Methods     # same instance
 
-# No argument — uses cwd (where cop was invoked).
-# Since it's nullary, no parens needed (convention):
-let code = csharp
-code.Types       # types found under current directory
+# To analyze a different path, call csharp as a constructor:
+let other = csharp('c:\git\other')
+other.Types        # different codebase
 ```
 
-The **no-arg form** preserves the simplicity of dropping a `.cop` file at a repo root and just running it — the codebase is implicitly "here." The explicit form supports cross-repo analysis and multi-codebase scenarios.
+**Key distinction:**
+- **`csharp`** (bare name) — the import-time instance, bound to cwd. One instance per file. No re-evaluation.
+- **`csharp('path')`** — constructor call, creates a new CSharpCodebase bound to that path. Each call with a different path creates a new instance. Bind with `let` to avoid redundant instantiation.
+
+The **bare form** preserves the simplicity of dropping a `.cop` file at a repo root and just running it — the codebase is implicitly "here." The constructor form supports cross-repo analysis and multi-codebase scenarios.
 
 The returned `CSharpCodebase` has **nullary** members — they're already bound to the path. No risk of accidentally mixing paths across collections.
 
@@ -407,10 +410,9 @@ Providers are the bridge between external data and the Cop type system.
 
 ### What is `csharp`?
 
-`csharp` is a **function** (string? → CSharpCodebase). Calling it returns a path-bound codebase:
+After `import csharp`, the name `csharp` is a **CSharpCodebase** instance (bound to cwd). It's also callable as a constructor to create instances for other paths:
 
 ```cop
-# csharp is a function: path? → bound codebase
 type CSharpCodebase = {
     Types: [Type],           # nullary — bound to the codebase path
     Methods: [Method],       # nullary — same codebase
@@ -421,46 +423,52 @@ type CSharpCodebase = {
 }
 ```
 
-All members on the returned codebase are **nullary** — they're already curried with the path. This guarantees consistency: Types and Methods always come from the same codebase.
+All members are **nullary** — they're already curried with the path. This guarantees consistency: Types and Methods always come from the same codebase.
+
+### Memoization
+
+`csharp` (the import binding) is evaluated once — it's a single instance for the file. Using `csharp.Types` ten times doesn't re-scan; it's the same memoized value.
+
+`csharp('path')` is a constructor call — each unique call creates a new instance. Bind with `let` to avoid redundant work:
 
 ```cop
 import csharp
 
-# Simple case — just analyze "here" (cwd), no parens:
-let code = csharp
-let publicTypes = code.Types:isPublic
+# csharp is already a codebase (cwd). One instance, reused:
+csharp.Types              # scans once, memoizes
+csharp.Types              # same cached result
 
-# Explicit path for cross-repo analysis:
-let code = csharp('c:\git\myapp')
-let types = code.Types         # → [Type, ...]
-let methods = code.Methods     # → [Method, ...] — same codebase, guaranteed
+# Explicit path — bind once, reuse:
+let other = csharp('c:\git\other')
+other.Types               # scans once
+other.Types               # cached
 
-# Multiple independent codebases:
+# Multiple codebases:
 let frontend = csharp('c:\git\frontend')
 let backend = csharp('c:\git\backend')
 frontend.Types    # types from frontend
-backend.Methods   # methods from backend — no confusion
+backend.Methods   # methods from backend
 ```
 
 ### `import` — formal definition
 
 `import <package>` does three things:
 
-1. **Binds a callable** — the package's factory function is bound to an immutable name (e.g., `csharp`). For providers, this is typically a function that takes configuration (like a path) and returns a bound instance.
-2. **Brings exports into scope** — the package's exported types, predicates, and functions become resolvable names
-3. **No eager instantiation** — nothing is created until the user calls the function
+1. **Creates and binds a default instance** — for providers, this is an instance bound to cwd (evaluated lazily). The name `csharp` IS a CSharpCodebase, usable directly.
+2. **Makes the name callable** — `csharp('path')` constructs a new instance bound to a different path.
+3. **Brings exports into scope** — the package's exported types, predicates, and functions become resolvable names.
 
 ```cop
 import csharp
 #        │
-#        ├─ (1) binds:  let csharp = <factory function: string → CSharpCodebase>
-#        ├─ (2) scope:  Type, Method, isPublic, ... are now resolvable names
-#        └─ (3) no work done yet — csharp('path') triggers scanning
+#        ├─ (1) binds:  let csharp = CSharpCodebase(cwd)  — lazy, one instance
+#        ├─ (2) callable: csharp('path') → new CSharpCodebase(path)
+#        └─ (3) scope:  Type, Method, isPublic, ... are now resolvable names
 ```
 
 So `import csharp` is equivalent to:
 ```cop
-let csharp = <package-provided factory function>
+let csharp = <cwd-bound CSharpCodebase instance, also callable as constructor>
 use csharp.[Type, Method, Statement, ...]     # bring exported types into scope
 use csharp.[isPublic, isAbstract, ...]         # bring exported predicates into scope
 ```
