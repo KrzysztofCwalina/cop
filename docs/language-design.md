@@ -83,8 +83,8 @@ Types serve four purposes:
 At runtime, everything from providers down to leaf scalars is a DataObject. Every member is a function — some take arguments, some are nullary (look like fields). The tree is uniform:
 
 ```
-csharp                → DataObject (callable — function: string → CSharpProject)
-  ('path')            → DataObject (typed as CSharpProject — bound to path)
+csharp                → DataObject (callable — function: string → CSharpCodebase)
+  ('path')            → DataObject (typed as CSharpCodebase — bound to path)
     .Types            → DataObject (iterable) — nullary, returns [Type]
       [0]             → DataObject (typed as Type)
         .Name         → scalar (string) — nullary function returning a string
@@ -104,19 +104,19 @@ A "field" is simply syntactic sugar for calling a curried (zero-remaining-args) 
 
 ### What is `csharp`?
 
-`import csharp` binds the name `csharp` to a **function**: `string → CSharpProject`. You call it with a path to get a project-bound instance:
+`import csharp` binds the name `csharp` to a **function**: `string → CSharpCodebase`. You call it with a path to get a path-bound codebase:
 
 ```cop
 import csharp
 
-let project = csharp('c:\git\myproject')
-project.Types       # nullary — all types in that project
-project.Methods     # nullary — all methods, same project (guaranteed consistent)
+let code = csharp('c:\git\myapp')
+code.Types       # nullary — all types in that codebase
+code.Methods     # nullary — all methods, same codebase (guaranteed consistent)
 ```
 
-The returned `CSharpProject` has **nullary** members — they're already bound to the path. No risk of accidentally mixing paths across collections.
+The returned `CSharpCodebase` has **nullary** members — they're already bound to the path. No risk of accidentally mixing paths across collections.
 
-Multiple projects work naturally:
+Multiple codebases work naturally:
 ```cop
 let frontend = csharp('c:\git\frontend')
 let backend = csharp('c:\git\backend')
@@ -324,7 +324,7 @@ All declarations are order-independent within a file. Evaluation is demand-drive
 
 ```cop
 let threshold = 10
-let codebase = csharp.Code('path/to/project')
+let codebase = csharp('path/to/src')
 let types = codebase.Types
 let publicTypes = types:isPublic
 let names = publicTypes.Name
@@ -397,13 +397,13 @@ Providers are the bridge between external data and the Cop type system.
 
 ### What is `csharp`?
 
-`csharp` is a **function** (string → CSharpProject). Calling it with a path returns a project-bound instance:
+`csharp` is a **function** (string → CSharpCodebase). Calling it with a path returns a path-bound codebase:
 
 ```cop
-# csharp is a function: path → bound project
-type CSharpProject = {
-    Types: [Type],           # nullary — bound to the project path
-    Methods: [Method],       # nullary — same project
+# csharp is a function: path → bound codebase
+type CSharpCodebase = {
+    Types: [Type],           # nullary — bound to the codebase path
+    Methods: [Method],       # nullary — same codebase
     Fields: [Field],
     Properties: [Property],
     Events: [Event],
@@ -411,27 +411,27 @@ type CSharpProject = {
 }
 ```
 
-All members on the returned project are **nullary** — they're already curried with the path. This guarantees consistency: Types and Methods always come from the same project.
+All members on the returned codebase are **nullary** — they're already curried with the path. This guarantees consistency: Types and Methods always come from the same codebase.
 
 ```cop
 import csharp
 
-# Bind to a project — csharp is callable:
-let project = csharp('c:\git\myproject')
+# Bind to a codebase — csharp is callable:
+let code = csharp('c:\git\myapp')
 
 # All collections are now nullary (path already bound):
-let types = project.Types         # → [Type, ...]
-let methods = project.Methods     # → [Method, ...] — same project, guaranteed
+let types = code.Types         # → [Type, ...]
+let methods = code.Methods     # → [Method, ...] — same codebase, guaranteed
 
-# Multiple independent projects:
+# Multiple independent codebases:
 let frontend = csharp('c:\git\frontend')
 let backend = csharp('c:\git\backend')
 frontend.Types    # types from frontend
 backend.Methods   # methods from backend — no confusion
 
 # Filter as usual:
-let publicTypes = project.Types:isPublic
-let bigTypes = project.Types:Methods.Count > 20
+let publicTypes = code.Types:isPublic
+let bigTypes = code.Types:Methods.Count > 20
 ```
 
 ### `import` — formal definition
@@ -445,7 +445,7 @@ let bigTypes = project.Types:Methods.Count > 20
 ```cop
 import csharp
 #        │
-#        ├─ (1) binds:  let csharp = <factory function: string → CSharpProject>
+#        ├─ (1) binds:  let csharp = <factory function: string → CSharpCodebase>
 #        ├─ (2) scope:  Type, Method, isPublic, ... are now resolvable names
 #        └─ (3) no work done yet — csharp('path') triggers scanning
 ```
@@ -465,8 +465,8 @@ use csharp.[isPublic, isAbstract, ...]         # bring exported predicates into 
 | What | Who creates it | When |
 |------|---------------|------|
 | The provider function (`csharp`) | The runtime, triggered by `import` | At import time (binds factory) |
-| The bound project (`csharp('path')`) | The provider, when called | When user applies the function |
-| Objects in collections (`project.Types[0]`) | The provider, by reading external data | On first access (lazy) |
+| The bound codebase (`csharp('path')`) | The provider, when called | When user applies the function |
+| Objects in collections (`code.Types[0]`) | The provider, by reading external data | On first access (lazy) |
 | User-defined objects (`Violation { ... }`) | User code, via record construction | When the expression is evaluated |
 | Function results (`checkMethodCount(type)`) | The function body | When the function is called |
 
@@ -604,7 +604,7 @@ import csharp
 import validation
 
 # Types from the package are now available for pattern matching:
-let codebase = csharp.Code('c:\projects\myapp')
+let codebase = csharp('c:\projects\myapp')
 
 # Use exported predicates as extension methods:
 let violations = codebase.Types:tooManyMethods.map(checkMethodCount)
