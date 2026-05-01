@@ -375,7 +375,7 @@ public class ScriptInterpreter
                     EvaluationContext ctx = new();
                     ctx.Capture(finalItemType, filteredItem);
                     ctx.Capture("item", filteredItem);
-                    if (filteredItem is ScriptObject ao)
+                    if (filteredItem is DataObject ao)
                         CaptureAlanObjectFields(ctx, ao);
                     CaptureLetValues(ctx, evaluator, letDeclarations, filteredItem, finalItemType);
                     var richMessage = ResolveTemplate(cmd.MessageTemplate, ctx);
@@ -537,7 +537,7 @@ public class ScriptInterpreter
                 EvaluationContext finalCtx = new();
                 finalCtx.Capture(finalItemType, item);
                 finalCtx.Capture("item", item);
-                if (item is ScriptObject ao)
+                if (item is DataObject ao)
                     CaptureAlanObjectFields(finalCtx, ao);
                 CaptureLetValues(finalCtx, evaluator, letDeclarations, item, finalItemType);
 
@@ -662,7 +662,7 @@ public class ScriptInterpreter
                 EvaluationContext finalCtx = new();
                 finalCtx.Capture(finalItemType, item);
                 finalCtx.Capture("item", item);
-                if (item is ScriptObject ao)
+                if (item is DataObject ao)
                     CaptureAlanObjectFields(finalCtx, ao);
                 CaptureLetValues(finalCtx, evaluator, letDeclarations, item, finalItemType);
 
@@ -1235,7 +1235,7 @@ public class ScriptInterpreter
                     var result = new List<object>();
                     foreach (var key in groupOrder)
                     {
-                        var groupObj = new ScriptObject("Group");
+                        var groupObj = new DataObject("Group");
                         groupObj.Set("Key", key);
                         groupObj.Set("Items", groups[key]);
                         groupObj.Set("Count", groups[key].Count);
@@ -1302,7 +1302,7 @@ public class ScriptInterpreter
                             var ctx = new EvaluationContext();
                             ctx.Capture(currentType, item);
                             ctx.Capture("item", item);
-                            if (item is ScriptObject ao)
+                            if (item is DataObject ao)
                                 CaptureAlanObjectFields(ctx, ao);
                             return ResolveTemplate(template, ctx).ToPlainText();
                         })
@@ -1414,7 +1414,7 @@ public class ScriptInterpreter
     /// </summary>
     private string? GetItemSource(object item, string itemType)
     {
-        if (item is ScriptObject ao)
+        if (item is DataObject ao)
             return ao.GetField("Source")?.ToString();
 
         var typeName = _typeRegistry.InferTypeName(item) ?? itemType;
@@ -1620,7 +1620,7 @@ public class ScriptInterpreter
         HashSet<string>? visited = null)
     {
         // Dotted value-binding access: codebase.Types, types.Count, types.First
-        // Dispatches on RUNTIME TYPE of parent (ScriptObject, IList, etc.)
+        // Dispatches on RUNTIME TYPE of parent (DataObject, IList, etc.)
         var dottedItems = TryResolveDottedValueBinding(collection, letDeclarations, evaluator);
         if (dottedItems != null) return dottedItems;
 
@@ -1816,10 +1816,10 @@ public class ScriptInterpreter
     }
 
     /// <summary>
-    /// Capture ScriptObject fields into evaluation context for template resolution.
+    /// Capture DataObject fields into evaluation context for template resolution.
     /// Allows {TypeName.FieldName} patterns to resolve against function-produced objects.
     /// </summary>
-    private static void CaptureAlanObjectFields(EvaluationContext ctx, ScriptObject ao)
+    private static void CaptureAlanObjectFields(EvaluationContext ctx, DataObject ao)
     {
         // Register as a virtual object that responds to property access
         // The TypeName is already captured by the caller; fields are accessed via GetPropertyViaRegistry
@@ -1890,7 +1890,7 @@ public class ScriptInterpreter
     {
         if (obj is null) return "";
         if (obj is string s) return s;
-        if (obj is ScriptObject so) return so.ToJson();
+        if (obj is DataObject so) return so.ToJson();
         var typeName = _typeRegistry.InferTypeName(obj);
         if (typeName is not null)
         {
@@ -1903,8 +1903,8 @@ public class ScriptInterpreter
 
     private object? GetPropertyViaRegistry(object obj, string property)
     {
-        // ScriptObject: resolve fields by name (includes lazy resolver)
-        if (obj is ScriptObject ao)
+        // DataObject: resolve fields by name (includes lazy resolver)
+        if (obj is DataObject ao)
             return ao.GetField(property);
 
         var typeName = _typeRegistry.InferTypeName(obj);
@@ -2275,9 +2275,9 @@ public class ScriptInterpreter
 
     /// <summary>
     /// Resolves a dotted collection reference where the parent is a let-bound value.
-    /// Uses the evaluator for member access — ScriptObject's lazy field resolver
+    /// Uses the evaluator for member access — DataObject's lazy field resolver
     /// handles Code() objects, IList handles .Count/.First, etc.
-    /// e.g., "codebase.Types" where codebase is a ScriptObject with lazy fields,
+    /// e.g., "codebase.Types" where codebase is a DataObject with lazy fields,
     ///        "types.First" where types evaluates to IList.
     /// </summary>
     private List<object>? TryResolveDottedValueBinding(

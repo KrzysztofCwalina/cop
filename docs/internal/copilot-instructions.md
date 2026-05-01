@@ -61,7 +61,7 @@ samples/            Example .cop scripts (s1-HelloWorld through s17-Currying)
 | **ScriptInterpreter** | `ScriptInterpreter.cs` | Evaluates commands, `foreach` loops, implicit output, `SAVE` actions |
 | **PredicateEvaluator** | `PredicateEvaluator.cs` | Evaluates predicate chains (`:filter`, `.Where(...)`, `.Select(...)`) on collections |
 | **TypeRegistry** | `TypeRegistry.cs` | Type system — property resolution, method dispatch |
-| **ScriptObject** | `ScriptObject.cs` | Runtime value representation for all Cop values |
+| **DataObject** | `DataObject.cs` | Runtime value representation for all Cop values |
 
 ### Runtime — `cop/runtime/` (Cop.Providers)
 

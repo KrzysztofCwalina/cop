@@ -1084,17 +1084,17 @@ public class PredicateEvaluatorTests
         var stmt = MakeStatement("var", "x", 10);
         var result = eval.ApplyFunction("error", stmt, "Statement", [new LiteralExpr("Do not use var")]);
 
-        Assert.That(result, Is.TypeOf<ScriptObject>());
-        Assert.That(((ScriptObject)result!).TypeName, Is.EqualTo("Violation"));
-        Assert.That(((ScriptObject)result!).GetField("Severity"), Is.EqualTo("error"));
-        Assert.That(((ScriptObject)result!).GetField("Message"), Is.EqualTo("Do not use var"));
+        Assert.That(result, Is.TypeOf<DataObject>());
+        Assert.That(((DataObject)result!).TypeName, Is.EqualTo("Violation"));
+        Assert.That(((DataObject)result!).GetField("Severity"), Is.EqualTo("error"));
+        Assert.That(((DataObject)result!).GetField("Message"), Is.EqualTo("Do not use var"));
     }
 
     [Test]
     public void Function_InChain_ProducesAlanObject()
     {
         // Test function call in a chain: Statement:error("msg")
-        // The evaluator should produce an ScriptObject, not a bool
+        // The evaluator should produce an DataObject, not a bool
         var func = MakeFunction("error", "Statement", "Violation",
             [new FunctionParameter("message", "string")],
             new Dictionary<string, Expression>
@@ -1120,8 +1120,8 @@ public class PredicateEvaluatorTests
         var ctx = new EvaluationContext();
         // Use ApplyFunction directly (chain evaluation path)
         var result = eval.ApplyFunction("error", stmt, "Statement", [new LiteralExpr("Do not use var")]);
-        Assert.That(((ScriptObject)result!).TypeName, Is.EqualTo("Violation"));
-        Assert.That(((ScriptObject)result!).GetField("Message"), Is.EqualTo("Do not use var"));
+        Assert.That(((DataObject)result!).TypeName, Is.EqualTo("Violation"));
+        Assert.That(((DataObject)result!).GetField("Message"), Is.EqualTo("Do not use var"));
     }
 
     [Test]
@@ -1174,7 +1174,7 @@ public class PredicateEvaluatorTests
         var result = eval.ApplyFunction("error", stmt, "Statement",
             [new LiteralExpr("Do not use var for {item.MemberName}")]);
 
-        Assert.That(((ScriptObject)result!).GetField("Message"), Is.EqualTo("Do not use var for myField"));
+        Assert.That(((DataObject)result!).GetField("Message"), Is.EqualTo("Do not use var for myField"));
     }
 
     [Test]
@@ -1200,13 +1200,13 @@ public class PredicateEvaluatorTests
         var stmt = MakeStatement("var", "x", 42);
         var result = eval.ApplyFunction("error", stmt, "Statement", [new LiteralExpr("msg")]);
 
-        Assert.That(((ScriptObject)result!).GetField("Line"), Is.EqualTo(42));
+        Assert.That(((DataObject)result!).GetField("Line"), Is.EqualTo(42));
     }
 
     [Test]
     public void AlanObject_GetField_ReturnsNullForMissing()
     {
-        var obj = new ScriptObject("Violation", new Dictionary<string, object?>
+        var obj = new DataObject("Violation", new Dictionary<string, object?>
         {
             ["Severity"] = "error",
             ["Message"] = "test"
@@ -1218,8 +1218,8 @@ public class PredicateEvaluatorTests
     [Test]
     public void AlanObject_GetMember_WorksInEvaluator()
     {
-        // After a function produces an ScriptObject, member access should work
-        var obj = new ScriptObject("Violation", new Dictionary<string, object?>
+        // After a function produces an DataObject, member access should work
+        var obj = new DataObject("Violation", new Dictionary<string, object?>
         {
             ["Severity"] = "error",
             ["Message"] = "test message"
@@ -1259,7 +1259,7 @@ public class PredicateEvaluatorTests
             ["warning"] = new LiteralExpr("yellow")
         });
         var map = eval.EvaluateField(mapExpr, MakeType("Dummy"), "Type");
-        Assert.That(map, Is.TypeOf<ScriptObject>());
+        Assert.That(map, Is.TypeOf<DataObject>());
 
         // Get with a literal key
         var getExpr = new PredicateCallExpr(mapExpr, "Get", [new LiteralExpr("error")]);
@@ -1275,7 +1275,7 @@ public class PredicateEvaluatorTests
         {
             ["Error"] = new LiteralExpr("red")
         });
-        // ScriptObject field lookup is case-insensitive by default
+        // DataObject field lookup is case-insensitive by default
         var getExpr = new PredicateCallExpr(mapExpr, "Get", [new LiteralExpr("error")]);
         var result = eval.EvaluateField(getExpr, MakeType("Dummy"), "Type");
         Assert.That(result, Is.EqualTo("red"));
@@ -1379,16 +1379,16 @@ public class PredicateEvaluatorTests
             functions: functions);
 
         // Item with Path = "/" → should match constrained overload
-        var matchItem = new ScriptObject("Request", new() { ["Path"] = "/", ["Method"] = "GET" });
+        var matchItem = new DataObject("Request", new() { ["Path"] = "/", ["Method"] = "GET" });
         var result = eval.ApplyFunction("handle", matchItem, "Request", []);
-        Assert.That(result, Is.TypeOf<ScriptObject>());
-        Assert.That(((ScriptObject)result!).GetField("StatusCode"), Is.EqualTo(200));
+        Assert.That(result, Is.TypeOf<DataObject>());
+        Assert.That(((DataObject)result!).GetField("StatusCode"), Is.EqualTo(200));
 
         // Item with Path = "/other" → should fall through to unconstrained
-        var noMatchItem = new ScriptObject("Request", new() { ["Path"] = "/other", ["Method"] = "GET" });
+        var noMatchItem = new DataObject("Request", new() { ["Path"] = "/other", ["Method"] = "GET" });
         var result2 = eval.ApplyFunction("handle", noMatchItem, "Request", []);
-        Assert.That(result2, Is.TypeOf<ScriptObject>());
-        Assert.That(((ScriptObject)result2!).GetField("StatusCode"), Is.EqualTo(404));
+        Assert.That(result2, Is.TypeOf<DataObject>());
+        Assert.That(((DataObject)result2!).GetField("StatusCode"), Is.EqualTo(404));
     }
 
     #endregion

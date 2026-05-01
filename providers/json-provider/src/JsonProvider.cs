@@ -26,7 +26,7 @@ public class JsonProvider : DataProvider, ICapabilityProvider
 
             var schema = registry.ExportTypeAsSchema(typeName);
             var items = JsonCollectionDeserializer.DeserializeArray(File.ReadAllBytes(fullPath), typeName, schema);
-            JsonCollectionDeserializer.RegisterScriptObjectAccessors(registry, schema);
+            JsonCollectionDeserializer.RegisterDataObjectAccessors(registry, schema);
             return items;
         });
     }

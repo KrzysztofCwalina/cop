@@ -4,7 +4,7 @@ namespace Cop.Lang;
 /// A runtime object produced by a function transformation.
 /// Carries its cop type name so the runtime can resolve properties and infer types.
 /// </summary>
-public class ScriptObject
+public class DataObject
 {
     public string TypeName { get; }
     private readonly Dictionary<string, object?> _fields;
@@ -16,7 +16,7 @@ public class ScriptObject
     /// </summary>
     private Func<string, object?>? _fieldResolver;
 
-    public ScriptObject(string typeName, Dictionary<string, object?> fields)
+    public DataObject(string typeName, Dictionary<string, object?> fields)
     {
         TypeName = typeName;
         // Ensure case-insensitive field lookup (consistent with Cop string semantics)
@@ -30,7 +30,7 @@ public class ScriptObject
         }
     }
 
-    public ScriptObject(string typeName) : this(typeName, new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase))
+    public DataObject(string typeName) : this(typeName, new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase))
     {
     }
 
@@ -39,7 +39,7 @@ public class ScriptObject
     /// When GetField is called for a field not in the dictionary, the resolver is invoked
     /// and the result is memoized (stored in the dictionary for future access).
     /// </summary>
-    public ScriptObject WithFieldResolver(Func<string, object?> resolver)
+    public DataObject WithFieldResolver(Func<string, object?> resolver)
     {
         _fieldResolver = resolver;
         return this;
@@ -94,7 +94,7 @@ public class ScriptObject
             int n => n.ToString(),
             double d => d.ToString(System.Globalization.CultureInfo.InvariantCulture),
             string s => $"\"{EscapeJson(s)}\"",
-            ScriptObject obj => obj.ToJson(indent),
+            DataObject obj => obj.ToJson(indent),
             System.Collections.IList list => FormatJsonArray(list, indent),
             _ => $"\"{EscapeJson(value.ToString() ?? "")}\"",
         };

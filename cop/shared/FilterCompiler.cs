@@ -6,7 +6,7 @@ namespace Cop.Lang;
 /// Compiles a <see cref="FilterExpression"/> into a native predicate using
 /// registered property accessors from the type system.
 /// This is the pushdown execution engine — it evaluates provider-level filters
-/// without going through the full PredicateEvaluator/ScriptObject pipeline.
+/// without going through the full PredicateEvaluator/DataObject pipeline.
 /// </summary>
 public static class FilterCompiler
 {

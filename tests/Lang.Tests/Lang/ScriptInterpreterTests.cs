@@ -214,7 +214,7 @@ public class CheckInterpreterTests
     public void Run_FunctionInLetChain_ProducesTransformedOutput()
     {
         // End-to-end: define a function, use it in a let declaration chain,
-        // and verify template resolves fields from the function-produced ScriptObject.
+        // and verify template resolves fields from the function-produced DataObject.
         var source = """
             predicate isVar(Statement) => Statement.Kind == 'declaration' && Statement.Keywords:contains('var')
             function error(Statement, message: string) => Violation {

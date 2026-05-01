@@ -536,7 +536,7 @@ public class ScriptParser
         // If that fails, treat as a general value binding (arbitrary expression).
         // SourceExpression is always stored as fallback — the runtime uses it when
         // the parent turns out to be a value binding (e.g., codebase.Types where
-        // codebase is a ScriptObject from Code()).
+        // codebase is a DataObject from Code()).
         try
         {
             var (baseCollection, filters, exclusions, pathOverride) = DecomposeCollectionExpression(expr);

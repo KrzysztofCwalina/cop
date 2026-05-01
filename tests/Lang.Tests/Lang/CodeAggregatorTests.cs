@@ -14,28 +14,28 @@ public class CodeAggregatorTests
 
         // Register some items under "csharp" namespace to simulate a loaded provider
         registry.AppendNamespacedCollection("csharp", "Types", [
-            new ScriptObject("Type", new Dictionary<string, object?> { ["Name"] = "MyClass" }),
-            new ScriptObject("Type", new Dictionary<string, object?> { ["Name"] = "MyInterface" })
+            new DataObject("Type", new Dictionary<string, object?> { ["Name"] = "MyClass" }),
+            new DataObject("Type", new Dictionary<string, object?> { ["Name"] = "MyInterface" })
         ]);
         registry.AppendNamespacedCollection("csharp", "Methods", [
-            new ScriptObject("Method", new Dictionary<string, object?> { ["Name"] = "DoWork" })
+            new DataObject("Method", new Dictionary<string, object?> { ["Name"] = "DoWork" })
         ]);
 
         // Register items under "python" namespace
         registry.AppendNamespacedCollection("python", "Types", [
-            new ScriptObject("Type", new Dictionary<string, object?> { ["Name"] = "PythonClass" })
+            new DataObject("Type", new Dictionary<string, object?> { ["Name"] = "PythonClass" })
         ]);
 
         return registry;
     }
 
-    // --- ScriptObject lazy field resolver tests ---
+    // --- DataObject lazy field resolver tests ---
 
     [Test]
-    public void ScriptObject_LazyField_EvaluatesOnFirstAccess()
+    public void DataObject_LazyField_EvaluatesOnFirstAccess()
     {
         int callCount = 0;
-        var obj = new ScriptObject("Test");
+        var obj = new DataObject("Test");
         obj.WithFieldResolver(name =>
         {
             callCount++;
@@ -50,10 +50,10 @@ public class CodeAggregatorTests
     }
 
     [Test]
-    public void ScriptObject_LazyField_MemoizesResult()
+    public void DataObject_LazyField_MemoizesResult()
     {
         int callCount = 0;
-        var obj = new ScriptObject("Test");
+        var obj = new DataObject("Test");
         obj.WithFieldResolver(name =>
         {
             callCount++;
@@ -66,10 +66,10 @@ public class CodeAggregatorTests
     }
 
     [Test]
-    public void ScriptObject_LazyField_DifferentFieldsResolveIndependently()
+    public void DataObject_LazyField_DifferentFieldsResolveIndependently()
     {
         var resolved = new HashSet<string>();
-        var obj = new ScriptObject("Test");
+        var obj = new DataObject("Test");
         obj.WithFieldResolver(name =>
         {
             resolved.Add(name);
@@ -84,9 +84,9 @@ public class CodeAggregatorTests
     }
 
     [Test]
-    public void ScriptObject_EagerField_TakesPriorityOverResolver()
+    public void DataObject_EagerField_TakesPriorityOverResolver()
     {
-        var obj = new ScriptObject("Test");
+        var obj = new DataObject("Test");
         obj.Set("Eager", "immediate");
         obj.WithFieldResolver(name => "lazy");
 
@@ -239,7 +239,7 @@ foreach types => '{item.Name}'
         if (codeFile.FlagsDefinitions != null)
             registry.LoadFlagsDefinitions(codeFile.FlagsDefinitions);
 
-        // codebase.Types.Count — chained member access on lazy ScriptObject
+        // codebase.Types.Count — chained member access on lazy DataObject
         var script = ScriptParser.Parse(@"
 import code
 

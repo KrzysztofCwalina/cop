@@ -198,7 +198,7 @@ public class TypeRegistry
     /// <summary>
     /// Applies a pushdown filter to items using registered property accessors.
     /// This evaluates filter conditions natively on CLR objects, bypassing the
-    /// full PredicateEvaluator/ScriptObject pipeline for significantly faster execution.
+    /// full PredicateEvaluator/DataObject pipeline for significantly faster execution.
     /// </summary>
     public List<object> ApplyPushdownFilter(string itemTypeName, List<object> items, Core.FilterExpression filter)
     {
@@ -729,7 +729,7 @@ public class TypeRegistry
     /// </summary>
     internal string? InferTypeName(object value)
     {
-        if (value is ScriptObject ao)
+        if (value is DataObject ao)
             return ao.TypeName;
         if (value is RecordView v)
             return v.Table.TypeName;
@@ -773,7 +773,7 @@ public class TypeRegistry
     /// Registers type descriptors and collection declarations from a <see cref="ProviderSchema"/>.
     /// Does NOT register property accessors — the caller is responsible for registering
     /// CLR-based accessors via <see cref="RegisterAccessors"/> for Objects-format providers,
-    /// or ScriptObject-based accessors for JSON-format providers.
+    /// or DataObject-based accessors for JSON-format providers.
     /// </summary>
     public void RegisterProviderSchema(ProviderSchema schema)
     {

@@ -117,12 +117,12 @@ public static class ProviderLoader
         }
         else if (instance.SupportedFormats.HasFlag(DataFormat.AsyncStream))
         {
-            // Streaming providers use ScriptObject accessors (same as JSON)
-            JsonCollectionDeserializer.RegisterScriptObjectAccessors(registry, schema);
+            // Streaming providers use DataObject accessors (same as JSON)
+            JsonCollectionDeserializer.RegisterDataObjectAccessors(registry, schema);
         }
         else if (instance.SupportedFormats.HasFlag(DataFormat.Json))
         {
-            JsonCollectionDeserializer.RegisterScriptObjectAccessors(registry, schema);
+            JsonCollectionDeserializer.RegisterDataObjectAccessors(registry, schema);
         }
 
         return schema;

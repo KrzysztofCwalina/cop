@@ -97,8 +97,8 @@ public class NicLiteralTests
         };
         var evaluator = new PredicateEvaluator(predicates, "test.cs", CreateTestRegistry());
         var result = evaluator.EvaluateField(file.Predicates[0].Body, MakeType(), "Type");
-        Assert.That(result, Is.TypeOf<ScriptObject>());
-        var obj = (ScriptObject)result!;
+        Assert.That(result, Is.TypeOf<DataObject>());
+        var obj = (DataObject)result!;
         Assert.That(obj.GetField("Name"), Is.EqualTo("hello"));
         Assert.That(obj.GetField("Extra"), Is.Null);
     }
@@ -120,14 +120,14 @@ public class NicLiteralTests
     // --- JSON serialization test ---
 
     [Test]
-    public void ScriptObject_ToJson_NullField_SerializesAsNull()
+    public void DataObject_ToJson_NullField_SerializesAsNull()
     {
         var fields = new Dictionary<string, object?>
         {
             ["name"] = "hello",
             ["value"] = null
         };
-        var obj = new ScriptObject("Test", fields);
+        var obj = new DataObject("Test", fields);
         var json = obj.ToJson();
         Assert.That(json, Does.Contain("\"value\": null"));
     }

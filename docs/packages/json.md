@@ -17,7 +17,7 @@ let Collection = Parse('path/to/file.json', [TypeName])
 | `'path'` | Relative or absolute path to a JSON file. Relative paths resolve from the working directory. |
 | `[TypeName]` | Target type name in brackets. Must match a `type` declaration in the script. |
 
-The JSON file must contain a **top-level array** of objects. Each object is deserialized into a `ScriptObject` with fields matching the type definition.
+The JSON file must contain a **top-level array** of objects. Each object is deserialized into a `DataObject` with fields matching the type definition.
 
 ---
 

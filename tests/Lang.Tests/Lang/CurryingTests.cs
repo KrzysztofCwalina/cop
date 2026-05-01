@@ -72,7 +72,7 @@ foreach csharp.Types:add('hello', ' world') => '{item}'
         if (codeFile.FlagsDefinitions != null)
             registry.LoadFlagsDefinitions(codeFile.FlagsDefinitions);
         registry.AppendNamespacedCollection("csharp", "Types", [
-            new ScriptObject("Type", new Dictionary<string, object?> { ["Name"] = "Foo" })
+            new DataObject("Type", new Dictionary<string, object?> { ["Name"] = "Foo" })
         ]);
 
         var interpreter = new ScriptInterpreter(registry);
@@ -101,7 +101,7 @@ foreach csharp.Types:partial('second') => '{item}'
         if (codeFile.FlagsDefinitions != null)
             registry.LoadFlagsDefinitions(codeFile.FlagsDefinitions);
         registry.AppendNamespacedCollection("csharp", "Types", [
-            new ScriptObject("Type", new Dictionary<string, object?> { ["Name"] = "Foo" })
+            new DataObject("Type", new Dictionary<string, object?> { ["Name"] = "Foo" })
         ]);
 
         var interpreter = new ScriptInterpreter(registry);

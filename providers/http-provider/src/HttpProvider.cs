@@ -77,8 +77,8 @@ public class HttpProvider : DataProvider
 
         await foreach (var request in _requestChannel.Reader.ReadAllAsync(cancellationToken))
         {
-            // Wrap as ScriptObject so the cop evaluator can access properties
-            var so = new ScriptObject("Request");
+            // Wrap as DataObject so the cop evaluator can access properties
+            var so = new DataObject("Request");
             so.Set("Method", request.Method);
             so.Set("Path", request.Path);
             so.Set("Body", request.Body);
@@ -177,16 +177,16 @@ public class HttpSendSink : DataSink
 
     public override Task WriteAsync(object? originalItem, object result)
     {
-        // Extract the response completion from the original request ScriptObject
+        // Extract the response completion from the original request DataObject
         TaskCompletionSource<HttpResponseItem>? tcs = null;
-        if (originalItem is ScriptObject origSo)
+        if (originalItem is DataObject origSo)
             tcs = origSo.GetField("__responseCompletion") as TaskCompletionSource<HttpResponseItem>;
 
         if (tcs is null)
             throw new InvalidOperationException("http.Send can only be used with items from http.Receive.");
 
         HttpResponseItem response;
-        if (result is ScriptObject so)
+        if (result is DataObject so)
         {
             // Extract StatusCode, Body, ContentType from cop object
             var statusCode = so.GetField("StatusCode") is int sc ? sc : 200;
@@ -204,7 +204,7 @@ public class HttpSendSink : DataSink
         return Task.CompletedTask;
     }
 
-    private static string SerializeToJson(ScriptObject so)
+    private static string SerializeToJson(DataObject so)
     {
         var dict = new Dictionary<string, object?>();
         foreach (var (key, value) in so.Fields)

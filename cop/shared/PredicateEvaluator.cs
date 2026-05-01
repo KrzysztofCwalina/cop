@@ -78,7 +78,7 @@ public class PredicateEvaluator
         var fields = new Dictionary<string, object?>();
         foreach (var (name, expr) in obj.Fields)
             fields[name] = Eval(expr, item, paramType, ctx);
-        return new ScriptObject(obj.TypeName ?? "Object", fields);
+        return new DataObject(obj.TypeName ?? "Object", fields);
     }
 
     private object? EvalFunctionCall(FunctionCallExpr fc, object item, string paramType, EvaluationContext ctx)
@@ -118,7 +118,7 @@ public class PredicateEvaluator
 
     /// <summary>
     /// Evaluates the built-in Code([providers], path?) function.
-    /// Returns a ScriptObject with a lazy field resolver that queries providers on demand.
+    /// Returns a DataObject with a lazy field resolver that queries providers on demand.
     /// </summary>
     private object EvalCodeFunction(List<Expression> args, object item, string paramType, EvaluationContext ctx)
     {
@@ -184,7 +184,7 @@ public class PredicateEvaluator
             return ApplyClosure(closure, item, mc.Args, paramType, ctx);
         }
 
-        // Provider-scoped Code: namespace.Code('path') → ScriptObject with lazy resolver
+        // Provider-scoped Code: namespace.Code('path') → DataObject with lazy resolver
         if (mc.Name == "Code" && mc.Target is IdentifierExpr nsId)
         {
             var knownNamespaces = _registry.GetProviderNamespaces();
@@ -562,8 +562,8 @@ public class PredicateEvaluator
     {
         if (target is null) return null;
 
-        // ScriptObject: resolve fields by name, plus map properties
-        if (target is ScriptObject ao)
+        // DataObject: resolve fields by name, plus map properties
+        if (target is DataObject ao)
         {
             return member switch
             {
@@ -648,8 +648,8 @@ public class PredicateEvaluator
     {
         if (target is null) return null;
 
-        // Map/ScriptObject operations
-        if (target is ScriptObject so)
+        // Map/DataObject operations
+        if (target is DataObject so)
         {
             switch (predicate)
             {
@@ -1058,11 +1058,11 @@ public class PredicateEvaluator
                     }
                     groupList.Add(collItem);
                 }
-                // Return as list of ScriptObjects with Key and Items properties
+                // Return as list of DataObjects with Key and Items properties
                 var result = new List<object>();
                 foreach (var key in groupOrder)
                 {
-                    var groupObj = new ScriptObject("Group");
+                    var groupObj = new DataObject("Group");
                     groupObj.Set("Key", key);
                     groupObj.Set("Items", groups[key]);
                     groupObj.Set("Count", groups[key].Count);
@@ -1272,7 +1272,7 @@ public class PredicateEvaluator
     }
 
     /// <summary>
-    /// Apply a function definition to an item, producing an ScriptObject.
+    /// Apply a function definition to an item, producing an DataObject.
     /// Evaluates each field mapping expression with the item as context,
     /// binding function parameters from the provided arguments.
     /// </summary>
@@ -1320,7 +1320,7 @@ public class PredicateEvaluator
             return EvalInFunctionContext(func.BodyExpression, inputItem!, inputType, funcCtx, paramBindings);
         }
 
-        // Record-body function: evaluate field mappings and return ScriptObject
+        // Record-body function: evaluate field mappings and return DataObject
         var fields = new Dictionary<string, object?>();
         foreach (var (fieldName, fieldExpr) in func.FieldMappings)
         {
@@ -1336,7 +1336,7 @@ public class PredicateEvaluator
             fields[fieldName] = EvalInFunctionContext(fieldExpr, inputItem, inputType, funcCtx, paramBindings);
         }
 
-        return new ScriptObject(func.ReturnType, fields);
+        return new DataObject(func.ReturnType, fields);
     }
 
     /// <summary>
@@ -1442,7 +1442,7 @@ public class PredicateEvaluator
                         continue;
                     }
                 }
-                if (target is ScriptObject so && so.Fields.TryGetValue(path[i], out var fieldVal))
+                if (target is DataObject so && so.Fields.TryGetValue(path[i], out var fieldVal))
                 {
                     target = fieldVal;
                     continue;
@@ -1534,7 +1534,7 @@ public class PredicateEvaluator
     }
 
     /// <summary>
-    /// Apply a function to an item, producing an ScriptObject.
+    /// Apply a function to an item, producing an DataObject.
     /// Used by the interpreter for map operations in collection chains.
     /// </summary>
     public object? ApplyFunction(string funcName, object item, string itemType, List<Expression> args)
@@ -1584,15 +1584,15 @@ public class PredicateEvaluator
     }
 
     /// <summary>
-    /// Creates a ScriptObject representing a Code([providers], path?) result.
+    /// Creates a DataObject representing a Code([providers], path?) result.
     /// The object has a lazy field resolver that queries providers on demand and memoizes results.
     /// </summary>
-    private ScriptObject CreateCodeObject(string[] providers, string? path)
+    private DataObject CreateCodeObject(string[] providers, string? path)
     {
         var registry = _registry;
         var queryService = _providerQueryService;
 
-        var obj = new ScriptObject("Code");
+        var obj = new DataObject("Code");
         obj.WithFieldResolver(collectionName =>
         {
             var results = new List<object>();
