@@ -95,10 +95,12 @@ csharp                → DataObject (callable — function: string → CSharpCo
 
 **Every `.` is a function call.** The only difference is arity:
 - `type.Name` — calls a nullary function (no parens needed, like Haskell)
-- `csharp.Types('path')` — calls a unary function (argument required)
+- `csharp('path')` — calls a unary function (argument in parens)
 - `type.hasPrefix('I')` — calls a unary predicate (extension method)
 
-A "field" is simply syntactic sugar for calling a curried (zero-remaining-args) function. There is no semantic distinction between `obj.Name` and `obj.compute()` — both are `.` applied to a function member.
+**Convention: nullary functions are called without parentheses.** Since there are no args to pass, parens add nothing. This is why `code.Types` looks like "field access" — it IS a function call, just with no args and therefore no parens. Write `code.Types`, not `code.Types()`.
+
+A "field" is simply a nullary function called without parens. There is no semantic distinction — it's all function application via `.`.
 
 > **Implementation note:** Semantically everything is a function, but for performance, nullary members are represented as evaluated values (actual fields) at runtime — not as closures that get invoked on each access. This is analogous to Haskell's thunk evaluation: once forced, a thunk is replaced by its value. The user never observes the difference, but the runtime avoids per-access function-call overhead for fully-curried members.
 
@@ -114,8 +116,9 @@ let code = csharp('c:\git\myapp')
 code.Types       # nullary — all types in that codebase
 code.Methods     # nullary — all methods, same codebase (guaranteed consistent)
 
-# No argument — uses cwd (where the cop file lives / where cop was invoked):
-let code = csharp()
+# No argument — uses cwd (where cop was invoked).
+# Since it's nullary, no parens needed (convention):
+let code = csharp
 code.Types       # types found under current directory
 ```
 
@@ -423,8 +426,8 @@ All members on the returned codebase are **nullary** — they're already curried
 ```cop
 import csharp
 
-# Simple case — just analyze "here" (cwd):
-let code = csharp()
+# Simple case — just analyze "here" (cwd), no parens:
+let code = csharp
 let publicTypes = code.Types:isPublic
 
 # Explicit path for cross-repo analysis:
