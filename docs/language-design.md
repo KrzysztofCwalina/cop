@@ -104,13 +104,21 @@ A "field" is simply a nullary function called without parens. There is no semant
 
 > **Implementation note:** Semantically everything is a function, but for performance, nullary members are represented as evaluated values (actual fields) at runtime — not as closures that get invoked on each access. This is analogous to Haskell's thunk evaluation: once forced, a thunk is replaced by its value. The user never observes the difference, but the runtime avoids per-access function-call overhead for fully-curried members.
 
-### What is `csharp`?
+### Packages as Curried Functions (Example: `csharp`)
 
-`csharp` is a **fully curried function**. The `import` statement supplies the implicit argument (cwd), making it nullary. Per our rule — nullary functions are lowered to fields — `csharp` becomes a **global static field** holding a CSharpCodebase instance.
+Every package, when imported, behaves the same way. `csharp` is just one example — it illustrates the general pattern.
 
-This is not a special case. It's the same principle applied everywhere:
+`import <package>` curries the package's default arguments (e.g., cwd), making the name a nullary function that is lowered to a global static field. Any package that accepts configuration works identically:
+
+```cop
+import csharp       # csharp = CSharpCodebase(cwd) — static field
+import filesystem   # filesystem = Filesystem(cwd) — static field
+import http         # http = HttpProvider(default config) — static field
+```
+
+This is the same principle applied everywhere:
 - `type.Name` — nullary function → lowered to a field on the object
-- `csharp` — nullary function (cwd already applied) → lowered to a global static field
+- `csharp` — nullary function (cwd curried in by `import`) → lowered to a global static field
 - `csharp.Types` — nullary function on the codebase → lowered to a field
 
 ```cop
@@ -120,14 +128,14 @@ import csharp
 csharp.Types       # same instance, same memoized result
 csharp.Methods     # same instance
 
-# Partial application with a different path → new instance:
+# Re-apply with a different path → new instance:
 let other = csharp('c:\git\other')
 other.Types        # different codebase
 ```
 
-**No special "dual nature."** `csharp` without parens is the evaluated (lowered) result. `csharp('path')` is re-applying the underlying function with an explicit argument — overriding the curried-in default.
+**No special "dual nature."** `csharp` without parens is the evaluated (lowered) result. `csharp('path')` re-applies the underlying function with an explicit argument — overriding the curried-in default. This works the same for any configurable package.
 
-Multiple codebases:
+Multiple instances:
 ```cop
 let frontend = csharp('c:\git\frontend')
 let backend = csharp('c:\git\backend')
@@ -402,9 +410,9 @@ These are the explicit operations on iterable DataObjects — like Haskell's `fi
 
 ---
 
-## Providers
+## Providers (Example: `csharp`)
 
-Providers are the bridge between external data and the Cop type system.
+Providers are the bridge between external data and the Cop type system. They follow the same rules as all packages — `csharp` is used as the example throughout, but every provider package works identically.
 
 ### What is `csharp`?
 
@@ -518,32 +526,80 @@ let pyTypes = python.Type   # similarly for python
 # Or: only import one, qualify the other
 ```
 
-### Built-in Types Package
+### Built-in Types Package (`core`)
 
-Built-in scalar types (`string`, `int`, `number`, `bool`) have type definitions in a built-in package (`core`). These definitions exist for documentation and intellisense — external tools see them as regular types with regular type definitions. The runtime may erase them for performance, but that is invisible to tooling.
+**Every callable thing has a type definition somewhere.** No function call can succeed if the function isn't described in metadata. The built-in `core` package defines types for all primitives, collections, and built-in operations. External tools (docs generators, intellisense, linters) see these as regular type definitions — they don't need to know the runtime may optimize/erase them.
 
 ```cop
 # Defined in the built-in 'core' package (implicit import):
 namespace core
+
+# --- Scalars ---
 
 type string = {
     Length: int,
     Lower: string,
     Upper: string,
     Trim: string,
-    Words: [string]
+    Words: [string],
+    Replace: function(old: string, new: string) => string,
+    StartsWith: function(prefix: string) => bool,
+    EndsWith: function(suffix: string) => bool,
+    Contains: function(substring: string) => bool
 }
 
 type int = {
-    # scalar — no named members beyond arithmetic
+    Abs: int,
+    Sign: int
 }
 
-type bool = {
-    # scalar
+type number = {
+    Abs: number,
+    Floor: int,
+    Ceiling: int,
+    Round: int
+}
+
+type bool = { }
+
+# --- Collections ---
+
+type List<T> = {
+    Count: int,
+    First: T?,
+    Last: T?,
+    Single: T,
+    any: function(predicate: function(T) => bool) => bool,
+    all: function(predicate: function(T) => bool) => bool,
+    count: function(predicate: function(T) => bool) => int,
+    first: function(predicate: function(T) => bool) => T?,
+    where: function(predicate: function(T) => bool) => List<T>,
+    map: function(transform: function(T) => U) => List<U>,
+    orderBy: function(key: function(T) => K) => List<T>,
+    groupBy: function(key: function(T) => K) => List<Group<K, T>>,
+    sum: function(selector: function(T) => number) => number,
+    distinct: List<T>,
+    flatten: List<T>
+}
+
+type Group<K, T> = {
+    Key: K,
+    Items: List<T>,
+    Count: int
+}
+
+# --- Functions ---
+
+type Function<TIn, TOut> = {
+    # callable — application protocol
+}
+
+type Predicate<T> = {
+    # callable — returns bool, usable with : operator
 }
 ```
 
-The `core` package is implicitly imported — its types are always available without qualification. This is the ONLY implicit import.
+The `core` package is implicitly imported — its types are always available without qualification. This is the ONLY implicit import. The invariant: **if you can call it, its type is defined in metadata.**
 
 ---
 
