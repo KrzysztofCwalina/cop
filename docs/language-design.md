@@ -83,13 +83,14 @@ Types serve four purposes:
 At runtime, everything from providers down to leaf scalars is a DataObject. Every member is a function — some take arguments, some are nullary (look like fields). The tree is uniform:
 
 ```
-csharp                → DataObject (typed as CSharpProvider)
-  .Types('path')      → DataObject (iterable) — unary function returning [Type]
-    [0]               → DataObject (typed as Type)
-      .Name           → scalar (string) — nullary function returning a string
-      .Methods        → DataObject (iterable) — nullary function returning [Method]
-        [0]           → DataObject (typed as Method)
-          .Name       → scalar (string) — nullary function
+csharp                → DataObject (callable — function: string → CSharpProject)
+  ('path')            → DataObject (typed as CSharpProject — bound to path)
+    .Types            → DataObject (iterable) — nullary, returns [Type]
+      [0]             → DataObject (typed as Type)
+        .Name         → scalar (string) — nullary function returning a string
+        .Methods      → DataObject (iterable) — nullary function returning [Method]
+          [0]         → DataObject (typed as Method)
+            .Name     → scalar (string) — nullary function
 ```
 
 **Every `.` is a function call.** The only difference is arity:
@@ -103,11 +104,26 @@ A "field" is simply syntactic sugar for calling a curried (zero-remaining-args) 
 
 ### What is `csharp`?
 
-`import csharp` binds the name `csharp` to a DataObject whose members are functions:
-- `.Types('path')` — function: string → [Type]
-- `.Methods('path')` — function: string → [Method]
+`import csharp` binds the name `csharp` to a **function**: `string → CSharpProject`. You call it with a path to get a project-bound instance:
 
-`csharp.Types('c:\git\myproject')` applies the `Types` function. The same `.` operation at every level. No magic — just functions with different arities.
+```cop
+import csharp
+
+let project = csharp('c:\git\myproject')
+project.Types       # nullary — all types in that project
+project.Methods     # nullary — all methods, same project (guaranteed consistent)
+```
+
+The returned `CSharpProject` has **nullary** members — they're already bound to the path. No risk of accidentally mixing paths across collections.
+
+Multiple projects work naturally:
+```cop
+let frontend = csharp('c:\git\frontend')
+let backend = csharp('c:\git\backend')
+
+frontend.Types      # types from frontend only
+backend.Types       # types from backend only
+```
 
 
 ---
@@ -381,53 +397,62 @@ Providers are the bridge between external data and the Cop type system.
 
 ### What is `csharp`?
 
-`csharp` is an **object**. Its type is defined by the csharp provider package:
+`csharp` is a **function** (string → CSharpProject). Calling it with a path returns a project-bound instance:
 
 ```cop
-# Defined by the csharp package (simplified):
-type CSharpProvider = {
-    Types: function(path: string) => [Type],       # unary function
-    Methods: function(path: string) => [Method],   # unary function
-    Fields: function(path: string) => [Field],
-    Properties: function(path: string) => [Property],
-    Events: function(path: string) => [Event],
-    Statements: function(path: string) => [Statement]
+# csharp is a function: path → bound project
+type CSharpProject = {
+    Types: [Type],           # nullary — bound to the project path
+    Methods: [Method],       # nullary — same project
+    Fields: [Field],
+    Properties: [Property],
+    Events: [Event],
+    Statements: [Statement]
 }
 ```
 
-Every member is a function. Some are unary (require an argument), some could be nullary. In this case, `Types` is unary — it needs a path to know what to scan:
+All members on the returned project are **nullary** — they're already curried with the path. This guarantees consistency: Types and Methods always come from the same project.
 
 ```cop
 import csharp
 
-# Apply the Types function with a path argument:
-let types = csharp.Types('c:\git\myproject')     # → [Type, Type, ...]
-let methods = csharp.Methods('c:\git\myproject') # → [Method, Method, ...]
+# Bind to a project — csharp is callable:
+let project = csharp('c:\git\myproject')
+
+# All collections are now nullary (path already bound):
+let types = project.Types         # → [Type, ...]
+let methods = project.Methods     # → [Method, ...] — same project, guaranteed
+
+# Multiple independent projects:
+let frontend = csharp('c:\git\frontend')
+let backend = csharp('c:\git\backend')
+frontend.Types    # types from frontend
+backend.Methods   # methods from backend — no confusion
 
 # Filter as usual:
-let publicTypes = types:isPublic
-let bigTypes = types:Methods.Count > 20
+let publicTypes = project.Types:isPublic
+let bigTypes = project.Types:Methods.Count > 20
 ```
 
 ### `import` — formal definition
 
 `import <package>` does three things:
 
-1. **Instantiates** — the runtime creates an instance of the package's module type (e.g., `CSharpProvider`)
-2. **Binds a name** — the instance is bound to an immutable variable named after the package (e.g., `csharp`)
-3. **Brings exports into scope** — the package's exported types, predicates, and functions become resolvable names
+1. **Binds a callable** — the package's factory function is bound to an immutable name (e.g., `csharp`). For providers, this is typically a function that takes configuration (like a path) and returns a bound instance.
+2. **Brings exports into scope** — the package's exported types, predicates, and functions become resolvable names
+3. **No eager instantiation** — nothing is created until the user calls the function
 
 ```cop
 import csharp
 #        │
-#        ├─ (1) runtime creates: CSharpProvider { Types = <func>, Methods = <func>, ... }
-#        ├─ (2) binds variable:  let csharp = <that instance>
-#        └─ (3) scope injection: Type, Method, isPublic, ... are now resolvable names
+#        ├─ (1) binds:  let csharp = <factory function: string → CSharpProject>
+#        ├─ (2) scope:  Type, Method, isPublic, ... are now resolvable names
+#        └─ (3) no work done yet — csharp('path') triggers scanning
 ```
 
 So `import csharp` is equivalent to:
 ```cop
-let csharp = <runtime-created CSharpProvider instance>
+let csharp = <package-provided factory function>
 use csharp.[Type, Method, Statement, ...]     # bring exported types into scope
 use csharp.[isPublic, isAbstract, ...]         # bring exported predicates into scope
 ```
@@ -439,12 +464,13 @@ use csharp.[isPublic, isAbstract, ...]         # bring exported predicates into 
 
 | What | Who creates it | When |
 |------|---------------|------|
-| The provider object (`csharp`) | The runtime, triggered by `import` | At import time |
-| Objects in provider collections (`csharp.Types[0]`) | The provider, by reading external data | On first field access (lazy) |
+| The provider function (`csharp`) | The runtime, triggered by `import` | At import time (binds factory) |
+| The bound project (`csharp('path')`) | The provider, when called | When user applies the function |
+| Objects in collections (`project.Types[0]`) | The provider, by reading external data | On first access (lazy) |
 | User-defined objects (`Violation { ... }`) | User code, via record construction | When the expression is evaluated |
 | Function results (`checkMethodCount(type)`) | The function body | When the function is called |
 
-The runtime is the only "magic" — it instantiates the provider when you `import`. Everything after that is regular field access, function calls, and record construction.
+The runtime's only "magic" is binding the factory function at `import` time. Everything after that is regular function application and record construction.
 
 
 
