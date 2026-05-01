@@ -368,30 +368,96 @@ These are the explicit operations on iterable DataObjects — like Haskell's `fi
 
 ## Providers
 
-Providers supply typed object graphs to Cop programs. They are DataObjects.
+Providers are the bridge between external data and the Cop type system. A provider **reads external sources** (source code, file systems, APIs) and **produces typed object instances** — so Cop code never needs to manually construct them.
+
+### How Providers Create Objects
+
+When you access `csharp.Types`, the provider:
+1. Scans C# source files
+2. Parses them into an AST
+3. Creates a `Type` instance for each class/struct/interface found
+4. Returns them as a typed collection
+
+**The user never instantiates provider types.** The provider does it:
+
+```cop
+import csharp
+
+# The csharp provider creates Type instances by reading source code.
+# Each Type has fields: Name, Namespace, Methods, Properties, Visibility, etc.
+# The user just accesses the pre-populated collection:
+let types = csharp.Types        # → [Type, Type, Type, ...] (created by provider)
+let methods = csharp.Methods    # → [Method, Method, ...] (created by provider)
+
+# Scoped: provider reads only the specified path
+let codebase = csharp.Code('path/to/project')
+let types = codebase.Types      # → Types from that project only
+```
+
+This is the key distinction between **provider types** and **user-defined types**:
+
+| | Provider types (e.g., Type, Method, File) | User-defined types (e.g., Violation, Summary) |
+|---|---|---|
+| **Who creates instances?** | The provider (by reading external data) | User code (via record construction or functions) |
+| **Who defines the type?** | The provider package (schema) | The user/package (type declaration) |
+| **How do instances appear?** | Access a provider collection (`.Types`) | Construct explicitly (`TypeName { ... }`) or return from a function |
+| **Mutable?** | No — read-only snapshot | No — all values are immutable |
+
+### Provider Type Schema
+
+Providers declare their types in their package. For example, the `csharp` provider package defines:
+
+```cop
+# Defined by the csharp provider package (not by the user):
+type Type = {
+    Name: string,
+    Namespace: string,
+    Visibility: string,
+    Modifiers: int,
+    Methods: [Method],
+    Properties: [Property],
+    Fields: [Field],
+    Events: [Event],
+    File: string,
+    Line: int
+}
+
+type Method = {
+    Name: string,
+    Parameters: [Parameter],
+    ReturnType: string,
+    Visibility: string,
+    Modifiers: int,
+    Statements: [Statement],
+    File: string,
+    Line: int
+}
+```
+
+These type definitions serve the same four purposes as any type: shape description, parameter matching, pattern matching, and tooling (completion/docs). The only difference is that the PROVIDER creates instances, not user code.
 
 ### Import and Access
 
 ```cop
 import csharp
 
-# csharp is now a DataObject with lazy fields:
-csharp.Types             # collection of all types
-csharp.Methods           # collection of all methods
+# csharp is a provider DataObject with lazy fields:
+csharp.Types             # collection of Type instances (created by provider)
+csharp.Methods           # collection of Method instances (created by provider)
 
 # Scoped to a path:
 let codebase = csharp.Code('path/to/project')
 codebase.Types           # types in that project only
-codebase.Methods         # methods in that project only
 ```
 
 ### Provider Contract
 
 A provider:
-1. Exposes a **DataObject** with lazy fields for its collections
-2. Responds to field access by querying data on demand
-3. Supports **filter pushdown** — `:` predicates passed down for optimization
-4. Operates **read-only** — providers never mutate data
+1. **Defines types** (schema) — what shape of objects it produces
+2. **Creates instances** — by reading external sources on demand (lazy)
+3. **Supports filter pushdown** — `:` predicates passed down for optimization
+4. **Operates read-only** — providers never mutate external data
+
 
 ---
 
