@@ -6,12 +6,13 @@ Cop is a **lazy, declarative language** for processing typed object graphs. It c
 
 ### Design Principles
 
-1. **Lazy evaluation** — Nothing is computed until demanded. Fields resolve on first access and memoize. Like Haskell, everything is a thunk until forced.
-2. **Purity** — Expressions have no side effects. Output is the only effect, isolated in `command` blocks.
-3. **One type** — The language has exactly one composite type: DataObject. Collections, functions, providers — all DataObjects with different protocols.
-4. **Two operators** — `.` navigates (field access, extension methods). `:` filters (Where).
-5. **Extension methods** — Predicates and functions are extension methods resolved by their first-parameter type, like C#.
-6. **Case-insensitive** — All identifiers, string comparisons, and field lookups are case-insensitive by default.
+1. **Everything is a function** — Like Haskell, there is no distinction between "fields" and "functions." A field is a zero-arg function. `type.Name` calls a nullary function. `csharp.Types('path')` calls a unary function. The `.` operator always evaluates a function — arity is the only difference.
+2. **Lazy evaluation** — Nothing is computed until demanded. Functions memoize on first application. Like Haskell, everything is a thunk until forced.
+3. **Purity** — Expressions have no side effects. Output is the only effect, isolated in `command` blocks.
+4. **One type** — The language has exactly one composite type: DataObject. Collections, functions, providers — all DataObjects with different protocols.
+5. **Two operators** — `.` applies/navigates (calls a function on a DataObject). `:` filters (Where).
+6. **Extension methods** — Predicates and functions are extension methods resolved by their first-parameter type, like C#.
+7. **Case-insensitive** — All identifiers, string comparisons, and field lookups are case-insensitive by default.
 
 ---
 
@@ -23,12 +24,12 @@ Cop is a **lazy, declarative language** for processing typed object graphs. It c
 
 | Protocol | Capability | Example |
 |----------|-----------|---------|
-| **Field access** | Has named fields, accessed via `.` | `type.Name`, `csharp.Types` |
+| **Member access** | Has named functions, accessed via `.` | `type.Name`, `csharp.Types('path')` |
 | **Iteration** | Is a sequence of items, supports `:` and higher-order ops | `types`, `methods` |
-| **Application** | Is callable (function, predicate, closure) | `isPublic`, `summarize` |
+| **Application** | Is directly callable (function, predicate, closure) | `isPublic`, `summarize` |
 | **Scalar** | Has a terminal value (string, int, bool, null) | `'hello'`, `42`, `true` |
 
-These are NOT exclusive. A string has a scalar value AND supports field access (`.Length`). A collection supports iteration AND field access (`.Count`, `.First`).
+These are NOT exclusive. A string has a scalar value AND supports member access (`.Length`). A collection supports iteration AND member access (`.Count`, `.First`).
 
 ### Scalars
 
@@ -44,14 +45,14 @@ Scalars are the terminal values — the base case where navigation stops:
 
 ### Types (Shape Descriptors)
 
-Types describe the **shape** of objects — what fields they have and what kind of values those fields hold. DataObject is the invisible runtime representation; users think in terms of types.
+Types describe the **shape** of objects — what named functions they expose. DataObject is the invisible runtime representation; users think in terms of types.
 
 ```cop
 type Request = {
-    Method: string,
-    Path: string,
-    Headers: [Header],
-    Body: string?
+    Method: string,          # nullary: () => string
+    Path: string,            # nullary: () => string
+    Headers: [Header],       # nullary: () => [Header]
+    Body: string?            # nullary: () => string?
 }
 
 type Response = {
@@ -63,11 +64,13 @@ type Response = {
 type Type = {
     Name: string,
     Namespace: string,
-    Methods: [Method],
+    Methods: [Method],       # nullary: () => [Method]
     Properties: [Property],
     Visibility: string
 }
 ```
+
+Every member in a type definition is a function. When written as `Name: string`, it means a nullary function returning string. This is why `type.Name` and `csharp.Types('path')` are the same `.` operation — both call a function, just with different arities.
 
 Types serve four purposes:
 1. **Shape description** — what fields an object has
@@ -75,57 +78,61 @@ Types serve four purposes:
 3. **Pattern matching** — constrained dispatch based on value (see below)
 4. **Tooling** — library documentation, statement completion, type-ahead suggestions
 
-### The Object Tree (Uniform Thunks)
+### The Object Tree (Everything is a Function)
 
-At runtime, everything from providers down to leaf fields is a DataObject. The tree is uniform:
+At runtime, everything from providers down to leaf scalars is a DataObject. Every member is a function — some take arguments, some are nullary (look like fields). The tree is uniform:
 
 ```
-csharp                → DataObject (typed as Provider; fields: Types, Methods, ...)
-  .Types              → DataObject (iterable of Type-shaped DataObjects)
-    [0]               → DataObject (typed as Type; fields: Name, Methods, ...)
-      .Methods        → DataObject (iterable of Method-shaped DataObjects)
-        [0]           → DataObject (typed as Method; fields: Name, Parameters, ...)
-          .Name       → scalar (string — terminal)
+csharp                → DataObject (typed as CSharpProvider)
+  .Types('path')      → DataObject (iterable) — unary function returning [Type]
+    [0]               → DataObject (typed as Type)
+      .Name           → scalar (string) — nullary function returning a string
+      .Methods        → DataObject (iterable) — nullary function returning [Method]
+        [0]           → DataObject (typed as Method)
+          .Name       → scalar (string) — nullary function
 ```
 
-**Every `.` is the same operation** at every level. DataObject is the uniform runtime mechanism, but the USER sees typed objects (Type, Method, Request, etc.).
+**Every `.` is a function call.** The only difference is arity:
+- `type.Name` — calls a nullary function (no parens needed, like Haskell)
+- `csharp.Types('path')` — calls a unary function (argument required)
+- `type.hasPrefix('I')` — calls a unary predicate (extension method)
+
+A "field" is simply syntactic sugar for calling a curried (zero-remaining-args) function. There is no semantic distinction between `obj.Name` and `obj.compute()` — both are `.` applied to a function member.
 
 ### What is `csharp`?
 
-`import csharp` binds the name `csharp` to a provider — a DataObject with typed, lazy fields:
-- `.Types` — iterable of Type objects (loaded on demand)
-- `.Methods` — iterable of Method objects (loaded on demand)
-- `.Code('path')` — function that returns a scoped view
+`import csharp` binds the name `csharp` to a DataObject whose members are functions:
+- `.Types('path')` — function: string → [Type]
+- `.Methods('path')` — function: string → [Method]
 
-`csharp.Types` is field access. The same `.` operation at every level. But `csharp` is typed (it's a Provider), and `csharp.Types` returns objects typed as Type.
+`csharp.Types('c:\git\myproject')` applies the `Types` function. The same `.` operation at every level. No magic — just functions with different arities.
 
 
 ---
 
 ## The Two Operators
 
-### `.` — Navigate
+### `.` — Navigate (Apply)
 
-The dot operator does ONE thing: access a named member on a DataObject. Its behavior depends on what it finds:
+The dot operator applies a function on a DataObject. Since everything is a function, this covers all cases uniformly:
 
-**Field access** (member is a field):
+**Nullary function** (what users call "field access"):
 ```cop
-type.Name                # access field → string
-type.Methods             # access field → iterable DataObject
-csharp.Types             # access field → iterable DataObject
+type.Name                # apply nullary function → string
+type.Methods             # apply nullary function → iterable DataObject
 ```
 
-**Extension method** (member is a predicate/function defined on the type):
+**Unary/multi-arg function** (explicit arguments):
 ```cop
-type.isPublic            # apply predicate → bool
-type.hasPrefix('I')      # apply predicate with arg → bool
-type.summarize('json')   # apply function with arg → DataObject
+csharp.Types('path')     # apply unary function → [Type]
+type.hasPrefix('I')      # apply predicate (extension method) → bool
+type.summarize('json')   # apply function → DataObject
 ```
 
-**Project on iterable** (left side is iterable, member is a field on items):
+**Project on iterable** (left side is iterable, function is on items):
 ```cop
-types.Name               # project → list of strings (one per item)
-types.Methods            # flatten → list of all Methods across all Types
+types.Name               # apply Name on each item → list of strings
+types.Methods            # apply Methods on each, flatten → list of all Methods
 ```
 
 **Higher-order operator** (left side is iterable, member is a collection operator):
@@ -139,7 +146,7 @@ types.groupBy(Namespace) # → iterable of {Key, Items, Count}
 types.sum(Methods.Count) # → int (aggregate)
 ```
 
-**Built-in iterable properties**:
+**Built-in iterable members** (nullary functions on iterables):
 ```cop
 types.Count              # number of items
 types.First              # first item
@@ -377,8 +384,8 @@ Providers are the bridge between external data and the Cop type system.
 ```cop
 # Defined by the csharp package (simplified):
 type CSharpProvider = {
-    Types: function(path: string) => [Type],
-    Methods: function(path: string) => [Method],
+    Types: function(path: string) => [Type],       # unary function
+    Methods: function(path: string) => [Method],   # unary function
     Fields: function(path: string) => [Field],
     Properties: function(path: string) => [Property],
     Events: function(path: string) => [Event],
@@ -386,12 +393,12 @@ type CSharpProvider = {
 }
 ```
 
-The fields are **functions** — they take a path and return typed collections:
+Every member is a function. Some are unary (require an argument), some could be nullary. In this case, `Types` is unary — it needs a path to know what to scan:
 
 ```cop
 import csharp
 
-# Types is a function that takes a path to scan:
+# Apply the Types function with a path argument:
 let types = csharp.Types('c:\git\myproject')     # → [Type, Type, ...]
 let methods = csharp.Methods('c:\git\myproject') # → [Method, Method, ...]
 
