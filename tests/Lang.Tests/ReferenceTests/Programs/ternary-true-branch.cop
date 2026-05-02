@@ -1,0 +1,6 @@
+# Ternary: true branch — sealed types pass
+# @expect output-contains: GoodClient
+
+import csharp
+predicate sealedLabel(Type) => isSealed ? true | false
+foreach csharp.Types:sealedLabel => '{item.Name}'

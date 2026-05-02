@@ -1,0 +1,4 @@
+# Negative: parse error — predicate without body
+# @expect parse-error
+
+predicate broken(Type)

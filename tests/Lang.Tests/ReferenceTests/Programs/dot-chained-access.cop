@@ -1,0 +1,6 @@
+# Dot operator: chained access — type.Methods.Count
+# @expect output
+
+import csharp
+predicate hasMethods(Type) => Type.Methods.Count > 0
+foreach csharp.Types:hasMethods => '{item.Name}'

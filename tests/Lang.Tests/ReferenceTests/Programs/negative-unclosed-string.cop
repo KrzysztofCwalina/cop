@@ -1,0 +1,4 @@
+# Negative: parse error — unclosed string literal
+# @expect parse-error
+
+let x = 'unclosed

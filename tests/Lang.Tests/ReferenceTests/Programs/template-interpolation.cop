@@ -1,0 +1,5 @@
+# Template interpolation: field values in output strings
+# @expect output-contains: sealed: GoodClient
+
+import csharp
+foreach csharp.Types:isSealed => 'sealed: {item.Name}'

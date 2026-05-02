@@ -1,0 +1,6 @@
+# Colon operator: inline filter no match
+# @expect no-output
+
+import csharp
+predicate nameStartsZZZ(Type) => Type.Name:sw('ZZZ')
+foreach csharp.Types:nameStartsZZZ => '{item.Name}'

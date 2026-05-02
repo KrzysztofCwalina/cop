@@ -1,0 +1,6 @@
+# Dot operator: field access negative case — no match
+# @expect no-output
+
+import csharp
+predicate noMatch(Type) => Type.Name:eq('NonExistent')
+foreach csharp.Types:noMatch => '{item.Name}'

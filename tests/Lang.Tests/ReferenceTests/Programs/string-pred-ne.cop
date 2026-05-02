@@ -1,0 +1,7 @@
+# String predicate: ne (not equals) — Placeholder type should be excluded
+# @expect output
+# @expect no-output-contains: Placeholder
+
+import csharp
+predicate nameNotPlaceholder(Type) => Type.Name:ne('Placeholder')
+foreach csharp.Types:nameNotPlaceholder => '{item.Name}'

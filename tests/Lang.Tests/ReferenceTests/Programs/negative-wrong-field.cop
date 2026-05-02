@@ -1,0 +1,6 @@
+# Negative: non-existent field access produces no match
+# @expect no-output
+
+import csharp
+predicate wrongField(Type) => Type.FakeField:eq('x')
+foreach csharp.Types:wrongField => '{item.Name}'

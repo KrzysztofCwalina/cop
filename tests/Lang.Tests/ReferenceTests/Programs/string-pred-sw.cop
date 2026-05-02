@@ -1,0 +1,6 @@
+# String predicate: sw (starts with)
+# @expect output-contains: GoodClient
+
+import csharp
+predicate nameStartsGood(Type) => Type.Name:sw('Good')
+foreach csharp.Types:nameStartsGood => '{item.Name}'

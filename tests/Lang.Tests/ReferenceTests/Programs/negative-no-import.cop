@@ -1,0 +1,5 @@
+# Negative: import code only provides abstractions — no concrete provider, no data
+# @expect no-output
+
+import code
+foreach Types:csharp:isPublic => '{item.Name}'

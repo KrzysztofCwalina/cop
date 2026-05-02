@@ -1,0 +1,5 @@
+# Colon operator: filter by predicate — preserves item type
+# @expect output-contains: GoodClient
+
+import csharp
+foreach csharp.Types:isPublic => '{item.Name}'

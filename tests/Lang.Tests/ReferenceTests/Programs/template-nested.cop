@@ -1,0 +1,6 @@
+# Template interpolation: nested field access in template
+# @expect output-contains: GoodClient
+# @expect output-contains: methods
+
+import csharp
+foreach csharp.Types:isSealed => '{item.Name} has {item.Methods.Count} methods'

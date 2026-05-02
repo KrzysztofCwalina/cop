@@ -1,0 +1,6 @@
+# Function: user-defined function as transform
+# @expect output-contains: GoodClient
+
+import csharp
+function getTypeName(Type) => Type.Name
+foreach csharp.Types => '{item.Name}'

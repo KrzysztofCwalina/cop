@@ -1,0 +1,6 @@
+# Predicates: numeric comparison — no type has > 100 methods
+# @expect no-output
+
+import csharp
+predicate manyMethods(Type) => Type.Methods.Count > 100
+foreach csharp.Types:manyMethods => '{item.Name}'

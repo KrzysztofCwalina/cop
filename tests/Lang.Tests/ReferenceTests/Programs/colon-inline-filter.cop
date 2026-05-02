@@ -1,0 +1,6 @@
+# Colon operator: inline field filter — predicate using Name:sw
+# @expect output-contains: GoodClient
+
+import csharp
+predicate nameStartsGood(Type) => Type.Name:sw('Good')
+foreach csharp.Types:nameStartsGood => '{item.Name}'

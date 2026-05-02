@@ -1,0 +1,7 @@
+# Let binding: string constant used in predicate
+# @expect output-contains: GoodClient
+
+import csharp
+let prefix = 'Good'
+predicate startsWithPrefix(Type) => Type.Name:sw(prefix)
+foreach csharp.Types:startsWithPrefix => '{item.Name}'

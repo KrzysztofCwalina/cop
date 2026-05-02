@@ -1,0 +1,7 @@
+# Ternary: false branch — sealed types excluded, Placeholder should still be present
+# @expect output
+# @expect output-contains: Placeholder
+
+import csharp
+predicate notSealed(Type) => isSealed ? false | true
+foreach csharp.Types:notSealed => '{item.Name}'

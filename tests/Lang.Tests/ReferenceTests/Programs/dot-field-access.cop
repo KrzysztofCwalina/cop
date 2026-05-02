@@ -1,0 +1,6 @@
+# Dot operator: field access (nullary function) returns scalar
+# @expect output-contains: GoodClient
+
+import csharp
+predicate hasName(Type) => Type.Name:eq('GoodClient')
+foreach csharp.Types:hasName => '{item.Name}'

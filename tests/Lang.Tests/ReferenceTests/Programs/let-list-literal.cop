@@ -1,0 +1,7 @@
+# Let binding: list literal used in filter
+# @expect no-output
+
+import csharp
+let badNames = ['Bad', 'Evil', 'Wrong']
+predicate hasBadPrefix(Type) => Type.Name:sw(badNames)
+foreach csharp.Types:hasBadPrefix => '{item.Name}'

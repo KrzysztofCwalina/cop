@@ -1,0 +1,6 @@
+# Predicates: negative — GoodClient is not abstract
+# @expect no-output
+
+import csharp
+predicate isAbstractGood(Type) => isAbstract && Type.Name:sw('Good')
+foreach csharp.Types:isAbstractGood => '{item.Name}'
