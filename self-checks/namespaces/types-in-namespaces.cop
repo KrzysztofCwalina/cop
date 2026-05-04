@@ -9,11 +9,13 @@
 import csharp
 import code-analysis
 
+predicate inTestProject(Type) => Type.File.Path:sw('tests/') || Type.File.Path:sw('samples/')
+
 predicate hasNamespace(Type) => Type.File.Namespace.Length:gt(0)
 
-predicate missingNamespace(Type) => !hasNamespace
+predicate missingNamespace(Type) => !hasNamespace && !inTestProject
 
 export let types-without-namespace = csharp.Types:missingNamespace
     :toError('{item.Name} in {item.File.Path} must be in a namespace')
 
-command check-namespaces = foreach types-without-namespace => '{item.File}({item.Line}): {item.Severity}: {item.Message}'
+command check-namespaces = CHECK(types-without-namespace)

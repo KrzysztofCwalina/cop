@@ -58,6 +58,7 @@ public class PredicateEvaluator
             NicExpr => null,
             LiteralExpr lit => lit.Value,
             ListLiteralExpr list => list.Elements.Select(e => Eval(e, item, paramType, ctx)).ToList(),
+            CollectionUnionExpr union => EvalCollectionUnion(union, item, paramType, ctx),
             ObjectLiteralExpr obj => EvalObjectLiteral(obj, item, paramType, ctx),
             IdentifierExpr id => EvalIdentifier(id.Name, item, paramType, ctx),
             MemberAccessExpr ma => GetMember(Eval(ma.Target, item, paramType, ctx), ma.Member),
@@ -79,6 +80,21 @@ public class PredicateEvaluator
         foreach (var (name, expr) in obj.Fields)
             fields[name] = Eval(expr, item, paramType, ctx);
         return new DataObject(obj.TypeName ?? "Object", fields);
+    }
+
+    private object? EvalCollectionUnion(CollectionUnionExpr union, object item, string paramType, EvaluationContext ctx)
+    {
+        var result = new List<object?>();
+        foreach (var elem in union.Elements)
+        {
+            var val = Eval(elem, item, paramType, ctx);
+            if (val is IList list)
+                foreach (var listItem in list)
+                    result.Add(listItem);
+            else if (val is not null)
+                result.Add(val);
+        }
+        return result;
     }
 
     private object? EvalFunctionCall(FunctionCallExpr fc, object item, string paramType, EvaluationContext ctx)

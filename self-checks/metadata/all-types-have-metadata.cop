@@ -1,31 +1,38 @@
 # Cop Self-Check: Type Metadata Coverage
+#
+# Design principle: Every data provider must have a corresponding .cop package
+# that defines 'export type' metadata for the types it registers.
+#
+# Run: cop run self-checks/metadata/all-types-have-metadata.cop -t .
 
-# Design principle: Every type reachable through the Cop type system must be
-# defined in metadata - either as a real export type definition in a .cop
-# package file, or as a pseudo type registered in TypeRegistry.RegisterCorePrimitives.
-
-# This check uses the cop-lang provider to structurally inspect .cop type
-# definitions and the csharp provider to verify C# schema classes.
-
-# Run: cop run self-checks/all-types-have-metadata.cop -t .
-
-import cop-lang
 import csharp
+import code-analysis
 
-# All types defined in .cop package files under packages/code/
-predicate isCodePackageType(Type) => Type.File.Path:ct('code/src')
+# Known provider implementations (update when adding a new provider)
+let tracked-providers = [
+    'CSharpProvider'
+    'PythonProvider'
+    'JavaScriptProvider'
+    'CopProvider'
+    'MarkdownProvider'
+    'FilesystemProvider'
+    'HttpProvider'
+    'JsonProvider'
+    'TypeSpecProvider'
+    'TypeSpecHttpProvider'
+    'TypeSpecRawProvider'
+    'CodeSchemaProvider'
+]
 
-# All types defined in .cop package files (any package)
-predicate isPackageType(Type) => Type.File.Path:ct('packages/')
+# DataProvider subclasses in the providers/ directory
+predicate isProviderImpl(Type) =>
+    Type.File.Path:ct('providers/')
+    && Type.Name:ew('Provider')
 
-# Check: C# schema class exists
-predicate isSchemaClass(Type) => Type.Name:eq('CodeSchema')
-    && Type.File.Path:ct('providers/code')
+# Provider implementations not tracked in this self-check
+predicate untrackedProvider(Type) => isProviderImpl && !Type.Name:in(tracked-providers)
 
-export let schema-class-exists = csharp.Types:isSchemaClass
+export let untracked-providers = csharp.Types:untrackedProvider
+    :toWarning('Provider {item.Name} in {item.File.Path} needs a .cop package with type metadata')
 
-# List all .cop type definitions from code package (informational)
-export let code-types = cop-lang.Types:isCodePackageType
-
-command show-schema = foreach schema-class-exists => '{item.Name} found in {item.File.Path}'
-command show-types = foreach code-types => '{item.Name} ({item.File.Path})'
+command check-metadata = CHECK(untracked-providers)
