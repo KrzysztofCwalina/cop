@@ -27,7 +27,8 @@ public static class FilterHintExtractor
         List<Expression> filters,
         TypeDescriptor? itemType,
         HashSet<string>? predicateNames = null,
-        Dictionary<string, List<PredicateDefinition>>? predicateDefs = null)
+        Dictionary<string, List<PredicateDefinition>>? predicateDefs = null,
+        bool allowPartial = false)
     {
         if (itemType is null || filters.Count == 0)
             return (null, 0);
@@ -37,7 +38,7 @@ public static class FilterHintExtractor
 
         for (; i < filters.Count; i++)
         {
-            var hint = TryExtract(filters[i], itemType, predicateNames, predicateDefs);
+            var hint = TryExtract(filters[i], itemType, predicateNames, predicateDefs, allowPartial);
             if (hint is null)
                 break; // Hit a barrier — stop extracting
 
@@ -55,17 +56,18 @@ public static class FilterHintExtractor
         Expression filter,
         TypeDescriptor itemType,
         HashSet<string>? predicateNames,
-        Dictionary<string, List<PredicateDefinition>>? predicateDefs)
+        Dictionary<string, List<PredicateDefinition>>? predicateDefs,
+        bool allowPartial)
     {
         switch (filter)
         {
             // Bare identifier — bool property or user predicate to inline
             case IdentifierExpr id:
-                return TryExtractIdentifier(id.Name, negated: false, itemType, predicateNames, predicateDefs);
+                return TryExtractIdentifier(id.Name, negated: false, itemType, predicateNames, predicateDefs, allowPartial);
 
             // Negated identifier — !Empty, !predicateName
             case UnaryExpr { Operator: "!" or "not", Operand: IdentifierExpr id }:
-                return TryExtractIdentifier(id.Name, negated: true, itemType, predicateNames, predicateDefs);
+                return TryExtractIdentifier(id.Name, negated: true, itemType, predicateNames, predicateDefs, allowPartial);
 
             // Predicate call — Name:sw('Client'), Size:gt(100), Extension:eq('.cs')
             // or collection predicate — Keywords:contains('var')
@@ -74,7 +76,7 @@ public static class FilterHintExtractor
 
             // Binary expression — Depth < 3, Size > 1000, Extension == '.cs'
             case BinaryExpr bin:
-                return TryExtractBinary(bin, itemType, paramName: null);
+                return TryExtractBinary(bin, itemType, paramName: null, predicateNames, predicateDefs, allowPartial);
 
             default:
                 return null;
@@ -85,14 +87,15 @@ public static class FilterHintExtractor
         string name, bool negated,
         TypeDescriptor itemType,
         HashSet<string>? predicateNames,
-        Dictionary<string, List<PredicateDefinition>>? predicateDefs)
+        Dictionary<string, List<PredicateDefinition>>? predicateDefs,
+        bool allowPartial)
     {
         // If it's a known user predicate, try to inline its body
         if (predicateNames is not null && predicateNames.Contains(name))
         {
             if (predicateDefs is not null && predicateDefs.TryGetValue(name, out var defs))
             {
-                var inlined = TryInlinePredicateBody(defs[0], itemType);
+                var inlined = TryInlinePredicateBody(defs[0], itemType, predicateNames, predicateDefs, allowPartial);
                 if (inlined is not null)
                     return negated ? new NotFilter(inlined) : inlined;
             }
@@ -114,13 +117,20 @@ public static class FilterHintExtractor
     /// </summary>
     private static FilterExpression? TryInlinePredicateBody(
         PredicateDefinition predicate,
-        TypeDescriptor itemType)
+        TypeDescriptor itemType,
+        HashSet<string>? predicateNames = null,
+        Dictionary<string, List<PredicateDefinition>>? predicateDefs = null,
+        bool allowPartial = false)
     {
         var paramName = predicate.ParameterType;
-        return TryExtractFromBody(predicate.Body, itemType, paramName);
+        return TryExtractFromBody(predicate.Body, itemType, paramName, predicateNames, predicateDefs, allowPartial);
     }
 
-    private static FilterExpression? TryExtractFromBody(Expression body, TypeDescriptor itemType, string? paramName)
+    private static FilterExpression? TryExtractFromBody(
+        Expression body, TypeDescriptor itemType, string? paramName,
+        HashSet<string>? predicateNames = null,
+        Dictionary<string, List<PredicateDefinition>>? predicateDefs = null,
+        bool allowPartial = false)
     {
         switch (body)
         {
@@ -139,35 +149,71 @@ public static class FilterHintExtractor
                 && IsParamAccess(ma.Target, paramName):
                 return TryExtractPredicateCall(ma.Member, pc.Name, pc.Args, itemType);
 
+            // !Param.Prop:predicate('value') — negated string/numeric operation
+            case UnaryExpr { Operator: "!" or "not", Operand: PredicateCallExpr pc }
+                when pc.Target is MemberAccessExpr ma
+                && IsParamAccess(ma.Target, paramName):
+                var inner = TryExtractPredicateCall(ma.Member, pc.Name, pc.Args, itemType);
+                return inner is not null ? new NotFilter(inner) : null;
+
+            // Bare identifier — resolve as predicate name and inline its body
+            case IdentifierExpr id when predicateNames is not null && predicateNames.Contains(id.Name):
+                return TryResolvePredicateIdentifier(id.Name, negated: false, itemType, predicateNames, predicateDefs, allowPartial);
+
+            // !predicateName — negated predicate reference
+            case UnaryExpr { Operator: "!" or "not", Operand: IdentifierExpr id }
+                when predicateNames is not null && predicateNames.Contains(id.Name):
+                return TryResolvePredicateIdentifier(id.Name, negated: true, itemType, predicateNames, predicateDefs, allowPartial);
+
             // Binary — Param.Prop == 'value', Param.Prop > 3, or &&/|| combinations
             case BinaryExpr bin:
-                return TryExtractBinary(bin, itemType, paramName);
+                return TryExtractBinary(bin, itemType, paramName, predicateNames, predicateDefs, allowPartial);
 
             default:
                 return null;
         }
     }
 
+    private static FilterExpression? TryResolvePredicateIdentifier(
+        string name, bool negated, TypeDescriptor itemType,
+        HashSet<string>? predicateNames, Dictionary<string, List<PredicateDefinition>>? predicateDefs,
+        bool allowPartial)
+    {
+        if (predicateDefs is not null && predicateDefs.TryGetValue(name, out var defs))
+        {
+            var inlined = TryInlinePredicateBody(defs[0], itemType, predicateNames, predicateDefs, allowPartial);
+            if (inlined is not null)
+                return negated ? new NotFilter(inlined) : inlined;
+        }
+        return null;
+    }
+
     /// <summary>
     /// Extracts from binary expressions: comparisons, equality, and logical AND/OR.
     /// </summary>
-    private static FilterExpression? TryExtractBinary(BinaryExpr bin, TypeDescriptor itemType, string? paramName)
+    private static FilterExpression? TryExtractBinary(
+        BinaryExpr bin, TypeDescriptor itemType, string? paramName,
+        HashSet<string>? predicateNames = null,
+        Dictionary<string, List<PredicateDefinition>>? predicateDefs = null,
+        bool allowPartial = false)
     {
-        // Logical AND — both sides must be pushdown-able
+        // Logical AND — in partial mode, extract whichever sides are pushdown-able
         if (bin.Operator == "&&")
         {
-            var left = TryExtractFromBody(bin.Left, itemType, paramName);
-            var right = TryExtractFromBody(bin.Right, itemType, paramName);
+            var left = TryExtractFromBody(bin.Left, itemType, paramName, predicateNames, predicateDefs, allowPartial);
+            var right = TryExtractFromBody(bin.Right, itemType, paramName, predicateNames, predicateDefs, allowPartial);
             if (left is not null && right is not null)
                 return FilterExpression.And(left, right);
+            if (allowPartial)
+                return left ?? right; // partial: return whichever side extracted
             return null;
         }
 
-        // Logical OR — both sides must be pushdown-able
+        // Logical OR — both sides must be pushdown-able (can't partially push OR)
         if (bin.Operator == "||")
         {
-            var left = TryExtractFromBody(bin.Left, itemType, paramName);
-            var right = TryExtractFromBody(bin.Right, itemType, paramName);
+            var left = TryExtractFromBody(bin.Left, itemType, paramName, predicateNames, predicateDefs, allowPartial);
+            var right = TryExtractFromBody(bin.Right, itemType, paramName, predicateNames, predicateDefs, allowPartial);
             if (left is not null && right is not null)
                 return FilterExpression.Or(left, right);
             return null;

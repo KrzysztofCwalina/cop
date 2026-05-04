@@ -860,7 +860,7 @@ public static class Engine
             }
 
             var itemTypeDesc = typeRegistry.GetType(itemTypeName);
-            var (hints, _) = FilterHintExtractor.Extract(allCmdFilters, itemTypeDesc, predicateNames, predicateDefs);
+            var (hints, _) = FilterHintExtractor.Extract(allCmdFilters, itemTypeDesc, predicateNames, predicateDefs, allowPartial: true);
 
             // Merge: if same collection from multiple command blocks, AND the filters
             if (collectionFilters.TryGetValue(bareCollection, out var existing) && existing is not null && hints is not null)
