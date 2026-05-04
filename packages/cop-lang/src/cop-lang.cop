@@ -1,0 +1,8 @@
+# Cop Language Analysis Package v1.0
+# Provides structural analysis of .cop source files through
+# the standard code analysis collections (Types, Statements, Lines, Files).
+#
+# Usage: import cop-lang
+# Then use cop-lang.Types, cop-lang.Lines, cop-lang.Files, etc.
+
+import code

@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Cop.Providers</RootNamespace>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\code\code.csproj" />
+  </ItemGroup>
+
+  <!-- Copy provider DLL to package lib/ folder after build -->
+  <Target Name="CopyToPackageLib" AfterTargets="Build">
+    <PropertyGroup>
+      <PackageLibDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\packages\cop-lang\lib\'))</PackageLibDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(PackageLibDir)" />
+    <ItemGroup>
+      <ProviderFiles Include="$(OutputPath)cop-provider.dll" />
+      <ProviderFiles Include="$(OutputPath)cop-provider.deps.json" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ProviderFiles)" DestinationFolder="$(PackageLibDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

@@ -1070,6 +1070,27 @@ public class PredicateEvaluator
                 }
                 return result;
             }
+            case "containsAny":
+            {
+                // Check if the collection contains any element from the argument list
+                var argVal = Eval(args[0], item, paramType, ctx);
+                if (argVal is IList argList)
+                {
+                    var argSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var a in argList)
+                        if (a is not null) argSet.Add(a.ToString()!);
+                    foreach (var collItem in collection)
+                        if (collItem is not null && argSet.Contains(collItem.ToString()!))
+                            return true;
+                    return false;
+                }
+                // Single value fallback
+                var singleVal = argVal?.ToString();
+                foreach (var collItem in collection)
+                    if (string.Equals(collItem?.ToString(), singleVal, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                return false;
+            }
             case "Reduce":
             {
                 // Reduce(operator, itemExpr, separator?, seed?)

@@ -175,9 +175,16 @@ public static class Engine
                 // Log item counts per collection for this provider
                 foreach (var coll in bp.Schema.Collections)
                 {
-                    var collItems = typeRegistry.GetGlobalCollectionItems(coll.Name);
-                    if (collItems is not null && collItems.Count > 0)
-                        diagLog($"[trace] provider {bp.Name}: {coll.Name} -> {collItems.Count} items");
+                    try
+                    {
+                        var collItems = typeRegistry.GetGlobalCollectionItems(coll.Name);
+                        if (collItems is not null && collItems.Count > 0)
+                            diagLog($"[trace] provider {bp.Name}: {coll.Name} -> {collItems.Count} items");
+                    }
+                    catch (AmbiguousCollectionException)
+                    {
+                        // Multiple providers registered this collection name — skip bare-name trace
+                    }
                 }
                 diagLog($"[diag] {bp.Instance} query: {phaseSw.ElapsedMilliseconds}ms");
             }

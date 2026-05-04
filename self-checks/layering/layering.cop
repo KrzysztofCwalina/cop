@@ -1,13 +1,13 @@
 # Cop Self-Check: Provider Isolation
-#
+
 # Design principle: Only the filesystem provider is built-in.
 # All other providers (code, markdown, csharp, etc.) must be external,
 # loaded dynamically via import statements.
-#
+
 # This check validates that the runtime project does not have compile-time
 # dependencies on any provider other than filesystem-provider.
-#
-# Run: cop run -t cop/runtime
+
+# Run: cop run self-checks/layering.cop -t .
 # Expected: this check SHOULD currently produce violations
 #   (Engine.cs still hardcodes CodeSchemaProvider and MarkdownProvider)
 
@@ -23,3 +23,5 @@ predicate hasForbiddenProviderRef(Project) => isRuntime
 
 export let provider-isolation = csharp.Projects:hasForbiddenProviderRef
     :toError('{item.Name} must not reference providers other than filesystem-provider')
+
+command check-layering = foreach provider-isolation => '{item.File}({item.Line}): {item.Severity}: {item.Message}'
