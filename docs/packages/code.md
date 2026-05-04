@@ -56,7 +56,7 @@ Language keywords (`csharp`, `python`, `java`, `go`, `typescript`) scope collect
 |---|---|---|
 | `Name` | `string` | Method name |
 | `Modifiers` | `int` | Modifier bitfield (use predicates) |
-| `ReturnType` | [`TypeReference`](#typereference)`?` | Return type (null for constructors/void) |
+| `ReturnType` | [`TypeReference`](#typereference)`?` | Return type (nic for constructors/void) |
 | `Parameters` | [`[Parameter]`](#parameter) | Parameter declarations |
 | `Decorators` | `[string]` | Attributes/decorators |
 | `Line` | `int` | Source line number |
@@ -66,7 +66,7 @@ Language keywords (`csharp`, `python`, `java`, `go`, `typescript`) scope collect
 | Property | Type | Description |
 |---|---|---|
 | `Name` | `string` | Parameter name |
-| `Type` | [`TypeReference`](#typereference)`?` | Parameter type (null if untyped) |
+| `Type` | [`TypeReference`](#typereference)`?` | Parameter type (nic if untyped) |
 | `Variadic` | `bool` | Is `params`/`*args` |
 | `Kwargs` | `bool` | Is `**kwargs` (Python) |
 | `Defaulted` | `bool` | Has default value |
@@ -77,7 +77,7 @@ Language keywords (`csharp`, `python`, `java`, `go`, `typescript`) scope collect
 | Property | Type | Description |
 |---|---|---|
 | `Name` | `string` | Type name without namespace |
-| `Namespace` | `string?` | Namespace prefix (null if unqualified) |
+| `Namespace` | `string?` | Namespace prefix (nic if unqualified) |
 | `Generic` | `bool` | Has generic arguments |
 | `GenericArguments` | [`[TypeReference]`](#typereference) | Generic type arguments |
 | `Length` | `int` | Length of original type text |

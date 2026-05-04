@@ -199,7 +199,7 @@ Types describe the property structure of objects:
 # Object with named properties
 type Foo = { Name : string, Age : int }
 
-# Optional properties (may be null)
+# Optional properties (may be nic)
 type Bar = { Value : string? }
 
 # Properties whose values are lists
@@ -567,7 +567,7 @@ Type.Methods.Count ? 0 => 'empty' | _ => 'has-methods'
 foreach Types => '{item.Name}: {item.Accessibility ? 'public' => '🟢' | _ => '⚪'}'
 ```
 
-If no arm matches and no `_` default exists, the expression returns null (falsy).
+If no arm matches and no `_` default exists, the expression returns nic (falsy).
 
 #### String Predicates
 
@@ -654,9 +654,9 @@ Name.Replace('old', 'new')   # replace substring
 
 ```ruby
 Items.Count                  # number of items
-Items.First                  # first item (null if empty)
-Items.Last                   # last item (null if empty)
-Items.Single                 # single item (null if 0 or 2+)
+Items.First                  # first item (nic if empty)
+Items.Last                   # last item (nic if empty)
+Items.Single                 # single item (nic if 0 or 2+)
 ```
 
 ### List Predicates

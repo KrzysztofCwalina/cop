@@ -27,7 +27,7 @@ Cop is a **lazy, declarative language** for processing typed object graphs. It c
 | **Member access** | Has named functions, accessed via `.` | `type.Name`, `csharp.Types('path')` |
 | **Iteration** | Is a sequence of items, supports `:` and higher-order ops | `types`, `methods` |
 | **Application** | Is directly callable (function, predicate, closure) | `isPublic`, `summarize` |
-| **Scalar** | Has a terminal value (string, int, bool, null) | `'hello'`, `42`, `true` |
+| **Scalar** | Has a terminal value (string, int, bool, nic) | `'hello'`, `42`, `true` |
 
 These are NOT exclusive. A string has a scalar value AND supports member access (`.Length`). A collection supports iteration AND member access (`.Count`, `.First`).
 
@@ -41,7 +41,7 @@ Scalars are the terminal values — the base case where navigation stops:
 | `int` | `42`, `-1` | 32-bit signed integer |
 | `number` | `3.14` | 64-bit float |
 | `bool` | `true`, `false` | |
-| `null` | `null` | Absence of value |
+| `nic` | `nic` | Absence of value |
 
 ### Types (Shape Descriptors)
 
@@ -177,10 +177,10 @@ types.Methods            # apply Methods on each, flatten → list of all Method
 types.any(isPublic)      # → bool (true if any item satisfies)
 types.all(isPublic)      # → bool (true if all satisfy)
 types.count(isPublic)    # → int (how many satisfy)
-types.first(isPublic)    # → first matching item or null
-types.orderBy(Name)      # → sorted iterable
-types.groupBy(Namespace) # → iterable of {Key, Items, Count}
-types.sum(Methods.Count) # → int (aggregate)
+types.First(isPublic)    # → first matching item or nic
+types.OrderBy(Name)      # → sorted iterable
+types.GroupBy(Namespace) # → iterable of {Key, Items, Count}
+types.Sum(Methods.Count) # → int (aggregate)
 ```
 
 **Built-in iterable members** (nullary functions on iterables):
@@ -250,7 +250,7 @@ function summarize(Type) => Summary {
 }
 
 type.summarize          # apply to single item → Summary DataObject
-types.map(summarize)    # apply to each item → list of Summaries
+types.Select(summarize)    # apply to each item → list of Summaries
 ```
 
 ### Predicates ARE Functions
@@ -399,11 +399,11 @@ These are the explicit operations on iterable DataObjects — like Haskell's `fi
 | `items.any(pred)` | `any pred items` | bool |
 | `items.all(pred)` | `all pred items` | bool |
 | `items.count(pred)` | `length . filter pred` | int |
-| `items.first(pred)` | `find pred items` | item or null |
-| `items.orderBy(field)` | `sortBy field items` | Sorted collection |
-| `items.groupBy(field)` | `groupBy field items` | [{Key, Items, Count}] |
-| `items.sum(expr)` | `sum . map expr` | number |
-| `items.map(func)` | `map func items` | Transformed list |
+| `items.First(pred)` | `find pred items` | item or nic |
+| `items.OrderBy(field)` | `sortBy field items` | Sorted collection |
+| `items.GroupBy(field)` | `groupBy field items` | [{Key, Items, Count}] |
+| `items.Sum(expr)` | `sum . map expr` | number |
+| `items.Select(func)` | `map func items` | Transformed list |
 | `items.Count` | `length items` | int |
 | `items.First` | `head items` | First item |
 | `items.Last` | `last items` | Last item |
@@ -484,7 +484,7 @@ The runtime's only "magic" is currying the default arg at `import` time. Everyth
 
 ## Namespaces
 
-All types, functions, and predicates live in a namespace. The only exception: **built-in scalar types** (`string`, `int`, `number`, `bool`, `null`) are in the global namespace.
+All types, functions, and predicates live in a namespace. The only exception: **built-in scalar types** (`string`, `int`, `number`, `bool`, `nic`) are in the global namespace.
 
 ### Package = Namespace
 
@@ -666,7 +666,7 @@ let v = Violation {
     Line = 12
 }
 
-# Optional fields can be omitted (default to null):
+# Optional fields can be omitted (default to nic):
 let v2 = Violation {
     Rule = 'naming'
     Message = 'Bad name'
@@ -699,8 +699,8 @@ export function violation(rule: string, message: string, severity: Severity) => 
     Rule = rule
     Message = message
     Severity = severity
-    File = null
-    Line = null
+    File = nic
+    Line = nic
 }
 
 export function validate(violations: [Violation]) => ValidationResult {
@@ -736,7 +736,7 @@ import validation
 let codebase = csharp('c:\projects\myapp')
 
 # Use exported predicates as extension methods:
-let violations = codebase.Types:tooManyMethods.map(checkMethodCount)
+let violations = codebase.Types:tooManyMethods.Select(checkMethodCount)
 
 # Use exported types for filtering/querying:
 let errors = violations:isError

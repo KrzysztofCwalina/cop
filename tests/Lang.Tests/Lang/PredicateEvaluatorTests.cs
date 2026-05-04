@@ -1392,4 +1392,50 @@ public class PredicateEvaluatorTests
     }
 
     #endregion
+
+    #region Count Predicate
+
+    [Test]
+    public void Count_ReturnsNumberOfMatchingItems()
+    {
+        var eval = CreateEvaluator();
+        var type = MakeType("TestClient", methods: [
+            new MethodDeclaration("GetBlob", Modifier.Public, [], TR("void"), [], 1),
+            new MethodDeclaration("GetContainer", Modifier.Public, [], TR("void"), [], 2),
+            new MethodDeclaration("ListBlobs", Modifier.Public, [], TR("void"), [], 3),
+            new MethodDeclaration("Delete", Modifier.Internal, [], TR("void"), [], 4)
+        ]);
+
+        // Type.Methods.count(item.Name:startsWith('Get')) — should return 2
+        var inlineExpr = new PredicateCallExpr(
+            new MemberAccessExpr(new IdentifierExpr("item"), "Name"),
+            "startsWith", [new LiteralExpr("Get")]);
+        var expr = new PredicateCallExpr(
+            new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
+            "count", [inlineExpr]);
+        var result = eval.EvaluateField(expr, type, "Type");
+        Assert.That(result, Is.EqualTo(2));
+    }
+
+    [Test]
+    public void Count_ReturnsZeroWhenNoMatch()
+    {
+        var eval = CreateEvaluator();
+        var type = MakeType("TestClient", methods: [
+            new MethodDeclaration("GetBlob", Modifier.Public, [], TR("void"), [], 1),
+            new MethodDeclaration("ListBlobs", Modifier.Public, [], TR("void"), [], 2)
+        ]);
+
+        // Type.Methods.count(item.Name:startsWith('Delete')) — should return 0
+        var inlineExpr = new PredicateCallExpr(
+            new MemberAccessExpr(new IdentifierExpr("item"), "Name"),
+            "startsWith", [new LiteralExpr("Delete")]);
+        var expr = new PredicateCallExpr(
+            new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
+            "count", [inlineExpr]);
+        var result = eval.EvaluateField(expr, type, "Type");
+        Assert.That(result, Is.EqualTo(0));
+    }
+
+    #endregion
 }

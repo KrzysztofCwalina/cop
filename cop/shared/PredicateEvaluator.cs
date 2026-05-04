@@ -829,6 +829,19 @@ public class PredicateEvaluator
                 }
                 return true;
             }
+            case "count":
+            {
+                var predExpr = args[0];
+                int count = 0;
+                foreach (var collItem in collection)
+                {
+                    if (collItem is null) continue;
+                    string itemType = InferItemType(predExpr, collItem);
+                    if (ToBool(Eval(predExpr, collItem, itemType, ctx)))
+                        count++;
+                }
+                return count;
+            }
             case "Where":
             {
                 var predExpr = args[0];
