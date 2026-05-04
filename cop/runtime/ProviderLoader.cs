@@ -139,6 +139,8 @@ public static class ProviderLoader
     /// <summary>
     /// Queries a provider with the given query and registers the resulting collections.
     /// Collections are registered under the provider's namespace for proper scoping.
+    /// When CollectionFilters are specified, items are filtered before registration
+    /// using compiled filter predicates for efficient pushdown.
     /// </summary>
     public static void QueryAndRegister(DataProvider instance, ProviderSchema schema, string ns, TypeRegistry registry, ProviderQuery query, List<string>? errors = null)
     {
@@ -163,7 +165,10 @@ public static class ProviderLoader
                 if (collections != null)
                 {
                     foreach (var (collName, items) in collections)
-                        registry.AppendNamespacedCollection(ns, collName, items);
+                    {
+                        var filtered = ApplyCollectionFilter(registry, schema, collName, items, query.CollectionFilters);
+                        registry.AppendNamespacedCollection(ns, collName, filtered);
+                    }
                 }
             }
             else if (instance.SupportedFormats.HasFlag(DataFormat.InMemoryDatabase))
@@ -181,7 +186,8 @@ public static class ProviderLoader
                     var views = new List<object>(table.Count);
                     for (int i = 0; i < table.Count; i++)
                         views.Add(new RecordView(table, i));
-                    registry.AppendNamespacedCollection(ns, collName, views);
+                    var filtered = ApplyCollectionFilter(registry, schema, collName, views, query.CollectionFilters);
+                    registry.AppendNamespacedCollection(ns, collName, filtered);
                 }
             }
             else if (instance.SupportedFormats.HasFlag(DataFormat.Json))
@@ -189,7 +195,10 @@ public static class ProviderLoader
                 var resultJson = instance.Query(query);
                 var collections = JsonCollectionDeserializer.Deserialize(resultJson, schema);
                 foreach (var (collName, items) in collections)
-                    registry.AppendNamespacedCollection(ns, collName, items);
+                {
+                    var filtered = ApplyCollectionFilter(registry, schema, collName, items, query.CollectionFilters);
+                    registry.AppendNamespacedCollection(ns, collName, filtered);
+                }
             }
             else
             {
@@ -203,6 +212,24 @@ public static class ProviderLoader
             else
                 throw;
         }
+    }
+
+    /// <summary>
+    /// Applies a per-collection pushdown filter if one exists for this collection.
+    /// Uses FilterCompiler which gracefully ignores unknown properties.
+    /// </summary>
+    private static List<object> ApplyCollectionFilter(
+        TypeRegistry registry, ProviderSchema schema, string collName,
+        List<object> items, IReadOnlyDictionary<string, FilterExpression>? collectionFilters)
+    {
+        if (collectionFilters is null) return items;
+        if (!collectionFilters.TryGetValue(collName, out var filter)) return items;
+
+        var itemType = schema.Collections
+            .FirstOrDefault(c => c.Name.Equals(collName, StringComparison.OrdinalIgnoreCase))?.ItemType;
+        if (itemType is null) return items;
+
+        return registry.ApplyPushdownFilter(itemType, items, filter);
     }
 
     /// <summary>

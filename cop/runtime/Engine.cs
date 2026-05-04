@@ -144,8 +144,9 @@ public static class Engine
             // Determine which collections are referenced
             IReadOnlyList<string>? reqCols = null;
             FilterExpression? hintFilter = null;
+            Dictionary<string, FilterExpression>? perCollFilters = null;
             if (queryHints is not null)
-                (reqCols, hintFilter) = queryHints.ForProvider(collNames);
+                (reqCols, hintFilter, perCollFilters) = queryHints.ForProvider(collNames);
 
             // Skip providers whose collections aren't referenced
             if (queryHints is not null && reqCols is null)
@@ -158,7 +159,8 @@ public static class Engine
             {
                 RootPath = rootPath,
                 ExcludedDirectories = ExcludedDirectoryNames,
-                RequestedCollections = reqCols
+                RequestedCollections = reqCols,
+                CollectionFilters = perCollFilters
             };
 
             if (diagLog is not null)
@@ -199,8 +201,9 @@ public static class Engine
             // Determine which collections are referenced
             IReadOnlyList<string>? reqCols = null;
             FilterExpression? hintFilter = null;
+            Dictionary<string, FilterExpression>? perCollFilters = null;
             if (queryHints is not null)
-                (reqCols, hintFilter) = queryHints.ForProvider(bp.CollectionNames);
+                (reqCols, hintFilter, perCollFilters) = queryHints.ForProvider(bp.CollectionNames);
 
             // Skip providers whose collections aren't referenced (performance optimization)
             if (queryHints is not null && reqCols is null)
@@ -213,7 +216,8 @@ public static class Engine
             {
                 RootPath = rootPath,
                 ExcludedDirectories = ExcludedDirectoryNames,
-                RequestedCollections = reqCols
+                RequestedCollections = reqCols,
+                CollectionFilters = perCollFilters
             };
 
             if (diagLog is not null)
@@ -761,24 +765,30 @@ public static class Engine
         public IEnumerable<string> Collections => CollectionFilters.Keys;
 
         /// <summary>
-        /// Gets the combined filter and collections for a set of provider-owned collection names.
-        /// Returns null filter if none of the provider's collections are referenced.
+        /// Gets the combined filter, per-collection filters, and collections for a provider.
+        /// Returns null RequestedCollections if none of the provider's collections are referenced.
         /// </summary>
-        public (List<string>? RequestedCollections, FilterExpression? Filter) ForProvider(IEnumerable<string> providerCollections)
+        public (List<string>? RequestedCollections, FilterExpression? Filter, Dictionary<string, FilterExpression>? PerCollectionFilters) ForProvider(IEnumerable<string> providerCollections)
         {
             var matched = new List<string>();
             var filters = new List<FilterExpression>();
+            Dictionary<string, FilterExpression>? perCollection = null;
             foreach (var c in providerCollections)
             {
                 if (CollectionFilters.TryGetValue(c, out var f))
                 {
                     matched.Add(c);
-                    if (f is not null) filters.Add(f);
+                    if (f is not null)
+                    {
+                        filters.Add(f);
+                        perCollection ??= new(StringComparer.OrdinalIgnoreCase);
+                        perCollection[c] = f;
+                    }
                 }
             }
-            if (matched.Count == 0) return (null, null);
+            if (matched.Count == 0) return (null, null, null);
             var combined = filters.Count switch { 0 => null, 1 => filters[0], _ => new AndFilter(filters) };
-            return (matched, combined);
+            return (matched, combined, perCollection);
         }
     }
 

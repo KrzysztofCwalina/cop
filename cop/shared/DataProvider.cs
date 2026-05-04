@@ -153,12 +153,19 @@ public class ProviderQuery
     public IReadOnlyList<string>? RequestedCollections { get; init; }
 
     /// <summary>
-    /// Pushdown filter expression. Providers that support query optimization
+    /// Pushdown filter expression (combined). Providers that support query optimization
     /// can inspect this to avoid materializing items that will be filtered out.
     /// Providers that don't support pushdown can ignore this — the engine
     /// will apply filters locally as a fallback.
     /// </summary>
     public FilterExpression? Filter { get; init; }
+
+    /// <summary>
+    /// Per-collection pushdown filters. Keyed by collection name (e.g., "Types", "Projects").
+    /// The engine uses this to apply collection-specific filters after items are returned.
+    /// Providers may also inspect this for internal optimization.
+    /// </summary>
+    public IReadOnlyDictionary<string, FilterExpression>? CollectionFilters { get; init; }
 
     /// <summary>
     /// Directory names to skip during recursive filesystem scanning.
