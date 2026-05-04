@@ -128,22 +128,24 @@ public static class Engine
             return new EngineResult([], parseErrors, fatalErrors, commandName);
         }
 
-        // Extract query hints from the target command (collection, filters, languages)
-        var queryHints = commandName is not null
-            ? ExtractCommandQueryHints(scriptFiles, commandName, typeRegistry)
-            : null;
+        // Extract query hints from commands (collection references + filter chains)
+        var queryHints = ExtractCommandQueryHints(scriptFiles, commandName, typeRegistry);
 
         // Phase 2: Query external providers with hints
+        // Note: Only RequestedCollections is passed to providers for collection narrowing.
+        // Filter hints are logged for diagnostics but NOT sent to providers — the interpreter
+        // applies all filters after the provider returns data. This avoids issues with providers
+        // that can't evaluate all filter properties.
         phaseSw.Restart();
         foreach (var (loaded, schema) in externalProviders)
         {
             var collNames = new HashSet<string>(schema.Collections.Select(c => c.Name), StringComparer.OrdinalIgnoreCase);
 
-            // Build provider-specific query with hints
+            // Determine which collections are referenced
             IReadOnlyList<string>? reqCols = null;
-            FilterExpression? provFilter = null;
+            FilterExpression? hintFilter = null;
             if (queryHints is not null)
-                (reqCols, provFilter) = queryHints.ForProvider(collNames);
+                (reqCols, hintFilter) = queryHints.ForProvider(collNames);
 
             // Skip providers whose collections aren't referenced
             if (queryHints is not null && reqCols is null)
@@ -156,8 +158,7 @@ public static class Engine
             {
                 RootPath = rootPath,
                 ExcludedDirectories = ExcludedDirectoryNames,
-                RequestedCollections = reqCols,
-                Filter = provFilter
+                RequestedCollections = reqCols
             };
 
             if (diagLog is not null)
@@ -167,8 +168,8 @@ public static class Engine
                     parts.Add($"Collections=[{string.Join(", ", reqCols)}]");
                 else
                     parts.Add("Collections=all");
-                if (provFilter is not null)
-                    parts.Add($"Filter={FilterExpression.Format(provFilter)}");
+                if (hintFilter is not null)
+                    parts.Add($"Filter={FilterExpression.Format(hintFilter)}");
                 diagLog($"[diag] {loaded.PackageName} query: {string.Join(", ", parts)}");
             }
 
@@ -195,11 +196,11 @@ public static class Engine
         phaseSw.Restart();
         foreach (var bp in _builtinProviders)
         {
-            // Build provider-specific query with hints
+            // Determine which collections are referenced
             IReadOnlyList<string>? reqCols = null;
-            FilterExpression? provFilter = null;
+            FilterExpression? hintFilter = null;
             if (queryHints is not null)
-                (reqCols, provFilter) = queryHints.ForProvider(bp.CollectionNames);
+                (reqCols, hintFilter) = queryHints.ForProvider(bp.CollectionNames);
 
             // Skip providers whose collections aren't referenced (performance optimization)
             if (queryHints is not null && reqCols is null)
@@ -212,8 +213,7 @@ public static class Engine
             {
                 RootPath = rootPath,
                 ExcludedDirectories = ExcludedDirectoryNames,
-                RequestedCollections = reqCols,
-                Filter = provFilter
+                RequestedCollections = reqCols
             };
 
             if (diagLog is not null)
@@ -223,8 +223,8 @@ public static class Engine
                     parts.Add($"Collections=[{string.Join(", ", reqCols)}]");
                 else
                     parts.Add("Collections=all");
-                if (provFilter is not null)
-                    parts.Add($"Filter={FilterExpression.Format(provFilter)}");
+                if (hintFilter is not null)
+                    parts.Add($"Filter={FilterExpression.Format(hintFilter)}");
                 diagLog($"[diag] {bp.Instance} query: {string.Join(", ", parts)}");
             }
 
@@ -786,15 +786,29 @@ public static class Engine
     /// Analyzes the target command's collection references and filter chains to extract
     /// pushdown-able query hints. Walks through let bindings recursively to find the
     /// base collection and combines all filters along the chain.
+    /// When commandName is null, analyzes ALL commands (union of all referenced collections).
     /// </summary>
     private static QueryHints? ExtractCommandQueryHints(
-        List<ScriptFile> scriptFiles, string commandName, TypeRegistry typeRegistry)
+        List<ScriptFile> scriptFiles, string? commandName, TypeRegistry typeRegistry)
     {
-        // Find matching command blocks
-        var commands = scriptFiles
-            .SelectMany(f => f.Commands)
-            .Where(c => c.IsCommand && string.Equals(c.Name, commandName, StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        // Find command blocks to analyze for collection references
+        List<CommandBlock> commands;
+        if (commandName is not null)
+        {
+            // Specific command: only analyze that named command
+            commands = scriptFiles
+                .SelectMany(f => f.Commands)
+                .Where(c => c.IsCommand && string.Equals(c.Name, commandName, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+        else
+        {
+            // All commands: include both named commands and anonymous foreach blocks
+            commands = scriptFiles
+                .SelectMany(f => f.Commands)
+                .Where(c => c.Collection is not null)
+                .ToList();
+        }
 
         if (commands.Count == 0) return null;
 
@@ -831,11 +845,17 @@ public static class Engine
             var allCmdFilters = new List<Expression>(cmd.Filters);
             var baseCollection = ResolveBaseCollection(cmd.Collection, letDeclarations, allCmdFilters);
 
+            // Normalize to bare collection name (strip namespace prefix like "csharp." or "Code.")
+            var bareCollection = baseCollection;
+            var dotIdx = baseCollection.IndexOf('.');
+            if (dotIdx > 0)
+                bareCollection = baseCollection[(dotIdx + 1)..];
+
             // Get the item type for the base collection to extract pushdown hints
             var itemTypeName = typeRegistry.GetCollectionItemType(baseCollection);
             if (itemTypeName is null)
             {
-                collectionFilters.TryAdd(baseCollection, null);
+                collectionFilters.TryAdd(bareCollection, null);
                 continue;
             }
 
@@ -843,10 +863,10 @@ public static class Engine
             var (hints, _) = FilterHintExtractor.Extract(allCmdFilters, itemTypeDesc, predicateNames, predicateDefs);
 
             // Merge: if same collection from multiple command blocks, AND the filters
-            if (collectionFilters.TryGetValue(baseCollection, out var existing) && existing is not null && hints is not null)
-                collectionFilters[baseCollection] = FilterExpression.And(existing, hints);
+            if (collectionFilters.TryGetValue(bareCollection, out var existing) && existing is not null && hints is not null)
+                collectionFilters[bareCollection] = FilterExpression.And(existing, hints);
             else
-                collectionFilters[baseCollection] = hints ?? existing;
+                collectionFilters[bareCollection] = hints ?? existing;
         }
 
         return collectionFilters.Count > 0 ? new QueryHints(collectionFilters) : null;
