@@ -17,13 +17,15 @@ public class ProviderQueryService : IProviderQueryService
     private readonly string _invocationDirectory;
     private readonly IReadOnlySet<string>? _excludedDirectories;
     private readonly List<string> _warnings = [];
+    private Action<string>? _diagLog;
 
     public IReadOnlyList<string> Warnings => _warnings;
 
-    public ProviderQueryService(string invocationDirectory, IReadOnlySet<string>? excludedDirectories = null)
+    public ProviderQueryService(string invocationDirectory, IReadOnlySet<string>? excludedDirectories = null, Action<string>? diagLog = null)
     {
         _invocationDirectory = invocationDirectory;
         _excludedDirectories = excludedDirectories;
+        _diagLog = diagLog;
     }
 
     /// <summary>
@@ -74,6 +76,8 @@ public class ProviderQueryService : IProviderQueryService
             RequestedCollections = [collectionName],
             ExcludedDirectories = _excludedDirectories
         };
+
+        _diagLog?.Invoke($"[diag] Path-scoped query: {providerName}.{collectionName} RootPath={absolutePath}");
 
         try
         {

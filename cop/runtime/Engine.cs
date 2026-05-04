@@ -114,11 +114,11 @@ public static class Engine
 
         // Create provider query service for path-scoped collections
         var invocationDirectory = Directory.GetCurrentDirectory();
-        var queryService = new ProviderQueryService(invocationDirectory, ExcludedDirectoryNames);
+        var queryService = new ProviderQueryService(invocationDirectory, ExcludedDirectoryNames, diagLog);
 
         // Load external providers (schema registration + data query)
         phaseSw.Restart();
-        LoadExternalProviders(typeRegistry, providerPackages, rootPath, parseErrors, fatalErrors, ExcludedDirectoryNames, queryService);
+        LoadExternalProviders(typeRegistry, providerPackages, rootPath, parseErrors, fatalErrors, ExcludedDirectoryNames, queryService, diagLog);
         if (providerPackages.Count > 0)
             diagLog?.Invoke($"[diag] External providers: {phaseSw.ElapsedMilliseconds}ms ({providerPackages.Count} providers)");
 
@@ -821,7 +821,7 @@ public static class Engine
     /// Loads external CLR providers: registers their schemas into the type registry
     /// and queries them for collection data.
     /// </summary>
-    private static void LoadExternalProviders(TypeRegistry typeRegistry, List<(string Dir, PackageMetadata Meta)> providerPackages, string rootPath, List<string> errors, List<string> fatalErrors, IReadOnlySet<string>? excludedDirectories = null, ProviderQueryService? queryService = null)
+    private static void LoadExternalProviders(TypeRegistry typeRegistry, List<(string Dir, PackageMetadata Meta)> providerPackages, string rootPath, List<string> errors, List<string> fatalErrors, IReadOnlySet<string>? excludedDirectories = null, ProviderQueryService? queryService = null, Action<string>? diagLog = null)
     {
         foreach (var (dir, meta) in providerPackages)
         {
@@ -832,7 +832,22 @@ public static class Engine
             var schema = ProviderLoader.RegisterSchema(loaded.Instance, typeRegistry);
 
             // Query for data and register global collections
+            diagLog?.Invoke($"[diag] External provider {loaded.PackageName} query: RootPath={rootPath}");
             ProviderLoader.QueryAndRegister(loaded, typeRegistry, rootPath, errors, excludedDirectories);
+
+            if (diagLog is not null)
+            {
+                foreach (var coll in schema.Collections)
+                {
+                    try
+                    {
+                        var collItems = typeRegistry.GetGlobalCollectionItems(coll.Name);
+                        if (collItems is not null && collItems.Count > 0)
+                            diagLog($"[trace] provider {loaded.PackageName}: {coll.Name} -> {collItems.Count} items");
+                    }
+                    catch (AmbiguousCollectionException) { }
+                }
+            }
 
             // Initialize capabilities (document loaders, file parsers, etc.)
             ProviderLoader.InitializeCapabilities(loaded.Instance, typeRegistry, rootPath);
