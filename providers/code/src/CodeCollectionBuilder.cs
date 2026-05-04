@@ -1,4 +1,5 @@
 using Cop.Core;
+using Cop.Lang;
 using Cop.Providers.SourceModel;
 using Cop.Providers.SourceParsers;
 
@@ -69,15 +70,20 @@ public static class CodeCollectionBuilder
         }
 
         var sorted = sourceFiles.OrderBy(f => f.Path, StringComparer.Ordinal).ToList();
-        return ExtractCollections(sorted, query.RequestedCollections);
+        return ExtractCollections(sorted, query.RequestedCollections, query.CollectionFilters);
     }
 
     /// <summary>
     /// Extracts flat collections from a list of parsed source files.
+    /// When collectionFilters are provided, items are filtered inline during extraction.
     /// </summary>
-    public static Dictionary<string, List<object>> ExtractCollections(List<SourceFile> sourceFiles, IReadOnlyList<string>? requestedCollections)
+    public static Dictionary<string, List<object>> ExtractCollections(
+        List<SourceFile> sourceFiles, IReadOnlyList<string>? requestedCollections,
+        IReadOnlyDictionary<string, FilterExpression>? collectionFilters = null)
     {
         var extractors = CodeBindings.BuildExtractors();
+        var accessors = collectionFilters is not null ? CodeBindings.BuildAccessors() : null;
+        var collectionItemTypes = GetCollectionItemTypes();
         var collections = new Dictionary<string, List<object>>();
 
         foreach (var (name, extractor) in extractors)
@@ -85,14 +91,52 @@ public static class CodeCollectionBuilder
             if (requestedCollections != null && !requestedCollections.Contains(name))
                 continue;
 
+            // Compile a filter predicate for this collection if available
+            Func<object, bool>? predicate = null;
+            if (collectionFilters is not null &&
+                collectionFilters.TryGetValue(name, out var filter) &&
+                collectionItemTypes.TryGetValue(name, out var itemType) &&
+                accessors!.TryGetValue(itemType, out var typeAccessors))
+            {
+                predicate = FilterCompiler.Compile(filter, typeAccessors);
+            }
+
             var items = new List<object>();
             foreach (var file in sourceFiles)
-                items.AddRange(extractor(file));
+            {
+                if (predicate is null)
+                {
+                    items.AddRange(extractor(file));
+                }
+                else
+                {
+                    foreach (var item in extractor(file))
+                    {
+                        if (predicate(item))
+                            items.Add(item);
+                    }
+                }
+            }
             collections[name] = items;
         }
 
         return collections;
     }
+
+    /// <summary>
+    /// Maps collection names to their item type names (matching schema/accessors keys).
+    /// </summary>
+    private static Dictionary<string, string> GetCollectionItemTypes() => new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Types"] = "Type",
+        ["Statements"] = "Statement",
+        ["Lines"] = "Line",
+        ["Files"] = "File",
+        ["Members"] = "Member",
+        ["Api"] = "Api",
+        ["Regions"] = "Region",
+        ["Projects"] = "Project",
+    };
 
     private static void CollectSourceFiles(string dir, SourceParserRegistry parsers, IReadOnlySet<string>? excluded, List<string> result)
     {

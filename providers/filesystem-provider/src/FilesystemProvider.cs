@@ -90,20 +90,24 @@ public class FilesystemProvider : DataProvider
         bool wantFiles = requested is null || requested.Any(c => c.Equals("DiskFiles", StringComparison.OrdinalIgnoreCase));
         bool wantFolders = requested is null || requested.Any(c => c.Equals("Folders", StringComparison.OrdinalIgnoreCase));
 
-        int maxDepth = ExtractMaxDepth(query.Filter);
+        // Use per-collection filters when available, fall back to combined Filter
+        var fileFilter = query.CollectionFilters?.GetValueOrDefault("DiskFiles") ?? query.Filter;
+        var folderFilter = query.CollectionFilters?.GetValueOrDefault("Folders") ?? query.Filter;
+        int maxDepth = Math.Min(ExtractMaxDepth(fileFilter), ExtractMaxDepth(folderFilter));
+        if (maxDepth == -1) maxDepth = Math.Max(ExtractMaxDepth(fileFilter), ExtractMaxDepth(folderFilter));
 
         var db = new DataStoreBuilder();
         var files = wantFiles ? db.AddTable("DiskFiles", "DiskFile", stride: 8) : null;
         var folders = wantFolders ? db.AddTable("Folders", "Folder", stride: 8) : null;
 
-        ScanDirectory(rootPath, rootPath, files, folders, query.ExcludedDirectories, query.Filter, maxDepth, DateTime.UtcNow, depth: 0);
+        ScanDirectory(rootPath, rootPath, files, folders, query.ExcludedDirectories, fileFilter, folderFilter, maxDepth, DateTime.UtcNow, depth: 0);
 
         return db.Build();
     }
 
     private static void ScanDirectory(string dir, string root,
         DataTableBuilder? files, DataTableBuilder? folders,
-        IReadOnlySet<string>? excludedDirs, FilterExpression? filter, int maxDepth, DateTime now, int depth)
+        IReadOnlySet<string>? excludedDirs, FilterExpression? fileFilter, FilterExpression? folderFilter, int maxDepth, DateTime now, int depth)
     {
         if (maxDepth >= 0 && depth > maxDepth)
             return;
@@ -136,7 +140,7 @@ public class FilesystemProvider : DataProvider
                 var name = fi.Name;
                 var ext = fi.Extension;
 
-                if (!FilterEvaluator.Matches(filter, prop => prop switch
+                if (!FilterEvaluator.Matches(fileFilter, prop => prop switch
                 {
                     "Path" => fileRelPath,
                     "Name" => name,
@@ -187,7 +191,7 @@ public class FilesystemProvider : DataProvider
             var minutesSinceModified = (int)(now - dirInfo.LastWriteTimeUtc).TotalMinutes;
             bool empty = subfolderCount == 0 && fileCount == 0;
 
-            if (FilterEvaluator.Matches(filter, prop => prop switch
+            if (FilterEvaluator.Matches(folderFilter, prop => prop switch
             {
                 "Path" => relativePath,
                 "Name" => dirName,
@@ -215,7 +219,7 @@ public class FilesystemProvider : DataProvider
 
         foreach (var childDir in includedDirs)
         {
-            ScanDirectory(childDir, root, files, folders, excludedDirs, filter, maxDepth, now, depth + 1);
+            ScanDirectory(childDir, root, files, folders, excludedDirs, fileFilter, folderFilter, maxDepth, now, depth + 1);
         }
     }
 

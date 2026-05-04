@@ -48,7 +48,7 @@ public static class CodeBindings
         };
     }
 
-    private static Dictionary<string, Dictionary<string, Func<object, object?>>> BuildAccessors()
+    internal static Dictionary<string, Dictionary<string, Func<object, object?>>> BuildAccessors()
     {
         return new()
         {
