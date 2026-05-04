@@ -116,11 +116,11 @@ public static class Engine
         var invocationDirectory = Directory.GetCurrentDirectory();
         var queryService = new ProviderQueryService(invocationDirectory, ExcludedDirectoryNames, diagLog);
 
-        // Load external providers (schema registration + data query)
+        // Phase 1: Register external provider schemas (no data query yet — need schemas for hint extraction)
         phaseSw.Restart();
-        LoadExternalProviders(typeRegistry, providerPackages, rootPath, parseErrors, fatalErrors, ExcludedDirectoryNames, queryService, diagLog);
+        var externalProviders = RegisterExternalProviderSchemas(typeRegistry, providerPackages, rootPath, fatalErrors, queryService);
         if (providerPackages.Count > 0)
-            diagLog?.Invoke($"[diag] External providers: {phaseSw.ElapsedMilliseconds}ms ({providerPackages.Count} providers)");
+            diagLog?.Invoke($"[diag] External provider schemas: {phaseSw.ElapsedMilliseconds}ms ({externalProviders.Count} providers)");
 
         if (fatalErrors.Count > 0)
         {
@@ -133,7 +133,65 @@ public static class Engine
             ? ExtractCommandQueryHints(scriptFiles, commandName, typeRegistry)
             : null;
 
-        // Query all built-in providers uniformly
+        // Phase 2: Query external providers with hints
+        phaseSw.Restart();
+        foreach (var (loaded, schema) in externalProviders)
+        {
+            var collNames = new HashSet<string>(schema.Collections.Select(c => c.Name), StringComparer.OrdinalIgnoreCase);
+
+            // Build provider-specific query with hints
+            IReadOnlyList<string>? reqCols = null;
+            FilterExpression? provFilter = null;
+            if (queryHints is not null)
+                (reqCols, provFilter) = queryHints.ForProvider(collNames);
+
+            // Skip providers whose collections aren't referenced
+            if (queryHints is not null && reqCols is null)
+            {
+                diagLog?.Invoke($"[diag] {loaded.PackageName} query: skipped (no collections referenced)");
+                continue;
+            }
+
+            var query = new ProviderQuery
+            {
+                RootPath = rootPath,
+                ExcludedDirectories = ExcludedDirectoryNames,
+                RequestedCollections = reqCols,
+                Filter = provFilter
+            };
+
+            if (diagLog is not null)
+            {
+                var parts = new List<string> { $"RootPath={rootPath}" };
+                if (reqCols is not null)
+                    parts.Add($"Collections=[{string.Join(", ", reqCols)}]");
+                else
+                    parts.Add("Collections=all");
+                if (provFilter is not null)
+                    parts.Add($"Filter={FilterExpression.Format(provFilter)}");
+                diagLog($"[diag] {loaded.PackageName} query: {string.Join(", ", parts)}");
+            }
+
+            ProviderLoader.QueryAndRegister(loaded.Instance, schema, loaded.PackageName, typeRegistry, query, parseErrors);
+
+            if (diagLog is not null)
+            {
+                foreach (var coll in schema.Collections)
+                {
+                    try
+                    {
+                        var collItems = typeRegistry.GetGlobalCollectionItems(coll.Name);
+                        if (collItems is not null && collItems.Count > 0)
+                            diagLog($"[trace] provider {loaded.PackageName}: {coll.Name} -> {collItems.Count} items");
+                    }
+                    catch (AmbiguousCollectionException) { }
+                }
+            }
+        }
+        if (externalProviders.Count > 0)
+            diagLog?.Invoke($"[diag] External providers query: {phaseSw.ElapsedMilliseconds}ms");
+
+        // Query all built-in providers with hints
         phaseSw.Restart();
         foreach (var bp in _builtinProviders)
         {
@@ -163,6 +221,8 @@ public static class Engine
                 var parts = new List<string> { $"RootPath={rootPath}" };
                 if (reqCols is not null)
                     parts.Add($"Collections=[{string.Join(", ", reqCols)}]");
+                else
+                    parts.Add("Collections=all");
                 if (provFilter is not null)
                     parts.Add($"Filter={FilterExpression.Format(provFilter)}");
                 diagLog($"[diag] {bp.Instance} query: {string.Join(", ", parts)}");
@@ -832,22 +892,7 @@ public static class Engine
             var schema = ProviderLoader.RegisterSchema(loaded.Instance, typeRegistry);
 
             // Query for data and register global collections
-            diagLog?.Invoke($"[diag] External provider {loaded.PackageName} query: RootPath={rootPath}");
             ProviderLoader.QueryAndRegister(loaded, typeRegistry, rootPath, errors, excludedDirectories);
-
-            if (diagLog is not null)
-            {
-                foreach (var coll in schema.Collections)
-                {
-                    try
-                    {
-                        var collItems = typeRegistry.GetGlobalCollectionItems(coll.Name);
-                        if (collItems is not null && collItems.Count > 0)
-                            diagLog($"[trace] provider {loaded.PackageName}: {coll.Name} -> {collItems.Count} items");
-                    }
-                    catch (AmbiguousCollectionException) { }
-                }
-            }
 
             // Initialize capabilities (document loaders, file parsers, etc.)
             ProviderLoader.InitializeCapabilities(loaded.Instance, typeRegistry, rootPath);
@@ -855,6 +900,34 @@ public static class Engine
             // Register with query service for path-scoped queries
             queryService?.RegisterProvider(loaded.PackageName, loaded.Instance, schema);
         }
+    }
+
+    /// <summary>
+    /// Phase 1: Loads external provider assemblies and registers their schemas (types, accessors, bindings)
+    /// into the type registry WITHOUT querying for data. Returns loaded providers for deferred querying.
+    /// </summary>
+    private static List<(ProviderLoader.LoadedProvider Loaded, ProviderSchema Schema)> RegisterExternalProviderSchemas(
+        TypeRegistry typeRegistry, List<(string Dir, PackageMetadata Meta)> providerPackages,
+        string rootPath, List<string> fatalErrors, ProviderQueryService? queryService = null)
+    {
+        var result = new List<(ProviderLoader.LoadedProvider, ProviderSchema)>();
+        foreach (var (dir, meta) in providerPackages)
+        {
+            var loaded = ProviderLoader.Load(dir, meta, fatalErrors);
+            if (loaded is null) continue;
+
+            // Register schema, types, accessors, and bindings (no data query)
+            var schema = ProviderLoader.RegisterSchema(loaded.Instance, typeRegistry);
+
+            // Initialize capabilities (document loaders, file parsers, etc.)
+            ProviderLoader.InitializeCapabilities(loaded.Instance, typeRegistry, rootPath);
+
+            // Register with query service for path-scoped queries
+            queryService?.RegisterProvider(loaded.PackageName, loaded.Instance, schema);
+
+            result.Add((loaded, schema));
+        }
+        return result;
     }
 
     /// <summary>
