@@ -282,7 +282,7 @@ internal class ProviderLoadContext : AssemblyLoadContext
     private readonly AssemblyDependencyResolver _resolver;
     private static readonly string? SharedCodeAssemblyName = typeof(CodeSchemaProvider).Assembly.GetName().Name;
 
-    public ProviderLoadContext(string pluginPath) : base(isCollectible: true)
+    public ProviderLoadContext(string pluginPath) : base(isCollectible: false)
     {
         _resolver = new AssemblyDependencyResolver(pluginPath);
     }
