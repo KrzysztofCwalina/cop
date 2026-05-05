@@ -141,7 +141,7 @@ const packages = {
       bytes: {
         props: []
       },
-      list: {
+      "[T]": {
         props: [
           { name: "Count", type: "int", desc: "Number of items" },
           { name: "First", type: "T?", desc: "First element or null if empty" },
@@ -222,9 +222,9 @@ const packages = {
       { name: "PRINT", params: "template: string", desc: "Print formatted output to console. Supports {item.Field} and {text@style}" },
       { name: "SAVE", params: "path: string, template: string", desc: "Write formatted output to a file (one line per item)" },
       { name: "CHECK", params: "[Violation]", desc: "Report violations. Fails the run if any error-severity violations" },
-      { name: "ASSERT", params: "expression", desc: "Assert collection is non-empty. Fails in test mode if empty" },
-      { name: "ASSERT_EMPTY", params: "expression", desc: "Assert collection is empty. Fails in test mode if non-empty" },
-      { name: "DEBUG", params: "expression", desc: "Diagnostic output for debugging (prints internal representation)" }
+      { name: "ASSERT", params: "[T]", desc: "Evaluate collection; fail if zero items remain after filtering" },
+      { name: "ASSERT_EMPTY", params: "[T]", desc: "Evaluate collection; fail if any items remain after filtering" },
+      { name: "DEBUG", params: "[T]", desc: "Evaluate collection and print each item's internal structure" }
     ]
   },
   code: {
