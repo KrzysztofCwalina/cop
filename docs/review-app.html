@@ -93,10 +93,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 </div>
 
 <div class="toolbar">
-  <button onclick="submitToCopilot()" class="primary">Submit to Copilot <span class="badge" id="commentCount">0</span></button>
-  <button onclick="reviewPending()">Review Pending</button>
-  <button onclick="exportComments()">Export JSON</button>
-  <button onclick="clearAllComments()">Clear All</button>
+  <button onclick="submitToCopilot()" class="primary">Copy Comments to Clipboard <span class="badge" id="commentCount">0</span></button>
 </div>
 
 <script>
@@ -1502,16 +1499,6 @@ function updateBadge() {
   document.getElementById('commentCount').textContent = Object.keys(comments).length;
 }
 
-function exportComments() {
-  const blob = new Blob([JSON.stringify(comments, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'cop-review-comments.json';
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 function submitToCopilot() {
   const keys = Object.keys(comments);
   if (keys.length === 0) {
@@ -1561,71 +1548,6 @@ function submitToCopilot() {
     updateBadge();
     alert(`Copied ${keys.length} comment(s) to clipboard and cleared queue.\nPaste into Copilot CLI.`);
   });
-}
-
-function clearAllComments() {
-  if (!confirm('Clear all comments? This cannot be undone.')) return;
-  comments = {};
-  saveComments();
-  updateBadge();
-  const active = document.querySelector('.tree-label.active');
-  if (active) {
-    const pkg = active.dataset.pkg;
-    const type = active.dataset.type;
-    const view = active.dataset.view;
-    if (type) renderType(pkg, type);
-    else if (view === 'predicates') renderPredicates(pkg);
-    else if (view === 'functions') renderFunctions(pkg);
-    else if (view === 'checks') renderChecks(pkg);
-    else if (view === 'commands') renderCommands(pkg);
-    else if (view === 'lets') renderLets(pkg);
-  }
-}
-
-function reviewPending() {
-  const content = document.getElementById('content');
-  const keys = Object.keys(comments);
-
-  if (keys.length === 0) {
-    content.innerHTML = '<h1>No Pending Comments</h1><p style="color:#57606a; margin-top:8px;">All clear! No review comments to process.</p>';
-    return;
-  }
-
-  let html = '<h1>Pending Review Comments</h1>';
-  html += `<p style="color:#57606a; margin-top:4px; margin-bottom:16px;">${keys.length} comment(s) pending. Dismiss resolved items individually.</p>`;
-
-  // Group by package
-  const grouped = {};
-  for (const [key, value] of Object.entries(comments)) {
-    const parts = key.split('.');
-    const pkg = parts[0];
-    if (!grouped[pkg]) grouped[pkg] = [];
-    grouped[pkg].push({ key, item: parts.slice(1).join('.'), comment: value });
-  }
-
-  for (const [pkg, items] of Object.entries(grouped)) {
-    html += `<h2>${pkg}</h2>`;
-    for (const item of items) {
-      html += `
-        <div class="item-row" style="align-items: flex-start;">
-          <div style="flex:1;">
-            <span class="item-name">${escapeHtml(item.item)}</span>
-            <div style="color:#57606a; font-size:12px; margin-top:4px; white-space:pre-wrap;">${escapeHtml(item.comment)}</div>
-          </div>
-          <button onclick="dismissComment('${escapeHtml(item.key)}')" style="padding:4px 10px; border:1px solid #d0d7de; border-radius:6px; background:#fff; cursor:pointer; font-size:12px; flex-shrink:0; margin-left:8px;" title="Mark as resolved">✓ Resolved</button>
-        </div>
-      `;
-    }
-  }
-
-  content.innerHTML = html;
-}
-
-function dismissComment(key) {
-  delete comments[key];
-  saveComments();
-  updateBadge();
-  reviewPending();
 }
 
 function formatTypeLink(currentPkgId, typeStr) {
