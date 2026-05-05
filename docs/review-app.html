@@ -1695,6 +1695,9 @@ function formatParamsWithLinks(currentPkgId, paramsStr) {
 }
 
 function formatTypeLink(currentPkgId, typeStr) {
+  // First check if the exact string is a registered type (e.g. "[T]")
+  const exactLink = makeTypeLink(currentPkgId, typeStr);
+  if (exactLink !== typeStr) return exactLink;
   // Handle nullable collection types like [Statement]?
   const nullCollMatch = typeStr.match(/^\[(.+)\]\?$/);
   if (nullCollMatch) {
