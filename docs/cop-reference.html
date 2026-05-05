@@ -902,7 +902,6 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
     predicates: [],
     functions: [
       { name: "Receive", params: "", returns: "[Request]", desc: "Incoming HTTP requests — yields requests as they arrive" },
-      { name: "Send", params: "", returns: "[Response]", desc: "Outgoing HTTP responses — pipe results here to send back" },
       { name: "ok", params: "Request", returns: "Response", desc: "Creates a 200 OK response" },
       { name: "notFound", params: "Request", returns: "Response", desc: "Creates a 404 Not Found response" },
       { name: "created", params: "Request", returns: "Response", desc: "Creates a 201 Created response" },
@@ -910,7 +909,9 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
       { name: "serverError", params: "Request", returns: "Response", desc: "Creates a 500 Internal Server Error response" }
     ],
     checks: [],
-    commands: []
+    commands: [
+      { name: "SEND", params: "[Response]", desc: "Send HTTP responses back to clients" }
+    ]
   },
 
   json: {
