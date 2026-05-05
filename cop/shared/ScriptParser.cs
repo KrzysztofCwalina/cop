@@ -279,13 +279,14 @@ public class ScriptParser
         return new EnumDefinition(name.Value, members, line, isExported);
     }
 
-    // Enum members may use names that are also language keywords (e.g. import, command, enum)
-    // or numeric literals (e.g. HTTP status codes: 200, 404)
+    // Enum members may use names that are also language keywords (e.g. import, command, enum),
+    // numeric literals (e.g. HTTP status codes: 200, 404), or string literals (e.g. MIME types).
     private Token ExpectIdentifierOrKeyword()
     {
         if (Current.Kind == TokenKind.Identifier
             || Current.Kind == TokenKind.IntLiteral
             || Current.Kind == TokenKind.NumberLiteral
+            || Current.Kind == TokenKind.StringLiteral
             || Current.Kind.ToString().EndsWith("Keyword"))
             return Advance();
         throw new ParseException(

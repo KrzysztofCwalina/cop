@@ -40,8 +40,8 @@ public class HttpProvider : DataProvider
                     Properties =
                     [
                         new ProviderPropertySchema { Name = "Method" },
-                        new ProviderPropertySchema { Name = "Path" },
-                        new ProviderPropertySchema { Name = "Body" },
+                        new ProviderPropertySchema { Name = "Uri" },
+                        new ProviderPropertySchema { Name = "Body", Type = "bytes" },
                         new ProviderPropertySchema { Name = "ContentType", Optional = true },
                     ]
                 },
@@ -51,7 +51,7 @@ public class HttpProvider : DataProvider
                     Properties =
                     [
                         new ProviderPropertySchema { Name = "StatusCode", Type = "int" },
-                        new ProviderPropertySchema { Name = "Body" },
+                        new ProviderPropertySchema { Name = "Body", Type = "bytes" },
                         new ProviderPropertySchema { Name = "ContentType" },
                     ]
                 }
@@ -80,10 +80,9 @@ public class HttpProvider : DataProvider
             // Wrap as DataObject so the cop evaluator can access properties
             var so = new DataObject("Request");
             so.Set("Method", request.Method);
-            so.Set("Path", request.Path);
+            so.Set("Uri", request.Uri);
             so.Set("Body", request.Body);
             so.Set("ContentType", request.ContentType);
-            so.Set("Query", request.Query);
             so.Set("__responseCompletion", request.ResponseCompletion);
             yield return so;
         }
@@ -98,21 +97,21 @@ public class HttpProvider : DataProvider
 
         _app.Map("{**path}", async (HttpContext ctx) =>
         {
-            var body = "";
+            byte[] body = [];
             if (ctx.Request.ContentLength > 0)
             {
-                using var reader = new StreamReader(ctx.Request.Body);
-                body = await reader.ReadToEndAsync(cancellationToken);
+                using var ms = new MemoryStream();
+                await ctx.Request.Body.CopyToAsync(ms, cancellationToken);
+                body = ms.ToArray();
             }
 
             var tcs = new TaskCompletionSource<HttpResponseItem>();
             var requestItem = new HttpRequestItem
             {
                 Method = ctx.Request.Method,
-                Path = ctx.Request.Path.Value ?? "/",
+                Uri = (ctx.Request.Path.Value ?? "/") + (ctx.Request.QueryString.Value ?? ""),
                 Body = body,
                 ContentType = ctx.Request.ContentType ?? "",
-                Query = ctx.Request.QueryString.Value ?? "",
                 ResponseCompletion = tcs
             };
 
@@ -148,10 +147,9 @@ public class HttpProvider : DataProvider
 public class HttpRequestItem
 {
     public string Method { get; init; } = "";
-    public string Path { get; init; } = "";
-    public string Body { get; init; } = "";
+    public string Uri { get; init; } = "/";
+    public byte[] Body { get; init; } = [];
     public string ContentType { get; init; } = "";
-    public string Query { get; init; } = "";
 
     // Hidden from cop scripts — used by the sink to deliver the response
     internal TaskCompletionSource<HttpResponseItem> ResponseCompletion { get; init; } = null!;
@@ -190,7 +188,12 @@ public class HttpSendSink : DataSink
         {
             // Extract StatusCode, Body, ContentType from cop object
             var statusCode = so.GetField("StatusCode") is int sc ? sc : 200;
-            var body = so.GetField("Body")?.ToString() ?? SerializeToJson(so);
+            var bodyField = so.GetField("Body");
+            string body;
+            if (bodyField is byte[] bytes)
+                body = System.Text.Encoding.UTF8.GetString(bytes);
+            else
+                body = bodyField?.ToString() ?? SerializeToJson(so);
             var contentType = so.GetField("ContentType")?.ToString() ?? "application/json";
             response = new HttpResponseItem { StatusCode = statusCode, Body = body, ContentType = contentType };
         }

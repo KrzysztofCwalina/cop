@@ -63,6 +63,10 @@ public class TypeRegistry
         {
             TextConverter = obj => obj is byte b ? b.ToString() : "0"
         });
+        Register(new TypeDescriptor("bytes")
+        {
+            TextConverter = obj => obj is byte[] arr ? $"[{arr.Length} bytes]" : obj?.ToString() ?? "[]"
+        });
     }
 
     public void Register(TypeDescriptor descriptor)

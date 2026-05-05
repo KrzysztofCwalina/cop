@@ -19,7 +19,7 @@ Import with `import http` to build web APIs using cop's pipeline syntax.
 ```cop
 import http
 
-function handle(Request) => Path
+function handle(Request) => Uri
   ? '/api/hello' => ok({ message = 'Hello, World!' })
   | _ => notFound({ error = 'Not found' })
 
@@ -28,7 +28,7 @@ command serve = foreach http.Receive => handle => http.Send
 
 ## Collections
 
-- `http.Receive` — streaming collection of incoming HTTP requests
+- `http.Receive` — streaming collection of incoming HTTP requests (yields `Request`)
 
 ## Sinks
 

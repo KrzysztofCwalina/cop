@@ -224,4 +224,28 @@ public class EnumTests
         var (result2, _) = evaluator.EvaluateAsBool(expr2, item, "MyType");
         Assert.That(result2, Is.False);
     }
+
+    [Test]
+    public void Parse_EnumWithStringLiteralMembers()
+    {
+        var file = ScriptParser.Parse(
+            "enum ContentType = 'application/json' | 'text/plain' | 'text/html'", "test.cop");
+        Assert.That(file.EnumDefinitions, Has.Count.EqualTo(1));
+        var enumDef = file.EnumDefinitions![0];
+        Assert.That(enumDef.Name, Is.EqualTo("ContentType"));
+        Assert.That(enumDef.Members, Is.EqualTo(new[] { "application/json", "text/plain", "text/html" }));
+    }
+
+    [Test]
+    public void TypeRegistry_StringLiteralEnumMembers_Resolve()
+    {
+        var registry = new TypeRegistry();
+        var enumDef = new EnumDefinition("ContentType",
+            ["application/json", "text/plain", "text/html"], 1);
+        var errors = registry.LoadEnumDefinitions([enumDef]);
+        Assert.That(errors, Is.Empty);
+        Assert.That(registry.TryResolveEnumConstant("application/json"), Is.EqualTo("application/json"));
+        Assert.That(registry.IsEnumType("ContentType"), Is.True);
+        Assert.That(registry.GetEnumType("ContentType")!.Members, Has.Count.EqualTo(3));
+    }
 }

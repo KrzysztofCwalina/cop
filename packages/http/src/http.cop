@@ -6,21 +6,21 @@
 #   command serve = foreach http.Receive => handle => http.Send
 
 export enum HttpMethod = GET | POST | PUT | DELETE | PATCH | HEAD | OPTIONS
+export enum ContentType = 'application/json' | 'text/plain' | 'text/html' | 'application/xml' | 'multipart/form-data' | 'application/octet-stream'
 
 # Response type produced by helper functions
 export type Response = {
     StatusCode : int,
-    Body : string,
-    ContentType : string
+    Body : bytes,
+    ContentType : ContentType
 }
 
 # Request type provided by the http streaming source
 export type Request = {
     Method : HttpMethod,
-    Path : string,
-    Body : string,
-    ContentType : string,
-    Query : string
+    Uri : string,
+    Body : bytes,
+    ContentType : ContentType
 }
 
 # Creates a 200 OK response with JSON body

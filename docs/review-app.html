@@ -758,35 +758,40 @@ const packages = {
 
   http: {
     label: "http",
-    collections: [],
+    collections: [
+      { name: "Receive", type: "Request", desc: "Streaming collection of incoming HTTP requests" },
+    ],
+    sinks: [
+      { name: "Send", desc: "Sends the transformed result back as an HTTP response" }
+    ],
     enums: [
-      { name: "HttpMethod", values: "GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS" }
+      { name: "HttpMethod", values: "GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS" },
+      { name: "ContentType", values: "application/json|text/plain|text/html|application/xml|multipart/form-data|application/octet-stream" }
     ],
     types: {
       Response: {
         props: [
           { name: "StatusCode", type: "int", desc: "HTTP status code" },
-          { name: "Body", type: "string", desc: "Response body text" },
-          { name: "ContentType", type: "string", desc: "Content-Type header value" }
+          { name: "Body", type: "bytes", desc: "Response body as binary data" },
+          { name: "ContentType", type: "ContentType", desc: "Content-Type header value" }
         ]
       },
       Request: {
         props: [
           { name: "Method", type: "HttpMethod", desc: "HTTP method (GET, POST, PUT, etc.)" },
-          { name: "Path", type: "string", desc: "Request path" },
-          { name: "Body", type: "string", desc: "Request body text" },
-          { name: "ContentType", type: "string", desc: "Content-Type header value" },
-          { name: "Query", type: "string", desc: "Query string" }
+          { name: "Uri", type: "string", desc: "Request URI (path + query string)" },
+          { name: "Body", type: "bytes", desc: "Request body as binary data" },
+          { name: "ContentType", type: "ContentType", desc: "Content-Type header value" }
         ]
       }
     },
     predicates: [],
     functions: [
-      { name: "ok", params: "Request", returns: "Response", desc: "Send request and expect 200 OK" },
-      { name: "notFound", params: "Request", returns: "Response", desc: "Send request and expect 404 Not Found" },
-      { name: "created", params: "Request", returns: "Response", desc: "Send request and expect 201 Created" },
-      { name: "badRequest", params: "Request", returns: "Response", desc: "Send request and expect 400 Bad Request" },
-      { name: "serverError", params: "Request", returns: "Response", desc: "Send request and expect 500 Server Error" }
+      { name: "ok", params: "Request", returns: "Response", desc: "Creates a 200 OK response" },
+      { name: "notFound", params: "Request", returns: "Response", desc: "Creates a 404 Not Found response" },
+      { name: "created", params: "Request", returns: "Response", desc: "Creates a 201 Created response" },
+      { name: "badRequest", params: "Request", returns: "Response", desc: "Creates a 400 Bad Request response" },
+      { name: "serverError", params: "Request", returns: "Response", desc: "Creates a 500 Internal Server Error response" }
     ],
     checks: [],
     commands: []
@@ -1141,6 +1146,8 @@ function buildTree() {
       const hasCmds = pkg.commands && pkg.commands.length > 0;
       const hasLets = pkg.lets && pkg.lets.length > 0;
       const hasEnums = pkg.enums && pkg.enums.length > 0;
+      const hasSinks = pkg.sinks && pkg.sinks.length > 0;
+      const hasCollObjs = pkg.collections && pkg.collections.length > 0 && typeof pkg.collections[0] === 'object';
 
       pkgNode.innerHTML = `
         <div class="tree-label" data-pkg="${pkgId}">
@@ -1173,6 +1180,32 @@ function buildTree() {
             <span class="tree-toggle" style="visibility:hidden"></span>
             <span class="section-tag tag-enum">E</span>
             <span>Enums (${pkg.enums.length})</span>
+          </div>
+        `;
+        childrenDiv.appendChild(secNode);
+      }
+
+      if (hasCollObjs) {
+        const secNode = document.createElement('div');
+        secNode.className = 'tree-node';
+        secNode.innerHTML = `
+          <div class="tree-label" data-pkg="${pkgId}" data-view="streams">
+            <span class="tree-toggle" style="visibility:hidden"></span>
+            <span class="section-tag tag-function">S</span>
+            <span>Streams (${pkg.collections.length})</span>
+          </div>
+        `;
+        childrenDiv.appendChild(secNode);
+      }
+
+      if (hasSinks) {
+        const secNode = document.createElement('div');
+        secNode.className = 'tree-node';
+        secNode.innerHTML = `
+          <div class="tree-label" data-pkg="${pkgId}" data-view="sinks">
+            <span class="tree-toggle" style="visibility:hidden"></span>
+            <span class="section-tag tag-command">⇥</span>
+            <span>Sinks (${pkg.sinks.length})</span>
           </div>
         `;
         childrenDiv.appendChild(secNode);
@@ -1283,6 +1316,8 @@ function buildTree() {
       else if (view === 'commands') renderCommands(pkg);
       else if (view === 'lets') renderLets(pkg);
       else if (view === 'enums') renderEnums(pkg);
+      else if (view === 'streams') renderStreams(pkg);
+      else if (view === 'sinks') renderSinks(pkg);
     } else if (section) {
       // Toggle section expand
       const children = label.nextElementSibling;
@@ -1311,7 +1346,8 @@ function renderType(pkgId, typeName) {
 
   let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> ${typeName}</h1>`;
   if (pkg.collections && pkg.collections.length > 0) {
-    html += `<p style="color:#57606a; font-size:13px; margin-top:4px;">Collections: <code>${pkg.collections.join('</code>, <code>')}</code></p>`;
+    const names = pkg.collections.map(c => typeof c === 'string' ? c : c.name);
+    html += `<p style="color:#57606a; font-size:13px; margin-top:4px;">Collections: <code>${names.join('</code>, <code>')}</code></p>`;
   }
   html += `<h2>Properties</h2>`;
 
@@ -1532,6 +1568,64 @@ function renderEnums(pkgId) {
             <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
           </div>
           <div class="enum-values">${values.map(v => `<span class="enum-value">${escapeHtml(v)}</span>`).join('')}</div>
+        </div>
+        <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
+      </div>
+    `;
+  }
+
+  content.innerHTML = html;
+  wireUpComments(content);
+}
+
+function renderStreams(pkgId) {
+  const pkg = packages[pkgId];
+  const content = document.getElementById('content');
+
+  let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Streaming Collections</h1>`;
+  html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">Async streaming sources — use with <code>foreach</code> pipelines</p>`;
+
+  for (const coll of pkg.collections) {
+    if (typeof coll === 'string') continue;
+    const key = `${pkgId}.stream.${coll.name}`;
+    const hasComment = comments[key] ? 'has-comment' : '';
+    html += `
+      <div class="comment-wrapper">
+        <div class="fn-block">
+          <div class="fn-signature">
+            <span class="item-name">${pkg.label}.${coll.name}</span>
+            <span class="prop-type" style="margin-left:8px">${coll.type || ''}</span>
+            <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
+          </div>
+          <div class="fn-desc">${escapeHtml(coll.desc)}</div>
+        </div>
+        <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
+      </div>
+    `;
+  }
+
+  content.innerHTML = html;
+  wireUpComments(content);
+}
+
+function renderSinks(pkgId) {
+  const pkg = packages[pkgId];
+  const content = document.getElementById('content');
+
+  let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Sinks</h1>`;
+  html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">Pipeline sinks — terminal endpoints that consume pipeline results</p>`;
+
+  for (const sink of pkg.sinks) {
+    const key = `${pkgId}.sink.${sink.name}`;
+    const hasComment = comments[key] ? 'has-comment' : '';
+    html += `
+      <div class="comment-wrapper">
+        <div class="fn-block">
+          <div class="fn-signature">
+            <span class="item-name">${pkg.label}.${sink.name}</span>
+            <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
+          </div>
+          <div class="fn-desc">${escapeHtml(sink.desc)}</div>
         </div>
         <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
       </div>

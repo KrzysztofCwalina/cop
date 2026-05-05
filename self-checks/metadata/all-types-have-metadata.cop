@@ -68,6 +68,24 @@ predicate isUntrackedGlobal(Statement) =>
 export let untracked-globals = pkg-code.Statements:isUntrackedGlobal
     :toWarning('Runtime global "{item.MemberName}" in {item.File.Path} is not tracked — add here and to docs/review-app.html')
 
+# Streaming providers (those with DataFormat.AsyncStream) expose collections and sinks
+# that are NOT declared via 'runtime::' in .cop files — they come from C# provider code.
+# Track them manually here. If a new streaming provider is added, update this list.
+let tracked-streaming-apis = [
+    'Receive'
+    'Send'
+]
+
+# DataSink subclasses in the providers/ directory
+predicate isSinkClass(Type) =>
+    Type.File.Path:ct('providers/')
+    && Type.BaseType:eq('DataSink')
+
+predicate untrackedSink(Type) => isSinkClass && !Type.Name:ct('Send')
+
+export let untracked-sinks = csharp.Types:untrackedSink
+    :toWarning('DataSink "{item.Name}" in {item.File.Path} is not documented — add to docs/review-app.html')
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Part 3: Exported Types
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -117,6 +135,7 @@ let tracked-types = [
     'UncategorizedProject'
     # http package
     'HttpMethod'
+    'ContentType'
     'Response'
     'Request'
     # csharp-api package
