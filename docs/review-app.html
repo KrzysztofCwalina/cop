@@ -144,9 +144,9 @@ const packages = {
       "[T]": {
         props: [
           { name: "Count", type: "int", desc: "Number of items" },
-          { name: "First", type: "T?", desc: "First element or null if empty" },
-          { name: "Last", type: "T?", desc: "Last element or null if empty" },
-          { name: "Single", type: "T?", desc: "The element if exactly one item, otherwise null" },
+          { name: "First", type: "T?", desc: "First element or nic if empty" },
+          { name: "Last", type: "T?", desc: "Last element or nic if empty" },
+          { name: "Single", type: "T?", desc: "The element if exactly one item, otherwise nic" },
           { name: "Tail", type: "[T]", desc: "All elements except the first" }
         ]
       },
@@ -203,7 +203,7 @@ const packages = {
       { name: "Where", params: "[T], predicate", returns: "[T]", desc: "Filter to items matching predicate" },
       { name: "First", params: "[T], predicate?", returns: "T?", desc: "First item (optionally matching predicate)" },
       { name: "Last", params: "[T], predicate?", returns: "T?", desc: "Last item (optionally matching predicate)" },
-      { name: "Single", params: "[T], predicate?", returns: "T?", desc: "Exactly one matching item (null if 0 or 2+)" },
+      { name: "Single", params: "[T], predicate?", returns: "T?", desc: "Exactly one matching item (nic if 0 or 2+)" },
       { name: "ElementAt", params: "[T], index: int", returns: "T?", desc: "Item at zero-based index" },
       { name: "Select", params: "[T], field", returns: "[U]", desc: "Project each item to a field/expression" },
       { name: "OrderBy", params: "[T], field", returns: "[T]", desc: "Sort ascending by field" },
