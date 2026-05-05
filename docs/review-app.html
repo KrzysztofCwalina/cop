@@ -1190,7 +1190,7 @@ function buildTree() {
           <div class="tree-label" data-pkg="${pkgId}" data-view="lets">
             <span class="tree-toggle" style="visibility:hidden"></span>
             <span class="section-tag tag-let">L</span>
-            <span>Let Bindings (${pkg.lets.length})</span>
+            <span>Globals (${pkg.lets.length})</span>
           </div>
         `;
         childrenDiv.appendChild(secNode);
@@ -1341,7 +1341,7 @@ function renderChecks(pkgId) {
   const content = document.getElementById('content');
 
   let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Checks</h1>`;
-  html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">${pkg.checks.length} exported checks (let bindings)</p>`;
+  html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">${pkg.checks.length} exported checks</p>`;
 
   for (const check of pkg.checks) {
     const key = `${pkgId}.check.${check.name}`;
@@ -1392,8 +1392,8 @@ function renderLets(pkgId) {
   const pkg = packages[pkgId];
   const content = document.getElementById('content');
 
-  let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Let Bindings</h1>`;
-  html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">${pkg.lets.length} exported let bindings</p>`;
+  let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Globals</h1>`;
+  html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">${pkg.lets.length} exported globals</p>`;
 
   for (const letItem of pkg.lets) {
     const key = `${pkgId}.let.${letItem.name}`;
