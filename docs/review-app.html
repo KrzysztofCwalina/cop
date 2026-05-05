@@ -1290,9 +1290,9 @@ function renderPredicates(pkgId) {
     groups[p.appliesTo].push(p);
   }
 
-  for (const [appliesTo, preds] of Object.entries(groups)) {
+  for (const [appliesTo, preds] of Object.entries(groups).sort(([a],[b]) => a.localeCompare(b))) {
     html += `<h3>On ${appliesTo}</h3>`;
-    for (const pred of preds) {
+    for (const pred of preds.sort((a,b) => a.name.localeCompare(b.name))) {
       const key = `${pkgId}.pred.${pred.name}.${pred.appliesTo}`;
       const hasComment = comments[key] ? 'has-comment' : '';
       const retInfo = pred.returns ? ` → ${pred.returns}` : '';
@@ -1320,7 +1320,7 @@ function renderFunctions(pkgId) {
   let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Functions</h1>`;
   html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">${pkg.functions.length} exported functions</p>`;
 
-  for (const fn of pkg.functions) {
+  for (const fn of pkg.functions.slice().sort((a,b) => a.name.localeCompare(b.name))) {
     const key = `${pkgId}.fn.${fn.name}.${fn.params.replace(/[, ]/g, '_')}`;
     const hasComment = comments[key] ? 'has-comment' : '';
     html += `
@@ -1346,7 +1346,7 @@ function renderChecks(pkgId) {
   let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Checks</h1>`;
   html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">${pkg.checks.length} exported checks</p>`;
 
-  for (const check of pkg.checks) {
+  for (const check of pkg.checks.slice().sort((a,b) => a.name.localeCompare(b.name))) {
     const key = `${pkgId}.check.${check.name}`;
     const hasComment = comments[key] ? 'has-comment' : '';
     html += `
@@ -1372,7 +1372,7 @@ function renderCommands(pkgId) {
   let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Commands</h1>`;
   html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">${pkg.commands.length} exported commands</p>`;
 
-  for (const cmd of pkg.commands) {
+  for (const cmd of pkg.commands.slice().sort((a,b) => a.name.localeCompare(b.name))) {
     const key = `${pkgId}.cmd.${cmd.name}`;
     const hasComment = comments[key] ? 'has-comment' : '';
     html += `
@@ -1398,7 +1398,7 @@ function renderLets(pkgId) {
   let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Globals</h1>`;
   html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">${pkg.lets.length} exported globals</p>`;
 
-  for (const letItem of pkg.lets) {
+  for (const letItem of pkg.lets.slice().sort((a,b) => a.name.localeCompare(b.name))) {
     const key = `${pkgId}.let.${letItem.name}`;
     const hasComment = comments[key] ? 'has-comment' : '';
     const typeHtml = letItem.type ? `<span class="item-type">${formatTypeLink(pkgId, letItem.type)}</span>` : '';
