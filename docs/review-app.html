@@ -1500,22 +1500,26 @@ function renderPredicates(pkgId) {
 }
 
 function renderFunctions(pkgId) {
+  renderCallables(pkgId, packages[pkgId].functions, 'Functions', 'fn');
+}
+
+function renderCallables(pkgId, items, sectionTitle, keyPrefix) {
   const pkg = packages[pkgId];
   const content = document.getElementById('content');
 
-  let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Functions</h1>`;
-  html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">${pkg.functions.length} exported functions</p>`;
+  let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> ${sectionTitle}</h1>`;
+  html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">${items.length} exported ${sectionTitle.toLowerCase()}</p>`;
 
-  for (const fn of pkg.functions.slice().sort((a,b) => a.name.localeCompare(b.name))) {
-    const key = `${pkgId}.fn.${fn.name}.${fn.params.replace(/[, ]/g, '_')}`;
+  for (const fn of items.slice().sort((a,b) => a.name.localeCompare(b.name))) {
+    const key = `${pkgId}.${keyPrefix}.${fn.name}.${(fn.params||'').replace(/[, ]/g, '_')}`;
     const hasComment = comments[key] ? 'has-comment' : '';
-    const paramsHtml = formatParamsWithLinks(pkgId, fn.params);
-    const returnsHtml = formatTypeLink(pkgId, fn.returns);
+    const paramsHtml = fn.params ? formatParamsWithLinks(pkgId, fn.params) : '';
+    const returnsHtml = fn.returns ? ` → ${formatTypeLink(pkgId, fn.returns)}` : '';
     html += `
       <div class="comment-wrapper">
         <div class="fn-block">
           <div class="fn-signature">
-            <span class="item-name">${fn.name}(${paramsHtml}) → ${returnsHtml}</span>
+            <span class="item-name">${fn.name}(${paramsHtml})${returnsHtml}</span>
             <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
           </div>
           <div class="fn-desc">${escapeHtml(fn.desc)}</div>
@@ -1557,29 +1561,7 @@ function renderChecks(pkgId) {
 }
 
 function renderCommands(pkgId) {
-  const pkg = packages[pkgId];
-  const content = document.getElementById('content');
-
-  let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Commands</h1>`;
-  html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">${pkg.commands.length} exported commands</p>`;
-
-  for (const cmd of pkg.commands.slice().sort((a,b) => a.name.localeCompare(b.name))) {
-    const key = `${pkgId}.cmd.${cmd.name}`;
-    const hasComment = comments[key] ? 'has-comment' : '';
-    html += `
-      <div class="comment-wrapper">
-        <div class="item-row">
-          <span class="item-name">${cmd.name}(${formatParamsWithLinks(pkgId, cmd.params)})</span>
-          <span class="item-detail">${escapeHtml(cmd.desc)}</span>
-          <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
-        </div>
-        <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
-      </div>
-    `;
-  }
-
-  content.innerHTML = html;
-  wireUpComments(content);
+  renderCallables(pkgId, packages[pkgId].commands, 'Commands', 'cmd');
 }
 
 function renderEnums(pkgId) {
