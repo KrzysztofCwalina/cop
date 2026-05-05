@@ -36,7 +36,7 @@ install/publish.ps1 -Runtimes win-x64
   - **cop/language/** — Cop language (namespace `Cop.Lang`). Parser, interpreter, evaluator, type system. General-purpose language features only.
   - **cop/runtime/** — Runtime engine (namespace `Cop.Providers`). Engine orchestrator, source parsers (C#, Python, JavaScript), provider loading and registration.
   - **cop/shared/** — Core library (Cop.Core): package models, DataProvider base class, DataObject binary format, feed manager, dependency resolver, restore engine, checksum manager.
-- **providers/** — Data providers (filesystem, code, typespec, etc.). Each provider extends `DataProvider` and supplies typed collections to the language runtime. Built-in providers compile into `cop.exe`; external providers ship as separate DLLs.
+- **providers/** — Data providers (files, code, typespec, etc.). Each provider extends `DataProvider` and supplies typed collections to the language runtime. Built-in providers compile into `cop.exe`; external providers ship as separate DLLs.
 - **packages/** — Seed packages organized by language (general at root, language-specific in dotnet/, js/, python/).
 - **tests/Cop.Tests/** — NUnit 4.x tests for core library.
 - **tests/Lang.Tests/** — NUnit 4.x tests for Cop language runtime.

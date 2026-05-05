@@ -2,7 +2,7 @@
 
 Structured violation reporting and common analysis predicates for source code checks. &nbsp; `import code-analysis`
 
-**Source:** [`packages/code-analysis/src/code-analysis.cop`](../../packages/code-analysis/src/code-analysis.cop) &nbsp; **Depends on:** code, filesystem
+**Source:** [`packages/code-analysis/src/code-analysis.cop`](../../packages/code-analysis/src/code-analysis.cop) &nbsp; **Depends on:** code, files
 
 ---
 
@@ -28,7 +28,7 @@ The `code-analysis` package provides the foundation for writing static analysis 
 
 ### Functions
 
-Each function has overloads for [`Statement`](code.md#statement), [`Type`](code.md#type), [`Line`](code.md#line), and [`Folder`](filesystem.md#folder). The `message` parameter supports template interpolation (e.g., `'Missing docs for {item.Name}'`).
+Each function has overloads for [`Statement`](code.md#statement), [`Type`](code.md#type), [`Line`](code.md#line), and [`Folder`](files.md#folder). The `message` parameter supports template interpolation (e.g., `'Missing docs for {item.Name}'`).
 
 | Function | Description |
 |---|---|

@@ -250,5 +250,5 @@ Keep editing `main.cop` and re-running expressions — the REPL automatically pi
 
 - The REPL auto-reloads `.cop` files when they change on disk — just save and re-run your expression.
 - The REPL lazily loads providers — the first time you reference a collection like `Code.Types`, it scans your project files. Subsequent queries are fast.
-- You can import any installed package (`csharp`, `filesystem`, `code`, etc.) in your `.cop` file and their predicates become available in the REPL.
+- You can import any installed package (`csharp`, `files`, `code`, etc.) in your `.cop` file and their predicates become available in the REPL.
 - Packages are auto-restored on first use — no manual restore step needed.

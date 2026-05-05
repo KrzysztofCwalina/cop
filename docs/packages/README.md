@@ -6,7 +6,7 @@ For a complete list of every individual check across all packages, see the [All 
 
 | Package | Description |
 |---|---|
-| [filesystem](filesystem.md) | File and folder analysis |
+| [files](files.md) | File and folder analysis |
 | [code](code.md) | Source code structural analysis (types, statements, lines, files) |
 | [markdown](markdown.md) | Markdown document structural analysis (headings, links, sections, code blocks) |
 | [code-analysis](code-analysis.md) | Violation reporting (toError, toWarning, toInfo, CHECK) |

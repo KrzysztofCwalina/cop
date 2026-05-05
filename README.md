@@ -109,7 +109,7 @@ foreach ErrorHandlers:swallowsError => PRINT('{error:@red} {ErrorHandler.File.Pa
 
 ## Filesystem Analysis
 
-The same specification language works for filesystem structure rules:
+The same specification language works for file and folder rules:
 
 ```ruby
 import files

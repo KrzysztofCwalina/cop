@@ -116,7 +116,7 @@ let tracked-types = [
     'File'
     'Project'
     'Codebase'
-    # filesystem package
+    # files package
     'Folder'
     'DiskFile'
     'Filesystem'
