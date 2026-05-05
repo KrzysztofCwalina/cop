@@ -1,12 +1,21 @@
-# Cop Self-Check: Type Metadata Coverage
+# Cop Self-Check: Package Metadata Coverage
 #
 # Design principle: Every data provider must have a corresponding .cop package
-# that defines 'export type' metadata for the types it registers.
+# that defines 'export type' metadata for the types it registers, and
+# 'export let = runtime::' globals for aggregate entry points.
+#
+# If this check fails, add the item to the tracked list below AND to docs/review-app.html.
 #
 # Run: cop run self-checks/metadata/all-types-have-metadata.cop -t .
 
 import csharp
+import cop-lang
+import code
 import code-analysis
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Part 1: Provider Implementations
+# ═══════════════════════════════════════════════════════════════════════════════
 
 # Known provider implementations (update when adding a new provider)
 let tracked-providers = [
@@ -29,10 +38,111 @@ predicate isProviderImpl(Type) =>
     Type.File.Path:ct('providers/')
     && Type.Name:ew('Provider')
 
-# Provider implementations not tracked in this self-check
 predicate untrackedProvider(Type) => isProviderImpl && !Type.Name:in(tracked-providers)
 
 export let untracked-providers = csharp.Types:untrackedProvider
     :toWarning('Provider {item.Name} in {item.File.Path} needs a .cop package with type metadata')
 
-command check-metadata = CHECK(untracked-providers)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Part 2: Runtime Globals
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Use Code([cop-lang], 'packages/') to scan .cop files in packages/ directory
+let pkg-code = Code([cop-lang], 'packages/')
+
+# All runtime-backed globals (export let X = runtime::Y) must be tracked here.
+let tracked-globals = [
+    'Code'
+    'Disk'
+    'Markdown'
+]
+
+predicate isRuntimeGlobal(Statement) =>
+    Statement.Kind:eq('declaration')
+    && Statement.Keywords:contains('runtime')
+    && Statement.Keywords:contains('export')
+
+predicate isUntrackedGlobal(Statement) =>
+    isRuntimeGlobal && !Statement.MemberName:in(tracked-globals)
+
+export let untracked-globals = pkg-code.Statements:isUntrackedGlobal
+    :toWarning('Runtime global "{item.MemberName}" in {item.File.Path} is not tracked — add here and to docs/review-app.html')
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Part 3: Exported Types
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# All exported types in .cop packages must be tracked here.
+let tracked-types = [
+    # code package
+    'Modifier'
+    'Type'
+    'Method'
+    'Constructor'
+    'Field'
+    'Property'
+    'Event'
+    'Api'
+    'Parameter'
+    'TypeReference'
+    'Statement'
+    'Call'
+    'Declaration'
+    'ErrorHandler'
+    'Attribute'
+    'Line'
+    'Region'
+    'File'
+    'Project'
+    'Codebase'
+    # filesystem package
+    'Folder'
+    'DiskFile'
+    'Filesystem'
+    # markdown package
+    'Heading'
+    'Link'
+    'Section'
+    'FenceBlock'
+    'MarkdownContent'
+    # code-analysis package
+    'Violation'
+    # arch-layering package
+    'LayerViolation'
+    'UncategorizedProject'
+    # http package
+    'Response'
+    'Request'
+    # csharp-api package
+    'ApiLine'
+    # typespec package
+    'TspDecorator'
+    'TspProperty'
+    'TspModel'
+    'TspOperation'
+    'TspInterface'
+    'TspEnumMember'
+    'TspEnum'
+    'TspUnionVariant'
+    'TspUnion'
+    'TspScalar'
+    'TspNamespace'
+    # typespec-http package
+    'HttpParameter'
+    'HttpHeader'
+    'HttpResponse'
+    'HttpOperation'
+    'HttpService'
+]
+
+predicate isExportedPackageType(Type) =>
+    Type.Modifiers:isSet(Public)
+
+predicate isUntrackedType(Type) =>
+    isExportedPackageType && !Type.Name:in(tracked-types)
+
+export let untracked-types = pkg-code.Types:isUntrackedType
+    :toWarning('Exported type "{item.Name}" in {item.File.Path} is not tracked — add here and to docs/review-app.html')
+
+# ═══════════════════════════════════════════════════════════════════════════════
+command check-metadata = CHECK(untracked-providers, untracked-globals, untracked-types)
