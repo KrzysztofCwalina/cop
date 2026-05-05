@@ -187,6 +187,7 @@ const packages = {
       { name: "any", appliesTo: "[T]", params: "predicate", desc: "Any item matches predicate expression" },
       { name: "none", appliesTo: "[T]", params: "predicate", desc: "No items match predicate expression" },
       { name: "all", appliesTo: "[T]", params: "predicate", desc: "All items match predicate expression" },
+      { name: "count", appliesTo: "[T]", params: "predicate", desc: "Count items matching predicate (returns int)" },
       { name: "in", appliesTo: "any", params: "values: [T]", desc: "Value is in the given list (works on any type)" },
       { name: "containsKey", appliesTo: "object", params: "name: string", desc: "Object has a field with the given name" }
     ],
@@ -212,8 +213,7 @@ const packages = {
       { name: "Min", params: "[T], field", returns: "int", desc: "Minimum numeric field value" },
       { name: "Max", params: "[T], field", returns: "int", desc: "Maximum numeric field value" },
       { name: "Average", params: "[T], field", returns: "number", desc: "Average numeric field value" },
-      { name: "Reduce", params: "[T], op: string, field, separator?", returns: "string", desc: "Reduce with operator (concat with separator, or numeric sum)" },
-      { name: "count", params: "[T], predicate", returns: "int", desc: "Count items matching predicate" }
+      { name: "Reduce", params: "[T], op: string, field, separator?", returns: "string", desc: "Reduce with operator (concat with separator, or numeric sum)" }
     ],
     checks: [],
     commands: [
