@@ -1,5 +1,5 @@
 ---
-name: cop-lang
+name: core
 version: 1.0.0
 title: Cop Language Analysis
 description: Structural analysis of .cop source files — types, predicates, functions, imports
@@ -26,11 +26,11 @@ All standard code collections are available, filtered to `.cop` files:
 ## Usage
 
 ```cop
-import cop-lang
+import core
 
 # List all exported type definitions in .cop files
-foreach cop-lang.Types:isPublic => '{item.Name} ({item.File.Path})'
+foreach core.Types:isPublic => '{item.Name} ({item.File.Path})'
 
 # Find predicates
-foreach cop-lang.Statements:declaration => '{item.MemberName}'
+foreach core.Statements:declaration => '{item.MemberName}'
 ```

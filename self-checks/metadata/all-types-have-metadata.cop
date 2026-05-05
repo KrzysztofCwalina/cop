@@ -9,7 +9,7 @@
 # Run: cop run self-checks/metadata/all-types-have-metadata.cop -t .
 
 import csharp
-import cop-lang
+import core
 import code
 import code-analysis
 
@@ -47,8 +47,8 @@ export let untracked-providers = csharp.Types:untrackedProvider
 # Part 2: Runtime Globals
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Use Code([cop-lang], 'packages/') to scan .cop files in packages/ directory
-let pkg-code = Code([cop-lang], 'packages/')
+# Use Code([core], 'packages/') to scan .cop files in packages/ directory
+let pkg-code = Code([core], 'packages/')
 
 # All runtime-backed globals (export let X = runtime::Y) must be tracked here.
 let tracked-globals = [

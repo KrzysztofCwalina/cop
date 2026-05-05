@@ -16,7 +16,7 @@
   <!-- Copy provider DLL to package lib/ folder after build -->
   <Target Name="CopyToPackageLib" AfterTargets="Build">
     <PropertyGroup>
-      <PackageLibDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\packages\cop-lang\lib\'))</PackageLibDir>
+      <PackageLibDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\packages\core\lib\'))</PackageLibDir>
     </PropertyGroup>
     <MakeDir Directories="$(PackageLibDir)" />
     <ItemGroup>
