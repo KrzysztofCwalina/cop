@@ -280,9 +280,13 @@ public class ScriptParser
     }
 
     // Enum members may use names that are also language keywords (e.g. import, command, enum)
+    // or numeric literals (e.g. HTTP status codes: 200, 404)
     private Token ExpectIdentifierOrKeyword()
     {
-        if (Current.Kind == TokenKind.Identifier || Current.Kind.ToString().EndsWith("Keyword"))
+        if (Current.Kind == TokenKind.Identifier
+            || Current.Kind == TokenKind.IntLiteral
+            || Current.Kind == TokenKind.NumberLiteral
+            || Current.Kind.ToString().EndsWith("Keyword"))
             return Advance();
         throw new ParseException(
             $"Expected identifier but got {Current.Kind} '{Current.Value}'",

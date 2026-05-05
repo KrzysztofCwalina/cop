@@ -1,5 +1,9 @@
 # TypeSpec HTTP protocol graph types
 
+export enum HttpVerb = get | put | post | patch | delete | head
+export enum HttpStatusCode = 200 | 201 | 204 | 304 | default
+export enum HttpParameterLocation = path | query | header | body | cookie
+
 export type TspDecorator = {
     Name : string,
     Arguments : [string]
@@ -8,7 +12,7 @@ export type TspDecorator = {
 export type HttpParameter = {
     Name : string,
     Type : string,
-    In : string,
+    In : HttpParameterLocation,
     Optional : bool,
     Style : string?
 }
@@ -19,7 +23,7 @@ export type HttpHeader = {
 }
 
 export type HttpResponse = {
-    StatusCode : string,
+    StatusCode : HttpStatusCode,
     Description : string?,
     Body : string?,
     Headers : [HttpHeader]
@@ -27,7 +31,7 @@ export type HttpResponse = {
 
 export type HttpOperation = {
     Name : string,
-    Verb : string,
+    Verb : HttpVerb,
     Path : string,
     UriTemplate : string,
     Parameters : [HttpParameter],
@@ -44,8 +48,8 @@ export type HttpService = {
 }
 
 # Common HTTP predicates
-export predicate isGet(HttpOperation) => HttpOperation.Verb == 'get'
-export predicate isPut(HttpOperation) => HttpOperation.Verb == 'put'
-export predicate isPost(HttpOperation) => HttpOperation.Verb == 'post'
-export predicate isPatch(HttpOperation) => HttpOperation.Verb == 'patch'
-export predicate isDelete(HttpOperation) => HttpOperation.Verb == 'delete'
+export predicate isGet(HttpOperation) => HttpOperation.Verb == get
+export predicate isPut(HttpOperation) => HttpOperation.Verb == put
+export predicate isPost(HttpOperation) => HttpOperation.Verb == post
+export predicate isPatch(HttpOperation) => HttpOperation.Verb == patch
+export predicate isDelete(HttpOperation) => HttpOperation.Verb == delete

@@ -5,8 +5,10 @@
 import code
 import filesystem
 
+export enum Severity = error | warning | info
+
 export type Violation = {
-    Severity : string,
+    Severity : Severity,
     Message : string,
     File : string,
     Line : int,

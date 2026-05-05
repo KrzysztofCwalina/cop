@@ -5,6 +5,8 @@
 # Usage:
 #   command serve = foreach http.Receive => handle => http.Send
 
+export enum HttpMethod = GET | POST | PUT | DELETE | PATCH | HEAD | OPTIONS
+
 # Response type produced by helper functions
 export type Response = {
     StatusCode : int,
@@ -14,7 +16,7 @@ export type Response = {
 
 # Request type provided by the http streaming source
 export type Request = {
-    Method : string,
+    Method : HttpMethod,
     Path : string,
     Body : string,
     ContentType : string,

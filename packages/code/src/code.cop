@@ -10,6 +10,7 @@ export flags Modifier = Public | Private | Protected | Internal | Static | Seale
 export enum TypeKind = Class | Struct | Interface | Enum
 export enum StatementKind = call | declaration | import | command | attribute | throw | return | using | foreach | try | catch | if | else | while | for | switch | await
 export enum ApiKind = class | struct | interface | enum | enumvalue | ctor | method | property | event | field
+export enum Language = csharp | python | javascript | cop | text
 
 export type Type = {
     Name : string,
@@ -202,7 +203,7 @@ export type Region = {
 
 export type File = {
     Path : string,
-    Language : string?,
+    Language : Language?,
     Namespace : string?,
     Usings : [string],
     Types : [Type]
@@ -211,7 +212,7 @@ export type File = {
 export type Project = {
     Name : string,
     Path : string,
-    Language : string?,
+    Language : Language?,
     References : [string]
 }
 
