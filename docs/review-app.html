@@ -114,15 +114,73 @@ const categories = [
 
 const packages = {
   "cop-lang": {
-    label: "cop-lang",
+    label: "core",
     collections: [],
-    types: {},
-    predicates: [],
+    types: {
+      string: {
+        props: [
+          { name: "Length", type: "int", desc: "Number of characters" },
+          { name: "Lower", type: "string", desc: "Lowercase version" },
+          { name: "Upper", type: "string", desc: "Uppercase version" },
+          { name: "Normalized", type: "string", desc: "Identifier-normalized (strips casing/separators for comparison)" },
+          { name: "Words", type: "[string]", desc: "Split identifier into words (camelCase, PascalCase, snake_case)" }
+        ]
+      },
+      list: {
+        props: [
+          { name: "Count", type: "int", desc: "Number of items in the collection" }
+        ]
+      }
+    },
+    predicates: [
+      { name: "equals", appliesTo: "string", desc: "Case-insensitive string equality", returns: "bool" },
+      { name: "notEquals", appliesTo: "string", desc: "Case-insensitive string inequality", returns: "bool" },
+      { name: "startsWith", appliesTo: "string", desc: "String starts with value (case-insensitive)", returns: "bool" },
+      { name: "endsWith", appliesTo: "string", desc: "String ends with value (case-insensitive)", returns: "bool" },
+      { name: "contains", appliesTo: "string", desc: "String contains value (case-insensitive)", returns: "bool" },
+      { name: "containsAny", appliesTo: "string", desc: "String contains any value from a list", returns: "bool" },
+      { name: "matches", appliesTo: "string", desc: "String matches regex pattern", returns: "bool" },
+      { name: "sameAs", appliesTo: "string", desc: "Normalized identifier comparison (ignores casing/separators)", returns: "bool" },
+      { name: "empty", appliesTo: "string", desc: "String is empty (length 0)", returns: "bool" },
+      { name: "equals", appliesTo: "int", desc: "Numeric equality", returns: "bool" },
+      { name: "notEquals", appliesTo: "int", desc: "Numeric inequality", returns: "bool" },
+      { name: "greaterThan", appliesTo: "int", desc: "Greater than comparison", returns: "bool" },
+      { name: "lessThan", appliesTo: "int", desc: "Less than comparison", returns: "bool" },
+      { name: "greaterOrEqual", appliesTo: "int", desc: "Greater than or equal", returns: "bool" },
+      { name: "lessOrEqual", appliesTo: "int", desc: "Less than or equal", returns: "bool" },
+      { name: "isSet", appliesTo: "int", desc: "Bitwise flag is set (bitfield & value != 0)", returns: "bool" },
+      { name: "isClear", appliesTo: "int", desc: "Bitwise flag is clear (bitfield & value == 0)", returns: "bool" },
+      { name: "contains", appliesTo: "[T]", desc: "Collection contains value (case-insensitive)", returns: "bool" },
+      { name: "containsAny", appliesTo: "[T]", desc: "Collection contains any value from argument list", returns: "bool" },
+      { name: "empty", appliesTo: "[T]", desc: "Collection has no items", returns: "bool" },
+      { name: "any", appliesTo: "[T]", desc: "Any item matches predicate", returns: "bool" },
+      { name: "none", appliesTo: "[T]", desc: "No items match predicate", returns: "bool" },
+      { name: "all", appliesTo: "[T]", desc: "All items match predicate", returns: "bool" },
+      { name: "in", appliesTo: "string", desc: "Value is in the given list", returns: "bool" }
+    ],
     functions: [
       { name: "PRINT", params: "template: string", returns: "void", desc: "Print formatted output to console. Supports {item.Field} interpolation and {text@style} styling" },
       { name: "SAVE", params: "path: string, template: string", returns: "void", desc: "Write formatted output to a file. Appends each item's rendered template as a line" },
       { name: "CHECK", params: "[Violation]", returns: "void", desc: "Report violations to the analysis engine. Fails if any error-severity violations exist" },
-      { name: "ASSERT", params: "condition", returns: "void", desc: "Assert a condition is true. Used in test mode to verify expectations" }
+      { name: "ASSERT", params: "condition", returns: "void", desc: "Assert a condition is true. Used in test mode to verify expectations" },
+      { name: "Trim", params: "string, suffix: string?", returns: "string", desc: "Remove suffix from string (or whitespace if no arg)" },
+      { name: "Replace", params: "string, old: string, new: string", returns: "string", desc: "Replace occurrences in string (case-insensitive)" },
+      { name: "Where", params: "[T], predicate", returns: "[T]", desc: "Filter collection to items matching predicate" },
+      { name: "First", params: "[T], predicate?", returns: "T?", desc: "First item (optionally matching predicate)" },
+      { name: "Last", params: "[T], predicate?", returns: "T?", desc: "Last item (optionally matching predicate)" },
+      { name: "Single", params: "[T], predicate?", returns: "T?", desc: "Exactly one matching item (null if 0 or 2+)" },
+      { name: "ElementAt", params: "[T], index: int", returns: "T?", desc: "Item at zero-based index" },
+      { name: "Select", params: "[T], field", returns: "[U]", desc: "Project each item to a field/expression" },
+      { name: "OrderBy", params: "[T], field", returns: "[T]", desc: "Sort collection ascending by field" },
+      { name: "OrderByDescending", params: "[T], field", returns: "[T]", desc: "Sort collection descending by field" },
+      { name: "Distinct", params: "[T], field?", returns: "[T]", desc: "Remove duplicates (optionally by projected field)" },
+      { name: "GroupBy", params: "[T], field", returns: "[Group]", desc: "Group items by field. Each Group has Key, Items, Count" },
+      { name: "Sum", params: "[T], field", returns: "int", desc: "Sum numeric field across all items" },
+      { name: "Min", params: "[T], field", returns: "int", desc: "Minimum numeric field value" },
+      { name: "Max", params: "[T], field", returns: "int", desc: "Maximum numeric field value" },
+      { name: "Average", params: "[T], field", returns: "double", desc: "Average numeric field value" },
+      { name: "Reduce", params: "[T], op: string, field, separator?", returns: "string", desc: "Reduce collection with operator (string concat with separator, or numeric sum)" },
+      { name: "count", params: "[T], predicate", returns: "int", desc: "Count items matching predicate" }
     ],
     checks: [],
     commands: []
