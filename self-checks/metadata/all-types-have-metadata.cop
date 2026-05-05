@@ -68,10 +68,9 @@ predicate isUntrackedGlobal(Statement) =>
 export let untracked-globals = pkg-code.Statements:isUntrackedGlobal
     :toWarning('Runtime global "{item.MemberName}" in {item.File.Path} is not tracked — add here and to docs/review-app.html')
 
-# Streaming providers (those with DataFormat.AsyncStream) expose collections and sinks
-# via C# code. The .cop packages declare them with 'export collection Name : [Type]'.
-# Track the DataSink classes here to ensure they are documented.
-let tracked-streaming-collections = [
+# Streaming providers (those with DataFormat.AsyncStream) expose globals and sinks
+# via C# code (GetSchema). Track the DataSink classes here to ensure they are documented.
+let tracked-streaming-globals = [
     'Receive'
     'Send'
 ]

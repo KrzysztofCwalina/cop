@@ -3,14 +3,10 @@
 # Import with: import http
 # 
 # Usage:
-#   command serve = async foreach http.Receive => handle => http.Send
+#   command serve = async foreach Receive => handle => Send
 
 export enum HttpMethod = GET | POST | PUT | DELETE | PATCH | HEAD | OPTIONS
 export enum ContentType = 'application/json' | 'text/plain' | 'text/html' | 'application/xml' | 'multipart/form-data' | 'application/octet-stream'
-
-# Streaming source and sink — pipe dequeues from Receive, enqueues to Send
-export collection Receive : [Request]
-export collection Send : [Response]
 
 # Response type produced by helper functions
 export type Response = {

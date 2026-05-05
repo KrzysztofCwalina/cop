@@ -120,7 +120,6 @@ A `.cop` file contains these kinds of declarations:
 | `type` | Describe the shape of an object’s property list |
 | `flags` | Define a flags enum for bitwise operations |
 | `enum` | Define an extensible enum with named values |
-| `collection` | Declare a typed collection (source or sink for pipes) |
 | `let` | Declare a named list (base or subset) |
 | `command name =` | Define a named command (implicit output, SAVE, or composition) |
 | `foreach` | Iterate over a collection sequentially |
@@ -307,16 +306,9 @@ let localFiles = filesystem.DiskFiles('src/lib/')
 
 Path-scoped collections query the provider against the given path instead of the default root (CWD or `-t`). The path is resolved relative to the process working directory. Results are cached by `(provider, collection, absolutePath)` so repeated references with the same path are efficient. Each collection is parameterized individually — `csharp.Types('../sdk/')` does not affect `csharp.Statements`.
 
-### Collection Declarations
+### Pipe Operators
 
-`collection` declares a named typed collection. Collections can be used as pipe sources (dequeue from) or pipe sinks (enqueue to):
-
-```ruby
-collection Receive : [Request]     # source: dequeue incoming items
-collection Send : [Response]       # sink: enqueue outgoing items
-```
-
-Collections are backed by providers. The pipe operator (`=>`) dequeues items from the source and enqueues results into the sink:
+Providers expose globals that return typed lists (e.g., `Types`, `Receive`). The pipe operator (`=>`) dequeues items from a source, transforms them, and enqueues results into a sink:
 
 ```ruby
 # foreach = repeat { dequeue from source → transform → enqueue to sink }
@@ -326,7 +318,7 @@ command serve = foreach Receive => handle => Send
 command serve = async foreach Receive => handle => Send
 ```
 
-Any collection can serve as both a source and a sink. The runtime handles thread-safe enqueue/dequeue operations. Use `async foreach` when items can be processed independently (e.g., HTTP requests).
+Any global returning a list can serve as a source. Sinks are provider-registered targets (e.g., `Send`, `console`, `file`). The runtime handles thread-safe enqueue/dequeue. Use `async foreach` when items can be processed independently (e.g., HTTP requests).
 
 ### Predicates
 
@@ -937,7 +929,7 @@ command serve = async foreach Receive => handle => Send
 foreach Types => SAVE('types.txt', '{item.Name}')
 ```
 
-The pipe operator means **dequeue → transform → enqueue**: items are dequeued from the source, transformed, and enqueued to the sink. `async foreach` processes items concurrently with bounded parallelism. See [Collection Declarations](#collection-declarations).
+The pipe operator means **dequeue → transform → enqueue**: items are dequeued from the source, transformed, and enqueued to the sink. `async foreach` processes items concurrently with bounded parallelism. See [Pipe Operators](#pipe-operators).
 
 #### Language Filtering
 

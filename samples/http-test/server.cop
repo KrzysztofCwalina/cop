@@ -6,4 +6,4 @@ function handle(Request) => Response {
   ContentType = 'text/plain'
 }
 
-command serve = async foreach http.Receive => handle => http.Send
+command serve = async foreach Receive => handle => Send

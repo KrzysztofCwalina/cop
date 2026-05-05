@@ -24,4 +24,4 @@ function handle(Request) => Response {
 }
 
 # Start the server pipeline: receive requests, handle them, send responses
-command serve = foreach http.Receive => handle => http.Send
+command serve = async foreach Receive => handle => Send

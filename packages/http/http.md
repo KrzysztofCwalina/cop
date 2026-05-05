@@ -25,13 +25,13 @@ function handle(Request) => Response {
   ContentType = 'text/plain'
 }
 
-command serve = async foreach http.Receive => handle => http.Send
+command serve = async foreach Receive => handle => Send
 ```
 
-## Collections
+## Globals
 
-- `http.Receive` — incoming HTTP requests (`[Request]`). Dequeue from this in a pipe.
-- `http.Send` — outgoing HTTP responses (`[Response]`). Enqueue to this in a pipe.
+- `Receive` — incoming HTTP requests (`[Request]`)
+- `Send` — outgoing HTTP responses (`[Response]`)
 
 ## Helper Functions
 
