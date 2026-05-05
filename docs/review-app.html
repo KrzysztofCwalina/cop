@@ -1432,7 +1432,7 @@ function renderType(pkgId, typeName) {
   for (const [pId, p] of Object.entries(packages)) {
     if (!p.predicates) continue;
     for (const pred of p.predicates) {
-      if (pred.appliesTo === typeName) {
+      if (pred.appliesTo === typeName || pred.appliesTo === "any") {
         applicablePredicates.push({ ...pred, fromPkg: pId });
       }
     }
