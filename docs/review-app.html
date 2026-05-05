@@ -9,7 +9,7 @@
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; height: 100vh; color: #24292f; }
 
 /* Sidebar */
-.sidebar { width: 300px; border-right: 1px solid #d0d7de; overflow-y: auto; background: #f6f8fa; padding: 12px 0; flex-shrink: 0; }
+.sidebar { width: 320px; border-right: 1px solid #d0d7de; overflow-y: auto; background: #f6f8fa; padding: 12px 0; flex-shrink: 0; }
 .sidebar h2 { padding: 8px 16px; font-size: 14px; color: #57606a; text-transform: uppercase; letter-spacing: 0.5px; }
 .tree-node { cursor: pointer; user-select: none; }
 .tree-label { display: flex; align-items: center; padding: 4px 16px; font-size: 13px; border-radius: 6px; margin: 1px 8px; }
@@ -19,9 +19,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .tree-icon { margin-right: 6px; font-size: 12px; }
 .tree-children { padding-left: 16px; }
 .tree-children.collapsed { display: none; }
+.category-label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #57606a; letter-spacing: 0.5px; padding: 12px 16px 4px; }
 
 /* Main content */
-.main { flex: 1; overflow-y: auto; padding: 32px 48px; max-width: 900px; }
+.main { flex: 1; overflow-y: auto; padding: 32px 48px; max-width: 960px; }
 .main h1 { font-size: 24px; margin-bottom: 8px; }
 .main h2 { font-size: 18px; margin: 24px 0 12px; padding-bottom: 6px; border-bottom: 1px solid #d0d7de; }
 .main h3 { font-size: 15px; margin: 16px 0 8px; }
@@ -29,9 +30,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 /* Property row */
 .prop-row { display: flex; align-items: center; padding: 5px 8px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
 .prop-row:hover { background: #f6f8fa; }
-.prop-name { font-family: 'SFMono-Regular', Consolas, monospace; font-weight: 600; width: 180px; flex-shrink: 0; }
-.prop-type { color: #6639ba; width: 160px; flex-shrink: 0; font-family: monospace; font-size: 12px; }
+.prop-name { font-family: 'SFMono-Regular', Consolas, monospace; font-weight: 600; width: 200px; flex-shrink: 0; }
+.prop-type { color: #6639ba; width: 180px; flex-shrink: 0; font-family: monospace; font-size: 12px; }
 .prop-desc { flex: 1; color: #57606a; }
+
+/* Item row (for predicates, functions, checks) */
+.item-row { display: flex; align-items: center; padding: 6px 8px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+.item-row:hover { background: #f6f8fa; }
+.item-name { font-family: 'SFMono-Regular', Consolas, monospace; font-weight: 600; flex: 1; }
+.item-detail { color: #57606a; font-size: 12px; margin-left: 12px; }
 
 /* Comment button and input */
 .comment-btn { cursor: pointer; font-size: 14px; margin-left: 8px; opacity: 0.3; transition: opacity 0.2s; flex-shrink: 0; }
@@ -51,6 +58,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 
 /* Collection header */
 .collection-header { display: flex; align-items: center; padding: 5px 8px; background: #f6f8fa; border-bottom: 1px solid #eaeef2; font-size: 13px; font-weight: 600; }
+
+/* Section tag */
+.section-tag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-right: 6px; }
+.tag-type { background: #ddf4ff; color: #0969da; }
+.tag-predicate { background: #fff8c5; color: #9a6700; }
+.tag-function { background: #dcffe4; color: #1a7f37; }
+.tag-check { background: #ffebe9; color: #cf222e; }
+.tag-command { background: #fbefff; color: #8250df; }
+.tag-let { background: #eaeef2; color: #57606a; }
 </style>
 </head>
 <body>
@@ -62,7 +78,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 
 <div class="main" id="content">
   <h1>Cop Package Reference Review</h1>
-  <p style="color:#57606a; margin-top:8px;">Select a type from the tree to view its properties. Click 💬 to add comments. Export when done.</p>
+  <p style="color:#57606a; margin-top:8px;">Select an item from the tree to view details. Click 💬 to add comments. Export when done.</p>
 </div>
 
 <div class="toolbar">
@@ -71,11 +87,28 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 </div>
 
 <script>
-// === SCHEMA DATA (from actual provider implementations) ===
+// === PACKAGE DATA ===
+const categories = [
+  { name: "Core", packages: ["code", "code-analysis", "filesystem", "markdown"] },
+  { name: "TypeSpec", packages: ["typespec", "typespec-http"] },
+  { name: "Utilities", packages: ["arch-layering", "http", "json"] },
+  { name: ".NET", packages: ["csharp", "csharp-library", "csharp-library-client", "csharp-library-client-azure", "csharp-style"] },
+  { name: "Python", packages: ["python", "python-library", "python-library-client", "python-library-client-azure"] },
+  { name: "JavaScript", packages: ["javascript", "javascript-library", "javascript-library-client", "javascript-library-client-azure"] }
+];
+
 const packages = {
   code: {
     label: "code",
     collections: ["Types", "Statements", "Lines", "Files", "Members", "Api", "Regions", "Projects"],
+    lets: [
+      { name: "Code", desc: "Alias for the code provider data" },
+      { name: "Calls", desc: "All call statements" },
+      { name: "Declarations", desc: "All declaration statements" },
+      { name: "ErrorHandlers", desc: "All error-handling statements" },
+      { name: "Attributes", desc: "All attribute statements" }
+    ],
+    flags: [{ name: "Modifier", values: "Public|Private|Protected|Internal|Static|Sealed|Abstract|Virtual|Async|Override|Readonly|Const" }],
     types: {
       Type: {
         props: [
@@ -102,12 +135,21 @@ const packages = {
         props: [
           { name: "Name", type: "string", desc: "Method name" },
           { name: "Modifiers", type: "int", desc: "Modifier bitfield" },
-          { name: "ReturnType", type: "TypeReference?", desc: "Return type (nic for constructors/void)" },
+          { name: "ReturnType", type: "TypeReference?", desc: "Return type (nil for constructors/void)" },
           { name: "Parameters", type: "[Parameter]", desc: "Parameter declarations" },
           { name: "Statements", type: "[Statement]", desc: "Statements within method body" },
           { name: "Decorators", type: "[string]", desc: "Attributes/decorators" },
           { name: "Line", type: "int", desc: "Source line number" },
           { name: "Documented", type: "bool", desc: "Has documentation comment" }
+        ]
+      },
+      Constructor: {
+        props: [
+          { name: "Name", type: "string", desc: "Constructor name (same as type name)" },
+          { name: "Modifiers", type: "int", desc: "Modifier bitfield" },
+          { name: "Parameters", type: "[Parameter]", desc: "Parameter declarations" },
+          { name: "Statements", type: "[Statement]", desc: "Statements within body" },
+          { name: "Line", type: "int", desc: "Source line number" }
         ]
       },
       Parameter: {
@@ -178,6 +220,47 @@ const packages = {
           { name: "Expression", type: "string?", desc: "Statement expression text" }
         ]
       },
+      Call: {
+        props: [
+          { name: "TypeName", type: "string?", desc: "Receiver type name" },
+          { name: "MemberName", type: "string?", desc: "Called method name" },
+          { name: "Arguments", type: "[string]", desc: "Call arguments" },
+          { name: "Line", type: "int", desc: "Source line number" },
+          { name: "File", type: "File?", desc: "Containing file" },
+          { name: "Source", type: "string", desc: "Source text" },
+          { name: "Method", type: "Method?", desc: "Enclosing method" }
+        ]
+      },
+      Declaration: {
+        props: [
+          { name: "TypeName", type: "string?", desc: "Declared type name" },
+          { name: "MemberName", type: "string?", desc: "Variable name" },
+          { name: "Line", type: "int", desc: "Source line number" },
+          { name: "File", type: "File?", desc: "Containing file" },
+          { name: "Source", type: "string", desc: "Source text" }
+        ]
+      },
+      ErrorHandler: {
+        props: [
+          { name: "Kind", type: "string", desc: "catch, try, finally" },
+          { name: "TypeName", type: "string?", desc: "Exception type caught" },
+          { name: "Rethrows", type: "bool", desc: "Rethrows caught exception" },
+          { name: "Generic", type: "bool", desc: "Catches generic Exception type" },
+          { name: "Children", type: "[Statement]", desc: "Child statements" },
+          { name: "Line", type: "int", desc: "Source line number" },
+          { name: "File", type: "File?", desc: "Containing file" },
+          { name: "Source", type: "string", desc: "Source text" }
+        ]
+      },
+      Attribute: {
+        props: [
+          { name: "TypeName", type: "string?", desc: "Attribute type name" },
+          { name: "Arguments", type: "[string]", desc: "Attribute arguments" },
+          { name: "Line", type: "int", desc: "Source line number" },
+          { name: "File", type: "File?", desc: "Containing file" },
+          { name: "Source", type: "string", desc: "Source text" }
+        ]
+      },
       Line: {
         props: [
           { name: "Text", type: "string", desc: "Raw text content" },
@@ -232,12 +315,114 @@ const packages = {
           { name: "Language", type: "string?", desc: "Language" },
           { name: "References", type: "[string]", desc: "Referenced project names" }
         ]
+      },
+      Codebase: {
+        props: [
+          { name: "Projects", type: "[Project]", desc: "All projects in the codebase" },
+          { name: "Files", type: "[File]", desc: "All source files" }
+        ]
       }
-    }
+    },
+    predicates: [
+      { name: "isPublic", appliesTo: "Type", desc: "Type has Public modifier" },
+      { name: "isSealed", appliesTo: "Type", desc: "Type has Sealed modifier" },
+      { name: "isAbstract", appliesTo: "Type", desc: "Type has Abstract modifier" },
+      { name: "isStatic", appliesTo: "Type", desc: "Type has Static modifier" },
+      { name: "isDocumented", appliesTo: "Type", desc: "Type has documentation comment" },
+      { name: "isPublic", appliesTo: "Method", desc: "Method has Public modifier" },
+      { name: "isProtected", appliesTo: "Method", desc: "Method has Protected modifier" },
+      { name: "isPrivate", appliesTo: "Method", desc: "Method has Private modifier" },
+      { name: "isInternal", appliesTo: "Method", desc: "Method has Internal modifier" },
+      { name: "isAsync", appliesTo: "Method", desc: "Method has Async modifier" },
+      { name: "isStatic", appliesTo: "Method", desc: "Method has Static modifier" },
+      { name: "isAbstract", appliesTo: "Method", desc: "Method has Abstract modifier" },
+      { name: "isVirtual", appliesTo: "Method", desc: "Method has Virtual modifier" },
+      { name: "isOverride", appliesTo: "Method", desc: "Method has Override modifier" },
+      { name: "isDocumented", appliesTo: "Method", desc: "Method has documentation comment" },
+      { name: "isPublic", appliesTo: "Field", desc: "Field has Public modifier" },
+      { name: "isPrivate", appliesTo: "Field", desc: "Field has Private modifier" },
+      { name: "isProtected", appliesTo: "Field", desc: "Field has Protected modifier" },
+      { name: "isInternal", appliesTo: "Field", desc: "Field has Internal modifier" },
+      { name: "isStatic", appliesTo: "Field", desc: "Field has Static modifier" },
+      { name: "isReadonly", appliesTo: "Field", desc: "Field has Readonly modifier" },
+      { name: "isConst", appliesTo: "Field", desc: "Field has Const modifier" },
+      { name: "isPublic", appliesTo: "Property", desc: "Property has Public modifier" },
+      { name: "isProtected", appliesTo: "Property", desc: "Property has Protected modifier" },
+      { name: "isPrivate", appliesTo: "Property", desc: "Property has Private modifier" },
+      { name: "isInternal", appliesTo: "Property", desc: "Property has Internal modifier" },
+      { name: "isStatic", appliesTo: "Property", desc: "Property has Static modifier" },
+      { name: "isAbstract", appliesTo: "Property", desc: "Property has Abstract modifier" },
+      { name: "isVirtual", appliesTo: "Property", desc: "Property has Virtual modifier" },
+      { name: "isOverride", appliesTo: "Property", desc: "Property has Override modifier" },
+      { name: "hasGetter", appliesTo: "Property", desc: "Property has get accessor" },
+      { name: "hasSetter", appliesTo: "Property", desc: "Property has set accessor" },
+      { name: "isDocumented", appliesTo: "Property", desc: "Property has documentation comment" },
+      { name: "isPublic", appliesTo: "Event", desc: "Event has Public modifier" },
+      { name: "isProtected", appliesTo: "Event", desc: "Event has Protected modifier" },
+      { name: "isPrivate", appliesTo: "Event", desc: "Event has Private modifier" },
+      { name: "isInternal", appliesTo: "Event", desc: "Event has Internal modifier" },
+      { name: "isStatic", appliesTo: "Event", desc: "Event has Static modifier" },
+      { name: "call", appliesTo: "Statement", desc: "Narrows Statement to Call type", returns: "Call" },
+      { name: "declaration", appliesTo: "Statement", desc: "Narrows Statement to Declaration type", returns: "Declaration" },
+      { name: "errorHandler", appliesTo: "Statement", desc: "Narrows Statement to ErrorHandler type", returns: "ErrorHandler" },
+      { name: "attribute", appliesTo: "Statement", desc: "Narrows Statement to Attribute type", returns: "Attribute" },
+      { name: "generic", appliesTo: "ErrorHandler", desc: "ErrorHandler catches generic Exception type" }
+    ],
+    functions: [],
+    checks: [],
+    commands: []
   },
+
+  "code-analysis": {
+    label: "code-analysis",
+    collections: [],
+    types: {
+      Violation: {
+        props: [
+          { name: "Severity", type: "string", desc: "error, warning, or info" },
+          { name: "Message", type: "string", desc: "Violation message" },
+          { name: "File", type: "string", desc: "Source file path" },
+          { name: "Line", type: "int", desc: "Source line number" },
+          { name: "Source", type: "string", desc: "Source text" }
+        ]
+      }
+    },
+    predicates: [
+      { name: "callsSyncWhenAsyncExists", appliesTo: "Statement", desc: "Statement calls sync method when async alternative exists" }
+    ],
+    functions: [
+      { name: "toError", params: "Statement, msg", returns: "Violation", desc: "Create error violation from Statement" },
+      { name: "toWarning", params: "Statement, msg", returns: "Violation", desc: "Create warning violation from Statement" },
+      { name: "toInfo", params: "Statement, msg", returns: "Violation", desc: "Create info violation from Statement" },
+      { name: "toError", params: "Type, msg", returns: "Violation", desc: "Create error violation from Type" },
+      { name: "toWarning", params: "Type, msg", returns: "Violation", desc: "Create warning violation from Type" },
+      { name: "toInfo", params: "Type, msg", returns: "Violation", desc: "Create info violation from Type" },
+      { name: "toError", params: "Line, msg", returns: "Violation", desc: "Create error violation from Line" },
+      { name: "toWarning", params: "Line, msg", returns: "Violation", desc: "Create warning violation from Line" },
+      { name: "toInfo", params: "Line, msg", returns: "Violation", desc: "Create info violation from Line" },
+      { name: "toError", params: "Folder, msg", returns: "Violation", desc: "Create error violation from Folder" },
+      { name: "toWarning", params: "Folder, msg", returns: "Violation", desc: "Create warning violation from Folder" },
+      { name: "toInfo", params: "Folder, msg", returns: "Violation", desc: "Create info violation from Folder" },
+      { name: "toError", params: "Api, msg", returns: "Violation", desc: "Create error violation from Api" },
+      { name: "toWarning", params: "Api, msg", returns: "Violation", desc: "Create warning violation from Api" },
+      { name: "toInfo", params: "Api, msg", returns: "Violation", desc: "Create info violation from Api" },
+      { name: "toError", params: "Region, msg", returns: "Violation", desc: "Create error violation from Region" },
+      { name: "toWarning", params: "Region, msg", returns: "Violation", desc: "Create warning violation from Region" },
+      { name: "toInfo", params: "Region, msg", returns: "Violation", desc: "Create info violation from Region" }
+    ],
+    checks: [],
+    commands: [
+      { name: "CHECK", params: "violations", desc: "Report violations collection to the analysis engine" }
+    ]
+  },
+
   filesystem: {
     label: "filesystem",
     collections: ["Folders", "Files"],
+    lets: [
+      { name: "Disk", desc: "Alias for the filesystem provider data" },
+      { name: "empty-folders", desc: "All folders with no files inside" }
+    ],
     types: {
       Folder: {
         props: [
@@ -262,9 +447,25 @@ const packages = {
           { name: "MinutesSinceModified", type: "int", desc: "Minutes since last modified" },
           { name: "Source", type: "string", desc: "File path" }
         ]
+      },
+      Filesystem: {
+        props: [
+          { name: "Folders", type: "[Folder]", desc: "All scanned folders" },
+          { name: "Files", type: "[DiskFile]", desc: "All scanned files" }
+        ]
       }
-    }
+    },
+    predicates: [
+      { name: "recentlyModified", appliesTo: "Folder", desc: "Folder was modified within recent threshold" },
+      { name: "recentlyModified", appliesTo: "DiskFile", desc: "File was modified within recent threshold" },
+      { name: "stale", appliesTo: "Folder", desc: "Folder has not been modified for a long time" },
+      { name: "stale", appliesTo: "DiskFile", desc: "File has not been modified for a long time" }
+    ],
+    functions: [],
+    checks: [],
+    commands: []
   },
+
   markdown: {
     label: "markdown",
     collections: ["Headings", "Links", "Sections", "FenceBlocks"],
@@ -310,12 +511,32 @@ const packages = {
           { name: "Source", type: "string", desc: "Full fence block source" }
         ]
       }
-    }
+    },
+    predicates: [],
+    functions: [],
+    checks: [],
+    commands: []
   },
+
   typespec: {
     label: "typespec",
     collections: ["Models", "Operations", "Interfaces", "Enums", "Unions", "Scalars", "Namespaces"],
     types: {
+      TspDecorator: {
+        props: [
+          { name: "Name", type: "string", desc: "Decorator name" },
+          { name: "Arguments", type: "[string]", desc: "Argument values" }
+        ]
+      },
+      TspProperty: {
+        props: [
+          { name: "Name", type: "string", desc: "Property name" },
+          { name: "Type", type: "string", desc: "Type expression" },
+          { name: "Optional", type: "bool", desc: "True if optional" },
+          { name: "Default", type: "string?", desc: "Default value" },
+          { name: "Decorators", type: "[TspDecorator]", desc: "Applied decorators" }
+        ]
+      },
       TspModel: {
         props: [
           { name: "Name", type: "string", desc: "Model name" },
@@ -343,12 +564,25 @@ const packages = {
           { name: "Decorators", type: "[TspDecorator]", desc: "Applied decorators" }
         ]
       },
+      TspEnumMember: {
+        props: [
+          { name: "Name", type: "string", desc: "Member name" },
+          { name: "Value", type: "string?", desc: "Explicit value" },
+          { name: "Decorators", type: "[TspDecorator]", desc: "Applied decorators" }
+        ]
+      },
       TspEnum: {
         props: [
           { name: "Name", type: "string", desc: "Enum name" },
           { name: "Namespace", type: "string?", desc: "Containing namespace" },
           { name: "Members", type: "[TspEnumMember]", desc: "Enum members" },
           { name: "Decorators", type: "[TspDecorator]", desc: "Applied decorators" }
+        ]
+      },
+      TspUnionVariant: {
+        props: [
+          { name: "Name", type: "string", desc: "Variant name" },
+          { name: "Type", type: "string", desc: "Variant type expression" }
         ]
       },
       TspUnion: {
@@ -373,61 +607,18 @@ const packages = {
           { name: "FullName", type: "string", desc: "Fully qualified name" },
           { name: "Decorators", type: "[TspDecorator]", desc: "Applied decorators" }
         ]
-      },
-      TspDecorator: {
-        props: [
-          { name: "Name", type: "string", desc: "Decorator name" },
-          { name: "Arguments", type: "[string]", desc: "Argument values" }
-        ]
-      },
-      TspProperty: {
-        props: [
-          { name: "Name", type: "string", desc: "Property name" },
-          { name: "Type", type: "string", desc: "Type expression" },
-          { name: "Optional", type: "bool", desc: "True if optional" },
-          { name: "Default", type: "string?", desc: "Default value" },
-          { name: "Decorators", type: "[TspDecorator]", desc: "Applied decorators" }
-        ]
-      },
-      TspEnumMember: {
-        props: [
-          { name: "Name", type: "string", desc: "Member name" },
-          { name: "Value", type: "string?", desc: "Explicit value" },
-          { name: "Decorators", type: "[TspDecorator]", desc: "Applied decorators" }
-        ]
-      },
-      TspUnionVariant: {
-        props: [
-          { name: "Name", type: "string", desc: "Variant name" },
-          { name: "Type", type: "string", desc: "Variant type expression" }
-        ]
       }
-    }
+    },
+    predicates: [],
+    functions: [],
+    checks: [],
+    commands: []
   },
+
   "typespec-http": {
     label: "typespec-http",
     collections: ["Operations", "Services"],
     types: {
-      HttpOperation: {
-        props: [
-          { name: "Name", type: "string", desc: "Operation name" },
-          { name: "Verb", type: "string", desc: "HTTP verb (get, put, post, etc.)" },
-          { name: "Path", type: "string", desc: "Resolved route path" },
-          { name: "UriTemplate", type: "string", desc: "URI template with placeholders" },
-          { name: "Parameters", type: "[HttpParameter]", desc: "Request parameters" },
-          { name: "Responses", type: "[HttpResponse]", desc: "Possible responses" },
-          { name: "Interface", type: "string?", desc: "Parent interface" },
-          { name: "Decorators", type: "[TspDecorator]", desc: "Applied decorators" }
-        ]
-      },
-      HttpService: {
-        props: [
-          { name: "Name", type: "string", desc: "Service name" },
-          { name: "Namespace", type: "string", desc: "Service namespace" },
-          { name: "Operations", type: "[HttpOperation]", desc: "Service operations" },
-          { name: "Auth", type: "string?", desc: "Authentication scheme" }
-        ]
-      },
       HttpParameter: {
         props: [
           { name: "Name", type: "string", desc: "Parameter name" },
@@ -450,8 +641,427 @@ const packages = {
           { name: "Body", type: "string?", desc: "Body type expression" },
           { name: "Headers", type: "[HttpHeader]", desc: "Response headers" }
         ]
+      },
+      HttpOperation: {
+        props: [
+          { name: "Name", type: "string", desc: "Operation name" },
+          { name: "Verb", type: "string", desc: "HTTP verb (get, put, post, etc.)" },
+          { name: "Path", type: "string", desc: "Resolved route path" },
+          { name: "UriTemplate", type: "string", desc: "URI template with placeholders" },
+          { name: "Parameters", type: "[HttpParameter]", desc: "Request parameters" },
+          { name: "Responses", type: "[HttpResponse]", desc: "Possible responses" },
+          { name: "Interface", type: "string?", desc: "Parent interface" },
+          { name: "Decorators", type: "[TspDecorator]", desc: "Applied decorators" }
+        ]
+      },
+      HttpService: {
+        props: [
+          { name: "Name", type: "string", desc: "Service name" },
+          { name: "Namespace", type: "string", desc: "Service namespace" },
+          { name: "Operations", type: "[HttpOperation]", desc: "Service operations" },
+          { name: "Auth", type: "string?", desc: "Authentication scheme" }
+        ]
       }
-    }
+    },
+    predicates: [
+      { name: "isGet", appliesTo: "HttpOperation", desc: "Operation uses GET verb" },
+      { name: "isPut", appliesTo: "HttpOperation", desc: "Operation uses PUT verb" },
+      { name: "isPost", appliesTo: "HttpOperation", desc: "Operation uses POST verb" },
+      { name: "isPatch", appliesTo: "HttpOperation", desc: "Operation uses PATCH verb" },
+      { name: "isDelete", appliesTo: "HttpOperation", desc: "Operation uses DELETE verb" }
+    ],
+    functions: [],
+    checks: [],
+    commands: []
+  },
+
+  "arch-layering": {
+    label: "arch-layering",
+    collections: [],
+    types: {
+      LayerViolation: {
+        props: [
+          { name: "Name", type: "string", desc: "Violating project name" },
+          { name: "Path", type: "string", desc: "Project path" },
+          { name: "SourceLayer", type: "string", desc: "Layer of the referencing project" },
+          { name: "Target", type: "string", desc: "Referenced project name" },
+          { name: "TargetLayer", type: "string", desc: "Layer of the referenced project" },
+          { name: "Source", type: "string", desc: "Source text" }
+        ]
+      },
+      UncategorizedProject: {
+        props: [
+          { name: "Name", type: "string", desc: "Project name not in any layer" },
+          { name: "Path", type: "string", desc: "Project path" },
+          { name: "Source", type: "string", desc: "Source text" }
+        ]
+      }
+    },
+    predicates: [
+      { name: "notInLayer", appliesTo: "Project", desc: "Project is not assigned to any architecture layer" }
+    ],
+    functions: [
+      { name: "toError", params: "Project, msg", returns: "Violation", desc: "Create error violation from Project" },
+      { name: "toWarning", params: "Project, msg", returns: "Violation", desc: "Create warning violation from Project" },
+      { name: "toInfo", params: "Project, msg", returns: "Violation", desc: "Create info violation from Project" }
+    ],
+    checks: [],
+    commands: []
+  },
+
+  http: {
+    label: "http",
+    collections: [],
+    types: {
+      Response: {
+        props: [
+          { name: "StatusCode", type: "int", desc: "HTTP status code" },
+          { name: "Body", type: "string", desc: "Response body text" },
+          { name: "ContentType", type: "string", desc: "Content-Type header value" }
+        ]
+      },
+      Request: {
+        props: [
+          { name: "Method", type: "string", desc: "HTTP method (GET, POST, etc.)" },
+          { name: "Path", type: "string", desc: "Request path" },
+          { name: "Body", type: "string", desc: "Request body text" },
+          { name: "ContentType", type: "string", desc: "Content-Type header value" },
+          { name: "Query", type: "string", desc: "Query string" }
+        ]
+      }
+    },
+    predicates: [],
+    functions: [
+      { name: "ok", params: "Request", returns: "Response", desc: "Send request and expect 200 OK" },
+      { name: "notFound", params: "Request", returns: "Response", desc: "Send request and expect 404 Not Found" },
+      { name: "created", params: "Request", returns: "Response", desc: "Send request and expect 201 Created" },
+      { name: "badRequest", params: "Request", returns: "Response", desc: "Send request and expect 400 Bad Request" },
+      { name: "serverError", params: "Request", returns: "Response", desc: "Send request and expect 500 Server Error" }
+    ],
+    checks: [],
+    commands: []
+  },
+
+  json: {
+    label: "json",
+    collections: [],
+    types: {},
+    predicates: [],
+    functions: [
+      { name: "Parse", params: "path, type", returns: "object", desc: "Parse a JSON file at path into the specified type" }
+    ],
+    checks: [],
+    commands: []
+  },
+
+  csharp: {
+    label: "csharp",
+    collections: [],
+    types: {},
+    predicates: [
+      { name: "syncBlockingCall", appliesTo: "Statement", desc: "Statement is a synchronous blocking call (e.g. .Result, .Wait())" },
+      { name: "inAsyncMethod", appliesTo: "Statement", desc: "Statement is inside an async method" },
+      { name: "inSyncMethod", appliesTo: "Statement", desc: "Statement is inside a synchronous method" }
+    ],
+    functions: [],
+    checks: [
+      { name: "var-declarations", desc: "Flag var declarations that should use explicit types" },
+      { name: "dynamic-declarations", desc: "Flag usage of dynamic type" },
+      { name: "thread-sleep-calls", desc: "Flag Thread.Sleep calls" },
+      { name: "console-calls", desc: "Flag Console.WriteLine/Write calls" },
+      { name: "base-exception-catches", desc: "Flag catching base Exception type" },
+      { name: "swallowed-exceptions", desc: "Flag catch blocks that swallow exceptions" },
+      { name: "configure-await-true-calls", desc: "Flag ConfigureAwait(true) calls" },
+      { name: "sync-over-async-calls", desc: "Flag synchronous calls over async (.Result, .Wait())" },
+      { name: "bare-task-completion-sources", desc: "Flag TaskCompletionSource without generic type" },
+      { name: "sync-wait-in-async", desc: "Flag synchronous wait inside async methods" },
+      { name: "uri-tostring", desc: "Flag Uri.ToString() calls (use AbsoluteUri instead)" },
+      { name: "type-name-is-keyword", desc: "Flag types named after language keywords" },
+      { name: "uninstantiated-internal", desc: "Flag internal types never instantiated" },
+      { name: "undisposed-new", desc: "Flag new IDisposable objects not properly disposed" },
+      { name: "readme-install-package", desc: "Verify README contains install instructions" },
+      { name: "cpm-compliance", desc: "Verify Central Package Management compliance" }
+    ],
+    commands: []
+  },
+
+  "csharp-library": {
+    label: "csharp-library",
+    collections: [],
+    types: {},
+    predicates: [
+      { name: "publicType", appliesTo: "Type", desc: "Type is public" },
+      { name: "dualModeMethod", appliesTo: "Method", desc: "Method has both sync and async code paths" },
+      { name: "inDualModeMethod", appliesTo: "Statement", desc: "Statement is inside a dual-mode method" },
+      { name: "guardedByAsyncCheck", appliesTo: "Statement", desc: "Statement is guarded by an async/sync branch check" },
+      { name: "wrongAsyncFalseInAsyncGuard", appliesTo: "Statement", desc: "Statement passes async=false inside an async-guarded block" },
+      { name: "wrongAsyncTrueInSyncGuard", appliesTo: "Statement", desc: "Statement passes async=true inside a sync-guarded block" },
+      { name: "asyncParamPassedAsArg", appliesTo: "Statement", desc: "Statement passes the async bool parameter as an argument" },
+      { name: "bannedInternalType", appliesTo: "Parameter", desc: "Parameter uses a banned internal type in public API" },
+      { name: "bannedParamType", appliesTo: "Method", desc: "Method has a parameter with a banned type" },
+      { name: "bannedParams", appliesTo: "Type", desc: "Type has methods with banned parameter types" }
+    ],
+    functions: [],
+    checks: [
+      { name: "public-async-bool-params", desc: "Public async methods must accept bool async parameter" },
+      { name: "async-missing-bool-param", desc: "Async method missing the bool async parameter" },
+      { name: "awaits-using-default", desc: "Await using default pattern compliance" },
+      { name: "unconditional-await-in-dual-mode", desc: "Unconditional await in dual-mode method" },
+      { name: "unconditional-sync-in-dual-mode", desc: "Unconditional sync call in dual-mode method" },
+      { name: "wrong-async-arg-value", desc: "Wrong async argument value in async guard" },
+      { name: "wrong-sync-arg-value", desc: "Wrong async argument value in sync guard" },
+      { name: "async-param-misuse", desc: "Misuse of the async bool parameter" }
+    ],
+    commands: []
+  },
+
+  "csharp-library-client": {
+    label: "csharp-library-client",
+    collections: [],
+    types: {},
+    predicates: [
+      { name: "client", appliesTo: "Type", desc: "Type is a client class" },
+      { name: "clientOptionsType", appliesTo: "Type", desc: "Type is a client options class" },
+      { name: "Clients", appliesTo: "Types", desc: "All client types in the codebase" },
+      { name: "model", appliesTo: "Type", desc: "Type is a model class" },
+      { name: "Models", appliesTo: "Types", desc: "All model types in the codebase" },
+      { name: "ClientOptions", appliesTo: "Types", desc: "All client options types" },
+      { name: "protectedParameterless", appliesTo: "Constructor", desc: "Constructor is protected and parameterless" },
+      { name: "collectionSuffix", appliesTo: "Type", desc: "Type name has Collection suffix" },
+      { name: "requestSuffix", appliesTo: "Type", desc: "Type name has Request suffix" },
+      { name: "parameterSuffix", appliesTo: "Type", desc: "Type name has Parameter suffix" },
+      { name: "optionSuffix", appliesTo: "Type", desc: "Type name has Option suffix" },
+      { name: "missingMockingConstructor", appliesTo: "Type", desc: "Client type is missing a protected parameterless constructor for mocking" }
+    ],
+    functions: [],
+    checks: [
+      { name: "client-needs-options-ctor", desc: "Client must have constructor accepting options" },
+      { name: "client-sealed-or-abstract", desc: "Client type must be sealed or abstract" },
+      { name: "async-needs-cancellation-token", desc: "Async methods must accept CancellationToken" },
+      { name: "client-methods-virtual", desc: "Client methods must be virtual" },
+      { name: "async-needs-sync-counterpart", desc: "Async methods must have sync counterpart" }
+    ],
+    commands: []
+  },
+
+  "csharp-library-client-azure": {
+    label: "csharp-library-client-azure",
+    collections: [],
+    types: {},
+    predicates: [],
+    functions: [],
+    checks: [
+      { name: "client-needs-token-credential", desc: "Client must accept TokenCredential" },
+      { name: "client-needs-mocking-ctor", desc: "Client must have protected parameterless constructor" },
+      { name: "options-inherits-base", desc: "Options must inherit from ClientOptions" },
+      { name: "client-needs-options-ctor", desc: "Client must have constructor accepting options" },
+      { name: "client-needs-simple-ctor", desc: "Client must have a simple convenience constructor" },
+      { name: "no-request-content-in-convenience", desc: "Convenience methods must not expose RequestContent" },
+      { name: "options-single-ctor-param", desc: "Options constructor must have single parameter" },
+      { name: "no-collection-suffix", desc: "Types must not have Collection suffix" },
+      { name: "no-request-suffix", desc: "Types must not have Request suffix" },
+      { name: "no-parameter-suffix", desc: "Types must not have Parameter suffix" },
+      { name: "no-option-suffix", desc: "Types must not have Option suffix" },
+      { name: "no-resource-suffix", desc: "Types must not have Resource suffix" },
+      { name: "options-first-param-service-version", desc: "Options first param must be ServiceVersion" },
+      { name: "options-needs-service-version-enum", desc: "Options must define ServiceVersion enum" },
+      { name: "service-version-naming", desc: "ServiceVersion enum values follow naming convention" },
+      { name: "service-version-default-value", desc: "ServiceVersion must have correct default value" },
+      { name: "service-method-needs-cancellation", desc: "Service methods must accept CancellationToken" },
+      { name: "no-banned-internal-types", desc: "Public API must not expose banned internal types" },
+      { name: "no-raw-http-return-types", desc: "Public methods must not return raw HTTP types" },
+      { name: "no-pipeline-types-in-api", desc: "Pipeline types must not appear in public API" },
+      { name: "model-reader-writer-context", desc: "Models implement IJsonModel with correct context" },
+      { name: "protocol-method-return-type", desc: "Protocol methods must return correct types" },
+      { name: "no-ambiguous-overloads", desc: "No ambiguous method overloads" },
+      { name: "internals-visible-to-non-test", desc: "InternalsVisibleTo only for test assemblies" },
+      { name: "internals-visible-to", desc: "InternalsVisibleTo attribute usage review" },
+      { name: "settings-ctor-isolation", desc: "Settings constructor isolation check" },
+      { name: "duplicate-bcl-type-name", desc: "No types duplicating BCL type names" },
+      { name: "model-needs-factory", desc: "Model types need factory methods" },
+      { name: "use-ensure-completed", desc: "Use EnsureCompleted() pattern" },
+      { name: "no-public-async-in-sync", desc: "No public async calls in sync code paths" },
+      { name: "no-single-word-type-name", desc: "Types must not have single-word generic names" },
+      { name: "cancellation-token-propagation", desc: "CancellationToken must be propagated through call chain" }
+    ],
+    commands: []
+  },
+
+  "csharp-style": {
+    label: "csharp-style",
+    collections: [],
+    types: {},
+    predicates: [],
+    functions: [],
+    checks: [
+      { name: "interface-prefix", desc: "Interfaces must have I prefix" },
+      { name: "type-name-casing", desc: "Type names must be PascalCase" },
+      { name: "method-name-casing", desc: "Method names must be PascalCase" },
+      { name: "single-type-per-file", desc: "One type per file" },
+      { name: "comment-spacing", desc: "Comments must have space after //" },
+      { name: "no-tabs", desc: "No tab characters in source" },
+      { name: "no-trailing-whitespace", desc: "No trailing whitespace" },
+      { name: "no-empty-statements", desc: "No empty statements (standalone semicolons)" },
+      { name: "no-empty-comments", desc: "No empty comments" },
+      { name: "use-string-empty", desc: "Use string.Empty instead of empty string literal" },
+      { name: "modifier-order", desc: "Modifiers in standard order" },
+      { name: "file-header-required", desc: "Files must have license header" },
+      { name: "public-documented", desc: "Public types must be documented" },
+      { name: "public-method-documented", desc: "Public methods must be documented" },
+      { name: "no-public-fields", desc: "No public fields (use properties)" },
+      { name: "private-field-naming", desc: "Private fields must use _camelCase" },
+      { name: "static-field-naming", desc: "Static fields must use s_camelCase" },
+      { name: "const-naming", desc: "Constants must be PascalCase" },
+      { name: "braces-on-own-line", desc: "Opening braces on own line (Allman style)" },
+      { name: "required-braces", desc: "Control statements require braces" },
+      { name: "public-property-documented", desc: "Public properties must be documented" }
+    ],
+    commands: []
+  },
+
+  python: {
+    label: "python",
+    collections: [],
+    types: {},
+    predicates: [],
+    functions: [],
+    checks: [
+      { name: "print-calls", desc: "Flag print() calls in production code" },
+      { name: "bare-except-clauses", desc: "Flag bare except: clauses" },
+      { name: "silenced-exceptions", desc: "Flag exceptions caught and silenced" },
+      { name: "no-six-import", desc: "No imports from six compatibility library" },
+      { name: "no-legacy-typing", desc: "No legacy typing imports (use built-in generics)" },
+      { name: "no-eval", desc: "No eval() calls" }
+    ],
+    commands: []
+  },
+
+  "python-library": {
+    label: "python-library",
+    collections: [],
+    types: {},
+    predicates: [],
+    functions: [],
+    checks: [
+      { name: "untyped-public-params", desc: "Public method parameters must have type annotations" },
+      { name: "missing-return-types", desc: "Public methods must have return type annotations" }
+    ],
+    commands: []
+  },
+
+  "python-library-client": {
+    label: "python-library-client",
+    collections: [],
+    types: {},
+    predicates: [
+      { name: "client", appliesTo: "Type", desc: "Type is a client class" },
+      { name: "asyncClient", appliesTo: "Type", desc: "Type is an async client class" },
+      { name: "clientBadAsyncName", appliesTo: "Type", desc: "Async client has incorrect naming" },
+      { name: "nameTooLong", appliesTo: "Type", desc: "Type name exceeds recommended length" }
+    ],
+    lets: [
+      { name: "Clients", desc: "All client types" }
+    ],
+    functions: [],
+    checks: [
+      { name: "async-client-bad-name", desc: "Async client must be named with Async prefix/suffix" },
+      { name: "client-missing-kwargs", desc: "Client methods must accept **kwargs" },
+      { name: "no-connection-string-in-ctor", desc: "No connection string in client constructor" },
+      { name: "no-static-methods", desc: "Clients must not have static methods" },
+      { name: "too-many-positional-params", desc: "Methods must not have too many positional parameters" },
+      { name: "async-method-missing-kwargs", desc: "Async methods must accept **kwargs" },
+      { name: "lro-naming", desc: "Long-running operations must follow naming convention" },
+      { name: "paging-naming", desc: "Paging methods must follow naming convention" },
+      { name: "name-too-long", desc: "Type/method names must not be excessively long" }
+    ],
+    commands: []
+  },
+
+  "python-library-client-azure": {
+    label: "python-library-client-azure",
+    collections: [],
+    types: {},
+    predicates: [],
+    functions: [],
+    checks: [
+      { name: "client-needs-credential", desc: "Client must accept credential parameter" },
+      { name: "client-needs-api-version", desc: "Client must accept api_version parameter" },
+      { name: "method-snake-case", desc: "Methods must use snake_case naming" },
+      { name: "type-pascal-case", desc: "Types must use PascalCase naming" },
+      { name: "delete-returns-none", desc: "Delete methods must return None" },
+      { name: "no-raise-with-traceback", desc: "No raise_with_traceback usage" },
+      { name: "no-legacy-typing", desc: "No legacy typing imports" },
+      { name: "no-asyncio-sleep", desc: "No asyncio.sleep in non-test code" },
+      { name: "no-log-exceptions-above-debug", desc: "No logging exceptions above debug level" },
+      { name: "missing-tracing-decorator", desc: "Public methods must have tracing decorator" }
+    ],
+    commands: []
+  },
+
+  javascript: {
+    label: "javascript",
+    collections: [],
+    types: {},
+    predicates: [],
+    functions: [],
+    checks: [
+      { name: "console-calls", desc: "Flag console.log/warn/error calls" },
+      { name: "alert-calls", desc: "Flag alert() calls" },
+      { name: "eval-calls", desc: "Flag eval() calls" },
+      { name: "debugger-statements", desc: "Flag debugger statements" },
+      { name: "var-declarations", desc: "Flag var declarations (use let/const)" },
+      { name: "swallowed-exceptions", desc: "Flag catch blocks that swallow exceptions" }
+    ],
+    commands: []
+  },
+
+  "javascript-library": {
+    label: "javascript-library",
+    collections: [],
+    types: {},
+    predicates: [],
+    functions: [],
+    checks: [
+      { name: "no-default-exports", desc: "No default exports (use named exports)" },
+      { name: "no-external-promises", desc: "No returning external Promise implementations" },
+      { name: "no-const-enums", desc: "No const enums (not compatible with isolatedModules)" },
+      { name: "no-window-reference", desc: "No window object references" }
+    ],
+    commands: []
+  },
+
+  "javascript-library-client": {
+    label: "javascript-library-client",
+    collections: [],
+    types: {},
+    predicates: [
+      { name: "client", appliesTo: "Type", desc: "Type is a client class" },
+      { name: "Clients", appliesTo: "Types", desc: "All client types in the codebase" }
+    ],
+    functions: [],
+    checks: [
+      { name: "standardized-verbs", desc: "Client methods must use standardized verb names" },
+      { name: "support-cancellation", desc: "Async methods must support cancellation via AbortSignal" },
+      { name: "subclient-naming", desc: "Sub-clients must follow naming conventions" },
+      { name: "lro-begin-prefix", desc: "Long-running operations must start with begin prefix" },
+      { name: "pagination-list-return", desc: "Pagination methods must return PagedAsyncIterableIterator" }
+    ],
+    commands: []
+  },
+
+  "javascript-library-client-azure": {
+    label: "javascript-library-client-azure",
+    collections: [],
+    types: {},
+    predicates: [],
+    functions: [],
+    checks: [
+      { name: "client-needs-credential", desc: "Client must accept TokenCredential" },
+      { name: "copyright-header", desc: "Files must have copyright header" },
+      { name: "error-handling", desc: "Proper error handling patterns" },
+      { name: "no-console-logging", desc: "No console logging (use logger)" }
+    ],
+    commands: []
   }
 };
 
@@ -463,31 +1073,129 @@ let activeNode = null;
 function buildTree() {
   const tree = document.getElementById('tree');
   tree.innerHTML = '';
-  for (const [pkgId, pkg] of Object.entries(packages)) {
-    const pkgNode = document.createElement('div');
-    pkgNode.className = 'tree-node';
-    pkgNode.innerHTML = `
-      <div class="tree-label" data-pkg="${pkgId}">
-        <span class="tree-toggle">▶</span>
-        <span class="tree-icon">📦</span>
-        <span>${pkg.label}</span>
-      </div>
-      <div class="tree-children collapsed"></div>
-    `;
-    const childrenDiv = pkgNode.querySelector('.tree-children');
-    for (const typeName of Object.keys(pkg.types)) {
-      const typeNode = document.createElement('div');
-      typeNode.className = 'tree-node';
-      typeNode.innerHTML = `
-        <div class="tree-label" data-pkg="${pkgId}" data-type="${typeName}">
-          <span class="tree-toggle" style="visibility:hidden"></span>
-          <span class="tree-icon">◆</span>
-          <span>${typeName}</span>
+
+  for (const cat of categories) {
+    const catDiv = document.createElement('div');
+    catDiv.innerHTML = `<div class="category-label">${cat.name}</div>`;
+    tree.appendChild(catDiv);
+
+    for (const pkgId of cat.packages) {
+      const pkg = packages[pkgId];
+      if (!pkg) continue;
+      const pkgNode = document.createElement('div');
+      pkgNode.className = 'tree-node';
+
+      const hasTypes = pkg.types && Object.keys(pkg.types).length > 0;
+      const hasPreds = pkg.predicates && pkg.predicates.length > 0;
+      const hasFuncs = pkg.functions && pkg.functions.length > 0;
+      const hasChecks = pkg.checks && pkg.checks.length > 0;
+      const hasCmds = pkg.commands && pkg.commands.length > 0;
+      const hasLets = pkg.lets && pkg.lets.length > 0;
+
+      pkgNode.innerHTML = `
+        <div class="tree-label" data-pkg="${pkgId}">
+          <span class="tree-toggle">▶</span>
+          <span class="tree-icon">📦</span>
+          <span>${pkg.label}</span>
         </div>
+        <div class="tree-children collapsed"></div>
       `;
-      childrenDiv.appendChild(typeNode);
+      const childrenDiv = pkgNode.querySelector('.tree-children');
+
+      if (hasTypes) {
+        const secNode = document.createElement('div');
+        secNode.className = 'tree-node';
+        secNode.innerHTML = `
+          <div class="tree-label" data-pkg="${pkgId}" data-section="types-header">
+            <span class="tree-toggle">▶</span>
+            <span class="section-tag tag-type">T</span>
+            <span>Types</span>
+          </div>
+          <div class="tree-children collapsed"></div>
+        `;
+        const typesChildren = secNode.querySelector('.tree-children');
+        for (const typeName of Object.keys(pkg.types)) {
+          const typeNode = document.createElement('div');
+          typeNode.className = 'tree-node';
+          typeNode.innerHTML = `
+            <div class="tree-label" data-pkg="${pkgId}" data-type="${typeName}">
+              <span class="tree-toggle" style="visibility:hidden"></span>
+              <span class="tree-icon">◆</span>
+              <span>${typeName}</span>
+            </div>
+          `;
+          typesChildren.appendChild(typeNode);
+        }
+        childrenDiv.appendChild(secNode);
+      }
+
+      if (hasPreds) {
+        const secNode = document.createElement('div');
+        secNode.className = 'tree-node';
+        secNode.innerHTML = `
+          <div class="tree-label" data-pkg="${pkgId}" data-view="predicates">
+            <span class="tree-toggle" style="visibility:hidden"></span>
+            <span class="section-tag tag-predicate">P</span>
+            <span>Predicates (${pkg.predicates.length})</span>
+          </div>
+        `;
+        childrenDiv.appendChild(secNode);
+      }
+
+      if (hasFuncs) {
+        const secNode = document.createElement('div');
+        secNode.className = 'tree-node';
+        secNode.innerHTML = `
+          <div class="tree-label" data-pkg="${pkgId}" data-view="functions">
+            <span class="tree-toggle" style="visibility:hidden"></span>
+            <span class="section-tag tag-function">F</span>
+            <span>Functions (${pkg.functions.length})</span>
+          </div>
+        `;
+        childrenDiv.appendChild(secNode);
+      }
+
+      if (hasChecks) {
+        const secNode = document.createElement('div');
+        secNode.className = 'tree-node';
+        secNode.innerHTML = `
+          <div class="tree-label" data-pkg="${pkgId}" data-view="checks">
+            <span class="tree-toggle" style="visibility:hidden"></span>
+            <span class="section-tag tag-check">C</span>
+            <span>Checks (${pkg.checks.length})</span>
+          </div>
+        `;
+        childrenDiv.appendChild(secNode);
+      }
+
+      if (hasCmds) {
+        const secNode = document.createElement('div');
+        secNode.className = 'tree-node';
+        secNode.innerHTML = `
+          <div class="tree-label" data-pkg="${pkgId}" data-view="commands">
+            <span class="tree-toggle" style="visibility:hidden"></span>
+            <span class="section-tag tag-command">!</span>
+            <span>Commands (${pkg.commands.length})</span>
+          </div>
+        `;
+        childrenDiv.appendChild(secNode);
+      }
+
+      if (hasLets) {
+        const secNode = document.createElement('div');
+        secNode.className = 'tree-node';
+        secNode.innerHTML = `
+          <div class="tree-label" data-pkg="${pkgId}" data-view="lets">
+            <span class="tree-toggle" style="visibility:hidden"></span>
+            <span class="section-tag tag-let">L</span>
+            <span>Let Bindings (${pkg.lets.length})</span>
+          </div>
+        `;
+        childrenDiv.appendChild(secNode);
+      }
+
+      tree.appendChild(pkgNode);
     }
-    tree.appendChild(pkgNode);
   }
 
   // Event delegation
@@ -496,22 +1204,39 @@ function buildTree() {
     if (!label) return;
     const pkg = label.dataset.pkg;
     const type = label.dataset.type;
+    const view = label.dataset.view;
+    const section = label.dataset.section;
+
     if (type) {
-      selectType(pkg, type, label);
+      document.querySelectorAll('.tree-label.active').forEach(el => el.classList.remove('active'));
+      label.classList.add('active');
+      renderType(pkg, type);
+    } else if (view) {
+      document.querySelectorAll('.tree-label.active').forEach(el => el.classList.remove('active'));
+      label.classList.add('active');
+      if (view === 'predicates') renderPredicates(pkg);
+      else if (view === 'functions') renderFunctions(pkg);
+      else if (view === 'checks') renderChecks(pkg);
+      else if (view === 'commands') renderCommands(pkg);
+      else if (view === 'lets') renderLets(pkg);
+    } else if (section) {
+      // Toggle section expand
+      const children = label.nextElementSibling;
+      const toggle = label.querySelector('.tree-toggle');
+      if (children) {
+        children.classList.toggle('collapsed');
+        toggle.textContent = children.classList.contains('collapsed') ? '▶' : '▼';
+      }
     } else {
       // Toggle package expand
       const children = label.nextElementSibling;
       const toggle = label.querySelector('.tree-toggle');
-      children.classList.toggle('collapsed');
-      toggle.textContent = children.classList.contains('collapsed') ? '▶' : '▼';
+      if (children) {
+        children.classList.toggle('collapsed');
+        toggle.textContent = children.classList.contains('collapsed') ? '▶' : '▼';
+      }
     }
   });
-}
-
-function selectType(pkgId, typeName, labelEl) {
-  document.querySelectorAll('.tree-label.active').forEach(el => el.classList.remove('active'));
-  labelEl.classList.add('active');
-  renderType(pkgId, typeName);
 }
 
 // === CONTENT RENDERING ===
@@ -520,7 +1245,10 @@ function renderType(pkgId, typeName) {
   const type = pkg.types[typeName];
   const content = document.getElementById('content');
 
-  let html = `<h1>${pkg.label}.${typeName}</h1>`;
+  let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> ${typeName}</h1>`;
+  if (pkg.collections && pkg.collections.length > 0) {
+    html += `<p style="color:#57606a; font-size:13px; margin-top:4px;">Collections: <code>${pkg.collections.join('</code>, <code>')}</code></p>`;
+  }
   html += `<h2>Properties</h2>`;
 
   for (const prop of type.props) {
@@ -540,21 +1268,164 @@ function renderType(pkgId, typeName) {
   }
 
   content.innerHTML = html;
+  wireUpComments(content);
+}
 
-  // Wire up comment buttons and inputs
-  content.querySelectorAll('.comment-btn').forEach(btn => {
+function renderPredicates(pkgId) {
+  const pkg = packages[pkgId];
+  const content = document.getElementById('content');
+
+  let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Predicates</h1>`;
+  html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">${pkg.predicates.length} exported predicates</p>`;
+
+  // Group by appliesTo
+  const groups = {};
+  for (const p of pkg.predicates) {
+    if (!groups[p.appliesTo]) groups[p.appliesTo] = [];
+    groups[p.appliesTo].push(p);
+  }
+
+  for (const [appliesTo, preds] of Object.entries(groups)) {
+    html += `<h3>On ${appliesTo}</h3>`;
+    for (const pred of preds) {
+      const key = `${pkgId}.pred.${pred.name}.${pred.appliesTo}`;
+      const hasComment = comments[key] ? 'has-comment' : '';
+      const retInfo = pred.returns ? ` → ${pred.returns}` : '';
+      html += `
+        <div class="comment-wrapper">
+          <div class="item-row">
+            <span class="item-name">${pred.name}(${pred.appliesTo})${retInfo}</span>
+            <span class="item-detail">${escapeHtml(pred.desc)}</span>
+            <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
+          </div>
+          <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
+        </div>
+      `;
+    }
+  }
+
+  content.innerHTML = html;
+  wireUpComments(content);
+}
+
+function renderFunctions(pkgId) {
+  const pkg = packages[pkgId];
+  const content = document.getElementById('content');
+
+  let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Functions</h1>`;
+  html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">${pkg.functions.length} exported functions</p>`;
+
+  for (const fn of pkg.functions) {
+    const key = `${pkgId}.fn.${fn.name}.${fn.params.replace(/[, ]/g, '_')}`;
+    const hasComment = comments[key] ? 'has-comment' : '';
+    html += `
+      <div class="comment-wrapper">
+        <div class="item-row">
+          <span class="item-name">${fn.name}(${escapeHtml(fn.params)}) → ${escapeHtml(fn.returns)}</span>
+          <span class="item-detail">${escapeHtml(fn.desc)}</span>
+          <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
+        </div>
+        <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
+      </div>
+    `;
+  }
+
+  content.innerHTML = html;
+  wireUpComments(content);
+}
+
+function renderChecks(pkgId) {
+  const pkg = packages[pkgId];
+  const content = document.getElementById('content');
+
+  let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Checks</h1>`;
+  html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">${pkg.checks.length} exported checks (let bindings)</p>`;
+
+  for (const check of pkg.checks) {
+    const key = `${pkgId}.check.${check.name}`;
+    const hasComment = comments[key] ? 'has-comment' : '';
+    html += `
+      <div class="comment-wrapper">
+        <div class="item-row">
+          <span class="item-name">${check.name}</span>
+          <span class="item-detail">${escapeHtml(check.desc)}</span>
+          <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
+        </div>
+        <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
+      </div>
+    `;
+  }
+
+  content.innerHTML = html;
+  wireUpComments(content);
+}
+
+function renderCommands(pkgId) {
+  const pkg = packages[pkgId];
+  const content = document.getElementById('content');
+
+  let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Commands</h1>`;
+  html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">${pkg.commands.length} exported commands</p>`;
+
+  for (const cmd of pkg.commands) {
+    const key = `${pkgId}.cmd.${cmd.name}`;
+    const hasComment = comments[key] ? 'has-comment' : '';
+    html += `
+      <div class="comment-wrapper">
+        <div class="item-row">
+          <span class="item-name">${cmd.name}(${escapeHtml(cmd.params)})</span>
+          <span class="item-detail">${escapeHtml(cmd.desc)}</span>
+          <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
+        </div>
+        <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
+      </div>
+    `;
+  }
+
+  content.innerHTML = html;
+  wireUpComments(content);
+}
+
+function renderLets(pkgId) {
+  const pkg = packages[pkgId];
+  const content = document.getElementById('content');
+
+  let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Let Bindings</h1>`;
+  html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">${pkg.lets.length} exported let bindings</p>`;
+
+  for (const letItem of pkg.lets) {
+    const key = `${pkgId}.let.${letItem.name}`;
+    const hasComment = comments[key] ? 'has-comment' : '';
+    html += `
+      <div class="comment-wrapper">
+        <div class="item-row">
+          <span class="item-name">${letItem.name}</span>
+          <span class="item-detail">${escapeHtml(letItem.desc)}</span>
+          <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
+        </div>
+        <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
+      </div>
+    `;
+  }
+
+  content.innerHTML = html;
+  wireUpComments(content);
+}
+
+function wireUpComments(container) {
+  container.querySelectorAll('.comment-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const key = btn.dataset.key;
-      const input = content.querySelector(`.comment-input[data-key="${key}"]`);
+      const input = container.querySelector(`.comment-input[data-key="${CSS.escape(key)}"]`);
       input.classList.toggle('visible');
       if (input.classList.contains('visible')) input.focus();
     });
   });
 
-  content.querySelectorAll('.comment-input').forEach(input => {
+  container.querySelectorAll('.comment-input').forEach(input => {
     input.addEventListener('input', () => {
       const key = input.dataset.key;
-      const btn = content.querySelector(`.comment-btn[data-key="${key}"]`);
+      const btn = container.querySelector(`.comment-btn[data-key="${CSS.escape(key)}"]`);
       if (input.value.trim()) {
         comments[key] = input.value.trim();
         btn.classList.add('has-comment');
@@ -592,12 +1463,22 @@ function clearAllComments() {
   comments = {};
   saveComments();
   updateBadge();
-  // Re-render current view
   const active = document.querySelector('.tree-label.active');
-  if (active) selectType(active.dataset.pkg, active.dataset.type, active);
+  if (active) {
+    const pkg = active.dataset.pkg;
+    const type = active.dataset.type;
+    const view = active.dataset.view;
+    if (type) renderType(pkg, type);
+    else if (view === 'predicates') renderPredicates(pkg);
+    else if (view === 'functions') renderFunctions(pkg);
+    else if (view === 'checks') renderChecks(pkg);
+    else if (view === 'commands') renderCommands(pkg);
+    else if (view === 'lets') renderLets(pkg);
+  }
 }
 
 function escapeHtml(str) {
+  if (!str) return '';
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
