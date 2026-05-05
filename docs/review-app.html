@@ -1478,7 +1478,8 @@ function submitToCopilot() {
   }
 
   // Build a prompt for Copilot CLI
-  let prompt = `Process these ${keys.length} review comment(s) from the cop review app:\n\n`;
+  let prompt = `Process these ${keys.length} review comment(s) from the cop review app. `;
+  prompt += `Each comment is an actionable request to rename, remove, or fix an API in the corresponding .cop package file.\n\n`;
 
   for (const [pkg, items] of Object.entries(grouped)) {
     prompt += `## ${pkg}\n`;
@@ -1489,23 +1490,24 @@ function submitToCopilot() {
   }
 
   navigator.clipboard.writeText(prompt).then(() => {
-    alert(`Copied ${keys.length} comment(s) to clipboard. Paste into Copilot CLI.`);
-    if (confirm('Clear submitted comments from the review app?')) {
-      comments = {};
-      saveComments();
-      updateBadge();
-      const active = document.querySelector('.tree-label.active');
-      if (active) active.click();
-    }
+    // Auto-clear after successful copy
+    comments = {};
+    saveComments();
+    updateBadge();
+    alert(`Copied ${keys.length} comment(s) to clipboard and cleared queue.\nPaste into Copilot CLI.`);
+    const active = document.querySelector('.tree-label.active');
+    if (active) active.click();
   }).catch(() => {
-    // Fallback: select in a textarea
     const ta = document.createElement('textarea');
     ta.value = prompt;
     document.body.appendChild(ta);
     ta.select();
     document.execCommand('copy');
     document.body.removeChild(ta);
-    alert(`Copied ${keys.length} comment(s) to clipboard. Paste into Copilot CLI.`);
+    comments = {};
+    saveComments();
+    updateBadge();
+    alert(`Copied ${keys.length} comment(s) to clipboard and cleared queue.\nPaste into Copilot CLI.`);
   });
 }
 
