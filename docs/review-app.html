@@ -758,11 +758,11 @@ const packages = {
 
   http: {
     label: "http",
-    collections: [
-      { name: "Receive", type: "[Request]", desc: "Incoming HTTP requests. Dequeue from this in a pipe." },
-      { name: "Send", type: "[Response]", desc: "Outgoing HTTP responses. Enqueue to this in a pipe." }
+    collections: [],
+    lets: [
+      { name: "Receive", type: "[Request]", desc: "Incoming HTTP requests — global that yields requests as they arrive" },
+      { name: "Send", type: "[Response]", desc: "Outgoing HTTP responses — pipe results here to send back" }
     ],
-    lets: [],
     enums: [
       { name: "HttpMethod", values: "GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS" },
       { name: "ContentType", values: "application/json|text/plain|text/html|application/xml|multipart/form-data|application/octet-stream" }
@@ -1147,7 +1147,6 @@ function buildTree() {
       const hasCmds = pkg.commands && pkg.commands.length > 0;
       const hasLets = pkg.lets && pkg.lets.length > 0;
       const hasEnums = pkg.enums && pkg.enums.length > 0;
-      const hasCollObjs = pkg.collections && pkg.collections.length > 0 && typeof pkg.collections[0] === 'object';
 
       pkgNode.innerHTML = `
         <div class="tree-label" data-pkg="${pkgId}">
@@ -1185,18 +1184,7 @@ function buildTree() {
         childrenDiv.appendChild(secNode);
       }
 
-      if (hasCollObjs) {
-        const secNode = document.createElement('div');
-        secNode.className = 'tree-node';
-        secNode.innerHTML = `
-          <div class="tree-label" data-pkg="${pkgId}" data-view="collections">
-            <span class="tree-toggle" style="visibility:hidden"></span>
-            <span class="section-tag tag-function">C</span>
-            <span>Collections (${pkg.collections.length})</span>
-          </div>
-        `;
-        childrenDiv.appendChild(secNode);
-      }
+
 
       if (hasTypes) {
         const secNode = document.createElement('div');
@@ -1303,7 +1291,6 @@ function buildTree() {
       else if (view === 'commands') renderCommands(pkg);
       else if (view === 'lets') renderLets(pkg);
       else if (view === 'enums') renderEnums(pkg);
-      else if (view === 'collections') renderCollections(pkg);
     } else if (section) {
       // Toggle section expand
       const children = label.nextElementSibling;
@@ -1333,7 +1320,7 @@ function renderType(pkgId, typeName) {
   let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> ${typeName}</h1>`;
   if (pkg.collections && pkg.collections.length > 0) {
     const names = pkg.collections.map(c => typeof c === 'string' ? c : c.name);
-    html += `<p style="color:#57606a; font-size:13px; margin-top:4px;">Collections: <code>${names.join('</code>, <code>')}</code></p>`;
+    html += `<p style="color:#57606a; font-size:13px; margin-top:4px;">Globals: <code>${names.join('</code>, <code>')}</code></p>`;
   }
   html += `<h2>Properties</h2>`;
 
@@ -1554,36 +1541,6 @@ function renderEnums(pkgId) {
             <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
           </div>
           <div class="enum-values">${values.map(v => `<span class="enum-value">${escapeHtml(v)}</span>`).join('')}</div>
-        </div>
-        <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
-      </div>
-    `;
-  }
-
-  content.innerHTML = html;
-  wireUpComments(content);
-}
-
-function renderCollections(pkgId) {
-  const pkg = packages[pkgId];
-  const content = document.getElementById('content');
-
-  let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Collections</h1>`;
-  html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">${pkg.collections.length} typed collections — use as pipe sources (dequeue) or sinks (enqueue)</p>`;
-
-  for (const coll of pkg.collections) {
-    if (typeof coll === 'string') continue;
-    const key = `${pkgId}.collection.${coll.name}`;
-    const hasComment = comments[key] ? 'has-comment' : '';
-    html += `
-      <div class="comment-wrapper">
-        <div class="fn-block">
-          <div class="fn-signature">
-            <span class="item-name">${pkg.label}.${coll.name}</span>
-            <span class="prop-type" style="margin-left:8px">${coll.type || ''}</span>
-            <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
-          </div>
-          <div class="fn-desc">${escapeHtml(coll.desc)}</div>
         </div>
         <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
       </div>
