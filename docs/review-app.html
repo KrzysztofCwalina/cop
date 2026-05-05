@@ -149,7 +149,7 @@ const packages = {
           { name: "Single", type: "T?", desc: "The element if exactly one item, otherwise null" }
         ]
       },
-      Object: {
+      object: {
         props: [
           { name: "Keys", type: "[string]", desc: "All field names" },
           { name: "Values", type: "[any]", desc: "All non-null field values" },
@@ -159,8 +159,7 @@ const packages = {
       Group: {
         props: [
           { name: "Key", type: "string", desc: "Group key value" },
-          { name: "Items", type: "[T]", desc: "Items in this group" },
-          { name: "Count", type: "int", desc: "Number of items in this group" }
+          { name: "Items", type: "[T]", desc: "Items in this group" }
         ]
       }
     },
@@ -190,7 +189,7 @@ const packages = {
       { name: "none", appliesTo: "[T]", desc: "No items match predicate expression" },
       { name: "all", appliesTo: "[T]", desc: "All items match predicate expression" },
       { name: "in", appliesTo: "any", desc: "Value is in the given list (works on any type)" },
-      { name: "containsKey", appliesTo: "Object", desc: "Object has a field with the given name" }
+      { name: "containsKey", appliesTo: "object", desc: "Object has a field with the given name" }
     ],
     functions: [
       { name: "Trim", params: "string, suffix: string?", returns: "string", desc: "Remove suffix from end of string" },
