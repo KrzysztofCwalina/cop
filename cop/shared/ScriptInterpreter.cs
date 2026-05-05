@@ -567,7 +567,7 @@ public class ScriptInterpreter
                 }
                 else if (cmd.Sink is not null)
                 {
-                    var sink = ResolveSink(cmd.Sink);
+                    var sink = ResolveSink(cmd.Sink, _globalResolvedSelects);
                     sink.WriteAsync(item, richMessage.ToPlainText()).GetAwaiter().GetResult();
                 }
                 else
@@ -691,7 +691,7 @@ public class ScriptInterpreter
                 }
                 else if (cmd.Sink is not null)
                 {
-                    var sink = ResolveSink(cmd.Sink);
+                    var sink = ResolveSink(cmd.Sink, resolvedCollections);
                     sink.WriteAsync(item, richMessage.ToPlainText()).GetAwaiter().GetResult();
                 }
                 else
@@ -2150,10 +2150,18 @@ public class ScriptInterpreter
         activeStack.Remove(cmd.CommandRef);
     }
 
-    private DataSink ResolveSink(SinkTarget target)
+    private DataSink ResolveSink(SinkTarget target, Dictionary<string, IList>? resolvedCollections = null)
     {
-        var sink = _typeRegistry.ResolveSink(target.Name)
-            ?? throw new InvalidOperationException($"Sink '{target.Name}' not found. Use a qualified name like 'console.WriteLine' or 'file.Write'.");
+        var sink = _typeRegistry.ResolveSink(target.Name);
+        if (sink is null && resolvedCollections is not null)
+        {
+            // Fall back: if the target name matches a resolved collection (let-binding list),
+            // wrap it with ListAppendSink — pipe enqueues items into the list.
+            if (resolvedCollections.TryGetValue(target.Name, out var list))
+                sink = new ListAppendSink(list);
+        }
+        if (sink is null)
+            throw new InvalidOperationException($"Sink '{target.Name}' not found. Use a qualified name like 'console.WriteLine' or 'file.Write'.");
         if (target.Args is { Count: > 0 })
             sink = sink.WithArgs(target.Args);
         return sink;

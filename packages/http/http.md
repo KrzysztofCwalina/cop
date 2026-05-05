@@ -2,16 +2,16 @@
 name: http
 version: 1.0.0
 title: HTTP Server Provider
-description: Streaming HTTP server provider for building web APIs with cop pipelines
+description: HTTP server provider for building web APIs with cop pipelines
 authors: cop-team
-tags: http, server, streaming, api
+tags: http, server, api
 provider: clr
 providerEntry: Cop.Providers.Http.HttpProvider
 ---
 
 # HTTP Server Provider
 
-Provides a streaming HTTP server that yields incoming requests as an async collection.
+Provides an HTTP server that yields incoming requests as a collection.
 Import with `import http` to build web APIs using cop's pipeline syntax.
 
 ## Usage
@@ -28,11 +28,8 @@ command serve = foreach http.Receive => handle => http.Send
 
 ## Collections
 
-- `http.Receive` — streaming collection of incoming HTTP requests (yields `Request`)
-
-## Sinks
-
-- `http.Send` — sends the transformed result as an HTTP response
+- `http.Receive` — incoming HTTP requests (`[Request]`). Dequeue from this in a pipe.
+- `http.Send` — outgoing HTTP responses (`[Response]`). Enqueue to this in a pipe.
 
 ## Helper Functions
 

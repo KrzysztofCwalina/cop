@@ -55,8 +55,6 @@ let tracked-globals = [
     'Code'
     'Disk'
     'Markdown'
-    'Receive'
-    'Send'
 ]
 
 predicate isRuntimeGlobal(Statement) =>
@@ -71,9 +69,9 @@ export let untracked-globals = pkg-code.Statements:isUntrackedGlobal
     :toWarning('Runtime global "{item.MemberName}" in {item.File.Path} is not tracked — add here and to docs/review-app.html')
 
 # Streaming providers (those with DataFormat.AsyncStream) expose collections and sinks
-# that are NOT declared via 'runtime::' in .cop files — they come from C# provider code.
-# Track them manually here. If a new streaming provider is added, update this list.
-let tracked-streaming-apis = [
+# via C# code. The .cop packages declare them with 'export collection Name : [Type]'.
+# Track the DataSink classes here to ensure they are documented.
+let tracked-streaming-collections = [
     'Receive'
     'Send'
 ]

@@ -758,12 +758,11 @@ const packages = {
 
   http: {
     label: "http",
-    collections: [],
-    lets: [
-      { name: "Receive", type: "Request", desc: "Streaming source — yields incoming HTTP requests. Use with foreach pipelines." },
-      { name: "Send", type: "Response", desc: "Pipeline sink — sends the transformed result back as an HTTP response." }
+    collections: [
+      { name: "Receive", type: "[Request]", desc: "Incoming HTTP requests. Dequeue from this in a pipe." },
+      { name: "Send", type: "[Response]", desc: "Outgoing HTTP responses. Enqueue to this in a pipe." }
     ],
-    sinks: [],
+    lets: [],
     enums: [
       { name: "HttpMethod", values: "GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS" },
       { name: "ContentType", values: "application/json|text/plain|text/html|application/xml|multipart/form-data|application/octet-stream" }
@@ -1146,7 +1145,6 @@ function buildTree() {
       const hasCmds = pkg.commands && pkg.commands.length > 0;
       const hasLets = pkg.lets && pkg.lets.length > 0;
       const hasEnums = pkg.enums && pkg.enums.length > 0;
-      const hasSinks = pkg.sinks && pkg.sinks.length > 0;
       const hasCollObjs = pkg.collections && pkg.collections.length > 0 && typeof pkg.collections[0] === 'object';
 
       pkgNode.innerHTML = `
@@ -1189,23 +1187,10 @@ function buildTree() {
         const secNode = document.createElement('div');
         secNode.className = 'tree-node';
         secNode.innerHTML = `
-          <div class="tree-label" data-pkg="${pkgId}" data-view="streams">
+          <div class="tree-label" data-pkg="${pkgId}" data-view="collections">
             <span class="tree-toggle" style="visibility:hidden"></span>
-            <span class="section-tag tag-function">S</span>
-            <span>Streams (${pkg.collections.length})</span>
-          </div>
-        `;
-        childrenDiv.appendChild(secNode);
-      }
-
-      if (hasSinks) {
-        const secNode = document.createElement('div');
-        secNode.className = 'tree-node';
-        secNode.innerHTML = `
-          <div class="tree-label" data-pkg="${pkgId}" data-view="sinks">
-            <span class="tree-toggle" style="visibility:hidden"></span>
-            <span class="section-tag tag-command">⇥</span>
-            <span>Sinks (${pkg.sinks.length})</span>
+            <span class="section-tag tag-function">C</span>
+            <span>Collections (${pkg.collections.length})</span>
           </div>
         `;
         childrenDiv.appendChild(secNode);
@@ -1316,8 +1301,7 @@ function buildTree() {
       else if (view === 'commands') renderCommands(pkg);
       else if (view === 'lets') renderLets(pkg);
       else if (view === 'enums') renderEnums(pkg);
-      else if (view === 'streams') renderStreams(pkg);
-      else if (view === 'sinks') renderSinks(pkg);
+      else if (view === 'collections') renderCollections(pkg);
     } else if (section) {
       // Toggle section expand
       const children = label.nextElementSibling;
@@ -1578,16 +1562,16 @@ function renderEnums(pkgId) {
   wireUpComments(content);
 }
 
-function renderStreams(pkgId) {
+function renderCollections(pkgId) {
   const pkg = packages[pkgId];
   const content = document.getElementById('content');
 
-  let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Streaming Collections</h1>`;
-  html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">Async streaming sources — use with <code>foreach</code> pipelines</p>`;
+  let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Collections</h1>`;
+  html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">${pkg.collections.length} typed collections — use as pipe sources (dequeue) or sinks (enqueue)</p>`;
 
   for (const coll of pkg.collections) {
     if (typeof coll === 'string') continue;
-    const key = `${pkgId}.stream.${coll.name}`;
+    const key = `${pkgId}.collection.${coll.name}`;
     const hasComment = comments[key] ? 'has-comment' : '';
     html += `
       <div class="comment-wrapper">
@@ -1598,34 +1582,6 @@ function renderStreams(pkgId) {
             <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
           </div>
           <div class="fn-desc">${escapeHtml(coll.desc)}</div>
-        </div>
-        <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
-      </div>
-    `;
-  }
-
-  content.innerHTML = html;
-  wireUpComments(content);
-}
-
-function renderSinks(pkgId) {
-  const pkg = packages[pkgId];
-  const content = document.getElementById('content');
-
-  let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Sinks</h1>`;
-  html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">Pipeline sinks — terminal endpoints that consume pipeline results</p>`;
-
-  for (const sink of pkg.sinks) {
-    const key = `${pkgId}.sink.${sink.name}`;
-    const hasComment = comments[key] ? 'has-comment' : '';
-    html += `
-      <div class="comment-wrapper">
-        <div class="fn-block">
-          <div class="fn-signature">
-            <span class="item-name">${pkg.label}.${sink.name}</span>
-            <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
-          </div>
-          <div class="fn-desc">${escapeHtml(sink.desc)}</div>
         </div>
         <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
       </div>

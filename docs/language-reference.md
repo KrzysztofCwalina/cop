@@ -119,6 +119,8 @@ A `.cop` file contains these kinds of declarations:
 | `export` | Make a declaration visible to importing packages |
 | `type` | Describe the shape of an object’s property list |
 | `flags` | Define a flags enum for bitwise operations |
+| `enum` | Define an extensible enum with named values |
+| `collection` | Declare a typed collection (source or sink for pipes) |
 | `let` | Declare a named list (base or subset) |
 | `command name =` | Define a named command (implicit output, SAVE, or composition) |
 | `predicate name(Param) =>` | Define a named predicate for subsetting |
@@ -302,6 +304,24 @@ let localFiles = filesystem.DiskFiles('src/lib/')
 ```
 
 Path-scoped collections query the provider against the given path instead of the default root (CWD or `-t`). The path is resolved relative to the process working directory. Results are cached by `(provider, collection, absolutePath)` so repeated references with the same path are efficient. Each collection is parameterized individually — `csharp.Types('../sdk/')` does not affect `csharp.Statements`.
+
+### Collection Declarations
+
+`collection` declares a named typed collection. Collections can be used as pipe sources (dequeue from) or pipe sinks (enqueue to):
+
+```ruby
+collection Receive : [Request]     # source: dequeue incoming items
+collection Send : [Response]       # sink: enqueue outgoing items
+```
+
+Collections are backed by providers. The pipe operator (`=>`) dequeues items from the source and enqueues results into the sink:
+
+```ruby
+# foreach = repeat { dequeue from source → transform → enqueue to sink }
+command serve = foreach Receive => handle => Send
+```
+
+Any collection can serve as both a source and a sink. The runtime handles thread-safe enqueue/dequeue operations.
 
 ### Predicates
 
@@ -896,6 +916,20 @@ foreach Types:csharp:client => '{error:@red} {item.Name} is a client'
 | `foreach List` | no | What to iterate — a named list or subset |
 | `:filter` | no | One or more predicate filters (AND-combined) |
 | `'...'` | yes | Template string with `{Expr}` interpolation |
+
+#### Pipe Sinks
+
+Use `=> target` after the template to pipe output to a collection instead of the console:
+
+```ruby
+# Pipe to a provider-backed collection (e.g., http response)
+command serve = foreach Receive => handle => Send
+
+# Pipe to a file
+foreach Types => SAVE('types.txt', '{item.Name}')
+```
+
+The pipe operator means **dequeue → transform → enqueue**: items are dequeued from the source, transformed, and enqueued to the sink. See [Collection Declarations](#collection-declarations).
 
 #### Language Filtering
 
