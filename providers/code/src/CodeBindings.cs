@@ -206,6 +206,7 @@ public static class CodeBindings
         {
             ["Types"] = doc => ((SourceFile)doc).Types.Cast<object>().ToList(),
             ["Statements"] = doc => ((SourceFile)doc).Statements.Cast<object>().ToList(),
+            ["Calls"] = doc => ((SourceFile)doc).Statements.Where(s => s.Kind == "call").Cast<object>().ToList(),
             ["Lines"] = doc =>
             {
                 var file = (SourceFile)doc;

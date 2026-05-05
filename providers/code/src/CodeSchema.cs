@@ -104,6 +104,7 @@ public static class CodeSchema
             [
                 new() { Name = "Types", ItemType = "Type" },
                 new() { Name = "Statements", ItemType = "Statement" },
+                new() { Name = "Calls", ItemType = "Statement" },
                 new() { Name = "Lines", ItemType = "Line" },
                 new() { Name = "Files", ItemType = "File" },
                 new() { Name = "Members", ItemType = "Member" },

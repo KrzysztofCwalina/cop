@@ -130,6 +130,7 @@ public static class CodeCollectionBuilder
     {
         ["Types"] = "Type",
         ["Statements"] = "Statement",
+        ["Calls"] = "Statement",
         ["Lines"] = "Line",
         ["Files"] = "File",
         ["Members"] = "Member",

@@ -105,11 +105,9 @@ const categories = [
 const packages = {
   code: {
     label: "code",
-    collections: ["Types", "Statements", "Lines", "Files", "Members", "Api", "Regions", "Projects"],
+    collections: ["Types", "Statements", "Calls", "Lines", "Files", "Members", "Api", "Regions", "Projects"],
     lets: [
-      { name: "Code", type: "Codebase", desc: "The code analysis data for the current project" },
-      { name: "Calls", type: "[Statement]", desc: "All call statements" },
-      { name: "Declarations", type: "[Statement]", desc: "All declaration statements" }
+      { name: "Code", type: "Codebase", desc: "The code analysis data for the current project" }
     ],
     flags: [{ name: "Modifier", values: "Public|Private|Protected|Internal|Static|Sealed|Abstract|Virtual|Async|Override|Readonly|Const" }],
     types: {
@@ -324,8 +322,13 @@ const packages = {
       },
       Codebase: {
         props: [
-          { name: "Projects", type: "[Project]", desc: "All projects in the codebase" },
-          { name: "Files", type: "[File]", desc: "All source files" }
+          { name: "Files", type: "[File]", desc: "All source files" },
+          { name: "Types", type: "[Type]", desc: "All type declarations" },
+          { name: "Statements", type: "[Statement]", desc: "All statements" },
+          { name: "Calls", type: "[Statement]", desc: "All call statements" },
+          { name: "Lines", type: "[Line]", desc: "All source lines" },
+          { name: "Regions", type: "[Region]", desc: "All named regions" },
+          { name: "Projects", type: "[Project]", desc: "All projects in the codebase" }
         ]
       }
     },

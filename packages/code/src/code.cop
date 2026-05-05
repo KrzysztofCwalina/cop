@@ -178,10 +178,6 @@ export predicate isAttribute(Statement) : Attribute => Statement.Kind == 'attrib
 # ErrorHandler predicates
 export predicate isGeneric(ErrorHandler) => ErrorHandler.Generic == true
 
-# Convenience collections
-export let Calls = Code.Statements:isCall
-export let Declarations = Code.Statements:isDeclaration
-
 export type Line = {
     Text : string,
     Number : int,
@@ -218,6 +214,7 @@ export type Codebase = {
     Files : [File],
     Types : [Type],
     Statements : [Statement],
+    Calls : [Statement],
     Lines : [Line],
     Regions : [Region],
     Projects : [Project]

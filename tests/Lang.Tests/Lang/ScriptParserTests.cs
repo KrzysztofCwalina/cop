@@ -493,7 +493,7 @@ public class CheckFileParserTests
             "..", "..", "..", "..", "..", "packages", "code", "src", "code.cop"));
         var file = ScriptParser.Parse(source, "code.cop");
         Assert.That(file.TypeDefinitions.Count, Is.GreaterThanOrEqualTo(8));
-        Assert.That(file.LetDeclarations.Count, Is.GreaterThanOrEqualTo(3));
+        Assert.That(file.LetDeclarations.Count, Is.GreaterThanOrEqualTo(1));
 
         // Object is a core primitive, not defined in code.cop
         Assert.That(file.TypeDefinitions.Any(t => t.Name == "Object"), Is.False);
