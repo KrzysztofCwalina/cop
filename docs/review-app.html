@@ -38,6 +38,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .item-row { display: flex; align-items: center; padding: 6px 8px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
 .item-row:hover { background: #f6f8fa; }
 .item-name { font-family: 'SFMono-Regular', Consolas, monospace; font-weight: 600; flex: 1; }
+.item-type { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px; color: #8250df; margin-left: 8px; flex-shrink: 0; }
+.item-type a.type-nav-link { color: #8250df; text-decoration: none; border-bottom: 1px dotted #8250df; }
+.item-type a.type-nav-link:hover { color: #6639ba; border-bottom-style: solid; }
 .item-detail { color: #57606a; font-size: 12px; margin-left: 12px; }
 
 /* Comment button and input */
@@ -104,9 +107,9 @@ const packages = {
     label: "code",
     collections: ["Types", "Statements", "Lines", "Files", "Members", "Api", "Regions", "Projects"],
     lets: [
-      { name: "Code", desc: "The code analysis data for the current project" },
-      { name: "Calls", desc: "All call statements" },
-      { name: "Declarations", desc: "All declaration statements" }
+      { name: "Code", type: "Codebase", desc: "The code analysis data for the current project" },
+      { name: "Calls", type: "[Statement]", desc: "All call statements" },
+      { name: "Declarations", type: "[Statement]", desc: "All declaration statements" }
     ],
     flags: [{ name: "Modifier", values: "Public|Private|Protected|Internal|Static|Sealed|Abstract|Virtual|Async|Override|Readonly|Const" }],
     types: {
@@ -423,8 +426,8 @@ const packages = {
     label: "filesystem",
     collections: ["Folders", "Files"],
     lets: [
-      { name: "Disk", desc: "Alias for the filesystem provider data" },
-      { name: "empty-folders", desc: "All folders with no files inside" }
+      { name: "Disk", type: "Filesystem", desc: "Alias for the filesystem provider data" },
+      { name: "empty-folders", type: "[Folder]", desc: "All folders with no files inside" }
     ],
     types: {
       Folder: {
@@ -962,7 +965,7 @@ const packages = {
       { name: "hasNameTooLong", appliesTo: "Type", desc: "Type name exceeds recommended length" }
     ],
     lets: [
-      { name: "Clients", desc: "All client types" }
+      { name: "Clients", type: "[Type]", desc: "All client types" }
     ],
     functions: [],
     checks: [
@@ -1398,10 +1401,12 @@ function renderLets(pkgId) {
   for (const letItem of pkg.lets) {
     const key = `${pkgId}.let.${letItem.name}`;
     const hasComment = comments[key] ? 'has-comment' : '';
+    const typeHtml = letItem.type ? `<span class="item-type">${formatTypeLink(pkgId, letItem.type)}</span>` : '';
     html += `
       <div class="comment-wrapper">
         <div class="item-row">
           <span class="item-name">${letItem.name}</span>
+          ${typeHtml}
           <span class="item-detail">${escapeHtml(letItem.desc)}</span>
           <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
         </div>
@@ -1412,6 +1417,7 @@ function renderLets(pkgId) {
 
   content.innerHTML = html;
   wireUpComments(content);
+  wireUpTypeLinks(content);
 }
 
 function wireUpComments(container) {
@@ -1574,6 +1580,40 @@ function dismissComment(key) {
   saveComments();
   updateBadge();
   reviewPending();
+}
+
+function formatTypeLink(currentPkgId, typeStr) {
+  // Handle collection types like [Statement], [Folder]
+  const collMatch = typeStr.match(/^\[(.+)\]$/);
+  if (collMatch) {
+    const inner = collMatch[1];
+    const link = makeTypeLink(currentPkgId, inner);
+    return `[${link}]`;
+  }
+  return makeTypeLink(currentPkgId, typeStr);
+}
+
+function makeTypeLink(currentPkgId, typeName) {
+  // Find which package owns this type
+  for (const [pkgId, pkg] of Object.entries(packages)) {
+    if (pkg.types && pkg.types[typeName]) {
+      return `<a href="#" class="type-nav-link" data-pkg="${pkgId}" data-type="${typeName}">${typeName}</a>`;
+    }
+  }
+  // Not found as a navigable type — render plain
+  return typeName;
+}
+
+function wireUpTypeLinks(container) {
+  container.querySelectorAll('.type-nav-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const pkg = link.dataset.pkg;
+      const type = link.dataset.type;
+      document.querySelectorAll('.tree-label.active').forEach(el => el.classList.remove('active'));
+      renderType(pkg, type);
+    });
+  });
 }
 
 function escapeHtml(str) {
