@@ -488,6 +488,9 @@ const packages = {
   markdown: {
     label: "markdown",
     collections: ["Headings", "Links", "Sections", "FenceBlocks"],
+    lets: [
+      { name: "Markdown", type: "MarkdownContent", desc: "Aggregates markdown data from all .md files. Access collections like Markdown.Headings, Markdown.Links, Markdown.Sections, Markdown.FenceBlocks." }
+    ],
     types: {
       Heading: {
         props: [
@@ -528,6 +531,14 @@ const packages = {
           { name: "ContentHash", type: "string", desc: "Hash of content" },
           { name: "File", type: "File?", desc: "Containing file" },
           { name: "Source", type: "string", desc: "Full fence block source" }
+        ]
+      },
+      MarkdownContent: {
+        props: [
+          { name: "Headings", type: "[Heading]", desc: "All headings in markdown files" },
+          { name: "Links", type: "[Link]", desc: "All links in markdown files" },
+          { name: "Sections", type: "[Section]", desc: "All sections in markdown files" },
+          { name: "FenceBlocks", type: "[FenceBlock]", desc: "All fenced code blocks" }
         ]
       }
     },
