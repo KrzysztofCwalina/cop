@@ -109,7 +109,7 @@ const packages = {
     label: "code",
     collections: ["Types", "Statements", "Calls", "Lines", "Files", "Members", "Api", "Regions", "Projects"],
     lets: [
-      { name: "Code", type: "Codebase", desc: "The code analysis data for the current project" }
+      { name: "Code", type: "Codebase", desc: "Aggregates code data from all imported providers (e.g. csharp, python). Access collections like Code.Types, Code.Statements, Code.Calls." }
     ],
     flags: [{ name: "Modifier", values: "Public|Private|Protected|Internal|Static|Sealed|Abstract|Virtual|Async|Override|Readonly|Const" }],
     types: {
@@ -380,7 +380,7 @@ const packages = {
       { name: "isGeneric", appliesTo: "ErrorHandler", desc: "ErrorHandler catches generic Exception type" }
     ],
     functions: [
-      { name: "Code", params: "[providers], path?", returns: "Codebase", desc: "Create a Codebase scoped to specific providers and optional path" }
+      { name: "Code", params: "[providers], path?", returns: "Codebase", desc: "Creates a Codebase scoped to explicit providers and optional subdirectory path. E.g. Code([csharp], 'src/') analyzes only C# files under src/." }
     ],
     checks: [],
     commands: []
