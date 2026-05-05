@@ -164,32 +164,31 @@ const packages = {
       }
     },
     predicates: [
-      { name: "equals", appliesTo: "string", desc: "Case-insensitive equality" },
-      { name: "notEquals", appliesTo: "string", desc: "Case-insensitive inequality" },
-      { name: "startsWith", appliesTo: "string", desc: "Starts with value (case-insensitive)" },
-      { name: "endsWith", appliesTo: "string", desc: "Ends with value (case-insensitive)" },
-      { name: "contains", appliesTo: "string", desc: "Contains substring (case-insensitive)" },
-      { name: "containsAny", appliesTo: "string", desc: "Contains any value from a list" },
-      { name: "matches", appliesTo: "string", desc: "Matches regex pattern (1s timeout)" },
-      { name: "sameAs", appliesTo: "string", desc: "Normalized identifier comparison (ignores casing/separators)" },
+      { name: "equals", appliesTo: "string", params: "value: string", desc: "Case-insensitive equality" },
+      { name: "notEquals", appliesTo: "string", params: "value: string", desc: "Case-insensitive inequality" },
+      { name: "startsWith", appliesTo: "string", params: "prefix: string", desc: "Starts with value (case-insensitive)" },
+      { name: "endsWith", appliesTo: "string", params: "suffix: string", desc: "Ends with value (case-insensitive)" },
+      { name: "contains", appliesTo: "string", params: "substring: string", desc: "Contains substring (case-insensitive)" },
+      { name: "containsAny", appliesTo: "string", params: "values: [string]", desc: "Contains any value from a list" },
+      { name: "matches", appliesTo: "string", params: "pattern: string", desc: "Matches regex pattern (1s timeout)" },
+      { name: "sameAs", appliesTo: "string", params: "other: string", desc: "Normalized identifier comparison (ignores casing/separators)" },
       { name: "empty", appliesTo: "string", desc: "String is empty (length 0)" },
-      { name: "in", appliesTo: "string", desc: "Value is in the given list (case-insensitive)" },
-      { name: "equals", appliesTo: "int", desc: "Numeric equality" },
-      { name: "notEquals", appliesTo: "int", desc: "Numeric inequality" },
-      { name: "greaterThan", appliesTo: "int", desc: "Greater than" },
-      { name: "lessThan", appliesTo: "int", desc: "Less than" },
-      { name: "greaterOrEqual", appliesTo: "int", desc: "Greater than or equal" },
-      { name: "lessOrEqual", appliesTo: "int", desc: "Less than or equal" },
-      { name: "isSet", appliesTo: "int", desc: "Bitwise flag is set (value & mask != 0)" },
-      { name: "isClear", appliesTo: "int", desc: "Bitwise flag is clear (value & mask == 0)" },
-      { name: "contains", appliesTo: "[T]", desc: "Collection contains value (case-insensitive)" },
-      { name: "containsAny", appliesTo: "[T]", desc: "Collection contains any value from list" },
+      { name: "equals", appliesTo: "int", params: "value: int", desc: "Numeric equality" },
+      { name: "notEquals", appliesTo: "int", params: "value: int", desc: "Numeric inequality" },
+      { name: "greaterThan", appliesTo: "int", params: "value: int", desc: "Greater than" },
+      { name: "lessThan", appliesTo: "int", params: "value: int", desc: "Less than" },
+      { name: "greaterOrEqual", appliesTo: "int", params: "value: int", desc: "Greater than or equal" },
+      { name: "lessOrEqual", appliesTo: "int", params: "value: int", desc: "Less than or equal" },
+      { name: "isSet", appliesTo: "int", params: "mask: int", desc: "Bitwise flag is set (value & mask != 0)" },
+      { name: "isClear", appliesTo: "int", params: "mask: int", desc: "Bitwise flag is clear (value & mask == 0)" },
+      { name: "contains", appliesTo: "[T]", params: "value: string", desc: "Collection contains value (case-insensitive)" },
+      { name: "containsAny", appliesTo: "[T]", params: "values: [string]", desc: "Collection contains any value from list" },
       { name: "empty", appliesTo: "[T]", desc: "Collection has no items" },
-      { name: "any", appliesTo: "[T]", desc: "Any item matches predicate expression" },
-      { name: "none", appliesTo: "[T]", desc: "No items match predicate expression" },
-      { name: "all", appliesTo: "[T]", desc: "All items match predicate expression" },
-      { name: "in", appliesTo: "any", desc: "Value is in the given list (works on any type)" },
-      { name: "containsKey", appliesTo: "object", desc: "Object has a field with the given name" }
+      { name: "any", appliesTo: "[T]", params: "predicate", desc: "Any item matches predicate expression" },
+      { name: "none", appliesTo: "[T]", params: "predicate", desc: "No items match predicate expression" },
+      { name: "all", appliesTo: "[T]", params: "predicate", desc: "All items match predicate expression" },
+      { name: "in", appliesTo: "any", params: "values: [T]", desc: "Value is in the given list (works on any type)" },
+      { name: "containsKey", appliesTo: "object", params: "name: string", desc: "Object has a field with the given name" }
     ],
     functions: [
       { name: "Trim", params: "string, suffix: string?", returns: "string", desc: "Remove suffix from end of string" },
@@ -1443,10 +1442,11 @@ function renderType(pkgId, typeName) {
       const key = `${pred.fromPkg}.pred.${pred.name}.${pred.appliesTo}`;
       const hasComment = comments[key] ? 'has-comment' : '';
       const fromLabel = pred.fromPkg !== pkgId ? ` <span style="color:#8b949e; font-size:11px;">(${pred.fromPkg})</span>` : '';
+      const paramsHtml = pred.params ? `(${formatParamsWithLinks(pkgId, pred.params)})` : '';
       html += `
         <div class="comment-wrapper">
           <div class="item-row">
-            <span class="item-name">${pred.name}${fromLabel} → ${formatTypeLink(pkgId, 'bool')}</span>
+            <span class="item-name">${pred.name}${paramsHtml}${fromLabel}</span>
             <span class="item-detail">${escapeHtml(pred.desc)}</span>
             <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
           </div>
@@ -1480,10 +1480,11 @@ function renderPredicates(pkgId) {
     for (const pred of preds.sort((a,b) => a.name.localeCompare(b.name))) {
       const key = `${pkgId}.pred.${pred.name}.${pred.appliesTo}`;
       const hasComment = comments[key] ? 'has-comment' : '';
+      const paramsHtml = pred.params ? `, ${formatParamsWithLinks(pkgId, pred.params)}` : '';
       html += `
         <div class="comment-wrapper">
           <div class="item-row">
-            <span class="item-name">${pred.name}(${formatTypeLink(pkgId, pred.appliesTo)}) → ${formatTypeLink(pkgId, 'bool')}</span>
+            <span class="item-name">${pred.name}(${formatTypeLink(pkgId, pred.appliesTo)}${paramsHtml})</span>
             <span class="item-detail">${escapeHtml(pred.desc)}</span>
             <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
           </div>
