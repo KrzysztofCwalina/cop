@@ -371,7 +371,7 @@ Unnamed statements (bare `foreach`) always run. Named commands only run when inv
 
 ## Available Packages
 
-Browse the full [Package Reference](https://krzysztofcwalina.github.io/cop/reference.html) for types, predicates, functions, and checks in every package.
+Browse the full [Package Reference](https://krzysztofcwalina.github.io/cop/cop-reference.html) for types, predicates, functions, and checks in every package.
 
 ## Testing
 
