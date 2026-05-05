@@ -603,6 +603,7 @@ public class PredicateEvaluator
                 case "First": return list.Count > 0 ? list[0] : null;
                 case "Last": return list.Count > 0 ? list[list.Count - 1] : null;
                 case "Single": return list.Count == 1 ? list[0] : null;
+                case "Tail": return list.Count > 1 ? list.Cast<object>().Skip(1).ToList() : new List<object>();
                 default:
                     // Flatten: list.Property → SelectMany across all items
                     var flattened = new List<object?>();
