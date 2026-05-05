@@ -32,6 +32,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .prop-row:hover { background: #f6f8fa; }
 .prop-name { font-family: 'SFMono-Regular', Consolas, monospace; font-weight: 600; width: 200px; flex-shrink: 0; }
 .prop-type { color: #6639ba; width: 180px; flex-shrink: 0; font-family: monospace; font-size: 12px; }
+.prop-type a.type-nav-link { color: #6639ba; text-decoration: none; border-bottom: 1px dotted #6639ba; }
+.prop-type a.type-nav-link:hover { color: #8250df; border-bottom-style: solid; }
 .prop-desc { flex: 1; color: #57606a; }
 
 /* Item row (for predicates, functions, checks) */
@@ -1266,7 +1268,7 @@ function renderType(pkgId, typeName) {
       <div class="comment-wrapper">
         <div class="prop-row">
           <span class="prop-name">${prop.name}</span>
-          <span class="prop-type">${escapeHtml(prop.type)}</span>
+          <span class="prop-type">${formatTypeLink(pkgId, prop.type)}</span>
           <span class="prop-desc">${escapeHtml(prop.desc)}</span>
           <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
         </div>
@@ -1277,6 +1279,7 @@ function renderType(pkgId, typeName) {
 
   content.innerHTML = html;
   wireUpComments(content);
+  wireUpTypeLinks(content);
 }
 
 function renderPredicates(pkgId) {
@@ -1592,6 +1595,13 @@ function formatTypeLink(currentPkgId, typeStr) {
     const inner = collMatch[1];
     const link = makeTypeLink(currentPkgId, inner);
     return `[${link}]`;
+  }
+  // Handle nullable types like File?, string?
+  const nullMatch = typeStr.match(/^(.+)\?$/);
+  if (nullMatch) {
+    const inner = nullMatch[1];
+    const link = makeTypeLink(currentPkgId, inner);
+    return `${link}?`;
   }
   return makeTypeLink(currentPkgId, typeStr);
 }
