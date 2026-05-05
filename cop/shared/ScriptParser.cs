@@ -143,6 +143,13 @@ public class ScriptParser
                 commands.Add(ParseForeachBlock(pendingDocComment));
                 pendingDocComment = null;
             }
+            else if (Current.Kind == TokenKind.Identifier && Current.Value == "async" && _pos + 1 < _tokens.Count && _tokens[_pos + 1].Kind == TokenKind.ForeachKeyword)
+            {
+                Advance(); // consume 'async'
+                var cmd = ParseForeachBlock(pendingDocComment);
+                commands.Add(cmd with { IsAsync = true });
+                pendingDocComment = null;
+            }
             else if (Current.Kind == TokenKind.StringLiteral)
             {
                 // Bare string literal = implicit output statement
@@ -704,6 +711,12 @@ public class ScriptParser
         {
             block = ParseForeachBlock(docComment);
             block = block with { Name = commandName, IsCommand = true };
+        }
+        else if (Current.Kind == TokenKind.Identifier && Current.Value == "async" && _pos + 1 < _tokens.Count && _tokens[_pos + 1].Kind == TokenKind.ForeachKeyword)
+        {
+            Advance(); // consume 'async'
+            block = ParseForeachBlock(docComment);
+            block = block with { Name = commandName, IsCommand = true, IsAsync = true };
         }
         else if (Current.Kind == TokenKind.StringLiteral)
         {

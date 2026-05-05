@@ -351,49 +351,100 @@ public class ScriptInterpreter
 
         try
         {
-            await foreach (var item in streamingSource.QueryStream(cancellationToken))
+            if (cmd.IsAsync)
             {
-                if (cancellationToken.IsCancellationRequested) break;
+                // Async mode: process items concurrently
+                var semaphore = new SemaphoreSlim(Environment.ProcessorCount * 2);
+                var activeTasks = new List<Task>();
 
-                var evaluator = new PredicateEvaluator(predicateGroups, "", _typeRegistry, letDeclarations, functionGroups);
-
-                // Apply filters
-                var items = new List<object> { item };
-                items = ApplyFilters(items, itemType, cmd.Filters, evaluator, functionGroups);
-                if (items.Count == 0) continue;
-
-                var filteredItem = items[0];
-
-                // Evaluate transform
-                object result;
-                if (cmd.OutputExpression is not null)
+                await foreach (var item in streamingSource.QueryStream(cancellationToken))
                 {
-                    result = evaluator.EvaluateField(cmd.OutputExpression, filteredItem, finalItemType) ?? filteredItem;
-                }
-                else if (!string.IsNullOrEmpty(cmd.MessageTemplate))
-                {
-                    EvaluationContext ctx = new();
-                    ctx.Capture(finalItemType, filteredItem);
-                    ctx.Capture("item", filteredItem);
-                    if (filteredItem is DataObject ao)
-                        CaptureAlanObjectFields(ctx, ao);
-                    CaptureLetValues(ctx, evaluator, letDeclarations, filteredItem, finalItemType);
-                    var richMessage = ResolveTemplate(cmd.MessageTemplate, ctx);
-                    result = richMessage.ToPlainText();
-                }
-                else
-                {
-                    result = filteredItem;
+                    if (cancellationToken.IsCancellationRequested) break;
+
+                    await semaphore.WaitAsync(cancellationToken);
+                    var task = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await ProcessStreamItem(item, itemType, finalItemType, cmd, predicateGroups, letDeclarations, functionGroups, sink);
+                        }
+                        finally
+                        {
+                            semaphore.Release();
+                        }
+                    }, cancellationToken);
+
+                    lock (activeTasks)
+                    {
+                        activeTasks.Add(task);
+                        activeTasks.RemoveAll(t => t.IsCompleted);
+                    }
                 }
 
-                // Dispatch to sink
-                await sink.WriteAsync(filteredItem, result);
+                // Wait for remaining tasks
+                Task[] remaining;
+                lock (activeTasks) { remaining = activeTasks.ToArray(); }
+                await Task.WhenAll(remaining);
+            }
+            else
+            {
+                // Sync mode: process items sequentially
+                await foreach (var item in streamingSource.QueryStream(cancellationToken))
+                {
+                    if (cancellationToken.IsCancellationRequested) break;
+                    await ProcessStreamItem(item, itemType, finalItemType, cmd, predicateGroups, letDeclarations, functionGroups, sink);
+                }
             }
         }
         finally
         {
             await sink.CompleteAsync();
         }
+    }
+
+    private async Task ProcessStreamItem(
+        object item,
+        string itemType,
+        string finalItemType,
+        CommandBlock cmd,
+        Dictionary<string, List<PredicateDefinition>> predicateGroups,
+        Dictionary<string, LetDeclaration> letDeclarations,
+        Dictionary<string, List<FunctionDefinition>> functionGroups,
+        DataSink sink)
+    {
+        var evaluator = new PredicateEvaluator(predicateGroups, "", _typeRegistry, letDeclarations, functionGroups);
+
+        // Apply filters
+        var items = new List<object> { item };
+        items = ApplyFilters(items, itemType, cmd.Filters, evaluator, functionGroups);
+        if (items.Count == 0) return;
+
+        var filteredItem = items[0];
+
+        // Evaluate transform
+        object result;
+        if (cmd.OutputExpression is not null)
+        {
+            result = evaluator.EvaluateField(cmd.OutputExpression, filteredItem, finalItemType) ?? filteredItem;
+        }
+        else if (!string.IsNullOrEmpty(cmd.MessageTemplate))
+        {
+            EvaluationContext ctx = new();
+            ctx.Capture(finalItemType, filteredItem);
+            ctx.Capture("item", filteredItem);
+            if (filteredItem is DataObject ao)
+                CaptureAlanObjectFields(ctx, ao);
+            CaptureLetValues(ctx, evaluator, letDeclarations, filteredItem, finalItemType);
+            var richMessage = ResolveTemplate(cmd.MessageTemplate, ctx);
+            result = richMessage.ToPlainText();
+        }
+        else
+        {
+            result = filteredItem;
+        }
+
+        // Dispatch to sink
+        await sink.WriteAsync(filteredItem, result);
     }
 
     /// <summary>

@@ -17,7 +17,8 @@ public record CommandBlock(
     List<string>? Parameters = null,
     Expression? OutputExpression = null,
     SinkTarget? Sink = null,
-    string? PathOverride = null);
+    string? PathOverride = null,
+    bool IsAsync = false);
 
 /// <summary>
 /// Represents the target sink in a chained pipeline: foreach Source => Transform => Sink

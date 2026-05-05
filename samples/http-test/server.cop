@@ -1,0 +1,9 @@
+import http
+
+function handle(Request) => Response {
+  StatusCode = 200
+  Body = Request.Uri
+  ContentType = 'text/plain'
+}
+
+command serve = async foreach http.Receive => handle => http.Send
