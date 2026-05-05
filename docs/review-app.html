@@ -391,7 +391,7 @@ const packages = {
       { name: "isGeneric", appliesTo: "ErrorHandler", desc: "ErrorHandler catches generic Exception type" }
     ],
     functions: [
-      { name: "Code", params: "[providers]?, path?", returns: "Codebase", desc: "Returns aggregate code data. No args: all providers. With args: scoped to providers/path. Access Code.Types, Code.Statements, etc." }
+      { name: "Code", params: "[Language]?, path: string?", returns: "Codebase", desc: "Returns aggregate code data. No args: all providers. With args: scoped to languages/path. Access Code.Types, Code.Statements, etc." }
     ],
     checks: [],
     commands: []
@@ -1396,11 +1396,13 @@ function renderFunctions(pkgId) {
   for (const fn of pkg.functions.slice().sort((a,b) => a.name.localeCompare(b.name))) {
     const key = `${pkgId}.fn.${fn.name}.${fn.params.replace(/[, ]/g, '_')}`;
     const hasComment = comments[key] ? 'has-comment' : '';
+    const paramsHtml = formatParamsWithLinks(pkgId, fn.params);
+    const returnsHtml = formatTypeLink(pkgId, fn.returns);
     html += `
       <div class="comment-wrapper">
         <div class="fn-block">
           <div class="fn-signature">
-            <span class="item-name">${fn.name}(${escapeHtml(fn.params)}) → ${escapeHtml(fn.returns)}</span>
+            <span class="item-name">${fn.name}(${paramsHtml}) → ${returnsHtml}</span>
             <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
           </div>
           <div class="fn-desc">${escapeHtml(fn.desc)}</div>
@@ -1412,6 +1414,7 @@ function renderFunctions(pkgId) {
 
   content.innerHTML = html;
   wireUpComments(content);
+  wireUpTypeLinks(content);
 }
 
 function renderChecks(pkgId) {
@@ -1582,7 +1585,28 @@ function submitToCopilot() {
   });
 }
 
+function formatParamsWithLinks(currentPkgId, paramsStr) {
+  if (!paramsStr) return '';
+  // Split params by comma, link type references in each segment
+  return paramsStr.split(',').map(p => {
+    p = p.trim();
+    // Match patterns like "name: Type?" or "[Type]?" or just "Type"
+    const colonMatch = p.match(/^(\w+):\s*(.+)$/);
+    if (colonMatch) {
+      return `${escapeHtml(colonMatch[1])}: ${formatTypeLink(currentPkgId, colonMatch[2])}`;
+    }
+    return formatTypeLink(currentPkgId, p);
+  }).join(', ');
+}
+
 function formatTypeLink(currentPkgId, typeStr) {
+  // Handle nullable collection types like [Statement]?
+  const nullCollMatch = typeStr.match(/^\[(.+)\]\?$/);
+  if (nullCollMatch) {
+    const inner = nullCollMatch[1];
+    const link = makeTypeLink(currentPkgId, inner);
+    return `[${link}]?`;
+  }
   // Handle collection types like [Statement], [Folder]
   const collMatch = typeStr.match(/^\[(.+)\]$/);
   if (collMatch) {
