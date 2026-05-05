@@ -1277,6 +1277,36 @@ function renderType(pkgId, typeName) {
     `;
   }
 
+  // Collect predicates that apply to this type from all packages
+  const applicablePredicates = [];
+  for (const [pId, p] of Object.entries(packages)) {
+    if (!p.predicates) continue;
+    for (const pred of p.predicates) {
+      if (pred.appliesTo === typeName) {
+        applicablePredicates.push({ ...pred, fromPkg: pId });
+      }
+    }
+  }
+
+  if (applicablePredicates.length > 0) {
+    html += `<h2>Predicates</h2>`;
+    for (const pred of applicablePredicates.sort((a,b) => a.name.localeCompare(b.name))) {
+      const key = `${pred.fromPkg}.pred.${pred.name}.${pred.appliesTo}`;
+      const hasComment = comments[key] ? 'has-comment' : '';
+      const fromLabel = pred.fromPkg !== pkgId ? ` <span style="color:#8b949e; font-size:11px;">(${pred.fromPkg})</span>` : '';
+      html += `
+        <div class="comment-wrapper">
+          <div class="item-row">
+            <span class="item-name">${pred.name}${fromLabel}</span>
+            <span class="item-detail">${escapeHtml(pred.desc)}</span>
+            <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
+          </div>
+          <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
+        </div>
+      `;
+    }
+  }
+
   content.innerHTML = html;
   wireUpComments(content);
   wireUpTypeLinks(content);
