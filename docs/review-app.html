@@ -1146,22 +1146,7 @@ function buildTree() {
       `;
       const childrenDiv = pkgNode.querySelector('.tree-children');
 
-      if (hasEnums) {
-        const secNode = document.createElement('div');
-        secNode.className = 'tree-node';
-        secNode.innerHTML = `
-          <div class="tree-label" data-pkg="${pkgId}" data-view="enums">
-            <span class="tree-toggle" style="visibility:hidden"></span>
-            <span class="section-tag tag-enum">E</span>
-            <span>Enums (${pkg.enums.length})</span>
-          </div>
-        `;
-        childrenDiv.appendChild(secNode);
-      }
-
-
-
-      if (hasTypes) {
+      if (hasTypes || hasEnums) {
         const secNode = document.createElement('div');
         secNode.className = 'tree-node';
         secNode.innerHTML = `
@@ -1173,31 +1158,34 @@ function buildTree() {
           <div class="tree-children collapsed"></div>
         `;
         const typesChildren = secNode.querySelector('.tree-children');
-        for (const typeName of Object.keys(pkg.types).sort()) {
-          const typeNode = document.createElement('div');
-          typeNode.className = 'tree-node';
-          typeNode.innerHTML = `
-            <div class="tree-label" data-pkg="${pkgId}" data-type="${typeName}">
-              <span class="tree-toggle" style="visibility:hidden"></span>
-              <span class="tree-icon">◆</span>
-              <span>${typeName}</span>
-            </div>
-          `;
-          typesChildren.appendChild(typeNode);
+        if (hasTypes) {
+          for (const typeName of Object.keys(pkg.types).sort()) {
+            const typeNode = document.createElement('div');
+            typeNode.className = 'tree-node';
+            typeNode.innerHTML = `
+              <div class="tree-label" data-pkg="${pkgId}" data-type="${typeName}">
+                <span class="tree-toggle" style="visibility:hidden"></span>
+                <span class="tree-icon">◆</span>
+                <span>${typeName}</span>
+              </div>
+            `;
+            typesChildren.appendChild(typeNode);
+          }
         }
-        childrenDiv.appendChild(secNode);
-      }
-
-      if (hasPreds) {
-        const secNode = document.createElement('div');
-        secNode.className = 'tree-node';
-        secNode.innerHTML = `
-          <div class="tree-label" data-pkg="${pkgId}" data-view="predicates">
-            <span class="tree-toggle" style="visibility:hidden"></span>
-            <span class="section-tag tag-predicate">P</span>
-            <span>Predicates (${pkg.predicates.length})</span>
-          </div>
-        `;
+        if (hasEnums) {
+          for (const en of pkg.enums) {
+            const enumNode = document.createElement('div');
+            enumNode.className = 'tree-node';
+            enumNode.innerHTML = `
+              <div class="tree-label" data-pkg="${pkgId}" data-view="enums" data-enum="${en.name}">
+                <span class="tree-toggle" style="visibility:hidden"></span>
+                <span class="tree-icon">◇</span>
+                <span>${en.name}</span>
+              </div>
+            `;
+            typesChildren.appendChild(enumNode);
+          }
+        }
         childrenDiv.appendChild(secNode);
       }
 
@@ -1209,6 +1197,19 @@ function buildTree() {
             <span class="tree-toggle" style="visibility:hidden"></span>
             <span class="section-tag tag-function">F</span>
             <span>Functions (${pkg.functions.length})</span>
+          </div>
+        `;
+        childrenDiv.appendChild(secNode);
+      }
+
+      if (hasPreds) {
+        const secNode = document.createElement('div');
+        secNode.className = 'tree-node';
+        secNode.innerHTML = `
+          <div class="tree-label" data-pkg="${pkgId}" data-view="predicates">
+            <span class="tree-toggle" style="visibility:hidden"></span>
+            <span class="section-tag tag-predicate">P</span>
+            <span>Predicates (${pkg.predicates.length})</span>
           </div>
         `;
         childrenDiv.appendChild(secNode);
