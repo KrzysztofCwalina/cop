@@ -54,6 +54,7 @@ HTTP protocol graph derived from TypeSpec specs. &nbsp; `import typespec-http`
 | `Parameters` | [`[HttpParameter]`](#httpparameter) | Request parameters |
 | `Responses` | [`[HttpResponse]`](#httpresponse) | Possible responses |
 | `Interface` | string? | Parent interface |
+| `Decorators` | [`[TspDecorator]`](#tspdecorator) | Applied decorators |
 
 #### HttpService
 

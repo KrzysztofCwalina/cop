@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cop Package Reference Review</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; height: 100vh; color: #24292f; }
+
+/* Sidebar */
+.sidebar { width: 300px; border-right: 1px solid #d0d7de; overflow-y: auto; background: #f6f8fa; padding: 12px 0; flex-shrink: 0; }
+.sidebar h2 { padding: 8px 16px; font-size: 14px; color: #57606a; text-transform: uppercase; letter-spacing: 0.5px; }
+.tree-node { cursor: pointer; user-select: none; }
+.tree-label { display: flex; align-items: center; padding: 4px 16px; font-size: 13px; border-radius: 6px; margin: 1px 8px; }
+.tree-label:hover { background: #eaeef2; }
+.tree-label.active { background: #ddf4ff; color: #0969da; font-weight: 600; }
+.tree-toggle { width: 16px; font-size: 10px; color: #57606a; flex-shrink: 0; }
+.tree-icon { margin-right: 6px; font-size: 12px; }
+.tree-children { padding-left: 16px; }
+.tree-children.collapsed { display: none; }
+
+/* Main content */
+.main { flex: 1; overflow-y: auto; padding: 32px 48px; max-width: 900px; }
+.main h1 { font-size: 24px; margin-bottom: 8px; }
+.main h2 { font-size: 18px; margin: 24px 0 12px; padding-bottom: 6px; border-bottom: 1px solid #d0d7de; }
+.main h3 { font-size: 15px; margin: 16px 0 8px; }
+
+/* Property row */
+.prop-row { display: flex; align-items: center; padding: 5px 8px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+.prop-row:hover { background: #f6f8fa; }
+.prop-name { font-family: 'SFMono-Regular', Consolas, monospace; font-weight: 600; width: 180px; flex-shrink: 0; }
+.prop-type { color: #6639ba; width: 160px; flex-shrink: 0; font-family: monospace; font-size: 12px; }
+.prop-desc { flex: 1; color: #57606a; }
+
+/* Comment button and input */
+.comment-btn { cursor: pointer; font-size: 14px; margin-left: 8px; opacity: 0.3; transition: opacity 0.2s; flex-shrink: 0; }
+.comment-btn:hover { opacity: 1; }
+.comment-btn.has-comment { opacity: 1; color: #0969da; }
+.comment-input { display: none; width: 100%; margin-top: 4px; padding: 6px 8px; border: 1px solid #d0d7de; border-radius: 6px; font-size: 12px; font-family: inherit; resize: vertical; min-height: 28px; }
+.comment-input.visible { display: block; }
+.comment-wrapper { width: 100%; }
+
+/* Toolbar */
+.toolbar { position: fixed; top: 12px; right: 24px; display: flex; gap: 8px; z-index: 100; }
+.toolbar button { padding: 6px 14px; border: 1px solid #d0d7de; border-radius: 6px; background: #fff; cursor: pointer; font-size: 13px; font-weight: 500; }
+.toolbar button:hover { background: #f3f4f6; }
+.toolbar button.primary { background: #2da44e; color: #fff; border-color: #2da44e; }
+.toolbar button.primary:hover { background: #2c974b; }
+.badge { background: #0969da; color: #fff; border-radius: 10px; padding: 1px 6px; font-size: 11px; margin-left: 4px; }
+
+/* Collection header */
+.collection-header { display: flex; align-items: center; padding: 5px 8px; background: #f6f8fa; border-bottom: 1px solid #eaeef2; font-size: 13px; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <h2>Packages</h2>
+  <div id="tree"></div>
+</div>
+
+<div class="main" id="content">
+  <h1>Cop Package Reference Review</h1>
+  <p style="color:#57606a; margin-top:8px;">Select a type from the tree to view its properties. Click 💬 to add comments. Export when done.</p>
+</div>
+
+<div class="toolbar">
+  <button onclick="exportComments()" class="primary">Export Comments <span class="badge" id="commentCount">0</span></button>
+  <button onclick="clearAllComments()">Clear All</button>
+</div>
+
+<script>
+// === SCHEMA DATA (from actual provider implementations) ===
+const packages = {
+  code: {
+    label: "code",
+    collections: ["Types", "Statements", "Lines", "Files", "Members", "Api", "Regions", "Projects"],
+    types: {
+      Type: {
+        props: [
+          { name: "Name", type: "string", desc: "Type name" },
+          { name: "Kind", type: "string", desc: "Class, Struct, Interface, Enum, Record" },
+          { name: "Modifiers", type: "int", desc: "Modifier bitfield (use predicates)" },
+          { name: "BaseTypes", type: "[string]", desc: "Base types and interfaces" },
+          { name: "Constructors", type: "[Method]", desc: "Constructor declarations" },
+          { name: "Methods", type: "[Method]", desc: "Method declarations" },
+          { name: "MethodNames", type: "[string]", desc: "Method names (quick string matching)" },
+          { name: "NestedTypes", type: "[Type]", desc: "Nested type declarations" },
+          { name: "EnumValues", type: "[string]", desc: "Enum member names" },
+          { name: "Decorators", type: "[string]", desc: "Attributes/decorators" },
+          { name: "Fields", type: "[Field]", desc: "Field declarations" },
+          { name: "Properties", type: "[Property]", desc: "Property declarations" },
+          { name: "Events", type: "[Event]", desc: "Event declarations" },
+          { name: "Line", type: "int", desc: "Source line number" },
+          { name: "File", type: "File?", desc: "Containing source file" },
+          { name: "Source", type: "string", desc: "Source text of the declaration" },
+          { name: "Documented", type: "bool", desc: "Has documentation comment" }
+        ]
+      },
+      Method: {
+        props: [
+          { name: "Name", type: "string", desc: "Method name" },
+          { name: "Modifiers", type: "int", desc: "Modifier bitfield" },
+          { name: "ReturnType", type: "TypeReference?", desc: "Return type (nic for constructors/void)" },
+          { name: "Parameters", type: "[Parameter]", desc: "Parameter declarations" },
+          { name: "Statements", type: "[Statement]", desc: "Statements within method body" },
+          { name: "Decorators", type: "[string]", desc: "Attributes/decorators" },
+          { name: "Line", type: "int", desc: "Source line number" },
+          { name: "Documented", type: "bool", desc: "Has documentation comment" }
+        ]
+      },
+      Parameter: {
+        props: [
+          { name: "Name", type: "string", desc: "Parameter name" },
+          { name: "Type", type: "TypeReference?", desc: "Parameter type" },
+          { name: "Variadic", type: "bool", desc: "Is params/*args" },
+          { name: "Kwargs", type: "bool", desc: "Is **kwargs (Python)" },
+          { name: "Defaulted", type: "bool", desc: "Has default value" },
+          { name: "DefaultValue", type: "string?", desc: "Default value text" }
+        ]
+      },
+      Field: {
+        props: [
+          { name: "Name", type: "string", desc: "Field name" },
+          { name: "Type", type: "TypeReference?", desc: "Field type" },
+          { name: "Modifiers", type: "int", desc: "Modifier bitfield" },
+          { name: "Line", type: "int", desc: "Source line number" }
+        ]
+      },
+      Property: {
+        props: [
+          { name: "Name", type: "string", desc: "Property name" },
+          { name: "Type", type: "TypeReference?", desc: "Property type" },
+          { name: "Modifiers", type: "int", desc: "Modifier bitfield" },
+          { name: "HasGetter", type: "bool", desc: "Has get accessor" },
+          { name: "HasSetter", type: "bool", desc: "Has set accessor" },
+          { name: "Documented", type: "bool", desc: "Has documentation comment" },
+          { name: "Line", type: "int", desc: "Source line number" }
+        ]
+      },
+      Event: {
+        props: [
+          { name: "Name", type: "string", desc: "Event name" },
+          { name: "Type", type: "TypeReference?", desc: "Event handler type" },
+          { name: "Modifiers", type: "int", desc: "Modifier bitfield" },
+          { name: "Line", type: "int", desc: "Source line number" }
+        ]
+      },
+      TypeReference: {
+        props: [
+          { name: "Name", type: "string", desc: "Type name without namespace" },
+          { name: "Namespace", type: "string?", desc: "Namespace prefix" },
+          { name: "Generic", type: "bool", desc: "Has generic arguments" },
+          { name: "GenericArguments", type: "[TypeReference]", desc: "Generic type arguments" },
+          { name: "Length", type: "int", desc: "Length of original type text" }
+        ]
+      },
+      Statement: {
+        props: [
+          { name: "Kind", type: "string", desc: "declaration, call, throw, catch, return, using, foreach, await" },
+          { name: "Keywords", type: "[string]", desc: "Language keywords" },
+          { name: "TypeName", type: "string?", desc: "Receiver type name" },
+          { name: "MemberName", type: "string?", desc: "Member name" },
+          { name: "Arguments", type: "[string]", desc: "Call arguments" },
+          { name: "Line", type: "int", desc: "Source line number" },
+          { name: "InMethod", type: "bool", desc: "Inside a method body" },
+          { name: "Rethrows", type: "bool", desc: "Rethrows caught exception" },
+          { name: "Generic", type: "bool", desc: "Uses generic type parameters" },
+          { name: "ErrorHandler", type: "bool", desc: "Is error-handling construct" },
+          { name: "File", type: "File?", desc: "Containing file" },
+          { name: "Source", type: "string", desc: "Source text" },
+          { name: "Method", type: "Method?", desc: "Enclosing method" },
+          { name: "Parent", type: "Statement?", desc: "Parent statement" },
+          { name: "Children", type: "[Statement]", desc: "Child statements" },
+          { name: "Ancestors", type: "[Statement]", desc: "All ancestor statements" },
+          { name: "Condition", type: "string?", desc: "Condition expression text" },
+          { name: "Expression", type: "string?", desc: "Statement expression text" }
+        ]
+      },
+      Line: {
+        props: [
+          { name: "Text", type: "string", desc: "Raw text content" },
+          { name: "Number", type: "int", desc: "Line number" },
+          { name: "File", type: "File?", desc: "Containing file" },
+          { name: "Source", type: "string", desc: "Same as Text" }
+        ]
+      },
+      File: {
+        props: [
+          { name: "Path", type: "string", desc: "Relative file path" },
+          { name: "Language", type: "string?", desc: "Language (csharp, python, etc.)" },
+          { name: "Namespace", type: "string?", desc: "Declared namespace" },
+          { name: "Usings", type: "[string]", desc: "Import/using directives" },
+          { name: "Types", type: "[Type]", desc: "Type declarations in file" }
+        ]
+      },
+      Api: {
+        props: [
+          { name: "Kind", type: "string", desc: "Entry kind (type, method, field, property, event)" },
+          { name: "TypeName", type: "string", desc: "Declaring type name" },
+          { name: "MemberName", type: "string", desc: "Member name" },
+          { name: "Signature", type: "string", desc: "Full signature text" },
+          { name: "ApiAsText", type: "string", desc: "Formatted API surface text" },
+          { name: "Line", type: "int", desc: "Source line number" },
+          { name: "File", type: "File?", desc: "Containing file" },
+          { name: "Source", type: "string", desc: "Source text" }
+        ]
+      },
+      Member: {
+        props: [
+          { name: "Name", type: "string", desc: "Member name" },
+          { name: "DeclaringType", type: "string", desc: "Declaring type name" },
+          { name: "Line", type: "int", desc: "Source line number" }
+        ]
+      },
+      Region: {
+        props: [
+          { name: "Name", type: "string", desc: "Region name" },
+          { name: "StartLine", type: "int", desc: "Start line number" },
+          { name: "EndLine", type: "int", desc: "End line number" },
+          { name: "Content", type: "string", desc: "Region content text" },
+          { name: "ContentHash", type: "string", desc: "Hash of content" },
+          { name: "File", type: "File?", desc: "Containing file" },
+          { name: "Source", type: "string", desc: "Raw region source" }
+        ]
+      },
+      Project: {
+        props: [
+          { name: "Name", type: "string", desc: "Project/package name" },
+          { name: "Path", type: "string", desc: "Relative path to manifest" },
+          { name: "Language", type: "string?", desc: "Language" },
+          { name: "References", type: "[string]", desc: "Referenced project names" }
+        ]
+      }
+    }
+  },
+  filesystem: {
+    label: "filesystem",
+    collections: ["Folders", "Files"],
+    types: {
+      Folder: {
+        props: [
+          { name: "Path", type: "string", desc: "Full path" },
+          { name: "Name", type: "string", desc: "Folder name (last segment)" },
+          { name: "Empty", type: "bool", desc: "True if no files inside" },
+          { name: "FileCount", type: "int", desc: "Files directly in folder" },
+          { name: "SubfolderCount", type: "int", desc: "Immediate subfolders" },
+          { name: "Depth", type: "int", desc: "Nesting depth from scan root" },
+          { name: "MinutesSinceModified", type: "int", desc: "Minutes since last modified" },
+          { name: "Source", type: "string", desc: "Folder path" }
+        ]
+      },
+      DiskFile: {
+        props: [
+          { name: "Path", type: "string", desc: "Full path" },
+          { name: "Name", type: "string", desc: "File name with extension" },
+          { name: "Extension", type: "string", desc: "Extension (e.g. .cs, .md)" },
+          { name: "Size", type: "int", desc: "Size in bytes" },
+          { name: "Folder", type: "string", desc: "Parent folder path" },
+          { name: "Depth", type: "int", desc: "Nesting depth from scan root" },
+          { name: "MinutesSinceModified", type: "int", desc: "Minutes since last modified" },
+          { name: "Source", type: "string", desc: "File path" }
+        ]
+      }
+    }
+  },
+  markdown: {
+    label: "markdown",
+    collections: ["Headings", "Links", "Sections", "FenceBlocks"],
+    types: {
+      Heading: {
+        props: [
+          { name: "Text", type: "string", desc: "Heading text content" },
+          { name: "Level", type: "int", desc: "Heading level (1-6)" },
+          { name: "Line", type: "int", desc: "Source line number" },
+          { name: "File", type: "File?", desc: "Containing file" },
+          { name: "Source", type: "string", desc: "Raw source line" }
+        ]
+      },
+      Link: {
+        props: [
+          { name: "Url", type: "string", desc: "Link target URL" },
+          { name: "Text", type: "string?", desc: "Display text" },
+          { name: "Line", type: "int", desc: "Source line number" },
+          { name: "File", type: "File?", desc: "Containing file" },
+          { name: "Source", type: "string", desc: "Raw source text" }
+        ]
+      },
+      Section: {
+        props: [
+          { name: "Heading", type: "string", desc: "Section heading text" },
+          { name: "Level", type: "int", desc: "Heading level (1-6)" },
+          { name: "Content", type: "string", desc: "Full section content" },
+          { name: "StartLine", type: "int", desc: "First line of section" },
+          { name: "EndLine", type: "int", desc: "Last line of section" },
+          { name: "File", type: "File?", desc: "Containing file" },
+          { name: "Source", type: "string", desc: "Raw section source" }
+        ]
+      },
+      FenceBlock: {
+        props: [
+          { name: "Language", type: "string?", desc: "Language tag (e.g. csharp, json)" },
+          { name: "Tag", type: "string?", desc: "Additional tag after language" },
+          { name: "StartLine", type: "int", desc: "Opening fence line number" },
+          { name: "EndLine", type: "int", desc: "Closing fence line number" },
+          { name: "Content", type: "string", desc: "Code block content" },
+          { name: "ContentHash", type: "string", desc: "Hash of content" },
+          { name: "File", type: "File?", desc: "Containing file" },
+          { name: "Source", type: "string", desc: "Full fence block source" }
+        ]
+      }
+    }
+  },
+  typespec: {
+    label: "typespec",
+    collections: ["Models", "Operations", "Interfaces", "Enums", "Unions", "Scalars", "Namespaces"],
+    types: {
+      TspModel: {
+        props: [
+          { name: "Name", type: "string", desc: "Model name" },
+          { name: "Namespace", type: "string?", desc: "Containing namespace" },
+          { name: "Properties", type: "[TspProperty]", desc: "Model properties" },
+          { name: "BaseModel", type: "string?", desc: "Parent model" },
+          { name: "Decorators", type: "[TspDecorator]", desc: "Applied decorators" }
+        ]
+      },
+      TspOperation: {
+        props: [
+          { name: "Name", type: "string", desc: "Operation name" },
+          { name: "Namespace", type: "string?", desc: "Containing namespace" },
+          { name: "Interface", type: "string?", desc: "Parent interface" },
+          { name: "Parameters", type: "[TspProperty]", desc: "Input parameters" },
+          { name: "ReturnType", type: "string", desc: "Return type expression" },
+          { name: "Decorators", type: "[TspDecorator]", desc: "Applied decorators" }
+        ]
+      },
+      TspInterface: {
+        props: [
+          { name: "Name", type: "string", desc: "Interface name" },
+          { name: "Namespace", type: "string?", desc: "Containing namespace" },
+          { name: "Operations", type: "[TspOperation]", desc: "Contained operations" },
+          { name: "Decorators", type: "[TspDecorator]", desc: "Applied decorators" }
+        ]
+      },
+      TspEnum: {
+        props: [
+          { name: "Name", type: "string", desc: "Enum name" },
+          { name: "Namespace", type: "string?", desc: "Containing namespace" },
+          { name: "Members", type: "[TspEnumMember]", desc: "Enum members" },
+          { name: "Decorators", type: "[TspDecorator]", desc: "Applied decorators" }
+        ]
+      },
+      TspUnion: {
+        props: [
+          { name: "Name", type: "string", desc: "Union name" },
+          { name: "Namespace", type: "string?", desc: "Containing namespace" },
+          { name: "Variants", type: "[TspUnionVariant]", desc: "Union variants" },
+          { name: "Decorators", type: "[TspDecorator]", desc: "Applied decorators" }
+        ]
+      },
+      TspScalar: {
+        props: [
+          { name: "Name", type: "string", desc: "Scalar name" },
+          { name: "Namespace", type: "string?", desc: "Containing namespace" },
+          { name: "BaseScalar", type: "string?", desc: "Base scalar type" },
+          { name: "Decorators", type: "[TspDecorator]", desc: "Applied decorators" }
+        ]
+      },
+      TspNamespace: {
+        props: [
+          { name: "Name", type: "string", desc: "Short name" },
+          { name: "FullName", type: "string", desc: "Fully qualified name" },
+          { name: "Decorators", type: "[TspDecorator]", desc: "Applied decorators" }
+        ]
+      },
+      TspDecorator: {
+        props: [
+          { name: "Name", type: "string", desc: "Decorator name" },
+          { name: "Arguments", type: "[string]", desc: "Argument values" }
+        ]
+      },
+      TspProperty: {
+        props: [
+          { name: "Name", type: "string", desc: "Property name" },
+          { name: "Type", type: "string", desc: "Type expression" },
+          { name: "Optional", type: "bool", desc: "True if optional" },
+          { name: "Default", type: "string?", desc: "Default value" },
+          { name: "Decorators", type: "[TspDecorator]", desc: "Applied decorators" }
+        ]
+      },
+      TspEnumMember: {
+        props: [
+          { name: "Name", type: "string", desc: "Member name" },
+          { name: "Value", type: "string?", desc: "Explicit value" },
+          { name: "Decorators", type: "[TspDecorator]", desc: "Applied decorators" }
+        ]
+      },
+      TspUnionVariant: {
+        props: [
+          { name: "Name", type: "string", desc: "Variant name" },
+          { name: "Type", type: "string", desc: "Variant type expression" }
+        ]
+      }
+    }
+  },
+  "typespec-http": {
+    label: "typespec-http",
+    collections: ["Operations", "Services"],
+    types: {
+      HttpOperation: {
+        props: [
+          { name: "Name", type: "string", desc: "Operation name" },
+          { name: "Verb", type: "string", desc: "HTTP verb (get, put, post, etc.)" },
+          { name: "Path", type: "string", desc: "Resolved route path" },
+          { name: "UriTemplate", type: "string", desc: "URI template with placeholders" },
+          { name: "Parameters", type: "[HttpParameter]", desc: "Request parameters" },
+          { name: "Responses", type: "[HttpResponse]", desc: "Possible responses" },
+          { name: "Interface", type: "string?", desc: "Parent interface" },
+          { name: "Decorators", type: "[TspDecorator]", desc: "Applied decorators" }
+        ]
+      },
+      HttpService: {
+        props: [
+          { name: "Name", type: "string", desc: "Service name" },
+          { name: "Namespace", type: "string", desc: "Service namespace" },
+          { name: "Operations", type: "[HttpOperation]", desc: "Service operations" },
+          { name: "Auth", type: "string?", desc: "Authentication scheme" }
+        ]
+      },
+      HttpParameter: {
+        props: [
+          { name: "Name", type: "string", desc: "Parameter name" },
+          { name: "Type", type: "string", desc: "Type expression" },
+          { name: "In", type: "string", desc: "Location: query, header, path, body" },
+          { name: "Optional", type: "bool", desc: "True if optional" },
+          { name: "Style", type: "string?", desc: "Serialization style" }
+        ]
+      },
+      HttpHeader: {
+        props: [
+          { name: "Name", type: "string", desc: "Header name" },
+          { name: "Type", type: "string", desc: "Header type" }
+        ]
+      },
+      HttpResponse: {
+        props: [
+          { name: "StatusCode", type: "string", desc: "HTTP status code" },
+          { name: "Description", type: "string?", desc: "Response description" },
+          { name: "Body", type: "string?", desc: "Body type expression" },
+          { name: "Headers", type: "[HttpHeader]", desc: "Response headers" }
+        ]
+      }
+    }
+  }
+};
+
+// === STATE ===
+let comments = JSON.parse(localStorage.getItem('cop-review-comments') || '{}');
+let activeNode = null;
+
+// === TREE RENDERING ===
+function buildTree() {
+  const tree = document.getElementById('tree');
+  tree.innerHTML = '';
+  for (const [pkgId, pkg] of Object.entries(packages)) {
+    const pkgNode = document.createElement('div');
+    pkgNode.className = 'tree-node';
+    pkgNode.innerHTML = `
+      <div class="tree-label" data-pkg="${pkgId}">
+        <span class="tree-toggle">▶</span>
+        <span class="tree-icon">📦</span>
+        <span>${pkg.label}</span>
+      </div>
+      <div class="tree-children collapsed"></div>
+    `;
+    const childrenDiv = pkgNode.querySelector('.tree-children');
+    for (const typeName of Object.keys(pkg.types)) {
+      const typeNode = document.createElement('div');
+      typeNode.className = 'tree-node';
+      typeNode.innerHTML = `
+        <div class="tree-label" data-pkg="${pkgId}" data-type="${typeName}">
+          <span class="tree-toggle" style="visibility:hidden"></span>
+          <span class="tree-icon">◆</span>
+          <span>${typeName}</span>
+        </div>
+      `;
+      childrenDiv.appendChild(typeNode);
+    }
+    tree.appendChild(pkgNode);
+  }
+
+  // Event delegation
+  tree.addEventListener('click', (e) => {
+    const label = e.target.closest('.tree-label');
+    if (!label) return;
+    const pkg = label.dataset.pkg;
+    const type = label.dataset.type;
+    if (type) {
+      selectType(pkg, type, label);
+    } else {
+      // Toggle package expand
+      const children = label.nextElementSibling;
+      const toggle = label.querySelector('.tree-toggle');
+      children.classList.toggle('collapsed');
+      toggle.textContent = children.classList.contains('collapsed') ? '▶' : '▼';
+    }
+  });
+}
+
+function selectType(pkgId, typeName, labelEl) {
+  document.querySelectorAll('.tree-label.active').forEach(el => el.classList.remove('active'));
+  labelEl.classList.add('active');
+  renderType(pkgId, typeName);
+}
+
+// === CONTENT RENDERING ===
+function renderType(pkgId, typeName) {
+  const pkg = packages[pkgId];
+  const type = pkg.types[typeName];
+  const content = document.getElementById('content');
+
+  let html = `<h1>${pkg.label}.${typeName}</h1>`;
+  html += `<h2>Properties</h2>`;
+
+  for (const prop of type.props) {
+    const key = `${pkgId}.${typeName}.${prop.name}`;
+    const hasComment = comments[key] ? 'has-comment' : '';
+    html += `
+      <div class="comment-wrapper">
+        <div class="prop-row">
+          <span class="prop-name">${prop.name}</span>
+          <span class="prop-type">${escapeHtml(prop.type)}</span>
+          <span class="prop-desc">${escapeHtml(prop.desc)}</span>
+          <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
+        </div>
+        <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
+      </div>
+    `;
+  }
+
+  content.innerHTML = html;
+
+  // Wire up comment buttons and inputs
+  content.querySelectorAll('.comment-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.key;
+      const input = content.querySelector(`.comment-input[data-key="${key}"]`);
+      input.classList.toggle('visible');
+      if (input.classList.contains('visible')) input.focus();
+    });
+  });
+
+  content.querySelectorAll('.comment-input').forEach(input => {
+    input.addEventListener('input', () => {
+      const key = input.dataset.key;
+      const btn = content.querySelector(`.comment-btn[data-key="${key}"]`);
+      if (input.value.trim()) {
+        comments[key] = input.value.trim();
+        btn.classList.add('has-comment');
+      } else {
+        delete comments[key];
+        btn.classList.remove('has-comment');
+      }
+      saveComments();
+      updateBadge();
+    });
+  });
+}
+
+// === COMMENTS ===
+function saveComments() {
+  localStorage.setItem('cop-review-comments', JSON.stringify(comments));
+}
+
+function updateBadge() {
+  document.getElementById('commentCount').textContent = Object.keys(comments).length;
+}
+
+function exportComments() {
+  const blob = new Blob([JSON.stringify(comments, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'cop-review-comments.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function clearAllComments() {
+  if (!confirm('Clear all comments? This cannot be undone.')) return;
+  comments = {};
+  saveComments();
+  updateBadge();
+  // Re-render current view
+  const active = document.querySelector('.tree-label.active');
+  if (active) selectType(active.dataset.pkg, active.dataset.type, active);
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// === INIT ===
+buildTree();
+updateBadge();
+</script>
+</body>
+</html>

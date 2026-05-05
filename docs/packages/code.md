@@ -15,6 +15,9 @@ Source code structural analysis across multiple languages. &nbsp; `import code`
 | `Code.Statements` | [`[Statement]`](#statement) | Individual code statements |
 | `Code.Lines` | [`[Line]`](#line) | Raw text lines |
 | `Code.Files` | [`[File]`](#file) | Source files |
+| `Code.Members` | [`[Member]`](#member) | All type members (unified view) |
+| `Code.Api` | [`[Api]`](#api) | Public API surface entries |
+| `Code.Regions` | [`[Region]`](#region) | Code regions (e.g. `#region`…`#endregion`) |
 | `Code.Projects` | [`[Project]`](#project) | Discovered projects/packages |
 
 Convenience subsets:
@@ -46,7 +49,13 @@ Language keywords (`csharp`, `python`, `java`, `go`, `typescript`) scope collect
 | `NestedTypes` | [`[Type]`](#type) | Nested type declarations |
 | `EnumValues` | `[string]` | Enum member names |
 | `Decorators` | `[string]` | Attributes/decorators |
+| `Fields` | [`[Field]`](#field) | Field declarations |
+| `Properties` | [`[Property]`](#property) | Property declarations |
+| `Events` | [`[Event]`](#event) | Event declarations |
 | `Line` | `int` | Source line number |
+| `File` | [`File`](#file)`?` | Containing source file |
+| `Source` | `string` | Source text of the declaration |
+| `Documented` | `bool` | Has documentation comment |
 
 #### Method
 
@@ -58,8 +67,10 @@ Language keywords (`csharp`, `python`, `java`, `go`, `typescript`) scope collect
 | `Modifiers` | `int` | Modifier bitfield (use predicates) |
 | `ReturnType` | [`TypeReference`](#typereference)`?` | Return type (nic for constructors/void) |
 | `Parameters` | [`[Parameter]`](#parameter) | Parameter declarations |
+| `Statements` | [`[Statement]`](#statement) | Statements within method body |
 | `Decorators` | `[string]` | Attributes/decorators |
 | `Line` | `int` | Source line number |
+| `Documented` | `bool` | Has documentation comment |
 
 #### Parameter
 
@@ -70,6 +81,7 @@ Language keywords (`csharp`, `python`, `java`, `go`, `typescript`) scope collect
 | `Variadic` | `bool` | Is `params`/`*args` |
 | `Kwargs` | `bool` | Is `**kwargs` (Python) |
 | `Defaulted` | `bool` | Has default value |
+| `DefaultValue` | `string?` | Default value text |
 | `Line` | `int` | Source line number |
 
 #### TypeReference
@@ -82,6 +94,36 @@ Language keywords (`csharp`, `python`, `java`, `go`, `typescript`) scope collect
 | `GenericArguments` | [`[TypeReference]`](#typereference) | Generic type arguments |
 | `Length` | `int` | Length of original type text |
 
+#### Field
+
+| Property | Type | Description |
+|---|---|---|
+| `Name` | `string` | Field name |
+| `Type` | [`TypeReference`](#typereference)`?` | Field type |
+| `Modifiers` | `int` | Modifier bitfield (use predicates) |
+| `Line` | `int` | Source line number |
+
+#### Property
+
+| Property | Type | Description |
+|---|---|---|
+| `Name` | `string` | Property name |
+| `Type` | [`TypeReference`](#typereference)`?` | Property type |
+| `Modifiers` | `int` | Modifier bitfield (use predicates) |
+| `HasGetter` | `bool` | Has get accessor |
+| `HasSetter` | `bool` | Has set accessor |
+| `Documented` | `bool` | Has documentation comment |
+| `Line` | `int` | Source line number |
+
+#### Event
+
+| Property | Type | Description |
+|---|---|---|
+| `Name` | `string` | Event name |
+| `Type` | [`TypeReference`](#typereference)`?` | Event handler type |
+| `Modifiers` | `int` | Modifier bitfield (use predicates) |
+| `Line` | `int` | Source line number |
+
 #### Statement
 
 | Property | Type | Description |
@@ -93,7 +135,17 @@ Language keywords (`csharp`, `python`, `java`, `go`, `typescript`) scope collect
 | `Arguments` | `[string]` | Call arguments |
 | `Line` | `int` | Source line number |
 | `InMethod` | `bool` | Inside a method body |
+| `Rethrows` | `bool` | Rethrows caught exception |
+| `Generic` | `bool` | Uses generic type parameters |
+| `ErrorHandler` | `bool` | Is an error-handling construct |
 | `File` | [`File`](#file)`?` | Containing file |
+| `Source` | `string` | Source text of the statement |
+| `Method` | [`Method`](#method)`?` | Enclosing method |
+| `Parent` | [`Statement`](#statement)`?` | Parent statement (block nesting) |
+| `Children` | [`[Statement]`](#statement) | Child statements (nested block) |
+| `Ancestors` | [`[Statement]`](#statement) | All ancestor statements up to method |
+| `Condition` | `string?` | Condition expression text (if/while/for) |
+| `Expression` | `string?` | Statement expression text |
 
 Subset types narrow by predicate:
 
@@ -110,6 +162,8 @@ Subset types narrow by predicate:
 |---|---|---|
 | `Text` | `string` | Raw text content |
 | `Number` | `int` | Line number |
+| `File` | [`File`](#file)`?` | Containing file |
+| `Source` | `string` | Same as Text (unified interface) |
 
 #### File
 
@@ -138,6 +192,39 @@ Each language provider discovers projects from their manifest files:
 | Python | `pyproject.toml` / `setup.py` | `[project].name` | `[project].dependencies` |
 | JavaScript | `package.json` | `name` field | `dependencies` + `devDependencies` |
 
+#### Api
+
+| Property | Type | Description |
+|---|---|---|
+| `Kind` | `string` | Entry kind (`type`, `method`, `field`, `property`, `event`) |
+| `TypeName` | `string` | Declaring type name |
+| `MemberName` | `string` | Member name |
+| `Signature` | `string` | Full signature text |
+| `ApiAsText` | `string` | Formatted API surface text |
+| `Line` | `int` | Source line number |
+| `File` | [`File`](#file)`?` | Containing file |
+| `Source` | `string` | Source text |
+
+#### Member
+
+| Property | Type | Description |
+|---|---|---|
+| `Name` | `string` | Member name |
+| `DeclaringType` | `string` | Declaring type name |
+| `Line` | `int` | Source line number |
+
+#### Region
+
+| Property | Type | Description |
+|---|---|---|
+| `Name` | `string` | Region name |
+| `StartLine` | `int` | Start line number |
+| `EndLine` | `int` | End line number |
+| `Content` | `string` | Region content text |
+| `ContentHash` | `string` | Hash of content (for change detection) |
+| `File` | [`File`](#file)`?` | Containing file |
+| `Source` | `string` | Raw region source |
+
 #### Codebase
 
 | Property | Type | Description |
@@ -146,6 +233,9 @@ Each language provider discovers projects from their manifest files:
 | `Types` | [`[Type]`](#type) | All type declarations |
 | `Statements` | [`[Statement]`](#statement) | All code statements |
 | `Lines` | [`[Line]`](#line) | All text lines |
+| `Members` | [`[Member]`](#member) | All type members |
+| `Api` | [`[Api]`](#api) | Public API surface entries |
+| `Regions` | [`[Region]`](#region) | Code regions |
 | `Projects` | [`[Project]`](#project) | All discovered projects |
 
 ---
@@ -156,17 +246,31 @@ Modifier predicates (apply with `:` syntax, e.g. `Type:isPublic`, `Method:isAsyn
 
 | Predicate | Applies To | Condition |
 |---|---|---|
-| `isPublic` | Type, Method | Has public modifier |
+| `isPublic` | Type, Method, Field, Property, Event | Has public modifier |
 | `isSealed` | Type | Has sealed modifier |
-| `isAbstract` | Type, Method | Has abstract modifier |
-| `isStatic` | Type, Method | Has static modifier |
-| `isDocumented` | Type, Method | Has documentation |
-| `isProtected` | Method | Has protected modifier |
-| `isPrivate` | Method | Has private modifier |
-| `isInternal` | Method | Has internal modifier |
+| `isAbstract` | Type, Method, Property | Has abstract modifier |
+| `isStatic` | Type, Method, Field, Property, Event | Has static modifier |
+| `isDocumented` | Type, Method, Property | Has documentation |
+| `isProtected` | Method, Field, Property, Event | Has protected modifier |
+| `isPrivate` | Method, Field, Property, Event | Has private modifier |
+| `isInternal` | Method, Field, Property, Event | Has internal modifier |
 | `isAsync` | Method | Has async modifier |
-| `isVirtual` | Method | Has virtual modifier |
-| `isOverride` | Method | Has override modifier |
+| `isVirtual` | Method, Property | Has virtual modifier |
+| `isOverride` | Method, Property | Has override modifier |
+| `isReadonly` | Field | Has readonly modifier |
+| `isConst` | Field | Has const modifier |
+| `hasGetter` | Property | Has get accessor |
+| `hasSetter` | Property | Has set accessor |
+
+Statement narrowing predicates:
+
+| Predicate | Narrows To | Condition |
+|---|---|---|
+| `call` | `Call` | `Kind == 'call'` |
+| `declaration` | `Declaration` | `Kind == 'declaration'` |
+| `errorHandler` | `ErrorHandler` | `ErrorHandler == true` |
+| `attribute` | `Attribute` | `Kind == 'attribute'` |
+| `generic` | ErrorHandler | `Generic == true` |
 
 ---
 

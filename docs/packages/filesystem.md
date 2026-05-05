@@ -30,6 +30,7 @@ File and folder analysis. &nbsp; `import filesystem`
 | `SubfolderCount` | int | Immediate subfolders |
 | `Depth` | int | Nesting depth from scan root |
 | `MinutesSinceModified` | int | Minutes since last modified |
+| `Source` | string | Folder path (unified interface) |
 
 #### DiskFile
 
@@ -42,9 +43,7 @@ File and folder analysis. &nbsp; `import filesystem`
 | `Folder` | string | Parent folder path |
 | `Depth` | int | Nesting depth from scan root |
 | `MinutesSinceModified` | int | Minutes since last modified |
-| `Checksum` | string? | Content hash (for lock checking) |
-| `Locked` | bool | Under lock control |
-| `LockStatus` | string | `locked`, `modified`, `deleted`, or `unlocked` |
+| `Source` | string | File path (unified interface) |
 
 #### Filesystem
 
@@ -62,8 +61,6 @@ File and folder analysis. &nbsp; `import filesystem`
 | `empty` | any | Built-in: collection/string has no items, or `Empty` property is true |
 | `recentlyModified` | Folder, DiskFile | `MinutesSinceModified < 10` |
 | `stale` | Folder, DiskFile | `MinutesSinceModified > 1440` |
-| `locked` | DiskFile | `Locked == true` |
-| `lockViolation` | DiskFile | `LockStatus == 'modified'` or `'deleted'` |
 
 ---
 
@@ -72,7 +69,6 @@ File and folder analysis. &nbsp; `import filesystem`
 | Check | Severity | Condition |
 |---|---|---|
 | `empty-folders` | error | `Disk.Folders:empty` — flags empty folders |
-| `lock-violations` | error | `Disk.Files:lockViolation` — flags unauthorized changes |
 
 ---
 
