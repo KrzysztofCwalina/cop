@@ -76,6 +76,9 @@ export let untracked-globals = pkg-code.Statements:isUntrackedGlobal
 let tracked-types = [
     # code package
     'Modifier'
+    'TypeKind'
+    'StatementKind'
+    'ApiKind'
     'Type'
     'Method'
     'Constructor'

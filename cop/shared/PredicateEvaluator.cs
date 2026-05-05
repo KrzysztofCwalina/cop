@@ -317,6 +317,10 @@ public class PredicateEvaluator
         var flagsValue = _registry.TryResolveFlagsConstant(name);
         if (flagsValue is not null) return flagsValue.Value;
 
+        // Enum constant resolution (e.g., Class → "Class", Method → "Method")
+        var enumValue = _registry.TryResolveEnumConstant(name);
+        if (enumValue is not null) return enumValue;
+
         // Language filter fallback: if the item has a File.Language property,
         // check if the identifier matches the language. This enables filter chains
         // like Types:csharp:client where "csharp" matches File.Language == "csharp".

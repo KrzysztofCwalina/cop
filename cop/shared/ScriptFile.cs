@@ -11,4 +11,5 @@ public record ScriptFile(
     List<CommandBlock> Commands,
     List<RunInvocation>? RunInvocations = null,
     List<string>? FeedPaths = null,
-    List<FlagsDefinition>? FlagsDefinitions = null);
+    List<FlagsDefinition>? FlagsDefinitions = null,
+    List<EnumDefinition>? EnumDefinitions = null);

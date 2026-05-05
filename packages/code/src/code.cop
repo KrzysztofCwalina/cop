@@ -6,9 +6,14 @@
 # Use with :isSet() and :isClear() predicates: Type.Modifiers:isSet(Public)
 export flags Modifier = Public | Private | Protected | Internal | Static | Sealed | Abstract | Virtual | Async | Override | Readonly | Const
 
+# Extensible enums — known values for Kind properties. Providers may return additional values.
+export enum TypeKind = Class | Struct | Interface | Enum
+export enum StatementKind = call | declaration | import | command | attribute | throw | return | using | foreach | try | catch | if | else | while | for | switch | await
+export enum ApiKind = class | struct | interface | enum | enumvalue | ctor | method | property | event | field
+
 export type Type = {
     Name : string,
-    Kind : string,
+    Kind : TypeKind,
     Modifiers : int,
     BaseTypes : [string],
     Constructors : [Method],
@@ -67,7 +72,7 @@ export type Event = {
 }
 
 export type Api = {
-    Kind : string,
+    Kind : ApiKind,
     TypeName : string,
     MemberName : string,
     Signature : string,
@@ -95,7 +100,7 @@ export type TypeReference = {
 }
 
 export type Statement = {
-    Kind : string,
+    Kind : StatementKind,
     Keywords : [string],
     TypeName : string?,
     MemberName : string?,
@@ -170,10 +175,10 @@ export predicate isInternal(Event) => Event.Modifiers:isSet(Internal)
 export predicate isStatic(Event) => Event.Modifiers:isSet(Static)
 
 # Narrowing predicates — filter Statements and narrow to subtypes
-export predicate isCall(Statement) : Call => Statement.Kind == 'call'
-export predicate isDeclaration(Statement) : Declaration => Statement.Kind == 'declaration'
+export predicate isCall(Statement) : Call => Statement.Kind == call
+export predicate isDeclaration(Statement) : Declaration => Statement.Kind == declaration
 export predicate isErrorHandler(Statement) : ErrorHandler => Statement.ErrorHandler == true
-export predicate isAttribute(Statement) : Attribute => Statement.Kind == 'attribute'
+export predicate isAttribute(Statement) : Attribute => Statement.Kind == attribute
 
 # ErrorHandler predicates
 export predicate isGeneric(ErrorHandler) => ErrorHandler.Generic == true

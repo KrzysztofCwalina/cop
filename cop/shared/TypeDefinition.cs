@@ -26,3 +26,13 @@ public record FlagsDefinition(
     List<string> Members,
     int Line,
     bool IsExported = false);
+
+/// <summary>
+/// An extensible enum definition: enum TypeKind = Class | Struct | Interface | Enum
+/// Members resolve to their string name. Extensible: providers may return unlisted values.
+/// </summary>
+public record EnumDefinition(
+    string Name,
+    List<string> Members,
+    int Line,
+    bool IsExported = false);

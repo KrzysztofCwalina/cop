@@ -656,6 +656,12 @@ public static class Engine
                 errors.AddRange(flagsErrors);
             }
 
+            if (packageFile.EnumDefinitions is not null)
+            {
+                var enumErrors = typeRegistry.LoadEnumDefinitions(packageFile.EnumDefinitions);
+                errors.AddRange(enumErrors);
+            }
+
             foreach (var coll in packageFile.CollectionDeclarations)
                 typeRegistry.RegisterCollection(coll);
 
@@ -680,6 +686,12 @@ public static class Engine
             {
                 var flagsErrors = typeRegistry.LoadFlagsDefinitions(sf.FlagsDefinitions);
                 errors.AddRange(flagsErrors);
+            }
+
+            if (sf.EnumDefinitions is not null)
+            {
+                var enumErrors = typeRegistry.LoadEnumDefinitions(sf.EnumDefinitions);
+                errors.AddRange(enumErrors);
             }
 
             foreach (var coll in sf.CollectionDeclarations)

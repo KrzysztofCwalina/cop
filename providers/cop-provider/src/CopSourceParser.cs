@@ -56,6 +56,17 @@ public class CopSourceParser : ISourceParser
             }
         }
 
+        // Map enum definitions → TypeDeclaration (Enum)
+        if (script.EnumDefinitions is not null)
+        {
+            foreach (var ed in script.EnumDefinitions)
+            {
+                var modifiers = ed.IsExported ? Modifier.Public : Modifier.None;
+                types.Add(new TypeDeclaration(ed.Name, TypeKind.Enum, modifiers,
+                    [], [], [], [], [], ed.Members, ed.Line));
+            }
+        }
+
         // Map predicates → MethodDeclaration (return type = bool)
         foreach (var pd in script.Predicates)
         {

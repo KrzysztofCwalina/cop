@@ -23,6 +23,8 @@ public class TypeRegistry
     private readonly Dictionary<string, CollectionDeclaration> _collections = new();
     private readonly Dictionary<string, FlagsDefinition> _flagsTypes = new();
     private readonly Dictionary<string, int> _flagsConstants = new();
+    private readonly Dictionary<string, EnumDefinition> _enumTypes = new();
+    private readonly Dictionary<string, string> _enumConstants = new();
     private readonly Dictionary<Type, string> _clrTypeMappings = new();
     private readonly Dictionary<string, Func<Document, List<object>>> _collectionExtractors = new();
     private readonly Dictionary<string, List<object>> _globalCollections = new();
@@ -121,6 +123,57 @@ public class TypeRegistry
     /// Returns true if the given type name is a registered flags type.
     /// </summary>
     public bool IsFlagsType(string typeName) => _flagsTypes.ContainsKey(typeName);
+
+    /// <summary>
+    /// Loads extensible enum definitions. Members resolve to their string name.
+    /// </summary>
+    public List<string> LoadEnumDefinitions(IEnumerable<EnumDefinition> enumDefs)
+    {
+        var errors = new List<string>();
+        foreach (var ed in enumDefs)
+        {
+            if (_enumTypes.ContainsKey(ed.Name))
+            {
+                errors.Add($"line {ed.Line}: duplicate enum definition '{ed.Name}'");
+                continue;
+            }
+            _enumTypes[ed.Name] = ed;
+
+            foreach (var member in ed.Members)
+            {
+                if (_enumConstants.TryGetValue(member, out _))
+                {
+                    errors.Add($"line {ed.Line}: enum member '{member}' already defined in another enum");
+                    continue;
+                }
+                if (_flagsConstants.ContainsKey(member))
+                {
+                    errors.Add($"line {ed.Line}: enum member '{member}' conflicts with a flags constant");
+                    continue;
+                }
+                _enumConstants[member] = member;
+            }
+        }
+        return errors;
+    }
+
+    /// <summary>
+    /// Tries to resolve a bare identifier as an enum constant.
+    /// Returns the string value (member name), or null if not a known enum member.
+    /// </summary>
+    public string? TryResolveEnumConstant(string name) =>
+        _enumConstants.TryGetValue(name, out var value) ? value : null;
+
+    /// <summary>
+    /// Returns the EnumDefinition for a named enum type, or null if not found.
+    /// </summary>
+    public EnumDefinition? GetEnumType(string name) =>
+        _enumTypes.TryGetValue(name, out var ed) ? ed : null;
+
+    /// <summary>
+    /// Returns true if the given type name is a registered enum type.
+    /// </summary>
+    public bool IsEnumType(string typeName) => _enumTypes.ContainsKey(typeName);
 
     /// <summary>
     /// Maps a CLR type to an cop type name for runtime type inference.

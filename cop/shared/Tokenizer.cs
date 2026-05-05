@@ -22,6 +22,7 @@ public enum TokenKind
     RunKeyword,
     FeedKeyword,
     FlagsKeyword,
+    EnumKeyword,
     DoubleColon,
     Colon,
     AndAnd,
@@ -380,6 +381,7 @@ public class Tokenizer
             "RUN" => TokenKind.RunKeyword,
             "feed" => TokenKind.FeedKeyword,
             "flags" => TokenKind.FlagsKeyword,
+            "enum" => TokenKind.EnumKeyword,
 
             _ => TokenKind.Identifier
         };

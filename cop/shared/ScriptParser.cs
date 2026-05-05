@@ -45,6 +45,7 @@ public class ScriptParser
         var feedPaths = new List<string>();
         var typeDefinitions = new List<TypeDefinition>();
         var flagsDefinitions = new List<FlagsDefinition>();
+        var enumDefinitions = new List<EnumDefinition>();
         var collectionDeclarations = new List<CollectionDeclaration>();
         var letDeclarations = new List<LetDeclaration>();
         var predicates = new List<PredicateDefinition>();
@@ -94,9 +95,11 @@ public class ScriptParser
                     functions.Add(ParseFunctionDefinition(isExported: true));
                 else if (Current.Kind == TokenKind.FlagsKeyword)
                     flagsDefinitions.Add(ParseFlagsDefinition(isExported: true));
+                else if (Current.Kind == TokenKind.EnumKeyword)
+                    enumDefinitions.Add(ParseEnumDefinition(isExported: true));
                 else
                     throw new ParseException(
-                        "Expected type, collection, let, command, predicate, or flags after 'export'",
+                        "Expected type, collection, let, command, predicate, flags, or enum after 'export'",
                         _filePath, Current.Line);
             }
             else if (Current.Kind == TokenKind.TypeKeyword)
@@ -185,15 +188,20 @@ public class ScriptParser
                 pendingDocComment = null;
                 flagsDefinitions.Add(ParseFlagsDefinition());
             }
+            else if (Current.Kind == TokenKind.EnumKeyword)
+            {
+                pendingDocComment = null;
+                enumDefinitions.Add(ParseEnumDefinition());
+            }
             else
             {
                 throw new ParseException(
-                    $"Unexpected token '{Current.Value}' — expected predicate, let, command, foreach, type, flags, or collection",
+                    $"Unexpected token '{Current.Value}' — expected predicate, let, command, foreach, type, flags, enum, or collection",
                     _filePath, Current.Line);
             }
         }
 
-        return new ScriptFile(_filePath, imports, typeDefinitions, collectionDeclarations, letDeclarations, predicates, functions, commands, runInvocations, feedPaths.Count > 0 ? feedPaths : null, flagsDefinitions.Count > 0 ? flagsDefinitions : null);
+        return new ScriptFile(_filePath, imports, typeDefinitions, collectionDeclarations, letDeclarations, predicates, functions, commands, runInvocations, feedPaths.Count > 0 ? feedPaths : null, flagsDefinitions.Count > 0 ? flagsDefinitions : null, enumDefinitions.Count > 0 ? enumDefinitions : null);
     }
 
     private string CollectDocComment()
@@ -251,6 +259,34 @@ public class ScriptParser
             members.Add(Expect(TokenKind.Identifier).Value);
         }
         return new FlagsDefinition(name.Value, members, line, isExported);
+    }
+
+    // enum TypeKind = Class | Struct | Interface | Enum
+    private EnumDefinition ParseEnumDefinition(bool isExported = false)
+    {
+        int line = Current.Line;
+        Expect(TokenKind.EnumKeyword);
+        var name = Expect(TokenKind.Identifier);
+        Expect(TokenKind.Equals);
+
+        var members = new List<string>();
+        members.Add(ExpectIdentifierOrKeyword().Value);
+        while (Current.Kind == TokenKind.Pipe)
+        {
+            Advance();
+            members.Add(ExpectIdentifierOrKeyword().Value);
+        }
+        return new EnumDefinition(name.Value, members, line, isExported);
+    }
+
+    // Enum members may use names that are also language keywords (e.g. import, command, enum)
+    private Token ExpectIdentifierOrKeyword()
+    {
+        if (Current.Kind == TokenKind.Identifier || Current.Kind.ToString().EndsWith("Keyword"))
+            return Advance();
+        throw new ParseException(
+            $"Expected identifier but got {Current.Kind} '{Current.Value}'",
+            _filePath, Current.Line);
     }
 
     private List<PropertyDefinition> ParsePropertyBlock()
