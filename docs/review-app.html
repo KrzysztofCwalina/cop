@@ -1477,37 +1477,36 @@ function submitToCopilot() {
     grouped[pkg].push({ item: itemPath, comment: value });
   }
 
-  // Build structured queue entry
-  const queueEntry = {
-    submitted: new Date().toISOString(),
-    itemCount: keys.length,
-    comments: grouped
-  };
+  // Build a prompt for Copilot CLI
+  let prompt = `Process these ${keys.length} review comment(s) from the cop review app:\n\n`;
 
-  // Save as downloadable file to .github/copilot-review-queue.json
-  const blob = new Blob([JSON.stringify(queueEntry, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'copilot-review-queue.json';
-  a.click();
-  URL.revokeObjectURL(url);
-
-  // Show instructions
-  alert(
-    `Saved ${keys.length} comment(s) to copilot-review-queue.json.\n\n` +
-    'To process, move the file to your repo root and tell Copilot CLI:\n' +
-    '"process the review queue in copilot-review-queue.json"'
-  );
-
-  // Offer to clear after submission
-  if (confirm('Clear submitted comments from the review app?')) {
-    comments = {};
-    saveComments();
-    updateBadge();
-    const active = document.querySelector('.tree-label.active');
-    if (active) active.click();
+  for (const [pkg, items] of Object.entries(grouped)) {
+    prompt += `## ${pkg}\n`;
+    for (const item of items) {
+      prompt += `- ${item.item}: ${item.comment}\n`;
+    }
+    prompt += '\n';
   }
+
+  navigator.clipboard.writeText(prompt).then(() => {
+    alert(`Copied ${keys.length} comment(s) to clipboard. Paste into Copilot CLI.`);
+    if (confirm('Clear submitted comments from the review app?')) {
+      comments = {};
+      saveComments();
+      updateBadge();
+      const active = document.querySelector('.tree-label.active');
+      if (active) active.click();
+    }
+  }).catch(() => {
+    // Fallback: select in a textarea
+    const ta = document.createElement('textarea');
+    ta.value = prompt;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    alert(`Copied ${keys.length} comment(s) to clipboard. Paste into Copilot CLI.`);
+  });
 }
 
 function clearAllComments() {
