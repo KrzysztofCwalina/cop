@@ -112,7 +112,7 @@ Every package, when imported, behaves the same way. `csharp` is just one example
 
 ```cop
 import csharp       # csharp = CSharpCodebase(cwd) — static field
-import filesystem   # filesystem = Filesystem(cwd) — static field
+import files   # filesystem = Filesystem(cwd) — static field
 import http         # http = HttpProvider(default config) — static field
 ```
 

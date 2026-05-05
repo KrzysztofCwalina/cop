@@ -301,7 +301,7 @@ let People = Parse('data.json', [Person])
 ```ruby
 let sdkTypes = csharp.Types('../azure-sdk/')
 let sdkPublic = csharp.Types('../azure-sdk/'):isPublic
-let localFiles = filesystem.DiskFiles('src/lib/')
+let localFiles = files.DiskFiles('src/lib/')
 ```
 
 Path-scoped collections query the provider against the given path instead of the default root (CWD or `-t`). The path is resolved relative to the process working directory. Results are cached by `(provider, collection, absolutePath)` so repeated references with the same path are efficient. Each collection is parameterized individually — `csharp.Types('../sdk/')` does not affect `csharp.Statements`.
@@ -1088,7 +1088,7 @@ Packages provide domain-specific types, lists, and runtime data. Import a packag
 |---------|--------|-------------|
 | `code` | `import code` | Source code structural analysis — see [Code Package Reference](packages/code.md) |
 | `json` | `import json` | JSON file parsing into typed collections — see [JSON Package Reference](packages/json.md) |
-| `filesystem` | `import filesystem` | File and folder analysis — see [Filesystem Package Reference](packages/filesystem.md) |
+| `files` | `import files` | File and folder analysis — see [Files Package Reference](packages/files.md) |
 
 More packages are listed in the [Getting Started](../README.md#available-packages) guide.
 

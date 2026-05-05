@@ -357,7 +357,7 @@ public class ReplEvaluator
     }
 
     /// <summary>
-    /// Gets all provider namespace names (e.g., "csharp", "filesystem").
+    /// Gets all provider namespace names (e.g., "csharp", "files").
     /// </summary>
     public List<string> GetProviderNamespaces()
     {

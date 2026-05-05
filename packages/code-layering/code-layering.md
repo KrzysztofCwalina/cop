@@ -1,5 +1,5 @@
 ---
-name: arch-layering
+name: code-layering
 version: 1.0.0
 title: Architecture Layering Enforcement
 description: Formal architecture layer definitions and dependency direction checks
@@ -17,7 +17,7 @@ Defines types and predicates for declaring architectural layers and enforcing de
 ## Usage
 
 ```cop
-import arch-layering
+import code-layering
 
 # Define layers as project name lists
 let presentation-projects = ['MyApp.Web', 'MyApp.Api']
@@ -44,5 +44,5 @@ export let violations = Code.Projects:presentationReferencesData
 export let uncategorized = Code.Projects:notInLayer
     :toWarning('Project {item.Name} is not assigned to any architectural layer')
 
-CHECK arch-layering => violations + uncategorized
+CHECK code-layering => violations + uncategorized
 ```

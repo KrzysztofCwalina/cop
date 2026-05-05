@@ -112,7 +112,7 @@ foreach ErrorHandlers:swallowsError => PRINT('{error:@red} {ErrorHandler.File.Pa
 The same specification language works for filesystem structure rules:
 
 ```ruby
-import filesystem
+import files
 
 # Find empty folders
 foreach Disk.Folders:empty => PRINT('{warning:@yellow} Empty folder: {item.Path}')
@@ -316,7 +316,7 @@ Packages provide reusable types, predicates, and checks. Use `import` to bring t
 
 ```ruby
 import code              # Type, Statement, File definitions and modifier predicates
-import filesystem        # Folder, DiskFile for file system analysis
+import files        # Folder, DiskFile for file system analysis
 import csharp            # C# language provider (scans .cs files)
 import javascript        # JavaScript/TypeScript provider (scans .js/.ts files)
 import python            # Python provider (scans .py files)
@@ -377,7 +377,7 @@ Unnamed statements (bare `foreach`) always run. Named commands only run when inv
 |---------|-------------|
 | [`code`](docs/packages/code.md) | Core type definitions for source code analysis (Type, Statement, File, etc.) |
 | [`code-analysis`](docs/packages/code-analysis.md) | Violation type and severity functions (toError, toWarning, toInfo) |
-| [`filesystem`](docs/packages/filesystem.md) | Type definitions for filesystem analysis (Folder, DiskFile) |
+| [`files`](docs/packages/files.md) | Type definitions for filesystem analysis (Folder, DiskFile) |
 | [`json`](docs/packages/json.md) | Parse JSON files into typed collections using user-defined schemas |
 | [`markdown`](docs/packages/code.md) | Analyze markdown documents (headings, links, sections, fenced code blocks) |
 

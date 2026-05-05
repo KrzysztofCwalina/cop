@@ -104,12 +104,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 <script>
 // === PACKAGE DATA ===
 const categories = [
-  { name: "Core", packages: ["code", "code-analysis", "filesystem", "markdown"] },
-  { name: "TypeSpec", packages: ["typespec", "typespec-http"] },
-  { name: "Utilities", packages: ["arch-layering", "http", "json"] },
+  { name: "Core", packages: ["code", "code-analysis", "code-layering", "files", "json", "markdown"] },
   { name: ".NET", packages: ["csharp", "csharp-library", "csharp-library-client", "csharp-library-client-azure", "csharp-style"] },
   { name: "Python", packages: ["python", "python-library", "python-library-client", "python-library-client-azure"] },
-  { name: "JavaScript", packages: ["javascript", "javascript-library", "javascript-library-client", "javascript-library-client-azure"] }
+  { name: "JavaScript", packages: ["javascript", "javascript-library", "javascript-library-client", "javascript-library-client-azure"] },
+  { name: "TypeSpec", packages: ["typespec", "typespec-http"] },
+  { name: "Misc", packages: ["http"] }
 ];
 
 const packages = {
@@ -443,8 +443,8 @@ const packages = {
     ]
   },
 
-  filesystem: {
-    label: "filesystem",
+  files: {
+    label: "files",
     collections: ["Folders", "Files"],
     types: {
       Folder: {
@@ -716,8 +716,8 @@ const packages = {
     commands: []
   },
 
-  "arch-layering": {
-    label: "arch-layering",
+  "code-layering": {
+    label: "code-layering",
     collections: [],
     types: {
       LayerViolation: {

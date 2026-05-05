@@ -1,8 +1,8 @@
-## filesystem
+## files
 
-File and folder analysis. &nbsp; `import filesystem`
+File and folder analysis. &nbsp; `import files`
 
-**Source:** [`packages/filesystem/src/filesystem.cop`](../../packages/filesystem/src/filesystem.cop)
+**Source:** [`packages/files/src/files.cop`](../../packages/files/src/files.cop)
 
 ---
 
@@ -45,7 +45,7 @@ File and folder analysis. &nbsp; `import filesystem`
 | `MinutesSinceModified` | int | Minutes since last modified |
 | `Source` | string | File path (unified interface) |
 
-#### Filesystem
+#### files
 
 | Property | Type | Description |
 |---|---|---|
@@ -75,7 +75,7 @@ File and folder analysis. &nbsp; `import filesystem`
 ### Examples
 
 ```ruby
-import filesystem
+import files
 
 predicate isLarge(DiskFile) => DiskFile.Size > 1048576
 let large-files = Disk.Files:isLarge:toWarning('Large file ({item.Size} bytes): {item.Path}')

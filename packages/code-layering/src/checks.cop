@@ -8,7 +8,7 @@
 #
 # Example:
 #
-#   import arch-layering
+#   import code-layering
 #
 #   # Define layer membership (project names)
 #   let presentation-projects = ['MyApp.Web' 'MyApp.Api']
@@ -49,7 +49,7 @@
 #   export let uncategorized = Code.Projects:isNotInLayer
 #       :toWarning('Project {item.Name} is not assigned to any architectural layer')
 #
-#   CHECK arch-layering => layer-violations + uncategorized
+#   CHECK code-layering => layer-violations + uncategorized
 
 import code-analysis
 

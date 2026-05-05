@@ -475,5 +475,5 @@ src/Helpers/QueryTestHelper.cs(1): warning: QueryTestHelper should be public so 
 - [Language Reference](language-reference.md) — full DSL syntax and semantics
 - [Testing with Agent Cop](testing-with-cop.md) — writing and running tests with ASSERT
 - [Code Package Reference](packages/code.md) — complete type catalog (Type, Statement, File, etc.)
-- [Filesystem Package Reference](packages/filesystem.md) — folder and file analysis types
+- [Files Package Reference](packages/files.md) — folder and file analysis types
 - [Package Documentation](packages/) — reference docs for all built-in packages

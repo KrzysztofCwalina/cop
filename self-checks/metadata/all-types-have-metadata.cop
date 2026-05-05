@@ -129,7 +129,7 @@ let tracked-types = [
     # code-analysis package
     'Severity'
     'Violation'
-    # arch-layering package
+    # code-layering package
     'LayerViolation'
     'UncategorizedProject'
     # http package

@@ -28,7 +28,7 @@ public static class Engine
         var collNames = new HashSet<string>(schema.Collections.Select(c => c.Name), StringComparer.OrdinalIgnoreCase);
         var name = provider switch
         {
-            FilesystemProvider => "filesystem",
+            FilesystemProvider => "files",
             CodeSchemaProvider => "code",
             Markdown.MarkdownProvider => "markdown",
             _ => provider.ToString() ?? provider.GetType().Name

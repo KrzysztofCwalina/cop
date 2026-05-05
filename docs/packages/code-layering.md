@@ -1,13 +1,13 @@
-## arch-layering
-Architecture layering enforcement. &nbsp; `import arch-layering`
+## code-layering
+Architecture layering enforcement. &nbsp; `import code-layering`
 
-**Source:** [`packages/arch-layering/src/`](../../packages/arch-layering/src/)
+**Source:** [`packages/code-layering/src/`](../../packages/code-layering/src/)
 
 ---
 
 ### Overview
 
-The `arch-layering` package lets architects formally define architectural layers and enforce dependency direction between projects. It works across all supported languages (C#, Python, JavaScript/TypeScript) by operating on the `Projects` collection.
+The `code-layering` package lets architects formally define architectural layers and enforce dependency direction between projects. It works across all supported languages (C#, Python, JavaScript/TypeScript) by operating on the `Projects` collection.
 
 ### Key Concepts
 
@@ -19,7 +19,7 @@ The `arch-layering` package lets architects formally define architectural layers
 ### Usage Pattern
 
 ```cop
-import arch-layering
+import code-layering
 
 # 1. Define layers as lists of project names
 let presentation-projects = ['MyApp.Web' 'MyApp.Api']
@@ -59,7 +59,7 @@ export let uncategorized = Code.Projects:notInLayer
     :toWarning('Project {item.Name} is not assigned to any architectural layer')
 
 # 6. Run all checks
-CHECK arch-layering => layer-violations + uncategorized
+CHECK code-layering => layer-violations + uncategorized
 ```
 
 ### Exported Types
@@ -102,7 +102,7 @@ CHECK arch-layering => layer-violations + uncategorized
 #### C# Solution
 
 ```cop
-import arch-layering
+import code-layering
 
 let api-projects = ['Contoso.Api' 'Contoso.Controllers']
 let domain-projects = ['Contoso.Domain' 'Contoso.Contracts']
@@ -126,13 +126,13 @@ export let violations = Code.Projects:domainReferencesApi
 export let uncategorized = Code.Projects:notInLayer
     :toWarning('Project {item.Name} is not assigned to any layer')
 
-CHECK arch-layering => violations + uncategorized
+CHECK code-layering => violations + uncategorized
 ```
 
 #### Python Monorepo
 
 ```cop
-import arch-layering
+import code-layering
 
 let api-projects = ['myapp-api' 'myapp-routes']
 let core-projects = ['myapp-core' 'myapp-domain']
@@ -149,13 +149,13 @@ export let violations = Code.Projects:dataReferencesApi
 export let uncategorized = Code.Projects:notInLayer
     :toWarning('Project {item.Name} is not assigned to any layer')
 
-CHECK arch-layering => violations + uncategorized
+CHECK code-layering => violations + uncategorized
 ```
 
 #### JavaScript/TypeScript Monorepo
 
 ```cop
-import arch-layering
+import code-layering
 
 let ui-projects = ['@myapp/web' '@myapp/components']
 let logic-projects = ['@myapp/services' '@myapp/store']
@@ -172,7 +172,7 @@ export let violations = Code.Projects:uiReferencesApi
 export let uncategorized = Code.Projects:notInLayer
     :toWarning('Package {item.Name} is not assigned to any layer')
 
-CHECK arch-layering => violations + uncategorized
+CHECK code-layering => violations + uncategorized
 ```
 
 ### Dependencies

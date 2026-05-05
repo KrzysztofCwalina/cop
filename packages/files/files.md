@@ -1,15 +1,15 @@
 ---
-name: filesystem
+name: files
 version: 1.0.0
-title: Filesystem Types
+title: Files
 description: Type definitions for filesystem structural and temporal analysis
 authors: cop-team
 tags: types, filesystem, analysis
 ---
 
-# Filesystem Types
+# Files
 
-Defines the type system for filesystem structural and temporal analysis. Import with `import filesystem` in `.cop` files.
+Defines the type system for filesystem structural and temporal analysis. Import with `import files` in `.cop` files.
 
 Provides types for: Folder, DiskFile.
 Provides collections for: Folders, DiskFiles.

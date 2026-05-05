@@ -4,7 +4,7 @@
 
 - **callsSyncWhenAsyncExists** — Flags sync method calls when an async variant exists on any type in the codebase
 
-## arch-layering
+## code-layering
 
 - **notInLayer** — Detects projects not assigned to any defined architectural layer
 

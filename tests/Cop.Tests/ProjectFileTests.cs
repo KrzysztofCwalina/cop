@@ -17,12 +17,12 @@ public class RunProjectTests
         _tempDir = Path.Combine(Path.GetTempPath(), "cop-runproject-test-" + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(_tempDir);
 
-        // Create a feed with the filesystem package (self-contained inline version for test isolation)
+        // Create a feed with the files package (self-contained inline version for test isolation)
         _feedDir = Path.Combine(_tempDir, "feed");
-        var pkgSrc = Path.Combine(_feedDir, "filesystem", "src");
+        var pkgSrc = Path.Combine(_feedDir, "files", "src");
         Directory.CreateDirectory(pkgSrc);
 
-        File.WriteAllText(Path.Combine(pkgSrc, "filesystem.cop"), """
+        File.WriteAllText(Path.Combine(pkgSrc, "files.cop"), """
                 export type Folder = {
                     Path : string,
                     Name : string,
@@ -68,7 +68,7 @@ public class RunProjectTests
 
         var result = Engine.RunProject(
             [_feedDir],
-            ["filesystem"],
+            ["files"],
             codebase,
             ["empty-folders"]);
 
@@ -89,7 +89,7 @@ public class RunProjectTests
 
         var result = Engine.RunProject(
             [_feedDir],
-            ["filesystem"],
+            ["files"],
             codebase,
             ["empty-folders"]);
 
@@ -116,7 +116,7 @@ public class RunProjectTests
     [Test]
     public void RunProject_MultiplePackages_BothRulesWork()
     {
-        // Create feed with both filesystem and a csharp-like package
+        // Create feed with both files and a csharp-like package
         var csharpSrc = Path.Combine(_feedDir, "csharp", "src");
         Directory.CreateDirectory(csharpSrc);
         File.WriteAllText(Path.Combine(csharpSrc, "checks.cop"), """
@@ -130,7 +130,7 @@ public class RunProjectTests
 
         var result = Engine.RunProject(
             [_feedDir],
-            ["filesystem", "csharp"],
+            ["files", "csharp"],
             codebase,
             ["empty-folders"]);
 
@@ -160,7 +160,7 @@ public class RunProjectTests
 
         var result = Engine.RunProject(
             [realPackages],
-            ["filesystem"],
+            ["files"],
             codebase,
             ["empty-folders"]);
 

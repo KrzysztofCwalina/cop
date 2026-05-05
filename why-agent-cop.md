@@ -52,7 +52,7 @@ This is the entire specification — not a plugin, not a code review checklist i
 Another common example — enforcing dependency direction in a layered architecture:
 
 ```ruby
-import arch-layering
+import code-layering
 
 let ui-projects   = ['MyApp.Web' 'MyApp.Api']
 let data-projects = ['MyApp.Data' 'MyApp.EF']

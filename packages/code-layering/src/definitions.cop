@@ -1,6 +1,6 @@
 # Architecture Layering Package v1.0
 # Defines types and predicates for architectural layer enforcement.
-# Import with: import arch-layering
+# Import with: import code-layering
 
 import code
 import code-analysis

@@ -3,7 +3,7 @@
 # Import with: import code-analysis
 
 import code
-import filesystem
+import files
 
 export enum Severity = error | warning | info
 

@@ -7,7 +7,7 @@
 # Run: cop run self-checks/layering/layering.cop -t .
 
 import csharp
-import arch-layering
+import code-layering
 
 # Define layers
 let runtime-projects = [
@@ -50,7 +50,7 @@ predicate runtimeReferencesProvider(Project) =>
 export let violations = csharp.Projects:runtimeReferencesProvider
     :toError('{item.Name} must not reference providers other than filesystem-provider')
 
-export let uncategorized = csharp.Projects:notInLayer
+export let uncategorized = csharp.Projects:isNotInLayer
     :toWarning('Project {item.Name} is not assigned to any architectural layer')
 
 command check-violations = CHECK(violations)

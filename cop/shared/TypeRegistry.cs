@@ -543,7 +543,7 @@ public class TypeRegistry
     }
 
     /// <summary>
-    /// Gets all registered provider namespace names (e.g., "csharp", "filesystem").
+    /// Gets all registered provider namespace names (e.g., "csharp", "files").
     /// </summary>
     public List<string> GetProviderNamespaces()
     {

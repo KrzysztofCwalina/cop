@@ -1,6 +1,6 @@
 # alan Filesystem Package v1.0
 # Defines types and collections for filesystem structural analysis.
-# Import with: import filesystem
+# Import with: import files
 
 import code-analysis
 
