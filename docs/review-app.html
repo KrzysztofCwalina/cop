@@ -80,7 +80,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .tag-function { background: #dcffe4; color: #1a7f37; }
 .tag-check { background: #ffebe9; color: #cf222e; }
 .tag-command { background: #fbefff; color: #8250df; }
-.tag-let { background: #eaeef2; color: #57606a; }
 .tag-enum { background: #fff1e5; color: #bc4c00; }
 .enum-values { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; padding-left: 2px; }
 .enum-value { display: inline-block; padding: 2px 8px; background: #fff1e5; color: #bc4c00; border-radius: 4px; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px; }
@@ -117,9 +116,6 @@ const packages = {
   code: {
     label: "code",
     collections: ["Types", "Statements", "Calls", "Lines", "Files", "Members", "Api", "Regions", "Projects"],
-    lets: [
-      { name: "Code", type: "Codebase", desc: "Aggregates code data from all imported providers (e.g. csharp, python). Access collections like Code.Types, Code.Statements, Code.Calls." }
-    ],
     flags: [{ name: "Modifier", values: "Public|Private|Protected|Internal|Static|Sealed|Abstract|Virtual|Async|Override|Readonly|Const" }],
     enums: [
       { name: "TypeKind", values: "Class|Struct|Interface|Enum" },
@@ -395,7 +391,7 @@ const packages = {
       { name: "isGeneric", appliesTo: "ErrorHandler", desc: "ErrorHandler catches generic Exception type" }
     ],
     functions: [
-      { name: "Code", params: "[providers], path?", returns: "Codebase", desc: "Creates a Codebase scoped to explicit providers and optional subdirectory path. E.g. Code([csharp], 'src/') analyzes only C# files under src/." }
+      { name: "Code", params: "[providers]?, path?", returns: "Codebase", desc: "Returns aggregate code data. No args: all providers. With args: scoped to providers/path. Access Code.Types, Code.Statements, etc." }
     ],
     checks: [],
     commands: []
@@ -450,10 +446,6 @@ const packages = {
   filesystem: {
     label: "filesystem",
     collections: ["Folders", "Files"],
-    lets: [
-      { name: "Disk", type: "Filesystem", desc: "Alias for the filesystem provider data" },
-      { name: "empty-folders", type: "[Folder]", desc: "All folders with no files inside" }
-    ],
     types: {
       Folder: {
         props: [
@@ -492,7 +484,10 @@ const packages = {
       { name: "isStale", appliesTo: "Folder", desc: "Folder has not been modified for a long time" },
       { name: "isStale", appliesTo: "DiskFile", desc: "File has not been modified for a long time" }
     ],
-    functions: [],
+    functions: [
+      { name: "Disk", params: "", returns: "Filesystem", desc: "Returns filesystem provider data (Disk.Folders, Disk.Files)" },
+      { name: "empty-folders", params: "", returns: "[Folder]", desc: "All folders with no files inside" }
+    ],
     checks: [],
     commands: []
   },
@@ -500,9 +495,6 @@ const packages = {
   markdown: {
     label: "markdown",
     collections: ["Headings", "Links", "Sections", "FenceBlocks"],
-    lets: [
-      { name: "Markdown", type: "MarkdownContent", desc: "Aggregates markdown data from all .md files. Access collections like Markdown.Headings, Markdown.Links, Markdown.Sections, Markdown.FenceBlocks." }
-    ],
     types: {
       Heading: {
         props: [
@@ -555,7 +547,9 @@ const packages = {
       }
     },
     predicates: [],
-    functions: [],
+    functions: [
+      { name: "Markdown", params: "", returns: "MarkdownContent", desc: "Returns all markdown data (Markdown.Headings, Markdown.Links, Markdown.Sections, Markdown.FenceBlocks)" }
+    ],
     checks: [],
     commands: []
   },
@@ -759,10 +753,6 @@ const packages = {
   http: {
     label: "http",
     collections: [],
-    lets: [
-      { name: "Receive", type: "[Request]", desc: "Incoming HTTP requests — global that yields requests as they arrive" },
-      { name: "Send", type: "[Response]", desc: "Outgoing HTTP responses — pipe results here to send back" }
-    ],
     enums: [
       { name: "HttpMethod", values: "GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS" },
       { name: "ContentType", values: "application/json|text/plain|text/html|application/xml|multipart/form-data|application/octet-stream" }
@@ -786,6 +776,8 @@ const packages = {
     },
     predicates: [],
     functions: [
+      { name: "Receive", params: "", returns: "[Request]", desc: "Incoming HTTP requests — yields requests as they arrive" },
+      { name: "Send", params: "", returns: "[Response]", desc: "Outgoing HTTP responses — pipe results here to send back" },
       { name: "ok", params: "Request", returns: "Response", desc: "Creates a 200 OK response" },
       { name: "notFound", params: "Request", returns: "Response", desc: "Creates a 404 Not Found response" },
       { name: "created", params: "Request", returns: "Response", desc: "Creates a 201 Created response" },
@@ -1012,10 +1004,9 @@ const packages = {
       { name: "hasBadAsyncName", appliesTo: "Type", desc: "Async client has incorrect naming" },
       { name: "hasNameTooLong", appliesTo: "Type", desc: "Type name exceeds recommended length" }
     ],
-    lets: [
-      { name: "Clients", type: "[Type]", desc: "All client types" }
+    functions: [
+      { name: "Clients", params: "", returns: "[Type]", desc: "All client types" }
     ],
-    functions: [],
     checks: [
       { name: "async-client-bad-name", desc: "Async client must be named with Async prefix/suffix" },
       { name: "client-missing-kwargs", desc: "Client methods must accept **kwargs" },
@@ -1143,7 +1134,6 @@ function buildTree() {
       const hasFuncs = pkg.functions && pkg.functions.length > 0;
       const hasChecks = pkg.checks && pkg.checks.length > 0;
       const hasCmds = pkg.commands && pkg.commands.length > 0;
-      const hasLets = pkg.lets && pkg.lets.length > 0;
       const hasEnums = pkg.enums && pkg.enums.length > 0;
 
       pkgNode.innerHTML = `
@@ -1155,19 +1145,6 @@ function buildTree() {
         <div class="tree-children collapsed"></div>
       `;
       const childrenDiv = pkgNode.querySelector('.tree-children');
-
-      if (hasLets) {
-        const secNode = document.createElement('div');
-        secNode.className = 'tree-node';
-        secNode.innerHTML = `
-          <div class="tree-label" data-pkg="${pkgId}" data-view="lets">
-            <span class="tree-toggle" style="visibility:hidden"></span>
-            <span class="section-tag tag-let">L</span>
-            <span>Globals (${pkg.lets.length})</span>
-          </div>
-        `;
-        childrenDiv.appendChild(secNode);
-      }
 
       if (hasEnums) {
         const secNode = document.createElement('div');
@@ -1287,7 +1264,6 @@ function buildTree() {
       else if (view === 'functions') renderFunctions(pkg);
       else if (view === 'checks') renderChecks(pkg);
       else if (view === 'commands') renderCommands(pkg);
-      else if (view === 'lets') renderLets(pkg);
       else if (view === 'enums') renderEnums(pkg);
     } else if (section) {
       // Toggle section expand
@@ -1318,7 +1294,7 @@ function renderType(pkgId, typeName) {
   let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> ${typeName}</h1>`;
   if (pkg.collections && pkg.collections.length > 0) {
     const names = pkg.collections.map(c => typeof c === 'string' ? c : c.name);
-    html += `<p style="color:#57606a; font-size:13px; margin-top:4px;">Globals: <code>${names.join('</code>, <code>')}</code></p>`;
+    html += `<p style="color:#57606a; font-size:13px; margin-top:4px;">Functions: <code>${names.join('</code>, <code>')}</code></p>`;
   }
   html += `<h2>Properties</h2>`;
 
@@ -1488,36 +1464,6 @@ function renderCommands(pkgId) {
 
   content.innerHTML = html;
   wireUpComments(content);
-}
-
-function renderLets(pkgId) {
-  const pkg = packages[pkgId];
-  const content = document.getElementById('content');
-
-  let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Globals</h1>`;
-  html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">${pkg.lets.length} exported globals</p>`;
-
-  for (const letItem of pkg.lets.slice().sort((a,b) => a.name.localeCompare(b.name))) {
-    const key = `${pkgId}.let.${letItem.name}`;
-    const hasComment = comments[key] ? 'has-comment' : '';
-    const typeHtml = letItem.type ? ` → <span class="item-type-inline">${formatTypeLink(pkgId, letItem.type)}</span>` : '';
-    html += `
-      <div class="comment-wrapper">
-        <div class="fn-block">
-          <div class="fn-signature">
-            <span class="item-name">${letItem.name}${typeHtml}</span>
-            <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
-          </div>
-          <div class="fn-desc">${escapeHtml(letItem.desc)}</div>
-        </div>
-        <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
-      </div>
-    `;
-  }
-
-  content.innerHTML = html;
-  wireUpComments(content);
-  wireUpTypeLinks(content);
 }
 
 function renderEnums(pkgId) {
