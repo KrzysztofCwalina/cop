@@ -634,9 +634,9 @@ import csharp-api
 import code-analysis
 
 # Baseline: C# stub files in api/ directory (Azure SDK convention)
-predicate baselineApi(Api) => publicApi && Api.File.Path:rx('[/\\\\]api[/\\\\]')
+predicate baselineApi(Api) => isPublicApi && Api.File.Path:rx('[/\\\\]api[/\\\\]')
 # Source: everything NOT in api/
-predicate sourceApi(Api) => publicApi && !Api.File.Path:rx('[/\\\\]api[/\\\\]')
+predicate sourceApi(Api) => isPublicApi && !Api.File.Path:rx('[/\\\\]api[/\\\\]')
 
 let baselineSignatures = Code.Api:csharp:baselineApi.Select(item.Signature)
 let currentSignatures = Code.Api:csharp:sourceApi.Select(item.Signature)
@@ -656,7 +656,7 @@ export let api-compat = api-removed + api-added
         var exportPolicy = @"
 import csharp-api
 import code-analysis
-export command api-export = SAVE('api-baseline.txt', '{item.Signature}', Code.Api:csharp:publicApi)
+export command api-export = SAVE('api-baseline.txt', '{item.Signature}', Code.Api:csharp:isPublicApi)
 ";
         var result = RunInlineCop(exportPolicy,
             [SamplePath("GoodClient.cs")], commandName: "api-export");

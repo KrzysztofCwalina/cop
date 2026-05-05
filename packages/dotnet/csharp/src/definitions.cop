@@ -1,42 +1,42 @@
 # General C# source code style definitions
 
-predicate varDeclaration(Statement) => Statement.Kind == 'declaration' && Statement.Keywords:contains('var')
+predicate isVarDeclaration(Statement) => Statement.Kind == 'declaration' && Statement.Keywords:contains('var')
 
-predicate dynamicDeclaration(Statement) => Statement.Kind == 'declaration' && Statement.Keywords:contains('dynamic')
+predicate isDynamicDeclaration(Statement) => Statement.Kind == 'declaration' && Statement.Keywords:contains('dynamic')
 
-predicate threadSleep(Statement) => Statement.Kind == 'call'
+predicate isThreadSleep(Statement) => Statement.Kind == 'call'
     && Statement.TypeName == 'Thread' && Statement.MemberName == 'Sleep'
 
-predicate consoleCall(Statement) => Statement.Kind == 'call'
+predicate isConsoleCall(Statement) => Statement.Kind == 'call'
     && Statement.TypeName == 'Console'
 
-predicate catchesBaseException(Statement) => Statement.ErrorHandler == true
+predicate isCatchingBaseException(Statement) => Statement.ErrorHandler == true
     && Statement.Generic == true
 
-predicate swallowsBaseException(Statement) => Statement.ErrorHandler == true
+predicate isSwallowingBaseException(Statement) => Statement.ErrorHandler == true
     && Statement.Generic == true && !Statement.Rethrows
 
-predicate configureAwaitTrue(Statement) => Statement.Kind == 'call'
+predicate isConfigureAwaitTrue(Statement) => Statement.Kind == 'call'
     && Statement.MemberName == 'ConfigureAwait' && Statement.Arguments:contains('true')
 
-predicate getAwaiterGetResult(Statement) => Statement.Kind == 'call'
+predicate isGetAwaiterGetResult(Statement) => Statement.Kind == 'call'
     && Statement.MemberName == 'GetResult'
 
-predicate taskCompletionSourceNew(Statement) => Statement.Kind == 'call'
+predicate isTaskCompletionSourceNew(Statement) => Statement.Kind == 'call'
     && Statement.TypeName == 'TaskCompletionSource'
 
 # Sync-blocking call patterns (reusable by any check)
-export predicate syncBlockingCall(Statement) => Statement.Kind == 'call'
+export predicate isSyncBlockingCall(Statement) => Statement.Kind == 'call'
     && (Statement.MemberName == 'Wait' || Statement.MemberName == 'GetResult')
 
 # Statement is inside an async method
-export predicate inAsyncMethod(Statement) => Statement.Method != null && Statement.Method.Modifiers:isSet(Async)
+export predicate isInAsyncMethod(Statement) => Statement.Method != null && Statement.Method.Modifiers:isSet(Async)
 
 # Statement is inside a non-async method
-export predicate inSyncMethod(Statement) => Statement.Method != null && Statement.Method.Modifiers:isClear(Async)
+export predicate isInSyncMethod(Statement) => Statement.Method != null && Statement.Method.Modifiers:isClear(Async)
 
 # Banned API: Uri.ToString() — prefer Uri.AbsoluteUri for consistent output
-predicate uriToString(Statement) => Statement.Kind == 'call'
+predicate isUriToString(Statement) => Statement.Kind == 'call'
     && Statement.MemberName == 'ToString'
     && Statement.TypeName != null && Statement.TypeName:matches('[Uu]ri')
 
@@ -51,16 +51,16 @@ let csharpKeywords = ['abstract' 'as' 'base' 'bool' 'break' 'byte' 'case' 'catch
     'static' 'string' 'struct' 'switch' 'this' 'throw' 'true' 'try' 'typeof'
     'uint' 'ulong' 'unchecked' 'unsafe' 'ushort' 'using' 'virtual' 'void'
     'volatile' 'while']
-predicate typeNameIsKeyword(Type) => csharpKeywords:contains(Type.Name)
+predicate hasKeywordName(Type) => csharpKeywords:contains(Type.Name)
 
 # CA1812: Avoid uninstantiated internal classes
 # Internal non-abstract class that is never 'new'd in any statement
-predicate internalNonAbstractClass(Type) => Type.Kind == 'Class' && Type:!isPublic && Type:!isAbstract
+predicate isInternalNonAbstract(Type) => Type.Kind == 'Class' && Type:!isPublic && Type:!isAbstract
 
 # CA2000: IDisposable not in using statement
 # new SomeType() not inside a using ancestor
 predicate isUsingStatement(Statement) => Statement.Kind == 'using'
-predicate newCallNotInUsing(Statement) => Statement.Kind == 'call'
+predicate isNewCallNotInUsing(Statement) => Statement.Kind == 'call'
     && Statement.Expression != null && Statement.Expression:matches('new\s+')
     && !Statement.Ancestors:any(isUsingStatement)
 
@@ -68,10 +68,10 @@ predicate newCallNotInUsing(Statement) => Statement.Kind == 'call'
 predicate isChangelogFile(Line) => Line.File.Path:matches('CHANGELOG') && Line.Number == 1
 
 # README: Should not contain 'Install-Package' (use 'dotnet add package')
-predicate readmeInstallPackage(Line) => Line.File.Path:matches('README') && Line.Text:matches('Install-Package')
+predicate isReadmeInstallPackage(Line) => Line.File.Path:matches('README') && Line.Text:matches('Install-Package')
 
 # .csproj: PackageReference should not have Version attribute (CPM compliance)
-predicate packageRefWithVersion(Line) => Line.File.Path:matches('\\.csproj$') && Line.Text:matches('PackageReference.*Version\s*=')
+predicate hasPackageRefWithVersion(Line) => Line.File.Path:matches('\\.csproj$') && Line.Text:matches('PackageReference.*Version\s*=')
 
 # .csproj: TargetFramework validation
-predicate targetFrameworkLine(Line) => Line.File.Path:matches('\\.csproj$') && Line.Text:matches('<TargetFramework>')
+predicate isTargetFrameworkLine(Line) => Line.File.Path:matches('\\.csproj$') && Line.Text:matches('<TargetFramework>')

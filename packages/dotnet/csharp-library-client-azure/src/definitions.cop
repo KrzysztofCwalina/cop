@@ -4,54 +4,54 @@ import csharp-library-client
 import csharp-library
 import csharp
 
-predicate tokenCredential(Parameter) => Parameter.Type == 'TokenCredential'
-predicate tokenCredentialParam(Constructor) => Constructor.Parameters:any(tokenCredential)
+predicate isTokenCredential(Parameter) => Parameter.Type == 'TokenCredential'
+predicate hasTokenCredentialParam(Constructor) => Constructor.Parameters:any(isTokenCredential)
 
-predicate inheritsClientOptions(Type) => Type:inheritsFrom('ClientOptions') || Type:inheritsFrom('ClientPipelineOptions')
+predicate isInheritingClientOptions(Type) => Type:inheritsFrom('ClientOptions') || Type:inheritsFrom('ClientPipelineOptions')
 
-predicate optionsParameter(Parameter) => Parameter.Type:endsWith('Options')
-predicate ctorWithOptions(Type) => Type.Constructors:any(ctorHasOptions)
-predicate ctorHasOptions(Constructor) => Constructor:isPublic && Constructor.Parameters:any(optionsParameter)
-predicate ctorWithoutOptions(Type) => Type.Constructors:any(ctorLacksOptions)
-predicate ctorLacksOptions(Constructor) => Constructor:isPublic && Constructor.Parameters:!any(optionsParameter)
+predicate isOptionsParameter(Parameter) => Parameter.Type:endsWith('Options')
+predicate hasCtorWithOptions(Type) => Type.Constructors:any(isCtorWithOptions)
+predicate isCtorWithOptions(Constructor) => Constructor:isPublic && Constructor.Parameters:any(isOptionsParameter)
+predicate hasCtorWithoutOptions(Type) => Type.Constructors:any(isCtorLackingOptions)
+predicate isCtorLackingOptions(Constructor) => Constructor:isPublic && Constructor.Parameters:!any(isOptionsParameter)
     && Constructor.Parameters.Count > 0
 
-predicate requestContent(Parameter) => Parameter.Type == 'RequestContent' || Parameter.Type == 'RequestBody'
-predicate usesRequestContent(Method) => Method.Parameters:any(requestContent)
-predicate convenience(Method) => Method:isPublic && Method:isVirtual
+predicate isRequestContent(Parameter) => Parameter.Type == 'RequestContent' || Parameter.Type == 'RequestBody'
+predicate hasRequestContent(Method) => Method.Parameters:any(isRequestContent)
+predicate isConvenience(Method) => Method:isPublic && Method:isVirtual
 
-predicate resourceSuffix(Type) => Type.Name:endsWith('Resource')
+predicate hasResourceSuffix(Type) => Type.Name:endsWith('Resource')
 
-predicate serviceVersionEnum(Type) => Type.Kind == 'Enum' && Type.Name == 'ServiceVersion'
+predicate isServiceVersionEnum(Type) => Type.Kind == 'Enum' && Type.Name == 'ServiceVersion'
 
-predicate cancellation(Parameter) => Parameter.Type == 'CancellationToken' || Parameter.Type == 'RequestContext'
-predicate publicServiceMethod(Method) => Method:isPublic && Method:isVirtual && Method:!isStatic
+predicate isCancellation(Parameter) => Parameter.Type == 'CancellationToken' || Parameter.Type == 'RequestContext'
+predicate isPublicServiceMethod(Method) => Method:isPublic && Method:isVirtual && Method:!isStatic
 
-predicate modelReaderWriterRead(Statement) => Statement.Kind == 'call'
+predicate isModelReaderWriterRead(Statement) => Statement.Kind == 'call'
     && Statement.TypeName == 'ModelReaderWriter' && Statement.MemberName == 'Read'
 
-predicate requestContextParam(Parameter) => Parameter.Type == 'RequestContext'
-predicate protocolMethodByContext(Method) => Method:isPublic && Method:isVirtual
-    && Method.Parameters:any(requestContextParam)
+predicate isRequestContextParam(Parameter) => Parameter.Type == 'RequestContext'
+predicate isProtocolMethodByContext(Method) => Method:isPublic && Method:isVirtual
+    && Method.Parameters:any(isRequestContextParam)
 
-predicate protocolMethod(Method) => Method:isPublic && Method:isVirtual && Method.Parameters:any(requestContent)
-predicate convenienceMethod(Method) => Method:isPublic && Method:isVirtual && Method.Parameters:!any(requestContent)
-predicate sameNameMethod(Method2) => Method2.Name == Method.Name
-predicate protocolWithSameNameConvenience(Method) => Type.Methods.Where(convenienceMethod):any(sameNameMethod)
+predicate isProtocolMethod(Method) => Method:isPublic && Method:isVirtual && Method.Parameters:any(isRequestContent)
+predicate isConvenienceMethod(Method) => Method:isPublic && Method:isVirtual && Method.Parameters:!any(isRequestContent)
+predicate isSameNameMethod(Method2) => Method2.Name == Method.Name
+predicate hasConvenienceCounterpart(Method) => Type.Methods.Where(isConvenienceMethod):any(isSameNameMethod)
 
-predicate internalsVisibleTo(Statement) => Statement.Kind == 'attribute'
+predicate isInternalsVisibleTo(Statement) => Statement.Kind == 'attribute'
     && Statement.TypeName == 'InternalsVisibleTo'
 
 # AZC0112: InternalsVisibleTo targeting non-test assemblies
-predicate internalsVisibleToNonTest(Statement) => internalsVisibleTo
+predicate isInternalsVisibleToNonTest(Statement) => isInternalsVisibleTo
     && !Statement.Arguments.First:contains('Test')
 
 # AZC0021: ClientSettings constructor should not combine settings param with other params
-predicate clientSettingsParam(Parameter) => Parameter.Type:endsWith('Settings')
+predicate isClientSettingsParam(Parameter) => Parameter.Type:endsWith('Settings')
 predicate hasSettingsAndOtherParams(Constructor) => Constructor:isPublic
-    && Constructor.Parameters:any(clientSettingsParam)
+    && Constructor.Parameters:any(isClientSettingsParam)
     && Constructor.Parameters.Count > 1
-predicate settingsCtorOverloaded(Type) => Type.Constructors:any(hasSettingsAndOtherParams)
+predicate hasSettingsCtorOverloaded(Type) => Type.Constructors:any(hasSettingsAndOtherParams)
 
 # AZC0034: Duplicate type names across SDK and .NET BCL
 let bclTypeNames = [
@@ -98,32 +98,32 @@ let bclTypeNames = [
     'Expression' 'Claim' 'ClaimsIdentity' 'ClaimsPrincipal'
     'Notification' 'Subscription' 'Message' 'Endpoint' 'Connection'
 ]
-predicate duplicatesBclTypeName(Type) => bclTypeNames:contains(Type.Name)
+predicate isDuplicatingBclTypeName(Type) => bclTypeNames:contains(Type.Name)
 
 # AZC0035: Output model types need a ModelFactory method
 predicate isModelFactory(Type) => Type.Name:endsWith('ModelFactory')
 let factoryTypes = Code.Types:isModelFactory
-predicate factoryMethodReturns(Method) => Method:isStatic && Method:isPublic && Method.ReturnType.Name == Type.Name
-predicate factoryHasMethodFor(FactoryType) => FactoryType.Methods:any(factoryMethodReturns)
-predicate hasFactory(Type) => factoryTypes:any(factoryHasMethodFor)
-predicate outputModelWithoutFactory(Type) => model && !hasFactory
+predicate isFactoryMethod(Method) => Method:isStatic && Method:isPublic && Method.ReturnType.Name == Type.Name
+predicate hasFactoryMethodFor(FactoryType) => FactoryType.Methods:any(isFactoryMethod)
+predicate hasFactory(Type) => factoryTypes:any(hasFactoryMethodFor)
+predicate isMissingFactory(Type) => isModel && !hasFactory
 
 # AZC0104: Use EnsureCompleted() instead of GetAwaiter().GetResult() in sync methods
-predicate getResultInSyncMethod(Statement) => Statement.Kind == 'call'
-    && Statement.MemberName == 'GetResult' && inSyncMethod
+predicate isGetResultInSyncMethod(Statement) => Statement.Kind == 'call'
+    && Statement.MemberName == 'GetResult' && isInSyncMethod
 
 # AZC0107: Don't call *Async methods from sync context
-predicate asyncCallInSyncMethod(Statement) => Statement.Kind == 'call'
-    && Statement.MemberName:endsWith('Async') && inSyncMethod
+predicate isAsyncCallInSyncMethod(Statement) => Statement.Kind == 'call'
+    && Statement.MemberName:endsWith('Async') && isInSyncMethod
 
 # AZC0012: Single-word public type names are too generic
-predicate singleWordName(Type) => Type:isPublic && Type.Name:matches('^[A-Z][a-z]+$')
+predicate hasSingleWordName(Type) => Type:isPublic && Type.Name:matches('^[A-Z][a-z]+$')
 
 # AZC0020: Async calls/awaits should propagate CancellationToken or RequestContext
-predicate methodHasCancellation(Statement) => Statement.Method != null
-    && Statement.Method.Parameters:any(cancellation)
-predicate argRefersToToken(Argument) => Argument:contains('cancellationToken')
+predicate isInMethodWithCancellation(Statement) => Statement.Method != null
+    && Statement.Method.Parameters:any(isCancellation)
+predicate isReferringToToken(Argument) => Argument:contains('cancellationToken')
     || Argument:contains('cancellation') || Argument:contains('context')
-predicate asyncCallMissingToken(Statement) => Statement.Kind == 'await'
-    && methodHasCancellation
-    && !Statement.Arguments:any(argRefersToToken)
+predicate isAsyncCallMissingToken(Statement) => Statement.Kind == 'await'
+    && isInMethodWithCancellation
+    && !Statement.Arguments:any(isReferringToToken)

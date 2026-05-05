@@ -309,7 +309,7 @@ import code-analysis
 
 let Accepted = ['BadClient.cs:x']
 
-command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'var\' for {item.MemberName}') - Accepted => '{item.Message}'";
+command NO-VAR = foreach Statements:csharp:isVarDeclaration:toError('Do not use \'var\' for {item.MemberName}') - Accepted => '{item.Message}'";
         var allFiles = ParseWithImports(source);
 
         var interpreter = TestInterpreter.Create();
@@ -331,7 +331,7 @@ import code-analysis
 
 let Accepted = ['BadClient.cs:nonExistentMember']
 
-command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'var\' for {item.MemberName}') - Accepted => '{item.Message}'";
+command NO-VAR = foreach Statements:csharp:isVarDeclaration:toError('Do not use \'var\' for {item.MemberName}') - Accepted => '{item.Message}'";
         var allFiles = ParseWithImports(source);
 
         var interpreter = TestInterpreter.Create();
@@ -350,7 +350,7 @@ import code-analysis
 
 let Accepted = []
 
-command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'var\' for {item.MemberName}') - Accepted => '{item.Message}'";
+command NO-VAR = foreach Statements:csharp:isVarDeclaration:toError('Do not use \'var\' for {item.MemberName}') - Accepted => '{item.Message}'";
         var allFiles = ParseWithImports(source);
 
         var interpreter = TestInterpreter.Create();
@@ -368,7 +368,7 @@ command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'
         var source = @"
 import code-analysis
 
-command NO-VAR = foreach Statements:csharp:varDeclaration:toError('Do not use \'var\' for {item.MemberName}') - ['BadClient.cs:x' 'BadClient.cs:result'] => '{item.Message}'";
+command NO-VAR = foreach Statements:csharp:isVarDeclaration:toError('Do not use \'var\' for {item.MemberName}') - ['BadClient.cs:x' 'BadClient.cs:result'] => '{item.Message}'";
         var allFiles = ParseWithImports(source);
 
         var interpreter = TestInterpreter.Create();
@@ -387,7 +387,7 @@ import code-analysis
 
 export command CHECK(violations) = foreach violations => '{item.Message}'
 
-export let var-usage = Statements:csharp:varDeclaration:toError('Do not use var for {item.MemberName}')
+export let var-usage = Statements:csharp:isVarDeclaration:toError('Do not use var for {item.MemberName}')
 
 RUN CHECK(var-usage)
 ";
@@ -407,7 +407,7 @@ import code-analysis
 
 export command CHECK(violations) = foreach violations => '{item.Message}'
 
-export let var-usage = Statements:csharp:varDeclaration:toError('Do not use var for {item.MemberName}')
+export let var-usage = Statements:csharp:isVarDeclaration:toError('Do not use var for {item.MemberName}')
 
 let Accepted = ['BadClient.cs:x' 'BadClient.cs:result']
 RUN CHECK(var-usage - Accepted)
@@ -446,7 +446,7 @@ import code-analysis
 
 export command CHECK(violations) = foreach violations => '{item.Message}'
 
-export let var-usage = Statements:csharp:varDeclaration:toError('Do not use var for {item.MemberName}')
+export let var-usage = Statements:csharp:isVarDeclaration:toError('Do not use var for {item.MemberName}')
 
 CHECK(var-usage)
 ";
@@ -466,7 +466,7 @@ import code-analysis
 
 export command CHECK(violations) = foreach violations => '{item.Message}'
 
-export let var-usage = Statements:csharp:varDeclaration:toError('Do not use var for {item.MemberName}')
+export let var-usage = Statements:csharp:isVarDeclaration:toError('Do not use var for {item.MemberName}')
 
 let Accepted = ['BadClient.cs:x' 'BadClient.cs:result']
 CHECK(var-usage - Accepted)
@@ -487,8 +487,8 @@ import code-analysis
 
 export command CHECK(violations) = foreach violations => '{item.Message}'
 
-export let var-usage = Statements:csharp:varDeclaration:toError('Do not use var')
-export let dynamic-usage = Statements:csharp:dynamicDeclaration:toError('Do not use dynamic')
+export let var-usage = Statements:csharp:isVarDeclaration:toError('Do not use var')
+export let dynamic-usage = Statements:csharp:isDynamicDeclaration:toError('Do not use dynamic')
 
 CHECK(var-usage)
 CHECK(dynamic-usage)
@@ -531,7 +531,7 @@ foreach StatementsUsingVar => 'uses var at {item.Line}'
         var source = @"
 import code-analysis
 
-export let var-usage = Code.Statements:csharp:varDeclaration:toError('Do not use var')
+export let var-usage = Code.Statements:csharp:isVarDeclaration:toError('Do not use var')
 CHECK(var-usage)
 ";
         var allFiles = ParseWithImports(source);
@@ -548,7 +548,7 @@ CHECK(var-usage)
         var source = @"
 import code-analysis
 
-export let var-usage = Code.Statements:csharp:varDeclaration:toError('Do not use var')
+export let var-usage = Code.Statements:csharp:isVarDeclaration:toError('Do not use var')
 CHECK(var-usage)
 ";
         var allFiles = ParseWithImports(source);

@@ -3,27 +3,27 @@
 import code-analysis
 
 ## Avoid console output in production code
-export let console-calls = Code.Statements:javascript:consoleCall
+export let console-calls = Code.Statements:javascript:isConsoleCall
     :toWarning('Avoid console.{item.MemberName} in production code')
 
 ## Do not use alert()
-export let alert-calls = Code.Statements:javascript:alertCall
+export let alert-calls = Code.Statements:javascript:isAlertCall
     :toError('Do not use alert()')
 
 ## Do not use eval()
-export let eval-calls = Code.Statements:javascript:evalCall
+export let eval-calls = Code.Statements:javascript:isEvalCall
     :toError('Do not use eval() — it is a security risk')
 
 ## Remove debugger statements
-export let debugger-statements = Code.Statements:javascript:debuggerStatement
+export let debugger-statements = Code.Statements:javascript:isDebuggerStatement
     :toError('Remove debugger statement')
 
 ## Use const or let instead of var
-export let var-declarations = Code.Statements:javascript:usesVar
+export let var-declarations = Code.Statements:javascript:isUsingVar
     :toWarning('Use const or let instead of var')
 
 ## Catch blocks should rethrow or handle errors explicitly
-export let swallowed-exceptions = Code.Statements:javascript:catchWithoutRethrow
+export let swallowed-exceptions = Code.Statements:javascript:isCatchWithoutRethrow
     :toWarning('Do not swallow errors — rethrow or handle explicitly')
 
 ## All JavaScript checks combined

@@ -4,11 +4,11 @@ import csharp
 import code-analysis
 
 ## SA1302: Interface names must begin with 'I' followed by an uppercase letter
-export let interface-prefix = Code.Types:csharp:interfaceMissingIPrefix
+export let interface-prefix = Code.Types:csharp:isMissingIPrefix
     :toWarning('SA1302: Interface {item.Name} should begin with \'I\' followed by an uppercase letter')
 
 ## SA1300: Type names must begin with an uppercase letter (PascalCase)
-export let type-name-casing = Code.Types:csharp:lowercaseTypeName
+export let type-name-casing = Code.Types:csharp:hasLowercaseTypeName
     :toWarning('SA1300: Type {item.Name} should begin with an uppercase letter')
 
 ## SA1300: Public method names must begin with an uppercase letter (PascalCase)
@@ -16,43 +16,43 @@ export let method-name-casing = Code.Types:csharp:hasLowercasePublicMethod
     :toWarning('SA1300: {item.Name} has a public method that should begin with an uppercase letter')
 
 ## SA1402: A file may only contain a single type
-export let single-type-per-file = Code.Types:csharp:multipleTypesInFile
+export let single-type-per-file = Code.Types:csharp:hasMultipleTypesInFile
     :toWarning('SA1402: {item.Name} — file should contain only a single type')
 
 ## SA1005: Single-line comment must begin with a space after //
-export let comment-spacing = Code.Lines:csharp:commentMissingSpace
+export let comment-spacing = Code.Lines:csharp:isCommentMissingSpace
     :toWarning('SA1005: Single-line comment should begin with a space')
 
 ## SA1027: Code must not contain tabs
-export let no-tabs = Code.Lines:csharp:containsTab
+export let no-tabs = Code.Lines:csharp:hasTab
     :toWarning('SA1027: Use spaces instead of tabs')
 
 ## SA1028: Code must not contain trailing whitespace
-export let no-trailing-whitespace = Code.Lines:csharp:trailingWhitespace
+export let no-trailing-whitespace = Code.Lines:csharp:hasTrailingWhitespace
     :toWarning('SA1028: Remove trailing whitespace')
 
 ## SA1106: Code must not contain empty statements
-export let no-empty-statements = Code.Lines:csharp:emptyStatement
+export let no-empty-statements = Code.Lines:csharp:isEmptyStatement
     :toWarning('SA1106: Remove empty statement')
 
 ## SA1120: Comments must contain text
-export let no-empty-comments = Code.Lines:csharp:emptyComment
+export let no-empty-comments = Code.Lines:csharp:isEmptyComment
     :toWarning('SA1120: Comment must contain text')
 
 ## SA1122: Use string.Empty instead of ""
-export let use-string-empty = Code.Lines:csharp:emptyStringLiteral
+export let use-string-empty = Code.Lines:csharp:hasEmptyStringLiteral
     :toWarning('SA1122: Use string.Empty instead of ""')
 
 ## SA1206: Declaration keywords must follow order
-export let modifier-order = Code.Lines:csharp:wrongModifierOrder
+export let modifier-order = Code.Lines:csharp:hasWrongModifierOrder
     :toWarning('SA1206: Access modifier should come before other modifiers')
 
 ## SA1633: File must have a header
-export let file-header-required = Code.Lines:csharp:missingFileHeader
+export let file-header-required = Code.Lines:csharp:isMissingFileHeader
     :toWarning('SA1633: File should begin with a header comment')
 
 ## SA1600: Public elements should be documented
-export let public-documented = Code.Types:csharp:publicUndocumented
+export let public-documented = Code.Types:csharp:isPublicUndocumented
     :toWarning('SA1600: Public type {item.Name} should have XML documentation')
 
 export let public-method-documented = Code.Types:csharp:hasUndocumentedPublicMethod
@@ -75,11 +75,11 @@ export let const-naming = Code.Types:csharp:hasConstNamingViolation
     :toWarning('{item.Name} has a constant that should be PascalCase')
 
 ## SA1500: Braces must be on their own line (Allman style)
-export let braces-on-own-line = Code.Lines:csharp:braceNotOnOwnLine
+export let braces-on-own-line = Code.Lines:csharp:hasBraceNotOnOwnLine
     :toWarning('SA1500: Opening brace should be on its own line')
 
 ## SA1503: Braces must not be omitted
-export let required-braces = Code.Lines:csharp:missingBraces
+export let required-braces = Code.Lines:csharp:isMissingBraces
     :toWarning('SA1503: Braces must not be omitted from control flow statement')
 
 ## SA1600: Public properties should be documented

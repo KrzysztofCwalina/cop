@@ -11,6 +11,6 @@ message, file path, and line number.
 ```cop
 import code-analysis
 
-let VarErrors = Statements:csharp:varDeclaration:toError("Do not use var for {item.MemberName}")
+let VarErrors = Statements:csharp:isVarDeclaration:toError("Do not use var for {item.MemberName}")
 foreach VarErrors => '{item.Severity}: {item.Message} ({item.File}:{item.Line})'
 ```

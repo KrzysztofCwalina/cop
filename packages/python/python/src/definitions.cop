@@ -1,24 +1,24 @@
 # General Python source code style definitions
 
-predicate printCall(Statement) => Statement.Kind == 'call' && Statement.MemberName == 'print'
+predicate isPrintCall(Statement) => Statement.Kind == 'call' && Statement.MemberName == 'print'
 
-predicate bareExcept(Statement) => Statement.ErrorHandler == true && Statement.TypeName == null
+predicate isBareExcept(Statement) => Statement.ErrorHandler == true && Statement.TypeName == null
 
-predicate catchesException(Statement) => Statement.ErrorHandler == true
+predicate isCatchingException(Statement) => Statement.ErrorHandler == true
     && Statement.Generic == true
 
-predicate swallowsException(Statement) => Statement.ErrorHandler == true
+predicate isSwallowingException(Statement) => Statement.ErrorHandler == true
     && Statement.Generic == true && !Statement.Rethrows
 
 # Do not import the six package (Python 2 compatibility layer)
-predicate importsSix(Line) => Line.Text:matches('^(import six|from six)')
+predicate isImportingSix(Line) => Line.Text:matches('^(import six|from six)')
 
 # Do not use legacy typing via comments — use Python 3.9+ type hints
-predicate legacyTypingComment(Line) => Line.Text:matches('#\\s*type:')
+predicate hasLegacyTypingComment(Line) => Line.Text:matches('#\\s*type:')
 
 # eval() is a security risk
-predicate evalCall(Statement) => Statement.Kind == 'call' && Statement.MemberName == 'eval'
+predicate isEvalCall(Statement) => Statement.Kind == 'call' && Statement.MemberName == 'eval'
 
 # Naming: functions/methods should use snake_case
-predicate functionNotSnakeCase(Type) => Type.Methods.Count > 0
+predicate isNotSnakeCase(Type) => Type.Methods.Count > 0
     && Type.Name:matches('^[a-z]') == false && Type.Kind == 'Class'

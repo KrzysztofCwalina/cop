@@ -3,38 +3,38 @@
 import csharp
 import code-analysis
 
-predicate missingOptionsConstructor(Type) => Type.Constructors:!any(constructorAcceptsOptions)
-predicate notSealedOrAbstract(Type) => Type:!isSealed && Type:!isAbstract
+predicate isMissingOptionsConstructor(Type) => Type.Constructors:!any(isConstructorWithOptions)
+predicate isNotSealedOrAbstract(Type) => Type:!isSealed && Type:!isAbstract
 
-predicate missingCancellationToken(Method) => Method.Parameters:!any(cancellationToken)
-predicate asyncWithoutCancellation(Type) => Type.Methods.Where(publicAsync):any(missingCancellationToken)
+predicate isMissingCancellationToken(Method) => Method.Parameters:!any(isCancellationToken)
+predicate hasAsyncWithoutCancellation(Type) => Type.Methods.Where(isPublicAsync):any(isMissingCancellationToken)
 
-predicate notVirtual(Method) => Method:!isVirtual && Method:!isOverride && Method:!isAbstract
-predicate nonVirtualServiceMethod(Type) => Type.Methods.Where(publicInstance):any(notVirtual)
+predicate isNotVirtual(Method) => Method:!isVirtual && Method:!isOverride && Method:!isAbstract
+predicate hasNonVirtualServiceMethod(Type) => Type.Methods.Where(isPublicInstance):any(isNotVirtual)
 
-predicate missingSyncCounterpart(Method) => !Type.MethodNames:contains(Method.Name.Trim('Async'))
-predicate asyncWithoutSync(Type) => Type.Methods.Where(asyncServiceMethod):any(missingSyncCounterpart)
+predicate isMissingSyncCounterpart(Method) => !Type.MethodNames:contains(Method.Name.Trim('Async'))
+predicate hasAsyncWithoutSync(Type) => Type.Methods.Where(isAsyncServiceMethod):any(isMissingSyncCounterpart)
 
-export predicate missingMockingConstructor(Type) => Type.Constructors:!any(protectedParameterless)
+export predicate isMissingMockingConstructor(Type) => Type.Constructors:!any(isProtectedParameterless)
 
 ## Client types must have a constructor that accepts an Options parameter
-export let client-needs-options-ctor = Clients:missingOptionsConstructor
+export let client-needs-options-ctor = Clients:isMissingOptionsConstructor
     :toWarning('{item.Name} should accept an options parameter')
 
 ## Client types must be sealed or abstract to prevent unintended inheritance
-export let client-sealed-or-abstract = Clients:notSealedOrAbstract
+export let client-sealed-or-abstract = Clients:isNotSealedOrAbstract
     :toWarning('{item.Name} should be sealed or abstract')
 
 ## Async methods on client types must accept a CancellationToken parameter
-export let async-needs-cancellation-token = Clients:asyncWithoutCancellation
+export let async-needs-cancellation-token = Clients:hasAsyncWithoutCancellation
     :toWarning('{item.Name} is async without CancellationToken')
 
 ## Public instance methods on client types should be virtual for mocking
-export let client-methods-virtual = Clients:nonVirtualServiceMethod
+export let client-methods-virtual = Clients:hasNonVirtualServiceMethod
     :toWarning('{item.Name} has non-virtual service method')
 
 ## Every public async method on a client type must have a matching sync method
-export let async-needs-sync-counterpart = Clients:asyncWithoutSync
+export let async-needs-sync-counterpart = Clients:hasAsyncWithoutSync
     :toWarning('{item.Name} has async method without sync counterpart')
 
 ## All client library checks combined

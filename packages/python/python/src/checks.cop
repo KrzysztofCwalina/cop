@@ -3,27 +3,27 @@
 import code-analysis
 
 ## Avoid print() — use logging instead
-export let print-calls = Code.Statements:python:printCall
+export let print-calls = Code.Statements:python:isPrintCall
     :toWarning('Avoid print() — use logging instead')
 
 ## Do not use bare except — catch a specific exception type
-export let bare-except-clauses = Code.Statements:python:bareExcept
+export let bare-except-clauses = Code.Statements:python:isBareExcept
     :toWarning('Do not use bare except — catch a specific exception type')
 
 ## Do not silence Exception — reraise or catch a specific type
-export let silenced-exceptions = Code.Statements:python:swallowsException
+export let silenced-exceptions = Code.Statements:python:isSwallowingException
     :toWarning('Do not silence Exception — reraise or catch a specific type')
 
 ## Do not import the six package — Python 2 is no longer supported
-export let no-six-import = Code.Lines:python:importsSix
+export let no-six-import = Code.Lines:python:isImportingSix
     :toError('Do not import six — Python 2 is no longer supported')
 
 ## Do not use legacy type comments — use Python 3.9+ type annotations
-export let no-legacy-typing = Code.Lines:python:legacyTypingComment
+export let no-legacy-typing = Code.Lines:python:hasLegacyTypingComment
     :toWarning('Do not use type comments — use Python 3.9+ type annotations')
 
 ## Do not use eval() — it is a security risk
-export let no-eval = Code.Statements:python:evalCall
+export let no-eval = Code.Statements:python:isEvalCall
     :toError('Do not use eval() — it is a security risk')
 
 ## All Python checks combined

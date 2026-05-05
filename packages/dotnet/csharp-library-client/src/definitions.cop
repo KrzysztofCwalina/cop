@@ -1,26 +1,26 @@
 # Client library design definitions for C#
 
-export predicate client(Type) => Type.Name:endsWith('Client')
-export predicate clientOptionsType(Type) => Type.Name:endsWith('ClientOptions')
-export predicate Clients(Types) => csharp && client
+export predicate isClient(Type) => Type.Name:endsWith('Client')
+export predicate isClientOptionsType(Type) => Type.Name:endsWith('ClientOptions')
+export predicate Clients(Types) => csharp && isClient
 
-predicate optionsParam(Parameter) => Parameter.Type:endsWith('Options')
-predicate constructorAcceptsOptions(Constructor) => Constructor.Parameters:any(optionsParam)
+predicate isOptionsParam(Parameter) => Parameter.Type:endsWith('Options')
+predicate isConstructorWithOptions(Constructor) => Constructor.Parameters:any(isOptionsParam)
 
-predicate cancellationToken(Parameter) => Parameter.Type == 'CancellationToken'
-predicate publicAsync(Method) => Method:isPublic && Method:isAsync
+predicate isCancellationToken(Parameter) => Parameter.Type == 'CancellationToken'
+predicate isPublicAsync(Method) => Method:isPublic && Method:isAsync
 
-predicate publicInstance(Method) => Method:isPublic && Method:!isStatic
+predicate isPublicInstance(Method) => Method:isPublic && Method:!isStatic
 
-predicate asyncServiceMethod(Method) => Method:isPublic && Method:isVirtual && Method.Name:endsWith('Async')
+predicate isAsyncServiceMethod(Method) => Method:isPublic && Method:isVirtual && Method.Name:endsWith('Async')
 
-export predicate model(Type) => Type.Kind == 'Class' && Type:isPublic && !client && !clientOptionsType
-export predicate Models(Types) => csharp && model
-export predicate ClientOptions(Types) => csharp && clientOptionsType
+export predicate isModel(Type) => Type.Kind == 'Class' && Type:isPublic && !isClient && !isClientOptionsType
+export predicate Models(Types) => csharp && isModel
+export predicate ClientOptions(Types) => csharp && isClientOptionsType
 
-export predicate protectedParameterless(Constructor) => Constructor:isProtected && Constructor.Parameters.Count == 0
+export predicate isProtectedParameterless(Constructor) => Constructor:isProtected && Constructor.Parameters.Count == 0
 
-export predicate collectionSuffix(Type) => Type.Name:endsWith('Collection')
-export predicate requestSuffix(Type) => Type.Name:endsWith('Request')
-export predicate parameterSuffix(Type) => Type.Name:endsWith('Parameter') || Type.Name:endsWith('Parameters')
-export predicate optionSuffix(Type) => Type.Name:endsWith('Option') || Type.Name:endsWith('Options')
+export predicate hasCollectionSuffix(Type) => Type.Name:endsWith('Collection')
+export predicate hasRequestSuffix(Type) => Type.Name:endsWith('Request')
+export predicate hasParameterSuffix(Type) => Type.Name:endsWith('Parameter') || Type.Name:endsWith('Parameters')
+export predicate hasOptionSuffix(Type) => Type.Name:endsWith('Option') || Type.Name:endsWith('Options')

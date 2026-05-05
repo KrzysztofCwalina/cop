@@ -14,7 +14,7 @@ export let snippet-duplicate-name = snippetRegions:isDuplicateSnippet
     :toWarning('{item.Name} is defined in multiple locations')
 
 ## Markdown snippet content is out of sync with C# source
-export let snippet-stale-content = snippetFences:hasSource:!contentMatchesSource
+export let snippet-stale-content = snippetFences:hasSource:!isContentMatchingSource
     :toWarning('{item.Tag} content is out of sync with C# source')
 
 ## All snippet checks combined

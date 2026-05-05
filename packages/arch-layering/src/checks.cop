@@ -36,7 +36,7 @@
 #       && Project.References:containsAny(presentation-projects)
 #
 #   # Detect projects not in any layer
-#   predicate notInLayer(Project) => !Project.Name:in(all-known-projects)
+#   predicate isNotInLayer(Project) => !Project.Name:in(all-known-projects)
 #
 #   # Produce violations
 #   export let layer-violations = Code.Projects:presentationReferencesData
@@ -46,7 +46,7 @@
 #       + Code.Projects:businessReferencesPresentation
 #       :toError('Business project {item.Name} must not reference Presentation layer')
 #
-#   export let uncategorized = Code.Projects:notInLayer
+#   export let uncategorized = Code.Projects:isNotInLayer
 #       :toWarning('Project {item.Name} is not assigned to any architectural layer')
 #
 #   CHECK arch-layering => layer-violations + uncategorized
@@ -56,4 +56,4 @@ import code-analysis
 # Predicate: project is not in any known layer.
 # Users must define 'all-known-projects' as a let-bound list of all project names
 # that belong to a defined layer.
-export predicate notInLayer(Project) => !Project.Name:in(all-known-projects)
+export predicate isNotInLayer(Project) => !Project.Name:in(all-known-projects)

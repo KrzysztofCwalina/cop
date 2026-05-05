@@ -1,24 +1,24 @@
 # Library design definitions for JavaScript/TypeScript
 
 # Export conventions
-predicate defaultExport(Line) => Line.Text:matches('^export\\s+default\\s')
-predicate usesDefaultExport(Type) => Type.File.Lines:any(defaultExport)
+predicate isDefaultExport(Line) => Line.Text:matches('^export\\s+default\\s')
+predicate hasDefaultExport(Type) => Type.File.Lines:any(isDefaultExport)
 
 # Promises: should use native Promise, not libraries like bluebird
-predicate importsBluebirdPromise(Line) => Line.Text:matches('from\\s+[\'"]bluebird[\'"]')
+predicate isImportingBluebird(Line) => Line.Text:matches('from\\s+[\'"]bluebird[\'"]')
     || Line.Text:matches('require\\([\'"]bluebird[\'"]\\)')
 
 # Const enums are problematic for consumers
-predicate constEnumDeclaration(Line) => Line.Text:matches('^\\s*(export\\s+)?const\\s+enum\\s')
+predicate isConstEnumDeclaration(Line) => Line.Text:matches('^\\s*(export\\s+)?const\\s+enum\\s')
 
 # Window global usage: prefer self for cross-platform
-predicate windowUsage(Statement) => Statement.Kind == 'call'
+predicate isWindowUsage(Statement) => Statement.Kind == 'call'
     && Statement.TypeName == 'window'
-predicate windowReference(Line) => Line.Text:matches('\\bwindow\\.')
+predicate hasWindowReference(Line) => Line.Text:matches('\\bwindow\\.')
     && !Line.Text:matches('//') && !Line.Text:matches('\\*')
 
 # Error handling: only throw built-in error types
-predicate throwsNonStandardError(Statement) => Statement.Kind == 'throw'
+predicate isThrowingNonStandardError(Statement) => Statement.Kind == 'throw'
     && Statement.TypeName != null
     && Statement.TypeName != 'Error'
     && Statement.TypeName != 'TypeError'

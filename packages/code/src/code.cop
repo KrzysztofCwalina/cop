@@ -167,19 +167,19 @@ export predicate isInternal(Event) => Event.Modifiers:isSet(Internal)
 export predicate isStatic(Event) => Event.Modifiers:isSet(Static)
 
 # Narrowing predicates — filter Statements and narrow to subtypes
-export predicate call(Statement) : Call => Statement.Kind == 'call'
-export predicate declaration(Statement) : Declaration => Statement.Kind == 'declaration'
-export predicate errorHandler(Statement) : ErrorHandler => Statement.ErrorHandler == true
-export predicate attribute(Statement) : Attribute => Statement.Kind == 'attribute'
+export predicate isCall(Statement) : Call => Statement.Kind == 'call'
+export predicate isDeclaration(Statement) : Declaration => Statement.Kind == 'declaration'
+export predicate isErrorHandler(Statement) : ErrorHandler => Statement.ErrorHandler == true
+export predicate isAttribute(Statement) : Attribute => Statement.Kind == 'attribute'
 
 # ErrorHandler predicates
-export predicate generic(ErrorHandler) => ErrorHandler.Generic == true
+export predicate isGeneric(ErrorHandler) => ErrorHandler.Generic == true
 
 # Convenience collections
-export let Calls = Code.Statements:call
-export let Declarations = Code.Statements:declaration
-export let ErrorHandlers = Code.Statements:errorHandler
-export let Attributes = Code.Statements:attribute
+export let Calls = Code.Statements:isCall
+export let Declarations = Code.Statements:isDeclaration
+export let ErrorHandlers = Code.Statements:isErrorHandler
+export let Attributes = Code.Statements:isAttribute
 
 export type Line = {
     Text : string,

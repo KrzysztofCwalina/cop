@@ -3,19 +3,19 @@
 import code-analysis
 
 ## Do not use default exports — use named exports only
-export let no-default-exports = Code.Lines:javascript:defaultExport
+export let no-default-exports = Code.Lines:javascript:isDefaultExport
     :toError('Do not use default exports — use named exports')
 
 ## Do not import Promise from external libraries (use native Promise)
-export let no-external-promises = Code.Lines:javascript:importsBluebirdPromise
+export let no-external-promises = Code.Lines:javascript:isImportingBluebird
     :toError('Use native Promise — do not import from bluebird or other polyfill libraries')
 
 ## Do not use const enums (problematic for consumers)
-export let no-const-enums = Code.Lines:javascript:constEnumDeclaration
+export let no-const-enums = Code.Lines:javascript:isConstEnumDeclaration
     :toWarning('Do not use const enum — use regular enum instead')
 
 ## Do not reference window global — use self for cross-platform compatibility
-export let no-window-reference = Code.Lines:javascript:windowReference
+export let no-window-reference = Code.Lines:javascript:hasWindowReference
     :toError('Do not use window — use self for cross-platform compatibility')
 
 ## All JavaScript library checks combined

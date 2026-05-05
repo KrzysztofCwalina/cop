@@ -14,18 +14,18 @@ let snippetRegions = Code.Regions:csharp:isSnippetRegion
 let snippetFences  = Markdown.FenceBlocks:markdown:isSnippetFence
 
 # Cross-collection: does a markdown fence reference this region's snippet name?
-predicate fenceMatchesRegion(FenceBlock) => FenceBlock.Tag:equals(Region.Name)
-predicate hasDocumentation(Region) => snippetFences:any(fenceMatchesRegion)
+predicate isFenceMatchingRegion(FenceBlock) => FenceBlock.Tag:equals(Region.Name)
+predicate hasDocumentation(Region) => snippetFences:any(isFenceMatchingRegion)
 
 # Cross-collection: does a C# region define this fence's snippet name?
-predicate regionMatchesFence(Region) => Region.Name:equals(FenceBlock.Tag)
-predicate hasSource(FenceBlock) => snippetRegions:any(regionMatchesFence)
+predicate isRegionMatchingFence(Region) => Region.Name:equals(FenceBlock.Tag)
+predicate hasSource(FenceBlock) => snippetRegions:any(isRegionMatchingFence)
 
 # Duplicate detection: another region with the same name at a different source location
-predicate sameNameDifferentSource(Region2) => Region2.Name:equals(Region.Name) && Region2.Source != Region.Source
-predicate isDuplicateSnippet(Region) => snippetRegions:any(sameNameDifferentSource)
+predicate isSameNameDifferentSource(Region2) => Region2.Name:equals(Region.Name) && Region2.Source != Region.Source
+predicate isDuplicateSnippet(Region) => snippetRegions:any(isSameNameDifferentSource)
 
 # Content freshness: fence content hash matches source region hash
-predicate regionContentMatchesFence(Region) => Region.Name:equals(FenceBlock.Tag)
+predicate isRegionContentMatchingFence(Region) => Region.Name:equals(FenceBlock.Tag)
     && Region.ContentHash == FenceBlock.ContentHash
-predicate contentMatchesSource(FenceBlock) => snippetRegions:any(regionContentMatchesFence)
+predicate isContentMatchingSource(FenceBlock) => snippetRegions:any(isRegionContentMatchingFence)

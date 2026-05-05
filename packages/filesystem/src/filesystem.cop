@@ -33,10 +33,10 @@ export type Filesystem = {
 export let Disk = runtime::Filesystem
 
 # Convenience predicates
-export predicate recentlyModified(Folder) => Folder.MinutesSinceModified < 10
-export predicate recentlyModified(DiskFile) => DiskFile.MinutesSinceModified < 10
-export predicate stale(Folder) => Folder.MinutesSinceModified > 1440
-export predicate stale(DiskFile) => DiskFile.MinutesSinceModified > 1440
+export predicate isRecentlyModified(Folder) => Folder.MinutesSinceModified < 10
+export predicate isRecentlyModified(DiskFile) => DiskFile.MinutesSinceModified < 10
+export predicate isStale(Folder) => Folder.MinutesSinceModified > 1440
+export predicate isStale(DiskFile) => DiskFile.MinutesSinceModified > 1440
 
 # Violation collections
 export let empty-folders = Disk.Folders:empty

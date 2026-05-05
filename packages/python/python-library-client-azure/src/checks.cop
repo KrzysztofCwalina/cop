@@ -4,11 +4,11 @@ import python-library-client
 import code-analysis
 
 ## Azure clients must accept a 'credential' parameter in the constructor
-export let client-needs-credential = Clients:ctorMissingCredential
+export let client-needs-credential = Clients:isMissingCredential
     :toWarning('{item.Name} constructor should accept a credential parameter')
 
 ## Azure clients must accept 'api_version' keyword argument
-export let client-needs-api-version = Clients:ctorMissingApiVersion
+export let client-needs-api-version = Clients:isMissingApiVersion
     :toWarning('{item.Name} should accept an api_version keyword argument')
 
 ## Method names must use snake_case
@@ -16,32 +16,32 @@ export let method-snake-case = Clients:hasNonSnakeCaseMethod
     :toWarning('{item.Name} has a method that does not use snake_case naming')
 
 ## Type names must use PascalCase
-export let type-pascal-case = Code.Types:python:typeNotPascalCase
+export let type-pascal-case = Code.Types:python:isNotPascalCase
     :toWarning('{item.Name} should use PascalCase for type names')
 
 ## Delete operations should return None
-predicate hasDeleteReturnsValue(Type) => Type.Methods:any(deleteReturnsValue)
+predicate hasDeleteReturnsValue(Type) => Type.Methods:any(isDeleteReturningValue)
 export let delete-returns-none = Clients:hasDeleteReturnsValue
     :toWarning('{item.Name} delete method should return None or LROPoller[None]')
 
 ## Do not use raise_with_traceback; use raise ... from syntax
-export let no-raise-with-traceback = Code.Statements:python:usesRaiseWithTraceback
+export let no-raise-with-traceback = Code.Statements:python:isUsingRaiseWithTraceback
     :toError('Use raise ... from instead of raise_with_traceback')
 
 ## Do not use legacy type comments; use Python 3.9+ type hints
-export let no-legacy-typing = Code.Lines:python:legacyTypeComment
+export let no-legacy-typing = Code.Lines:python:hasLegacyTypeComment
     :toWarning('Do not use type comments — use Python 3.9+ type annotations instead')
 
 ## Do not use asyncio.sleep; use transport sleep from azure.core
-export let no-asyncio-sleep = Code.Statements:python:importsAsyncio
+export let no-asyncio-sleep = Code.Statements:python:isImportingAsyncio
     :toWarning('Use azure.core pipeline transport sleep instead of asyncio.sleep')
 
 ## Do not log exceptions at non-debug levels (may reveal sensitive info)
-export let no-log-exceptions-above-debug = Code.Statements:python:logsExceptionNotDebug
+export let no-log-exceptions-above-debug = Code.Statements:python:isLoggingExceptionNotDebug
     :toWarning('Do not log exceptions at levels above debug — may reveal sensitive information')
 
 ## Client service methods should have distributed tracing decorator
-predicate hasMissingTracing(Type) => Type.Methods:any(missingTracing)
+predicate hasMissingTracing(Type) => Type.Methods:any(isMissingTracing)
 export let missing-tracing-decorator = Clients:hasMissingTracing
     :toWarning('{item.Name} has a public method without @distributed_trace decorator')
 

@@ -362,11 +362,11 @@ const packages = {
       { name: "isPrivate", appliesTo: "Event", desc: "Event has Private modifier" },
       { name: "isInternal", appliesTo: "Event", desc: "Event has Internal modifier" },
       { name: "isStatic", appliesTo: "Event", desc: "Event has Static modifier" },
-      { name: "call", appliesTo: "Statement", desc: "Narrows Statement to Call type", returns: "Call" },
-      { name: "declaration", appliesTo: "Statement", desc: "Narrows Statement to Declaration type", returns: "Declaration" },
-      { name: "errorHandler", appliesTo: "Statement", desc: "Narrows Statement to ErrorHandler type", returns: "ErrorHandler" },
-      { name: "attribute", appliesTo: "Statement", desc: "Narrows Statement to Attribute type", returns: "Attribute" },
-      { name: "generic", appliesTo: "ErrorHandler", desc: "ErrorHandler catches generic Exception type" }
+      { name: "isCall", appliesTo: "Statement", desc: "Narrows Statement to Call type", returns: "Call" },
+      { name: "isDeclaration", appliesTo: "Statement", desc: "Narrows Statement to Declaration type", returns: "Declaration" },
+      { name: "isErrorHandler", appliesTo: "Statement", desc: "Narrows Statement to ErrorHandler type", returns: "ErrorHandler" },
+      { name: "isAttribute", appliesTo: "Statement", desc: "Narrows Statement to Attribute type", returns: "Attribute" },
+      { name: "isGeneric", appliesTo: "ErrorHandler", desc: "ErrorHandler catches generic Exception type" }
     ],
     functions: [],
     checks: [],
@@ -388,7 +388,7 @@ const packages = {
       }
     },
     predicates: [
-      { name: "callsSyncWhenAsyncExists", appliesTo: "Statement", desc: "Statement calls sync method when async alternative exists" }
+      { name: "isSyncWhenAsyncExists", appliesTo: "Statement", desc: "Statement calls sync method when async alternative exists" }
     ],
     functions: [
       { name: "toError", params: "Statement, msg", returns: "Violation", desc: "Create error violation from Statement" },
@@ -456,10 +456,10 @@ const packages = {
       }
     },
     predicates: [
-      { name: "recentlyModified", appliesTo: "Folder", desc: "Folder was modified within recent threshold" },
-      { name: "recentlyModified", appliesTo: "DiskFile", desc: "File was modified within recent threshold" },
-      { name: "stale", appliesTo: "Folder", desc: "Folder has not been modified for a long time" },
-      { name: "stale", appliesTo: "DiskFile", desc: "File has not been modified for a long time" }
+      { name: "isRecentlyModified", appliesTo: "Folder", desc: "Folder was modified within recent threshold" },
+      { name: "isRecentlyModified", appliesTo: "DiskFile", desc: "File was modified within recent threshold" },
+      { name: "isStale", appliesTo: "Folder", desc: "Folder has not been modified for a long time" },
+      { name: "isStale", appliesTo: "DiskFile", desc: "File has not been modified for a long time" }
     ],
     functions: [],
     checks: [],
@@ -698,7 +698,7 @@ const packages = {
       }
     },
     predicates: [
-      { name: "notInLayer", appliesTo: "Project", desc: "Project is not assigned to any architecture layer" }
+      { name: "isNotInLayer", appliesTo: "Project", desc: "Project is not assigned to any architecture layer" }
     ],
     functions: [
       { name: "toError", params: "Project, msg", returns: "Violation", desc: "Create error violation from Project" },
@@ -759,9 +759,9 @@ const packages = {
     collections: [],
     types: {},
     predicates: [
-      { name: "syncBlockingCall", appliesTo: "Statement", desc: "Statement is a synchronous blocking call (e.g. .Result, .Wait())" },
-      { name: "inAsyncMethod", appliesTo: "Statement", desc: "Statement is inside an async method" },
-      { name: "inSyncMethod", appliesTo: "Statement", desc: "Statement is inside a synchronous method" }
+      { name: "isSyncBlockingCall", appliesTo: "Statement", desc: "Statement is a synchronous blocking call (e.g. .Result, .Wait())" },
+      { name: "isInAsyncMethod", appliesTo: "Statement", desc: "Statement is inside an async method" },
+      { name: "isInSyncMethod", appliesTo: "Statement", desc: "Statement is inside a synchronous method" }
     ],
     functions: [],
     checks: [
@@ -790,16 +790,16 @@ const packages = {
     collections: [],
     types: {},
     predicates: [
-      { name: "publicType", appliesTo: "Type", desc: "Type is public" },
-      { name: "dualModeMethod", appliesTo: "Method", desc: "Method has both sync and async code paths" },
-      { name: "inDualModeMethod", appliesTo: "Statement", desc: "Statement is inside a dual-mode method" },
-      { name: "guardedByAsyncCheck", appliesTo: "Statement", desc: "Statement is guarded by an async/sync branch check" },
-      { name: "wrongAsyncFalseInAsyncGuard", appliesTo: "Statement", desc: "Statement passes async=false inside an async-guarded block" },
-      { name: "wrongAsyncTrueInSyncGuard", appliesTo: "Statement", desc: "Statement passes async=true inside a sync-guarded block" },
-      { name: "asyncParamPassedAsArg", appliesTo: "Statement", desc: "Statement passes the async bool parameter as an argument" },
-      { name: "bannedInternalType", appliesTo: "Parameter", desc: "Parameter uses a banned internal type in public API" },
-      { name: "bannedParamType", appliesTo: "Method", desc: "Method has a parameter with a banned type" },
-      { name: "bannedParams", appliesTo: "Type", desc: "Type has methods with banned parameter types" }
+      { name: "isPublicType", appliesTo: "Type", desc: "Type is public" },
+      { name: "isDualModeMethod", appliesTo: "Method", desc: "Method has both sync and async code paths" },
+      { name: "isInDualModeMethod", appliesTo: "Statement", desc: "Statement is inside a dual-mode method" },
+      { name: "isGuardedByAsyncCheck", appliesTo: "Statement", desc: "Statement is guarded by an async/sync branch check" },
+      { name: "hasWrongAsyncFalseInAsyncGuard", appliesTo: "Statement", desc: "Statement passes async=false inside an async-guarded block" },
+      { name: "hasWrongAsyncTrueInSyncGuard", appliesTo: "Statement", desc: "Statement passes async=true inside a sync-guarded block" },
+      { name: "isPassingAsyncParamAsArg", appliesTo: "Statement", desc: "Statement passes the async bool parameter as an argument" },
+      { name: "hasBannedInternalType", appliesTo: "Parameter", desc: "Parameter uses a banned internal type in public API" },
+      { name: "hasBannedParamType", appliesTo: "Method", desc: "Method has a parameter with a banned type" },
+      { name: "hasBannedParams", appliesTo: "Type", desc: "Type has methods with banned parameter types" }
     ],
     functions: [],
     checks: [
@@ -820,18 +820,18 @@ const packages = {
     collections: [],
     types: {},
     predicates: [
-      { name: "client", appliesTo: "Type", desc: "Type is a client class" },
-      { name: "clientOptionsType", appliesTo: "Type", desc: "Type is a client options class" },
+      { name: "isClient", appliesTo: "Type", desc: "Type is a client class" },
+      { name: "isClientOptionsType", appliesTo: "Type", desc: "Type is a client options class" },
       { name: "Clients", appliesTo: "Types", desc: "All client types in the codebase" },
-      { name: "model", appliesTo: "Type", desc: "Type is a model class" },
+      { name: "isModel", appliesTo: "Type", desc: "Type is a model class" },
       { name: "Models", appliesTo: "Types", desc: "All model types in the codebase" },
       { name: "ClientOptions", appliesTo: "Types", desc: "All client options types" },
-      { name: "protectedParameterless", appliesTo: "Constructor", desc: "Constructor is protected and parameterless" },
-      { name: "collectionSuffix", appliesTo: "Type", desc: "Type name has Collection suffix" },
-      { name: "requestSuffix", appliesTo: "Type", desc: "Type name has Request suffix" },
-      { name: "parameterSuffix", appliesTo: "Type", desc: "Type name has Parameter suffix" },
-      { name: "optionSuffix", appliesTo: "Type", desc: "Type name has Option suffix" },
-      { name: "missingMockingConstructor", appliesTo: "Type", desc: "Client type is missing a protected parameterless constructor for mocking" }
+      { name: "isProtectedParameterless", appliesTo: "Constructor", desc: "Constructor is protected and parameterless" },
+      { name: "hasCollectionSuffix", appliesTo: "Type", desc: "Type name has Collection suffix" },
+      { name: "hasRequestSuffix", appliesTo: "Type", desc: "Type name has Request suffix" },
+      { name: "hasParameterSuffix", appliesTo: "Type", desc: "Type name has Parameter suffix" },
+      { name: "hasOptionSuffix", appliesTo: "Type", desc: "Type name has Option suffix" },
+      { name: "isMissingMockingConstructor", appliesTo: "Type", desc: "Client type is missing a protected parameterless constructor for mocking" }
     ],
     functions: [],
     checks: [
@@ -954,10 +954,10 @@ const packages = {
     collections: [],
     types: {},
     predicates: [
-      { name: "client", appliesTo: "Type", desc: "Type is a client class" },
-      { name: "asyncClient", appliesTo: "Type", desc: "Type is an async client class" },
-      { name: "clientBadAsyncName", appliesTo: "Type", desc: "Async client has incorrect naming" },
-      { name: "nameTooLong", appliesTo: "Type", desc: "Type name exceeds recommended length" }
+      { name: "isClient", appliesTo: "Type", desc: "Type is a client class" },
+      { name: "isAsyncClient", appliesTo: "Type", desc: "Type is an async client class" },
+      { name: "hasBadAsyncName", appliesTo: "Type", desc: "Async client has incorrect naming" },
+      { name: "hasNameTooLong", appliesTo: "Type", desc: "Type name exceeds recommended length" }
     ],
     lets: [
       { name: "Clients", desc: "All client types" }
@@ -1035,7 +1035,7 @@ const packages = {
     collections: [],
     types: {},
     predicates: [
-      { name: "client", appliesTo: "Type", desc: "Type is a client class" },
+      { name: "isClient", appliesTo: "Type", desc: "Type is a client class" },
       { name: "Clients", appliesTo: "Types", desc: "All client types in the codebase" }
     ],
     functions: [],

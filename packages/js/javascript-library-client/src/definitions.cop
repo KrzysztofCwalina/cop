@@ -1,13 +1,13 @@
 # Client library design definitions for JavaScript/TypeScript
 
 # Client type detection
-export predicate client(Type) => Type.Name:endsWith('Client')
-export predicate Clients(Types) => javascript && client
+export predicate isClient(Type) => Type.Name:endsWith('Client')
+export predicate Clients(Types) => javascript && isClient
 
 # Banned verb prefixes for client methods
 let bannedPrefixes = ['erase' 'fetch' 'getAll' 'insertOrUpdate' 'make' 'pop' 'push' 'updateOrInsert']
-predicate publicMethod(Method) => Method:isPublic && !Method.Name:startsWith('_')
-predicate bannedVerb(Method) => publicMethod
+predicate isPublicMethod(Method) => Method:isPublic && !Method.Name:startsWith('_')
+predicate hasBannedVerb(Method) => isPublicMethod
     && (Method.Name:startsWith('erase')
         || Method.Name:startsWith('fetch')
         || Method.Name:startsWith('getAll')
@@ -18,36 +18,36 @@ predicate bannedVerb(Method) => publicMethod
         || Method.Name:startsWith('updateOrInsert'))
 
 # Subclient naming: methods returning *Client should be named get*Client
-predicate returnsClient(Method) => publicMethod && Method.ReturnType != null
+predicate isReturningClient(Method) => isPublicMethod && Method.ReturnType != null
     && Method.ReturnType.Name:endsWith('Client')
-predicate subclientBadName(Method) => returnsClient
+predicate hasSubclientBadName(Method) => isReturningClient
     && !Method.Name:startsWith('get')
 
 # Drop noun: methods returning own type should not include the service name
-predicate returnsSelf(Method) => publicMethod && Method.ReturnType != null
+predicate isReturningSelf(Method) => isPublicMethod && Method.ReturnType != null
     && Method.ReturnType.Name == Type.Name
 
 # Options naming: options parameter should be suffixed with Options
-predicate optionsParam(Parameter) => Parameter.Name == 'options'
+predicate isOptionsParam(Parameter) => Parameter.Name == 'options'
     || Parameter.Type != null && Parameter.Type.Name:endsWith('Options')
 
 # Cancellation support: async methods should accept AbortSignal or options with signal
-predicate asyncPublicMethod(Method) => Method:isAsync && publicMethod
+predicate isAsyncPublicMethod(Method) => Method:isAsync && isPublicMethod
 predicate hasAbortSignal(Parameter) => Parameter.Type != null
     && (Parameter.Type.Name:contains('AbortSignal') || Parameter.Type.Name:endsWith('Options'))
-predicate asyncMissingCancellation(Method) => asyncPublicMethod
+predicate isAsyncMissingCancellation(Method) => isAsyncPublicMethod
     && Method.Parameters.Count > 0
     && Method.Parameters:!any(hasAbortSignal)
-    && Method.Parameters:!any(optionsParam)
+    && Method.Parameters:!any(isOptionsParam)
 
 # Pagination: list methods should return PagedAsyncIterableIterator
-predicate listMethod(Method) => publicMethod && Method.Name:startsWith('list')
-predicate pagingBadReturn(Method) => listMethod && Method.ReturnType != null
+predicate isListMethod(Method) => isPublicMethod && Method.Name:startsWith('list')
+predicate hasPagingBadReturn(Method) => isListMethod && Method.ReturnType != null
     && !Method.ReturnType.Name:contains('Paged')
     && !Method.ReturnType.Name:contains('PagedAsyncIterableIterator')
 
 # LRO: poller-returning methods should be prefixed with begin
-predicate pollerReturn(Method) => publicMethod && Method.ReturnType != null
+predicate hasPollerReturn(Method) => isPublicMethod && Method.ReturnType != null
     && (Method.ReturnType.Name:contains('Poller')
         || Method.ReturnType.Name:contains('PollerLike'))
-predicate lroBadName(Method) => pollerReturn && !Method.Name:startsWith('begin')
+predicate hasLroBadName(Method) => hasPollerReturn && !Method.Name:startsWith('begin')
