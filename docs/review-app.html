@@ -81,6 +81,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .tag-check { background: #ffebe9; color: #cf222e; }
 .tag-command { background: #fbefff; color: #8250df; }
 .tag-let { background: #eaeef2; color: #57606a; }
+.tag-enum { background: #fff1e5; color: #bc4c00; }
+.enum-values { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; padding-left: 2px; }
+.enum-value { display: inline-block; padding: 2px 8px; background: #fff1e5; color: #bc4c00; border-radius: 4px; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -118,11 +121,17 @@ const packages = {
       { name: "Code", type: "Codebase", desc: "Aggregates code data from all imported providers (e.g. csharp, python). Access collections like Code.Types, Code.Statements, Code.Calls." }
     ],
     flags: [{ name: "Modifier", values: "Public|Private|Protected|Internal|Static|Sealed|Abstract|Virtual|Async|Override|Readonly|Const" }],
+    enums: [
+      { name: "TypeKind", values: "Class|Struct|Interface|Enum" },
+      { name: "StatementKind", values: "call|declaration|import|command|attribute|throw|return|using|foreach|try|catch|if|else|while|for|switch|await" },
+      { name: "ApiKind", values: "class|struct|interface|enum|enumvalue|ctor|method|property|event|field" },
+      { name: "Language", values: "csharp|python|javascript|cop|text" }
+    ],
     types: {
       Type: {
         props: [
           { name: "Name", type: "string", desc: "Type name" },
-          { name: "Kind", type: "string", desc: "Class, Struct, Interface, Enum, Record" },
+          { name: "Kind", type: "TypeKind", desc: "Class, Struct, Interface, Enum" },
           { name: "Modifiers", type: "int", desc: "Modifier bitfield (use predicates)" },
           { name: "BaseTypes", type: "[string]", desc: "Base types and interfaces" },
           { name: "Constructors", type: "[Method]", desc: "Constructor declarations" },
@@ -212,7 +221,7 @@ const packages = {
       },
       Statement: {
         props: [
-          { name: "Kind", type: "string", desc: "declaration, call, throw, catch, return, using, foreach, await" },
+          { name: "Kind", type: "StatementKind", desc: "call, declaration, throw, catch, return, using, foreach, await, etc." },
           { name: "Keywords", type: "[string]", desc: "Language keywords" },
           { name: "TypeName", type: "string?", desc: "Receiver type name" },
           { name: "MemberName", type: "string?", desc: "Member name" },
@@ -254,7 +263,7 @@ const packages = {
       },
       ErrorHandler: {
         props: [
-          { name: "Kind", type: "string", desc: "catch, try, finally" },
+          { name: "Kind", type: "StatementKind", desc: "catch, try, finally" },
           { name: "TypeName", type: "string?", desc: "Exception type caught" },
           { name: "Rethrows", type: "bool", desc: "Rethrows caught exception" },
           { name: "Generic", type: "bool", desc: "Catches generic Exception type" },
@@ -284,7 +293,7 @@ const packages = {
       File: {
         props: [
           { name: "Path", type: "string", desc: "Relative file path" },
-          { name: "Language", type: "string?", desc: "Language (csharp, python, etc.)" },
+          { name: "Language", type: "Language?", desc: "Language (csharp, python, javascript, cop, text)" },
           { name: "Namespace", type: "string?", desc: "Declared namespace" },
           { name: "Usings", type: "[string]", desc: "Import/using directives" },
           { name: "Types", type: "[Type]", desc: "Type declarations in file" }
@@ -292,7 +301,7 @@ const packages = {
       },
       Api: {
         props: [
-          { name: "Kind", type: "string", desc: "Entry kind (type, method, field, property, event)" },
+          { name: "Kind", type: "ApiKind", desc: "Entry kind (type, method, field, property, event, ctor)" },
           { name: "TypeName", type: "string", desc: "Declaring type name" },
           { name: "MemberName", type: "string", desc: "Member name" },
           { name: "Signature", type: "string", desc: "Full signature text" },
@@ -324,7 +333,7 @@ const packages = {
         props: [
           { name: "Name", type: "string", desc: "Project/package name" },
           { name: "Path", type: "string", desc: "Relative path to manifest" },
-          { name: "Language", type: "string?", desc: "Language" },
+          { name: "Language", type: "Language?", desc: "Language" },
           { name: "References", type: "[string]", desc: "Referenced project names" }
         ]
       },
@@ -395,10 +404,13 @@ const packages = {
   "code-analysis": {
     label: "code-analysis",
     collections: [],
+    enums: [
+      { name: "Severity", values: "error|warning|info" }
+    ],
     types: {
       Violation: {
         props: [
-          { name: "Severity", type: "string", desc: "error, warning, or info" },
+          { name: "Severity", type: "Severity", desc: "error, warning, or info" },
           { name: "Message", type: "string", desc: "Violation message" },
           { name: "File", type: "string", desc: "Source file path" },
           { name: "Line", type: "int", desc: "Source line number" },
@@ -648,12 +660,17 @@ const packages = {
   "typespec-http": {
     label: "typespec-http",
     collections: ["Operations", "Services"],
+    enums: [
+      { name: "HttpVerb", values: "get|put|post|patch|delete|head" },
+      { name: "HttpStatusCode", values: "200|201|204|304|default" },
+      { name: "HttpParameterLocation", values: "path|query|header|body|cookie" }
+    ],
     types: {
       HttpParameter: {
         props: [
           { name: "Name", type: "string", desc: "Parameter name" },
           { name: "Type", type: "string", desc: "Type expression" },
-          { name: "In", type: "string", desc: "Location: query, header, path, body" },
+          { name: "In", type: "HttpParameterLocation", desc: "Location: path, query, header, body, cookie" },
           { name: "Optional", type: "bool", desc: "True if optional" },
           { name: "Style", type: "string?", desc: "Serialization style" }
         ]
@@ -666,7 +683,7 @@ const packages = {
       },
       HttpResponse: {
         props: [
-          { name: "StatusCode", type: "string", desc: "HTTP status code" },
+          { name: "StatusCode", type: "HttpStatusCode", desc: "HTTP status code" },
           { name: "Description", type: "string?", desc: "Response description" },
           { name: "Body", type: "string?", desc: "Body type expression" },
           { name: "Headers", type: "[HttpHeader]", desc: "Response headers" }
@@ -675,7 +692,7 @@ const packages = {
       HttpOperation: {
         props: [
           { name: "Name", type: "string", desc: "Operation name" },
-          { name: "Verb", type: "string", desc: "HTTP verb (get, put, post, etc.)" },
+          { name: "Verb", type: "HttpVerb", desc: "HTTP verb (get, put, post, patch, delete, head)" },
           { name: "Path", type: "string", desc: "Resolved route path" },
           { name: "UriTemplate", type: "string", desc: "URI template with placeholders" },
           { name: "Parameters", type: "[HttpParameter]", desc: "Request parameters" },
@@ -742,6 +759,9 @@ const packages = {
   http: {
     label: "http",
     collections: [],
+    enums: [
+      { name: "HttpMethod", values: "GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS" }
+    ],
     types: {
       Response: {
         props: [
@@ -752,7 +772,7 @@ const packages = {
       },
       Request: {
         props: [
-          { name: "Method", type: "string", desc: "HTTP method (GET, POST, etc.)" },
+          { name: "Method", type: "HttpMethod", desc: "HTTP method (GET, POST, PUT, etc.)" },
           { name: "Path", type: "string", desc: "Request path" },
           { name: "Body", type: "string", desc: "Request body text" },
           { name: "ContentType", type: "string", desc: "Content-Type header value" },
@@ -1120,6 +1140,7 @@ function buildTree() {
       const hasChecks = pkg.checks && pkg.checks.length > 0;
       const hasCmds = pkg.commands && pkg.commands.length > 0;
       const hasLets = pkg.lets && pkg.lets.length > 0;
+      const hasEnums = pkg.enums && pkg.enums.length > 0;
 
       pkgNode.innerHTML = `
         <div class="tree-label" data-pkg="${pkgId}">
@@ -1139,6 +1160,19 @@ function buildTree() {
             <span class="tree-toggle" style="visibility:hidden"></span>
             <span class="section-tag tag-let">L</span>
             <span>Globals (${pkg.lets.length})</span>
+          </div>
+        `;
+        childrenDiv.appendChild(secNode);
+      }
+
+      if (hasEnums) {
+        const secNode = document.createElement('div');
+        secNode.className = 'tree-node';
+        secNode.innerHTML = `
+          <div class="tree-label" data-pkg="${pkgId}" data-view="enums">
+            <span class="tree-toggle" style="visibility:hidden"></span>
+            <span class="section-tag tag-enum">E</span>
+            <span>Enums (${pkg.enums.length})</span>
           </div>
         `;
         childrenDiv.appendChild(secNode);
@@ -1248,6 +1282,7 @@ function buildTree() {
       else if (view === 'checks') renderChecks(pkg);
       else if (view === 'commands') renderCommands(pkg);
       else if (view === 'lets') renderLets(pkg);
+      else if (view === 'enums') renderEnums(pkg);
     } else if (section) {
       // Toggle section expand
       const children = label.nextElementSibling;
@@ -1478,6 +1513,35 @@ function renderLets(pkgId) {
   wireUpTypeLinks(content);
 }
 
+function renderEnums(pkgId) {
+  const pkg = packages[pkgId];
+  const content = document.getElementById('content');
+
+  let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Enums</h1>`;
+  html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">${pkg.enums.length} exported enums — extensible string-valued constants for tooling and completion</p>`;
+
+  for (const enumItem of pkg.enums.slice().sort((a,b) => a.name.localeCompare(b.name))) {
+    const key = `${pkgId}.enum.${enumItem.name}`;
+    const hasComment = comments[key] ? 'has-comment' : '';
+    const values = enumItem.values.split('|');
+    html += `
+      <div class="comment-wrapper">
+        <div class="fn-block">
+          <div class="fn-signature">
+            <span class="item-name">${enumItem.name}</span>
+            <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
+          </div>
+          <div class="enum-values">${values.map(v => `<span class="enum-value">${escapeHtml(v)}</span>`).join('')}</div>
+        </div>
+        <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
+      </div>
+    `;
+  }
+
+  content.innerHTML = html;
+  wireUpComments(content);
+}
+
 function wireUpComments(container) {
   container.querySelectorAll('.comment-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1589,6 +1653,10 @@ function makeTypeLink(currentPkgId, typeName) {
     if (pkg.types && pkg.types[typeName]) {
       return `<a href="#" class="type-nav-link" data-pkg="${pkgId}" data-type="${typeName}">${typeName}</a>`;
     }
+    // Check enums
+    if (pkg.enums && pkg.enums.some(e => e.name === typeName)) {
+      return `<a href="#" class="type-nav-link" data-pkg="${pkgId}" data-view="enums">${typeName}</a>`;
+    }
   }
   // Not found as a navigable type — render plain
   return typeName;
@@ -1600,8 +1668,10 @@ function wireUpTypeLinks(container) {
       e.preventDefault();
       const pkg = link.dataset.pkg;
       const type = link.dataset.type;
+      const view = link.dataset.view;
       document.querySelectorAll('.tree-label.active').forEach(el => el.classList.remove('active'));
-      renderType(pkg, type);
+      if (view === 'enums') renderEnums(pkg);
+      else renderType(pkg, type);
     });
   });
 }
