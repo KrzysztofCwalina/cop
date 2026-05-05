@@ -1569,7 +1569,7 @@ function renderCommands(pkgId) {
     html += `
       <div class="comment-wrapper">
         <div class="item-row">
-          <span class="item-name">${cmd.name}(${escapeHtml(cmd.params)})</span>
+          <span class="item-name">${cmd.name}(${formatParamsWithLinks(pkgId, cmd.params)})</span>
           <span class="item-detail">${escapeHtml(cmd.desc)}</span>
           <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
         </div>
