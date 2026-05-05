@@ -30,6 +30,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 /* Property row */
 .prop-row { display: flex; align-items: center; padding: 5px 8px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
 .prop-row:hover { background: #f6f8fa; }
+.type-overview { margin: 12px 0 16px; padding: 12px 16px; background: #f6f8fa; border-radius: 6px; font-size: 13px; line-height: 1.6; color: #24292f; }
+.type-overview code { background: #eff1f3; padding: 2px 5px; border-radius: 3px; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px; }
+.type-overview pre { background: #24292f; color: #e6edf3; padding: 12px 16px; border-radius: 6px; margin: 8px 0; overflow-x: auto; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px; line-height: 1.5; }
 .prop-name { font-family: 'SFMono-Regular', Consolas, monospace; font-weight: 600; width: 200px; flex-shrink: 0; }
 .prop-type { color: #6639ba; width: 180px; flex-shrink: 0; font-family: monospace; font-size: 12px; }
 .prop-type a.type-nav-link { color: #6639ba; text-decoration: none; border-bottom: 1px dotted #6639ba; }
@@ -142,6 +145,14 @@ const packages = {
         props: []
       },
       predicate: {
+        desc: `A named boolean expression evaluated once per item. Predicates are the primary filtering mechanism in Cop.<pre>predicate isPublic(Type) => Type.Modifiers:isSet(Public)
+
+# Use with : syntax (filter collection)
+foreach Types:isPublic => '{item.Name}'
+
+# Use as argument to collection operations
+let public-types = Where(Types, isPublic)
+let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code>predicate</code> keyword and always return <code>bool</code>. They can reference other predicates, use logical operators (<code>&&</code>, <code>||</code>, <code>!</code>), and call built-in predicates like <code>:equals</code>, <code>:contains</code>, etc.`,
         props: []
       },
       "[T]": {
@@ -1407,11 +1418,16 @@ function renderType(pkgId, typeName) {
   const content = document.getElementById('content');
 
   let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> ${typeName}</h1>`;
+  if (type.desc) {
+    html += `<div class="type-overview">${type.desc}</div>`;
+  }
   if (pkg.collections && pkg.collections.length > 0) {
     const names = pkg.collections.map(c => typeof c === 'string' ? c : c.name);
     html += `<p style="color:#57606a; font-size:13px; margin-top:4px;">Functions: <code>${names.join('</code>, <code>')}</code></p>`;
   }
-  html += `<h2>Properties</h2>`;
+  if (type.props.length > 0) {
+    html += `<h2>Properties</h2>`;
+  }
 
   for (const prop of type.props) {
     const key = `${pkgId}.${typeName}.${prop.name}`;
