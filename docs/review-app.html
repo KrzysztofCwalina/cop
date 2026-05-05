@@ -1107,6 +1107,19 @@ function buildTree() {
       `;
       const childrenDiv = pkgNode.querySelector('.tree-children');
 
+      if (hasLets) {
+        const secNode = document.createElement('div');
+        secNode.className = 'tree-node';
+        secNode.innerHTML = `
+          <div class="tree-label" data-pkg="${pkgId}" data-view="lets">
+            <span class="tree-toggle" style="visibility:hidden"></span>
+            <span class="section-tag tag-let">L</span>
+            <span>Globals (${pkg.lets.length})</span>
+          </div>
+        `;
+        childrenDiv.appendChild(secNode);
+      }
+
       if (hasTypes) {
         const secNode = document.createElement('div');
         secNode.className = 'tree-node';
@@ -1181,19 +1194,6 @@ function buildTree() {
             <span class="tree-toggle" style="visibility:hidden"></span>
             <span class="section-tag tag-command">!</span>
             <span>Commands (${pkg.commands.length})</span>
-          </div>
-        `;
-        childrenDiv.appendChild(secNode);
-      }
-
-      if (hasLets) {
-        const secNode = document.createElement('div');
-        secNode.className = 'tree-node';
-        secNode.innerHTML = `
-          <div class="tree-label" data-pkg="${pkgId}" data-view="lets">
-            <span class="tree-toggle" style="visibility:hidden"></span>
-            <span class="section-tag tag-let">L</span>
-            <span>Globals (${pkg.lets.length})</span>
           </div>
         `;
         childrenDiv.appendChild(secNode);
