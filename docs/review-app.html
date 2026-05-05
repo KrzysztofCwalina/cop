@@ -1119,7 +1119,7 @@ function buildTree() {
           <div class="tree-children collapsed"></div>
         `;
         const typesChildren = secNode.querySelector('.tree-children');
-        for (const typeName of Object.keys(pkg.types)) {
+        for (const typeName of Object.keys(pkg.types).sort()) {
           const typeNode = document.createElement('div');
           typeNode.className = 'tree-node';
           typeNode.innerHTML = `
