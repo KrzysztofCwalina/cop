@@ -8,6 +8,10 @@
 export enum HttpMethod = GET | POST | PUT | DELETE | PATCH | HEAD | OPTIONS
 export enum ContentType = 'application/json' | 'text/plain' | 'text/html' | 'application/xml' | 'multipart/form-data' | 'application/octet-stream'
 
+# Streaming source and sink provided by the http runtime
+export let Receive = runtime::Request
+export let Send = runtime::Response
+
 # Response type produced by helper functions
 export type Response = {
     StatusCode : int,

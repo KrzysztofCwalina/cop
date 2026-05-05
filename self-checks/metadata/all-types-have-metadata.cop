@@ -55,6 +55,8 @@ let tracked-globals = [
     'Code'
     'Disk'
     'Markdown'
+    'Receive'
+    'Send'
 ]
 
 predicate isRuntimeGlobal(Statement) =>

@@ -758,12 +758,12 @@ const packages = {
 
   http: {
     label: "http",
-    collections: [
-      { name: "Receive", type: "Request", desc: "Streaming collection of incoming HTTP requests" },
+    collections: [],
+    lets: [
+      { name: "Receive", type: "Request", desc: "Streaming source — yields incoming HTTP requests. Use with foreach pipelines." },
+      { name: "Send", type: "Response", desc: "Pipeline sink — sends the transformed result back as an HTTP response." }
     ],
-    sinks: [
-      { name: "Send", desc: "Sends the transformed result back as an HTTP response" }
-    ],
+    sinks: [],
     enums: [
       { name: "HttpMethod", values: "GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS" },
       { name: "ContentType", values: "application/json|text/plain|text/html|application/xml|multipart/form-data|application/octet-stream" }
