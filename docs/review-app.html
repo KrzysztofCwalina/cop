@@ -1446,7 +1446,7 @@ function renderType(pkgId, typeName) {
       html += `
         <div class="comment-wrapper">
           <div class="item-row">
-            <span class="item-name">${pred.name}${fromLabel}</span>
+            <span class="item-name">${pred.name}${fromLabel} → ${formatTypeLink(pkgId, 'bool')}</span>
             <span class="item-detail">${escapeHtml(pred.desc)}</span>
             <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
           </div>
@@ -1480,11 +1480,10 @@ function renderPredicates(pkgId) {
     for (const pred of preds.sort((a,b) => a.name.localeCompare(b.name))) {
       const key = `${pkgId}.pred.${pred.name}.${pred.appliesTo}`;
       const hasComment = comments[key] ? 'has-comment' : '';
-      const retInfo = pred.returns ? ` → ${pred.returns}` : '';
       html += `
         <div class="comment-wrapper">
           <div class="item-row">
-            <span class="item-name">${pred.name}(${pred.appliesTo})${retInfo}</span>
+            <span class="item-name">${pred.name}(${formatTypeLink(pkgId, pred.appliesTo)}) → ${formatTypeLink(pkgId, 'bool')}</span>
             <span class="item-detail">${escapeHtml(pred.desc)}</span>
             <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
           </div>
