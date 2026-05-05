@@ -68,6 +68,7 @@ public static class CodeBindings
                 ["File"] = o => ((TypeDeclaration)o).File,
                 ["Source"] = o => ((TypeDeclaration)o).Source,
                 ["Documented"] = o => (object)((TypeDeclaration)o).HasDocComment,
+                ["Documentation"] = o => (object?)((TypeDeclaration)o).DocComment,
                 ["Fields"] = o => (object)((TypeDeclaration)o).Fields,
                 ["Properties"] = o => (object)((TypeDeclaration)o).Properties,
                 ["Events"] = o => (object)((TypeDeclaration)o).Events,
@@ -82,6 +83,7 @@ public static class CodeBindings
                 ["ReturnType"] = o => (object?)((MethodDeclaration)o).ReturnType,
                 ["Line"] = o => (object)((MethodDeclaration)o).Line,
                 ["Documented"] = o => (object)((MethodDeclaration)o).HasDocComment,
+                ["Documentation"] = o => (object?)((MethodDeclaration)o).DocComment,
             },
             ["Parameter"] = new()
             {
@@ -107,6 +109,7 @@ public static class CodeBindings
                 ["HasGetter"] = o => (object)((PropertyDeclaration)o).HasGetter,
                 ["HasSetter"] = o => (object)((PropertyDeclaration)o).HasSetter,
                 ["Documented"] = o => (object)((PropertyDeclaration)o).HasDocComment,
+                ["Documentation"] = o => (object?)((PropertyDeclaration)o).DocComment,
                 ["Line"] = o => (object)((PropertyDeclaration)o).Line,
             },
             ["Event"] = new()

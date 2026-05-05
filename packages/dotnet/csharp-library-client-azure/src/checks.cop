@@ -138,7 +138,7 @@ export let service-method-needs-cancellation = Clients:hasMethodMissingCancellat
     :toWarning('{item.Name} must accept CancellationToken or RequestContext')
 
 ## Public API should not expose types from banned internal namespaces
-export let no-banned-internal-types = Code.Types:csharp:isPublicType:hasBannedParams
+export let no-banned-internal-types = Code.Types:csharp:isPublic:hasBannedParams
     :toWarning('{item.Name} uses types from banned namespace in public API')
 
 ## Client methods should return azure-specific types, not raw HTTP types
@@ -146,7 +146,7 @@ export let no-raw-http-return-types = Clients:hasBannedReturn
     :toWarning('{item.Name} should not return raw HTTP types')
 
 ## Public API should not expose Azure.Core.Pipeline internal types
-export let no-pipeline-types-in-api = Code.Types:csharp:isPublicType:hasBannedAzureCoreParams
+export let no-pipeline-types-in-api = Code.Types:csharp:isPublic:hasBannedAzureCoreParams
     :toWarning('{item.Name} uses banned Azure.Core.Pipeline type in public API')
 
 ## ModelReaderWriter.Read should include the ModelReaderWriterOptions context parameter
@@ -190,7 +190,7 @@ export let no-public-async-in-sync = Code.Statements:csharp:isAsyncCallInSyncMet
     :toWarning('Do not call {item.MemberName} from sync method')
 
 ## Avoid single-word public type names — too generic (AZC0012)
-export let no-single-word-type-name = Code.Types:csharp:isPublicType:hasSingleWordName
+export let no-single-word-type-name = Code.Types:csharp:isPublic:hasSingleWordName
     :toWarning('{item.Name} is a single-word type name — use a more descriptive multi-word name')
 
 ## Async calls should propagate CancellationToken or RequestContext (AZC0020)

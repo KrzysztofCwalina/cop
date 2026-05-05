@@ -28,7 +28,7 @@ public static class CodeSchema
                     Coll("MethodNames"), Coll("NestedTypes", "Type"),
                     Coll("EnumValues"), Coll("Decorators"),
                     Prop("Line", "int"), Opt("File", "File"), Prop("Source"),
-                    Bool("Documented"),
+                    Bool("Documented"), Opt("Documentation"),
                     Coll("Fields", "Field"), Coll("Properties", "Property"), Coll("Events", "Event")),
 
                 TypeDef("Method", null,
@@ -36,7 +36,7 @@ public static class CodeSchema
                     Prop("Modifiers", "int"),
                     Opt("ReturnType", "TypeReference"),
                     Coll("Parameters", "Parameter"), Coll("Statements", "Statement"), Coll("Decorators"),
-                    Prop("Line", "int"), Bool("Documented")),
+                    Prop("Line", "int"), Bool("Documented"), Opt("Documentation")),
 
                 TypeDef("Constructor", "Method"),
 
@@ -53,7 +53,7 @@ public static class CodeSchema
                 TypeDef("Property", null,
                     Prop("Name"), Opt("Type", "TypeReference"),
                     Prop("Modifiers", "int"),
-                    Bool("HasGetter"), Bool("HasSetter"), Bool("Documented"),
+                    Bool("HasGetter"), Bool("HasSetter"), Bool("Documented"), Opt("Documentation"),
                     Prop("Line", "int")),
 
                 TypeDef("Event", null,

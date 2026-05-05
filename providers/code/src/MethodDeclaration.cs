@@ -19,4 +19,5 @@ public record MethodDeclaration(
     public bool IsInternal => Modifiers.HasFlag(Modifier.Internal);
     public List<StatementInfo> Statements { get; set; } = [];
     public bool HasDocComment { get; init; }
+    public string? DocComment { get; init; }
 }

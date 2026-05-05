@@ -150,6 +150,7 @@ public class CSharpSourceParser : ISourceParser
             constructors, methods, nestedTypes, [], LineOf(syntax))
         {
             HasDocComment = HasDocComment(syntax),
+            DocComment = GetDocComment(syntax),
             Fields = fields,
             Properties = properties,
             Events = events
@@ -163,7 +164,8 @@ public class CSharpSourceParser : ISourceParser
             syntax.Members.Select(m => m.Identifier.Text).ToList(),
             LineOf(syntax))
         {
-            HasDocComment = HasDocComment(syntax)
+            HasDocComment = HasDocComment(syntax),
+            DocComment = GetDocComment(syntax)
         };
 
     private static MethodDeclaration ExtractConstructor(ConstructorDeclarationSyntax syntax)
@@ -172,7 +174,8 @@ public class CSharpSourceParser : ISourceParser
             null, syntax.ParameterList.Parameters.Select(ExtractParameter).ToList(),
             LineOf(syntax))
         {
-            HasDocComment = HasDocComment(syntax)
+            HasDocComment = HasDocComment(syntax),
+            DocComment = GetDocComment(syntax)
         };
         var methodStatements = new List<StatementInfo>();
         if (syntax.Body != null)
@@ -192,7 +195,8 @@ public class CSharpSourceParser : ISourceParser
             syntax.ParameterList.Parameters.Select(ExtractParameter).ToList(),
             LineOf(syntax))
         {
-            HasDocComment = HasDocComment(syntax)
+            HasDocComment = HasDocComment(syntax),
+            DocComment = GetDocComment(syntax)
         };
         var methodStatements = new List<StatementInfo>();
         if (syntax.Body != null)
@@ -223,7 +227,8 @@ public class CSharpSourceParser : ISourceParser
         {
             HasGetter = hasGetter,
             HasSetter = hasSetter,
-            HasDocComment = HasDocComment(syntax)
+            HasDocComment = HasDocComment(syntax),
+            DocComment = GetDocComment(syntax)
         };
     }
 
@@ -592,6 +597,20 @@ public class CSharpSourceParser : ISourceParser
     private static bool HasDocComment(SyntaxNode node) =>
         node.GetLeadingTrivia().Any(t => t.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia)
             || t.IsKind(SyntaxKind.MultiLineDocumentationCommentTrivia));
+
+    private static string? GetDocComment(SyntaxNode node)
+    {
+        var trivia = node.GetLeadingTrivia()
+            .FirstOrDefault(t => t.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia)
+                || t.IsKind(SyntaxKind.MultiLineDocumentationCommentTrivia));
+        if (trivia == default) return null;
+        var xml = trivia.ToString();
+        // Strip leading /// and whitespace from each line
+        var lines = xml.Split('\n')
+            .Select(l => l.TrimStart().TrimStart('/').TrimStart())
+            .Where(l => !string.IsNullOrWhiteSpace(l));
+        return string.Join(" ", lines).Trim();
+    }
 
     private static string ExtractBaseTypeName(TypeSyntax type) =>
         type is GenericNameSyntax generic ? generic.Identifier.Text : type.ToString();

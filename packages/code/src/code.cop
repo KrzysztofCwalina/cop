@@ -21,6 +21,7 @@ export type Type = {
     File : File?,
     Source : string,
     Documented : bool,
+    Documentation : string?,
     Fields : [Field],
     Properties : [Property],
     Events : [Event]
@@ -34,7 +35,8 @@ export type Method = {
     Statements : [Statement],
     Decorators : [string],
     Line : int,
-    Documented : bool
+    Documented : bool,
+    Documentation : string?
 }
 
 export type Constructor = Method & {}
@@ -53,6 +55,7 @@ export type Property = {
     HasGetter : bool,
     HasSetter : bool,
     Documented : bool,
+    Documentation : string?,
     Line : int
 }
 
@@ -178,8 +181,6 @@ export predicate isGeneric(ErrorHandler) => ErrorHandler.Generic == true
 # Convenience collections
 export let Calls = Code.Statements:isCall
 export let Declarations = Code.Statements:isDeclaration
-export let ErrorHandlers = Code.Statements:isErrorHandler
-export let Attributes = Code.Statements:isAttribute
 
 export type Line = {
     Text : string,
@@ -222,5 +223,5 @@ export type Codebase = {
     Projects : [Project]
 }
 
-# Built-in value — implementation is provided by the runtime engine
+# The code analysis data for the current project
 export let Code = runtime::Codebase

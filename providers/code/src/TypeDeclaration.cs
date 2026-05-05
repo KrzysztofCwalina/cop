@@ -19,6 +19,7 @@ public record TypeDeclaration(
 
     public SourceFile? File { get; init; }
     public bool HasDocComment { get; init; }
+    public string? DocComment { get; init; }
     public List<FieldDeclaration> Fields { get; init; } = [];
     public List<PropertyDeclaration> Properties { get; init; } = [];
     public List<EventDeclaration> Events { get; init; } = [];

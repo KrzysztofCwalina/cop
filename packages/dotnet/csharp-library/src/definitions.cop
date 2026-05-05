@@ -9,14 +9,12 @@ predicate isNonPublicAsync(Method) => Method:!isPublic && Method:isAsync
 predicate isAwaitUsingDefault(Statement) => Statement.Kind == 'await'
     && (Statement.MemberName != 'ConfigureAwait' || Statement.Arguments:contains('true'))
 
-export predicate isPublicType(Type) => Type:isPublic
-
 # Method uses the dual-mode async bool parameter pattern
-export predicate isDualModeMethod(Method) => Method.Parameters:any(hasAsyncBoolParam)
+export predicate hasSyncAndAsyncVariants(Method) => Method.Parameters:any(hasAsyncBoolParam)
 
 # Statement is in a dual-mode method (has async bool parameter)
 export predicate isInDualModeMethod(Statement) => Statement.Method != null
-    && Statement.Method.Parameters:any(hasAsyncBoolParam)
+    && Statement.Method:hasSyncAndAsyncVariants
 
 # Statement has an ancestor if-statement whose condition references 'async'
 predicate isAsyncGuard(Ancestor) => Ancestor.Kind == 'if' && Ancestor.Condition:contains('async')

@@ -104,11 +104,9 @@ const packages = {
     label: "code",
     collections: ["Types", "Statements", "Lines", "Files", "Members", "Api", "Regions", "Projects"],
     lets: [
-      { name: "Code", desc: "Alias for the code provider data" },
+      { name: "Code", desc: "The code analysis data for the current project" },
       { name: "Calls", desc: "All call statements" },
-      { name: "Declarations", desc: "All declaration statements" },
-      { name: "ErrorHandlers", desc: "All error-handling statements" },
-      { name: "Attributes", desc: "All attribute statements" }
+      { name: "Declarations", desc: "All declaration statements" }
     ],
     flags: [{ name: "Modifier", values: "Public|Private|Protected|Internal|Static|Sealed|Abstract|Virtual|Async|Override|Readonly|Const" }],
     types: {
@@ -130,7 +128,8 @@ const packages = {
           { name: "Line", type: "int", desc: "Source line number" },
           { name: "File", type: "File?", desc: "Containing source file" },
           { name: "Source", type: "string", desc: "Source text of the declaration" },
-          { name: "Documented", type: "bool", desc: "Has documentation comment" }
+          { name: "Documented", type: "bool", desc: "Has documentation comment" },
+          { name: "Documentation", type: "string?", desc: "Doc comment text (nic if not documented)" }
         ]
       },
       Method: {
@@ -142,7 +141,8 @@ const packages = {
           { name: "Statements", type: "[Statement]", desc: "Statements within method body" },
           { name: "Decorators", type: "[string]", desc: "Attributes/decorators" },
           { name: "Line", type: "int", desc: "Source line number" },
-          { name: "Documented", type: "bool", desc: "Has documentation comment" }
+          { name: "Documented", type: "bool", desc: "Has documentation comment" },
+          { name: "Documentation", type: "string?", desc: "Doc comment text (nic if not documented)" }
         ]
       },
       Constructor: {
@@ -180,6 +180,7 @@ const packages = {
           { name: "HasGetter", type: "bool", desc: "Has get accessor" },
           { name: "HasSetter", type: "bool", desc: "Has set accessor" },
           { name: "Documented", type: "bool", desc: "Has documentation comment" },
+          { name: "Documentation", type: "string?", desc: "Doc comment text (nic if not documented)" },
           { name: "Line", type: "int", desc: "Source line number" }
         ]
       },
@@ -792,8 +793,7 @@ const packages = {
     collections: [],
     types: {},
     predicates: [
-      { name: "isPublicType", appliesTo: "Type", desc: "Type is public" },
-      { name: "isDualModeMethod", appliesTo: "Method", desc: "Method has both sync and async code paths" },
+      { name: "hasSyncAndAsyncVariants", appliesTo: "Method", desc: "Method has both sync and async code paths" },
       { name: "isInDualModeMethod", appliesTo: "Statement", desc: "Statement is inside a dual-mode method" },
       { name: "isGuardedByAsyncCheck", appliesTo: "Statement", desc: "Statement is guarded by an async/sync branch check" },
       { name: "hasWrongAsyncFalseInAsyncGuard", appliesTo: "Statement", desc: "Statement passes async=false inside an async-guarded block" },

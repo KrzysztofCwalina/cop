@@ -13,4 +13,5 @@ public record PropertyDeclaration(string Name, TypeReference? Type, Modifier Mod
     public bool HasGetter { get; init; }
     public bool HasSetter { get; init; }
     public bool HasDocComment { get; init; }
+    public string? DocComment { get; init; }
 }
