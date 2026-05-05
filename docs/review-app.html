@@ -45,6 +45,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .item-type a.type-nav-link:hover { color: #6639ba; border-bottom-style: solid; }
 .item-detail { color: #57606a; font-size: 12px; margin-left: 12px; }
 
+/* Function block (signature on one line, description below) */
+.fn-block { padding: 6px 8px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+.fn-block:hover { background: #f6f8fa; }
+.fn-signature { display: flex; align-items: center; }
+.fn-desc { color: #57606a; font-size: 12px; margin-top: 3px; padding-left: 2px; }
+
 /* Comment button and input */
 .comment-btn { cursor: pointer; font-size: 14px; margin-left: 8px; opacity: 0.3; transition: opacity 0.2s; flex-shrink: 0; }
 .comment-btn:hover { opacity: 1; }
@@ -1363,10 +1369,12 @@ function renderFunctions(pkgId) {
     const hasComment = comments[key] ? 'has-comment' : '';
     html += `
       <div class="comment-wrapper">
-        <div class="item-row">
-          <span class="item-name">${fn.name}(${escapeHtml(fn.params)}) → ${escapeHtml(fn.returns)}</span>
-          <span class="item-detail">${escapeHtml(fn.desc)}</span>
-          <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
+        <div class="fn-block">
+          <div class="fn-signature">
+            <span class="item-name">${fn.name}(${escapeHtml(fn.params)}) → ${escapeHtml(fn.returns)}</span>
+            <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
+          </div>
+          <div class="fn-desc">${escapeHtml(fn.desc)}</div>
         </div>
         <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
       </div>
