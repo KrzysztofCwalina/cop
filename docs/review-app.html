@@ -379,7 +379,9 @@ const packages = {
       { name: "isAttribute", appliesTo: "Statement", desc: "Narrows Statement to Attribute type", returns: "Attribute" },
       { name: "isGeneric", appliesTo: "ErrorHandler", desc: "ErrorHandler catches generic Exception type" }
     ],
-    functions: [],
+    functions: [
+      { name: "Code", params: "[providers], path?", returns: "Codebase", desc: "Create a Codebase scoped to specific providers and optional path" }
+    ],
     checks: [],
     commands: []
   },
