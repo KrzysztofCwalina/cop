@@ -793,7 +793,9 @@ const packages = {
       { name: "serverError", params: "Request", returns: "Response", desc: "Creates a 500 Internal Server Error response" }
     ],
     checks: [],
-    commands: []
+    commands: [
+      { name: "serve", desc: "async foreach http.Receive => handle => http.Send — process requests in parallel" }
+    ]
   },
 
   json: {

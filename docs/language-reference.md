@@ -123,6 +123,8 @@ A `.cop` file contains these kinds of declarations:
 | `collection` | Declare a typed collection (source or sink for pipes) |
 | `let` | Declare a named list (base or subset) |
 | `command name =` | Define a named command (implicit output, SAVE, or composition) |
+| `foreach` | Iterate over a collection sequentially |
+| `async foreach` | Iterate over a collection with parallel processing |
 | `predicate name(Param) =>` | Define a named predicate for subsetting |
 | `function name(Param) =>` | Define a named function (expression-body or record-body) |
 | `SAVE` | Command that writes to a file |
@@ -319,9 +321,12 @@ Collections are backed by providers. The pipe operator (`=>`) dequeues items fro
 ```ruby
 # foreach = repeat { dequeue from source → transform → enqueue to sink }
 command serve = foreach Receive => handle => Send
+
+# async foreach = process items concurrently (parallel)
+command serve = async foreach Receive => handle => Send
 ```
 
-Any collection can serve as both a source and a sink. The runtime handles thread-safe enqueue/dequeue operations.
+Any collection can serve as both a source and a sink. The runtime handles thread-safe enqueue/dequeue operations. Use `async foreach` when items can be processed independently (e.g., HTTP requests).
 
 ### Predicates
 
@@ -925,11 +930,14 @@ Use `=> target` after the template to pipe output to a collection instead of the
 # Pipe to a provider-backed collection (e.g., http response)
 command serve = foreach Receive => handle => Send
 
+# Process items in parallel
+command serve = async foreach Receive => handle => Send
+
 # Pipe to a file
 foreach Types => SAVE('types.txt', '{item.Name}')
 ```
 
-The pipe operator means **dequeue → transform → enqueue**: items are dequeued from the source, transformed, and enqueued to the sink. See [Collection Declarations](#collection-declarations).
+The pipe operator means **dequeue → transform → enqueue**: items are dequeued from the source, transformed, and enqueued to the sink. `async foreach` processes items concurrently with bounded parallelism. See [Collection Declarations](#collection-declarations).
 
 #### Language Filtering
 
