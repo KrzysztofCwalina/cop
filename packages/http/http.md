@@ -21,7 +21,7 @@ import http
 
 function handle(Request:Uri:eq('/hello')) => ok({ message: 'Hello, World!' })
 
-command serve = async foreach Requests => handle => RESPONSES
+async foreach Requests => handle => RESPONSES
 ```
 
 ## Globals

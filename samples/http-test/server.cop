@@ -2,4 +2,4 @@ import http
 
 function handle(Request) => ok({ path: Request.Uri })
 
-command serve = async foreach Receive => handle => Send
+async foreach Receive => handle => Send

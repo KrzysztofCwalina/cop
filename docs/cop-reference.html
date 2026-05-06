@@ -945,7 +945,7 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
     label: "http",
     overview: "HTTP server provider. Receive incoming requests and send responses using streaming pipelines. Includes helper functions for common status codes.",
     samples: [
-      { title: "HTTP server with routing", code: "import http\n\nfunction handle(Request:Uri:eq('/hello')) => ok({ message: 'Hello, World!' })\n\nfunction handle(Request:Uri:eq('/health')) => ok({ status: 'ok' })\n\nfunction handle(Request) => notFound\n\ncommand serve = async foreach Requests => handle => RESPONSES" }
+      { title: "HTTP server with routing", code: "import http\n\nfunction handle(Request:Uri:eq('/hello')) => ok({ message: 'Hello, World!' })\n\nfunction handle(Request:Uri:eq('/health')) => ok({ status: 'ok' })\n\nfunction handle(Request) => notFound\n\nasync foreach Requests => handle => RESPONSES" }
     ],
     collections: [],
     enums: [
