@@ -560,7 +560,7 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
     label: "code-analysis",
     overview: "Violation reporting framework. Defines the Violation type and severity functions (toError, toWarning, toInfo) used to create structured analysis results from any source element.",
     samples: [
-      { title: "Create a simple check", code: "import code\nimport code-analysis\n\npredicate isGodClass(Type) =>\n    Type.Methods.Count:greaterThan(20)\n\nlet violations = Types:isGodClass\n    :toWarning(\'Type {item.Name} has too many methods\')\n\nCHECK violations" }
+      { title: "Create a simple check", code: "import code\nimport code-analysis\n\npredicate isTooLarge(Type) =>\n    Type.Methods.Count:greaterThan(20)\n\nlet violations = Types:isTooLarge\n    :toWarning('Type {item.Name} has too many methods')\n\nCHECK violations" }
     ],
     collections: [],
     enums: [
