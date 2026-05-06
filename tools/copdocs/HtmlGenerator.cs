@@ -141,7 +141,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .pkg-overview { margin: 8px 0 20px; font-size: 14px; line-height: 1.6; color: #24292f; }
 .pkg-sample { margin: 16px 0; }
 .pkg-sample h3 { font-size: 14px; margin-bottom: 8px; color: #24292f; }
-.pkg-sample pre { background: #24292f; color: #e6edf3; padding: 16px 20px; border-radius: 8px; overflow-x: auto; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 13px; line-height: 1.6; }
+.pkg-sample .code-block { position: relative; }
+.pkg-sample .code-block pre { background: #24292f; color: #e6edf3; padding: 16px 20px; border-radius: 8px; overflow-x: auto; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 13px; line-height: 1.6; margin: 0; }
+.pkg-sample .copy-btn { position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #e6edf3; border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer; opacity: 0; transition: opacity 0.15s; }
+.pkg-sample .code-block:hover .copy-btn { opacity: 1; }
+.pkg-sample .copy-btn:hover { background: rgba(255,255,255,0.2); }
+.pkg-sample .copy-btn.copied { color: #3fb950; }
 .pkg-exports { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0; }
 .pkg-exports a { display: inline-flex; align-items: center; gap: 4px; padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 500; text-decoration: none; cursor: pointer; border: 1px solid #d0d7de; }
 .pkg-exports a:hover { background: #f6f8fa; }
@@ -419,7 +424,7 @@ function renderPackageOverview(pkgId) {
     for (const sample of pkg.samples) {
       html += `<div class="pkg-sample">`;
       html += `<h3>${escapeHtml(sample.title)}</h3>`;
-      html += `<pre>${highlightCop(sample.code)}</pre>`;
+      html += `<div class="code-block"><pre>${highlightCop(sample.code)}</pre><button class="copy-btn" onclick="copySample(this)">Copy</button></div>`;
       html += `</div>`;
     }
   }
@@ -823,6 +828,16 @@ function highlightCop(code) {
 function escapeHtml(str) {
   if (!str) return '';
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function copySample(btn) {
+  var pre = btn.previousElementSibling;
+  var text = pre.textContent;
+  navigator.clipboard.writeText(text).then(function() {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(function() { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  });
 }
 
 var homeCode = "import code\n\n# Types named 'Client' must be sealed\npredicate unsealed(Type) => Type.Name:endsWith('Client') && !isSealed\n\nforeach Code.Types:unsealed => PRINT('{Type.Name} should be sealed')";
