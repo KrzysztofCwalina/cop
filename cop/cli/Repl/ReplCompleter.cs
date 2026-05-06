@@ -15,20 +15,25 @@ public class ReplCompleter
     [
         "equals", "notEquals", "startsWith", "endsWith", "contains", "containsAny",
         "matches", "sameAs", "empty", "in", "greaterThan", "lessThan",
-        "greaterOrEqual", "lessOrEqual"
+        "greaterOrEqual", "lessOrEqual", "isSet", "isClear", "count",
+        "any", "none", "all", "isError", "containsKey"
     ];
 
     // Built-in transforms
     private static readonly string[] BuiltinTransforms =
     [
-        "Trim", "Replace", "Words", "Where", "First", "Last",
-        "Single", "ElementAt", "Select", "Text", "Count", "Any", "All"
+        "Trim", "Replace", "Where", "First", "Last",
+        "Single", "ElementAt", "Select", "Text", "Count",
+        "OrderBy", "OrderByDescending", "Distinct", "GroupBy",
+        "Sum", "Min", "Max", "Average", "Reduce",
+        "Get", "File", "Path", "Matches", "error"
     ];
 
     // Built-in properties
     private static readonly string[] BuiltinProperties =
     [
-        "Length", "Count", "Lower", "Upper", "Normalized"
+        "Length", "Count", "Lower", "Upper", "Normalized",
+        "Words", "First", "Last", "Single", "Tail"
     ];
 
     public ReplCompleter(ReplEvaluator evaluator)

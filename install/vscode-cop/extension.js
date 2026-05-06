@@ -213,6 +213,7 @@ const TYPES = {
         { name: 'File', type: 'File?' },
         { name: 'Source', type: 'string' },
         { name: 'Documented', type: 'bool' },
+        { name: 'Documentation', type: 'string?' },
         { name: 'Fields', type: '[Field]' },
         { name: 'Properties', type: '[Property]' },
         { name: 'Events', type: '[Event]' },
@@ -226,6 +227,7 @@ const TYPES = {
         { name: 'Decorators', type: '[string]' },
         { name: 'Line', type: 'int' },
         { name: 'Documented', type: 'bool' },
+        { name: 'Documentation', type: 'string?' },
     ]},
     Constructor: { properties: [
         { name: 'Name', type: 'string' },
@@ -250,6 +252,7 @@ const TYPES = {
         { name: 'HasGetter', type: 'bool' },
         { name: 'HasSetter', type: 'bool' },
         { name: 'Documented', type: 'bool' },
+        { name: 'Documentation', type: 'string?' },
         { name: 'Line', type: 'int' },
     ]},
     Event: { properties: [
@@ -263,9 +266,30 @@ const TYPES = {
         { name: 'TypeName', type: 'string' },
         { name: 'MemberName', type: 'string' },
         { name: 'Signature', type: 'string' },
+        { name: 'ApiAsText', type: 'string' },
         { name: 'Line', type: 'int' },
         { name: 'File', type: 'File?' },
         { name: 'Source', type: 'string' },
+    ]},
+    Member: { properties: [
+        { name: 'Name', type: 'string' },
+        { name: 'DeclaringType', type: 'string' },
+        { name: 'Line', type: 'int' },
+    ]},
+    Region: { properties: [
+        { name: 'Name', type: 'string' },
+        { name: 'StartLine', type: 'int' },
+        { name: 'EndLine', type: 'int' },
+        { name: 'Content', type: 'string' },
+        { name: 'ContentHash', type: 'string' },
+        { name: 'File', type: 'File?' },
+        { name: 'Source', type: 'string' },
+    ]},
+    Project: { properties: [
+        { name: 'Name', type: 'string' },
+        { name: 'Path', type: 'string' },
+        { name: 'Language', type: 'string?' },
+        { name: 'References', type: '[string]' },
     ]},
     Parameter: { properties: [
         { name: 'Name', type: 'string' },
@@ -401,7 +425,12 @@ const TYPES = {
         { name: 'Files', type: '[File]' },
         { name: 'Types', type: '[Type]' },
         { name: 'Statements', type: '[Statement]' },
+        { name: 'Calls', type: '[Statement]' },
         { name: 'Lines', type: '[Line]' },
+        { name: 'Members', type: '[Member]' },
+        { name: 'Api', type: '[Api]' },
+        { name: 'Regions', type: '[Region]' },
+        { name: 'Projects', type: '[Project]' },
     ]},
     Folder: { properties: [
         { name: 'Path', type: 'string' },
@@ -411,6 +440,7 @@ const TYPES = {
         { name: 'SubfolderCount', type: 'int' },
         { name: 'Depth', type: 'int' },
         { name: 'MinutesSinceModified', type: 'int' },
+        { name: 'Source', type: 'string' },
     ]},
     DiskFile: { properties: [
         { name: 'Path', type: 'string' },
@@ -420,6 +450,7 @@ const TYPES = {
         { name: 'Folder', type: 'string' },
         { name: 'Depth', type: 'int' },
         { name: 'MinutesSinceModified', type: 'int' },
+        { name: 'Source', type: 'string' },
     ]},
     Filesystem: { properties: [
         { name: 'Folders', type: '[Folder]' },
@@ -605,17 +636,24 @@ const COLLECTION_PREDICATES = [
     { label: 'any', detail: '(predicate) — true if any item matches', kind: Kind.Method },
     { label: 'none', detail: '(predicate) — true if no items match', kind: Kind.Method },
     { label: 'all', detail: '(predicate) — true if all items match', kind: Kind.Method },
+    { label: 'count', detail: '(predicate) — count items matching predicate', kind: Kind.Method },
     { label: 'contains', detail: '(value) — list contains value', kind: Kind.Method },
+    { label: 'containsAny', detail: '(values) — list contains any value from list', kind: Kind.Method },
     { label: 'empty', detail: '— collection is empty', kind: Kind.Method },
 ];
 
 const UNIVERSAL_PREDICATES = [
     { label: 'in', detail: '(list) — value is member of list', kind: Kind.Method },
+    { label: 'isError', detail: '— value is an error', kind: Kind.Method },
+];
+
+const OBJECT_PREDICATES = [
+    { label: 'containsKey', detail: '(name) — object has field with given name', kind: Kind.Method },
 ];
 
 // All predicates deduped for fallback
 const ALL_PREDICATES = dedup([
-    ...STRING_PREDICATES, ...NUMERIC_PREDICATES, ...COLLECTION_PREDICATES, ...UNIVERSAL_PREDICATES
+    ...STRING_PREDICATES, ...NUMERIC_PREDICATES, ...COLLECTION_PREDICATES, ...UNIVERSAL_PREDICATES, ...OBJECT_PREDICATES
 ]);
 
 const STRING_PROPERTIES = [
@@ -636,6 +674,7 @@ const COLLECTION_PROPERTIES = [
     { label: 'First', detail: '— first item', kind: Kind.Property },
     { label: 'Last', detail: '— last item', kind: Kind.Property },
     { label: 'Single', detail: '— single item (null if not exactly one)', kind: Kind.Property },
+    { label: 'Tail', detail: '— all elements except the first', kind: Kind.Property },
 ];
 
 const COLLECTION_TRANSFORMS = [
@@ -645,6 +684,15 @@ const COLLECTION_TRANSFORMS = [
     { label: 'Single', detail: '(predicate?) — single matching item', kind: Kind.Method },
     { label: 'ElementAt', detail: '(index) — item at position', kind: Kind.Method },
     { label: 'Select', detail: '(expression) — project each item', kind: Kind.Method },
+    { label: 'OrderBy', detail: '(field) — sort ascending', kind: Kind.Method },
+    { label: 'OrderByDescending', detail: '(field) — sort descending', kind: Kind.Method },
+    { label: 'Distinct', detail: '(field?) — remove duplicates', kind: Kind.Method },
+    { label: 'GroupBy', detail: '(field) — group by field → Key, Items', kind: Kind.Method },
+    { label: 'Sum', detail: '(field) — sum numeric field', kind: Kind.Method },
+    { label: 'Min', detail: '(field) — minimum value', kind: Kind.Method },
+    { label: 'Max', detail: '(field) — maximum value', kind: Kind.Method },
+    { label: 'Average', detail: '(field) — average value', kind: Kind.Method },
+    { label: 'Reduce', detail: '(op, field, separator?) — reduce collection', kind: Kind.Method },
 ];
 
 const KEYWORDS = [
@@ -659,6 +707,8 @@ const KEYWORDS = [
     { label: 'foreach', detail: 'Iterate over a collection', kind: Kind.Keyword },
     { label: 'feed', detail: 'Specify a package feed directory', kind: Kind.Keyword },
     { label: 'flags', detail: 'Define flag constants', kind: Kind.Keyword },
+    { label: 'enum', detail: 'Define an enumeration', kind: Kind.Keyword },
+    { label: 'async', detail: 'Run foreach asynchronously', kind: Kind.Keyword },
     { label: 'RUN', detail: 'Invoke another command', kind: Kind.Keyword },
     { label: 'true', detail: 'Boolean true', kind: Kind.Constant },
     { label: 'false', detail: 'Boolean false', kind: Kind.Constant },
@@ -667,22 +717,24 @@ const KEYWORDS = [
 
 const ACTIONS = [
     { label: 'PRINT', detail: '(message) — output to console', kind: Kind.Function },
-    { label: 'SAVE', detail: '(path, template, collection) — write to file', kind: Kind.Function },
+    { label: 'SAVE', detail: '(path, template) — write to file', kind: Kind.Function },
     { label: 'RUN', detail: '(command) — invoke another command', kind: Kind.Function },
+    { label: 'DEBUG', detail: '(collection) — print internal structure', kind: Kind.Function },
+    { label: 'ASSERT', detail: '(collection) — fail if zero items', kind: Kind.Function },
+    { label: 'ASSERT_EMPTY', detail: '(collection) — fail if any items', kind: Kind.Function },
+    { label: 'FAIL', detail: '(message) — terminate with error', kind: Kind.Function },
 ];
 
-const VIOLATION_TRANSFORMS = [
-    { label: 'toError', detail: "(message) — create error violation", kind: Kind.Method },
-    { label: 'toWarning', detail: "(message) — create warning violation", kind: Kind.Method },
-    { label: 'toInfo', detail: "(message) — create info violation", kind: Kind.Method },
-    { label: 'toOutput', detail: "(message) — create output violation", kind: Kind.Method },
-    { label: 'toSave', detail: "(path, template) — create save violation", kind: Kind.Method },
-];
+// Note: toError/toWarning/toInfo are package-level functions from code-analysis,
+// not language built-ins. They are surfaced via dynamic package import resolution.
 
 const BUILTIN_FUNCTIONS = [
     { label: 'Text', detail: '(expr) — convert to string', kind: Kind.Function },
     { label: 'Path', detail: "(pattern) — test file path against glob", kind: Kind.Function },
     { label: 'Matches', detail: '(pattern) — test item text against regex', kind: Kind.Function },
+    { label: 'File', detail: '(path) — read file contents as string', kind: Kind.Function },
+    { label: 'Get', detail: '(obj, name) — get property by name dynamically', kind: Kind.Function },
+    { label: 'error', detail: '(message?) — create an error value', kind: Kind.Function },
 ];
 
 const RUNTIME_TYPES = [
@@ -692,23 +744,28 @@ const RUNTIME_TYPES = [
 
 const KNOWN_PACKAGES = [
     { label: 'code', detail: 'Source code structural analysis', kind: Kind.Module },
+    { label: 'code-analysis', detail: 'Violation reporting framework', kind: Kind.Module },
+    { label: 'code-layering', detail: 'Project dependency analysis', kind: Kind.Module },
     { label: 'csharp', detail: 'C# coding conventions', kind: Kind.Module },
     { label: 'python', detail: 'Python coding conventions', kind: Kind.Module },
     { label: 'javascript', detail: 'JavaScript/TypeScript coding conventions', kind: Kind.Module },
-    { label: 'filesystem', detail: 'Filesystem structural analysis', kind: Kind.Module },
-    { label: 'code-analysis', detail: 'Code analysis utilities', kind: Kind.Module },
+    { label: 'files', detail: 'Filesystem structural analysis', kind: Kind.Module },
+    { label: 'filesystem', detail: 'Filesystem structural analysis (alias)', kind: Kind.Module },
+    { label: 'json', detail: 'JSON document analysis', kind: Kind.Module },
     { label: 'markdown', detail: 'Markdown document analysis', kind: Kind.Module },
     { label: 'typespec', detail: 'TypeSpec analysis', kind: Kind.Module },
     { label: 'typespec-http', detail: 'TypeSpec HTTP analysis', kind: Kind.Module },
+    { label: 'http', detail: 'HTTP request/response provider', kind: Kind.Module },
 ];
 
 // Static fallback: collections for packages not found on disk (e.g. remote-only)
 const STATIC_PACKAGE_COLLECTIONS = {
-    'code': { Types: 'Type', Statements: 'Statement', Lines: 'Line', Files: 'File' },
-    'csharp': { Types: 'Type', Statements: 'Statement', Lines: 'Line', Files: 'File' },
-    'python': { Types: 'Type', Statements: 'Statement', Lines: 'Line', Files: 'File' },
-    'javascript': { Types: 'Type', Statements: 'Statement', Lines: 'Line', Files: 'File' },
-    'code-analysis': { Types: 'Type', Statements: 'Statement', Lines: 'Line', Files: 'File' },
+    'code': { Types: 'Type', Statements: 'Statement', Calls: 'Statement', Lines: 'Line', Files: 'File', Members: 'Member', Api: 'Api', Regions: 'Region', Projects: 'Project' },
+    'csharp': { Types: 'Type', Statements: 'Statement', Calls: 'Statement', Lines: 'Line', Files: 'File', Members: 'Member', Api: 'Api', Regions: 'Region', Projects: 'Project' },
+    'python': { Types: 'Type', Statements: 'Statement', Calls: 'Statement', Lines: 'Line', Files: 'File', Members: 'Member', Api: 'Api', Regions: 'Region', Projects: 'Project' },
+    'javascript': { Types: 'Type', Statements: 'Statement', Calls: 'Statement', Lines: 'Line', Files: 'File', Members: 'Member', Api: 'Api', Regions: 'Region', Projects: 'Project' },
+    'code-analysis': { Types: 'Type', Statements: 'Statement', Calls: 'Statement', Lines: 'Line', Files: 'File', Members: 'Member', Api: 'Api', Regions: 'Region', Projects: 'Project' },
+    'files': { Folders: 'Folder', DiskFiles: 'DiskFile' },
     'filesystem': { Folders: 'Folder', DiskFiles: 'DiskFile' },
     'markdown': { Headings: 'Heading', Links: 'Link', Sections: 'Section', FenceBlocks: 'FenceBlock' },
     'typespec': { Models: 'TspModel', Operations: 'TspOperation', Interfaces: 'TspInterface', Enums: 'TspEnum', Unions: 'TspUnion', Scalars: 'TspScalar', Namespaces: 'TspNamespace' },
@@ -944,7 +1001,7 @@ const provider = {
 
         // 5. After `=> ` → actions and violations
         if (/=>\s*$/.test(textBefore)) {
-            return toItems([...ACTIONS, ...VIOLATION_TRANSFORMS]);
+            return toItems([...ACTIONS]);
         }
 
         // 6. Start of line → keywords and known identifiers
@@ -955,7 +1012,7 @@ const provider = {
         // 7. After `export ` → declaration keywords
         if (/^\s*export\s+$/.test(textBefore)) {
             return toItems(KEYWORDS.filter(k =>
-                ['predicate', 'function', 'type', 'let', 'command', 'flags'].includes(k.label)
+                ['predicate', 'function', 'type', 'let', 'command', 'flags', 'enum', 'collection'].includes(k.label)
             ));
         }
 
@@ -1007,7 +1064,7 @@ function getPredicateCompletions(document, textBefore) {
         items.push({ label: name, detail: `(${paramType}) — function`, kind: Kind.Function });
     }
 
-    items.push(...BUILTIN_FUNCTIONS, ...VIOLATION_TRANSFORMS);
+    items.push(...BUILTIN_FUNCTIONS);
 
     return toItems(items);
 }

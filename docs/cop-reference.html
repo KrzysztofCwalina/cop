@@ -1982,12 +1982,12 @@ function highlightCop(code) {
   code = code.replace(/'([^'\\]*(?:\\.[^'\\]*)*)'/g, '<span class="cop-str">\'$1\'</span>');
   // Template interpolation {item.Name} inside already-processed text
   code = code.replace(/\{([^}@]+)\}/g, '<span class="cop-template">{$1}</span>');
-  // Keywords
-  code = code.replace(/\b(import|predicate|function|let|foreach|type|check|export|command|enum|flags|if|else|async)\b/g, '<span class="cop-kw">$1</span>');
-  // Built-in commands (uppercase)
-  code = code.replace(/\b(CHECK|PRINT|SAVE|ASSERT|DEBUG)\b/g, '<span class="cop-kw">$1</span>');
-  // Built-in functions
-  code = code.replace(/\b(Where|Select|GroupBy|OrderBy|Sum|Average|Count|Reduce|Parse)\b/g, '<span class="cop-fn">$1</span>');
+  // Keywords (must match tokenizer: type/collection/import/let/command/export/predicate/function/foreach/feed/flags/enum)
+  code = code.replace(/\b(import|predicate|function|let|foreach|type|export|command|enum|flags|collection|feed|async)\b/g, '<span class="cop-kw">$1</span>');
+  // Built-in actions (language-level uppercase commands)
+  code = code.replace(/\b(PRINT|SAVE|RUN|DEBUG|ASSERT|ASSERT_EMPTY|FAIL)\b/g, '<span class="cop-kw">$1</span>');
+  // Built-in functions and collection transforms
+  code = code.replace(/\b(Where|Select|GroupBy|OrderBy|OrderByDescending|Sum|Average|Count|Reduce|Distinct|Min|Max|Get|File|Text|Path|Matches)\b/g, '<span class="cop-fn">$1</span>');
   // Predicate calls (:name)
   code = code.replace(/:([a-zA-Z][a-zA-Z0-9]*)/g, ':<span class="cop-pred">$1</span>');
   // Operators

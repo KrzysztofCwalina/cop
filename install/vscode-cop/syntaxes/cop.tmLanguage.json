@@ -13,7 +13,11 @@
         { "include": "#function-definition" },
         { "include": "#command-definition" },
         { "include": "#type-definition" },
+        { "include": "#enum-definition" },
+        { "include": "#flags-definition" },
+        { "include": "#collection-declaration" },
         { "include": "#let-binding" },
+        { "include": "#async-foreach" },
         { "include": "#runtime-reference" },
         { "include": "#namespace-reference" },
         { "include": "#declaration-keywords" },
@@ -139,11 +143,39 @@
                 "2": { "name": "entity.name.type.cop" }
             }
         },
+        "enum-definition": {
+            "match": "\\b(enum)\\s+([A-Z][a-zA-Z0-9_]*)",
+            "captures": {
+                "1": { "name": "storage.type.enum.cop" },
+                "2": { "name": "entity.name.type.cop" }
+            }
+        },
+        "flags-definition": {
+            "match": "\\b(flags)\\s+([A-Z][a-zA-Z0-9_]*)",
+            "captures": {
+                "1": { "name": "storage.type.flags.cop" },
+                "2": { "name": "entity.name.type.cop" }
+            }
+        },
+        "collection-declaration": {
+            "match": "\\b(collection)\\s+([A-Z][a-zA-Z0-9_]*)",
+            "captures": {
+                "1": { "name": "storage.type.collection.cop" },
+                "2": { "name": "entity.name.type.cop" }
+            }
+        },
         "let-binding": {
             "match": "\\b(let)\\s+([a-zA-Z_][a-zA-Z0-9_-]*)\\s*=",
             "captures": {
                 "1": { "name": "keyword.control.cop" },
                 "2": { "name": "variable.other.readwrite.cop" }
+            }
+        },
+        "async-foreach": {
+            "match": "\\b(async)\\s+(foreach)\\b",
+            "captures": {
+                "1": { "name": "keyword.control.async.cop" },
+                "2": { "name": "keyword.control.cop" }
             }
         },
         "runtime-reference": {
@@ -163,15 +195,15 @@
             }
         },
         "declaration-keywords": {
-            "match": "\\b(predicate|function|command|type|collection)\\b",
+            "match": "\\b(predicate|function|command|type|collection|enum|flags)\\b",
             "name": "storage.type.cop"
         },
         "control-keywords": {
-            "match": "\\b(import|export|let|foreach|exclude|feed)\\b",
+            "match": "\\b(import|export|let|foreach|feed|async)\\b",
             "name": "keyword.control.cop"
         },
         "action-invocation": {
-            "match": "\\b(PRINT|SAVE|RUN)\\b",
+            "match": "\\b(PRINT|SAVE|RUN|DEBUG|ASSERT|ASSERT_EMPTY|FAIL)\\b",
             "name": "support.function.builtin.cop"
         },
         "constants": {
