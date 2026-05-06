@@ -6,7 +6,10 @@ import http
 
 # Chat endpoint — forwards request to OpenAI and returns the LLM reply
 function complete(string) =>
-    http.Post('https://api.openai.com/v1/chat/completions', string, {
+    http.Post('https://api.openai.com/v1/chat/completions', {
+        model = 'gpt-4o',
+        messages = [{ role = 'user', content = string }]
+    }, {
         Authorization: 'Bearer YOUR_API_KEY',
         Content-Type: 'application/json'
     })
