@@ -422,20 +422,11 @@ let details = Clients.Select(clientInfo)
 Functions can include inline filter constraints to create pattern-matched overloads. The constraint acts as a guard — the first matching overload is selected:
 
 ```ruby
-function handle(Request:Path:eq('/')) => Response {
-    StatusCode = 200
-    Body = '{"message":"hello world!"}'
-}
+function handle(Request:Path:eq('/')) => ok({ message: 'hello world!' })
 
-function handle(Request:Path:eq('/health')) => Response {
-    StatusCode = 200
-    Body = '{"status":"healthy"}'
-}
+function handle(Request:Path:eq('/health')) => ok({ status: 'healthy' })
 
-function handle(Request) => Response {
-    StatusCode = 404
-    Body = '{"error":"not found"}'
-}
+function handle(Request) => notFound()
 ```
 
 The constraint syntax is the same filter chain used elsewhere: `Type:Field:predicate(args)`. Constrained overloads are evaluated in order; the unconstrained overload serves as the default fallback.
@@ -1053,7 +1044,7 @@ Type.Base == nic ? 'none' | Type.Base      # null comparison in ternary
 
 ### Operational Errors (`error`)
 
-The `error` constructor creates an error value — a DataObject representing an operational failure:
+The `error` constructor creates an error value — a data object representing an operational failure:
 
 ```ruby
 error                     # bare error (no message)
@@ -1061,13 +1052,11 @@ error('timeout')          # error with message
 error('not found: {id}')  # error with interpolated message
 ```
 
-Error values have type `CopError` with fields:
+Error values have these fields:
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `Message` | string | Error message (may be nic) |
-| `SourceFile` | string | File where error originated |
-| `SourceLine` | int | Line number |
 | `Source` | string | Formatted as `file(line)` |
 
 ### Detecting Errors (`isError`)

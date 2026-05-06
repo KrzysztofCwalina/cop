@@ -266,23 +266,11 @@ Functions can have **multiple overloads** with the same name and parameter type.
 ### Basic pattern matching
 
 ```cop
-function handle(Request:Path.equals('/')) => Response {
-    StatusCode = 200
-    Body = '{"message":"hello world!"}'
-    ContentType = 'application/json'
-}
+function handle(Request:Path.equals('/')) => ok({ message: 'hello world!' })
 
-function handle(Request:Path.equals('/health')) => Response {
-    StatusCode = 200
-    Body = '{"status":"healthy"}'
-    ContentType = 'application/json'
-}
+function handle(Request:Path.equals('/health')) => ok({ status: 'healthy' })
 
-function handle(Request) => Response {
-    StatusCode = 404
-    Body = '{"error":"not found"}'
-    ContentType = 'application/json'
-}
+function handle(Request) => notFound()
 ```
 
 The runtime tries each overload top-to-bottom. The first match wins. The unconstrained overload is the fallback (like Haskell's `_`).
@@ -838,10 +826,10 @@ foreach http.Requests => handle => http.Responses
 ```
 
 **Key properties:**
-- `error` / `error('message')` — built-in constructors, return an ErrorValue (a DataObject with TypeName `CopError`)
+- `error` / `error('message')` — built-in constructors, return an error value (a data object)
 - `isError` — built-in predicate for filtering/detection
 - Errors are **truthy** (not falsy like `nic`) — they represent "something happened", not "nothing"
-- Errors have fields: `.Message`, `.SourceFile`, `.SourceLine`, `.Source`
+- Errors have fields: `.Message`, `.Source`
 - Pipeline propagation: errors skip transforms and pass directly to sinks
 - Sinks handle errors: console → stderr, file → skip, HTTP → 500 response
 
