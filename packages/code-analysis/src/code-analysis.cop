@@ -169,6 +169,7 @@ export function toInfo(Region, message: string) => Violation {
 # Parameterized check command — users invoke via RUN CHECK(violations)
 export command CHECK(violations) = foreach violations => '{item.File@dim}({item.Line@dim}): {item.Severity@auto}: {item.Message}'
 
+
 # Common predicates
 
 # Flags sync method calls when an async variant exists on any type in the codebase

@@ -1,6 +1,6 @@
 # Client library design checks for JavaScript/TypeScript
 
-import javascript
+import javascript-checks
 import code-analysis
 
 ## Client methods must use approved verb prefixes (not erase, fetch, make, pop, push, etc.)
@@ -29,4 +29,4 @@ export let pagination-list-return = Clients:hasPagingBadReturn
     :toWarning('{item.Name} list method should return PagedAsyncIterableIterator')
 
 ## All JavaScript client library checks combined
-export let javascript-library-client = standardized-verbs + support-cancellation + subclient-naming + lro-begin-prefix + pagination-list-return
+export let javascript-library-client-checks = standardized-verbs + support-cancellation + subclient-naming + lro-begin-prefix + pagination-list-return

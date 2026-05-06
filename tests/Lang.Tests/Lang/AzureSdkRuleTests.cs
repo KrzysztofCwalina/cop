@@ -78,7 +78,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_GoodClient_NoClientDiagnostics()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure",
+        var diags = RunPackageChecks("csharp-library-client-azure-checks",
             SamplePath("AzureGoodClient.cs"));
 
         var clientDiags = diags.Where(d =>
@@ -94,7 +94,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_BadClient_MissingTokenCredential()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure",
+        var diags = RunPackageChecks("csharp-library-client-azure-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("must accept TokenCredential")
@@ -105,7 +105,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_BadClient_MissingMockingCtor()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure",
+        var diags = RunPackageChecks("csharp-library-client-azure-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("protected parameterless constructor")
@@ -116,7 +116,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_BadClient_MissingCtorWithOptions()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure",
+        var diags = RunPackageChecks("csharp-library-client-azure-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("should have a constructor that accepts options")
@@ -127,7 +127,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_BadClient_ServiceVersionNaming()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure",
+        var diags = RunPackageChecks("csharp-library-client-azure-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("ServiceVersion")),
@@ -137,7 +137,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_BadClient_ServiceVersionFirstParam()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure",
+        var diags = RunPackageChecks("csharp-library-client-azure-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("BadServiceClientOptions")
@@ -148,7 +148,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_BadClient_ConvenienceWithRequestContent()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure",
+        var diags = RunPackageChecks("csharp-library-client-azure-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("RequestContent")
@@ -159,7 +159,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_BadClient_BannedReturnType()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure",
+        var diags = RunPackageChecks("csharp-library-client-azure-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("BadServiceClient")
@@ -170,7 +170,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_BadClient_ModelNameSuffixes()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure",
+        var diags = RunPackageChecks("csharp-library-client-azure-checks",
             SamplePath("AzureBadClient.cs"));
 
         // Check for various suffix violations in messages
@@ -187,7 +187,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_BadClient_ProtocolMethodReturnType()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure",
+        var diags = RunPackageChecks("csharp-library-client-azure-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("BadServiceClient")
@@ -200,7 +200,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_BadClient_SingleWordTypeName()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure",
+        var diags = RunPackageChecks("csharp-library-client-azure-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("Processor")
@@ -213,7 +213,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_BadClient_MissingTokenPropagation()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure",
+        var diags = RunPackageChecks("csharp-library-client-azure-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("propagate")
@@ -226,7 +226,7 @@ public class AzureSdkRuleTests
     [Test]
     public void ClientChecks_BadClient_NonVirtualMethods()
     {
-        var diags = RunPackageChecks("csharp-library-client",
+        var diags = RunPackageChecks("csharp-library-client-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("virtual")
@@ -237,7 +237,7 @@ public class AzureSdkRuleTests
     [Test]
     public void ClientChecks_BadClient_AsyncWithoutSync()
     {
-        var diags = RunPackageChecks("csharp-library-client",
+        var diags = RunPackageChecks("csharp-library-client-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("sync")),
@@ -247,7 +247,7 @@ public class AzureSdkRuleTests
     [Test]
     public void ClientChecks_GoodClient_NoDiagnostics()
     {
-        var diags = RunPackageChecks("csharp-library-client",
+        var diags = RunPackageChecks("csharp-library-client-checks",
             SamplePath("AzureGoodClient.cs"));
 
         var clientDiags = diags.Where(d =>
@@ -262,7 +262,7 @@ public class AzureSdkRuleTests
     [Test]
     public void LibraryChecks_BadCode_AsyncBoolParam()
     {
-        var diags = RunPackageChecks("csharp-library",
+        var diags = RunPackageChecks("csharp-library-checks",
             SamplePath("LibraryBad.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("BadLibraryService")
@@ -273,7 +273,7 @@ public class AzureSdkRuleTests
     [Test]
     public void LibraryChecks_BadCode_NonPublicAsyncMissingParam()
     {
-        var diags = RunPackageChecks("csharp-library",
+        var diags = RunPackageChecks("csharp-library-checks",
             SamplePath("LibraryBad.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("BadLibraryService")
@@ -284,7 +284,7 @@ public class AzureSdkRuleTests
     [Test]
     public void LibraryChecks_BadCode_AwaitWithoutConfigureAwaitFalse()
     {
-        var diags = RunPackageChecks("csharp-library",
+        var diags = RunPackageChecks("csharp-library-checks",
             SamplePath("LibraryBad.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("ConfigureAwait(false)")),
@@ -294,7 +294,7 @@ public class AzureSdkRuleTests
     [Test]
     public void LibraryChecks_GoodCode_ConfigureAwaitFalse_NoDiagnostic()
     {
-        var diags = RunPackageChecks("csharp-library",
+        var diags = RunPackageChecks("csharp-library-checks",
             SamplePath("LibraryBad.cs"));
 
         // GoodLibraryService uses ConfigureAwait(false) — should not be flagged
@@ -311,7 +311,7 @@ public class AzureSdkRuleTests
     [Test]
     public void CodeChecks_BadCode_ConfigureAwaitTrue()
     {
-        var diags = RunPackageChecks("csharp",
+        var diags = RunPackageChecks("csharp-checks",
             SamplePath("LibraryBad.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("ConfigureAwait")),
@@ -321,7 +321,7 @@ public class AzureSdkRuleTests
     [Test]
     public void CodeChecks_BadCode_GetAwaiterGetResult()
     {
-        var diags = RunPackageChecks("csharp",
+        var diags = RunPackageChecks("csharp-checks",
             SamplePath("LibraryBad.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("GetAwaiter")),
@@ -331,7 +331,7 @@ public class AzureSdkRuleTests
     [Test]
     public void CodeChecks_BadCode_TaskCompletionSource()
     {
-        var diags = RunPackageChecks("csharp",
+        var diags = RunPackageChecks("csharp-checks",
             SamplePath("LibraryBad.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("TaskCompletionSource")),
@@ -343,7 +343,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_AssemblyAttributes_FlagsAllInternalsVisibleTo()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure",
+        var diags = RunPackageChecks("csharp-library-client-azure-checks",
             SamplePath("AssemblyAttributes.cs"));
 
         var ivtDiags = diags.Where(d => d.Message.Contains("InternalsVisibleTo")).ToList();
@@ -358,7 +358,7 @@ public class AzureSdkRuleTests
     [Test]
     public void CSharpChecks_AsyncSyncBad_SyncWaitInAsync()
     {
-        var diags = RunPackageChecks("csharp",
+        var diags = RunPackageChecks("csharp-checks",
             SamplePath("AsyncSyncBad.cs"));
 
         var syncInAsync = diags.Where(d =>
@@ -374,7 +374,7 @@ public class AzureSdkRuleTests
     [Test]
     public void LibraryChecks_AsyncSyncBad_UnconditionalAwait()
     {
-        var diags = RunPackageChecks("csharp-library",
+        var diags = RunPackageChecks("csharp-library-checks",
             SamplePath("AsyncSyncBad.cs"));
 
         var unconditional = diags.Where(d =>
@@ -389,7 +389,7 @@ public class AzureSdkRuleTests
     [Test]
     public void LibraryChecks_AsyncSyncBad_UnconditionalEnsureCompleted()
     {
-        var diags = RunPackageChecks("csharp-library",
+        var diags = RunPackageChecks("csharp-library-checks",
             SamplePath("AsyncSyncBad.cs"));
 
         var unconditional = diags.Where(d =>
@@ -404,7 +404,7 @@ public class AzureSdkRuleTests
     [Test]
     public void LibraryChecks_AsyncSyncBad_GuardedDualModeNoDiagnostic()
     {
-        var diags = RunPackageChecks("csharp-library",
+        var diags = RunPackageChecks("csharp-library-checks",
             SamplePath("AsyncSyncBad.cs"));
 
         // DualModeGood has guards — should not trigger unconditional-await or unconditional-sync
@@ -420,7 +420,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_AsyncSyncBad_UseEnsureCompleted()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure",
+        var diags = RunPackageChecks("csharp-library-client-azure-checks",
             SamplePath("AsyncSyncBad.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("EnsureCompleted")
@@ -433,7 +433,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_AsyncSyncBad_NoAsyncInSync()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure",
+        var diags = RunPackageChecks("csharp-library-client-azure-checks",
             SamplePath("AsyncSyncBad.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("DoWorkAsync")
@@ -446,7 +446,7 @@ public class AzureSdkRuleTests
     [Test]
     public void LibraryChecks_AsyncSyncBad_WrongAsyncArgValue()
     {
-        var diags = RunPackageChecks("csharp-library",
+        var diags = RunPackageChecks("csharp-library-checks",
             SamplePath("AsyncSyncBad.cs"));
 
         var wrongArgs = diags.Where(d =>
@@ -459,7 +459,7 @@ public class AzureSdkRuleTests
     [Test]
     public void LibraryChecks_AsyncSyncBad_CorrectAsyncArgNoDiagnostic()
     {
-        var diags = RunPackageChecks("csharp-library",
+        var diags = RunPackageChecks("csharp-library-checks",
             SamplePath("AsyncSyncBad.cs"));
 
         // DualModeGoodAsyncArg passes correct values — should not trigger
@@ -476,7 +476,7 @@ public class AzureSdkRuleTests
     [Test]
     public void LibraryChecks_AsyncSyncBad_AsyncParamMisuse()
     {
-        var diags = RunPackageChecks("csharp-library",
+        var diags = RunPackageChecks("csharp-library-checks",
             SamplePath("AsyncSyncBad.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("async parameter")
@@ -489,7 +489,7 @@ public class AzureSdkRuleTests
     [Test]
     public void CodeChecks_BadCode_UriToString()
     {
-        var diags = RunPackageChecks("csharp",
+        var diags = RunPackageChecks("csharp-checks",
             SamplePath("LibraryBad.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("Uri.AbsoluteUri")
@@ -502,7 +502,7 @@ public class AzureSdkRuleTests
     [Test]
     public void PythonChecks_BadClient_PrintCalls()
     {
-        var diags = RunPackageChecks("python",
+        var diags = RunPackageChecks("python-checks",
             SamplePath("bad_client.py"));
 
         Assert.That(diags.Any(d => d.Message.Contains("print()")),
@@ -512,7 +512,7 @@ public class AzureSdkRuleTests
     [Test]
     public void PythonChecks_BadClient_BareExcept()
     {
-        var diags = RunPackageChecks("python",
+        var diags = RunPackageChecks("python-checks",
             SamplePath("bad_client.py"));
 
         Assert.That(diags.Any(d => d.Message.Contains("bare except")),
@@ -522,7 +522,7 @@ public class AzureSdkRuleTests
     [Test]
     public void PythonChecks_BadClient_SwallowedException()
     {
-        var diags = RunPackageChecks("python",
+        var diags = RunPackageChecks("python-checks",
             SamplePath("bad_client.py"));
 
         Assert.That(diags.Any(d => d.Message.Contains("silence")),
@@ -532,7 +532,7 @@ public class AzureSdkRuleTests
     [Test]
     public void PythonChecks_GoodClient_NoDiagnostics()
     {
-        var diags = RunPackageChecks("python",
+        var diags = RunPackageChecks("python-checks",
             SamplePath("good_client.py"));
 
         Assert.That(diags, Is.Empty,
@@ -544,7 +544,7 @@ public class AzureSdkRuleTests
     [Test]
     public void PythonLibraryChecks_BadClient_UntypedParams()
     {
-        var diags = RunPackageChecks("python-library",
+        var diags = RunPackageChecks("python-library-checks",
             SamplePath("bad_client.py"));
 
         Assert.That(diags.Any(d => d.Message.Contains("BadClient")
@@ -555,7 +555,7 @@ public class AzureSdkRuleTests
     [Test]
     public void PythonLibraryChecks_BadClient_MissingReturnType()
     {
-        var diags = RunPackageChecks("python-library",
+        var diags = RunPackageChecks("python-library-checks",
             SamplePath("bad_client.py"));
 
         Assert.That(diags.Any(d => d.Message.Contains("BadClient")
@@ -566,7 +566,7 @@ public class AzureSdkRuleTests
     [Test]
     public void PythonLibraryChecks_GoodClient_NoDiagnostics()
     {
-        var diags = RunPackageChecks("python-library",
+        var diags = RunPackageChecks("python-library-checks",
             SamplePath("good_client.py"));
 
         var clientDiags = diags.Where(d => d.Message.Contains("GoodClient")).ToList();

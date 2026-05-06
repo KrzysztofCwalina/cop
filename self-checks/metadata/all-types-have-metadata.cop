@@ -8,7 +8,7 @@
 #
 # Run: cop run self-checks/metadata/all-types-have-metadata.cop -t .
 
-import csharp
+import csharp-checks
 import core
 import code
 import code-analysis

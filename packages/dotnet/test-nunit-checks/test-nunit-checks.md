@@ -1,5 +1,5 @@
 ---
-name: test-nunit
+name: test-nunit-checks
 version: 1.0.0
 title: NUnit Testing
 description: NUnit-specific testing patterns and analyzer references

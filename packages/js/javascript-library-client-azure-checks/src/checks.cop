@@ -1,6 +1,6 @@
 # Azure-specific client library checks for JavaScript/TypeScript
 
-import javascript-library-client
+import javascript-library-client-checks
 import code-analysis
 
 ## Azure client constructors must accept a TokenCredential parameter
@@ -20,4 +20,4 @@ export let no-console-logging = Clients.Methods.Statements:isUsingConsoleLog
     :toError('Do not use console for logging — use @azure/logger instead')
 
 ## All Azure-specific JavaScript client library checks combined
-export let javascript-library-client-azure = client-needs-credential + copyright-header + error-handling + no-console-logging
+export let javascript-library-client-azure-checks = client-needs-credential + copyright-header + error-handling + no-console-logging

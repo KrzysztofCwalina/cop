@@ -1,6 +1,6 @@
 # Client library design checks for Python
 
-import python
+import python-checks
 import code-analysis
 
 # Collect all Python client types
@@ -47,4 +47,4 @@ export let name-too-long = Code.Types:python:hasNameTooLong
     :toWarning('{item.Name} exceeds 40 characters — use a shorter name')
 
 ## All Python client library checks combined
-export let python-library-client = async-client-bad-name + client-missing-kwargs + no-connection-string-in-ctor + no-static-methods + too-many-positional-params + async-method-missing-kwargs + lro-naming + paging-naming + name-too-long
+export let python-library-client-checks = async-client-bad-name + client-missing-kwargs + no-connection-string-in-ctor + no-static-methods + too-many-positional-params + async-method-missing-kwargs + lro-naming + paging-naming + name-too-long

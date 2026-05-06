@@ -1,6 +1,6 @@
 # Dot operator: field access negative case — no match
 # @expect no-output
 
-import csharp
+import csharp-checks
 predicate noMatch(Type) => Type.Name:equals('NonExistent')
 foreach csharp.Types:noMatch => '{item.Name}'

@@ -1,5 +1,5 @@
 ---
-name: csharp-snippets
+name: csharp-snippets-checks
 version: 1.0.0
 title: C# Snippet Validation
 description: Validates that C# code snippets in #region blocks match markdown documentation references
@@ -7,7 +7,7 @@ authors: cop-team
 tags: csharp, snippets, documentation, markdown
 language: C#
 dependencies:
-  - github.com/cop/cop/csharp
+  - github.com/cop/cop/csharp-checks
 ---
 
 # C# Snippet Validation

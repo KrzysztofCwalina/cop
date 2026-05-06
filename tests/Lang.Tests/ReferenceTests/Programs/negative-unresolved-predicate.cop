@@ -1,5 +1,5 @@
 # Negative: unresolved predicate produces no output (not a crash)
 # @expect no-output
 
-import csharp
+import csharp-checks
 foreach csharp.Types:doesNotExist => '{item.Name}'

@@ -2,6 +2,6 @@
 # @expect output
 # @expect output-contains: Placeholder
 
-import csharp
+import csharp-checks
 predicate notSealed(Type) => isSealed ? false | true
 foreach csharp.Types:notSealed => '{item.Name}'

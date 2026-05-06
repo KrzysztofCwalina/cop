@@ -313,9 +313,29 @@ public class TypeBinder
     /// </summary>
     private string? ResolveItemTypeAfterFilters(string baseItemType, List<Expression> filters, ScriptFile file)
     {
-        // For now, return the base item type.
-        // Map functions that change the type (like toError → Violation) would need function return type tracking.
-        return baseItemType;
+        var currentType = baseItemType;
+        foreach (var filter in filters)
+        {
+            var funcName = filter switch
+            {
+                PredicateCallExpr pc => pc.Name,
+                FunctionCallExpr fc => fc.Name,
+                _ => null
+            };
+
+            if (funcName is "toError" or "toWarning" or "toInfo")
+                currentType = "Violation";
+            else if (funcName is "Select" or "Text")
+                currentType = "string";
+            else if (funcName != null)
+            {
+                // Look up function return type from registered functions
+                var functions = file.Functions.Where(f => f.Name == funcName).ToList();
+                if (functions.Count > 0)
+                    currentType = functions[0].ReturnType;
+            }
+        }
+        return currentType;
     }
 
     /// <summary>

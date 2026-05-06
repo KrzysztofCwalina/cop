@@ -155,25 +155,25 @@ Packages are discovered from `packages/` directories in the project tree and fro
 Run C# style checks on the current directory:
 
 ```bash
-cop check csharp-style
+cop check csharp-style-checks
 ```
 
 Run multiple packages:
 
 ```bash
-cop check csharp-style csharp-library
+cop check csharp-style-checks csharp-library-checks
 ```
 
 Target a specific directory:
 
 ```bash
-cop check csharp-style -t src/
+cop check csharp-style-checks -t src/
 ```
 
 Run only specific rules from a package:
 
 ```bash
-cop check csharp-style -c interface-prefix,type-name-casing
+cop check csharp-style-checks -c interface-prefix,type-name-casing
 ```
 
 ## cop test

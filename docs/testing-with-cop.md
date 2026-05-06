@@ -7,12 +7,12 @@ This guide covers how to write and run tests for cop packages and programs using
 Agent Cop provides built-in test commands that verify collection properties. Tests are regular `.cop` files that use `ASSERT` and `ASSERT_EMPTY` instead of producing output or using `CHECK`. Run them with `cop test`.
 
 ```ruby
-import csharp
+import csharp-checks
 import code
 
-command test-has-types = ASSERT(csharp.Types)
-command test-has-public = ASSERT(csharp.Types:isPublic)
-command test-no-var = ASSERT_EMPTY(csharp.Statements:isVar)
+command test-has-types = ASSERT(csharp-checks.Types)
+command test-has-public = ASSERT(csharp-checks.Types:isPublic)
+command test-no-var = ASSERT_EMPTY(csharp-checks.Statements:isVar)
 ```
 
 ```bash
@@ -44,14 +44,14 @@ command test-name = ASSERT(collection:filter, 'optional message')
 Examples:
 
 ```ruby
-import csharp
+import csharp-checks
 import code
 
 # Basic: assert types exist
-command test-has-types = ASSERT(csharp.Types)
+command test-has-types = ASSERT(csharp-checks.Types)
 
 # Filtered: assert at least one public type exists (isPublic comes from code package)
-command test-public-types = ASSERT(csharp.Types:isPublic)
+command test-public-types = ASSERT(csharp-checks.Types:isPublic)
 
 # With message
 command test-has-files = ASSERT(Files, 'expected source files in project')
@@ -69,16 +69,16 @@ command test-name = ASSERT_EMPTY(collection:filter, 'optional message')
 Examples:
 
 ```ruby
-import csharp
+import csharp-checks
 
 # Verify no var declarations
 predicate isVar(Statement) => Statement.Kind == 'declaration' && Statement.Keywords:contains('var')
-command test-no-var = ASSERT_EMPTY(csharp.Statements:isVar)
+command test-no-var = ASSERT_EMPTY(csharp-checks.Statements:isVar)
 
 # Verify no Thread.Sleep calls
 predicate threadSleep(Statement) => Statement.Kind == 'call'
     && Statement.TypeName == 'Thread' && Statement.MemberName == 'Sleep'
-command test-no-sleep = ASSERT_EMPTY(csharp.Statements:threadSleep, 'Thread.Sleep should not be used')
+command test-no-sleep = ASSERT_EMPTY(csharp-checks.Statements:threadSleep, 'Thread.Sleep should not be used')
 ```
 
 ## Running Tests
@@ -122,26 +122,26 @@ cop test tests/cop/ || exit 1
 The most valuable tests verify that predicates match the right items:
 
 ```ruby
-import csharp
+import csharp-checks
 import code
 
 # ── Predicates under test ──
 predicate isClient(Type) => Type.Name:endsWith('Client')
 
 # ── Tests (isPublic comes from the code package) ──
-command test-clients-found = ASSERT(csharp.Types:isClient, 'expected Client types in sample')
-command test-public-clients = ASSERT(csharp.Types:isClient:isPublic)
+command test-clients-found = ASSERT(csharp-checks.Types:isClient, 'expected Client types in sample')
+command test-public-clients = ASSERT(csharp-checks.Types:isClient:isPublic)
 ```
 
 ### Test collection unions
 
 ```ruby
-import csharp
-import python
+import csharp-checks
+import python-checks
 import code
 
-let public-csharp = csharp.Types:isPublic
-let public-python = python.Types:isPublic
+let public-csharp = csharp-checks.Types:isPublic
+let public-python = python-checks.Types:isPublic
 let all-public = public-csharp + public-python
 
 command test-union-not-empty = ASSERT(all-public)
@@ -152,12 +152,12 @@ command test-union-not-empty = ASSERT(all-public)
 Use `ASSERT_EMPTY` to verify that rules catch nothing in clean code:
 
 ```ruby
-import csharp
+import csharp-checks
 
 predicate isVar(Statement) => Statement.Kind == 'declaration' && Statement.Keywords:contains('var')
 
 # Run against known-clean code: should find zero violations
-command test-clean-no-var = ASSERT_EMPTY(csharp.Statements:isVar)
+command test-clean-no-var = ASSERT_EMPTY(csharp-checks.Statements:isVar)
 ```
 
 ### Name tests descriptively

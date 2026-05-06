@@ -1,5 +1,5 @@
 ---
-name: csharp-library-client
+name: csharp-library-client-checks
 version: 1.0.0
 title: C# Client Library Development
 description: Patterns for building client libraries including retry, pagination, and long-running operations
@@ -7,7 +7,7 @@ authors: cop-team
 tags: csharp, sdk, client, library
 language: C#
 dependencies:
-  - github.com/cop/cop/csharp-library
+  - github.com/cop/cop/csharp-library-checks
 ---
 
 # C# Client Library Development

@@ -117,7 +117,7 @@ public class RunProjectTests
     public void RunProject_MultiplePackages_BothRulesWork()
     {
         // Create feed with both files and a csharp-like package
-        var csharpSrc = Path.Combine(_feedDir, "csharp", "src");
+        var csharpSrc = Path.Combine(_feedDir, "csharp-checks", "src");
         Directory.CreateDirectory(csharpSrc);
         File.WriteAllText(Path.Combine(csharpSrc, "checks.cop"), """
             command TEST-RULE = foreach Folders:isEmpty => 'Test diagnostic'
@@ -130,7 +130,7 @@ public class RunProjectTests
 
         var result = Engine.RunProject(
             [_feedDir],
-            ["files", "csharp"],
+            ["files", "csharp-checks"],
             codebase,
             ["empty-folders"]);
 

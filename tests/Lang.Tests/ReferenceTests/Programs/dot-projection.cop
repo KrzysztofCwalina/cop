@@ -1,6 +1,6 @@
 # Dot operator: projection on collection — Methods.Name produces list of strings
 # @expect output
 
-import csharp
+import csharp-checks
 predicate hasMethodNames(Type) => Type.Methods.Name.Count > 0
 foreach csharp.Types:hasMethodNames => '{item.Name}'

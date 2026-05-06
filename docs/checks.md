@@ -8,7 +8,7 @@
 
 - **notInLayer** — Detects projects not assigned to any defined architectural layer
 
-## python
+## python-checks
 
 - **print-calls** — Avoid `print()`; use logging instead
 - **bare-except-clauses** — Do not use bare `except`; catch a specific exception type
@@ -17,12 +17,12 @@
 - **no-legacy-typing** — Do not use type comments; use Python 3.9+ type annotations
 - **no-eval** — Do not use `eval()`; it is a security risk
 
-## python-library
+## python-library-checks
 
 - **untyped-public-params** — Public methods should have type hints on all parameters
 - **missing-return-types** — Public methods should declare a return type
 
-## python-library-client
+## python-library-client-checks
 
 - **async-client-bad-name** — Async clients should not include `Async` in the class name
 - **client-missing-kwargs** — Client constructor must accept `**kwargs`
@@ -34,7 +34,7 @@
 - **paging-naming** — Paging methods must be prefixed with `list_`
 - **name-too-long** — Type names should be under 40 characters
 
-## python-library-client-azure
+## python-library-client-azure-checks
 
 - **client-needs-credential** — Azure clients must accept a `credential` parameter
 - **client-needs-api-version** — Azure clients must accept an `api_version` keyword argument
@@ -47,7 +47,7 @@
 - **no-log-exceptions-above-debug** — Do not log exceptions at levels above debug (may reveal sensitive info)
 - **missing-tracing-decorator** — Public service methods must have `@distributed_trace` decorator
 
-## javascript
+## javascript-checks
 
 - **console-calls** — Avoid `console` output in production code
 - **alert-calls** — Do not use `alert()`
@@ -56,14 +56,14 @@
 - **var-declarations** — Use `const` or `let` instead of `var`
 - **swallowed-exceptions** — Catch blocks should rethrow or handle errors explicitly
 
-## javascript-library
+## javascript-library-checks
 
 - **no-default-exports** — Do not use default exports — use named exports only
 - **no-external-promises** — Use native Promise — do not import from bluebird or other polyfill libraries
 - **no-const-enums** — Do not use `const enum` — use regular enum instead
 - **no-window-reference** — Do not use `window` — use `self` for cross-platform compatibility
 
-## javascript-library-client
+## javascript-library-client-checks
 
 - **standardized-verbs** — Client methods must not use banned verb prefixes (erase, fetch, getAll, make, pop, push, insertOrUpdate, updateOrInsert)
 - **support-cancellation** — Async client methods must support cancellation via AbortSignalLike or an options parameter
@@ -71,14 +71,14 @@
 - **lro-begin-prefix** — Methods returning a Poller must be prefixed with `begin`
 - **pagination-list-return** — `list*` methods should return `PagedAsyncIterableIterator`
 
-## javascript-library-client-azure
+## javascript-library-client-azure-checks
 
 - **client-needs-credential** — Azure client constructors must accept a `TokenCredential` parameter
 - **copyright-header** — Source files must have a copyright header comment on the first line
 - **error-handling** — Only throw `Error`, `TypeError`, `RangeError`, or `RestError`
 - **no-console-logging** — Do not use `console` for logging — use `@azure/logger` instead
 
-## csharp
+## csharp-checks
 
 - **var-declarations** — Disallow implicit typing with `var`; use explicit types
 - **dynamic-declarations** — Disallow `dynamic` typing
@@ -97,7 +97,7 @@
 - **readme-install-package** — Use `dotnet add package` instead of `Install-Package` in README
 - **cpm-compliance** — `PackageReference` should not specify Version (use Central Package Management)
 
-## csharp-style
+## csharp-style-checks
 
 - **interface-prefix** — Interface names must begin with `I` followed by an uppercase letter (SA1302)
 - **type-name-casing** — Type names must begin with an uppercase letter (SA1300)
@@ -121,7 +121,7 @@
 - **required-braces** — Braces must not be omitted from control flow statements (SA1503)
 - **public-property-documented** — Public properties should have XML documentation (SA1600)
 
-## csharp-library
+## csharp-library-checks
 
 - **public-async-bool-params** — Public methods should not have a `bool` parameter named `async`
 - **async-missing-bool-param** — Non-public async methods should accept a `bool async` parameter
@@ -132,7 +132,7 @@
 - **wrong-sync-arg-value** — Passing `async: true` inside a sync guard is incorrect
 - **async-param-misuse** — Do not pass the `async` parameter as an argument; use if/else branching
 
-## csharp-library-client
+## csharp-library-client-checks
 
 - **client-needs-options-ctor** — Client types must have a constructor that accepts an Options parameter
 - **client-sealed-or-abstract** — Client types must be sealed or abstract
@@ -140,7 +140,7 @@
 - **client-methods-virtual** — Public instance methods on client types should be virtual for mocking
 - **async-needs-sync-counterpart** — Every public async method on a client must have a matching sync method
 
-## csharp-library-client-azure
+## csharp-library-client-azure-checks
 
 - **client-needs-token-credential** — Azure clients must accept `TokenCredential` for authentication
 - **client-needs-mocking-ctor** — Client types must provide a protected parameterless constructor for mocking
@@ -175,14 +175,14 @@
 - **no-single-word-type-name** — Avoid single-word public type names; use a more descriptive multi-word name
 - **cancellation-token-propagation** — Async calls should propagate `CancellationToken` or `RequestContext`
 
-## csharp-snippets
+## csharp-snippets-checks
 
 - **snippet-missing-docs** — C# snippet region has no corresponding markdown code fence
 - **snippet-orphaned-ref** — Markdown fence references a snippet not found in C# source
 - **snippet-duplicate-name** — Same snippet name defined in multiple C# locations
 - **snippet-stale-content** — Markdown snippet content is out of sync with C# source
 
-## fdg (Framework Design Guidelines)
+## fdg-checks (Framework Design Guidelines)
 
 ### Naming
 

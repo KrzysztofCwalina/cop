@@ -1,6 +1,6 @@
 # Colon operator: inline filter no match
 # @expect no-output
 
-import csharp
+import csharp-checks
 predicate nameStartsZZZ(Type) => Type.Name:startsWith('ZZZ')
 foreach csharp.Types:nameStartsZZZ => '{item.Name}'

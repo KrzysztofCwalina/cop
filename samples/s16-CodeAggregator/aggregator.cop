@@ -2,8 +2,8 @@
 # Code() creates a lazy proxy that queries providers on demand
 # and unions their results.
 # Run with: cop run
-import csharp
-import python
+import csharp-checks
+import python-checks
 
 # Query a single provider explicitly
 let cs = Code([csharp])

@@ -1,5 +1,5 @@
 # Colon operator: after filtering, items retain type — can still access .Methods.Count
 # @expect output-contains: methods
 
-import csharp
+import csharp-checks
 foreach csharp.Types:isPublic => '{item.Name} has {item.Methods.Count} methods'

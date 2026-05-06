@@ -1,5 +1,5 @@
 ---
-name: csharp-library-client-azure
+name: csharp-library-client-azure-checks
 version: 1.0.0
 title: C# Azure Client Library Development
 description: Azure SDK patterns for client library development using Azure.Core or System.ClientModel with TokenCredential support
@@ -7,7 +7,7 @@ authors: cop-team
 tags: csharp, sdk, client, azure, library, token-credential
 language: C#
 dependencies:
-  - github.com/cop/cop/csharp-library-client
+  - github.com/cop/cop/csharp-library-client-checks
 ---
 
 # C# Azure Client Library Development

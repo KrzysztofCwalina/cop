@@ -1,7 +1,7 @@
 # Let binding: list literal used in filter
 # @expect no-output
 
-import csharp
+import csharp-checks
 let badNames = ['Bad', 'Evil', 'Wrong']
 predicate hasBadPrefix(Type) => Type.Name:startsWith(badNames)
 foreach csharp.Types:hasBadPrefix => '{item.Name}'

@@ -299,12 +299,12 @@ let People = Parse('data.json', [Person])
 **Path-scoped** — queries a provider against a specific directory:
 
 ```ruby
-let sdkTypes = csharp.Types('../azure-sdk/')
-let sdkPublic = csharp.Types('../azure-sdk/'):isPublic
+let sdkTypes = csharp-checks.Types('../azure-sdk/')
+let sdkPublic = csharp-checks.Types('../azure-sdk/'):isPublic
 let localFiles = files.DiskFiles('src/lib/')
 ```
 
-Path-scoped collections query the provider against the given path instead of the default root (CWD or `-t`). The path is resolved relative to the process working directory. Results are cached by `(provider, collection, absolutePath)` so repeated references with the same path are efficient. Each collection is parameterized individually — `csharp.Types('../sdk/')` does not affect `csharp.Statements`.
+Path-scoped collections query the provider against the given path instead of the default root (CWD or `-t`). The path is resolved relative to the process working directory. Results are cached by `(provider, collection, absolutePath)` so repeated references with the same path are efficient. Each collection is parameterized individually — `csharp-checks.Types('../sdk/')` does not affect `csharp-checks.Statements`.
 
 ### Pipe Operators
 
@@ -455,15 +455,15 @@ Closures can be used in filter chains just like regular functions. They remember
 The built-in `Code()` function creates a lazy proxy that queries one or more code providers and unions their results:
 
 ```ruby
-import csharp
-import python
+import csharp-checks
+import python-checks
 
 # Query a single provider
-let cs = Code([csharp])
+let cs = Code([csharp-checks])
 foreach cs.Types:isPublic => '{item.Name}'
 
 # Query multiple providers — results are unioned
-let codebase = Code([csharp, python])
+let codebase = Code([csharp-checks, python-checks])
 foreach codebase.Types => '{item.Name}'
 ```
 

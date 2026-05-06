@@ -3,8 +3,8 @@
 # Run with: cop run LIST-TYPES
 # Run with: cop run LIST-PUBLIC-TYPES
 # Run with: cop run CLIENTS
-import csharp
-import python
+import csharp-checks
+import python-checks
 
 predicate isClient(Type) => Type.Name:endsWith('Client')
 

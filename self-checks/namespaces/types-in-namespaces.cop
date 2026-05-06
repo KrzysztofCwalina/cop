@@ -6,7 +6,7 @@
 
 # Run: cop run self-checks/ -t .
 
-import csharp
+import csharp-checks
 import code-analysis
 
 predicate inTestProject(Type) => Type.File.Path:startsWith('tests/') || Type.File.Path:startsWith('samples/')

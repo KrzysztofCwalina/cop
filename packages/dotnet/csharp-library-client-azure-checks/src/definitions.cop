@@ -1,8 +1,8 @@
 # Azure SDK client library definitions for C#
 
-import csharp-library-client
-import csharp-library
-import csharp
+import csharp-library-client-checks
+import csharp-library-checks
+import csharp-checks
 
 predicate isTokenCredential(Parameter) => Parameter.Type == 'TokenCredential'
 predicate hasTokenCredentialParam(Constructor) => Constructor.Parameters:any(isTokenCredential)

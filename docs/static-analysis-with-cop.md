@@ -7,24 +7,24 @@ Agent Cop ships with pre-built analysis packages that check your code for common
 The fastest way to analyze your code:
 
 ```bash
-cop check csharp-style            # run C# style checks (naming, formatting, docs)
-cop check fdg                     # run .NET Framework Design Guidelines checks
-cop check csharp-style fdg        # run multiple packages at once
-cop check csharp-style -t src/    # analyze a specific directory
+cop check csharp-style-checks           # run C# style checks (naming, formatting, docs)
+cop check fdg-checks                    # run .NET Framework Design Guidelines checks
+cop check csharp-style-checks fdg-checks  # run multiple packages at once
+cop check csharp-style-checks -t src/   # analyze a specific directory
 ```
 
 ### Available Check Packages
 
 | Package | What it checks |
 |---|---|
-| `csharp-style` | StyleCop-style rules: naming, formatting, documentation, braces |
-| `fdg` | .NET Framework Design Guidelines: naming, type/member/exception design (~26 rules) |
-| `csharp-library` | Library design: sealed clients, method conventions, constructor patterns |
-| `csharp-library-client` | Client library patterns: client naming, options types, service methods |
-| `python` | Python coding conventions: print, bare except, eval |
-| `python-library-client` | Python client library patterns: naming, kwargs, LRO, paging |
-| `javascript` | JavaScript/TypeScript conventions: console, eval, var, debugger |
-| `javascript-library-client` | JS/TS client library patterns: verbs, cancellation, pagination |
+| `csharp-style-checks` | StyleCop-style rules: naming, formatting, documentation, braces |
+| `fdg-checks` | .NET Framework Design Guidelines: naming, type/member/exception design (~26 rules) |
+| `csharp-library-checks` | Library design: sealed clients, method conventions, constructor patterns |
+| `csharp-library-client-checks` | Client library patterns: client naming, options types, service methods |
+| `python-checks` | Python coding conventions: print, bare except, eval |
+| `python-library-client-checks` | Python client library patterns: naming, kwargs, LRO, paging |
+| `javascript-checks` | JavaScript/TypeScript conventions: console, eval, var, debugger |
+| `javascript-library-client-checks` | JS/TS client library patterns: verbs, cancellation, pagination |
 
 For a complete list of every individual check, see the [All Checks Catalog](checks.md).
 
@@ -40,7 +40,7 @@ This makes cop easy to integrate into CI pipelines:
 
 ```yaml
 - name: Run cop checks
-  run: cop check csharp-style csharp-library
+  run: cop check csharp-style-checks csharp-library-checks
   # Fails the build if any checks produce violations (exit code 1)
 ```
 
@@ -49,7 +49,7 @@ This makes cop easy to integrate into CI pipelines:
 Each check package exports named rule sets. Use `-c` to run specific ones:
 
 ```bash
-cop check csharp-style -c interface-prefix,type-name-casing
+cop check csharp-style-checks -c interface-prefix,type-name-casing
 ```
 
 ## Writing Custom Checks
@@ -267,9 +267,9 @@ CHECK(swallowed + consoleWarnings)
 For small projects, a single `checks.cop` at the project root is all you need:
 
 ```ruby
-import csharp
-import javascript
-import python
+import csharp-checks
+import javascript-checks
+import python-checks
 
 CHECK(csharp-checks + javascript-checks + python-checks)
 ```
@@ -280,10 +280,10 @@ Agent Cop discovers and runs all `.cop` files in a directory. Split checks acros
 
 ```
 checks/
-  definitions.cop     # shared predicates
-  csharp-checks.cop   # C# specific checks
-  js-checks.cop       # JavaScript checks
-  project-rules.cop   # project-specific cross-language rules
+  definitions.cop       # shared predicates
+  csharp-checks.cop     # C# specific checks
+  js-checks.cop         # JavaScript checks
+  project-rules.cop     # project-specific cross-language rules
 ```
 
 The convention is to separate **predicates** (pure definitions, no output) from **checks** (produce violations). This keeps predicates reusable:
@@ -316,14 +316,14 @@ CHECK(empty-catch-blocks)
 Agent Cop ships with packages for common languages and frameworks. Import multiple to cover a polyglot codebase:
 
 ```ruby
-import csharp
-import javascript
-import python
+import csharp-checks
+import javascript-checks
+import python-checks
 
 CHECK(csharp-checks + javascript-checks + python-checks)
 ```
 
-This runs all built-in checksfor all three languages. Each package only matches files in its language — `csharp-checks` only touches `.cs` files, `javascript-checks` only `.ts`/`.js`, etc.
+This runs all built-in checks for all three languages. Each package only matches files in its language — `csharp-checks` only touches `.cs` files, `javascript-checks` only `.ts`/`.js`, etc.
 
 ### Package Hierarchy
 
@@ -335,7 +335,7 @@ code → code-analysis → csharp → csharp-library → csharp-library-client �
                       → python → python-library
 ```
 
-For example, `import csharp-library-client` gives you all of `csharp-library`, `csharp`, `code-analysis`, and `code`.
+For example, `import csharp-library-client-checks` gives you all of `csharp-library-checks`, `csharp-checks`, `code-analysis`, and `code`.
 
 ## Excluding Files
 
@@ -380,9 +380,9 @@ cop run                     # run all statements (but not named commands)
 ### Using Pre-Built Packages
 
 ```bash
-cop check csharp-style           # run style checks from a package
-cop check csharp-style -t src/   # analyze a specific directory
-cop check csharp-style -c type-name-casing  # run specific rules only
+cop check csharp-style-checks            # run style checks from a package
+cop check csharp-style-checks -t src/    # analyze a specific directory
+cop check csharp-style-checks -c type-name-casing  # run specific rules only
 ```
 
 ### Using Custom .cop Files

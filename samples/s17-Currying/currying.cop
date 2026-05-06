@@ -2,7 +2,7 @@
 # Calling a function with fewer arguments than required returns a closure.
 # The closure remembers the bound arguments and completes the call later.
 # Run with: cop run BRACKETS PARENS
-import csharp
+import csharp-checks
 
 # A function that wraps a type name with prefix and suffix
 function wrap(Type, prefix: String, suffix: String) => '{prefix}{item.Name}{suffix}'

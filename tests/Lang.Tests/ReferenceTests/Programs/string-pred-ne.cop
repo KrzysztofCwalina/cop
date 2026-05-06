@@ -2,6 +2,6 @@
 # @expect output
 # @expect no-output-contains: Placeholder
 
-import csharp
+import csharp-checks
 predicate nameNotPlaceholder(Type) => Type.Name:notEquals('Placeholder')
 foreach csharp.Types:nameNotPlaceholder => '{item.Name}'

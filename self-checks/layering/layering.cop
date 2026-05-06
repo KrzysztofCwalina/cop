@@ -6,7 +6,7 @@
 #
 # Run: cop run self-checks/layering/layering.cop -t .
 
-import csharp
+import csharp-checks
 import code-layering
 
 # Define layers

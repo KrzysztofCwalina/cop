@@ -1,5 +1,5 @@
 ---
-name: csharp-style
+name: csharp-style-checks
 version: 1.0.0
 title: C# StyleCop Rules
 description: StyleCop formatting, naming, and style rules for C# code

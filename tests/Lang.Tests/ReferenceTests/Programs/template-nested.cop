@@ -2,5 +2,5 @@
 # @expect output-contains: GoodClient
 # @expect output-contains: methods
 
-import csharp
+import csharp-checks
 foreach csharp.Types:isSealed => '{item.Name} has {item.Methods.Count} methods'

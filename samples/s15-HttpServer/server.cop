@@ -4,24 +4,8 @@
 # Stop with: Ctrl+C
 import http
 
-# Route handlers using constrained overloads
-function handle(Request:Path:equals('/')) => Response {
-    StatusCode = 200
-    Body = '{"message":"hello world!"}'
-    ContentType = 'application/json'
-}
+function handle(Request:Uri:equals('/hello')) => ok({ message: 'Hello, World!' })
+function handle(Request:Uri:equals('/health')) => ok
+function handle(Request) => notFound
 
-function handle(Request:Path:equals('/health')) => Response {
-    StatusCode = 200
-    Body = '{"status":"healthy"}'
-    ContentType = 'application/json'
-}
-
-function handle(Request) => Response {
-    StatusCode = 404
-    Body = '{"error":"not found"}'
-    ContentType = 'application/json'
-}
-
-# Start the server pipeline: receive requests, handle them, send responses
-command serve = async foreach Receive => handle => Send
+async foreach Requests => handle => RESPONSES

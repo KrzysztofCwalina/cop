@@ -19,4 +19,4 @@ export let no-window-reference = Code.Lines:javascript:hasWindowReference
     :toError('Do not use window — use self for cross-platform compatibility')
 
 ## All JavaScript library checks combined
-export let javascript-library = no-default-exports + no-external-promises + no-const-enums + no-window-reference
+export let javascript-library-checks = no-default-exports + no-external-promises + no-const-enums + no-window-reference

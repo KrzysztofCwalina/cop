@@ -14,7 +14,7 @@ cd my-checks
 Create `main.cop`:
 
 ```cop
-import csharp
+import csharp-checks
 
 let publicTypes = Code.Types:isPublic
 ```
@@ -174,7 +174,7 @@ cd naming-check
 Create `main.cop`:
 
 ```cop
-import csharp
+import csharp-checks
 ```
 
 **2. Start the REPL and explore**
@@ -225,7 +225,7 @@ deleteAll
 Edit `main.cop` to add your new check:
 
 ```cop
-import csharp
+import csharp-checks
 import code-analysis
 
 let publicTypes = Code.Types:isPublic

@@ -586,8 +586,8 @@ CHECK(var-usage)
         var apmRoot = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "packages");
 
         // Load only csharp definitions (not checks — they have their own commands)
-        var csharpDir = ImportResolver.FindPackageDir(apmRoot, "csharp")
-            ?? Path.Combine(apmRoot, "csharp");
+        var csharpDir = ImportResolver.FindPackageDir(apmRoot, "csharp-checks")
+            ?? Path.Combine(apmRoot, "csharp-checks");
         var csharpDefs = Path.Combine(csharpDir, "src", "definitions.cop");
         var allFiles = new List<ScriptFile> { TestInterpreter.CodePackage, scriptFile };
         allFiles.Add(ScriptParser.Parse(File.ReadAllText(csharpDefs), csharpDefs));

@@ -1,6 +1,6 @@
 # Predicates: user-defined combining built-in predicates
 # @expect output-contains: GoodClient
 
-import csharp
+import csharp-checks
 predicate isSealdGood(Type) => isSealed && Type.Name:startsWith('Good')
 foreach csharp.Types:isSealdGood => '{item.Name}'

@@ -1,5 +1,4 @@
 import code-analysis
-import csharp-snippets/definitions
 
 ## C# snippet has no corresponding markdown fence
 export let snippet-missing-docs = snippetRegions:!hasDocumentation
@@ -18,4 +17,4 @@ export let snippet-stale-content = snippetFences:hasSource:!isContentMatchingSou
     :toWarning('{item.Tag} content is out of sync with C# source')
 
 ## All snippet checks combined
-export let csharp-snippets = snippet-missing-docs + snippet-orphaned-ref + snippet-duplicate-name + snippet-stale-content
+export let csharp-snippets-checks = snippet-missing-docs + snippet-orphaned-ref + snippet-duplicate-name + snippet-stale-content

@@ -83,19 +83,19 @@ Types serve four purposes:
 At runtime, everything from providers down to leaf scalars is a DataObject. Every member is a function — some take arguments, some are nullary (look like fields). The tree is uniform:
 
 ```
-csharp                → DataObject (callable — function: string → CSharpCodebase)
-  ('path')            → DataObject (typed as CSharpCodebase — bound to path)
-    .Types            → DataObject (iterable) — nullary, returns [Type]
-      [0]             → DataObject (typed as Type)
-        .Name         → scalar (string) — nullary function returning a string
-        .Methods      → DataObject (iterable) — nullary function returning [Method]
-          [0]         → DataObject (typed as Method)
-            .Name     → scalar (string) — nullary function
+csharp-checks           → DataObject (callable — function: string → CSharpCodebase)
+  ('path')              → DataObject (typed as CSharpCodebase — bound to path)
+    .Types              → DataObject (iterable) — nullary, returns [Type]
+      [0]               → DataObject (typed as Type)
+        .Name           → scalar (string) — nullary function returning a string
+        .Methods        → DataObject (iterable) — nullary function returning [Method]
+          [0]           → DataObject (typed as Method)
+            .Name       → scalar (string) — nullary function
 ```
 
 **Every `.` is a function call.** The only difference is arity:
 - `type.Name` — calls a nullary function (no parens needed, like Haskell)
-- `csharp('path')` — calls a unary function (argument in parens)
+- `csharp-checks('path')` — calls a unary function (argument in parens)
 - `type.hasPrefix('I')` — calls a unary predicate (extension method)
 
 **Convention: nullary functions are called without parentheses.** Since there are no args to pass, parens add nothing. This is why `code.Types` looks like "field access" — it IS a function call, just with no args and therefore no parens. Write `code.Types`, not `code.Types()`.
@@ -104,41 +104,41 @@ A "field" is simply a nullary function called without parens. There is no semant
 
 > **Implementation note:** Semantically everything is a function, but for performance, nullary members are represented as evaluated values (actual fields) at runtime — not as closures that get invoked on each access. This is analogous to Haskell's thunk evaluation: once forced, a thunk is replaced by its value. The user never observes the difference, but the runtime avoids per-access function-call overhead for fully-curried members.
 
-### Packages as Curried Functions (Example: `csharp`)
+### Packages as Curried Functions (Example: `csharp-checks`)
 
-Every package, when imported, behaves the same way. `csharp` is just one example — it illustrates the general pattern.
+Every package, when imported, behaves the same way. `csharp-checks` is just one example — it illustrates the general pattern.
 
 `import <package>` curries the package's default arguments (e.g., cwd), making the name a nullary function that is lowered to a global static field. Any package that accepts configuration works identically:
 
 ```cop
-import csharp       # csharp = CSharpCodebase(cwd) — static field
-import files        # files = Filesystem(cwd) — static field
-import http         # http = HttpProvider(default config) — static field
+import csharp-checks    # csharp-checks = CSharpCodebase(cwd) — static field
+import files            # files = Filesystem(cwd) — static field
+import http             # http = HttpProvider(default config) — static field
 ```
 
 This is the same principle applied everywhere:
 - `type.Name` — nullary function → lowered to a field on the object
-- `csharp` — nullary function (cwd curried in by `import`) → lowered to a global static field
-- `csharp.Types` — nullary function on the codebase → lowered to a field
+- `csharp-checks` — nullary function (cwd curried in by `import`) → lowered to a global static field
+- `csharp-checks.Types` — nullary function on the codebase → lowered to a field
 
 ```cop
-import csharp
+import csharp-checks
 
-# csharp is a fully curried function → static field → CSharpCodebase(cwd):
-csharp.Types       # same instance, same memoized result
-csharp.Methods     # same instance
+# csharp-checks is a fully curried function → static field → CSharpCodebase(cwd):
+csharp-checks.Types       # same instance, same memoized result
+csharp-checks.Methods     # same instance
 
 # Re-apply with a different path → new instance:
-let other = csharp('c:\git\other')
+let other = csharp-checks('c:\git\other')
 other.Types        # different codebase
 ```
 
-**No special "dual nature."** `csharp` without parens is the evaluated (lowered) result. `csharp('path')` re-applies the underlying function with an explicit argument — overriding the curried-in default. This works the same for any configurable package.
+**No special "dual nature."** `csharp-checks` without parens is the evaluated (lowered) result. `csharp-checks('path')` re-applies the underlying function with an explicit argument — overriding the curried-in default. This works the same for any configurable package.
 
 Multiple instances:
 ```cop
-let frontend = csharp('c:\git\frontend')
-let backend = csharp('c:\git\backend')
+let frontend = csharp-checks('c:\git\frontend')
+let backend = csharp-checks('c:\git\backend')
 
 frontend.Types      # types from frontend only
 backend.Types       # types from backend only
@@ -161,9 +161,9 @@ type.Methods             # apply nullary function → iterable DataObject
 
 **Unary/multi-arg function** (explicit arguments):
 ```cop
-csharp.Types('path')     # apply unary function → [Type]
-type.hasPrefix('I')      # apply predicate (extension method) → bool
-type.summarize('json')   # apply function → DataObject
+csharp-checks.Types('path')  # apply unary function → [Type]
+type.hasPrefix('I')          # apply predicate (extension method) → bool
+type.summarize('json')       # apply function → DataObject
 ```
 
 **Project on iterable** (left side is iterable, function is on items):
@@ -331,7 +331,7 @@ All declarations are order-independent within a file. Evaluation is demand-drive
 
 ```cop
 let threshold = 10
-let codebase = csharp('path/to/src')
+let codebase = csharp-checks('path/to/src')
 let types = codebase.Types
 let publicTypes = types:isPublic
 let names = publicTypes.Name
@@ -398,13 +398,13 @@ These are the explicit operations on iterable DataObjects — like Haskell's `fi
 
 ---
 
-## Providers (Example: `csharp`)
+## Providers (Example: `csharp-checks`)
 
-Providers are the bridge between external data and the Cop type system. They follow the same rules as all packages — `csharp` is used as the example throughout, but every provider package works identically.
+Providers are the bridge between external data and the Cop type system. They follow the same rules as all packages — `csharp-checks` is used as the example throughout, but every provider package works identically.
 
-### What is `csharp`?
+### What is `csharp-checks`?
 
-`csharp` is a **fully curried function** — `import` supplies cwd as the implicit argument, making it nullary. It's lowered to a global static field (the same optimization as any nullary function):
+`csharp-checks` is a **fully curried function** — `import` supplies cwd as the implicit argument, making it nullary. It's lowered to a global static field (the same optimization as any nullary function):
 
 ```cop
 type CSharpCodebase = {
@@ -421,46 +421,46 @@ All members are **nullary** — curried with the path. Types and Methods always 
 
 ### Memoization
 
-`csharp` is a static field — evaluated once, memoized. `csharp.Types` used repeatedly returns the same cached collection.
+`csharp-checks` is a static field — evaluated once, memoized. `csharp-checks.Types` used repeatedly returns the same cached collection.
 
-`csharp('path')` re-applies the underlying function with an explicit path. Each call with a new path creates a new instance. Bind with `let` to cache:
+`csharp-checks('path')` re-applies the underlying function with an explicit path. Each call with a new path creates a new instance. Bind with `let` to cache:
 
 ```cop
-import csharp
+import csharp-checks
 
-# csharp is a static field (fully curried → lowered):
-csharp.Types              # memoized
-csharp.Types              # same result
+# csharp-checks is a static field (fully curried → lowered):
+csharp-checks.Types         # memoized
+csharp-checks.Types         # same result
 
 # Re-apply with explicit path:
-let other = csharp('c:\git\other')
-other.Types               # new codebase, memoized within this binding
+let other = csharp-checks('c:\git\other')
+other.Types                 # new codebase, memoized within this binding
 ```
 
 ### `import` — formal definition
 
 `import <package>` does two things:
 
-1. **Curries and binds** — supplies the default argument (e.g., cwd for providers), creating a fully curried function that is lowered to a global static field. `csharp` IS a CSharpCodebase.
+1. **Curries and binds** — supplies the default argument (e.g., cwd for providers), creating a fully curried function that is lowered to a global static field. `csharp-checks` IS a CSharpCodebase.
 2. **Brings exports into scope** — the package's exported types, predicates, and functions become resolvable names.
 
 The name remains callable with an explicit argument to override the default:
 
 ```cop
-import csharp
-#        │
-#        ├─ (1) binds:  csharp = fully curried function → static field (CSharpCodebase @ cwd)
-#        ├─     also:   csharp('path') re-applies with explicit arg → new CSharpCodebase
-#        └─ (2) scope:  Type, Method, isPublic, ... are now resolvable names
+import csharp-checks
+#           │
+#           ├─ (1) binds:  csharp-checks = fully curried function → static field (CSharpCodebase @ cwd)
+#           ├─     also:   csharp-checks('path') re-applies with explicit arg → new CSharpCodebase
+#           └─ (2) scope:  Type, Method, isPublic, ... are now resolvable names
 ```
 
 ### Who creates what?
 
 | What | Who creates it | When |
 |------|---------------|------|
-| The static field (`csharp`) | `import` curries cwd → lowered to field | At import time (lazy) |
-| A new codebase (`csharp('path')`) | Re-application of the function | When user supplies explicit arg |
-| Objects in collections (`csharp.Types[0]`) | The provider, by reading external data | On first access (lazy) |
+| The static field (`csharp-checks`) | `import` curries cwd → lowered to field | At import time (lazy) |
+| A new codebase (`csharp-checks('path')`) | Re-application of the function | When user supplies explicit arg |
+| Objects in collections (`csharp-checks.Types[0]`) | The provider, by reading external data | On first access (lazy) |
 | User-defined objects (`Violation { ... }`) | User code, via record construction | When the expression is evaluated |
 | Function results (`checkMethodCount(type)`) | The function body | When the function is called |
 
@@ -479,12 +479,12 @@ All types, functions, and predicates live in a namespace. The only exception: **
 Every package defines a namespace with the same name as the package. When you write:
 
 ```cop
-import csharp
+import csharp-checks
 ```
 
-This brings the `csharp` namespace into scope. Types and predicates exported by the package are accessible:
+This brings the `csharp-checks` namespace into scope. Types and predicates exported by the package are accessible:
 - **Unqualified**: `Type`, `Method`, `isPublic` — works because `import` brought the namespace into scope
-- **Qualified**: `csharp.Type`, `csharp.Method`, `csharp.isPublic` — always works, for disambiguation
+- **Qualified**: `csharp-checks.Type`, `csharp-checks.Method`, `csharp-checks.isPublic` — always works, for disambiguation
 
 ### Hierarchical Namespaces
 
