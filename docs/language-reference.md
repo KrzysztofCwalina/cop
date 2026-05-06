@@ -1059,15 +1059,27 @@ items:!isError
 predicate failed(Item) => isError
 ```
 
-### Error Propagation
+### Error Handling in Pipelines
 
-In pipelines (`foreach source => transform => sink`), errors skip transforms and flow directly to the sink:
+In streaming pipelines (`foreach source => transform => sink`), errors can be handled by defining a transform function overload for the `Error` type:
 
 ```ruby
-foreach http.Requests => handle => http.Responses
-# If handle(request) returns error, the transform is skipped
-# The error flows to http.Responses which returns a 500 response
+import http
+
+# Normal request handler
+function handle(Request:Uri:eq('/hello')) => ok({ message: 'Hello' })
+
+# Error handler — receives network errors, logs and swallows them
+function handle(Error) => print(Error.Message)
+
+async foreach Requests => handle => RESPONSES
 ```
+
+Error handling behavior:
+- If the transform has an `Error` overload → it's called with the error value
+- If the error handler returns null → the error is swallowed (dropped from pipeline)
+- If the error handler returns a value → that value is sent to the sink
+- If no `Error` overload exists → the error passes directly to the sink (default: HTTP 500)
 
 In batch foreach, errors output as `ERROR: message` instead of crashing.
 
@@ -1077,7 +1089,7 @@ Sink behavior for errors:
 |------|----------|
 | Console (default) | Writes `ERROR: message` to stderr |
 | `file.Write` | Skips the error (does not write) |
-| `http.Responses` | Returns HTTP 500 with JSON error body |
+| `http.RESPONSES` | Returns HTTP 500 with JSON error body |
 
 ### Code Bugs (`FAIL`)
 

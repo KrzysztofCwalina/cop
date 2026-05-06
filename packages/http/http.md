@@ -27,12 +27,31 @@ async foreach Requests => handle => RESPONSES
 ## Globals
 
 - `Requests` — incoming HTTP requests (`[Request]`)
-- `Send` — outgoing HTTP responses (`[Response]`)
+- `RESPONSES` — outgoing HTTP responses sink
 
 ## Helper Functions
 
 - `ok(Request, body)` — 200 OK response with JSON body (accepts string or inline object)
+- `ok(Request)` — 200 OK response with `{"status": "ok"}` body
 - `notFound(Request)` — 404 Not Found response
 - `created(Request)` — 201 Created response
 - `badRequest(Request)` — 400 Bad Request response
 - `serverError(Request)` — 500 Internal Server Error response
+- `serverError(Error)` — 500 response from an Error value (body = Error.Message)
+
+## Error Handling
+
+Network errors (e.g., client disconnects during request) are emitted as `Error` values into the pipeline. Define an `Error` overload on your transform function to handle them:
+
+```cop
+import http
+
+function handle(Request:Uri:equals('/hello')) => ok({ message: 'Hello' })
+function handle(Error) => print(Error.Message)
+
+async foreach Requests => handle => RESPONSES
+```
+
+- If no `Error` overload exists → errors pass to the sink (returns HTTP 500)
+- Return null from error handler → swallow the error silently
+- Return a response → send that response to the client

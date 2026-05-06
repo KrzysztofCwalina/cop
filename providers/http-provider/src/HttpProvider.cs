@@ -53,6 +53,7 @@ public class HttpProvider : DataProvider
                         new ProviderPropertySchema { Name = "StatusCode", Type = "int" },
                         new ProviderPropertySchema { Name = "Body", Type = "bytes" },
                         new ProviderPropertySchema { Name = "ContentType" },
+                        new ProviderPropertySchema { Name = "Headers", Optional = true },
                     ]
                 }
             ],
@@ -69,6 +70,117 @@ public class HttpProvider : DataProvider
         yield return new HttpSendSink();
     }
 
+    private static readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
+
+    public override Dictionary<string, Func<List<object?>, Task<object?>>>? GetProviderFunctions()
+    {
+        return new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Get"] = HttpGetAsync,
+            ["Post"] = HttpPostAsync,
+            ["Send"] = HttpSendAsync,
+        };
+    }
+
+    /// <summary>
+    /// http.Get(url, headers?) — performs an HTTP GET request.
+    /// </summary>
+    private static async Task<object?> HttpGetAsync(List<object?> args)
+    {
+        if (args.Count < 1)
+            throw new InvalidOperationException("http.Get requires at least 1 argument: http.Get(url, headers?)");
+        var url = args[0]?.ToString() ?? throw new InvalidOperationException("http.Get: url cannot be null");
+        var headers = args.Count > 1 ? args[1] as DataObject : null;
+        return await SendRequestAsync(HttpMethod.Get, url, body: null, headers);
+    }
+
+    /// <summary>
+    /// http.Post(url, body, headers?) — performs an HTTP POST request.
+    /// </summary>
+    private static async Task<object?> HttpPostAsync(List<object?> args)
+    {
+        if (args.Count < 2)
+            throw new InvalidOperationException("http.Post requires at least 2 arguments: http.Post(url, body, headers?)");
+        var url = args[0]?.ToString() ?? throw new InvalidOperationException("http.Post: url cannot be null");
+        var body = args[1];
+        var headers = args.Count > 2 ? args[2] as DataObject : null;
+        return await SendRequestAsync(HttpMethod.Post, url, body, headers);
+    }
+
+    /// <summary>
+    /// http.Send(method, url, body, headers?) — performs an HTTP request with any method.
+    /// </summary>
+    private static async Task<object?> HttpSendAsync(List<object?> args)
+    {
+        if (args.Count < 2)
+            throw new InvalidOperationException("http.Send requires at least 2 arguments: http.Send(method, url, body?, headers?)");
+        var methodStr = args[0]?.ToString() ?? "GET";
+        var url = args[1]?.ToString() ?? throw new InvalidOperationException("http.Send: url cannot be null");
+        var body = args.Count > 2 ? args[2] : null;
+        var headers = args.Count > 3 ? args[3] as DataObject : null;
+        var method = new HttpMethod(methodStr);
+        return await SendRequestAsync(method, url, body, headers);
+    }
+
+    private static async Task<object?> SendRequestAsync(HttpMethod method, string url, object? body, DataObject? headers)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(method, url);
+
+            // Set request body
+            if (body is not null)
+            {
+                byte[] bodyBytes = body switch
+                {
+                    byte[] b => b,
+                    string s => System.Text.Encoding.UTF8.GetBytes(s),
+                    DataObject obj => System.Text.Encoding.UTF8.GetBytes(obj.ToJson()),
+                    _ => System.Text.Encoding.UTF8.GetBytes(body.ToString() ?? "")
+                };
+                request.Content = new ByteArrayContent(bodyBytes);
+
+                // Default content type for non-byte[] bodies
+                if (body is not byte[])
+                    request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+            }
+
+            // Set request headers from DataObject fields
+            if (headers is not null)
+            {
+                foreach (var (key, value) in headers.Fields)
+                {
+                    var headerValue = value?.ToString() ?? "";
+                    if (key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase) && request.Content is not null)
+                        request.Content.Headers.ContentType = System.Net.Http.Headers.MediaTypeHeaderValue.Parse(headerValue);
+                    else
+                        request.Headers.TryAddWithoutValidation(key, headerValue);
+                }
+            }
+
+            using var response = await _httpClient.SendAsync(request);
+
+            // Build response DataObject
+            var responseBody = await response.Content.ReadAsByteArrayAsync();
+            var responseHeaders = new DataObject("Headers");
+            foreach (var header in response.Headers)
+                responseHeaders.Set(header.Key, string.Join(", ", header.Value));
+            foreach (var header in response.Content.Headers)
+                responseHeaders.Set(header.Key, string.Join(", ", header.Value));
+
+            var result = new DataObject("Response");
+            result.Set("StatusCode", (int)response.StatusCode);
+            result.Set("Body", responseBody);
+            result.Set("ContentType", response.Content.Headers.ContentType?.MediaType ?? "");
+            result.Set("Headers", responseHeaders);
+            return result;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or UriFormatException)
+        {
+            return new ErrorValue($"HTTP request failed: {ex.Message}");
+        }
+    }
+
     public override async IAsyncEnumerable<object> QueryStream(
         ProviderQuery query, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
@@ -77,14 +189,24 @@ public class HttpProvider : DataProvider
 
         await foreach (var request in _requestChannel.Reader.ReadAllAsync(cancellationToken))
         {
-            // Wrap as DataObject so the cop evaluator can access properties
-            var so = new DataObject("Request");
-            so.Set("Method", request.Method);
-            so.Set("Uri", request.Uri);
-            so.Set("Body", request.Body);
-            so.Set("ContentType", request.ContentType);
-            so.Set("__responseCompletion", request.ResponseCompletion);
-            yield return so;
+            if (request.ReadError is not null)
+            {
+                // Emit ErrorValue for failed request reads — pipeline can handle via Error overload
+                var errorValue = new ErrorValue(request.ReadError);
+                errorValue.Set("__responseCompletion", request.ResponseCompletion);
+                yield return errorValue;
+            }
+            else
+            {
+                // Wrap as DataObject so the cop evaluator can access properties
+                var so = new DataObject("Request");
+                so.Set("Method", request.Method);
+                so.Set("Uri", request.Uri);
+                so.Set("Body", request.Body);
+                so.Set("ContentType", request.ContentType);
+                so.Set("__responseCompletion", request.ResponseCompletion);
+                yield return so;
+            }
         }
     }
 
@@ -98,31 +220,63 @@ public class HttpProvider : DataProvider
         _app.Map("{**path}", async (HttpContext ctx) =>
         {
             byte[] body = [];
-            if (ctx.Request.ContentLength > 0)
+            try
             {
-                using var ms = new MemoryStream();
-                await ctx.Request.Body.CopyToAsync(ms, cancellationToken);
-                body = ms.ToArray();
+                if (ctx.Request.ContentLength > 0)
+                {
+                    using var ms = new MemoryStream();
+                    await ctx.Request.Body.CopyToAsync(ms, cancellationToken);
+                    body = ms.ToArray();
+                }
+            }
+            catch (Exception ex) when (ex is IOException or OperationCanceledException)
+            {
+                // Client disconnected during request body read — emit ErrorValue into pipeline
+                var tcs = new TaskCompletionSource<HttpResponseItem>();
+                var errorObj = new DataObject("Request");
+                errorObj.Set("__responseCompletion", tcs);
+                var errorItem = new HttpRequestItem
+                {
+                    Method = ctx.Request.Method,
+                    Uri = (ctx.Request.Path.Value ?? "/") + (ctx.Request.QueryString.Value ?? ""),
+                    Body = [],
+                    ContentType = "",
+                    ResponseCompletion = tcs,
+                    ReadError = $"Request read failed: {ex.Message}"
+                };
+                await _requestChannel.Writer.WriteAsync(errorItem, CancellationToken.None);
+                var response = await tcs.Task;
+                ctx.Response.StatusCode = response.StatusCode;
+                ctx.Response.ContentType = response.ContentType;
+                try { await ctx.Response.WriteAsync(response.Body); } catch { }
+                return;
             }
 
-            var tcs = new TaskCompletionSource<HttpResponseItem>();
+            var tcs2 = new TaskCompletionSource<HttpResponseItem>();
             var requestItem = new HttpRequestItem
             {
                 Method = ctx.Request.Method,
                 Uri = (ctx.Request.Path.Value ?? "/") + (ctx.Request.QueryString.Value ?? ""),
                 Body = body,
                 ContentType = ctx.Request.ContentType ?? "",
-                ResponseCompletion = tcs
+                ResponseCompletion = tcs2
             };
 
             await _requestChannel.Writer.WriteAsync(requestItem, ctx.RequestAborted);
 
             // Wait for the cop pipeline to produce a response
-            var response = await tcs.Task;
+            var response2 = await tcs2.Task;
 
-            ctx.Response.StatusCode = response.StatusCode;
-            ctx.Response.ContentType = response.ContentType;
-            await ctx.Response.WriteAsync(response.Body, ctx.RequestAborted);
+            ctx.Response.StatusCode = response2.StatusCode;
+            ctx.Response.ContentType = response2.ContentType;
+            try
+            {
+                await ctx.Response.WriteAsync(response2.Body, ctx.RequestAborted);
+            }
+            catch (Exception ex) when (ex is IOException or OperationCanceledException)
+            {
+                // Client disconnected before response could be written — silently ignore
+            }
         });
 
         await _app.StartAsync(cancellationToken);
@@ -153,6 +307,9 @@ public class HttpRequestItem
 
     // Hidden from cop scripts — used by the sink to deliver the response
     internal TaskCompletionSource<HttpResponseItem> ResponseCompletion { get; init; } = null!;
+
+    // Set when request body reading failed (network error)
+    internal string? ReadError { get; init; }
 }
 
 /// <summary>

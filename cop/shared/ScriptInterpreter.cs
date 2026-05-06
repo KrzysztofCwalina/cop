@@ -442,10 +442,30 @@ public class ScriptInterpreter
 
         var filteredItem = items[0];
 
-        // Error propagation: skip transforms, pass directly to sink
+        // Error dispatch: try to resolve transform function for "Error" type
         if (ErrorValue.IsError(filteredItem))
         {
-            await sink.WriteAsync(filteredItem, filteredItem);
+            // Check if the transform function has an overload for "Error" type
+            string? transformName = cmd.OutputExpression switch
+            {
+                IdentifierExpr id => id.Name,
+                _ => null
+            };
+
+            if (transformName is not null
+                && functionGroups.TryGetValue(transformName, out var errorFuncGroup)
+                && errorFuncGroup.Any(f => string.Equals(f.InputType, "Error", StringComparison.OrdinalIgnoreCase)))
+            {
+                // Call the Error overload — user-defined error handler
+                var errorResult = evaluator.EvaluateField(cmd.OutputExpression, filteredItem, "Error");
+                if (errorResult is null) return; // null = swallow error (drop from pipeline)
+                await sink.WriteAsync(filteredItem, errorResult);
+            }
+            else
+            {
+                // No error handler defined — pass ErrorValue directly to sink
+                await sink.WriteAsync(filteredItem, filteredItem);
+            }
             return;
         }
 

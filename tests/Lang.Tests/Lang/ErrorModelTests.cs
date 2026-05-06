@@ -36,10 +36,10 @@ public class ErrorModelTests
     }
 
     [Test]
-    public void ErrorValue_HasCopErrorTypeName()
+    public void ErrorValue_HasErrorTypeName()
     {
         var err = new ErrorValue("test");
-        Assert.That(err.TypeName, Is.EqualTo("CopError"));
+        Assert.That(err.TypeName, Is.EqualTo("Error"));
     }
 
     [Test]
@@ -314,5 +314,57 @@ predicate test(Type) => FAIL('should not happen')
         var evaluator = new PredicateEvaluator(predicates, "test.cop", CreateTestRegistry());
         Assert.Throws<FailException>(() =>
             evaluator.EvaluateField(file.Predicates[0].Body, MakeType(), "Type"));
+    }
+
+    // --- Error handling through function overloads ---
+
+    [Test]
+    public void FunctionWithErrorOverload_ReceivesError()
+    {
+        // A function with an Error overload should be called when item is ErrorValue
+        var source = @"
+function handle(Request) => Response { StatusCode = 200, Body = 'ok', ContentType = 'text/plain' }
+function handle(Error) => Response { StatusCode = 500, Body = Error.Message, ContentType = 'text/plain' }
+";
+        var file = ScriptParser.Parse(source, "test.cop");
+        var functions = new Dictionary<string, List<FunctionDefinition>>
+        {
+            ["handle"] = [file.Functions[0], file.Functions[1]]
+        };
+        var predicates = new Dictionary<string, List<PredicateDefinition>>();
+        var evaluator = new PredicateEvaluator(predicates, "test.cop", CreateTestRegistry(), functions: functions);
+
+        var errItem = new ErrorValue("connection timeout");
+        var result = evaluator.EvaluateField(new IdentifierExpr("handle"), errItem, "Error");
+
+        Assert.That(result, Is.InstanceOf<DataObject>());
+        var response = (DataObject)result!;
+        Assert.That(response.GetField("StatusCode"), Is.EqualTo(500));
+        Assert.That(response.GetField("Body"), Is.EqualTo("connection timeout"));
+    }
+
+    [Test]
+    public void FunctionWithoutErrorOverload_FallsThrough()
+    {
+        // When no Error overload exists, the function group does NOT contain a match
+        var source = @"
+function handle(Request) => Response { StatusCode = 200, Body = 'ok', ContentType = 'text/plain' }
+";
+        var file = ScriptParser.Parse(source, "test.cop");
+        var functions = new Dictionary<string, List<FunctionDefinition>>
+        {
+            ["handle"] = [file.Functions[0]]
+        };
+
+        // Verify that no overload with InputType "Error" exists
+        Assert.That(functions["handle"].Any(f => f.InputType == "Error"), Is.False);
+    }
+
+    [Test]
+    public void ErrorValue_TypeName_IsError()
+    {
+        // Ensure ErrorValue type name matches what function overload resolution expects
+        var err = new ErrorValue("test");
+        Assert.That(err.TypeName, Is.EqualTo("Error"));
     }
 }

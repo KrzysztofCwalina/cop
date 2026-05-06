@@ -819,10 +819,6 @@ let result = error('connection timeout')
 
 # Conditional error
 predicate handle(Request) => Request.Body == nic ? error('missing body') | process(Request)
-
-# Errors propagate through transforms automatically — no wrapping needed
-foreach http.Requests => handle => http.Responses
-# If handle returns error, it skips the transform and flows to the sink as a 500 response
 ```
 
 **Key properties:**
@@ -830,8 +826,27 @@ foreach http.Requests => handle => http.Responses
 - `isError` — built-in predicate for filtering/detection
 - Errors are **truthy** (not falsy like `nic`) — they represent "something happened", not "nothing"
 - Errors have fields: `.Message`, `.Source`
-- Pipeline propagation: errors skip transforms and pass directly to sinks
-- Sinks handle errors: console → stderr, file → skip, HTTP → 500 response
+- Error type name is `Error` — use in function overloads for custom handling
+
+**Pipeline error handling:**
+
+In streaming pipelines, errors flow through the transform function. Define an `Error` overload to handle them:
+
+```cop
+import http
+
+function handle(Request:Uri:eq('/hello')) => ok({ message: 'Hello' })
+
+# Custom error handler: log and swallow (return null = drop item)
+function handle(Error) => print(Error.Message)
+
+async foreach Requests => handle => RESPONSES
+```
+
+- If the transform has an `Error` overload → called with the error
+- Return null → swallow the error (drop from pipeline)
+- Return a value → send to sink (e.g., custom HTTP response)
+- No `Error` overload → error passes directly to sink (HTTP 500, console stderr, etc.)
 
 ```cop
 # Filter errors out

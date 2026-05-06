@@ -11,8 +11,12 @@ export enum ContentType = 'application/json' | 'text/plain' | 'text/html' | 'app
 export type Response = {
     StatusCode : int,
     Body : bytes,
-    ContentType : ContentType
+    ContentType : ContentType,
+    Headers : Headers
 }
+
+# Dynamic headers object — fields are header names, values are header values
+export type Headers = {}
 
 # Request type provided by the http streaming source
 export type Request = {
@@ -61,5 +65,12 @@ export function badRequest(Request) => {
 export function serverError(Request) => {
     StatusCode = 500
     Body = '{"error": "Internal Server Error"}'
+    ContentType = 'application/json'
+}
+
+# Creates a 500 Internal Server Error response from an Error value
+export function serverError(Error) => Response {
+    StatusCode = 500,
+    Body = Error.Message,
     ContentType = 'application/json'
 }

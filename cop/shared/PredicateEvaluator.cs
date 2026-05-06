@@ -3,6 +3,17 @@ using System.Text.RegularExpressions;
 
 namespace Cop.Lang;
 
+/// <summary>
+/// Sentinel value representing a provider namespace in expressions (e.g., "http" in http.Get(...)).
+/// When the evaluator resolves an identifier that is a provider function namespace, it returns
+/// this sentinel. CallPredicate then dispatches method calls on it to provider functions.
+/// </summary>
+internal sealed class ProviderNamespaceRef(string name)
+{
+    public string Name { get; } = name;
+    public override string ToString() => $"[namespace:{Name}]";
+}
+
 public class PredicateEvaluator
 {
 
@@ -351,6 +362,10 @@ public class PredicateEvaluator
         var enumValue = _registry.TryResolveEnumConstant(name);
         if (enumValue is not null) return enumValue;
 
+        // Provider namespace resolution (e.g., "http" → ProviderNamespaceRef for http.Get/Post/Send)
+        if (_registry.IsProviderFunctionNamespace(name))
+            return new ProviderNamespaceRef(name);
+
         // Language filter fallback: if the item has a File.Language property,
         // check if the identifier matches the language. This enables filter chains
         // like Types:csharp:client where "csharp" matches File.Language == "csharp".
@@ -698,6 +713,19 @@ public class PredicateEvaluator
         object item, string paramType, EvaluationContext ctx)
     {
         if (target is null) return null;
+
+        // Provider namespace function dispatch (e.g., http.Get(...), http.Post(...))
+        if (target is ProviderNamespaceRef nsRef)
+        {
+            var func = _registry.ResolveProviderFunction(nsRef.Name, predicate);
+            if (func is null)
+                throw new InvalidOperationException($"Unknown function '{nsRef.Name}.{predicate}'");
+            var nsArgs = args.Select(a => Eval(a, item, paramType, ctx)).ToList();
+            // Provider functions are async — block synchronously here.
+            // In streaming pipelines, the interpreter awaits the Task returned by Eval.
+            var task = func(nsArgs);
+            return task.GetAwaiter().GetResult();
+        }
 
         // Built-in isError predicate — works on any value
         if (predicate == "isError") return ErrorValue.IsError(target);

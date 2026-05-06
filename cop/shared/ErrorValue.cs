@@ -11,7 +11,7 @@ namespace Cop.Lang;
 public class ErrorValue : DataObject
 {
     public ErrorValue(string? message, string? sourceFile = null, int? sourceLine = null)
-        : base("CopError", new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        : base("Error", new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
         {
             ["Message"] = message,
             ["SourceFile"] = sourceFile,
