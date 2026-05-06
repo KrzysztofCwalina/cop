@@ -268,7 +268,7 @@ Functions can have **multiple overloads** with the same name and parameter type.
 ```cop
 function handle(Request:Path.equals('/')) => ok({ message: 'hello world!' })
 
-function handle(Request:Path.equals('/health')) => ok({ status: 'healthy' })
+function handle(Request:Path.equals('/health')) => ok
 
 function handle(Request) => notFound()
 ```
@@ -299,7 +299,7 @@ handle req                         = Response 404 "not found"
 ```cop
 -- Cop:
 function handle(Request:Path.equals('/'))       => ok({ message: 'hello' })
-function handle(Request:Path.equals('/health')) => ok({ status: 'healthy' })
+function handle(Request:Path.equals('/health')) => ok
 function handle(Request)                        => notFound()
 ```
 

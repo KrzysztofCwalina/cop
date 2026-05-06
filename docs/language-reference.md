@@ -424,7 +424,7 @@ Functions can include inline filter constraints to create pattern-matched overlo
 ```ruby
 function handle(Request:Path:eq('/')) => ok({ message: 'hello world!' })
 
-function handle(Request:Path:eq('/health')) => ok({ status: 'healthy' })
+function handle(Request:Path:eq('/health')) => ok
 
 function handle(Request) => notFound()
 ```
