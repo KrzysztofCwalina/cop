@@ -2176,7 +2176,7 @@ const packages = {
       },
       {
         "title": "Http client",
-        "code": "import http\r\n\r\nfunction chatApi(Request) =>\r\n    http.Post('https://api.example.com/v1/completions',\r\n        Text(Request.Body),\r\n        { Content-Type: 'application/json' }\r\n    )\r\n\r\nfunction handle(Request:Uri:equals('/chat')) =>\r\n    chatApi(Request).Body:Text:ok\r\n\r\nfunction handle(Request) => notFound\r\n\r\nasync foreach Requests => handle => RESPONSES"
+        "code": "import http\r\n\r\nfunction complete(Request) =>\r\n    http.Post('https://api.example.com/v1/completions',\r\n        Text(Request.Body),\r\n        { Content-Type: 'application/json' }\r\n    )\r\n\r\nfunction handle(Request:Uri:equals('/chat')) =>\r\n    complete(Request).Body:Text:ok\r\n\r\nfunction handle(Request) => notFound\r\n\r\nasync foreach Requests => handle => RESPONSES"
       }
     ],
     "collections": [],

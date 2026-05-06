@@ -503,7 +503,7 @@ On a single value (not a collection), `:` calls a function with that value as in
 someBytes:Text                       # Text(someBytes) — convert bytes to string
 someString:ok                        # ok(someString) — create HTTP 200 response
 expr:Text:ok                         # chain: Text(expr), then ok(result)
-chatApi(Request).Body:Text:ok        # full chain: access Body, convert, wrap
+complete(Request).Body:Text:ok        # full chain: access Body, convert, wrap
 ```
 
 This enables left-to-right data flow instead of nested function calls:
