@@ -86,6 +86,27 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .tag-enum { background: #fff1e5; color: #bc4c00; }
 .enum-values { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; padding-left: 2px; }
 .enum-value { display: inline-block; padding: 2px 8px; background: #fff1e5; color: #bc4c00; border-radius: 4px; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px; }
+
+/* Package overview */
+.pkg-overview { margin: 8px 0 20px; font-size: 14px; line-height: 1.6; color: #24292f; }
+.pkg-sample { margin: 16px 0; }
+.pkg-sample h3 { font-size: 14px; margin-bottom: 8px; color: #24292f; }
+.pkg-sample pre { background: #24292f; color: #e6edf3; padding: 16px 20px; border-radius: 8px; overflow-x: auto; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 13px; line-height: 1.6; }
+.pkg-exports { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0; }
+.pkg-exports a { display: inline-flex; align-items: center; gap: 4px; padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 500; text-decoration: none; cursor: pointer; border: 1px solid #d0d7de; }
+.pkg-exports a:hover { background: #f6f8fa; }
+.pkg-exports .count { font-weight: 700; }
+
+/* Syntax highlighting */
+.cop-kw { color: #ff7b72; font-weight: 600; }
+.cop-str { color: #a5d6ff; }
+.cop-comment { color: #8b949e; font-style: italic; }
+.cop-template { color: #ffa657; }
+.cop-pred { color: #d2a8ff; }
+.cop-num { color: #79c0ff; }
+.cop-op { color: #ff7b72; }
+.cop-type { color: #7ee787; }
+.cop-fn { color: #d2a8ff; }
 </style>
 </head>
 <body>
@@ -118,6 +139,11 @@ const categories = [
 const packages = {
   "core": {
     label: "core",
+    overview: "Built-in types, predicates, and functions available in every Cop program. Defines string, int, bool, collections, and the standard library operations like Select, Where, GroupBy, and OrderBy.",
+    samples: [
+      { title: "Filter and transform a collection", code: "# Select names of public types\nlet public-names = Where(Types, isPublic)\n  |> Select(item.Name)\n\nforeach public-names => \'{item}\'" },
+      { title: "Group and aggregate", code: "# Count types per file\nlet by-file = GroupBy(Types, item.File.Path)\n\nforeach by-file => \'{item.Key}: {item.Items.Count} types\'" }
+    ],
     collections: [],
     types: {
       string: {
@@ -242,6 +268,11 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
   },
   code: {
     label: "code",
+    overview: "Source code structural analysis. Provides Types, Methods, Statements, and other collections extracted from C#, Python, and JavaScript source files. The foundation for writing code checks.",
+    samples: [
+      { title: "List all public classes", code: "import code\n\nforeach Types:isPublic\n  => \'{Type.Name} ({Type.Kind})\'" },
+      { title: "Find long methods", code: "import code\n\npredicate isLong(Method) =>\n    Method.LineCount:greaterThan(50)\n\nforeach Types => \'{Type.Name}\'\n    :Methods:isLong\n    => \'  {Method.Name} ({Method.LineCount} lines)\'" }
+    ],
     collections: ["Types", "Statements", "Calls", "Lines", "Files", "Members", "Api", "Regions", "Projects"],
     flags: [{ name: "Modifier", values: "Public|Private|Protected|Internal|Static|Sealed|Abstract|Virtual|Async|Override|Readonly|Const" }],
     enums: [
@@ -526,6 +557,10 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
 
   "code-analysis": {
     label: "code-analysis",
+    overview: "Violation reporting framework. Defines the Violation type and severity functions (toError, toWarning, toInfo) used to create structured analysis results from any source element.",
+    samples: [
+      { title: "Create a simple check", code: "import code\nimport code-analysis\n\npredicate isGodClass(Type) =>\n    Type.Methods.Count:greaterThan(20)\n\nlet violations = Types:isGodClass\n    :toWarning(\'Type {item.Name} has too many methods\')\n\nCHECK violations" }
+    ],
     collections: [],
     enums: [
       { name: "Severity", values: "error|warning|info" }
@@ -570,6 +605,11 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
 
   files: {
     label: "files",
+    overview: "Filesystem structural analysis. Provides Folder and DiskFile collections for checking directory structure, finding empty folders, and detecting stale files.",
+    samples: [
+      { title: "Find empty folders", code: "import files\n\n# Built-in: Disk provides Folders and Files\nforeach Disk.Folders:empty\n    => \'{item.Path} is empty\'" },
+      { title: "Detect stale files", code: "import files\n\nforeach Disk.Files:isStale\n    => \'{item.Name} not modified in 24h\'" }
+    ],
     collections: ["Folders", "Files"],
     types: {
       Folder: {
@@ -619,6 +659,10 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
 
   markdown: {
     label: "markdown",
+    overview: "Markdown document analysis. Extracts Headings, Links, Sections, and FenceBlocks from .md files for documentation quality checks.",
+    samples: [
+      { title: "Check for broken links", code: "import markdown\n\npredicate isBroken(Link) =>\n    Link.Url:startsWith(\'http\')\n    && Link.Text:empty\n\nforeach Markdown.Links:isBroken\n    => \'Missing link text: {item.Url}\'" }
+    ],
     collections: ["Headings", "Links", "Sections", "FenceBlocks"],
     types: {
       Heading: {
@@ -681,6 +725,10 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
 
   typespec: {
     label: "typespec",
+    overview: "TypeSpec language graph types. Provides models, operations, interfaces, enums, and decorators for analyzing TypeSpec API definitions.",
+    samples: [
+      { title: "List all models", code: "import typespec\n\nforeach Models\n    => \'{TspModel.Name} ({TspModel.Properties.Count} props)\'" }
+    ],
     collections: ["Models", "Operations", "Interfaces", "Enums", "Unions", "Scalars", "Namespaces"],
     types: {
       TspDecorator: {
@@ -778,6 +826,10 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
 
   "typespec-http": {
     label: "typespec-http",
+    overview: "TypeSpec HTTP protocol types. Extends TypeSpec with HTTP-specific concepts like operations, routes, status codes, and request/response parameters.",
+    samples: [
+      { title: "Find GET operations", code: "import typespec-http\n\nforeach HttpOperations:isGet\n    => \'{item.Path} \u2014 {item.OperationId}\'" }
+    ],
     collections: ["Operations", "Services"],
     enums: [
       { name: "HttpVerb", values: "get|put|post|patch|delete|head" },
@@ -843,6 +895,10 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
 
   "code-layering": {
     label: "code-layering",
+    overview: "Architecture layer enforcement. Define project layers (presentation, business, data) and detect forbidden cross-layer references.",
+    samples: [
+      { title: "Enforce layering rules", code: "import code-layering\n\nlet ui-projects = [\'MyApp.Web\' \'MyApp.Api\']\nlet data-projects = [\'MyApp.Data\' \'MyApp.EF\']\n\npredicate uiRefsData(Project) =>\n    Project.Name:in(ui-projects)\n    && Project.References:containsAny(data-projects)\n\nlet violations = Projects:uiRefsData\n    :toError(\'UI must not reference Data directly\')\n\nCHECK violations" }
+    ],
     collections: [],
     types: {
       LayerViolation: {
@@ -877,6 +933,10 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
 
   http: {
     label: "http",
+    overview: "HTTP server provider. Receive incoming requests and send responses using streaming pipelines. Includes helper functions for common status codes.",
+    samples: [
+      { title: "Simple HTTP server", code: "import http\n\nfunction handle(Request) => Response {\n    StatusCode = 200,\n    Body = \'Hello, World!\',\n    ContentType = \'text/plain\'\n}\n\ncommand serve = async foreach Receive => handle => Send" }
+    ],
     collections: [],
     enums: [
       { name: "HttpMethod", values: "GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS" },
@@ -916,6 +976,10 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
 
   json: {
     label: "json",
+    overview: "JSON file loading. Parse JSON files into typed collections for querying and analysis.",
+    samples: [
+      { title: "Load and query JSON data", code: "import json\n\ntype Config = { name: string, enabled: bool }\n\nlet configs = Parse(\'settings.json\', [Config])\n\nforeach configs:enabled\n    => \'{item.name} is active\'" }
+    ],
     collections: [],
     types: {},
     predicates: [],
@@ -928,6 +992,10 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
 
   csharp: {
     label: "csharp",
+    overview: "General C# source code style checks. Detects var declarations, Thread.Sleep calls, Console usage, exception anti-patterns, and other common issues.",
+    samples: [
+      { title: "Run C# style checks", code: "import csharp\n\n# All built-in checks combined\nCHECK csharp-checks" }
+    ],
     collections: [],
     types: {},
     predicates: [
@@ -959,6 +1027,10 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
 
   "csharp-library": {
     label: "csharp-library",
+    overview: "C# library API design guidelines. Checks for dual-mode async patterns, banned parameter types, and correct async parameter usage in public APIs.",
+    samples: [
+      { title: "Check library APIs", code: "import csharp-library\n\nCHECK public-async-bool-params\nCHECK async-missing-bool-param\nCHECK unconditional-await-in-dual-mode" }
+    ],
     collections: [],
     types: {},
     predicates: [
@@ -988,6 +1060,10 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
 
   "csharp-library-client": {
     label: "csharp-library-client",
+    overview: "C# SDK client library patterns. Validates client type naming, constructor conventions, service method signatures, and model design for Azure-style client SDKs.",
+    samples: [
+      { title: "Check client conventions", code: "import csharp-library-client\n\n# Find all client types\nforeach Clients\n    => \'{Type.Name}\'\n\n# Run all client checks\nCHECK csharp-library-client-checks" }
+    ],
     collections: [],
     types: {},
     predicates: [
@@ -1017,6 +1093,10 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
 
   "csharp-library-client-azure": {
     label: "csharp-library-client-azure",
+    overview: "Azure SDK design guidelines for C#. Extends csharp-library-client with Azure-specific conventions for client construction, diagnostics, and pipeline integration.",
+    samples: [
+      { title: "Run Azure SDK checks", code: "import csharp-library-client-azure\n\nCHECK azure-client-checks" }
+    ],
     collections: [],
     types: {},
     predicates: [],
@@ -1060,6 +1140,10 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
 
   "csharp-style": {
     label: "csharp-style",
+    overview: "C# StyleCop-inspired code style checks. Enforces interface naming (I-prefix), PascalCase types and methods, single type per file, and other formatting conventions.",
+    samples: [
+      { title: "Run style checks", code: "import csharp-style\n\nCHECK interface-prefix\nCHECK type-name-casing\nCHECK method-name-casing\nCHECK single-type-per-file" }
+    ],
     collections: [],
     types: {},
     predicates: [],
@@ -1092,6 +1176,10 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
 
   python: {
     label: "python",
+    overview: "General Python source code style checks. Detects print() calls, bare except clauses, silenced exceptions, six imports, and eval() usage.",
+    samples: [
+      { title: "Run Python style checks", code: "import python\n\nCHECK python-checks" }
+    ],
     collections: [],
     types: {},
     predicates: [],
@@ -1109,6 +1197,10 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
 
   "python-library": {
     label: "python-library",
+    overview: "Python library API design guidelines. Checks for missing type hints on parameters and return types in public methods.",
+    samples: [
+      { title: "Check library APIs", code: "import python-library\n\nCHECK untyped-public-params\nCHECK missing-return-types" }
+    ],
     collections: [],
     types: {},
     predicates: [],
@@ -1122,6 +1214,10 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
 
   "python-library-client": {
     label: "python-library-client",
+    overview: "Python SDK client library patterns. Validates client naming, constructor kwargs, credential parameters, method prefixes, and async client conventions.",
+    samples: [
+      { title: "Check client conventions", code: "import python-library-client\n\nforeach Clients\n    => \'{Type.Name}\'\n\nCHECK python-client-checks" }
+    ],
     collections: [],
     types: {},
     predicates: [
@@ -1149,6 +1245,10 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
 
   "python-library-client-azure": {
     label: "python-library-client-azure",
+    overview: "Azure SDK design guidelines for Python. Extends python-library-client with Azure-specific naming, credential, and pipeline conventions.",
+    samples: [
+      { title: "Run Azure SDK checks", code: "import python-library-client-azure\n\nCHECK azure-python-client-checks" }
+    ],
     collections: [],
     types: {},
     predicates: [],
@@ -1170,6 +1270,10 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
 
   javascript: {
     label: "javascript",
+    overview: "General JavaScript/TypeScript source code style checks. Detects console calls, alert(), eval(), debugger statements, var declarations, and swallowed exceptions.",
+    samples: [
+      { title: "Run JS/TS checks", code: "import javascript\n\nCHECK javascript-checks" }
+    ],
     collections: [],
     types: {},
     predicates: [],
@@ -1187,6 +1291,10 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
 
   "javascript-library": {
     label: "javascript-library",
+    overview: "JavaScript/TypeScript library design guidelines. Checks for default exports, external Promise imports, const enums, and window global usage.",
+    samples: [
+      { title: "Check library conventions", code: "import javascript-library\n\nCHECK no-default-exports\nCHECK no-external-promises\nCHECK no-const-enums" }
+    ],
     collections: [],
     types: {},
     predicates: [],
@@ -1202,6 +1310,10 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
 
   "javascript-library-client": {
     label: "javascript-library-client",
+    overview: "JavaScript/TypeScript SDK client library patterns. Validates client naming, method prefixes, subclient patterns, and options parameter conventions.",
+    samples: [
+      { title: "Check client conventions", code: "import javascript-library-client\n\nforeach Clients\n    => \'{Type.Name}\'\n\nCHECK js-client-checks" }
+    ],
     collections: [],
     types: {},
     predicates: [
@@ -1221,6 +1333,10 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
 
   "javascript-library-client-azure": {
     label: "javascript-library-client-azure",
+    overview: "Azure SDK design guidelines for JavaScript/TypeScript. Extends javascript-library-client with Azure-specific conventions.",
+    samples: [
+      { title: "Run Azure SDK checks", code: "import javascript-library-client-azure\n\nCHECK azure-js-client-checks" }
+    ],
     collections: [],
     types: {},
     predicates: [],
@@ -1401,18 +1517,75 @@ function buildTree() {
         toggle.textContent = children.classList.contains('collapsed') ? '▶' : '▼';
       }
     } else {
-      // Toggle package expand
+      // Show package overview + toggle expand
+      document.querySelectorAll('.tree-label.active').forEach(el => el.classList.remove('active'));
+      label.classList.add('active');
+      renderPackageOverview(pkg);
       const children = label.nextElementSibling;
       const toggle = label.querySelector('.tree-toggle');
       if (children) {
-        children.classList.toggle('collapsed');
-        toggle.textContent = children.classList.contains('collapsed') ? '▶' : '▼';
+        if (children.classList.contains('collapsed')) {
+          children.classList.remove('collapsed');
+          toggle.textContent = '▼';
+        }
       }
     }
   });
 }
 
 // === CONTENT RENDERING ===
+function renderPackageOverview(pkgId) {
+  const pkg = packages[pkgId];
+  const content = document.getElementById('content');
+
+  let html = `<h1>📦 ${pkg.label}</h1>`;
+
+  if (pkg.overview) {
+    html += `<div class="pkg-overview">${pkg.overview}</div>`;
+  }
+
+  // Export summary
+  const typeCount = pkg.types ? Object.keys(pkg.types).length : 0;
+  const predCount = pkg.predicates ? pkg.predicates.length : 0;
+  const funcCount = pkg.functions ? pkg.functions.length : 0;
+  const checkCount = pkg.checks ? pkg.checks.length : 0;
+  const cmdCount = pkg.commands ? pkg.commands.length : 0;
+  const enumCount = pkg.enums ? pkg.enums.length : 0;
+
+  html += `<div class="pkg-exports">`;
+  if (typeCount > 0) html += `<a onclick="navToSection('${pkgId}','types-header')"><span class="section-tag tag-type">T</span> <span class="count">${typeCount}</span> types</a>`;
+  if (enumCount > 0) html += `<a onclick="navToSection('${pkgId}','types-header')"><span class="section-tag tag-enum">◇</span> <span class="count">${enumCount}</span> enums</a>`;
+  if (predCount > 0) html += `<a onclick="navToSection('${pkgId}','predicates')"><span class="section-tag tag-predicate">P</span> <span class="count">${predCount}</span> predicates</a>`;
+  if (funcCount > 0) html += `<a onclick="navToSection('${pkgId}','functions')"><span class="section-tag tag-function">F</span> <span class="count">${funcCount}</span> functions</a>`;
+  if (checkCount > 0) html += `<a onclick="navToSection('${pkgId}','checks')"><span class="section-tag tag-check">C</span> <span class="count">${checkCount}</span> checks</a>`;
+  if (cmdCount > 0) html += `<a onclick="navToSection('${pkgId}','commands')"><span class="section-tag tag-command">!</span> <span class="count">${cmdCount}</span> commands</a>`;
+  html += `</div>`;
+
+  // Code samples
+  if (pkg.samples && pkg.samples.length > 0) {
+    html += `<h2>Getting Started</h2>`;
+    for (const sample of pkg.samples) {
+      html += `<div class="pkg-sample">`;
+      html += `<h3>${escapeHtml(sample.title)}</h3>`;
+      html += `<pre>${highlightCop(sample.code)}</pre>`;
+      html += `</div>`;
+    }
+  }
+
+  content.innerHTML = html;
+}
+
+function navToSection(pkgId, view) {
+  const selector = view === 'types-header'
+    ? `.tree-label[data-pkg="${pkgId}"][data-section="types-header"]`
+    : `.tree-label[data-pkg="${pkgId}"][data-view="${view}"]`;
+  const label = document.querySelector(selector);
+  if (label) {
+    label.click();
+    label.scrollIntoView({ block: 'nearest' });
+  }
+}
+
 function renderType(pkgId, typeName) {
   const pkg = packages[pkgId];
   const type = pkg.types[typeName];
@@ -1769,6 +1942,30 @@ function wireUpTypeLinks(container) {
       else renderType(pkg, type);
     });
   });
+}
+
+function highlightCop(code) {
+  // Escape HTML first
+  code = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // Comments (must come first, before other replacements interfere)
+  code = code.replace(/(#[^\n]*)/g, '<span class="cop-comment">$1</span>');
+  // Strings (single-quoted)
+  code = code.replace(/'([^'\\]*(?:\\.[^'\\]*)*)'/g, '<span class="cop-str">\'$1\'</span>');
+  // Template interpolation {item.Name} inside already-processed text
+  code = code.replace(/\{([^}@]+)\}/g, '<span class="cop-template">{$1}</span>');
+  // Keywords
+  code = code.replace(/\b(import|predicate|function|let|foreach|type|check|export|command|enum|flags|if|else|async)\b/g, '<span class="cop-kw">$1</span>');
+  // Built-in commands (uppercase)
+  code = code.replace(/\b(CHECK|PRINT|SAVE|ASSERT|DEBUG)\b/g, '<span class="cop-kw">$1</span>');
+  // Built-in functions
+  code = code.replace(/\b(Where|Select|GroupBy|OrderBy|Sum|Average|Count|Reduce|Parse)\b/g, '<span class="cop-fn">$1</span>');
+  // Predicate calls (:name)
+  code = code.replace(/:([a-zA-Z][a-zA-Z0-9]*)/g, ':<span class="cop-pred">$1</span>');
+  // Operators
+  code = code.replace(/(\=&gt;|&amp;&amp;|\|\||\|&gt;)/g, '<span class="cop-op">$1</span>');
+  // Numbers
+  code = code.replace(/\b(\d+)\b/g, '<span class="cop-num">$1</span>');
+  return code;
 }
 
 function escapeHtml(str) {
