@@ -117,8 +117,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 </div>
 
 <div class="main" id="content">
-  <h1>Cop Package Reference Review</h1>
-  <p style="color:#57606a; margin-top:8px;">Select an item from the tree to view details. Click 💬 to add comments. Copy to clipboard when done.</p>
+  <h1>Cop Package Reference</h1>
+  <div class="type-overview">
+    <p><strong>Agent Cop</strong> is a static analysis tool that detects code slop — architectural violations, convention drift, and design debt that coding agents introduce at machine speed.</p>
+    <p style="margin-top:8px;">Rules are expressed in a simple DSL and enforced deterministically in CI. Here's an example check that flags types with names that don't follow conventions:</p>
+    <pre><code>import code
+
+# Types named "Client" must be sealed
+predicate unsealed(Type) => Type.Name:ew('Client') && !isSealed
+
+foreach Code.Types:unsealed => PRINT('{Type.Name} should be sealed')</code></pre>
+    <p style="margin-top:12px;">Browse the package tree on the left to explore available types, predicates, functions, and commands.</p>
+  </div>
 </div>
 
 <div class="toolbar">
