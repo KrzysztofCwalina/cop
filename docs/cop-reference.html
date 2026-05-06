@@ -139,9 +139,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 // === PACKAGE DATA ===
 const categories = [
   { name: "Core", packages: ["core", "code", "code-analysis", "code-layering", "files", "json", "markdown"] },
-  { name: ".NET", packages: ["csharp", "csharp-library", "csharp-library-client", "csharp-library-client-azure", "csharp-style"] },
-  { name: "Python", packages: ["python", "python-library", "python-library-client", "python-library-client-azure"] },
-  { name: "JavaScript", packages: ["javascript", "javascript-library", "javascript-library-client", "javascript-library-client-azure"] },
+  { name: ".NET", packages: ["csharp", "csharp-library-checks", "csharp-library-client-checks", "csharp-library-client-azure-checks", "csharp-style-checks"] },
+  { name: "Python", packages: ["python", "python-library-checks", "python-library-client-checks", "python-library-client-azure-checks"] },
+  { name: "JavaScript", packages: ["javascript", "javascript-library-checks", "javascript-library-client-checks", "javascript-library-client-azure-checks"] },
   { name: "TypeSpec", packages: ["typespec", "typespec-http"] },
   { name: "Misc", packages: ["http"] }
 ];
@@ -1039,11 +1039,11 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
     commands: []
   },
 
-  "csharp-library": {
-    label: "csharp-library",
+  "csharp-library-checks": {
+    label: "csharp-library-checks",
     overview: "C# library API design guidelines. Checks for dual-mode async patterns, banned parameter types, and correct async parameter usage in public APIs.",
     samples: [
-      { title: "Check library APIs", code: "import csharp-library\n\nCHECK public-async-bool-params\nCHECK async-missing-bool-param\nCHECK unconditional-await-in-dual-mode" }
+      { title: "Check library APIs", code: "import csharp-library-checks\n\nCHECK public-async-bool-params\nCHECK async-missing-bool-param\nCHECK unconditional-await-in-dual-mode" }
     ],
     collections: [],
     types: {},
@@ -1072,11 +1072,11 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
     commands: []
   },
 
-  "csharp-library-client": {
-    label: "csharp-library-client",
+  "csharp-library-client-checks": {
+    label: "csharp-library-client-checks",
     overview: "C# SDK client library patterns. Validates client type naming, constructor conventions, service method signatures, and model design for Azure-style client SDKs.",
     samples: [
-      { title: "Check client conventions", code: "import csharp-library-client\n\n# Find all client types\nforeach Clients\n    => \'{Type.Name}\'\n\n# Run all client checks\nCHECK csharp-library-client-checks" }
+      { title: "Check client conventions", code: "import csharp-library-client-checks\n\n# Find all client types\nforeach Clients\n    => \'{Type.Name}\'\n\n# Run all client checks\nCHECK csharp-library-client-checks" }
     ],
     collections: [],
     types: {},
@@ -1105,11 +1105,11 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
     commands: []
   },
 
-  "csharp-library-client-azure": {
-    label: "csharp-library-client-azure",
-    overview: "Azure SDK design guidelines for C#. Extends csharp-library-client with Azure-specific conventions for client construction, diagnostics, and pipeline integration.",
+  "csharp-library-client-azure-checks": {
+    label: "csharp-library-client-azure-checks",
+    overview: "Azure SDK design guidelines for C#. Extends csharp-library-client-checks with Azure-specific conventions for client construction, diagnostics, and pipeline integration.",
     samples: [
-      { title: "Run Azure SDK checks", code: "import csharp-library-client-azure\n\nCHECK azure-client-checks" }
+      { title: "Run Azure SDK checks", code: "import csharp-library-client-azure-checks\n\nCHECK azure-client-checks" }
     ],
     collections: [],
     types: {},
@@ -1152,11 +1152,11 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
     commands: []
   },
 
-  "csharp-style": {
-    label: "csharp-style",
+  "csharp-style-checks": {
+    label: "csharp-style-checks",
     overview: "C# StyleCop-inspired code style checks. Enforces interface naming (I-prefix), PascalCase types and methods, single type per file, and other formatting conventions.",
     samples: [
-      { title: "Run style checks", code: "import csharp-style\n\nCHECK interface-prefix\nCHECK type-name-casing\nCHECK method-name-casing\nCHECK single-type-per-file" }
+      { title: "Run style checks", code: "import csharp-style-checks\n\nCHECK interface-prefix\nCHECK type-name-casing\nCHECK method-name-casing\nCHECK single-type-per-file" }
     ],
     collections: [],
     types: {},
@@ -1209,11 +1209,11 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
     commands: []
   },
 
-  "python-library": {
-    label: "python-library",
+  "python-library-checks": {
+    label: "python-library-checks",
     overview: "Python library API design guidelines. Checks for missing type hints on parameters and return types in public methods.",
     samples: [
-      { title: "Check library APIs", code: "import python-library\n\nCHECK untyped-public-params\nCHECK missing-return-types" }
+      { title: "Check library APIs", code: "import python-library-checks\n\nCHECK untyped-public-params\nCHECK missing-return-types" }
     ],
     collections: [],
     types: {},
@@ -1226,11 +1226,11 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
     commands: []
   },
 
-  "python-library-client": {
-    label: "python-library-client",
+  "python-library-client-checks": {
+    label: "python-library-client-checks",
     overview: "Python SDK client library patterns. Validates client naming, constructor kwargs, credential parameters, method prefixes, and async client conventions.",
     samples: [
-      { title: "Check client conventions", code: "import python-library-client\n\nforeach Clients\n    => \'{Type.Name}\'\n\nCHECK python-client-checks" }
+      { title: "Check client conventions", code: "import python-library-client-checks\n\nforeach Clients\n    => \'{Type.Name}\'\n\nCHECK python-client-checks" }
     ],
     collections: [],
     types: {},
@@ -1257,11 +1257,11 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
     commands: []
   },
 
-  "python-library-client-azure": {
-    label: "python-library-client-azure",
-    overview: "Azure SDK design guidelines for Python. Extends python-library-client with Azure-specific naming, credential, and pipeline conventions.",
+  "python-library-client-azure-checks": {
+    label: "python-library-client-azure-checks",
+    overview: "Azure SDK design guidelines for Python. Extends python-library-client-checks with Azure-specific naming, credential, and pipeline conventions.",
     samples: [
-      { title: "Run Azure SDK checks", code: "import python-library-client-azure\n\nCHECK azure-python-client-checks" }
+      { title: "Run Azure SDK checks", code: "import python-library-client-azure-checks\n\nCHECK azure-python-client-checks" }
     ],
     collections: [],
     types: {},
@@ -1303,11 +1303,11 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
     commands: []
   },
 
-  "javascript-library": {
-    label: "javascript-library",
+  "javascript-library-checks": {
+    label: "javascript-library-checks",
     overview: "JavaScript/TypeScript library design guidelines. Checks for default exports, external Promise imports, const enums, and window global usage.",
     samples: [
-      { title: "Check library conventions", code: "import javascript-library\n\nCHECK no-default-exports\nCHECK no-external-promises\nCHECK no-const-enums" }
+      { title: "Check library conventions", code: "import javascript-library-checks\n\nCHECK no-default-exports\nCHECK no-external-promises\nCHECK no-const-enums" }
     ],
     collections: [],
     types: {},
@@ -1322,11 +1322,11 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
     commands: []
   },
 
-  "javascript-library-client": {
-    label: "javascript-library-client",
+  "javascript-library-client-checks": {
+    label: "javascript-library-client-checks",
     overview: "JavaScript/TypeScript SDK client library patterns. Validates client naming, method prefixes, subclient patterns, and options parameter conventions.",
     samples: [
-      { title: "Check client conventions", code: "import javascript-library-client\n\nforeach Clients\n    => \'{Type.Name}\'\n\nCHECK js-client-checks" }
+      { title: "Check client conventions", code: "import javascript-library-client-checks\n\nforeach Clients\n    => \'{Type.Name}\'\n\nCHECK js-client-checks" }
     ],
     collections: [],
     types: {},
@@ -1345,11 +1345,11 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
     commands: []
   },
 
-  "javascript-library-client-azure": {
-    label: "javascript-library-client-azure",
-    overview: "Azure SDK design guidelines for JavaScript/TypeScript. Extends javascript-library-client with Azure-specific conventions.",
+  "javascript-library-client-azure-checks": {
+    label: "javascript-library-client-azure-checks",
+    overview: "Azure SDK design guidelines for JavaScript/TypeScript. Extends javascript-library-client-checks with Azure-specific conventions.",
     samples: [
-      { title: "Run Azure SDK checks", code: "import javascript-library-client-azure\n\nCHECK azure-js-client-checks" }
+      { title: "Run Azure SDK checks", code: "import javascript-library-client-azure-checks\n\nCHECK azure-js-client-checks" }
     ],
     collections: [],
     types: {},
