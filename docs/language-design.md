@@ -298,9 +298,9 @@ handle req                         = Response 404 "not found"
 
 ```cop
 -- Cop:
-function handle(Request:Path.equals('/'))       => Response { ... }
-function handle(Request:Path.equals('/health')) => Response { ... }
-function handle(Request)                        => Response { ... }
+function handle(Request:Path.equals('/'))       => ok({ message: 'hello' })
+function handle(Request:Path.equals('/health')) => ok({ status: 'healthy' })
+function handle(Request)                        => notFound()
 ```
 
 The semantics are identical. The constraint after the type IS the guard.
@@ -313,9 +313,9 @@ Since predicates are extension methods, they can be used as constraints:
 predicate isGetRequest(Request) => item.Method.equals('GET')
 predicate isPostRequest(Request) => item.Method.equals('POST')
 
-function handle(Request:isGetRequest:Path.equals('/users')) => Response { ... }
-function handle(Request:isPostRequest:Path.equals('/users')) => Response { ... }
-function handle(Request) => Response { StatusCode = 405, ... }
+function handle(Request:isGetRequest:Path.equals('/users')) => ok({ users: '[]' })
+function handle(Request:isPostRequest:Path.equals('/users')) => ok({ created: true })
+function handle(Request) => Response { StatusCode = 405, Body = '{"error":"method not allowed"}', ContentType = 'application/json' }
 ```
 
 The `:` chain in the parameter is an AND of conditions — same semantics as collection filtering.
