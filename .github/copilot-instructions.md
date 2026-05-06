@@ -29,6 +29,21 @@ This publishes self-contained single-file EXEs into `install/<rid>/` subfolders.
 install/publish.ps1 -Runtimes win-x64
 ```
 
+## Regenerating Docs
+
+After any change to packages (new/renamed packages, updated doc comments, added/removed samples), regenerate the reference app:
+
+```bash
+dotnet run --project tools/copdocs -- packages --output docs/cop-reference.html
+```
+
+This reads all packages under `packages/` and generates a single-file HTML reference app. The tool discovers packages by looking for directories containing `src/*.cop` files or a manifest `.md` file. It extracts:
+
+- Types, predicates, functions, and checks from `.cop` source files (including `##` doc comments)
+- Code samples from `samples/*.cop` files within each package
+
+Always commit the regenerated `docs/cop-reference.html` alongside the package changes.
+
 ## Architecture
 
 - **cop/** — Main Cop project folder containing:
