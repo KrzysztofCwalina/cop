@@ -1,13 +1,13 @@
 import http
 
-function complete(Request) =>
+function complete(string) =>
     http.Post('https://api.example.com/v1/completions',
-        Text(Request.Body),
+        string,
         { Content-Type: 'application/json' }
     )
 
 function handle(Request:Uri:equals('/chat')) =>
-    complete(Request).Body:Text:ok
+    Request.Body:Text:complete.Body:Text:ok
 
 function handle(Request) => notFound
 

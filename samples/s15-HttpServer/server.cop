@@ -5,14 +5,14 @@
 import http
 
 # Chat endpoint — forwards request to OpenAI and returns the LLM reply
-function complete(Request) =>
-    http.Post('https://api.openai.com/v1/chat/completions', Text(Request.Body), {
+function complete(string) =>
+    http.Post('https://api.openai.com/v1/chat/completions', string, {
         Authorization: 'Bearer YOUR_API_KEY',
         Content-Type: 'application/json'
     })
 
 function handle(Request:Uri:equals('/chat')) =>
-    complete(Request).Body:Text:ok
+    Request.Body:Text:complete.Body:Text:ok
 
 function handle(Request:Uri:equals('/hello')) => ok('{"message": "Hello, World!"}')
 function handle(Request:Uri:equals('/health')) => ok
