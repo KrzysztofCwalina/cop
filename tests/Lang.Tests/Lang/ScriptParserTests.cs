@@ -25,7 +25,7 @@ public class CheckFileParserTests
         // Type.Name:endsWith("Client") → PredicateCallExpr(MemberAccessExpr(Identifier("Type"), "Name"), "endsWith", [Literal("Client")])
         Assert.That(body, Is.TypeOf<PredicateCallExpr>());
         var call = (PredicateCallExpr)body;
-        Assert.That(call.Name, Is.EqualTo("ew"));
+        Assert.That(call.Name, Is.EqualTo("endsWith"));
         Assert.That(call.Target, Is.TypeOf<MemberAccessExpr>());
     }
 
@@ -145,7 +145,7 @@ public class CheckFileParserTests
         Assert.That(check.Filters, Has.Count.EqualTo(3));
         Assert.That(check.Filters[1], Is.TypeOf<FunctionCallExpr>());
         var fc = (FunctionCallExpr)check.Filters[1];
-        Assert.That(fc.Name, Is.EqualTo("rx"));
+        Assert.That(fc.Name, Is.EqualTo("matches"));
     }
 
     [Test]
@@ -1082,7 +1082,7 @@ public class CheckFileParserTests
         Assert.That(func.Constraint, Is.Not.Null);
         Assert.That(func.Constraint, Is.TypeOf<PredicateCallExpr>());
         var pc = (PredicateCallExpr)func.Constraint!;
-        Assert.That(pc.Name, Is.EqualTo("eq"));
+        Assert.That(pc.Name, Is.EqualTo("equals"));
         Assert.That(pc.Target, Is.TypeOf<MemberAccessExpr>());
         var ma = (MemberAccessExpr)pc.Target;
         Assert.That(ma.Member, Is.EqualTo("Path"));
@@ -1127,7 +1127,7 @@ public class CheckFileParserTests
         Assert.That(outer.Name, Is.EqualTo("empty"));
         // Inner: PredicateCallExpr(MemberAccessExpr(IdentifierExpr("item"), "Method"), "equals", ["GET"])
         var inner = (PredicateCallExpr)outer.Target;
-        Assert.That(inner.Name, Is.EqualTo("eq"));
+        Assert.That(inner.Name, Is.EqualTo("equals"));
         Assert.That(inner.Target, Is.TypeOf<MemberAccessExpr>());
         var ma = (MemberAccessExpr)inner.Target;
         Assert.That(ma.Member, Is.EqualTo("Method"));
