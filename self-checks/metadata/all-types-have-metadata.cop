@@ -35,8 +35,8 @@ let tracked-providers = [
 
 # DataProvider subclasses in the providers/ directory
 predicate isProviderImpl(Type) =>
-    Type.File.Path:ct('providers/')
-    && Type.Name:ew('Provider')
+    Type.File.Path:contains('providers/')
+    && Type.Name:endsWith('Provider')
 
 predicate untrackedProvider(Type) => isProviderImpl && !Type.Name:in(tracked-providers)
 
@@ -58,7 +58,7 @@ let tracked-globals = [
 ]
 
 predicate isRuntimeGlobal(Statement) =>
-    Statement.Kind:eq('declaration')
+    Statement.Kind:equals('declaration')
     && Statement.Keywords:contains('runtime')
     && Statement.Keywords:contains('export')
 
@@ -77,10 +77,10 @@ let tracked-streaming-globals = [
 
 # DataSink subclasses in the providers/ directory
 predicate isSinkClass(Type) =>
-    Type.File.Path:ct('providers/')
-    && Type.BaseType:eq('DataSink')
+    Type.File.Path:contains('providers/')
+    && Type.BaseType:equals('DataSink')
 
-predicate untrackedSink(Type) => isSinkClass && !Type.Name:ct('Send')
+predicate untrackedSink(Type) => isSinkClass && !Type.Name:contains('Send')
 
 export let untracked-sinks = csharp.Types:untrackedSink
     :toWarning('DataSink "{item.Name}" in {item.File.Path} is not documented — add to docs/review-app.html')

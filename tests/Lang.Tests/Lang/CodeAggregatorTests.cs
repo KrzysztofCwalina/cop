@@ -294,7 +294,7 @@ import code
 
 let codebase = Code([csharp])
 let types = codebase.Types
-predicate startsWithMy(Type) => item.Name:sw('MyC')
+predicate startsWithMy(Type) => item.Name:startsWith('MyC')
 foreach types:startsWithMy => '{item.Name}'
 ", "test.cop");
 

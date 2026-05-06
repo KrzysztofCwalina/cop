@@ -422,9 +422,9 @@ let details = Clients.Select(clientInfo)
 Functions can include inline filter constraints to create pattern-matched overloads. The constraint acts as a guard — the first matching overload is selected:
 
 ```ruby
-function handle(Request:Path:eq('/')) => ok({ message: 'hello world!' })
+function handle(Request:Path:equals('/')) => ok({ message: 'hello world!' })
 
-function handle(Request:Path:eq('/health')) => ok
+function handle(Request:Path:equals('/health')) => ok
 
 function handle(Request) => notFound()
 ```
@@ -626,21 +626,6 @@ Size:notEquals(0)                     # not equal to
 | `isSet(flag)` | Flags bit is set — `(value & flag) != 0` |
 | `isClear(flag)` | Flags bit is clear — `(value & flag) == 0` |
 
-#### Short Aliases
-
-For brevity, predicates also accept short aliases:
-
-| Long form | Short | Long form | Short |
-|-----------|-------|-----------|-------|
-| `equals` | `eq` | `greaterThan` | `gt` |
-| `notEquals` | `ne` | `lessThan` | `lt` |
-| `startsWith` | `sw` | `greaterOrEqual` | `ge` |
-| `endsWith` | `ew` | `lessOrEqual` | `le` |
-| `contains` | `ct` | `containsAny` | `ca` |
-| `matches` | `rx` | `sameAs` | `sm` |
-
-Example: `Type.Name:startsWith('I')` is equivalent to the short alias `Type.Name:sw('I')`.
-
 ### String Properties
 
 ```ruby
@@ -724,7 +709,7 @@ let words = ['Get' 'Set'] + ['Create'] # → ['Get' 'Set' 'Create']
 The `+` operator also concatenates strings, including property values and literals:
 
 ```ruby
-predicate test(Statement) => Types.MethodNames:ct(Statement.MemberName + 'Async')
+predicate test(Statement) => Types.MethodNames:contains(Statement.MemberName + 'Async')
 ```
 
 #### Collection Flattening (Property Access on Lists)
@@ -734,7 +719,7 @@ Accessing a property on a collection flattens (SelectMany) that property across 
 ```ruby
 # Types.MethodNames → flat list of all method names across all types
 predicate hasAsyncVariant(Statement) =>
-    Types.MethodNames:ct(Statement.MemberName + 'Async')
+    Types.MethodNames:contains(Statement.MemberName + 'Async')
 ```
 
 #### Select and Text Examples

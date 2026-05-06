@@ -10,7 +10,7 @@ public class CheckFileParserTests
     public void Parse_SinglePredicate()
     {
         var file = ScriptParser.Parse(
-            "predicate IsClient(Type) => Type.Name:ew('Client')", "test.cop");
+            "predicate IsClient(Type) => Type.Name:endsWith('Client')", "test.cop");
         Assert.That(file.Predicates, Has.Count.EqualTo(1));
         Assert.That(file.Predicates[0].Name, Is.EqualTo("IsClient"));
         Assert.That(file.Predicates[0].ParameterType, Is.EqualTo("Type"));
@@ -20,7 +20,7 @@ public class CheckFileParserTests
     public void Parse_PredicateWithMemberAccessChain()
     {
         var file = ScriptParser.Parse(
-            "predicate IsClient(Type) => Type.Name:ew('Client')", "test.cop");
+            "predicate IsClient(Type) => Type.Name:endsWith('Client')", "test.cop");
         var body = file.Predicates[0].Body;
         // Type.Name:endsWith("Client") → PredicateCallExpr(MemberAccessExpr(Identifier("Type"), "Name"), "endsWith", [Literal("Client")])
         Assert.That(body, Is.TypeOf<PredicateCallExpr>());
@@ -49,7 +49,7 @@ public class CheckFileParserTests
     public void Parse_InlineFilterChain()
     {
         var source = """
-            predicate isClient(Type) => Type.Name:ew('Client')
+            predicate isClient(Type) => Type.Name:endsWith('Client')
             foreach Types:csharp:isClient => PRINT('WARNING: msg')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
@@ -79,7 +79,7 @@ public class CheckFileParserTests
     public void Parse_PredicateConstraint()
     {
         var source = """
-            predicate IsClient(Type:csharp) => Type.Name:ew('Client')
+            predicate IsClient(Type:csharp) => Type.Name:endsWith('Client')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         Assert.That(file.Predicates, Has.Count.EqualTo(1));
@@ -104,7 +104,7 @@ public class CheckFileParserTests
     public void Parse_NoConstraint_ConstraintIsNull()
     {
         var source = """
-            predicate isClient(Type) => Type.Name:ew('Client')
+            predicate isClient(Type) => Type.Name:endsWith('Client')
             foreach Types:isClient => PRINT('WARNING: msg')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
@@ -115,8 +115,8 @@ public class CheckFileParserTests
     public void Parse_MultiplePredicatesAndPrints()
     {
         var source = """
-            predicate isClient(Type) => Type.Name:ew('Client')
-            predicate isOptions(Type) => Type.Name:ew('Options')
+            predicate isClient(Type) => Type.Name:endsWith('Client')
+            predicate isOptions(Type) => Type.Name:endsWith('Options')
             foreach Types:isClient => PRINT('WARNING: msg1')
             foreach Types:isOptions => PRINT('INFO: msg2')
             """;
@@ -138,7 +138,7 @@ public class CheckFileParserTests
     public void Parse_FunctionCall_Path()
     {
         var source = """
-            foreach Lines:python:rx('\bprint\s*\('):!Path('**/tests/**') => PRINT('WARNING: no print')
+            foreach Lines:python:matches('\bprint\s*\('):!Path('**/tests/**') => PRINT('WARNING: no print')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         var check = file.Commands[0];
@@ -223,7 +223,7 @@ public class CheckFileParserTests
     public void Parse_DerivedCollection_ParsedAsPredicate()
     {
         var source = """
-            predicate isClient(Type) => Type.Name:ew('Client')
+            predicate isClient(Type) => Type.Name:endsWith('Client')
             predicate Clients(Types) => isClient
             foreach Clients:csharp:isClient => PRINT('WARNING: msg')
             """;
@@ -444,7 +444,7 @@ public class CheckFileParserTests
     {
         var source = """
             import code
-            predicate isClient(Type) => Type.Name:ew('Client')
+            predicate isClient(Type) => Type.Name:endsWith('Client')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         Assert.That(file.Imports, Has.Count.EqualTo(1));
@@ -456,7 +456,7 @@ public class CheckFileParserTests
     public void Parse_ImportAfterPredicate_Throws()
     {
         var source = """
-            predicate isClient(Type) => Type.Name:ew('Client')
+            predicate isClient(Type) => Type.Name:endsWith('Client')
             import code
             """;
         Assert.Throws<ParseException>(() =>
@@ -521,7 +521,7 @@ public class CheckFileParserTests
     public void Parse_LetCommand_WithFilters()
     {
         var source = """
-            predicate isClient(Type) => Type.Name:ew('Client')
+            predicate isClient(Type) => Type.Name:endsWith('Client')
             let check-clients = foreach Types:isClient => PRINT('WARNING: {item.Name}')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
@@ -1073,7 +1073,7 @@ public class CheckFileParserTests
     [Test]
     public void Parse_FunctionWithConstraint_FieldPredicate()
     {
-        var source = "function handle(Request:Path:eq('/')) => Response {\n    StatusCode = 200\n}";
+        var source = "function handle(Request:Path:equals('/')) => Response {\n    StatusCode = 200\n}";
         var file = ScriptParser.Parse(source, "test.cop");
         Assert.That(file.Functions, Has.Count.EqualTo(1));
         var func = file.Functions[0];
@@ -1117,7 +1117,7 @@ public class CheckFileParserTests
     [Test]
     public void Parse_FunctionWithConstraint_ChainedFields()
     {
-        var source = "function handle(Request:Method:eq('GET'):!empty) => Response {\n    StatusCode = 200\n}";
+        var source = "function handle(Request:Method:equals('GET'):!empty) => Response {\n    StatusCode = 200\n}";
         var file = ScriptParser.Parse(source, "test.cop");
         var func = file.Functions[0];
         Assert.That(func.Constraint, Is.Not.Null);

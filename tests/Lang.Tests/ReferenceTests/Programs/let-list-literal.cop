@@ -3,5 +3,5 @@
 
 import csharp
 let badNames = ['Bad', 'Evil', 'Wrong']
-predicate hasBadPrefix(Type) => Type.Name:sw(badNames)
+predicate hasBadPrefix(Type) => Type.Name:startsWith(badNames)
 foreach csharp.Types:hasBadPrefix => '{item.Name}'

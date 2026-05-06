@@ -2,5 +2,5 @@
 # @expect output-contains: GoodClient
 
 import csharp
-predicate nameIsGoodClient(Type) => Type.Name:eq('GoodClient')
+predicate nameIsGoodClient(Type) => Type.Name:equals('GoodClient')
 foreach csharp.Types:nameIsGoodClient => '{item.Name}'

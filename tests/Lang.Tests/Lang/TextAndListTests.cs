@@ -103,7 +103,7 @@ public class TextAndListTests
     {
         var source = """
             let Keywords = ['Test' 'Bench' 'Perf']
-            predicate test(Type) => Type.Name:ca(Keywords)
+            predicate test(Type) => Type.Name:containsAny(Keywords)
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         Assert.That(file.LetDeclarations, Has.Count.EqualTo(1));
@@ -119,7 +119,7 @@ public class TextAndListTests
     {
         var source = """
             let Empty = []
-            predicate test(Type) => Type.Name:ca(Empty)
+            predicate test(Type) => Type.Name:containsAny(Empty)
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         Assert.That(file.LetDeclarations[0].IsValueBinding, Is.True);
@@ -131,7 +131,7 @@ public class TextAndListTests
     [Test]
     public void ContainsAny_InlineList_Match()
     {
-        var source = """predicate test(Type) => Type.Name:ca(['Fo' 'Bar'])""";
+        var source = """predicate test(Type) => Type.Name:containsAny(['Fo' 'Bar'])""";
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -145,7 +145,7 @@ public class TextAndListTests
     [Test]
     public void ContainsAny_InlineList_NoMatch()
     {
-        var source = """predicate test(Type) => Type.Name:ca(['Bar' 'Baz'])""";
+        var source = """predicate test(Type) => Type.Name:containsAny(['Bar' 'Baz'])""";
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -159,7 +159,7 @@ public class TextAndListTests
     [Test]
     public void ContainsAny_EmptyList_ReturnsFalse()
     {
-        var source = """predicate test(Type) => Type.Name:ca([])""";
+        var source = """predicate test(Type) => Type.Name:containsAny([])""";
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -175,7 +175,7 @@ public class TextAndListTests
     {
         var source = """
             let Keywords = ['Fo' 'Bar']
-            predicate test(Type) => Type.Name:ca(Keywords)
+            predicate test(Type) => Type.Name:containsAny(Keywords)
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         var letDecls = new Dictionary<string, LetDeclaration>
@@ -196,7 +196,7 @@ public class TextAndListTests
     {
         var source = """
             let Keywords = ['Bar' 'Baz']
-            predicate test(Type) => Type.Name:ca(Keywords)
+            predicate test(Type) => Type.Name:containsAny(Keywords)
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         var letDecls = new Dictionary<string, LetDeclaration>
@@ -215,7 +215,7 @@ public class TextAndListTests
     [Test]
     public void ContainsAny_Negated()
     {
-        var source = """predicate test(Type) => !Type.Name:ca(['Test' 'Bench'])""";
+        var source = """predicate test(Type) => !Type.Name:containsAny(['Test' 'Bench'])""";
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -345,7 +345,7 @@ public class TextAndListTests
     [Test]
     public void Contains_CaseInsensitive_ByDefault()
     {
-        var source = """predicate test(Type) => Type.Name:ct('fo')""";
+        var source = """predicate test(Type) => Type.Name:contains('fo')""";
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -359,7 +359,7 @@ public class TextAndListTests
     [Test]
     public void StartsWith_CaseInsensitive_ByDefault()
     {
-        var source = """predicate test(Type) => Type.Name:sw('fo')""";
+        var source = """predicate test(Type) => Type.Name:startsWith('fo')""";
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -373,7 +373,7 @@ public class TextAndListTests
     [Test]
     public void EndsWith_CaseInsensitive_ByDefault()
     {
-        var source = """predicate test(Type) => Type.Name:ew('OO')""";
+        var source = """predicate test(Type) => Type.Name:endsWith('OO')""";
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -401,7 +401,7 @@ public class TextAndListTests
     [Test]
     public void Matches_StillCaseSensitive()
     {
-        var source = """predicate test(Type) => Type.Name:rx('^Foo$')""";
+        var source = """predicate test(Type) => Type.Name:matches('^Foo$')""";
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -576,12 +576,12 @@ public class TextAndListTests
         Assert.That(r2, Is.True);
     }
 
-    // --- :sm() predicate (convention-insensitive equality) ---
+    // --- :sameAs() predicate (convention-insensitive equality) ---
 
     [Test]
     public void Same_PascalVsSnake()
     {
-        var source = """predicate test(Type) => Type.Name:sm('foo_bar')""";
+        var source = """predicate test(Type) => Type.Name:sameAs('foo_bar')""";
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -595,7 +595,7 @@ public class TextAndListTests
     [Test]
     public void Same_CamelVsPascal()
     {
-        var source = """predicate test(Type) => Type.Name:sm('fooBar')""";
+        var source = """predicate test(Type) => Type.Name:sameAs('fooBar')""";
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -609,7 +609,7 @@ public class TextAndListTests
     [Test]
     public void Same_NoMatch()
     {
-        var source = """predicate test(Type) => Type.Name:sm('baz_qux')""";
+        var source = """predicate test(Type) => Type.Name:sameAs('baz_qux')""";
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -623,7 +623,7 @@ public class TextAndListTests
     [Test]
     public void Same_CrossLanguage_ConfigureAwait()
     {
-        var source = """predicate test(Type) => Type.Name:sm('configure_await')""";
+        var source = """predicate test(Type) => Type.Name:sameAs('configure_await')""";
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -666,7 +666,7 @@ public class TextAndListTests
         // Test that a computed string (Name + 'Async') can be passed to :contains on a list
         var source = """
             let Methods = ['FooAsync' 'BarAsync' 'Baz']
-            predicate test(Type) => Methods:ct(Type.Name + 'Async')
+            predicate test(Type) => Methods:contains(Type.Name + 'Async')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         var letDecls = new Dictionary<string, LetDeclaration>
@@ -687,7 +687,7 @@ public class TextAndListTests
     {
         var source = """
             let Methods = ['FooAsync' 'BarAsync']
-            predicate test(Type) => Methods:ct(Type.Name + 'Async')
+            predicate test(Type) => Methods:contains(Type.Name + 'Async')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         var letDecls = new Dictionary<string, LetDeclaration>
@@ -709,7 +709,7 @@ public class TextAndListTests
     public void CollectionFlatten_AccessPropertyAcrossListItems()
     {
         // Types.MethodNames should flatten all method names across all types into one list
-        var source = """predicate test(Type) => Types.MethodNames:ct(Type.Name + 'Async')""";
+        var source = """predicate test(Type) => Types.MethodNames:contains(Type.Name + 'Async')""";
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {

@@ -3,5 +3,5 @@
 
 import csharp
 let prefix = 'Good'
-predicate startsWithPrefix(Type) => Type.Name:sw(prefix)
+predicate startsWithPrefix(Type) => Type.Name:startsWith(prefix)
 foreach csharp.Types:startsWithPrefix => '{item.Name}'

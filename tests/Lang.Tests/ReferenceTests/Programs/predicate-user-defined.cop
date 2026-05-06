@@ -2,5 +2,5 @@
 # @expect output-contains: GoodClient
 
 import csharp
-predicate isSealdGood(Type) => isSealed && Type.Name:sw('Good')
+predicate isSealdGood(Type) => isSealed && Type.Name:startsWith('Good')
 foreach csharp.Types:isSealdGood => '{item.Name}'

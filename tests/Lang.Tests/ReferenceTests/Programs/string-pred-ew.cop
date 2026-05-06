@@ -2,5 +2,5 @@
 # @expect output-contains: GoodClient
 
 import csharp
-predicate nameEndsClient(Type) => Type.Name:ew('Client')
+predicate nameEndsClient(Type) => Type.Name:endsWith('Client')
 foreach csharp.Types:nameEndsClient => '{item.Name}'

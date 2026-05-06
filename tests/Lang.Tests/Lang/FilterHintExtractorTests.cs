@@ -319,7 +319,7 @@ public class FilterHintExtractorTests
     [Test]
     public void InlinePredicate_StringOpBody()
     {
-        // predicate csharp(TestItem) => TestItem.Extension:eq('.cs')
+        // predicate csharp(TestItem) => TestItem.Extension:equals('.cs')
         var preds = new Dictionary<string, List<PredicateDefinition>>
         {
             ["csharp"] = [new PredicateDefinition("csharp", "TestItem", null,
@@ -561,7 +561,7 @@ public class FilterHintExtractorTests
         Assert.That(hints, Is.Null);
     }
 
-    // --- Combined chain: DiskFiles:Depth:lt(3):Size:gt(100):Extension:eq('.cs') ---
+    // --- Combined chain: DiskFiles:Depth:lessThan(3):Size:greaterThan(100):Extension:equals('.cs') ---
 
     [Test]
     public void CombinedChain_MultiplePredicateTypes()

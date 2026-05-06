@@ -2,5 +2,5 @@
 # @expect no-output
 
 import csharp
-predicate isAbstractGood(Type) => isAbstract && Type.Name:sw('Good')
+predicate isAbstractGood(Type) => isAbstract && Type.Name:startsWith('Good')
 foreach csharp.Types:isAbstractGood => '{item.Name}'

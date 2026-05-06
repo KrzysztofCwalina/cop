@@ -132,7 +132,7 @@ public class TypeBinderTests
         var file = ScriptParser.Parse(
             """
             import code
-            predicate nameCheck(Type) => Type.Name:ew('Client')
+            predicate nameCheck(Type) => Type.Name:endsWith('Client')
             """, "test.cop");
 
         var errors = binder.Bind(file);

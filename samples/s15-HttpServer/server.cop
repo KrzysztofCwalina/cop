@@ -5,13 +5,13 @@
 import http
 
 # Route handlers using constrained overloads
-function handle(Request:Path:eq('/')) => Response {
+function handle(Request:Path:equals('/')) => Response {
     StatusCode = 200
     Body = '{"message":"hello world!"}'
     ContentType = 'application/json'
 }
 
-function handle(Request:Path:eq('/health')) => Response {
+function handle(Request:Path:equals('/health')) => Response {
     StatusCode = 200
     Body = '{"status":"healthy"}'
     ContentType = 'application/json'

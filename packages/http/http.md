@@ -19,7 +19,7 @@ Import with `import http` to build web APIs using cop's pipeline syntax.
 ```cop
 import http
 
-function handle(Request:Uri:eq('/hello')) => ok({ message: 'Hello, World!' })
+function handle(Request:Uri:equals('/hello')) => ok({ message: 'Hello, World!' })
 
 async foreach Requests => handle => RESPONSES
 ```

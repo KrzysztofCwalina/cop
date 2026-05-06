@@ -466,7 +466,7 @@ public class PredicateEvaluatorTests
     [Test]
     public void PropertyAccess_First_ChainsWithTypeMethod()
     {
-        // Parameters.First.Type:ew("ServiceVersion")
+        // Parameters.First.Type:endsWith("ServiceVersion")
         var eval = CreateEvaluator();
         var ctor = new MethodDeclaration(".ctor", Modifier.Public, [], null, [
             new ParameterDeclaration("version", TR("ServiceVersion"), false, false, false, 1)
@@ -702,7 +702,7 @@ public class PredicateEvaluatorTests
             new MethodDeclaration("ListBlobs", Modifier.Public, [], TR("void"), [], 2)
         ]);
 
-        // Type.Methods:none(item.Name:sw("Delete")) — should be true (no Delete methods)
+        // Type.Methods:none(item.Name:startsWith("Delete")) — should be true (no Delete methods)
         var inlineExpr = new PredicateCallExpr(
             new MemberAccessExpr(new IdentifierExpr("item"), "Name"),
             "startsWith", [new LiteralExpr("Delete")]);
@@ -774,7 +774,7 @@ public class PredicateEvaluatorTests
         var eval = CreateEvaluator();
         var type = MakeType("BlobClient", baseTypes: ["ServiceClient", "IDisposable"]);
 
-        // Type.BaseTypes:any(item:ct("Service"))
+        // Type.BaseTypes:any(item:contains("Service"))
         var inlineExpr = new PredicateCallExpr(
             new IdentifierExpr("item"),
             "contains", [new LiteralExpr("Service")]);
@@ -931,7 +931,7 @@ public class PredicateEvaluatorTests
             Usings = ["System", "System.IO", "Microsoft.Extensions"]
         };
 
-        // File.Usings:any(item:ct("System.IO"))
+        // File.Usings:any(item:contains("System.IO"))
         var inlineExpr = new PredicateCallExpr(
             new IdentifierExpr("item"),
             "contains", [new LiteralExpr("System.IO")]);
@@ -951,7 +951,7 @@ public class PredicateEvaluatorTests
             Usings = ["System", "System.Collections"]
         };
 
-        // File.Usings:none(item:sw("Microsoft"))
+        // File.Usings:none(item:startsWith("Microsoft"))
         var inlineExpr = new PredicateCallExpr(
             new IdentifierExpr("item"),
             "startsWith", [new LiteralExpr("Microsoft")]);
@@ -1354,7 +1354,7 @@ public class PredicateEvaluatorTests
     {
         var registry = new TypeRegistry();
 
-        // Two overloads: one constrained to Path:eq('/'), one unconstrained
+        // Two overloads: one constrained to Path:equals('/'), one unconstrained
         // Constraint: PredicateCallExpr(MemberAccessExpr(IdentifierExpr("item"), "Path"), "equals", ["/"])
         var constrained = new FunctionDefinition(
             "handle", "Request", "Response", [],

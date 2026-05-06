@@ -2,5 +2,5 @@
 # @expect output-contains: GoodClient
 
 import csharp
-predicate nameContains(Type) => Type.Name:ct('oodCl')
+predicate nameContains(Type) => Type.Name:contains('oodCl')
 foreach csharp.Types:nameContains => '{item.Name}'

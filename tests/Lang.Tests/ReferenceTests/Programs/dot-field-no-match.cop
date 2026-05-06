@@ -2,5 +2,5 @@
 # @expect no-output
 
 import csharp
-predicate noMatch(Type) => Type.Name:eq('NonExistent')
+predicate noMatch(Type) => Type.Name:equals('NonExistent')
 foreach csharp.Types:noMatch => '{item.Name}'

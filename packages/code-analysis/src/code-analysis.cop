@@ -175,4 +175,4 @@ export command CHECK(violations) = foreach violations => '{item.File@dim}({item.
 export predicate isSyncWhenAsyncExists(Statement) =>
     Statement.Kind:equals('call')
     && Statement.MemberName:endsWith('Async') == false
-    && Types.MethodNames:ct(Statement.MemberName + 'Async')
+    && Types.MethodNames:contains(Statement.MemberName + 'Async')

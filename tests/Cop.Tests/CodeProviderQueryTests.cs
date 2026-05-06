@@ -95,7 +95,7 @@ public class CodeProviderQueryTests
     [Test]
     public void Filter_NameEndsWith_ReturnsOnlyMatchingTypes()
     {
-        // Query: Types where Name:ew('Provider')
+        // Query: Types where Name:endsWith('Provider')
         var filters = new Dictionary<string, FilterExpression>
         {
             ["Types"] = new StringOpFilter("Name", StringOp.EndsWith, "Provider")
@@ -111,7 +111,7 @@ public class CodeProviderQueryTests
     [Test]
     public void Filter_NameStartsWith_ReturnsOnlyMatchingTypes()
     {
-        // Query: Types where Name:sw('Graph')
+        // Query: Types where Name:startsWith('Graph')
         var filters = new Dictionary<string, FilterExpression>
         {
             ["Types"] = new StringOpFilter("Name", StringOp.StartsWith, "Graph")
@@ -129,7 +129,7 @@ public class CodeProviderQueryTests
     [Test]
     public void Filter_NameContains_ReturnsOnlyMatchingTypes()
     {
-        // Query: Types where Name:ct('Service')
+        // Query: Types where Name:contains('Service')
         var filters = new Dictionary<string, FilterExpression>
         {
             ["Types"] = new StringOpFilter("Name", StringOp.Contains, "Service")
@@ -181,7 +181,7 @@ public class CodeProviderQueryTests
     [Test]
     public void Filter_AndCombination_PublicAndEndsWith()
     {
-        // Query: Types where Modifiers:isSet(Public) AND Name:ew('Client')
+        // Query: Types where Modifiers:isSet(Public) AND Name:endsWith('Client')
         var filters = new Dictionary<string, FilterExpression>
         {
             ["Types"] = FilterExpression.And(
@@ -200,7 +200,7 @@ public class CodeProviderQueryTests
     [Test]
     public void Filter_OrCombination_ProviderOrClient()
     {
-        // Query: Types where Name:ew('Provider') OR Name:ew('Client')
+        // Query: Types where Name:endsWith('Provider') OR Name:endsWith('Client')
         var filters = new Dictionary<string, FilterExpression>
         {
             ["Types"] = FilterExpression.Or(
@@ -219,7 +219,7 @@ public class CodeProviderQueryTests
     [Test]
     public void Filter_NotCombination_ExcludesInterfaces()
     {
-        // Query: Types where NOT Kind:eq('Interface')
+        // Query: Types where NOT Kind:equals('Interface')
         var filters = new Dictionary<string, FilterExpression>
         {
             ["Types"] = new NotFilter(new StringOpFilter("Kind", StringOp.Equals, "Interface"))
@@ -237,7 +237,7 @@ public class CodeProviderQueryTests
     [Test]
     public void Filter_OnStatements_ByKind_ReturnsOnlyMatchingStatements()
     {
-        // Query: Statements where Kind:eq('return')
+        // Query: Statements where Kind:equals('return')
         var filters = new Dictionary<string, FilterExpression>
         {
             ["Statements"] = new StringOpFilter("Kind", StringOp.Equals, "return")

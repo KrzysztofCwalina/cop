@@ -20,7 +20,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .tree-icon { margin-right: 6px; font-size: 12px; }
 .tree-children { padding-left: 16px; }
 .tree-children.collapsed { display: none; }
-.category-label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #57606a; letter-spacing: 0.5px; padding: 12px 16px 4px; }
+.category-label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #57606a; letter-spacing: 0.5px; padding: 12px 16px 4px; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+.category-label:hover { color: #0969da; }
+.category-label .tree-toggle { font-size: 10px; }
+.category-children { padding-left: 0; }
+.category-children.collapsed { display: none; }
 
 /* Main content */
 .main { flex: 1; overflow-y: auto; padding: 32px 48px; max-width: 960px; }
@@ -945,7 +949,7 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
     label: "http",
     overview: "HTTP server provider. Receive incoming requests and send responses using streaming pipelines. Includes helper functions for common status codes.",
     samples: [
-      { title: "HTTP server with routing", code: "import http\n\nfunction handle(Request:Uri:eq('/hello')) => ok({ message: 'Hello, World!' })\n\nfunction handle(Request:Uri:eq('/health')) => ok\n\nfunction handle(Request) => notFound\n\nasync foreach Requests => handle => RESPONSES" }
+      { title: "HTTP server with routing", code: "import http\n\nfunction handle(Request:Uri:equals('/hello')) => ok({ message: 'Hello, World!' })\n\nfunction handle(Request:Uri:equals('/health')) => ok\n\nfunction handle(Request) => notFound\n\nasync foreach Requests => handle => RESPONSES" }
     ],
     collections: [],
     enums: [
@@ -1372,8 +1376,24 @@ function buildTree() {
 
   for (const cat of categories) {
     const catDiv = document.createElement('div');
-    catDiv.innerHTML = `<div class="category-label">${cat.name}</div>`;
-    tree.appendChild(catDiv);
+    catDiv.className = 'tree-category';
+    const isCore = cat.name === 'Core';
+    catDiv.innerHTML = `
+      <div class="category-label" data-category="${cat.name}">
+        <span class="tree-toggle">${isCore ? '▼' : '▶'}</span>
+        ${cat.name}
+      </div>
+      <div class="category-children${isCore ? '' : ' collapsed'}"></div>
+    `;
+    const catChildrenDiv = catDiv.querySelector('.category-children');
+
+    // Category label click toggles collapse
+    catDiv.querySelector('.category-label').addEventListener('click', (e) => {
+      const children = catDiv.querySelector('.category-children');
+      const toggle = catDiv.querySelector('.category-label .tree-toggle');
+      children.classList.toggle('collapsed');
+      toggle.textContent = children.classList.contains('collapsed') ? '▶' : '▼';
+    });
 
     for (const pkgId of cat.packages) {
       const pkg = packages[pkgId];
@@ -1493,8 +1513,9 @@ function buildTree() {
         childrenDiv.appendChild(secNode);
       }
 
-      tree.appendChild(pkgNode);
+      catChildrenDiv.appendChild(pkgNode);
     }
+    tree.appendChild(catDiv);
   }
 
   // Event delegation
@@ -1981,7 +2002,7 @@ function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-var homeCode = "import code\n\n# Types named 'Client' must be sealed\npredicate unsealed(Type) => Type.Name:ew('Client') && !isSealed\n\nforeach Code.Types:unsealed => PRINT('{Type.Name} should be sealed')";
+var homeCode = "import code\n\n# Types named 'Client' must be sealed\npredicate unsealed(Type) => Type.Name:endsWith('Client') && !isSealed\n\nforeach Code.Types:unsealed => PRINT('{Type.Name} should be sealed')";
 
 function showHome() {
   var content = document.getElementById('content');

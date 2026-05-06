@@ -2,5 +2,5 @@
 # @expect no-output
 
 import csharp
-predicate nameStartsZZZ(Type) => Type.Name:sw('ZZZ')
+predicate nameStartsZZZ(Type) => Type.Name:startsWith('ZZZ')
 foreach csharp.Types:nameStartsZZZ => '{item.Name}'
