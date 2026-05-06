@@ -124,9 +124,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
     <pre><code>import code
 
 # Types named "Client" must be sealed
-predicate unsealed(Type) => Type.Name:ew('Client') && !isSealed
+predicate unsealed(Type) =&gt; Type.Name:ew('Client') &amp;&amp; !isSealed
 
-foreach Code.Types:unsealed => PRINT('{Type.Name} should be sealed')</code></pre>
+foreach Code.Types:unsealed =&gt; PRINT('{Type.Name} should be sealed')</code></pre>
     <p style="margin-top:12px;">Browse the package tree on the left to explore available types, predicates, functions, and commands.</p>
   </div>
 </div>
