@@ -726,13 +726,13 @@ public class PredicateEvaluator
             var arg0 = args.Count > 0 ? Eval(args[0], item, paramType, ctx) : null;
             return predicate switch
             {
-                "equals" => str.Equals(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
-                "notEquals" => !str.Equals(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
-                "endsWith" => str.EndsWith(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
-                "startsWith" => str.StartsWith(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
-                "contains" => str.Contains(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
-                "containsAny" => ContainsAny(str, arg0),
-                "matches" => Regex.IsMatch(str, arg0?.ToString() ?? "",
+                "equals" or "eq" => str.Equals(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
+                "notEquals" or "ne" => !str.Equals(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
+                "endsWith" or "ew" => str.EndsWith(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
+                "startsWith" or "sw" => str.StartsWith(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
+                "contains" or "ct" => str.Contains(arg0?.ToString() ?? "", StringComparison.OrdinalIgnoreCase),
+                "containsAny" or "ca" => ContainsAny(str, arg0),
+                "matches" or "rx" => Regex.IsMatch(str, arg0?.ToString() ?? "",
                     RegexOptions.None, TimeSpan.FromSeconds(1)),
                 "Trim" => arg0 is not null && str.EndsWith(arg0.ToString()!, StringComparison.OrdinalIgnoreCase)
                     ? str[..^arg0.ToString()!.Length] : str,
@@ -740,7 +740,7 @@ public class PredicateEvaluator
                     ? str.Replace(arg0.ToString()!, args.Count > 1
                         ? Eval(args[1], item, paramType, ctx)?.ToString() ?? "" : "", StringComparison.OrdinalIgnoreCase)
                     : str,
-                "sameAs" => NormalizeIdentifier(str) == NormalizeIdentifier(arg0?.ToString() ?? ""),
+                "sameAs" or "sm" => NormalizeIdentifier(str) == NormalizeIdentifier(arg0?.ToString() ?? ""),
                 "empty" => (object)(str.Length == 0),
                 _ => throw new InvalidOperationException($"Unknown string predicate '{predicate}'")
             };
@@ -753,12 +753,12 @@ public class PredicateEvaluator
             var arg0 = args.Count > 0 ? ToDouble(Eval(args[0], item, paramType, ctx)) : 0;
             return predicate switch
             {
-                "equals" => num == arg0,
-                "notEquals" => num != arg0,
-                "greaterThan" => num > arg0,
-                "lessThan" => num < arg0,
-                "greaterOrEqual" => num >= arg0,
-                "lessOrEqual" => num <= arg0,
+                "equals" or "eq" => num == arg0,
+                "notEquals" or "ne" => num != arg0,
+                "greaterThan" or "gt" => num > arg0,
+                "lessThan" or "lt" => num < arg0,
+                "greaterOrEqual" or "ge" => num >= arg0,
+                "lessOrEqual" or "le" => num <= arg0,
                 "isSet" => ((long)num & (long)arg0) != 0,
                 "isClear" => ((long)num & (long)arg0) == 0,
                 _ => throw new InvalidOperationException($"Unknown numeric predicate '{predicate}'")
@@ -860,7 +860,7 @@ public class PredicateEvaluator
                 }
                 return result;
             }
-            case "contains":
+            case "contains" or "ct":
             {
                 var value = Eval(args[0], item, paramType, ctx)?.ToString();
                 foreach (var collItem in collection)
@@ -1104,7 +1104,7 @@ public class PredicateEvaluator
                 }
                 return result;
             }
-            case "containsAny":
+            case "containsAny" or "ca":
             {
                 // Check if the collection contains any element from the argument list
                 var argVal = Eval(args[0], item, paramType, ctx);

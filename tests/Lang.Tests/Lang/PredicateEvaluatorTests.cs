@@ -1045,7 +1045,7 @@ public class PredicateEvaluatorTests
         var body = pred.Body as PredicateCallExpr;
         Assert.That(body, Is.Not.Null);
         Assert.That(body!.Negated, Is.True);
-        Assert.That(body.Name, Is.EqualTo("endsWith"));
+        Assert.That(body.Name, Is.EqualTo("ew"));
     }
 
     #endregion

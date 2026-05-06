@@ -425,8 +425,6 @@ public class ScriptParser
             bool negated = Current.Kind == TokenKind.Not;
             if (negated) Advance();
             var constraintIdent = Expect(TokenKind.Identifier);
-            var normalizedName = NormalizePredicateName(constraintIdent.Value);
-
             // First segment could be a field name (followed by another ':' or '(') or a bare predicate
             if (Current.Kind == TokenKind.LParen)
             {
@@ -434,7 +432,7 @@ public class ScriptParser
                 Advance();
                 var args = ParseArgList();
                 Expect(TokenKind.RParen);
-                constraint = new PredicateCallExpr(new IdentifierExpr("item"), normalizedName, args, negated);
+                constraint = new PredicateCallExpr(new IdentifierExpr("item"), constraintIdent.Value, args, negated);
             }
             else if (Current.Kind == TokenKind.Colon)
             {
@@ -448,17 +446,16 @@ public class ScriptParser
                     bool neg = Current.Kind == TokenKind.Not;
                     if (neg) Advance();
                     var predName = Expect(TokenKind.Identifier);
-                    var normalized = NormalizePredicateName(predName.Value);
                     if (Current.Kind == TokenKind.LParen)
                     {
                         Advance();
                         var args = ParseArgList();
                         Expect(TokenKind.RParen);
-                        chainExpr = new PredicateCallExpr(chainExpr, normalized, args, neg);
+                        chainExpr = new PredicateCallExpr(chainExpr, predName.Value, args, neg);
                     }
                     else
                     {
-                        chainExpr = new PredicateCallExpr(chainExpr, normalized, [], neg);
+                        chainExpr = new PredicateCallExpr(chainExpr, predName.Value, [], neg);
                     }
                 }
                 constraint = chainExpr;
@@ -466,7 +463,7 @@ public class ScriptParser
             else
             {
                 // Bare predicate name (no args, no further chain): e.g., Request:isPublic
-                constraint = new IdentifierExpr(normalizedName);
+                constraint = new IdentifierExpr(constraintIdent.Value);
             }
         }
         else if (Current.Kind == TokenKind.Colon)
@@ -1280,17 +1277,16 @@ public class ScriptParser
                     Advance();
                 }
                 var predName = Expect(TokenKind.Identifier);
-                var normalizedName = NormalizePredicateName(predName.Value);
                 if (Current.Kind == TokenKind.LParen)
                 {
                     Advance();
                     var args = ParseArgList();
                     Expect(TokenKind.RParen);
-                    expr = new PredicateCallExpr(expr, normalizedName, args, negated);
+                    expr = new PredicateCallExpr(expr, predName.Value, args, negated);
                 }
                 else
                 {
-                    expr = new PredicateCallExpr(expr, normalizedName, [], negated);
+                    expr = new PredicateCallExpr(expr, predName.Value, [], negated);
                 }
             }
             else
@@ -1438,20 +1434,4 @@ public class ScriptParser
     }
 
     /// <summary>Expands legacy 2-letter predicate abbreviations to their full camelCase names.</summary>
-    private static string NormalizePredicateName(string name) => name switch
-    {
-        "eq" => "equals",
-        "ne" => "notEquals",
-        "sw" => "startsWith",
-        "ew" => "endsWith",
-        "ct" => "contains",
-        "ca" => "containsAny",
-        "rx" => "matches",
-        "sm" => "sameAs",
-        "gt" => "greaterThan",
-        "lt" => "lessThan",
-        "ge" => "greaterOrEqual",
-        "le" => "lessOrEqual",
-        _ => name
-    };
 }
