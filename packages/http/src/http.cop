@@ -26,6 +26,13 @@ export type Request = {
     ContentType : ContentType
 }
 
+# Creates a 200 OK response with JSON body from a string value
+export function ok(string) => Response {
+    StatusCode = 200,
+    Body = string,
+    ContentType = 'application/json'
+}
+
 # Creates a 200 OK response with JSON body
 export function ok(Request, body: string) => Response {
     StatusCode = 200,

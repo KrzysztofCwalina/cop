@@ -201,7 +201,16 @@ const packages = {
   "code": {
     "label": "code",
     "overview": "Core type definitions for source code structural analysis",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Find long methods",
+        "code": "import code\r\n\r\npredicate isLong(Method) =>\r\n    Method.LineCount:greaterThan(50)\r\n\r\nforeach Types => '{Type.Name}'\r\n    :Methods:isLong\r\n    => '  {Method.Name} ({Method.LineCount} lines)'"
+      },
+      {
+        "title": "List all public classes",
+        "code": "import code\r\n\r\nforeach Types:isPublic\r\n  => '{Type.Name} ({Type.Kind})'"
+      }
+    ],
     "collections": [],
     "enums": [
       {
@@ -1063,7 +1072,12 @@ const packages = {
   "code-analysis": {
     "label": "code-analysis",
     "overview": "",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Create a simple check",
+        "code": "import code\r\nimport code-analysis\r\n\r\npredicate isTooLarge(Type) =>\r\n    Type.Methods.Count:greaterThan(20)\r\n\r\nlet violations = Types:isTooLarge\r\n    :toWarning('Type {item.Name} has too many methods')\r\n\r\nCHECK violations"
+      }
+    ],
     "collections": [],
     "enums": [
       {
@@ -1231,7 +1245,12 @@ const packages = {
   "code-layering": {
     "label": "code-layering",
     "overview": "Formal architecture layer definitions and dependency direction checks",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Enforce layering rules",
+        "code": "import code-layering\r\n\r\nlet ui-projects = ['MyApp.Web' 'MyApp.Api']\r\nlet data-projects = ['MyApp.Data' 'MyApp.EF']\r\n\r\npredicate uiRefsData(Project) =>\r\n    Project.Name:in(ui-projects)\r\n    && Project.References:containsAny(data-projects)\r\n\r\nlet violations = Projects:uiRefsData\r\n    :toError('UI must not reference Data directly')\r\n\r\nCHECK violations"
+      }
+    ],
     "collections": [],
     "types": {
       "LayerViolation": {
@@ -1321,7 +1340,20 @@ const packages = {
   "core": {
     "label": "core",
     "overview": "Structural analysis of .cop source files — types, predicates, functions, imports",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Hello world",
+        "code": "PRINT 'Hello, World!'"
+      },
+      {
+        "title": "String and collection operations",
+        "code": "let names = ['Alice' 'Bob' 'Charlie' 'Diana']\r\nlet count = names.Count\r\nlet first = names.First\r\n\r\nPRINT '{count} people, first is {first}'\r\n\r\nforeach names => 'Hello, {item}!'"
+      },
+      {
+        "title": "Variables and arithmetic",
+        "code": "let x = 10\r\nlet y = 3\r\nlet sum = x + y\r\nlet product = x * y\r\n\r\nPRINT 'Sum: {sum}, Product: {product}'"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -1385,7 +1417,12 @@ const packages = {
   "csharp-checks": {
     "label": "csharp-checks",
     "overview": "Core C# coding conventions and best practices for coding agents",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Run csharp style checks",
+        "code": "import csharp\r\n\r\n# All built-in checks combined\r\nCHECK csharp-checks"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [
@@ -1481,7 +1518,12 @@ const packages = {
   "csharp-library-checks": {
     "label": "csharp-library-checks",
     "overview": "Library design conventions for .NET class libraries",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Check library apis",
+        "code": "import csharp-library-checks\r\n\r\nCHECK public-async-bool-params\r\nCHECK async-missing-bool-param\r\nCHECK unconditional-await-in-dual-mode"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [
@@ -1575,7 +1617,12 @@ const packages = {
   "csharp-library-client-azure-checks": {
     "label": "csharp-library-client-azure-checks",
     "overview": "Azure SDK patterns for client library development using Azure.Core or System.ClientModel with TokenCredential support",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Run azure sdk checks",
+        "code": "import csharp-library-client-azure-checks\r\n\r\nCHECK azure-client-checks"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -1719,7 +1766,12 @@ const packages = {
   "csharp-library-client-checks": {
     "label": "csharp-library-client-checks",
     "overview": "Patterns for building client libraries including retry, pagination, and long-running operations",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Check client conventions",
+        "code": "import csharp-library-client-checks\r\n\r\n# Find all client types\r\nforeach Clients\r\n    => '{Type.Name}'\r\n\r\n# Run all client checks\r\nCHECK csharp-library-client-checks"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [
@@ -1848,7 +1900,12 @@ const packages = {
   "csharp-style-checks": {
     "label": "csharp-style-checks",
     "overview": "StyleCop formatting, naming, and style rules for C# code",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Run style checks",
+        "code": "import csharp-style-checks\r\n\r\nCHECK interface-prefix\r\nCHECK type-name-casing\r\nCHECK method-name-casing\r\nCHECK single-type-per-file"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -1964,7 +2021,16 @@ const packages = {
   "files": {
     "label": "files",
     "overview": "Type definitions for filesystem structural and temporal analysis",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Detect stale files",
+        "code": "import files\r\n\r\nforeach Disk.Files:isStale\r\n    => '{item.Name} not modified in 24h'"
+      },
+      {
+        "title": "Find empty folders",
+        "code": "import files\r\n\r\n# Built-in: Disk provides Folders and Files\r\nforeach Disk.Folders:empty\r\n    => '{item.Path} is empty'"
+      }
+    ],
     "collections": [],
     "types": {
       "Folder": {
@@ -2094,7 +2160,16 @@ const packages = {
   "http": {
     "label": "http",
     "overview": "HTTP server provider for building web APIs with cop pipelines",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Error handling",
+        "code": "import http\r\n\r\nfunction handle(Request:Uri:equals('/hello')) => ok({ message: 'Hello' })\r\nfunction handle(Request) => notFound\r\n\r\n# Handle network errors — log and swallow\r\nfunction handle(Error) => print(Error.Message)\r\n\r\nasync foreach Requests => handle => RESPONSES"
+      },
+      {
+        "title": "Http server with routing",
+        "code": "import http\r\n\r\nfunction handle(Request:Uri:equals('/hello')) => ok({ message: 'Hello, World!' })\r\n\r\nfunction handle(Request:Uri:equals('/health')) => ok\r\n\r\nfunction handle(Request) => notFound\r\n\r\nasync foreach Requests => handle => RESPONSES"
+      }
+    ],
     "collections": [],
     "enums": [
       {
@@ -2163,6 +2238,12 @@ const packages = {
     "functions": [
       {
         "name": "ok",
+        "params": "",
+        "returns": "Response",
+        "desc": ""
+      },
+      {
+        "name": "ok",
         "params": "body: string",
         "returns": "Response",
         "desc": ""
@@ -2210,7 +2291,12 @@ const packages = {
   "javascript": {
     "label": "javascript",
     "overview": "Core JavaScript and TypeScript coding conventions and best practices for coding agents",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Run js ts checks",
+        "code": "import javascript\r\n\r\nCHECK javascript-checks"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -2250,7 +2336,12 @@ const packages = {
   "javascript-library-checks": {
     "label": "javascript-library-checks",
     "overview": "Library design conventions for JavaScript and TypeScript packages",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Check library conventions",
+        "code": "import javascript-library-checks\r\n\r\nCHECK no-default-exports\r\nCHECK no-external-promises\r\nCHECK no-const-enums"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -2282,7 +2373,12 @@ const packages = {
   "javascript-library-client-azure-checks": {
     "label": "javascript-library-client-azure-checks",
     "overview": "Azure-specific patterns for JavaScript/TypeScript client SDKs following the Azure SDK design guidelines",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Run azure sdk checks",
+        "code": "import javascript-library-client-azure-checks\r\n\r\nCHECK azure-js-client-checks"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -2310,7 +2406,12 @@ const packages = {
   "javascript-library-client-checks": {
     "label": "javascript-library-client-checks",
     "overview": "Patterns for building JavaScript/TypeScript client libraries including naming, method signatures, and API design",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Check client conventions",
+        "code": "import javascript-library-client-checks\r\n\r\nforeach Clients\r\n    => '{Type.Name}'\r\n\r\nCHECK js-client-checks"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [
@@ -2357,7 +2458,12 @@ const packages = {
   "json": {
     "label": "json",
     "overview": "Parse JSON files into typed collections using user-defined type schemas",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Load and query json data",
+        "code": "import json\r\n\r\ntype Config = { name: string, enabled: bool }\r\n\r\nlet configs = Parse('settings.json', [Config])\r\n\r\nforeach configs:enabled\r\n    => '{item.name} is active'"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -2368,7 +2474,12 @@ const packages = {
   "markdown": {
     "label": "markdown",
     "overview": "",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Check for broken links",
+        "code": "import markdown\r\n\r\npredicate isBroken(Link) =>\r\n    Link.Url:startsWith('http')\r\n    && Link.Text:empty\r\n\r\nforeach Markdown.Links:isBroken\r\n    => 'Missing link text: {item.Url}'"
+      }
+    ],
     "collections": [],
     "types": {
       "Heading": {
@@ -2618,7 +2729,12 @@ const packages = {
   "python": {
     "label": "python",
     "overview": "Core Python coding conventions and best practices for coding agents",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Run python style checks",
+        "code": "import python\r\n\r\nCHECK python-checks"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -2658,7 +2774,12 @@ const packages = {
   "python-library-checks": {
     "label": "python-library-checks",
     "overview": "Library design conventions for Python packages",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Check library apis",
+        "code": "import python-library-checks\r\n\r\nCHECK untyped-public-params\r\nCHECK missing-return-types"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -2682,7 +2803,12 @@ const packages = {
   "python-library-client-azure-checks": {
     "label": "python-library-client-azure-checks",
     "overview": "Azure SDK patterns for Python client library development with credential support and pipeline conventions",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Run azure sdk checks",
+        "code": "import python-library-client-azure-checks\r\n\r\nCHECK azure-python-client-checks"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -2738,7 +2864,12 @@ const packages = {
   "python-library-client-checks": {
     "label": "python-library-client-checks",
     "overview": "Patterns for building Python client libraries including naming, method signatures, and API design",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Check client conventions",
+        "code": "import python-library-client-checks\r\n\r\nforeach Clients\r\n    => '{Type.Name}'\r\n\r\nCHECK python-client-checks"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [
@@ -2822,7 +2953,12 @@ const packages = {
   "typespec": {
     "label": "typespec",
     "overview": "Types and collections for TypeSpec API specification analysis",
-    "samples": [],
+    "samples": [
+      {
+        "title": "List all models",
+        "code": "import typespec\r\n\r\nforeach Models\r\n    => '{TspModel.Name} ({TspModel.Properties.Count} props)'"
+      }
+    ],
     "collections": [],
     "types": {
       "TspDecorator": {
@@ -3088,7 +3224,12 @@ const packages = {
   "typespec-http": {
     "label": "typespec-http",
     "overview": "HTTP protocol graph derived from TypeSpec API specifications",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Find get operations",
+        "code": "import typespec-http\r\n\r\nforeach HttpOperations:isGet\r\n    => '{item.Path} — {item.OperationId}'"
+      }
+    ],
     "collections": [],
     "enums": [
       {

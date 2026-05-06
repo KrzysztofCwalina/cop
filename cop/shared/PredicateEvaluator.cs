@@ -211,13 +211,29 @@ public class PredicateEvaluator
 
     private object? EvalPredicateCall(PredicateCallExpr mc, object item, string paramType, EvaluationContext ctx)
     {
+        // Provider namespace function call (e.g., http.Post(...)) — check before user functions
+        // to prevent shadowing by user-defined functions named "Post", "Get", etc.
+        if (mc.Target is IdentifierExpr nsId2 && _registry.IsProviderFunctionNamespace(nsId2.Name))
+        {
+            var provFunc = _registry.ResolveProviderFunction(nsId2.Name, mc.Name);
+            if (provFunc is not null)
+            {
+                var evalArgs = mc.Args.Select(a => Eval(a, item, paramType, ctx)).ToList();
+                var task = provFunc(evalArgs);
+                return task.GetAwaiter().GetResult();
+            }
+        }
+
         // Check if this is a function call (transforms type, not a boolean filter)
         if (_functions.TryGetValue(mc.Name, out var funcGroup))
         {
             if (mc.Negated)
                 throw new InvalidOperationException($"Cannot negate function call '{mc.Name}' — functions produce values, not booleans");
-            var func = ResolveFunction(funcGroup, paramType, item, ctx, callArgCount: mc.Args.Count);
             var target = Eval(mc.Target, item, paramType, ctx);
+            if (target is null) return null;
+            // Resolve overload using the target's actual type (pipe semantics)
+            var targetType = InferValueType(target);
+            var func = ResolveFunction(funcGroup, targetType, target, ctx, callArgCount: mc.Args.Count);
             return ApplyFunction(func, target, mc.Args, item, paramType, ctx);
         }
 
@@ -254,6 +270,21 @@ public class PredicateEvaluator
             && mc.Name.Length > 0 && char.IsUpper(mc.Name[0]))
         {
             return _providerQueryService.Query(provId.Name, mc.Name, pathValue);
+        }
+
+        // Built-in functions accessible via colon piping: x:Text => Text(x), x:File => File(x)
+        if (mc.Name is "Text" or "File" && mc.Args.Count == 0)
+        {
+            if (mc.Negated)
+                throw new InvalidOperationException($"Cannot negate function call '{mc.Name}' — functions produce values, not booleans");
+            var target = Eval(mc.Target, item, paramType, ctx);
+            if (target is null) return null;
+            return mc.Name switch
+            {
+                "Text" => ConvertToText(target),
+                "File" => ReadFileSandboxed(target?.ToString() ?? ""),
+                _ => null
+            };
         }
 
         var result = CallPredicate(Eval(mc.Target, item, paramType, ctx), mc.Name, mc.Args, item, paramType, ctx);
@@ -1358,6 +1389,20 @@ public class PredicateEvaluator
         _ => true
     };
 
+    /// <summary>
+    /// Infers the cop type name from a runtime value for pipe-based overload resolution.
+    /// </summary>
+    private string? InferValueType(object? value) => value switch
+    {
+        null => null,
+        string => "string",
+        int or long => "int",
+        double or float => "number",
+        bool => "bool",
+        byte[] => "bytes",
+        _ => _registry.InferTypeName(value)
+    };
+
     private static string ConvertToText(object? value) => value switch
     {
         null => "null",
@@ -1365,6 +1410,7 @@ public class PredicateEvaluator
         bool b => b ? "true" : "false",
         int i => i.ToString(),
         byte by => by.ToString(),
+        byte[] bytes => System.Text.Encoding.UTF8.GetString(bytes),
         IList list => $"[{string.Join(", ", list.Cast<object>().Select(ConvertToText))}]",
         _ => value.ToString() ?? ""
     };
