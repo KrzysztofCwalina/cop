@@ -10,7 +10,7 @@ Cop is a **lazy, declarative language** for processing typed object graphs. It c
 2. **Lazy evaluation** — Nothing is computed until demanded. Functions memoize on first application. Like Haskell, everything is a thunk until forced.
 3. **Purity** — Expressions have no side effects. Output is the only effect, isolated in `command` blocks.
 4. **One type** — The language has exactly one composite type: DataObject. Collections, functions, providers — all DataObjects with different protocols.
-5. **Two operators** — `.` applies/navigates (calls a function on a DataObject). `:` filters (Where).
+5. **Two operators** — `.` applies/navigates (calls a function on a DataObject). `:` applies a predicate or function (filters collections, pipes single values).
 6. **Extension methods** — Predicates and functions are extension methods resolved by their first-parameter type, like C#.
 7. **Smart comparisons** — Identifiers are case-sensitive. String comparison functions (`same`, `similar`, etc.) are case-insensitive and normalize whitespace/symbols by default, enabling fuzzy matching without boilerplate.
 
@@ -191,9 +191,14 @@ types.Last               # last item
 types.Single             # the item (asserts exactly one)
 ```
 
-### `:` — Filter (Where)
+### `:` — Apply (Filter + Pipe)
 
-The colon operator is the **filter** operator. It evaluates a predicate against each item in a collection and keeps only items where the result is truthy.
+The colon operator **applies** a predicate or function to a value:
+
+- **On collections** — it filters (keeps items where the result is truthy)
+- **On single values** — it pipes (calls the function with the value as input)
+
+#### Filter (collection context)
 
 ```cop
 types:isPublic                # keep Types where isPublic(item) is true
@@ -209,7 +214,28 @@ types:Name.startsWith('I')        # keep Types where item.Name starts with 'I'
 types:Methods.Count > 5           # keep Types with more than 5 methods
 ```
 
-**Key distinction between `.` and `:` on collections:**
+#### Value Pipe (single value context)
+
+On a single value, `:` calls the named function with that value as input:
+
+```cop
+response.Body:Text            # Text(response.Body) — convert bytes to string
+someString:ok                 # ok(someString) — wrap in HTTP 200 response
+expr:Text:ok                  # chain left-to-right: Text then ok
+```
+
+This eliminates deeply nested function calls:
+```cop
+# Before: nested, reads inside-out
+ok(Text(http.Post(url, body).Body))
+
+# After: piped, reads left-to-right
+http.Post(url, body).Body:Text:ok
+```
+
+Overload resolution uses the **target’s type** — `stringValue:ok` resolves `ok(string)`, not `ok(Request)`.
+
+#### Key distinction between `.` and `:` on collections:
 ```cop
 types.Name          # PROJECT → ['UserService', 'IRepo', ...] (strings! Types lost)
 types:isPublic      # FILTER  → [Type, Type, ...] (still Types, just fewer)

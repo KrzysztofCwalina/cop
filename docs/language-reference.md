@@ -396,6 +396,8 @@ Expression-body functions can be called anywhere an expression is expected:
 ```ruby
 inc(5)                    # → 6
 inc(inc(5))               # → 7
+5:inc                     # → 6 (colon pipe: same as inc(5))
+5:inc:double              # → 12 (chain: inc(5) then double(6))
 double(3) + 1             # → 7
 Types.Select(isLarge)     # → list of booleans
 ```
@@ -477,7 +479,7 @@ Provider identifiers must be imported packages. The proxy exposes the same colle
 
 Agent Cop uses two operators for accessing members:
 
-- **`:` (colon)** — applies a **predicate** (returns bool). Predicates use `camelCase` names: `:equals()`, `:startsWith()`, `:any()`, `:contains()`.
+- **`:` (colon)** — applies a **predicate** or **function** to a value. On collections it filters; on single values it pipes through a function. Names use `camelCase`: `:equals()`, `:startsWith()`, `:ok`, `:Text`.
 - **`.` (dot)** — accesses a **property** or **transform** (returns a value). Properties and transforms use `PascalCase` names: `.Name`, `.Count`, `.Where()`, `.Select()`.
 
 ### Subset (`:`)
@@ -487,11 +489,36 @@ The `:` operator filters a list with a predicate, producing a subset:
 ```ruby
 Types:isClient                       # Types where isClient is true
 Statements:csharp:usesVar            # Statements in C# files using var
-Types:isClient:notSealed             # AND-chained: client types that aren’t sealed
+Types:isClient:notSealed             # AND-chained: client types that aren't sealed
 Types:isClient:!isAbstract           # negated filter
 ```
 
 Multiple `:` filters are AND-combined — each filter produces a smaller subset.
+
+### Value Pipe (`:`)
+
+On a single value (not a collection), `:` calls a function with that value as input:
+
+```ruby
+someBytes:Text                       # Text(someBytes) — convert bytes to string
+someString:ok                        # ok(someString) — create HTTP 200 response
+expr:Text:ok                         # chain: Text(expr), then ok(result)
+chatApi(Request).Body:Text:ok        # full chain: access Body, convert, wrap
+```
+
+This enables left-to-right data flow instead of nested function calls:
+
+```ruby
+# Nested (harder to read):
+ok(Text(http.Post(url, body).Body))
+
+# Piped (reads left-to-right):
+http.Post(url, body).Body:Text:ok
+```
+
+Overload resolution uses the target’s type — `stringValue:ok` resolves to `ok(string)`, not `ok(Request)`.
+
+Built-in functions (`Text`, `File`) also work via colon pipe when called without arguments.
 
 ### Superset (`&`)
 
@@ -816,10 +843,12 @@ Types.Select(item.Methods.Count > 0 ? item.Name | 'empty')
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `Text(expr)` | any → string | Converts a value to its textual representation |
-| `File(path)` | string → [byte] | Reads a file and returns its bytes (sandboxed, 10MB max) |
+| `Text(expr)` | any → string | Converts a value to its textual representation. Also: `expr:Text` |
+| `File(path)` | string → [byte] | Reads a file and returns its bytes (sandboxed, 10MB max). Also: `path:File` |
 | `Path(pattern)` | string → bool | Tests if the current file path matches a glob pattern |
 | `Matches(pattern)` | string → bool | Tests if the current item text matches a regex |
+
+`Text` and `File` can be called via colon pipe: `response.Body:Text` is equivalent to `Text(response.Body)`.
 
 `Path` uses glob patterns: `*` matches within a segment, `**` matches across segments, `?` matches one character.
 
