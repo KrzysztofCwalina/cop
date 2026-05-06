@@ -1518,17 +1518,15 @@ function buildTree() {
         toggle.textContent = children.classList.contains('collapsed') ? '▶' : '▼';
       }
     } else {
-      // Show package overview + toggle expand
+      // Show package overview + toggle expand/collapse
       document.querySelectorAll('.tree-label.active').forEach(el => el.classList.remove('active'));
       label.classList.add('active');
       renderPackageOverview(pkg);
       const children = label.nextElementSibling;
       const toggle = label.querySelector('.tree-toggle');
       if (children) {
-        if (children.classList.contains('collapsed')) {
-          children.classList.remove('collapsed');
-          toggle.textContent = '▼';
-        }
+        children.classList.toggle('collapsed');
+        toggle.textContent = children.classList.contains('collapsed') ? '▶' : '▼';
       }
     }
   });
