@@ -1531,6 +1531,7 @@ function buildTree() {
       document.querySelectorAll('.tree-label.active').forEach(el => el.classList.remove('active'));
       label.classList.add('active');
       renderType(pkg, type);
+      location.hash = `${pkg}/${type}`;
     } else if (view) {
       document.querySelectorAll('.tree-label.active').forEach(el => el.classList.remove('active'));
       label.classList.add('active');
@@ -1539,6 +1540,7 @@ function buildTree() {
       else if (view === 'checks') renderChecks(pkg);
       else if (view === 'commands') renderCommands(pkg);
       else if (view === 'enums') renderEnums(pkg);
+      location.hash = `${pkg}/${view}`;
     } else if (section) {
       // Toggle section expand
       const children = label.nextElementSibling;
@@ -1552,6 +1554,7 @@ function buildTree() {
       document.querySelectorAll('.tree-label.active').forEach(el => el.classList.remove('active'));
       label.classList.add('active');
       renderPackageOverview(pkg);
+      location.hash = pkg;
       const children = label.nextElementSibling;
       const toggle = label.querySelector('.tree-toggle');
       if (children) {
@@ -2014,12 +2017,56 @@ function showHome() {
     <p style="margin-top:12px;">Browse the package tree on the left to explore available types, predicates, functions, and commands.</p>
   </div>`;
   document.querySelectorAll('.tree-label.active').forEach(el => el.classList.remove('active'));
+  if (location.hash) history.pushState(null, '', location.pathname);
 }
+
+// === ROUTING ===
+function navigateToHash() {
+  var hash = location.hash.replace(/^#/, '');
+  if (!hash) { showHome(); return; }
+  var parts = hash.split('/');
+  var pkgId = parts[0];
+  var target = parts[1] || null;
+  if (!packages[pkgId]) { showHome(); return; }
+
+  // Expand the package node in sidebar
+  var pkgLabel = document.querySelector(`.tree-label[data-pkg="${pkgId}"]:not([data-type]):not([data-view]):not([data-section])`);
+  if (pkgLabel) {
+    var children = pkgLabel.nextElementSibling;
+    if (children && children.classList.contains('collapsed')) {
+      children.classList.remove('collapsed');
+      var toggle = pkgLabel.querySelector('.tree-toggle');
+      if (toggle) toggle.textContent = '▼';
+    }
+  }
+
+  document.querySelectorAll('.tree-label.active').forEach(el => el.classList.remove('active'));
+
+  if (!target) {
+    renderPackageOverview(pkgId);
+    if (pkgLabel) pkgLabel.classList.add('active');
+  } else if (['predicates','functions','checks','commands','enums'].includes(target)) {
+    if (target === 'predicates') renderPredicates(pkgId);
+    else if (target === 'functions') renderFunctions(pkgId);
+    else if (target === 'checks') renderChecks(pkgId);
+    else if (target === 'commands') renderCommands(pkgId);
+    else if (target === 'enums') renderEnums(pkgId);
+    var viewLabel = document.querySelector(`.tree-label[data-pkg="${pkgId}"][data-view="${target}"]`);
+    if (viewLabel) viewLabel.classList.add('active');
+  } else {
+    renderType(pkgId, target);
+    var typeLabel = document.querySelector(`.tree-label[data-pkg="${pkgId}"][data-type="${target}"]`);
+    if (typeLabel) typeLabel.classList.add('active');
+  }
+}
+
+window.addEventListener('hashchange', navigateToHash);
 
 // === INIT ===
 buildTree();
 updateBadge();
-showHome();
+if (location.hash) navigateToHash();
+else showHome();
 </script>
 </body>
 </html>
