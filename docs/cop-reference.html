@@ -204,11 +204,11 @@ const packages = {
     "samples": [
       {
         "title": "Find long methods",
-        "code": "import code\r\n\r\npredicate isLong(Method) =>\r\n    Method.LineCount:greaterThan(50)\r\n\r\nforeach Types => '{Type.Name}'\r\n    :Methods:isLong\r\n    => '  {Method.Name} ({Method.LineCount} lines)'"
+        "code": "import code\r\n\r\npredicate isLong(Method) => Method.LineCount:greaterThan(50)\r\n\r\nforeach Types => '{Type.Name}':Methods:isLong\r\n    => '  {Method.Name} ({Method.LineCount} lines)'"
       },
       {
         "title": "List all public classes",
-        "code": "import code\r\n\r\nforeach Types:isPublic\r\n  => '{Type.Name} ({Type.Kind})'"
+        "code": "import code\r\n\r\nforeach Types:isPublic => '{Type.Name} ({Type.Kind})'"
       }
     ],
     "collections": [],
@@ -1364,7 +1364,16 @@ const packages = {
   "csharp-api": {
     "label": "csharp-api",
     "overview": "API surface tracking, export, and diff for .NET libraries",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Api diff",
+        "code": "import csharp-api\r\nimport code-analysis\r\n\r\n# Baseline: C# stub files in api/ directory\r\npredicate baselineApi(Api) => publicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')\r\n# Source: everything NOT in api/\r\npredicate sourceApi(Api) => publicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')\r\n\r\n# Build lookup lists from current source and baseline\r\nlet baselineSignatures = Code.Api:csharp:baselineApi.Select(item.Signature)\r\nlet currentSignatures = Code.Api:csharp:sourceApi.Select(item.Signature)\r\n\r\n# Diff predicates\r\npredicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)\r\npredicate addedApi(Api) => sourceApi && !Api.Signature:in(baselineSignatures)\r\n\r\n# Report results\r\nexport let api-removed = Code.Api:removedApi\r\n    :toError('API REMOVED (breaking): {item.Signature}')\r\nexport let api-added = Code.Api:addedApi\r\n    :toInfo('API ADDED: {item.Signature}')"
+      },
+      {
+        "title": "Api listing",
+        "code": "import csharp-api\r\n\r\n# Print API surface as C# stubs\r\nexport command api-listing = foreach Code.Api:csharp:publicApi => '{item.ApiAsText}'\r\n\r\n# Save API surface to a file\r\nlet apiText = Code.Api:csharp:publicApi.Text('{item.ApiAsText}')\r\nexport command save-api = save('api-surface.txt', apiText)"
+      }
+    ],
     "collections": [],
     "types": {
       "ApiLine": {
