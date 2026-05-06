@@ -1049,6 +1049,81 @@ Type.Base == nic ? 'none' | Type.Base      # null comparison in ternary
 
 `nic` is falsy — `ToBool(nic)` evaluates to `false`. In JSON output, `nic` serializes as `null`.
 
+## Errors
+
+### Operational Errors (`error`)
+
+The `error` constructor creates an error value — a DataObject representing an operational failure:
+
+```ruby
+error                     # bare error (no message)
+error('timeout')          # error with message
+error('not found: {id}')  # error with interpolated message
+```
+
+Error values have type `CopError` with fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Message` | string | Error message (may be nic) |
+| `SourceFile` | string | File where error originated |
+| `SourceLine` | int | Line number |
+| `Source` | string | Formatted as `file(line)` |
+
+### Detecting Errors (`isError`)
+
+The built-in predicate `isError` tests whether a value is an error:
+
+```ruby
+# As a filter — keep only errors
+items:isError
+
+# As a filter — exclude errors
+items:!isError
+
+# In predicate body
+predicate failed(Item) => isError
+```
+
+### Error Propagation
+
+In pipelines (`foreach source => transform => sink`), errors skip transforms and flow directly to the sink:
+
+```ruby
+foreach http.Requests => handle => http.Responses
+# If handle(request) returns error, the transform is skipped
+# The error flows to http.Responses which returns a 500 response
+```
+
+In batch foreach, errors output as `ERROR: message` instead of crashing.
+
+Sink behavior for errors:
+
+| Sink | Behavior |
+|------|----------|
+| Console (default) | Writes `ERROR: message` to stderr |
+| `file.Write` | Skips the error (does not write) |
+| `http.Responses` | Returns HTTP 500 with JSON error body |
+
+### Code Bugs (`FAIL`)
+
+`FAIL` terminates execution immediately — use for situations that should never occur:
+
+```ruby
+# Command position (with collection — triggers if any items match)
+FAIL('types must be sealed') foreach Types:!isSealed
+
+# Expression position (terminates during evaluation)
+predicate route(Request) =>
+    Request.Method == 'GET'  ? getHandler(Request)
+  | Request.Method == 'POST' ? postHandler(Request)
+  | FAIL('unsupported method')
+```
+
+Output: `FATAL: file(line): message`
+
+`FAIL` is NOT an error value — it does not produce data. It immediately halts the program.
+
 ## Comments
 
 ### Single-line comment

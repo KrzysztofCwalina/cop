@@ -184,7 +184,13 @@ public class HttpSendSink : DataSink
             throw new InvalidOperationException("http.RESPONSES can only be used with items from http.Requests.");
 
         HttpResponseItem response;
-        if (result is DataObject so)
+        if (result is ErrorValue err)
+        {
+            // Error propagated through pipeline — return 500 with error message
+            var message = err.GetField("Message")?.ToString() ?? "Internal Server Error";
+            response = new HttpResponseItem { StatusCode = 500, Body = $"{{\"error\":\"{message}\"}}", ContentType = "application/json" };
+        }
+        else if (result is DataObject so)
         {
             // Extract StatusCode, Body, ContentType from cop object
             var statusCode = so.GetField("StatusCode") is int sc ? sc : 200;
@@ -192,6 +198,8 @@ public class HttpSendSink : DataSink
             string body;
             if (bodyField is byte[] bytes)
                 body = System.Text.Encoding.UTF8.GetString(bytes);
+            else if (bodyField is DataObject bodyObj)
+                body = bodyObj.ToJson();
             else
                 body = bodyField?.ToString() ?? SerializeToJson(so);
             var contentType = so.GetField("ContentType")?.ToString() ?? "application/json";

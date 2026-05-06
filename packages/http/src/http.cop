@@ -24,9 +24,9 @@ export type Request = {
 }
 
 # Creates a 200 OK response with JSON body
-export function ok(Request) => {
-    StatusCode = 200
-    Body = Body
+export function ok(Request, body: string) => Response {
+    StatusCode = 200,
+    Body = body,
     ContentType = 'application/json'
 }
 

@@ -36,6 +36,7 @@ public abstract class DataSink
 /// <summary>
 /// Built-in sink that writes to stdout (default when no sink is specified).
 /// Registered under namespace "console" as "WriteLine".
+/// Errors are written to stderr.
 /// </summary>
 public class ConsoleWriteLineSink : DataSink
 {
@@ -45,7 +46,15 @@ public class ConsoleWriteLineSink : DataSink
 
     public override Task WriteAsync(object? originalItem, object result)
     {
-        Console.WriteLine(result.ToString());
+        if (result is Cop.Lang.ErrorValue err)
+        {
+            var message = err.GetField("Message")?.ToString() ?? "error";
+            Console.Error.WriteLine($"ERROR: {message}");
+        }
+        else
+        {
+            Console.WriteLine(result.ToString());
+        }
         return Task.CompletedTask;
     }
 }
@@ -71,6 +80,9 @@ public class FileWriteSink : DataSink
     {
         if (_path is null)
             throw new InvalidOperationException("file.Write: no path specified. Use file.Write('path').");
+        // Skip error values — don't write them to files
+        if (result is Cop.Lang.ErrorValue)
+            return Task.CompletedTask;
         File.AppendAllText(_path, result.ToString() + Environment.NewLine);
         return Task.CompletedTask;
     }

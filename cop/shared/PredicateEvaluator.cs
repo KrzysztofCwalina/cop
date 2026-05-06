@@ -99,6 +99,30 @@ public class PredicateEvaluator
 
     private object? EvalFunctionCall(FunctionCallExpr fc, object item, string paramType, EvaluationContext ctx)
     {
+        // Built-in error('message') constructor
+        if (fc.Name == "error")
+        {
+            string? message = null;
+            if (fc.Args.Count > 0)
+            {
+                var msgValue = Eval(fc.Args[0], item, paramType, ctx);
+                message = msgValue is string s ? s : msgValue?.ToString();
+            }
+            return new ErrorValue(message);
+        }
+
+        // Built-in FAIL('message') — terminates execution immediately
+        if (fc.Name == "FAIL")
+        {
+            string? message = null;
+            if (fc.Args.Count > 0)
+            {
+                var msgValue = Eval(fc.Args[0], item, paramType, ctx);
+                message = msgValue is string s ? s : msgValue?.ToString();
+            }
+            throw new FailException(message ?? "FAIL", _filePath, 0);
+        }
+
         // Built-in Code() aggregator function
         if (fc.Name == "Code")
             return EvalCodeFunction(fc.Args, item, paramType, ctx);
@@ -230,6 +254,12 @@ public class PredicateEvaluator
         if (name == paramType) return item;
         if (name == "item") return item;
         if (name == "null") return null;
+
+        // Built-in error constructor (bare, no args)
+        if (name == "error") return new ErrorValue(null);
+
+        // Built-in isError predicate (when used as bare identifier in filter/predicate position)
+        if (name == "isError") return ErrorValue.IsError(item);
 
         if (_predicates.TryGetValue(name, out var group))
         {
@@ -668,6 +698,9 @@ public class PredicateEvaluator
         object item, string paramType, EvaluationContext ctx)
     {
         if (target is null) return null;
+
+        // Built-in isError predicate — works on any value
+        if (predicate == "isError") return ErrorValue.IsError(target);
 
         // Map/DataObject operations
         if (target is DataObject so)

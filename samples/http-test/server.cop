@@ -1,9 +1,5 @@
 import http
 
-function handle(Request) => Response {
-  StatusCode = 200
-  Body = Request.Uri
-  ContentType = 'text/plain'
-}
+function handle(Request) => ok({ path: Request.Uri })
 
 command serve = async foreach Receive => handle => Send

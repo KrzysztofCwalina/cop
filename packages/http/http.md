@@ -19,11 +19,7 @@ Import with `import http` to build web APIs using cop's pipeline syntax.
 ```cop
 import http
 
-function handle(Request) => Response {
-  StatusCode = 200
-  Body = Request.Uri
-  ContentType = 'text/plain'
-}
+function handle(Request:Uri:eq('/hello')) => ok({ message: 'Hello, World!' })
 
 command serve = async foreach Requests => handle => RESPONSES
 ```
@@ -35,7 +31,7 @@ command serve = async foreach Requests => handle => RESPONSES
 
 ## Helper Functions
 
-- `ok(Request)` — 200 OK response
+- `ok(Request, body)` — 200 OK response with JSON body (accepts string or inline object)
 - `notFound(Request)` — 404 Not Found response
 - `created(Request)` — 201 Created response
 - `badRequest(Request)` — 400 Bad Request response

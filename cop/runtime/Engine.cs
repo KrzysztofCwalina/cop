@@ -281,6 +281,10 @@ public static class Engine
         {
             return new EngineResult([], parseErrors, [$"Error: {ex.Message}"], commandName);
         }
+        catch (FailException ex)
+        {
+            return new EngineResult([], parseErrors, [ex.FormatDiagnostic()], commandName);
+        }
 
         diagLog?.Invoke($"[diag] Interpreter: {phaseSw.ElapsedMilliseconds}ms ({result.Outputs.Count} outputs)");
         diagLog?.Invoke($"[diag] Total: {totalSw.ElapsedMilliseconds}ms");

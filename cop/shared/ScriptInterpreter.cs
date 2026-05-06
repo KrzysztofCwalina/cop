@@ -421,6 +421,13 @@ public class ScriptInterpreter
 
         var filteredItem = items[0];
 
+        // Error propagation: skip transforms, pass directly to sink
+        if (ErrorValue.IsError(filteredItem))
+        {
+            await sink.WriteAsync(filteredItem, filteredItem);
+            return;
+        }
+
         // Evaluate transform
         object result;
         if (cmd.OutputExpression is not null)
@@ -441,6 +448,13 @@ public class ScriptInterpreter
         else
         {
             result = filteredItem;
+        }
+
+        // If transform produced an error, propagate it to sink
+        if (ErrorValue.IsError(result))
+        {
+            await sink.WriteAsync(filteredItem, result);
+            return;
         }
 
         // Dispatch to sink
@@ -473,6 +487,32 @@ public class ScriptInterpreter
         // DEBUG action: skip entirely if diagLog is not active
         if (IsDebugAction(cmd.ActionName) && _diagLog is null)
             return;
+
+        // FAIL action: terminate execution immediately with diagnostic
+        if (IsFailAction(cmd.ActionName))
+        {
+            var message = !string.IsNullOrEmpty(cmd.MessageTemplate) ? cmd.MessageTemplate : "FAIL";
+            // If it has a collection, this is a foreach FAIL — resolve items to confirm non-empty
+            if (cmd.Collection is not null)
+            {
+                var evaluator = CreateEvaluator(predicateGroups, "", letDeclarations, functionGroups);
+                var items = ResolveGlobalCollection(cmd.Collection, evaluator, predicateGroups, letDeclarations, functionGroups);
+                items = ApplyFilters(items, ResolveItemType(cmd.Collection, predicateGroups, letDeclarations, functionGroups), cmd.Filters, evaluator, functionGroups);
+                if (items.Count > 0)
+                {
+                    // Resolve template with first matching item for context
+                    var ctx = new EvaluationContext();
+                    var firstItem = items[0];
+                    ctx.Capture("item", firstItem);
+                    if (firstItem is DataObject ao)
+                        CaptureAlanObjectFields(ctx, ao);
+                    var resolved = ResolveTemplate(message, ctx).ToPlainText();
+                    throw new FailException(resolved, null, cmd.Line);
+                }
+                return; // No items matched — FAIL not triggered
+            }
+            throw new FailException(message, null, cmd.Line);
+        }
 
         // ASSERT / ASSERT_EMPTY: resolve collection, count items, record result
         if (IsAssertAction(cmd.ActionName) && cmd.Collection is not null)
@@ -584,6 +624,23 @@ public class ScriptInterpreter
             {
                 if (count >= _maxOutputsPerCommand) break;
                 if (sw.Elapsed > _timeout) break;
+
+                // Error propagation in batch foreach: skip transforms, pass to sink directly
+                if (ErrorValue.IsError(item))
+                {
+                    if (cmd.Sink is not null)
+                    {
+                        var sink = ResolveSink(cmd.Sink, _globalResolvedSelects);
+                        sink.WriteAsync(item, item).GetAwaiter().GetResult();
+                    }
+                    else
+                    {
+                        var errMsg = item is ErrorValue ev ? ev.GetField("Message")?.ToString() ?? "error" : "error";
+                        allOutputs.Add(new PrintOutput(new RichString(new[] { new TextSpan($"ERROR: {errMsg}") })));
+                    }
+                    count++;
+                    continue;
+                }
 
                 EvaluationContext finalCtx = new();
                 finalCtx.Capture(finalItemType, item);
@@ -2227,6 +2284,9 @@ public class ScriptInterpreter
     private static bool IsAssertAction(string? actionName) =>
         string.Equals(actionName, "ASSERT", StringComparison.Ordinal) ||
         string.Equals(actionName, "ASSERT_EMPTY", StringComparison.Ordinal);
+
+    private static bool IsFailAction(string? actionName) =>
+        string.Equals(actionName, "FAIL", StringComparison.Ordinal);
 
     /// <summary>
     /// Execute an ASSERT or ASSERT_EMPTY command: resolve collection, count items, record pass/fail.

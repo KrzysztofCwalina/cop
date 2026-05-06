@@ -204,6 +204,15 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
           { name: "Count", type: "int", desc: "Number of fields" }
         ]
       },
+      CopError: {
+        desc: "Represents an operational error flowing through a pipeline. Created by error() or error('message'). Not a code bug — use FAIL for those.",
+        props: [
+          { name: "Message", type: "string", desc: "Error message (may be nic)" },
+          { name: "SourceFile", type: "string", desc: "File where the error originated" },
+          { name: "SourceLine", type: "int", desc: "Line number where the error originated" },
+          { name: "Source", type: "string", desc: "Formatted source location: file(line)" }
+        ]
+      },
       Group: {
         props: [
           { name: "Key", type: "string", desc: "Group key value" },
@@ -212,6 +221,7 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
       }
     },
     predicates: [
+      { name: "isError", appliesTo: "any", desc: "True if the value is an error (ErrorValue). Use to filter/detect errors in pipelines." },
       { name: "equals", appliesTo: "string", params: "value: string", desc: "Case-insensitive equality" },
       { name: "notEquals", appliesTo: "string", params: "value: string", desc: "Case-insensitive inequality" },
       { name: "startsWith", appliesTo: "string", params: "prefix: string", desc: "Starts with value (case-insensitive)" },
@@ -240,6 +250,8 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
       { name: "containsKey", appliesTo: "object", params: "name: string", desc: "Object has a field with the given name" }
     ],
     functions: [
+      { name: "error", params: "message?: string", returns: "CopError", desc: "Create an operational error value. Flows through pipelines as data." },
+      { name: "FAIL", params: "message: string", returns: "never", desc: "Terminate execution immediately. For code bugs that should never occur." },
       { name: "Trim", params: "string, suffix: string?", returns: "string", desc: "Remove suffix from end of string" },
       { name: "Replace", params: "string, old: string, new: string", returns: "string", desc: "Replace occurrences (case-insensitive)" },
       { name: "Text", params: "any", returns: "string", desc: "Convert any value to its text representation" },
@@ -270,6 +282,7 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
       { name: "CHECK", params: "[Violation]", desc: "Report violations. Fails the run if any error-severity violations" },
       { name: "ASSERT", params: "[T]", desc: "Evaluate collection; fail if zero items remain after filtering" },
       { name: "ASSERT_EMPTY", params: "[T]", desc: "Evaluate collection; fail if any items remain after filtering" },
+      { name: "FAIL", params: "message: string", desc: "Terminate execution with a fatal diagnostic. Use with foreach to fail only if items match: FAIL('msg') foreach Collection:filter" },
       { name: "DEBUG", params: "[T]", desc: "Evaluate collection and print each item's internal structure" }
     ]
   },

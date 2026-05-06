@@ -817,6 +817,62 @@ SAVE('path.md', template)
 
 ---
 
+## Error Model
+
+Cop distinguishes between two categories of failure:
+
+### Operational Errors — Errors as Data
+
+Operational errors represent external failures that code cannot prevent: network timeouts, file I/O failures, malformed external input. These are **values**, not exceptions. They flow through pipelines like any other data.
+
+```cop
+# Construct an error
+let result = error('connection timeout')
+
+# Conditional error
+predicate handle(Request) => Request.Body == nic ? error('missing body') | process(Request)
+
+# Errors propagate through transforms automatically — no wrapping needed
+foreach http.Requests => handle => http.Responses
+# If handle returns error, it skips the transform and flows to the sink as a 500 response
+```
+
+**Key properties:**
+- `error` / `error('message')` — built-in constructors, return an ErrorValue (a DataObject with TypeName `CopError`)
+- `isError` — built-in predicate for filtering/detection
+- Errors are **truthy** (not falsy like `nic`) — they represent "something happened", not "nothing"
+- Errors have fields: `.Message`, `.SourceFile`, `.SourceLine`, `.Source`
+- Pipeline propagation: errors skip transforms and pass directly to sinks
+- Sinks handle errors: console → stderr, file → skip, HTTP → 500 response
+
+```cop
+# Filter errors out
+foreach items:!isError => '{item.Name}'
+
+# Keep only errors
+foreach items:isError => 'Failed: {item.Message}'
+```
+
+### Code Bugs — Fail Fast
+
+`FAIL` represents a code bug — a situation the programmer asserts should never occur. It terminates execution immediately with a diagnostic.
+
+```cop
+# In command position: FAIL if any items match
+FAIL('public types must be sealed') foreach Types:isPublic:!isSealed
+
+# In expression position: terminate during evaluation
+predicate validate(Request) => Request.Method == 'DELETE' ? FAIL('DELETE not supported') | process(Request)
+```
+
+Output format: `FATAL: file(line): message`
+
+**Error vs FAIL decision:**
+- Can the caller recover? → `error('msg')` (data, flows through pipeline)
+- Is this a bug that should never happen? → `FAIL('msg')` (terminates, diagnostic)
+
+---
+
 ## Design Invariants
 
 1. **One type.** Every composite value is a DataObject. No proxy types, no wrappers, no special cases.
