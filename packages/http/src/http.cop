@@ -1,7 +1,6 @@
 # HTTP Server Package
 # Provides helper functions for building HTTP responses in cop pipelines.
 # Import with: import http
-# 
 # Usage:
 #   async foreach Requests => handle => RESPONSES
 
@@ -27,6 +26,13 @@ export type Request = {
 export function ok(Request, body: string) => Response {
     StatusCode = 200,
     Body = body,
+    ContentType = 'application/json'
+}
+
+# Creates a 200 OK response with empty body
+export function ok(Request) => Response {
+    StatusCode = 200,
+    Body = '{"status": "ok"}',
     ContentType = 'application/json'
 }
 

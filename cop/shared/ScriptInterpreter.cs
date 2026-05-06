@@ -368,6 +368,13 @@ public class ScriptInterpreter
                         {
                             await ProcessStreamItem(item, itemType, finalItemType, cmd, predicateGroups, letDeclarations, functionGroups, sink);
                         }
+                        catch (Exception ex) when (ex is not OutOfMemoryException)
+                        {
+                            // If processing fails, try to complete the response with an error
+                            // so the HTTP request doesn't hang indefinitely
+                            TryFailResponseCompletion(item, ex);
+                            _diagLog?.Invoke($"[diag] Stream item error: {ex.Message}");
+                        }
                         finally
                         {
                             semaphore.Release();
@@ -400,6 +407,20 @@ public class ScriptInterpreter
         {
             await sink.CompleteAsync();
         }
+    }
+
+    /// <summary>
+    /// Attempts to fail the response TCS on a streaming item so HTTP requests don't hang.
+    /// Uses reflection since the TCS generic type is defined in the provider assembly.
+    /// </summary>
+    private static void TryFailResponseCompletion(object item, Exception ex)
+    {
+        if (item is not DataObject failedItem) return;
+        var tcs = failedItem.GetField("__responseCompletion");
+        if (tcs is null) return;
+        // Use reflection to call TrySetException on the TCS (generic type is in provider assembly)
+        var method = tcs.GetType().GetMethod("TrySetException", [typeof(Exception)]);
+        method?.Invoke(tcs, [ex]);
     }
 
     private async Task ProcessStreamItem(

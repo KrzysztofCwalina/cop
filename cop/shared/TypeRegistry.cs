@@ -492,6 +492,11 @@ public class TypeRegistry
     public bool IsStreamingCollection(string name) => ResolveStreamingSource(name) != null;
 
     /// <summary>
+    /// Returns all registered streaming source names (for diagnostics).
+    /// </summary>
+    public IEnumerable<string> GetStreamingSourceNames() => _streamingSources.Keys;
+
+    /// <summary>
     /// Gets the names of all registered global collections (flat + namespaced bare names).
     /// For aggregate count computation. Returns bare names for unambiguous collections,
     /// and qualified names for all namespaced collections.

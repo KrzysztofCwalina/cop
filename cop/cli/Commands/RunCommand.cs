@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.CommandLine.Parsing;
 using System.Net.Http;
 using System.Text.Json;
+using Cop.Core;
 using Cop.Lang;
 using Cop.Providers;
 
@@ -90,18 +91,22 @@ public static class RunCommand
 
         Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(ColorDiagLine(msg)) : null;
 
+        // Auto-restore missing imports before execution
+        AutoRestoreImports(scriptsDir, diagLog);
+
         // Try streaming mode (auto-detect or by command name)
         try
         {
             using var cts = new CancellationTokenSource();
             Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 
-            Engine.RunStreamingAsync(scriptsDir, commandName, cts.Token, diagLog).GetAwaiter().GetResult();
+            Engine.RunStreamingAsync(scriptsDir, commandName, cts.Token, diagLog, additionalFeedPaths: FindFeedPathsFromCwd()).GetAwaiter().GetResult();
             return 0;
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException ex)
         {
             // No streaming command or setup failed — fall through to normal execution
+            diagLog?.Invoke($"[diag] Streaming mode skipped: {ex.Message}");
         }
 
         var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog, additionalFeedPaths: FindFeedPathsFromCwd());
@@ -290,5 +295,159 @@ public static class RunCommand
             return $"{magenta}{msg}{reset}";
         // [diag] and everything else
         return $"{gray}{msg}{reset}";
+    }
+
+    /// <summary>
+    /// Parses .cop files in the scripts directory, discovers imports, and auto-restores
+    /// any missing packages from configured GitHub feeds into ~/.cop/packages/.
+    /// </summary>
+    private static void AutoRestoreImports(string scriptsDir, Action<string>? diagLog)
+    {
+        var cachePath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cop", "packages");
+
+        // Parse all .cop files to collect imports
+        var imports = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var scriptFilePaths = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
+        foreach (var path in scriptFilePaths)
+        {
+            try
+            {
+                var source = File.ReadAllText(path);
+                var sf = ScriptParser.Parse(source, path);
+                foreach (var imp in sf.Imports)
+                    imports.Add(imp);
+            }
+            catch { /* skip unparseable files */ }
+        }
+
+        if (imports.Count == 0) return;
+
+        // Determine available feed paths (same as FindFeedPathsFromCwd logic)
+        var feedPaths = FindFeedPathsFromCwd();
+
+        // Find imports that can't be resolved from any known path
+        var missing = new List<string>();
+        foreach (var imp in imports)
+        {
+            bool found = false;
+            foreach (var feed in feedPaths)
+            {
+                if (ImportResolver.FindPackageDir(feed, imp) is not null)
+                {
+                    found = true;
+                    break;
+                }
+            }
+            // Also check scriptsDir walk-up paths (Engine's FindFeedPaths)
+            if (!found)
+            {
+                var dir = scriptsDir;
+                while (dir is not null)
+                {
+                    var packagesDir = Path.Combine(dir, "packages");
+                    if (Directory.Exists(packagesDir) && ImportResolver.FindPackageDir(packagesDir, imp) is not null)
+                    {
+                        found = true;
+                        break;
+                    }
+                    dir = Path.GetDirectoryName(dir);
+                }
+            }
+            if (!found)
+                missing.Add(imp);
+        }
+
+        if (missing.Count == 0) return;
+
+        // Try to restore from GitHub feeds
+        var feedManager = new FeedManager();
+        var feeds = feedManager.GetFeeds();
+        var githubFeeds = feeds
+            .Where(f => f.StartsWith("github.com/", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (githubFeeds.Count == 0)
+        {
+            diagLog?.Invoke($"[diag] Missing imports ({string.Join(", ", missing)}) but no GitHub feeds configured");
+            return;
+        }
+
+        string? githubToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+        using var httpClient = new HttpClient();
+        var source2 = new GitHubPackageSource(httpClient, githubToken);
+
+        Directory.CreateDirectory(cachePath);
+
+        // BFS: download missing packages and their transitive imports
+        var queue = new Queue<string>(missing);
+        var downloaded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        while (queue.Count > 0)
+        {
+            var pkgName = queue.Dequeue();
+            if (downloaded.Contains(pkgName)) continue;
+
+            if (ImportResolver.FindPackageDir(cachePath, pkgName) is not null)
+            {
+                downloaded.Add(pkgName);
+                continue;
+            }
+
+            bool restored = false;
+            foreach (var feed in githubFeeds)
+            {
+                try
+                {
+                    var pkgRef = PackageReference.Parse($"{feed}/{pkgName}");
+                    Console.Error.Write($"  Restoring {pkgName}...");
+                    var files = source2.DownloadPackageFilesAsync(pkgRef).GetAwaiter().GetResult();
+
+                    if (files.Count == 0) { Console.Error.WriteLine(" no files"); continue; }
+
+                    var pkgDir = Path.Combine(cachePath, pkgName);
+                    foreach (var (relativePath, content) in files)
+                    {
+                        var destPath = Path.Combine(pkgDir, relativePath);
+                        Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
+                        File.WriteAllBytes(destPath, content);
+                    }
+
+                    Console.Error.WriteLine(" ok");
+                    downloaded.Add(pkgName);
+                    restored = true;
+
+                    // Parse .cop files to discover transitive imports
+                    foreach (var (relPath, _) in files.Where(f => f.Key.EndsWith(".cop", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        var filePath = Path.Combine(pkgDir, relPath);
+                        try
+                        {
+                            var src = File.ReadAllText(filePath);
+                            var sf = ScriptParser.Parse(src, filePath);
+                            foreach (var imp in sf.Imports)
+                            {
+                                if (!downloaded.Contains(imp))
+                                    queue.Enqueue(imp);
+                            }
+                        }
+                        catch { /* skip unparseable files */ }
+                    }
+                    break;
+                }
+                catch (PackageNotFoundException)
+                {
+                    Console.Error.WriteLine(" not found");
+                    continue;
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($" failed: {ex.Message}");
+                }
+            }
+
+            if (!restored)
+                Console.Error.WriteLine($"Warning: Package '{pkgName}' not found in any configured feed.");
+        }
     }
 }

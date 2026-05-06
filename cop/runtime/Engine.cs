@@ -300,7 +300,8 @@ public static class Engine
         string scriptsDir,
         string? commandName,
         CancellationToken cancellationToken,
-        Action<string>? diagLog = null)
+        Action<string>? diagLog = null,
+        string[]? additionalFeedPaths = null)
     {
         scriptsDir = Path.GetFullPath(scriptsDir);
         if (!Directory.Exists(scriptsDir))
@@ -331,12 +332,15 @@ public static class Engine
 
         var fatalErrors = new List<string>();
         var providerPackages = new List<(string Dir, PackageMetadata Meta)>();
-        var typeRegistry = CreateTypeRegistry(scriptFiles, scriptsDir, parseErrors, fatalErrors, providerPackages: providerPackages);
+        var typeRegistry = CreateTypeRegistry(scriptFiles, scriptsDir, parseErrors, fatalErrors, providerPackages: providerPackages, additionalFeedPaths: additionalFeedPaths);
         if (fatalErrors.Count > 0)
             throw new InvalidOperationException($"Fatal errors: {string.Join("; ", fatalErrors)}");
 
         // Load external providers (registers streaming sources and sinks for AsyncStream providers)
-        LoadExternalProviders(typeRegistry, providerPackages, scriptsDir, parseErrors, fatalErrors, ExcludedDirectoryNames);
+        LoadExternalProviders(typeRegistry, providerPackages, scriptsDir, parseErrors, fatalErrors, ExcludedDirectoryNames, diagLog: diagLog);
+        diagLog?.Invoke($"[diag] Streaming: {providerPackages.Count} provider packages, {fatalErrors.Count} fatal errors, streaming sources: {string.Join(", ", typeRegistry.GetStreamingSourceNames())}");
+        if (fatalErrors.Count > 0)
+            diagLog?.Invoke($"[diag] Provider errors: {string.Join("; ", fatalErrors)}");
 
         // Register built-in sinks
         typeRegistry.RegisterSink("console", ConsoleWriteLineSink.Instance);
@@ -348,6 +352,7 @@ public static class Engine
         {
             foreach (var cmd in sf.Commands)
             {
+                diagLog?.Invoke($"[diag] Command: Collection={cmd.Collection}, IsAsync={cmd.IsAsync}, IsCommand={cmd.IsCommand}, Name={cmd.Name}");
                 if (cmd.Collection is not null && typeRegistry.IsStreamingCollection(cmd.Collection))
                 {
                     if (commandName is null || (cmd.IsCommand && string.Equals(cmd.Name, commandName, StringComparison.Ordinal)))
@@ -533,6 +538,11 @@ public static class Engine
 
         var interpreter = new ScriptInterpreter(typeRegistry, providerQueryService: queryService);
 
+        // Inject built-in CHECK command so packages don't need to define it
+        const string builtinCheckDef = "command CHECK(violations) = foreach violations => '{item.File@dim}({item.Line@dim}): {item.Severity@auto}: {item.Message}'";
+        var builtinCheckFile = ScriptParser.Parse(builtinCheckDef, "<builtin-check>");
+        scriptFiles.Add(builtinCheckFile);
+
         // Check if any specified rules are let collections (not commands).
         // If so, synthesize RUN CHECK(name) invocations for them.
         var allCommands = scriptFiles.SelectMany(sf => sf.Commands)
@@ -582,11 +592,12 @@ public static class Engine
         else
         {
             // No rules specified: synthesize RUN CHECK(name) for exported lets
-            // from the EXPLICITLY specified packages only (not transitive imports).
-            // This prevents imported helper packages (code, filesystem) from dumping raw data.
+            // that produce Violation items (detected by toError/toWarning/toInfo in filter chain).
+            // Only considers EXPLICITLY specified packages (not transitive imports).
             var explicitFiles = scriptFiles.Take(explicitScriptFileCount);
-            var letNames = explicitFiles.SelectMany(sf => sf.LetDeclarations)
-                .Where(l => l.IsExported && (!l.IsValueBinding || l.IsCollectionUnion) && !l.IsRuntime)
+            var allLetDecls = explicitFiles.SelectMany(sf => sf.LetDeclarations).ToList();
+            var letNames = allLetDecls
+                .Where(l => l.IsExported && !l.IsRuntime && IsViolationCollection(l, allLetDecls))
                 .Select(l => l.Name).ToList();
 
             if (letNames.Count > 0 && hasCheckCommand)
@@ -610,6 +621,58 @@ public static class Engine
                 return new EngineResult([], parseErrors, [$"Error: {ex.Message}"]);
             }
         }
+    }
+
+    /// <summary>
+    /// Determines if a let declaration produces Violation items.
+    /// A collection is a Violation collection if:
+    /// 1. Its filter chain ends with toError/toWarning/toInfo, OR
+    /// 2. It's a union whose constituents are Violation collections.
+    /// </summary>
+    private static bool IsViolationCollection(LetDeclaration let, List<LetDeclaration> allLets)
+    {
+        // Direct filter-based collection: check if filters end with a severity function
+        if (!let.IsValueBinding && !let.IsCollectionUnion)
+        {
+            return let.Filters.Count > 0 && HasViolationFilter(let.Filters);
+        }
+
+        // Union collection: check if any constituent is a Violation collection
+        if (let.IsCollectionUnion && let.ValueExpression is CollectionUnionExpr union)
+        {
+            foreach (var element in union.Elements)
+            {
+                if (element is IdentifierExpr id)
+                {
+                    var constituent = allLets.FirstOrDefault(l => l.Name == id.Name);
+                    if (constituent != null && IsViolationCollection(constituent, allLets))
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Checks if a filter chain contains a toError/toWarning/toInfo call,
+    /// indicating the collection produces Violation items.
+    /// </summary>
+    private static bool HasViolationFilter(List<Expression> filters)
+    {
+        foreach (var filter in filters)
+        {
+            var name = filter switch
+            {
+                PredicateCallExpr pc => pc.Name,
+                FunctionCallExpr fc => fc.Name,
+                _ => null
+            };
+            if (name is "toError" or "toWarning" or "toInfo")
+                return true;
+        }
+        return false;
     }
 
     /// <summary>

@@ -130,7 +130,7 @@ public class PredicateEvaluator
         // Check user-defined functions first
         if (_functions.TryGetValue(fc.Name, out var funcGroup))
         {
-            var func = ResolveFunction(funcGroup, paramType, item, ctx);
+            var func = ResolveFunction(funcGroup, paramType, item, ctx, callArgCount: fc.Args.Count);
             return ApplyFunction(func, item, fc.Args, item, paramType, ctx);
         }
 
@@ -205,7 +205,7 @@ public class PredicateEvaluator
         {
             if (mc.Negated)
                 throw new InvalidOperationException($"Cannot negate function call '{mc.Name}' — functions produce values, not booleans");
-            var func = ResolveFunction(funcGroup, paramType, item, ctx);
+            var func = ResolveFunction(funcGroup, paramType, item, ctx, callArgCount: mc.Args.Count);
             var target = Eval(mc.Target, item, paramType, ctx);
             return ApplyFunction(func, target, mc.Args, item, paramType, ctx);
         }
@@ -271,7 +271,7 @@ public class PredicateEvaluator
         // Bare function name as transform: `handle` means `handle(item)`
         if (_functions.TryGetValue(name, out var funcGroup))
         {
-            var func = ResolveFunction(funcGroup, paramType, item, ctx);
+            var func = ResolveFunction(funcGroup, paramType, item, ctx, callArgCount: 0);
             return ApplyFunction(func, item, [], item, paramType, ctx);
         }
 
@@ -1638,7 +1638,7 @@ public class PredicateEvaluator
     /// Resolve a function overload by matching constraints and input type.
     /// Constrained overloads are evaluated first; unconstrained is fallback.
     /// </summary>
-    private FunctionDefinition ResolveFunction(List<FunctionDefinition> group, string? inputType, object? item = null, EvaluationContext? ctx = null)
+    private FunctionDefinition ResolveFunction(List<FunctionDefinition> group, string? inputType, object? item = null, EvaluationContext? ctx = null, int? callArgCount = null)
     {
         // If we have an item and context, try constrained overloads first
         if (item is not null && ctx is not null)
@@ -1664,6 +1664,12 @@ public class PredicateEvaluator
         // Fall back to type match or first definition
         if (inputType != null)
         {
+            // When call arg count is known, prefer overload with matching parameter count
+            if (callArgCount is not null)
+            {
+                var paramMatch = group.FirstOrDefault(f => f.InputType == inputType && f.Constraint is null && f.Parameters.Count == callArgCount.Value);
+                if (paramMatch != null) return paramMatch;
+            }
             var match = group.FirstOrDefault(f => f.InputType == inputType && f.Constraint is null);
             if (match != null) return match;
         }

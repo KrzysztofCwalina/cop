@@ -141,12 +141,10 @@ public class Tokenizer
     private bool IsHashAloneOnLine()
     {
         int lookahead = _pos + 1;
-        while (lookahead < _source.Length && _source[lookahead] != '\n')
-        {
-            if (!char.IsWhiteSpace(_source[lookahead])) return false;
+        // Only match '#' immediately followed by end-of-line (or EOF), not '# ' with trailing spaces
+        while (lookahead < _source.Length && _source[lookahead] == '\r')
             lookahead++;
-        }
-        return true; // only whitespace (or nothing) after #
+        return lookahead >= _source.Length || _source[lookahead] == '\n';
     }
 
     private void SkipMultiLineComment()
