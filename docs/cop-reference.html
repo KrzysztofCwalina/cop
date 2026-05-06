@@ -245,7 +245,7 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
       { name: "containsKey", appliesTo: "object", params: "name: string", desc: "Object has a field with the given name" }
     ],
     functions: [
-      { name: "error", params: "message?: string", returns: "error value", desc: "Create an operational error value. Fields: .Message, .Source. Flows through pipelines — skips transforms, handled by sinks." },
+      { name: "error", params: "message?: string", returns: "error value", desc: "Create an operational error value. Fields: .Message, .Source. Type name is 'Error' — define function overloads with Error input type to handle in pipelines." },
       { name: "Trim", params: "string, suffix: string?", returns: "string", desc: "Remove suffix from end of string" },
       { name: "Replace", params: "string, old: string, new: string", returns: "string", desc: "Replace occurrences (case-insensitive)" },
       { name: "Text", params: "any", returns: "string", desc: "Convert any value to its text representation" },
@@ -947,9 +947,11 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
 
   http: {
     label: "http",
-    overview: "HTTP server provider. Receive incoming requests and send responses using streaming pipelines. Includes helper functions for common status codes.",
+    overview: "HTTP server and client provider. Receive incoming requests and send responses using streaming pipelines. Make outbound HTTP requests with http.Get, http.Post, and http.Send. Includes helper functions for common status codes.",
     samples: [
-      { title: "HTTP server with routing", code: "import http\n\nfunction handle(Request:Uri:equals('/hello')) => ok({ message: 'Hello, World!' })\n\nfunction handle(Request:Uri:equals('/health')) => ok\n\nfunction handle(Request) => notFound\n\nasync foreach Requests => handle => RESPONSES" }
+      { title: "HTTP server with routing", code: "import http\n\nfunction handle(Request:Uri:equals('/hello')) => ok({ message: 'Hello, World!' })\n\nfunction handle(Request:Uri:equals('/health')) => ok\n\nfunction handle(Request) => notFound\n\nasync foreach Requests => handle => RESPONSES" },
+      { title: "Error handling", code: "import http\n\nfunction handle(Request:Uri:equals('/hello')) => ok({ message: 'Hello' })\nfunction handle(Request) => notFound\n\n# Handle network errors — log and swallow\nfunction handle(Error) => print(Error.Message)\n\nasync foreach Requests => handle => RESPONSES" },
+      { title: "HTTP client — call an API", code: "import http\n\nfunction handle(Request:Uri:equals('/chat')) => ok(Text(http.Post('https://api.openai.com/v1/chat/completions', Text(Request.Body), {\n    Authorization: 'Bearer YOUR_API_KEY',\n    Content-Type: 'application/json'\n}).Body))\n\nfunction handle(Request) => notFound\n\nasync foreach Requests => handle => RESPONSES" }
     ],
     collections: [],
     enums: [
@@ -961,7 +963,8 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
         props: [
           { name: "StatusCode", type: "int", desc: "HTTP status code" },
           { name: "Body", type: "bytes", desc: "Response body as binary data" },
-          { name: "ContentType", type: "ContentType", desc: "Content-Type header value" }
+          { name: "ContentType", type: "ContentType", desc: "Content-Type header value" },
+          { name: "Headers", type: "Headers", desc: "Response headers as a dynamic object (access via Headers.Header-Name)" }
         ]
       },
       Request: {
@@ -971,16 +974,26 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
           { name: "Body", type: "bytes", desc: "Request body as binary data" },
           { name: "ContentType", type: "ContentType", desc: "Content-Type header value" }
         ]
+      },
+      Headers: {
+        props: [
+          { name: "(dynamic)", type: "string", desc: "Header values accessed by name (e.g., Headers.Content-Type, Headers.Authorization)" }
+        ]
       }
     },
     predicates: [],
     functions: [
       { name: "Requests", params: "", returns: "[Request]", desc: "Incoming HTTP requests — yields requests as they arrive" },
       { name: "ok", params: "Request, body: string", returns: "Response", desc: "Creates a 200 OK response with JSON body (accepts string or inline object)" },
+      { name: "ok", params: "Request", returns: "Response", desc: "Creates a 200 OK response with {\"status\": \"ok\"} body" },
       { name: "notFound", params: "Request", returns: "Response", desc: "Creates a 404 Not Found response" },
       { name: "created", params: "Request", returns: "Response", desc: "Creates a 201 Created response" },
       { name: "badRequest", params: "Request", returns: "Response", desc: "Creates a 400 Bad Request response" },
-      { name: "serverError", params: "Request", returns: "Response", desc: "Creates a 500 Internal Server Error response" }
+      { name: "serverError", params: "Request", returns: "Response", desc: "Creates a 500 Internal Server Error response" },
+      { name: "serverError", params: "Error", returns: "Response", desc: "Creates a 500 response from an Error value (body = Error.Message)" },
+      { name: "http.Get", params: "url: string, headers?: Headers", returns: "Response", desc: "Performs an outbound HTTP GET request. Returns Response with StatusCode, Body, ContentType, Headers." },
+      { name: "http.Post", params: "url: string, body: string|bytes|object, headers?: Headers", returns: "Response", desc: "Performs an outbound HTTP POST request. Body can be a string, bytes, or object literal (serialized as JSON)." },
+      { name: "http.Send", params: "method: string, url: string, body?: string|bytes|object, headers?: Headers", returns: "Response", desc: "Performs an outbound HTTP request with any method. Use for PUT, DELETE, PATCH, etc." }
     ],
     checks: [],
     commands: [
