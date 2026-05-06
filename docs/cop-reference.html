@@ -242,7 +242,6 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
     ],
     functions: [
       { name: "error", params: "message?: string", returns: "error value", desc: "Create an operational error value. Fields: .Message, .Source. Flows through pipelines — skips transforms, handled by sinks." },
-      { name: "FAIL", params: "message: string", returns: "never", desc: "Terminate execution immediately. For code bugs that should never occur." },
       { name: "Trim", params: "string, suffix: string?", returns: "string", desc: "Remove suffix from end of string" },
       { name: "Replace", params: "string, old: string, new: string", returns: "string", desc: "Replace occurrences (case-insensitive)" },
       { name: "Text", params: "any", returns: "string", desc: "Convert any value to its text representation" },
