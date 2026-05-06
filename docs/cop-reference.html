@@ -2176,12 +2176,12 @@ const packages = {
     "overview": "HTTP server provider for building web APIs with cop pipelines",
     "samples": [
       {
-        "title": "Error handling",
-        "code": "import http\r\n\r\nfunction handle(Request:Uri:equals('/hello')) => ok({ message: 'Hello' })\r\nfunction handle(Request) => notFound\r\n\r\n# Handle network errors — log and swallow\r\nfunction handle(Error) => print(Error.Message)\r\n\r\nasync foreach Requests => handle => RESPONSES"
-      },
-      {
         "title": "Http client",
         "code": "import http\r\n\r\nfunction complete(string) =>\r\n    http.Post('https://api.example.com/v1/completions', {\r\n        Content-Type: 'application/json'\r\n    }, {\r\n        model = 'gpt-4o',\r\n        messages = [{ role = 'user', content = string }]\r\n    })\r\n\r\nfunction handle(Request:Uri:equals('/chat')) =>\r\n    Request.Body:Text:complete.Body:Text:ok\r\n\r\nfunction handle(Request) => notFound\r\n\r\nasync foreach Requests => handle => RESPONSES"
+      },
+      {
+        "title": "Http server",
+        "code": "import http\r\n\r\nfunction handle(Request:Uri:equals('/hello')) => ok({ message: 'Hello' })\r\nfunction handle(Request) => notFound\r\n\r\n# Handle network errors — log and swallow\r\nfunction handle(Error) => print(Error.Message)\r\n\r\nasync foreach Requests => handle => RESPONSES"
       }
     ],
     "collections": [],
