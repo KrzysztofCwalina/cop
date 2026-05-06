@@ -936,7 +936,7 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
     label: "http",
     overview: "HTTP server provider. Receive incoming requests and send responses using streaming pipelines. Includes helper functions for common status codes.",
     samples: [
-      { title: "HTTP server with routing", code: "import http\n\nfunction handle(Request:Uri:eq('/hello')) => Response {\n    StatusCode = 200,\n    Body = '{\"message\": \"Hello, World!\"}',\n    ContentType = 'application/json'\n}\n\nfunction handle(Request:Uri:eq('/health')) => Response {\n    StatusCode = 200,\n    Body = '{\"status\": \"ok\"}',\n    ContentType = 'application/json'\n}\n\nfunction handle(Request) => notFound\n\ncommand serve = async foreach Receive => handle => RESPONSES" }
+      { title: "HTTP server with routing", code: "import http\n\nfunction handle(Request:Uri:eq('/hello')) => Response {\n    StatusCode = 200,\n    Body = '{\"message\": \"Hello, World!\"}',\n    ContentType = 'application/json'\n}\n\nfunction handle(Request:Uri:eq('/health')) => Response {\n    StatusCode = 200,\n    Body = '{\"status\": \"ok\"}',\n    ContentType = 'application/json'\n}\n\nfunction handle(Request) => notFound\n\ncommand serve = async foreach Requests => handle => RESPONSES" }
     ],
     collections: [],
     enums: [
@@ -962,7 +962,7 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
     },
     predicates: [],
     functions: [
-      { name: "Receive", params: "", returns: "[Request]", desc: "Incoming HTTP requests — yields requests as they arrive" },
+      { name: "Requests", params: "", returns: "[Request]", desc: "Incoming HTTP requests — yields requests as they arrive" },
       { name: "ok", params: "Request", returns: "Response", desc: "Creates a 200 OK response" },
       { name: "notFound", params: "Request", returns: "Response", desc: "Creates a 404 Not Found response" },
       { name: "created", params: "Request", returns: "Response", desc: "Creates a 201 Created response" },

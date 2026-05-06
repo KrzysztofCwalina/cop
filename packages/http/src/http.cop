@@ -3,7 +3,7 @@
 # Import with: import http
 # 
 # Usage:
-#   command serve = async foreach Receive => handle => RESPONSES
+#   command serve = async foreach Requests => handle => RESPONSES
 
 export enum HttpMethod = GET | POST | PUT | DELETE | PATCH | HEAD | OPTIONS
 export enum ContentType = 'application/json' | 'text/plain' | 'text/html' | 'application/xml' | 'multipart/form-data' | 'application/octet-stream'

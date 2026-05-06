@@ -58,7 +58,7 @@ public class HttpProvider : DataProvider
             ],
             Collections =
             [
-                new ProviderCollectionSchema { Name = "Receive", ItemType = "Request" }
+                new ProviderCollectionSchema { Name = "Requests", ItemType = "Request" }
             ]
         };
         return schema.ToJson();
@@ -181,7 +181,7 @@ public class HttpSendSink : DataSink
             tcs = origSo.GetField("__responseCompletion") as TaskCompletionSource<HttpResponseItem>;
 
         if (tcs is null)
-            throw new InvalidOperationException("http.RESPONSES can only be used with items from http.Receive.");
+            throw new InvalidOperationException("http.RESPONSES can only be used with items from http.Requests.");
 
         HttpResponseItem response;
         if (result is DataObject so)
@@ -229,7 +229,7 @@ public class HttpStreamingSource : IStreamingCollectionSource
         _provider = provider;
     }
 
-    public string CollectionName => "Receive";
+    public string CollectionName => "Requests";
 
     public IAsyncEnumerable<object> QueryStream(CancellationToken cancellationToken = default)
     {

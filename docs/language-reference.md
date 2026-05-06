@@ -308,14 +308,14 @@ Path-scoped collections query the provider against the given path instead of the
 
 ### Pipe Operators
 
-Providers expose globals that return typed lists (e.g., `Types`, `Receive`). The pipe operator (`=>`) dequeues items from a source, transforms them, and enqueues results into a sink:
+Providers expose globals that return typed lists (e.g., `Types`, `Requests`). The pipe operator (`=>`) dequeues items from a source, transforms them, and enqueues results into a sink:
 
 ```ruby
 # foreach = repeat { dequeue from source → transform → enqueue to sink }
-command serve = foreach Receive => handle => Send
+command serve = foreach Requests => handle => RESPONSES
 
 # async foreach = process items concurrently (parallel)
-command serve = async foreach Receive => handle => Send
+command serve = async foreach Requests => handle => RESPONSES
 ```
 
 Any global returning a list can serve as a source. Sinks are provider-registered targets (e.g., `Send`, `console`, `file`). The runtime handles thread-safe enqueue/dequeue. Use `async foreach` when items can be processed independently (e.g., HTTP requests).
@@ -920,10 +920,10 @@ Use `=> target` after the template to pipe output to a collection instead of the
 
 ```ruby
 # Pipe to a provider-backed collection (e.g., http response)
-command serve = foreach Receive => handle => Send
+command serve = foreach Requests => handle => RESPONSES
 
 # Process items in parallel
-command serve = async foreach Receive => handle => Send
+command serve = async foreach Requests => handle => RESPONSES
 
 # Pipe to a file
 foreach Types => SAVE('types.txt', '{item.Name}')

@@ -25,12 +25,12 @@ function handle(Request) => Response {
   ContentType = 'text/plain'
 }
 
-command serve = async foreach Receive => handle => RESPONSES
+command serve = async foreach Requests => handle => RESPONSES
 ```
 
 ## Globals
 
-- `Receive` — incoming HTTP requests (`[Request]`)
+- `Requests` — incoming HTTP requests (`[Request]`)
 - `Send` — outgoing HTTP responses (`[Response]`)
 
 ## Helper Functions
