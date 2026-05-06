@@ -141,8 +141,9 @@ const packages = {
     label: "core",
     overview: "Built-in types, predicates, and functions available in every Cop program. Defines string, int, bool, collections, and the standard library operations like Select, Where, GroupBy, and OrderBy.",
     samples: [
-      { title: "Filter and transform a collection", code: "# Select names of public types\nlet public-names = Where(Types, isPublic)\n  |> Select(item.Name)\n\nforeach public-names => \'{item}\'" },
-      { title: "Group and aggregate", code: "# Count types per file\nlet by-file = GroupBy(Types, item.File.Path)\n\nforeach by-file => \'{item.Key}: {item.Items.Count} types\'" }
+      { title: "Hello World", code: "PRINT 'Hello, World!'" },
+      { title: "Variables and arithmetic", code: "let x = 10\nlet y = 3\nlet sum = x + y\nlet product = x * y\n\nPRINT 'Sum: {sum}, Product: {product}'" },
+      { title: "String and collection operations", code: "let names = ['Alice' 'Bob' 'Charlie' 'Diana']\nlet count = names.Count\nlet first = names.First\n\nPRINT '{count} people, first is {first}'\n\nforeach names => 'Hello, {item}!'" }
     ],
     collections: [],
     types: {
