@@ -949,9 +949,9 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
     label: "http",
     overview: "HTTP server and client provider. Receive incoming requests and send responses using streaming pipelines. Make outbound HTTP requests with http.Get, http.Post, and http.Send. Includes helper functions for common status codes.",
     samples: [
-      { title: "HTTP server with routing", code: "import http\n\nfunction handle(Request:Uri:equals('/hello')) => ok({ message: 'Hello, World!' })\n\nfunction handle(Request:Uri:equals('/health')) => ok\n\nfunction handle(Request) => notFound\n\nasync foreach Requests => handle => RESPONSES" },
-      { title: "Error handling", code: "import http\n\nfunction handle(Request:Uri:equals('/hello')) => ok({ message: 'Hello' })\nfunction handle(Request) => notFound\n\n# Handle network errors — log and swallow\nfunction handle(Error) => print(Error.Message)\n\nasync foreach Requests => handle => RESPONSES" },
-      { title: "HTTP client — call an API", code: "import http\n\nfunction handle(Request:Uri:equals('/chat')) => ok(Text(http.Post('https://api.openai.com/v1/chat/completions', Text(Request.Body), {\n    Authorization: 'Bearer YOUR_API_KEY',\n    Content-Type: 'application/json'\n}).Body))\n\nfunction handle(Request) => notFound\n\nasync foreach Requests => handle => RESPONSES" }
+      { title: "HTTP server with routing", code: "import http\n\nfunction handle(Request:Uri:equals('/hello')) =>\n    ok({ message: 'Hello, World!' })\n\nfunction handle(Request:Uri:equals('/health')) => ok\n\nfunction handle(Request) => notFound\n\nasync foreach Requests => handle => RESPONSES" },
+      { title: "Error handling", code: "import http\n\nfunction handle(Request:Uri:equals('/hello')) =>\n    ok({ message: 'Hello' })\n\nfunction handle(Request) => notFound\n\n# Handle network errors — log and swallow\nfunction handle(Error) => print(Error.Message)\n\nasync foreach Requests => handle => RESPONSES" },
+      { title: "HTTP client — call an API", code: "import http\n\nfunction handle(Request:Uri:equals('/chat')) =>\n    ok(Text(http.Post(\n        'https://api.openai.com/v1/chat/completions',\n        Text(Request.Body),\n        {\n            Authorization: 'Bearer YOUR_API_KEY',\n            Content-Type: 'application/json'\n        }\n    ).Body))\n\nfunction handle(Request) => notFound\n\nasync foreach Requests => handle => RESPONSES" }
     ],
     collections: [],
     enums: [
