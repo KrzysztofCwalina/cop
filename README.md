@@ -433,4 +433,4 @@ Cop's exit codes make it easy to integrate into CI pipelines:
 - Read the [CLI Reference](docs/cli-reference.md) for all commands and options
 - Read [Static Analysis with Cop](docs/static-analysis-with-cop.md) for writing source code checks
 - Read [Testing with Cop](docs/testing-with-cop.md) for writing and running tests
-- Browse `packages/` for examples of check definitions
+- Browse the [Package Reference](https://krzysztofcwalina.github.io/cop/cop-reference.html) for examples of check definitions
