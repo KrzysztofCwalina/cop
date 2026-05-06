@@ -1,5 +1,5 @@
 ---
-name: javascript-library-client
+name: javascript-library-client-checks
 version: 1.0.0
 title: JavaScript/TypeScript Client Library Development
 description: Patterns for building JavaScript/TypeScript client libraries including naming, method signatures, and API design

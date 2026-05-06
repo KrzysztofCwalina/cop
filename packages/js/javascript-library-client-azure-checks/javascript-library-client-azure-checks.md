@@ -1,5 +1,5 @@
 ---
-name: javascript-library-client-azure
+name: javascript-library-client-azure-checks
 version: 1.0.0
 title: Azure JavaScript/TypeScript Client Library Development
 description: Azure-specific patterns for JavaScript/TypeScript client SDKs following the Azure SDK design guidelines

@@ -1,5 +1,5 @@
 ---
-name: javascript-library
+name: javascript-library-checks
 version: 1.0.0
 title: JavaScript/TypeScript Library Design
 description: Library design conventions for JavaScript and TypeScript packages

@@ -1,5 +1,5 @@
 ---
-name: python-library-client
+name: python-library-client-checks
 version: 1.0.0
 title: Python Client Library Development
 description: Patterns for building Python client libraries including naming, method signatures, and API design

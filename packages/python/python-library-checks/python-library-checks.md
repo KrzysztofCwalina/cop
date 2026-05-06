@@ -1,5 +1,5 @@
 ---
-name: python-library
+name: python-library-checks
 version: 1.0.0
 title: Python Library Design
 description: Library design conventions for Python packages
