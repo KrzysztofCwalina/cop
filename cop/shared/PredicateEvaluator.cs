@@ -156,7 +156,7 @@ public class PredicateEvaluator
                 ? id.Name
                 : throw new InvalidOperationException($"Code() provider list must contain identifiers, got {elem.GetType().Name}");
 
-            if (!knownNamespaces.Contains(name, StringComparer.OrdinalIgnoreCase))
+            if (!knownNamespaces.Contains(name, StringComparer.Ordinal))
                 throw new InvalidOperationException($"Provider '{name}' is not imported. Add 'import {name}' to your .cop file.");
 
             providers[i] = name;
@@ -204,7 +204,7 @@ public class PredicateEvaluator
         if (mc.Name == "Code" && mc.Target is IdentifierExpr nsId)
         {
             var knownNamespaces = _registry.GetProviderNamespaces();
-            if (knownNamespaces.Contains(nsId.Name, StringComparer.OrdinalIgnoreCase))
+            if (knownNamespaces.Contains(nsId.Name, StringComparer.Ordinal))
             {
                 string? path = mc.Args.Count == 1 ? Eval(mc.Args[0], item, paramType, ctx)?.ToString() : null;
                 return CreateCodeObject([nsId.Name], path);
@@ -341,7 +341,7 @@ public class PredicateEvaluator
                         {
                             var lang = langDesc.Accessor(file);
                             return lang is string langStr &&
-                                   string.Equals(langStr, name, StringComparison.OrdinalIgnoreCase);
+                                   string.Equals(langStr, name, StringComparison.Ordinal);
                         }
                     }
                 }
@@ -1047,7 +1047,7 @@ public class PredicateEvaluator
                 {
                     // Distinct by expression: deduplicate by projected value
                     var fieldExpr = args[0];
-                    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var seen = new HashSet<string>(StringComparer.Ordinal);
                     var result = new List<object>();
                     foreach (var collItem in collection)
                     {
@@ -1062,7 +1062,7 @@ public class PredicateEvaluator
                 else
                 {
                     // Distinct without args: deduplicate by string representation
-                    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var seen = new HashSet<string>(StringComparer.Ordinal);
                     var result = new List<object>();
                     foreach (var collItem in collection)
                     {
@@ -1077,7 +1077,7 @@ public class PredicateEvaluator
             case "GroupBy":
             {
                 var fieldExpr = args[0];
-                var groups = new Dictionary<string, List<object>>(StringComparer.OrdinalIgnoreCase);
+                var groups = new Dictionary<string, List<object>>(StringComparer.Ordinal);
                 var groupOrder = new List<string>();
                 foreach (var collItem in collection)
                 {

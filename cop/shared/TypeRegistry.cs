@@ -28,11 +28,11 @@ public class TypeRegistry
     private readonly Dictionary<Type, string> _clrTypeMappings = new();
     private readonly Dictionary<string, Func<Document, List<object>>> _collectionExtractors = new();
     private readonly Dictionary<string, List<object>> _globalCollections = new();
-    private readonly Dictionary<string, Dictionary<string, List<object>>> _nsCollections = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Dictionary<string, List<object>>> _nsCollections = new(StringComparer.Ordinal);
     private readonly Dictionary<(string, string), List<object>> _extractorCache = new();
-    private readonly Dictionary<string, Func<string, string, List<object>>> _fileParsers = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, Dictionary<string, DataSink>> _nsSinks = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, IStreamingCollectionSource> _streamingSources = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Func<string, string, List<object>>> _fileParsers = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Dictionary<string, DataSink>> _nsSinks = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, IStreamingCollectionSource> _streamingSources = new(StringComparer.Ordinal);
     private Func<string, List<Document>>? _documentLoader;
 
     public TypeRegistry()
@@ -302,7 +302,7 @@ public class TypeRegistry
     {
         if (!_nsCollections.TryGetValue(ns, out var nsDict))
         {
-            nsDict = new(StringComparer.OrdinalIgnoreCase);
+            nsDict = new(StringComparer.Ordinal);
             _nsCollections[ns] = nsDict;
         }
         if (nsDict.TryGetValue(collName, out var existing))
@@ -423,7 +423,7 @@ public class TypeRegistry
     {
         if (!_nsSinks.TryGetValue(ns, out var nsDict))
         {
-            nsDict = new(StringComparer.OrdinalIgnoreCase);
+            nsDict = new(StringComparer.Ordinal);
             _nsSinks[ns] = nsDict;
         }
         nsDict[sink.Name] = sink;
@@ -480,7 +480,7 @@ public class TypeRegistry
         foreach (var (key, src) in _streamingSources)
         {
             var dot = key.LastIndexOf('.');
-            if (dot >= 0 && string.Equals(key[(dot + 1)..], name, StringComparison.OrdinalIgnoreCase))
+            if (dot >= 0 && string.Equals(key[(dot + 1)..], name, StringComparison.Ordinal))
                 return src;
         }
         return null;
@@ -503,7 +503,7 @@ public class TypeRegistry
             yield return name;
 
         // Track bare name → namespaces for ambiguity detection
-        var bareNames = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var bareNames = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         foreach (var (ns, nsDict) in _nsCollections)
         {
             foreach (var collName in nsDict.Keys)
@@ -534,7 +534,7 @@ public class TypeRegistry
     /// </summary>
     public List<string> GetAllCollectionNames()
     {
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var n in GetGlobalCollectionNames())
             names.Add(n);
         foreach (var c in _collections.Keys)

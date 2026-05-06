@@ -25,7 +25,7 @@ public static class Engine
     private static BuiltinProvider ToBuiltin(DataProvider provider)
     {
         var schema = ProviderSchema.FromJson(provider.GetSchema());
-        var collNames = new HashSet<string>(schema.Collections.Select(c => c.Name), StringComparer.OrdinalIgnoreCase);
+        var collNames = new HashSet<string>(schema.Collections.Select(c => c.Name), StringComparer.Ordinal);
         var name = provider switch
         {
             FilesystemProvider => "files",
@@ -87,7 +87,7 @@ public static class Engine
                 .Distinct()
                 .ToList();
 
-            if (!availableCommands.Contains(commandName, StringComparer.OrdinalIgnoreCase))
+            if (!availableCommands.Contains(commandName, StringComparer.Ordinal))
             {
                 var message = availableCommands.Count > 0
                     ? $"Unknown command '{commandName}'. Available commands: {string.Join(", ", availableCommands)}"
@@ -139,7 +139,7 @@ public static class Engine
         phaseSw.Restart();
         foreach (var (loaded, schema) in externalProviders)
         {
-            var collNames = new HashSet<string>(schema.Collections.Select(c => c.Name), StringComparer.OrdinalIgnoreCase);
+            var collNames = new HashSet<string>(schema.Collections.Select(c => c.Name), StringComparer.Ordinal);
 
             // Determine which collections are referenced
             IReadOnlyList<string>? reqCols = null;
@@ -268,7 +268,7 @@ public static class Engine
 
         var interpreter = new ScriptInterpreter(typeRegistry, diagLog: diagLog, providerQueryService: queryService);
         HashSet<string>? filterSet = commandFilter is { Length: > 0 }
-            ? new HashSet<string>(commandFilter, StringComparer.OrdinalIgnoreCase)
+            ? new HashSet<string>(commandFilter, StringComparer.Ordinal)
             : null;
         phaseSw.Restart();
 
@@ -346,7 +346,7 @@ public static class Engine
             {
                 if (cmd.Collection is not null && typeRegistry.IsStreamingCollection(cmd.Collection))
                 {
-                    if (commandName is null || (cmd.IsCommand && string.Equals(cmd.Name, commandName, StringComparison.OrdinalIgnoreCase)))
+                    if (commandName is null || (cmd.IsCommand && string.Equals(cmd.Name, commandName, StringComparison.Ordinal)))
                     {
                         streamingCmd = cmd;
                         break;
@@ -533,10 +533,10 @@ public static class Engine
         // If so, synthesize RUN CHECK(name) invocations for them.
         var allCommands = scriptFiles.SelectMany(sf => sf.Commands)
             .Where(c => c.IsCommand && c.CommandRef == null)
-            .Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .Select(c => c.Name).ToHashSet(StringComparer.Ordinal);
         var allLets = scriptFiles.SelectMany(sf => sf.LetDeclarations)
             .Where(l => (!l.IsValueBinding || l.IsCollectionUnion) && !l.IsRuntime)
-            .Select(l => l.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .Select(l => l.Name).ToHashSet(StringComparer.Ordinal);
         bool hasCheckCommand = allCommands.Contains("CHECK");
 
         if (rules.Count > 0)
@@ -793,7 +793,7 @@ public static class Engine
                     if (f is not null)
                     {
                         filters.Add(f);
-                        perCollection ??= new(StringComparer.OrdinalIgnoreCase);
+                        perCollection ??= new(StringComparer.Ordinal);
                         perCollection[c] = f;
                     }
                 }
@@ -820,7 +820,7 @@ public static class Engine
             // Specific command: only analyze that named command
             commands = scriptFiles
                 .SelectMany(f => f.Commands)
-                .Where(c => c.IsCommand && string.Equals(c.Name, commandName, StringComparison.OrdinalIgnoreCase))
+                .Where(c => c.IsCommand && string.Equals(c.Name, commandName, StringComparison.Ordinal))
                 .ToList();
         }
         else
@@ -835,14 +835,14 @@ public static class Engine
         if (commands.Count == 0) return null;
 
         // Build let declaration dictionary for resolving transitive references
-        var letDeclarations = new Dictionary<string, LetDeclaration>(StringComparer.OrdinalIgnoreCase);
+        var letDeclarations = new Dictionary<string, LetDeclaration>(StringComparer.Ordinal);
         foreach (var sf in scriptFiles)
             foreach (var let in sf.LetDeclarations)
                 letDeclarations[let.Name] = let;
 
         // Collect predicate names and definitions for filter inlining
-        var predicateNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var predicateDefs = new Dictionary<string, List<PredicateDefinition>>(StringComparer.OrdinalIgnoreCase);
+        var predicateNames = new HashSet<string>(StringComparer.Ordinal);
+        var predicateDefs = new Dictionary<string, List<PredicateDefinition>>(StringComparer.Ordinal);
         foreach (var sf in scriptFiles)
         {
             foreach (var pred in sf.Predicates)
@@ -857,7 +857,7 @@ public static class Engine
             }
         }
 
-        var collectionFilters = new Dictionary<string, FilterExpression?>(StringComparer.OrdinalIgnoreCase);
+        var collectionFilters = new Dictionary<string, FilterExpression?>(StringComparer.Ordinal);
 
         foreach (var cmd in commands)
         {
@@ -908,7 +908,7 @@ public static class Engine
         if (letDecl.IsValueBinding)
             return name; // Value binding, not a collection chain
 
-        visited ??= new(StringComparer.OrdinalIgnoreCase);
+        visited ??= new(StringComparer.Ordinal);
         if (!visited.Add(name))
             return name; // Cycle detected
 

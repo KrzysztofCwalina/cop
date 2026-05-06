@@ -226,7 +226,7 @@ public static class ProviderLoader
         if (!collectionFilters.TryGetValue(collName, out var filter)) return items;
 
         var itemType = schema.Collections
-            .FirstOrDefault(c => c.Name.Equals(collName, StringComparison.OrdinalIgnoreCase))?.ItemType;
+            .FirstOrDefault(c => c.Name.Equals(collName, StringComparison.Ordinal))?.ItemType;
         if (itemType is null) return items;
 
         return registry.ApplyPushdownFilter(itemType, items, filter);

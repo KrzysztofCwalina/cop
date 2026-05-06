@@ -25,7 +25,7 @@ function handle(Request) => Response {
   ContentType = 'text/plain'
 }
 
-command serve = async foreach Receive => handle => Send
+command serve = async foreach Receive => handle => RESPONSES
 ```
 
 ## Globals

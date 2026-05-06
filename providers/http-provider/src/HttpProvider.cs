@@ -167,11 +167,11 @@ public class HttpResponseItem
 
 /// <summary>
 /// Sink that sends HTTP responses back to the requesting client.
-/// Registered as "http.Send".
+/// Registered as "http.RESPONSES".
 /// </summary>
 public class HttpSendSink : DataSink
 {
-    public override string Name => "Send";
+    public override string Name => "RESPONSES";
 
     public override Task WriteAsync(object? originalItem, object result)
     {
@@ -181,7 +181,7 @@ public class HttpSendSink : DataSink
             tcs = origSo.GetField("__responseCompletion") as TaskCompletionSource<HttpResponseItem>;
 
         if (tcs is null)
-            throw new InvalidOperationException("http.Send can only be used with items from http.Receive.");
+            throw new InvalidOperationException("http.RESPONSES can only be used with items from http.Receive.");
 
         HttpResponseItem response;
         if (result is DataObject so)

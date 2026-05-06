@@ -121,7 +121,7 @@ public class ScriptInterpreter
             letDeclarations, documents, predicateGroups, functionGroups);
 
         // Build command lookup table across all script files for expanding refs
-        var allCommands = new Dictionary<string, List<CommandBlock>>(StringComparer.OrdinalIgnoreCase);
+        var allCommands = new Dictionary<string, List<CommandBlock>>(StringComparer.Ordinal);
         foreach (var cf in scriptFiles)
         {
             foreach (var c in cf.Commands)
@@ -149,7 +149,7 @@ public class ScriptInterpreter
             else if (commandName != null)
             {
                 // Run only matching named commands (legacy single-command mode)
-                commandsToRun = ScriptFile.Commands.Where(c => c.IsCommand && string.Equals(c.Name, commandName, StringComparison.OrdinalIgnoreCase));
+                commandsToRun = ScriptFile.Commands.Where(c => c.IsCommand && string.Equals(c.Name, commandName, StringComparison.Ordinal));
             }
             else if (commandFilter != null)
             {
@@ -254,12 +254,12 @@ public class ScriptInterpreter
         if (!assertMode && allOutputs.Count == 0 && outputs.Count == 0)
         {
             // Only check collections from commands that actually executed (not all commands in all files)
-            var referencedCollections = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var referencedCollections = new HashSet<string>(StringComparer.Ordinal);
             foreach (var sf in scriptFiles)
             {
                 IEnumerable<CommandBlock> executed;
                 if (commandName != null)
-                    executed = sf.Commands.Where(c => c.IsCommand && string.Equals(c.Name, commandName, StringComparison.OrdinalIgnoreCase));
+                    executed = sf.Commands.Where(c => c.IsCommand && string.Equals(c.Name, commandName, StringComparison.Ordinal));
                 else if (commandFilter != null)
                     executed = sf.Commands.Where(c => commandFilter.Contains(c.Name));
                 else
@@ -273,7 +273,7 @@ public class ScriptInterpreter
             // Resolve all root provider collections. Only warn if ALL roots are empty —
             // if any root has data, zero output is from predicate filtering, not missing data.
             bool anyRootHasData = false;
-            var emptyRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var emptyRoots = new HashSet<string>(StringComparer.Ordinal);
             foreach (var col in referencedCollections)
             {
                 var roots = ResolveRootCollections(col, letDeclarations);
@@ -1247,7 +1247,7 @@ public class ScriptInterpreter
             {
                 var fieldArgs = GetFilterArgs(filter);
                 var materialized = current.Where(item => item is not null).ToList();
-                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var seen = new HashSet<string>(StringComparer.Ordinal);
                 var result = new List<object>();
                 foreach (var item in materialized)
                 {
@@ -1269,7 +1269,7 @@ public class ScriptInterpreter
                 var fieldArgs = GetFilterArgs(filter);
                 if (fieldArgs.Count > 0)
                 {
-                    var groups = new Dictionary<string, List<object>>(StringComparer.OrdinalIgnoreCase);
+                    var groups = new Dictionary<string, List<object>>(StringComparer.Ordinal);
                     var groupOrder = new List<string>();
                     foreach (var item in current)
                     {
@@ -1535,7 +1535,7 @@ public class ScriptInterpreter
         if (a is double or int && b is double or int) return ToDouble(a).CompareTo(ToDouble(b));
         var sa = a?.ToString() ?? "";
         var sb = b?.ToString() ?? "";
-        return string.Compare(sa, sb, StringComparison.OrdinalIgnoreCase);
+        return string.Compare(sa, sb, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -2219,14 +2219,14 @@ public class ScriptInterpreter
     }
 
     private static bool IsSaveAction(string? actionName) =>
-        string.Equals(actionName, "SAVE", StringComparison.OrdinalIgnoreCase);
+        string.Equals(actionName, "SAVE", StringComparison.Ordinal);
 
     private static bool IsDebugAction(string? actionName) =>
-        string.Equals(actionName, "DEBUG", StringComparison.OrdinalIgnoreCase);
+        string.Equals(actionName, "DEBUG", StringComparison.Ordinal);
 
     private static bool IsAssertAction(string? actionName) =>
-        string.Equals(actionName, "ASSERT", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(actionName, "ASSERT_EMPTY", StringComparison.OrdinalIgnoreCase);
+        string.Equals(actionName, "ASSERT", StringComparison.Ordinal) ||
+        string.Equals(actionName, "ASSERT_EMPTY", StringComparison.Ordinal);
 
     /// <summary>
     /// Execute an ASSERT or ASSERT_EMPTY command: resolve collection, count items, record pass/fail.
@@ -2239,7 +2239,7 @@ public class ScriptInterpreter
         Dictionary<string, List<FunctionDefinition>> functionGroups,
         List<AssertResult> allAsserts)
     {
-        bool expectEmpty = string.Equals(cmd.ActionName, "ASSERT_EMPTY", StringComparison.OrdinalIgnoreCase);
+        bool expectEmpty = string.Equals(cmd.ActionName, "ASSERT_EMPTY", StringComparison.Ordinal);
         string itemType = ResolveItemType(cmd.Collection!, predicateGroups, letDeclarations, functionGroups);
 
         List<object> items;
