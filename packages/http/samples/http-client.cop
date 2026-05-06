@@ -1,0 +1,13 @@
+import http
+
+type ChatRequest = { prompt: string }
+
+function handle(Request:Uri:equals('/chat')) =>
+    ok(Text(http.Post('https://api.example.com/v1/completions',
+        Text(Request.Body),
+        { Content-Type: 'application/json' }
+    ).Body))
+
+function handle(Request) => notFound
+
+async foreach Requests => handle => RESPONSES
