@@ -1,0 +1,8 @@
+import json
+
+type Config = { name: string, enabled: bool }
+
+let configs = Parse('settings.json', [Config])
+
+foreach configs:enabled
+    => '{item.name} is active'

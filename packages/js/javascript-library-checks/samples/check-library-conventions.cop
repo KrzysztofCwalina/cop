@@ -1,0 +1,5 @@
+import javascript-library-checks
+
+CHECK no-default-exports
+CHECK no-external-promises
+CHECK no-const-enums

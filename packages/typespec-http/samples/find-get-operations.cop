@@ -1,0 +1,4 @@
+import typespec-http
+
+foreach HttpOperations:isGet
+    => '{item.Path} — {item.OperationId}'

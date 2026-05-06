@@ -1,0 +1,4 @@
+import csharp
+
+# All built-in checks combined
+CHECK csharp-checks

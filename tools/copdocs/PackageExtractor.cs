@@ -27,14 +27,10 @@ public class PackageExtractor
             : [];
 
         var allLets = new List<LetDeclaration>();
-        var docComments = new Dictionary<string, string>();
 
         foreach (var copFile in copFiles)
         {
             var source = File.ReadAllText(copFile);
-
-            // Extract doc comments (## lines) associated with export let declarations
-            ExtractDocComments(source, docComments);
 
             try
             {
@@ -54,7 +50,7 @@ public class PackageExtractor
         }
 
         // Extract checks from let declarations
-        ExtractChecks(allLets, docComments, entry);
+        ExtractChecks(allLets, entry);
 
         // Load samples
         LoadSamples(packageDir, entry);
@@ -66,7 +62,7 @@ public class PackageExtractor
     {
         foreach (var td in sf.TypeDefinitions.Where(t => t.IsExported))
         {
-            var typeEntry = new TypeEntry();
+            var typeEntry = new TypeEntry { Desc = td.DocComment };
             foreach (var prop in td.Properties)
             {
                 var typeName = prop.IsCollection ? $"[{prop.TypeName}]" : prop.TypeName;
@@ -90,7 +86,7 @@ public class PackageExtractor
             {
                 Name = pd.Name,
                 AppliesTo = pd.ParameterType,
-                Desc = ""
+                Desc = pd.DocComment ?? ""
             });
         }
     }
@@ -105,7 +101,7 @@ public class PackageExtractor
                 Name = fd.Name,
                 Params = paramStr,
                 Returns = fd.ReturnType,
-                Desc = ""
+                Desc = fd.DocComment ?? ""
             });
         }
     }
@@ -160,14 +156,13 @@ public class PackageExtractor
         }
     }
 
-    private static void ExtractChecks(List<LetDeclaration> allLets, Dictionary<string, string> docComments, PackageEntry entry)
+    private static void ExtractChecks(List<LetDeclaration> allLets, PackageEntry entry)
     {
         foreach (var let in allLets.Where(l => l.IsExported && !l.IsRuntime))
         {
             if (IsViolationCollection(let, allLets))
             {
-                var desc = docComments.TryGetValue(let.Name, out var d) ? d : "";
-                entry.Checks.Add(new CheckEntry { Name = let.Name, Desc = desc });
+                entry.Checks.Add(new CheckEntry { Name = let.Name, Desc = let.DocComment ?? "" });
             }
         }
     }
@@ -207,40 +202,6 @@ public class PackageExtractor
                 return true;
         }
         return false;
-    }
-
-    /// <summary>
-    /// Scan source for ## doc comments that precede "export let" declarations.
-    /// </summary>
-    private static void ExtractDocComments(string source, Dictionary<string, string> docComments)
-    {
-        var lines = source.Split('\n');
-        string? pendingComment = null;
-
-        for (int i = 0; i < lines.Length; i++)
-        {
-            var line = lines[i].TrimStart();
-            if (line.StartsWith("## "))
-            {
-                pendingComment = line[3..].Trim();
-            }
-            else if (pendingComment != null && line.StartsWith("export let "))
-            {
-                // Extract the name: "export let name = ..."
-                var rest = line["export let ".Length..];
-                var eqIdx = rest.IndexOf('=');
-                var spIdx = rest.IndexOf(' ');
-                var endIdx = eqIdx >= 0 ? eqIdx : (spIdx >= 0 ? spIdx : rest.Length);
-                var name = rest[..endIdx].Trim();
-                if (!string.IsNullOrEmpty(name))
-                    docComments.TryAdd(name, pendingComment);
-                pendingComment = null;
-            }
-            else if (!string.IsNullOrWhiteSpace(line))
-            {
-                pendingComment = null;
-            }
-        }
     }
 
     private static void LoadSamples(string packageDir, PackageEntry entry)

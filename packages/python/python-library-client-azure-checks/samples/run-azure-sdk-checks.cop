@@ -1,0 +1,3 @@
+import python-library-client-azure-checks
+
+CHECK azure-python-client-checks

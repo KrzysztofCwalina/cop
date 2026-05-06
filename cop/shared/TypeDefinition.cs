@@ -8,7 +8,8 @@ public record TypeDefinition(
     string? BaseType,
     List<PropertyDefinition> Properties,
     int Line,
-    bool IsExported = false);
+    bool IsExported = false,
+    string? DocComment = null);
 
 public record PropertyDefinition(
     string Name,
@@ -25,7 +26,8 @@ public record FlagsDefinition(
     string Name,
     List<string> Members,
     int Line,
-    bool IsExported = false);
+    bool IsExported = false,
+    string? DocComment = null);
 
 /// <summary>
 /// An extensible enum definition: enum TypeKind = Class | Struct | Interface | Enum
@@ -35,4 +37,5 @@ public record EnumDefinition(
     string Name,
     List<string> Members,
     int Line,
-    bool IsExported = false);
+    bool IsExported = false,
+    string? DocComment = null);

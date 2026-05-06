@@ -76,27 +76,28 @@ public class ScriptParser
             }
             else if (Current.Kind == TokenKind.ExportKeyword)
             {
+                var doc = pendingDocComment;
                 pendingDocComment = null;
                 Advance(); // consume 'export'
                 if (Current.Kind == TokenKind.TypeKeyword)
-                    typeDefinitions.Add(ParseTypeDefinition(isExported: true));
+                    typeDefinitions.Add(ParseTypeDefinition(isExported: true, docComment: doc));
                 else if (Current.Kind == TokenKind.CollectionKeyword)
-                    collectionDeclarations.Add(ParseCollectionDeclaration(isExported: true));
+                    collectionDeclarations.Add(ParseCollectionDeclaration(isExported: true, docComment: doc));
                 else if (Current.Kind == TokenKind.LetKeyword)
                 {
-                    var decl = ParseLetDeclaration(isExported: true);
+                    var decl = ParseLetDeclaration(isExported: true, docComment: doc);
                     letDeclarations.Add(decl);
                 }
                 else if (Current.Kind == TokenKind.CommandKeyword)
-                    commands.AddRange(ParseLetCommandChain(pendingDocComment, isExported: true));
+                    commands.AddRange(ParseLetCommandChain(doc, isExported: true));
                 else if (Current.Kind == TokenKind.PredicateKeyword)
-                    predicates.Add(ParsePredicateDefinition(isExported: true));
+                    predicates.Add(ParsePredicateDefinition(isExported: true, docComment: doc));
                 else if (Current.Kind == TokenKind.FunctionKeyword)
-                    functions.Add(ParseFunctionDefinition(isExported: true));
+                    functions.Add(ParseFunctionDefinition(isExported: true, docComment: doc));
                 else if (Current.Kind == TokenKind.FlagsKeyword)
-                    flagsDefinitions.Add(ParseFlagsDefinition(isExported: true));
+                    flagsDefinitions.Add(ParseFlagsDefinition(isExported: true, docComment: doc));
                 else if (Current.Kind == TokenKind.EnumKeyword)
-                    enumDefinitions.Add(ParseEnumDefinition(isExported: true));
+                    enumDefinitions.Add(ParseEnumDefinition(isExported: true, docComment: doc));
                 else
                     throw new ParseException(
                         "Expected type, collection, let, command, predicate, flags, or enum after 'export'",
@@ -104,13 +105,13 @@ public class ScriptParser
             }
             else if (Current.Kind == TokenKind.TypeKeyword)
             {
+                typeDefinitions.Add(ParseTypeDefinition(docComment: pendingDocComment));
                 pendingDocComment = null;
-                typeDefinitions.Add(ParseTypeDefinition());
             }
             else if (Current.Kind == TokenKind.CollectionKeyword)
             {
+                collectionDeclarations.Add(ParseCollectionDeclaration(docComment: pendingDocComment));
                 pendingDocComment = null;
-                collectionDeclarations.Add(ParseCollectionDeclaration());
             }
             else if (Current.Kind == TokenKind.ImportKeyword)
             {
@@ -133,7 +134,7 @@ public class ScriptParser
                 }
                 else
                 {
-                    var decl = ParseLetDeclaration();
+                    var decl = ParseLetDeclaration(docComment: pendingDocComment);
                     letDeclarations.Add(decl);
                 }
                 pendingDocComment = null;
@@ -182,23 +183,23 @@ public class ScriptParser
             }
             else if (Current.Kind == TokenKind.PredicateKeyword)
             {
+                predicates.Add(ParsePredicateDefinition(docComment: pendingDocComment));
                 pendingDocComment = null;
-                predicates.Add(ParsePredicateDefinition());
             }
             else if (Current.Kind == TokenKind.FunctionKeyword)
             {
+                functions.Add(ParseFunctionDefinition(docComment: pendingDocComment));
                 pendingDocComment = null;
-                functions.Add(ParseFunctionDefinition());
             }
             else if (Current.Kind == TokenKind.FlagsKeyword)
             {
+                flagsDefinitions.Add(ParseFlagsDefinition(docComment: pendingDocComment));
                 pendingDocComment = null;
-                flagsDefinitions.Add(ParseFlagsDefinition());
             }
             else if (Current.Kind == TokenKind.EnumKeyword)
             {
+                enumDefinitions.Add(ParseEnumDefinition(docComment: pendingDocComment));
                 pendingDocComment = null;
-                enumDefinitions.Add(ParseEnumDefinition());
             }
             else
             {
@@ -230,7 +231,7 @@ public class ScriptParser
     }
 
     // type Name = { ... } | type Name = Base & { ... }
-    private TypeDefinition ParseTypeDefinition(bool isExported = false)
+    private TypeDefinition ParseTypeDefinition(bool isExported = false, string? docComment = null)
     {
         int line = Current.Line;
         Expect(TokenKind.TypeKeyword);
@@ -247,11 +248,11 @@ public class ScriptParser
         }
 
         var properties = ParsePropertyBlock();
-        return new TypeDefinition(name.Value, baseType, properties, line, isExported);
+        return new TypeDefinition(name.Value, baseType, properties, line, isExported, docComment);
     }
 
     // flags Visibility = Public | Protected | Private | Internal
-    private FlagsDefinition ParseFlagsDefinition(bool isExported = false)
+    private FlagsDefinition ParseFlagsDefinition(bool isExported = false, string? docComment = null)
     {
         int line = Current.Line;
         Expect(TokenKind.FlagsKeyword);
@@ -265,11 +266,11 @@ public class ScriptParser
             Advance();
             members.Add(Expect(TokenKind.Identifier).Value);
         }
-        return new FlagsDefinition(name.Value, members, line, isExported);
+        return new FlagsDefinition(name.Value, members, line, isExported, docComment);
     }
 
     // enum TypeKind = Class | Struct | Interface | Enum
-    private EnumDefinition ParseEnumDefinition(bool isExported = false)
+    private EnumDefinition ParseEnumDefinition(bool isExported = false, string? docComment = null)
     {
         int line = Current.Line;
         Expect(TokenKind.EnumKeyword);
@@ -283,7 +284,7 @@ public class ScriptParser
             Advance();
             members.Add(ExpectIdentifierOrKeyword().Value);
         }
-        return new EnumDefinition(name.Value, members, line, isExported);
+        return new EnumDefinition(name.Value, members, line, isExported, docComment);
     }
 
     // Enum members may use names that are also language keywords (e.g. import, command, enum),
@@ -356,7 +357,7 @@ public class ScriptParser
     }
 
     // collection Types : [Type]
-    private CollectionDeclaration ParseCollectionDeclaration(bool isExported = false)
+    private CollectionDeclaration ParseCollectionDeclaration(bool isExported = false, string? docComment = null)
     {
         int line = Current.Line;
         Expect(TokenKind.CollectionKeyword);
@@ -365,10 +366,10 @@ public class ScriptParser
         Expect(TokenKind.LBracket);
         var itemType = Expect(TokenKind.Identifier);
         Expect(TokenKind.RBracket);
-        return new CollectionDeclaration(name.Value, itemType.Value, line, isExported);
+        return new CollectionDeclaration(name.Value, itemType.Value, line, isExported, docComment);
     }
 
-    private PredicateDefinition ParsePredicateDefinition(bool isExported = false)
+    private PredicateDefinition ParsePredicateDefinition(bool isExported = false, string? docComment = null)
     {
         int line = Current.Line;
         Expect(TokenKind.PredicateKeyword); // 'predicate' keyword is required
@@ -397,14 +398,14 @@ public class ScriptParser
 
         Expect(TokenKind.Arrow);
         var body = ParseExpression();
-        return new PredicateDefinition(name.Value, paramType.Value, constraint, body, line, isExported, narrowedType);
+        return new PredicateDefinition(name.Value, paramType.Value, constraint, body, line, isExported, narrowedType, docComment);
     }
 
     // function name(InputType, param1: type1, param2: type2) => ReturnType {
     //     Field1 = expr,
     //     Field2 = expr
     // }
-    private FunctionDefinition ParseFunctionDefinition(bool isExported = false)
+    private FunctionDefinition ParseFunctionDefinition(bool isExported = false, string? docComment = null)
     {
         int line = Current.Line;
         Expect(TokenKind.FunctionKeyword);
@@ -515,17 +516,17 @@ public class ScriptParser
             }
 
             Expect(TokenKind.RBrace);
-            return new FunctionDefinition(name.Value, inputType, returnType, parameters, fieldMappings, line, isExported, Constraint: constraint);
+            return new FunctionDefinition(name.Value, inputType, returnType, parameters, fieldMappings, line, isExported, Constraint: constraint, DocComment: docComment);
         }
         else
         {
             // Expression-body function
             var bodyExpr = ParseExpression();
-            return new FunctionDefinition(name.Value, inputType, "", parameters, [], line, isExported, BodyExpression: bodyExpr, Constraint: constraint);
+            return new FunctionDefinition(name.Value, inputType, "", parameters, [], line, isExported, BodyExpression: bodyExpr, Constraint: constraint, DocComment: docComment);
         }
     }
 
-    private LetDeclaration ParseLetDeclaration(bool isExported = false)
+    private LetDeclaration ParseLetDeclaration(bool isExported = false, string? docComment = null)
     {
         int line = Current.Line;
         Expect(TokenKind.LetKeyword);
@@ -545,14 +546,14 @@ public class ScriptParser
         if (Current.Kind == TokenKind.LBracket)
         {
             var listExpr = ParseListLiteral();
-            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: listExpr);
+            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: listExpr, DocComment: docComment);
         }
 
         // Value binding: let Name = { Field = expr, ... }
         if (Current.Kind == TokenKind.LBrace)
         {
             var objExpr = ParseObjectLiteral(null);
-            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: objExpr);
+            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: objExpr, DocComment: docComment);
         }
 
         // Parse the RHS as an expression (handles colon chains via ParsePostfix)
@@ -561,20 +562,20 @@ public class ScriptParser
         // Handle Load('path') and Parse('file', [Type]) as value bindings
         if (expr is FunctionCallExpr call && call.Name is "Load" or "Parse" or "Code")
         {
-            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: call);
+            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: call, DocComment: docComment);
         }
 
         // Handle namespace.Code('path') — provider-scoped Code (e.g., csharp.Code('path'))
         if (expr is PredicateCallExpr { Name: "Code" } nsCode && nsCode.Target is IdentifierExpr)
         {
-            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: nsCode);
+            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: nsCode, DocComment: docComment);
         }
 
         // Collection union with + operator: let x = a + b + c
         if (expr is BinaryExpr && FlattenUnionOperands(expr) is { } unionElements)
         {
             var unionExpr = new CollectionUnionExpr(unionElements);
-            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: unionExpr);
+            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: unionExpr, DocComment: docComment);
         }
 
         // Try to decompose as a collection expression (base:filter1:filter2).
@@ -585,12 +586,12 @@ public class ScriptParser
         try
         {
             var (baseCollection, filters, exclusions, pathOverride) = DecomposeCollectionExpression(expr);
-            return new LetDeclaration(name.Value, baseCollection, filters, line, isExported, isRuntime, Exclusions: exclusions, SourceExpression: expr, PathOverride: pathOverride);
+            return new LetDeclaration(name.Value, baseCollection, filters, line, isExported, isRuntime, Exclusions: exclusions, SourceExpression: expr, PathOverride: pathOverride, DocComment: docComment);
         }
         catch (InvalidOperationException)
         {
             // Not a collection expression — store as a value binding
-            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: expr);
+            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: expr, DocComment: docComment);
         }
     }
 

@@ -16,4 +16,5 @@ public record FunctionDefinition(
     int Line,
     bool IsExported = false,
     Expression? BodyExpression = null,
-    Expression? Constraint = null);
+    Expression? Constraint = null,
+    string? DocComment = null);

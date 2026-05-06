@@ -7,4 +7,5 @@ public record CollectionDeclaration(
     string Name,
     string ItemType,
     int Line,
-    bool IsExported = false);
+    bool IsExported = false,
+    string? DocComment = null);

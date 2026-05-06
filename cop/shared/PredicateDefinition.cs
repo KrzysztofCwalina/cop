@@ -7,4 +7,5 @@ public record PredicateDefinition(
     Expression Body,
     int Line,
     bool IsExported = false,
-    string? NarrowedType = null);
+    string? NarrowedType = null,
+    string? DocComment = null);

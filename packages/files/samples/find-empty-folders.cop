@@ -1,0 +1,5 @@
+import files
+
+# Built-in: Disk provides Folders and Files
+foreach Disk.Folders:empty
+    => '{item.Path} is empty'

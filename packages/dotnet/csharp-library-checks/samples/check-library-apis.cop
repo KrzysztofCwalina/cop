@@ -1,0 +1,5 @@
+import csharp-library-checks
+
+CHECK public-async-bool-params
+CHECK async-missing-bool-param
+CHECK unconditional-await-in-dual-mode

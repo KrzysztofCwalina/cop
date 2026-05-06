@@ -49,6 +49,7 @@ rootCommand.Options.Add(new VersionOption("-v"));
 rootCommand.Add(RunCommand.Create());
 rootCommand.Add(CheckCommand.Create());
 rootCommand.Add(TestCommand.Create());
+rootCommand.Add(SyntaxCommand.Create());
 rootCommand.Add(LockCommand.Create());
 rootCommand.Add(UnlockCommand.Create());
 rootCommand.Add(HelpCommand.Create());

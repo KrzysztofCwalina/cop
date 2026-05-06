@@ -15,7 +15,8 @@ public record LetDeclaration(
     Expression? ValueExpression = null,
     Expression? Exclusions = null,
     Expression? SourceExpression = null,
-    string? PathOverride = null)
+    string? PathOverride = null,
+    string? DocComment = null)
 {
     public bool IsValueBinding => ValueExpression is not null;
 

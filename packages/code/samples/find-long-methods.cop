@@ -1,0 +1,8 @@
+import code
+
+predicate isLong(Method) =>
+    Method.LineCount:greaterThan(50)
+
+foreach Types => '{Type.Name}'
+    :Methods:isLong
+    => '  {Method.Name} ({Method.LineCount} lines)'

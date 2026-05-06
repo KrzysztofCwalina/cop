@@ -1,0 +1,7 @@
+let names = ['Alice' 'Bob' 'Charlie' 'Diana']
+let count = names.Count
+let first = names.First
+
+PRINT '{count} people, first is {first}'
+
+foreach names => 'Hello, {item}!'

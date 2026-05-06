@@ -1,0 +1,4 @@
+import typespec
+
+foreach Models
+    => '{TspModel.Name} ({TspModel.Properties.Count} props)'
