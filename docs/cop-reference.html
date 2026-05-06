@@ -973,7 +973,7 @@ let has-public = any(Types, isPublic)</pre>Predicates are defined with the <code
     predicates: [],
     functions: [
       { name: "Requests", params: "", returns: "[Request]", desc: "Incoming HTTP requests — yields requests as they arrive" },
-      { name: "ok", params: "Request", returns: "Response", desc: "Creates a 200 OK response" },
+      { name: "ok", params: "Request, body: string", returns: "Response", desc: "Creates a 200 OK response with JSON body (accepts string or inline object)" },
       { name: "notFound", params: "Request", returns: "Response", desc: "Creates a 404 Not Found response" },
       { name: "created", params: "Request", returns: "Response", desc: "Creates a 201 Created response" },
       { name: "badRequest", params: "Request", returns: "Response", desc: "Creates a 400 Bad Request response" },
