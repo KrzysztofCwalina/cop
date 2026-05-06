@@ -510,10 +510,10 @@ This enables left-to-right data flow instead of nested function calls:
 
 ```ruby
 # Nested (harder to read):
-ok(Text(http.Post(url, body).Body))
+ok(Text(http.Post(url, headers, body).Body))
 
 # Piped (reads left-to-right):
-http.Post(url, body).Body:Text:ok
+http.Post(url, headers, body).Body:Text:ok
 ```
 
 Overload resolution uses the target’s type — `stringValue:ok` resolves to `ok(string)`, not `ok(Request)`.

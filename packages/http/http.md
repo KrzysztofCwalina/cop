@@ -31,6 +31,7 @@ async foreach Requests => handle => RESPONSES
 
 ## Helper Functions
 
+- `ok(string)` — 200 OK response with the piped string as JSON body
 - `ok(Request, body)` — 200 OK response with JSON body (accepts string or inline object)
 - `ok(Request)` — 200 OK response with `{"status": "ok"}` body
 - `notFound(Request)` — 404 Not Found response
@@ -38,6 +39,12 @@ async foreach Requests => handle => RESPONSES
 - `badRequest(Request)` — 400 Bad Request response
 - `serverError(Request)` — 500 Internal Server Error response
 - `serverError(Error)` — 500 response from an Error value (body = Error.Message)
+
+## Client Functions
+
+- `http.Get(url, headers?)` — HTTP GET request
+- `http.Post(url, headers, body)` — HTTP POST request
+- `http.Send(method, url, headers?, body?)` — HTTP request with any method
 
 ## Error Handling
 

@@ -2,10 +2,10 @@ import http
 
 function complete(string) =>
     http.Post('https://api.example.com/v1/completions', {
+        Content-Type: 'application/json'
+    }, {
         model = 'gpt-4o',
         messages = [{ role = 'user', content = string }]
-    }, {
-        Content-Type: 'application/json'
     })
 
 function handle(Request:Uri:equals('/chat')) =>

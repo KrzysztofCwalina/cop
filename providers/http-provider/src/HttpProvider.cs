@@ -95,29 +95,29 @@ public class HttpProvider : DataProvider
     }
 
     /// <summary>
-    /// http.Post(url, body, headers?) — performs an HTTP POST request.
+    /// http.Post(url, headers, body) — performs an HTTP POST request.
     /// </summary>
     private static async Task<object?> HttpPostAsync(List<object?> args)
     {
         if (args.Count < 2)
-            throw new InvalidOperationException("http.Post requires at least 2 arguments: http.Post(url, body, headers?)");
+            throw new InvalidOperationException("http.Post requires at least 2 arguments: http.Post(url, headers, body)");
         var url = args[0]?.ToString() ?? throw new InvalidOperationException("http.Post: url cannot be null");
-        var body = args[1];
-        var headers = args.Count > 2 ? args[2] as DataObject : null;
+        var headers = args.Count > 1 ? args[1] as DataObject : null;
+        var body = args.Count > 2 ? args[2] : null;
         return await SendRequestAsync(HttpMethod.Post, url, body, headers);
     }
 
     /// <summary>
-    /// http.Send(method, url, body, headers?) — performs an HTTP request with any method.
+    /// http.Send(method, url, headers, body) — performs an HTTP request with any method.
     /// </summary>
     private static async Task<object?> HttpSendAsync(List<object?> args)
     {
         if (args.Count < 2)
-            throw new InvalidOperationException("http.Send requires at least 2 arguments: http.Send(method, url, body?, headers?)");
+            throw new InvalidOperationException("http.Send requires at least 2 arguments: http.Send(method, url, headers?, body?)");
         var methodStr = args[0]?.ToString() ?? "GET";
         var url = args[1]?.ToString() ?? throw new InvalidOperationException("http.Send: url cannot be null");
-        var body = args.Count > 2 ? args[2] : null;
-        var headers = args.Count > 3 ? args[3] as DataObject : null;
+        var headers = args.Count > 2 ? args[2] as DataObject : null;
+        var body = args.Count > 3 ? args[3] : null;
         var method = new HttpMethod(methodStr);
         return await SendRequestAsync(method, url, body, headers);
     }
@@ -140,9 +140,11 @@ public class HttpProvider : DataProvider
                 };
                 request.Content = new ByteArrayContent(bodyBytes);
 
-                // Default content type for non-byte[] bodies
-                if (body is not byte[])
-                    request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+                // Default content type based on body type
+                if (body is DataObject)
+                    request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json") { CharSet = "utf-8" };
+                else if (body is string)
+                    request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/plain") { CharSet = "utf-8" };
             }
 
             // Set request headers from DataObject fields
@@ -175,7 +177,7 @@ public class HttpProvider : DataProvider
             result.Set("Headers", responseHeaders);
             return result;
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or UriFormatException)
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or UriFormatException or InvalidOperationException or FormatException)
         {
             return new ErrorValue($"HTTP request failed: {ex.Message}");
         }
