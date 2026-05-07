@@ -110,7 +110,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 /* Syntax highlighting */
 .cop-kw { color: #ff7b72; font-weight: 600; }
 .cop-str { color: #a5d6ff; }
-.cop-comment { color: #8b949e; font-style: italic; }
+.cop-comment { color: #8b949e; font-style: italic; line-height: 0; vertical-align: baseline; }
 .cop-template { color: #ffa657; }
 .cop-pred { color: #d2a8ff; }
 .cop-num { color: #79c0ff; }
@@ -184,7 +184,8 @@ const categories = [
       "javascript",
       "javascript-library-checks",
       "javascript-library-client-azure-checks",
-      "javascript-library-client-checks"
+      "javascript-library-client-checks",
+      "typescript-checks"
     ]
   },
   {
@@ -209,11 +210,11 @@ const packages = {
     "samples": [
       {
         "title": "Find long methods",
-        "code": "import code\r\n\r\npredicate isLong(Method) => Method.LineCount:greaterThan(50)\r\n\r\nforeach Types => '{Type.Name}':Methods:isLong\r\n    => '  {Method.Name} ({Method.LineCount} lines)'"
+        "code": "import code\n\npredicate isLong(Method) => Method.LineCount:greaterThan(50)\n\nforeach Types => '{Type.Name}':Methods:isLong\n    => '  {Method.Name} ({Method.LineCount} lines)'"
       },
       {
         "title": "List all public classes",
-        "code": "import code\r\n\r\nforeach Types:isPublic => '{Type.Name} ({Type.Kind})'"
+        "code": "import code\n\nforeach Types:isPublic => '{Type.Name} ({Type.Kind})'"
       }
     ],
     "collections": [],
@@ -1080,7 +1081,7 @@ const packages = {
     "samples": [
       {
         "title": "Create a simple check",
-        "code": "import code\r\nimport code-analysis\r\n\r\npredicate isTooLarge(Type) =>\r\n    Type.Methods.Count:greaterThan(20)\r\n\r\nlet violations = Types:isTooLarge\r\n    :toWarning('Type {item.Name} has too many methods')\r\n\r\nCHECK violations"
+        "code": "import code\nimport code-analysis\n\npredicate isTooLarge(Type) =>\n    Type.Methods.Count:greaterThan(20)\n\nlet violations = Types:isTooLarge\n    :toWarning('Type {item.Name} has too many methods')\n\nCHECK violations"
       }
     ],
     "collections": [],
@@ -1253,7 +1254,7 @@ const packages = {
     "samples": [
       {
         "title": "Enforce layering rules",
-        "code": "import code-layering\r\n\r\nlet ui-projects = ['MyApp.Web' 'MyApp.Api']\r\nlet data-projects = ['MyApp.Data' 'MyApp.EF']\r\n\r\npredicate uiRefsData(Project) =>\r\n    Project.Name:in(ui-projects)\r\n    && Project.References:containsAny(data-projects)\r\n\r\nlet violations = Projects:uiRefsData\r\n    :toError('UI must not reference Data directly')\r\n\r\nCHECK violations"
+        "code": "import code-layering\n\nlet ui-projects = ['MyApp.Web' 'MyApp.Api']\nlet data-projects = ['MyApp.Data' 'MyApp.EF']\n\npredicate uiRefsData(Project) =>\n    Project.Name:in(ui-projects)\n    && Project.References:containsAny(data-projects)\n\nlet violations = Projects:uiRefsData\n    :toError('UI must not reference Data directly')\n\nCHECK violations"
       }
     ],
     "collections": [],
@@ -1352,11 +1353,11 @@ const packages = {
       },
       {
         "title": "String and collection operations",
-        "code": "let names = ['Alice' 'Bob' 'Charlie' 'Diana']\r\nlet count = names.Count\r\nlet first = names.First\r\n\r\nPRINT '{count} people, first is {first}'\r\n\r\nforeach names => 'Hello, {item}!'"
+        "code": "let names = ['Alice' 'Bob' 'Charlie' 'Diana']\nlet count = names.Count\nlet first = names.First\n\nPRINT '{count} people, first is {first}'\n\nforeach names => 'Hello, {item}!'"
       },
       {
         "title": "Variables and arithmetic",
-        "code": "let x = 10\r\nlet y = 3\r\nlet sum = x + y\r\nlet product = x * y\r\n\r\nPRINT 'Sum: {sum}, Product: {product}'"
+        "code": "let x = 10\nlet y = 3\nlet sum = x + y\nlet product = x * y\n\nPRINT 'Sum: {sum}, Product: {product}'"
       }
     ],
     "collections": [],
@@ -1372,11 +1373,11 @@ const packages = {
     "samples": [
       {
         "title": "Api diff",
-        "code": "import csharp-api\r\nimport code-analysis\r\n\r\n# Baseline: C# stub files in api/ directory\r\npredicate baselineApi(Api) => publicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')\r\n# Source: everything NOT in api/\r\npredicate sourceApi(Api) => publicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')\r\n\r\n# Build lookup lists from current source and baseline\r\nlet baselineSignatures = Code.Api:csharp:baselineApi.Select(item.Signature)\r\nlet currentSignatures = Code.Api:csharp:sourceApi.Select(item.Signature)\r\n\r\n# Diff predicates\r\npredicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)\r\npredicate addedApi(Api) => sourceApi && !Api.Signature:in(baselineSignatures)\r\n\r\n# Report results\r\nexport let api-removed = Code.Api:removedApi\r\n    :toError('API REMOVED (breaking): {item.Signature}')\r\nexport let api-added = Code.Api:addedApi\r\n    :toInfo('API ADDED: {item.Signature}')"
+        "code": "import csharp-api\nimport code-analysis\n\n# Baseline: C# stub files in api/ directory\npredicate baselineApi(Api) => publicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')\n# Source: everything NOT in api/\npredicate sourceApi(Api) => publicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')\n\n# Build lookup lists from current source and baseline\nlet baselineSignatures = Code.Api:csharp:baselineApi.Select(item.Signature)\nlet currentSignatures = Code.Api:csharp:sourceApi.Select(item.Signature)\n\n# Diff predicates\npredicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)\npredicate addedApi(Api) => sourceApi && !Api.Signature:in(baselineSignatures)\n\n# Report results\nexport let api-removed = Code.Api:removedApi\n    :toError('API REMOVED (breaking): {item.Signature}')\nexport let api-added = Code.Api:addedApi\n    :toInfo('API ADDED: {item.Signature}')"
       },
       {
         "title": "Api listing",
-        "code": "import csharp-api\r\n\r\n# Print API surface as C# stubs\r\nexport command api-listing = foreach Code.Api:csharp:publicApi => '{item.ApiAsText}'\r\n\r\n# Save API surface to a file\r\nlet apiText = Code.Api:csharp:publicApi.Text('{item.ApiAsText}')\r\nexport command save-api = save('api-surface.txt', apiText)"
+        "code": "import csharp-api\n\n# Print API surface as C# stubs\nexport command api-listing = foreach Code.Api:csharp:publicApi => '{item.ApiAsText}'\n\n# Save API surface to a file\nlet apiText = Code.Api:csharp:publicApi.Text('{item.ApiAsText}')\nexport command save-api = save('api-surface.txt', apiText)"
       }
     ],
     "collections": [],
@@ -1434,7 +1435,7 @@ const packages = {
     "samples": [
       {
         "title": "Run csharp style checks",
-        "code": "import csharp\r\n\r\n# All built-in checks combined\r\nCHECK csharp-checks"
+        "code": "import csharp\n\n# All built-in checks combined\nCHECK csharp-checks"
       }
     ],
     "collections": [],
@@ -1471,18 +1472,6 @@ const packages = {
         "desc": "Use Task.Delay instead of blocking Thread.Sleep"
       },
       {
-        "name": "console-calls",
-        "desc": "Avoid Console output in library code"
-      },
-      {
-        "name": "base-exception-catches",
-        "desc": "Catch specific exception types instead of bare Exception"
-      },
-      {
-        "name": "swallowed-exceptions",
-        "desc": "Do not swallow base exceptions — always rethrow"
-      },
-      {
         "name": "configure-await-true-calls",
         "desc": "ConfigureAwait(true) is the default and should not be used explicitly"
       },
@@ -1497,6 +1486,18 @@ const packages = {
       {
         "name": "sync-wait-in-async",
         "desc": "Do not use sync-blocking calls (.Wait(), .GetResult()) inside async methods (AZC0103)"
+      },
+      {
+        "name": "console-calls",
+        "desc": "Avoid Console output in library code"
+      },
+      {
+        "name": "base-exception-catches",
+        "desc": "Catch specific exception types instead of bare Exception"
+      },
+      {
+        "name": "swallowed-exceptions",
+        "desc": "Do not swallow base exceptions — always rethrow"
       },
       {
         "name": "uri-tostring",
@@ -1535,7 +1536,7 @@ const packages = {
     "samples": [
       {
         "title": "Check library apis",
-        "code": "import csharp-library-checks\r\n\r\nCHECK public-async-bool-params\r\nCHECK async-missing-bool-param\r\nCHECK unconditional-await-in-dual-mode"
+        "code": "import csharp-library-checks\n\nCHECK public-async-bool-params\nCHECK async-missing-bool-param\nCHECK unconditional-await-in-dual-mode"
       }
     ],
     "collections": [],
@@ -1603,11 +1604,11 @@ const packages = {
       },
       {
         "name": "unconditional-await-in-dual-mode",
-        "desc": ""
+        "desc": "Unconditional await in dual-mode method (AZC0110)"
       },
       {
         "name": "unconditional-sync-in-dual-mode",
-        "desc": ""
+        "desc": "Unconditional EnsureCompleted in dual-mode method (AZC0111)"
       },
       {
         "name": "wrong-async-arg-value",
@@ -1634,7 +1635,7 @@ const packages = {
     "samples": [
       {
         "title": "Run azure sdk checks",
-        "code": "import csharp-library-client-azure-checks\r\n\r\nCHECK azure-client-checks"
+        "code": "import csharp-library-client-azure-checks\n\nCHECK azure-client-checks"
       }
     ],
     "collections": [],
@@ -1651,10 +1652,6 @@ const packages = {
         "desc": "Client types must provide a protected parameterless constructor for mocking"
       },
       {
-        "name": "options-inherits-base",
-        "desc": "Options types must inherit from ClientOptions or ClientPipelineOptions"
-      },
-      {
         "name": "client-needs-options-ctor",
         "desc": "Client types should have a constructor that accepts ClientOptions"
       },
@@ -1667,8 +1664,64 @@ const packages = {
         "desc": "Convenience methods should not take RequestContent or RequestBody parameters"
       },
       {
-        "name": "options-single-ctor-param",
-        "desc": "ClientOptions constructors should not take more than one parameter"
+        "name": "settings-ctor-isolation",
+        "desc": "ClientSettings constructor should not combine settings param with other params (AZC0021)"
+      },
+      {
+        "name": "no-banned-internal-types",
+        "desc": "Public API should not expose types from banned internal namespaces"
+      },
+      {
+        "name": "no-pipeline-types-in-api",
+        "desc": "Public API should not expose Azure.Core.Pipeline internal types"
+      },
+      {
+        "name": "internals-visible-to",
+        "desc": "InternalsVisibleTo — export for project-level filtering"
+      },
+      {
+        "name": "internals-visible-to-non-test",
+        "desc": "InternalsVisibleTo targeting non-test assemblies (AZC0112)"
+      },
+      {
+        "name": "model-reader-writer-context",
+        "desc": "ModelReaderWriter.Read should include the ModelReaderWriterOptions context parameter"
+      },
+      {
+        "name": "model-needs-factory",
+        "desc": "Output model types should have a corresponding ModelFactory method (AZC0035)"
+      },
+      {
+        "name": "use-ensure-completed",
+        "desc": "Use EnsureCompleted() instead of GetAwaiter().GetResult() in sync methods (AZC0104)"
+      },
+      {
+        "name": "no-public-async-in-sync",
+        "desc": "Don't call *Async methods from sync context (AZC0107)"
+      },
+      {
+        "name": "cancellation-token-propagation",
+        "desc": "Async calls should propagate CancellationToken or RequestContext (AZC0020)"
+      },
+      {
+        "name": "csharp-library-client-azure-checks",
+        "desc": ""
+      },
+      {
+        "name": "service-method-needs-cancellation",
+        "desc": "Public virtual service methods must accept CancellationToken or RequestContext"
+      },
+      {
+        "name": "no-raw-http-return-types",
+        "desc": "Client methods should return azure-specific types, not raw HTTP types"
+      },
+      {
+        "name": "protocol-method-return-type",
+        "desc": "Protocol methods (with RequestContext) must return allowed types only"
+      },
+      {
+        "name": "no-ambiguous-overloads",
+        "desc": "Avoid ambiguous overloads between protocol and convenience methods"
       },
       {
         "name": "no-collection-suffix",
@@ -1691,6 +1744,22 @@ const packages = {
         "desc": "Model types should not use 'Resource' suffix"
       },
       {
+        "name": "duplicate-bcl-type-name",
+        "desc": "Model type name duplicates a common .NET BCL type name (AZC0034)"
+      },
+      {
+        "name": "no-single-word-type-name",
+        "desc": "Avoid single-word public type names — too generic (AZC0012)"
+      },
+      {
+        "name": "options-inherits-base",
+        "desc": "Options types must inherit from ClientOptions or ClientPipelineOptions"
+      },
+      {
+        "name": "options-single-ctor-param",
+        "desc": "ClientOptions constructors should not take more than one parameter"
+      },
+      {
         "name": "options-first-param-service-version",
         "desc": "ClientOptions constructor first parameter should be ServiceVersion"
       },
@@ -1705,74 +1774,6 @@ const packages = {
       {
         "name": "service-version-default-value",
         "desc": "ServiceVersion parameter should have a default value (latest version)"
-      },
-      {
-        "name": "service-method-needs-cancellation",
-        "desc": "Public virtual service methods must accept CancellationToken or RequestContext"
-      },
-      {
-        "name": "no-banned-internal-types",
-        "desc": "Public API should not expose types from banned internal namespaces"
-      },
-      {
-        "name": "no-raw-http-return-types",
-        "desc": "Client methods should return azure-specific types, not raw HTTP types"
-      },
-      {
-        "name": "no-pipeline-types-in-api",
-        "desc": "Public API should not expose Azure.Core.Pipeline internal types"
-      },
-      {
-        "name": "model-reader-writer-context",
-        "desc": "ModelReaderWriter.Read should include the ModelReaderWriterOptions context parameter"
-      },
-      {
-        "name": "protocol-method-return-type",
-        "desc": "Protocol methods (with RequestContext) must return allowed types only"
-      },
-      {
-        "name": "no-ambiguous-overloads",
-        "desc": "Avoid ambiguous overloads between protocol and convenience methods"
-      },
-      {
-        "name": "internals-visible-to-non-test",
-        "desc": "InternalsVisibleTo targeting non-test assemblies (AZC0112)"
-      },
-      {
-        "name": "internals-visible-to",
-        "desc": "InternalsVisibleTo — export for project-level filtering"
-      },
-      {
-        "name": "settings-ctor-isolation",
-        "desc": "ClientSettings constructor should not combine settings param with other params (AZC0021)"
-      },
-      {
-        "name": "duplicate-bcl-type-name",
-        "desc": "Model type name duplicates a common .NET BCL type name (AZC0034)"
-      },
-      {
-        "name": "model-needs-factory",
-        "desc": "Output model types should have a corresponding ModelFactory method (AZC0035)"
-      },
-      {
-        "name": "use-ensure-completed",
-        "desc": "Use EnsureCompleted() instead of GetAwaiter().GetResult() in sync methods (AZC0104)"
-      },
-      {
-        "name": "no-public-async-in-sync",
-        "desc": "Don't call *Async methods from sync context (AZC0107)"
-      },
-      {
-        "name": "no-single-word-type-name",
-        "desc": "Avoid single-word public type names — too generic (AZC0012)"
-      },
-      {
-        "name": "cancellation-token-propagation",
-        "desc": "Async calls should propagate CancellationToken or RequestContext (AZC0020)"
-      },
-      {
-        "name": "csharp-library-client-azure-checks",
-        "desc": "All Azure client library checks combined"
       }
     ],
     "commands": []
@@ -1783,17 +1784,12 @@ const packages = {
     "samples": [
       {
         "title": "Check client conventions",
-        "code": "import csharp-library-client-checks\r\n\r\n# Find all client types\r\nforeach Clients\r\n    => '{Type.Name}'\r\n\r\n# Run all client checks\r\nCHECK csharp-library-client-checks"
+        "code": "import csharp-library-client-checks\n\n# Find all client types\nforeach Clients\n    => '{Type.Name}'\n\n# Run all client checks\nCHECK csharp-library-client-checks"
       }
     ],
     "collections": [],
     "types": {},
     "predicates": [
-      {
-        "name": "isMissingMockingConstructor",
-        "appliesTo": "Type",
-        "desc": ""
-      },
       {
         "name": "isClient",
         "appliesTo": "Type",
@@ -1825,11 +1821,6 @@ const packages = {
         "desc": ""
       },
       {
-        "name": "isProtectedParameterless",
-        "appliesTo": "Constructor",
-        "desc": ""
-      },
-      {
         "name": "hasCollectionSuffix",
         "appliesTo": "Type",
         "desc": ""
@@ -1846,6 +1837,16 @@ const packages = {
       },
       {
         "name": "hasOptionSuffix",
+        "appliesTo": "Type",
+        "desc": ""
+      },
+      {
+        "name": "isProtectedParameterless",
+        "appliesTo": "Constructor",
+        "desc": ""
+      },
+      {
+        "name": "isMissingMockingConstructor",
         "appliesTo": "Type",
         "desc": ""
       }
@@ -1917,7 +1918,7 @@ const packages = {
     "samples": [
       {
         "title": "Run style checks",
-        "code": "import csharp-style-checks\r\n\r\nCHECK interface-prefix\r\nCHECK type-name-casing\r\nCHECK method-name-casing\r\nCHECK single-type-per-file"
+        "code": "import csharp-style-checks\n\nCHECK interface-prefix\nCHECK type-name-casing\nCHECK method-name-casing\nCHECK single-type-per-file"
       }
     ],
     "collections": [],
@@ -1940,6 +1941,10 @@ const packages = {
       {
         "name": "single-type-per-file",
         "desc": "SA1402: A file may only contain a single type"
+      },
+      {
+        "name": "file-header-required",
+        "desc": "SA1633: File must have a header"
       },
       {
         "name": "comment-spacing",
@@ -1970,8 +1975,12 @@ const packages = {
         "desc": "SA1206: Declaration keywords must follow order"
       },
       {
-        "name": "file-header-required",
-        "desc": "SA1633: File must have a header"
+        "name": "braces-on-own-line",
+        "desc": "SA1500: Braces must be on their own line (Allman style)"
+      },
+      {
+        "name": "required-braces",
+        "desc": "SA1503: Braces must not be omitted"
       },
       {
         "name": "public-documented",
@@ -1980,6 +1989,10 @@ const packages = {
       {
         "name": "public-method-documented",
         "desc": ""
+      },
+      {
+        "name": "public-property-documented",
+        "desc": "SA1600: Public properties should be documented"
       },
       {
         "name": "no-public-fields",
@@ -1996,18 +2009,6 @@ const packages = {
       {
         "name": "const-naming",
         "desc": ".editorconfig naming: const PascalCase"
-      },
-      {
-        "name": "braces-on-own-line",
-        "desc": "SA1500: Braces must be on their own line (Allman style)"
-      },
-      {
-        "name": "required-braces",
-        "desc": "SA1503: Braces must not be omitted"
-      },
-      {
-        "name": "public-property-documented",
-        "desc": "SA1600: Public properties should be documented"
       },
       {
         "name": "csharp-style-checks",
@@ -2038,11 +2039,11 @@ const packages = {
     "samples": [
       {
         "title": "Detect stale files",
-        "code": "import files\r\n\r\nforeach Disk.Files:isStale\r\n    => '{item.Name} not modified in 24h'"
+        "code": "import files\n\nforeach Disk.Files:isStale\n    => '{item.Name} not modified in 24h'"
       },
       {
         "title": "Find empty folders",
-        "code": "import files\r\n\r\n# Built-in: Disk provides Folders and Files\r\nforeach Disk.Folders:empty\r\n    => '{item.Path} is empty'"
+        "code": "import files\n\n# Built-in: Disk provides Folders and Files\nforeach Disk.Folders:empty\n    => '{item.Path} is empty'"
       }
     ],
     "collections": [],
@@ -2177,11 +2178,11 @@ const packages = {
     "samples": [
       {
         "title": "Http client",
-        "code": "import http\r\n\r\nfunction complete(string) =>\r\n    http.Post('https://api.example.com/v1/completions', {\r\n        Content-Type: 'application/json'\r\n    }, {\r\n        model = 'gpt-4o',\r\n        messages = [{ role = 'user', content = string }]\r\n    })\r\n\r\nfunction handle(Request:Uri:equals('/chat')) =>\r\n    Request.Body:Text:complete.Body:Text:ok\r\n\r\nfunction handle(Request) => notFound\r\n\r\nasync foreach Requests => handle => RESPONSES"
+        "code": "import http\n\nfunction complete(string) =>\n    http.Post('https://api.example.com/v1/completions', {\n        Content-Type: 'application/json'\n    }, {\n        model = 'gpt-4o',\n        messages = [{ role = 'user', content = string }]\n    })\n\nfunction handle(Request:Uri:equals('/chat')) =>\n    Request.Body:Text:complete.Body:Text:ok\n\nfunction handle(Request) => notFound\n\nasync foreach Requests => handle => RESPONSES"
       },
       {
         "title": "Http server",
-        "code": "import http\r\n\r\nfunction handle(Request:Uri:equals('/hello')) => ok({ message: 'Hello' })\r\nfunction handle(Request) => notFound\r\n\r\n# Handle network errors — log and swallow\r\nfunction handle(Error) => print(Error.Message)\r\n\r\nasync foreach Requests => handle => RESPONSES"
+        "code": "import http\n\nfunction handle(Request:Uri:equals('/hello')) => ok({ message: 'Hello' })\nfunction handle(Request) => notFound\n\n# Handle network errors — log and swallow\nfunction handle(Error) => print(Error.Message)\n\nasync foreach Requests => handle => RESPONSES"
       }
     ],
     "collections": [],
@@ -2308,7 +2309,7 @@ const packages = {
     "samples": [
       {
         "title": "Run js ts checks",
-        "code": "import javascript\r\n\r\nCHECK javascript-checks"
+        "code": "import javascript\n\nCHECK javascript-checks"
       }
     ],
     "collections": [],
@@ -2318,27 +2319,27 @@ const packages = {
     "checks": [
       {
         "name": "console-calls",
-        "desc": "Avoid console output in production code"
+        "desc": ""
       },
       {
         "name": "alert-calls",
-        "desc": "Do not use alert()"
+        "desc": ""
       },
       {
         "name": "eval-calls",
-        "desc": "Do not use eval()"
+        "desc": ""
       },
       {
         "name": "debugger-statements",
-        "desc": "Remove debugger statements"
+        "desc": ""
       },
       {
         "name": "var-declarations",
-        "desc": "Use const or let instead of var"
+        "desc": ""
       },
       {
         "name": "swallowed-exceptions",
-        "desc": "Catch blocks should rethrow or handle errors explicitly"
+        "desc": ""
       },
       {
         "name": "javascript-checks",
@@ -2353,7 +2354,7 @@ const packages = {
     "samples": [
       {
         "title": "Check library conventions",
-        "code": "import javascript-library-checks\r\n\r\nCHECK no-default-exports\r\nCHECK no-external-promises\r\nCHECK no-const-enums"
+        "code": "import javascript-library-checks\n\nCHECK no-default-exports\nCHECK no-external-promises\nCHECK no-const-enums"
       }
     ],
     "collections": [],
@@ -2363,19 +2364,19 @@ const packages = {
     "checks": [
       {
         "name": "no-default-exports",
-        "desc": "Do not use default exports — use named exports only"
+        "desc": ""
       },
       {
         "name": "no-external-promises",
-        "desc": "Do not import Promise from external libraries (use native Promise)"
+        "desc": ""
       },
       {
         "name": "no-const-enums",
-        "desc": "Do not use const enums (problematic for consumers)"
+        "desc": ""
       },
       {
         "name": "no-window-reference",
-        "desc": "Do not reference window global — use self for cross-platform compatibility"
+        "desc": ""
       },
       {
         "name": "javascript-library-checks",
@@ -2390,7 +2391,7 @@ const packages = {
     "samples": [
       {
         "title": "Run azure sdk checks",
-        "code": "import javascript-library-client-azure-checks\r\n\r\nCHECK azure-js-client-checks"
+        "code": "import javascript-library-client-azure-checks\n\nCHECK azure-js-client-checks"
       }
     ],
     "collections": [],
@@ -2400,15 +2401,15 @@ const packages = {
     "checks": [
       {
         "name": "client-needs-credential",
-        "desc": "Azure client constructors must accept a TokenCredential parameter"
+        "desc": ""
       },
       {
         "name": "copyright-header",
-        "desc": "Source files must have a copyright header on the first line"
+        "desc": ""
       },
       {
         "name": "error-handling",
-        "desc": "Client methods must only throw Error, TypeError, RangeError, or RestError"
+        "desc": ""
       },
       {
         "name": "javascript-library-client-azure-checks",
@@ -2423,7 +2424,7 @@ const packages = {
     "samples": [
       {
         "title": "Check client conventions",
-        "code": "import javascript-library-client-checks\r\n\r\nforeach Clients\r\n    => '{Type.Name}'\r\n\r\nCHECK js-client-checks"
+        "code": "import javascript-library-client-checks\n\nforeach Clients\n    => '{Type.Name}'\n\nCHECK js-client-checks"
       }
     ],
     "collections": [],
@@ -2447,19 +2448,19 @@ const packages = {
         "desc": ""
       },
       {
-        "name": "support-cancellation",
-        "desc": ""
-      },
-      {
         "name": "subclient-naming",
         "desc": ""
       },
       {
-        "name": "lro-begin-prefix",
+        "name": "support-cancellation",
         "desc": ""
       },
       {
         "name": "pagination-list-return",
+        "desc": ""
+      },
+      {
+        "name": "lro-begin-prefix",
         "desc": ""
       },
       {
@@ -2475,7 +2476,7 @@ const packages = {
     "samples": [
       {
         "title": "Load and query json data",
-        "code": "import json\r\n\r\ntype Config = { name: string, enabled: bool }\r\n\r\nlet configs = Parse('settings.json', [Config])\r\n\r\nforeach configs:enabled\r\n    => '{item.name} is active'"
+        "code": "import json\n\ntype Config = { name: string, enabled: bool }\n\nlet configs = Parse('settings.json', [Config])\n\nforeach configs:enabled\n    => '{item.name} is active'"
       }
     ],
     "collections": [],
@@ -2491,7 +2492,7 @@ const packages = {
     "samples": [
       {
         "title": "Check for broken links",
-        "code": "import markdown\r\n\r\npredicate isBroken(Link) =>\r\n    Link.Url:startsWith('http')\r\n    && Link.Text:empty\r\n\r\nforeach Markdown.Links:isBroken\r\n    => 'Missing link text: {item.Url}'"
+        "code": "import markdown\n\npredicate isBroken(Link) =>\n    Link.Url:startsWith('http')\n    && Link.Text:empty\n\nforeach Markdown.Links:isBroken\n    => 'Missing link text: {item.Url}'"
       }
     ],
     "collections": [],
@@ -2746,7 +2747,7 @@ const packages = {
     "samples": [
       {
         "title": "Run python style checks",
-        "code": "import python\r\n\r\nCHECK python-checks"
+        "code": "import python\n\nCHECK python-checks"
       }
     ],
     "collections": [],
@@ -2791,7 +2792,7 @@ const packages = {
     "samples": [
       {
         "title": "Check library apis",
-        "code": "import python-library-checks\r\n\r\nCHECK untyped-public-params\r\nCHECK missing-return-types"
+        "code": "import python-library-checks\n\nCHECK untyped-public-params\nCHECK missing-return-types"
       }
     ],
     "collections": [],
@@ -2820,7 +2821,7 @@ const packages = {
     "samples": [
       {
         "title": "Run azure sdk checks",
-        "code": "import python-library-client-azure-checks\r\n\r\nCHECK azure-python-client-checks"
+        "code": "import python-library-client-azure-checks\n\nCHECK azure-python-client-checks"
       }
     ],
     "collections": [],
@@ -2846,7 +2847,7 @@ const packages = {
       },
       {
         "name": "delete-returns-none",
-        "desc": ""
+        "desc": "Delete operations should return None"
       },
       {
         "name": "no-raise-with-traceback",
@@ -2866,7 +2867,7 @@ const packages = {
       },
       {
         "name": "missing-tracing-decorator",
-        "desc": ""
+        "desc": "Client service methods should have distributed tracing decorator"
       },
       {
         "name": "python-library-client-azure-checks",
@@ -2881,7 +2882,7 @@ const packages = {
     "samples": [
       {
         "title": "Check client conventions",
-        "code": "import python-library-client-checks\r\n\r\nforeach Clients\r\n    => '{Type.Name}'\r\n\r\nCHECK python-client-checks"
+        "code": "import python-library-client-checks\n\nforeach Clients\n    => '{Type.Name}'\n\nCHECK python-client-checks"
       }
     ],
     "collections": [],
@@ -2928,19 +2929,19 @@ const packages = {
       },
       {
         "name": "too-many-positional-params",
-        "desc": ""
+        "desc": "Client methods with more than 5 positional parameters"
       },
       {
         "name": "async-method-missing-kwargs",
-        "desc": ""
+        "desc": "Async client methods should accept **kwargs"
       },
       {
         "name": "lro-naming",
-        "desc": ""
+        "desc": "LRO methods should be prefixed with begin_"
       },
       {
         "name": "paging-naming",
-        "desc": ""
+        "desc": "Paging methods should be prefixed with list_"
       },
       {
         "name": "name-too-long",
@@ -2964,13 +2965,34 @@ const packages = {
     "checks": [],
     "commands": []
   },
+  "typescript-checks": {
+    "label": "typescript-checks",
+    "overview": "TypeScript-specific coding conventions and best practices for coding agents",
+    "samples": [
+      {
+        "title": "Run ts checks",
+        "code": "import typescript-checks\n\nCHECK typescript-checks"
+      }
+    ],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [],
+    "checks": [
+      {
+        "name": "await-thenable",
+        "desc": "Disallow awaiting a value that is not a Thenable (@typescript-eslint/await-thenable)"
+      }
+    ],
+    "commands": []
+  },
   "typespec": {
     "label": "typespec",
     "overview": "Types and collections for TypeSpec API specification analysis",
     "samples": [
       {
         "title": "List all models",
-        "code": "import typespec\r\n\r\nforeach Models\r\n    => '{TspModel.Name} ({TspModel.Properties.Count} props)'"
+        "code": "import typespec\n\nforeach Models\n    => '{TspModel.Name} ({TspModel.Properties.Count} props)'"
       }
     ],
     "collections": [],
@@ -3241,7 +3263,7 @@ const packages = {
     "samples": [
       {
         "title": "Find get operations",
-        "code": "import typespec-http\r\n\r\nforeach HttpOperations:isGet\r\n    => '{item.Path} — {item.OperationId}'"
+        "code": "import typespec-http\n\nforeach HttpOperations:isGet\n    => '{item.Path} — {item.OperationId}'"
       }
     ],
     "collections": [],
@@ -4055,6 +4077,8 @@ function wireUpTypeLinks(container) {
 }
 
 function highlightCop(code) {
+  // Normalize line endings to avoid extra blank lines in <pre>
+  code = code.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   // Escape HTML first
   code = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   // Comments (must come first, before other replacements interfere)

@@ -216,7 +216,7 @@ public class PackageExtractor
             if (title.Length > 0)
                 title = char.ToUpper(title[0]) + title[1..];
 
-            var code = File.ReadAllText(sampleFile).TrimEnd();
+            var code = File.ReadAllText(sampleFile).ReplaceLineEndings("\n").TrimEnd();
             entry.Samples.Add(new SampleEntry { Title = title, Code = code });
         }
     }

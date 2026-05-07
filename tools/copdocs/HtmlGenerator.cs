@@ -13,7 +13,7 @@ public class HtmlGenerator
         using var writer = new StreamWriter(outputPath, false, System.Text.Encoding.UTF8);
         writer.NewLine = "\n";
 
-        writer.Write(Header);
+        writer.Write(Header.ReplaceLineEndings("\n"));
         writer.Write("\n");
 
         // Categories
@@ -39,7 +39,7 @@ public class HtmlGenerator
         writer.Write(JsonSerializer.Serialize(data.Packages, pkgOptions));
         writer.Write(";\n");
 
-        writer.Write(Footer);
+        writer.Write(Footer.ReplaceLineEndings("\n"));
     }
 
     private const string Header = """
@@ -155,7 +155,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 /* Syntax highlighting */
 .cop-kw { color: #ff7b72; font-weight: 600; }
 .cop-str { color: #a5d6ff; }
-.cop-comment { color: #8b949e; font-style: italic; }
+.cop-comment { color: #8b949e; font-style: italic; line-height: 0; vertical-align: baseline; }
 .cop-template { color: #ffa657; }
 .cop-pred { color: #d2a8ff; }
 .cop-num { color: #79c0ff; }
@@ -802,6 +802,8 @@ function wireUpTypeLinks(container) {
 }
 
 function highlightCop(code) {
+  // Normalize line endings to avoid extra blank lines in <pre>
+  code = code.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   // Escape HTML first
   code = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   // Comments (must come first, before other replacements interfere)
