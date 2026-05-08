@@ -1,4 +1,0 @@
-import files
-
-foreach Disk.Files:isStale
-    => '{item.Name} not modified in 24h'

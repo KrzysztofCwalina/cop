@@ -13,10 +13,3 @@ Defines the type system for filesystem structural and temporal analysis. Import 
 
 Provides types for: Folder, DiskFile.
 Provides collections for: Folders, DiskFiles.
-
-## Time-based properties
-
-Both `Folder` and `DiskFile` include a `MinutesSinceModified` property (int) representing how many minutes have elapsed since the item was last modified. Convenience predicates:
-
-- `recentlyModified` — modified within the last 10 minutes
-- `stale` — not modified in over 24 hours (1440 minutes)
