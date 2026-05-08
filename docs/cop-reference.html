@@ -151,6 +151,7 @@ const categories = [
       "code-layering",
       "core",
       "files",
+      "filesystem",
       "json",
       "markdown"
     ]
@@ -173,9 +174,13 @@ const categories = [
     "name": "Python",
     "packages": [
       "python",
+      "python-doc-checks",
+      "python-idiom-checks",
       "python-library-checks",
       "python-library-client-azure-checks",
-      "python-library-client-checks"
+      "python-library-client-checks",
+      "python-quality-checks",
+      "python-style-checks"
     ]
   },
   {
@@ -2036,16 +2041,7 @@ const packages = {
   "files": {
     "label": "files",
     "overview": "Type definitions for filesystem structural and temporal analysis",
-    "samples": [
-      {
-        "title": "Detect stale files",
-        "code": "import files\n\nforeach Disk.Files:isStale\n    => '{item.Name} not modified in 24h'"
-      },
-      {
-        "title": "Find empty folders",
-        "code": "import files\n\n# Built-in: Disk provides Folders and Files\nforeach Disk.Folders:empty\n    => '{item.Path} is empty'"
-      }
-    ],
+    "samples": [],
     "collections": [],
     "types": {
       "Folder": {
@@ -2143,22 +2139,152 @@ const packages = {
     },
     "predicates": [
       {
-        "name": "isRecentlyModified",
+        "name": "recentlyModified",
         "appliesTo": "Folder",
         "desc": ""
       },
       {
-        "name": "isRecentlyModified",
+        "name": "recentlyModified",
         "appliesTo": "DiskFile",
         "desc": ""
       },
       {
-        "name": "isStale",
+        "name": "stale",
         "appliesTo": "Folder",
         "desc": ""
       },
       {
-        "name": "isStale",
+        "name": "stale",
+        "appliesTo": "DiskFile",
+        "desc": ""
+      }
+    ],
+    "functions": [],
+    "checks": [
+      {
+        "name": "empty-folders",
+        "desc": ""
+      }
+    ],
+    "commands": []
+  },
+  "filesystem": {
+    "label": "filesystem",
+    "overview": "Type definitions for filesystem structural and temporal analysis",
+    "samples": [],
+    "collections": [],
+    "types": {
+      "Folder": {
+        "props": [
+          {
+            "name": "Path",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Name",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Empty",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "FileCount",
+            "type": "int",
+            "desc": ""
+          },
+          {
+            "name": "SubfolderCount",
+            "type": "int",
+            "desc": ""
+          },
+          {
+            "name": "Depth",
+            "type": "int",
+            "desc": ""
+          },
+          {
+            "name": "MinutesSinceModified",
+            "type": "int",
+            "desc": ""
+          }
+        ]
+      },
+      "DiskFile": {
+        "props": [
+          {
+            "name": "Path",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Name",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Extension",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Size",
+            "type": "int",
+            "desc": ""
+          },
+          {
+            "name": "Folder",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Depth",
+            "type": "int",
+            "desc": ""
+          },
+          {
+            "name": "MinutesSinceModified",
+            "type": "int",
+            "desc": ""
+          }
+        ]
+      },
+      "Filesystem": {
+        "props": [
+          {
+            "name": "Folders",
+            "type": "[Folder]",
+            "desc": ""
+          },
+          {
+            "name": "Files",
+            "type": "[DiskFile]",
+            "desc": ""
+          }
+        ]
+      }
+    },
+    "predicates": [
+      {
+        "name": "recentlyModified",
+        "appliesTo": "Folder",
+        "desc": ""
+      },
+      {
+        "name": "recentlyModified",
+        "appliesTo": "DiskFile",
+        "desc": ""
+      },
+      {
+        "name": "stale",
+        "appliesTo": "Folder",
+        "desc": ""
+      },
+      {
+        "name": "stale",
         "appliesTo": "DiskFile",
         "desc": ""
       }
@@ -2747,7 +2873,7 @@ const packages = {
     "samples": [
       {
         "title": "Run python style checks",
-        "code": "import python\n\nCHECK python-checks"
+        "code": "import python-checks\n\nCHECK python-checks"
       }
     ],
     "collections": [],
@@ -2782,6 +2908,48 @@ const packages = {
       {
         "name": "python-checks",
         "desc": "All Python checks combined"
+      }
+    ],
+    "commands": []
+  },
+  "python-doc-checks": {
+    "label": "python-doc-checks",
+    "overview": "Documentation checks for Python — missing docstrings on public classes, functions, and modules",
+    "samples": [
+      {
+        "title": "Run python doc checks",
+        "code": "import python-checks\n\nCHECK python-doc-checks"
+      }
+    ],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [],
+    "checks": [
+      {
+        "name": "python-doc-checks",
+        "desc": "All Python documentation checks combined"
+      }
+    ],
+    "commands": []
+  },
+  "python-idiom-checks": {
+    "label": "python-idiom-checks",
+    "overview": "Checks for Pythonic idioms and patterns — prefer idiomatic Python over anti-patterns",
+    "samples": [
+      {
+        "title": "Run python idiom checks",
+        "code": "import python-checks\n\nCHECK python-idiom-checks"
+      }
+    ],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [],
+    "checks": [
+      {
+        "name": "python-idiom-checks",
+        "desc": "All Pythonic idiom checks combined"
       }
     ],
     "commands": []
@@ -2950,6 +3118,48 @@ const packages = {
       {
         "name": "python-library-client-checks",
         "desc": "All Python client library checks combined"
+      }
+    ],
+    "commands": []
+  },
+  "python-quality-checks": {
+    "label": "python-quality-checks",
+    "overview": "Code quality checks for Python — complexity, error handling, function design",
+    "samples": [
+      {
+        "title": "Run python quality checks",
+        "code": "import python-checks\n\nCHECK python-quality-checks"
+      }
+    ],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [],
+    "checks": [
+      {
+        "name": "python-quality-checks",
+        "desc": "All Python quality checks combined"
+      }
+    ],
+    "commands": []
+  },
+  "python-style-checks": {
+    "label": "python-style-checks",
+    "overview": "PEP 8 style rules for Python code including naming conventions, import style, and formatting",
+    "samples": [
+      {
+        "title": "Run python style checks",
+        "code": "import python-checks\n\nCHECK python-style-checks"
+      }
+    ],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [],
+    "checks": [
+      {
+        "name": "python-style-checks",
+        "desc": "All Python style checks combined"
       }
     ],
     "commands": []
