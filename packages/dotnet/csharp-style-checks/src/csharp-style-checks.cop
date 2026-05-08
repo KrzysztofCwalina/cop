@@ -1,0 +1,180 @@
+# StyleCop checks for C#
+
+import csharp-checks
+import code-analysis
+
+# Naming
+
+# SA1302: Interface names must begin with 'I' followed by an uppercase letter
+predicate isMissingIPrefix(Type) => Type.Kind == 'Interface' && !Type.Name:matches('^I[A-Z]')
+
+# SA1300: Type names must begin with an uppercase letter (PascalCase)
+predicate hasLowercaseTypeName(Type) => Type.Name:matches('^[a-z]')
+
+# SA1300: Public method names must begin with an uppercase letter (PascalCase)
+predicate isLowercasePublicMethod(Method) => Method:isPublic && Method.Name:matches('^[a-z]')
+predicate hasLowercasePublicMethod(Type) => Type.Methods:any(isLowercasePublicMethod)
+
+## SA1302: Interface names must begin with 'I' followed by an uppercase letter
+export let interface-prefix = Code.Types:csharp:isMissingIPrefix
+    :toWarning('SA1302: Interface {item.Name} should begin with \'I\' followed by an uppercase letter')
+
+## SA1300: Type names must begin with an uppercase letter (PascalCase)
+export let type-name-casing = Code.Types:csharp:hasLowercaseTypeName
+    :toWarning('SA1300: Type {item.Name} should begin with an uppercase letter')
+
+## SA1300: Public method names must begin with an uppercase letter (PascalCase)
+export let method-name-casing = Code.Types:csharp:hasLowercasePublicMethod
+    :toWarning('SA1300: {item.Name} has a public method that should begin with an uppercase letter')
+
+# File structure
+
+# SA1402: File may only contain a single type
+predicate hasMultipleTypesInFile(Type) => Type.File.Types.Count > 1
+
+# SA1633: File must have a header (first line should be a comment)
+predicate isMissingFileHeader(Line) => Line.Number == 1 && !Line.Text:matches('^(\s*/[/*]|#)')
+
+# SA1200: Using directives must be placed outside the namespace
+# This checks if the file has a namespace but usings appear after a namespace declaration
+predicate isUsingInsideNamespace(Line) => Line.Text:matches('^\s*using\s+[A-Z]') && Line.Number > 10
+
+## SA1402: A file may only contain a single type
+export let single-type-per-file = Code.Types:csharp:hasMultipleTypesInFile
+    :toWarning('SA1402: {item.Name} — file should contain only a single type')
+
+## SA1633: File must have a header
+export let file-header-required = Code.Lines:csharp:isMissingFileHeader
+    :toWarning('SA1633: File should begin with a header comment')
+
+# Whitespace and formatting
+
+# SA1005: Single-line comment must begin with a space after //
+predicate isCommentMissingSpace(Line) => Line.Text:matches('//[^ /!]')
+
+# SA1027: Code must not contain tabs
+predicate hasTab(Line) => Line.Text:matches('\t')
+
+# SA1028: Code must not contain trailing whitespace
+predicate hasTrailingWhitespace(Line) => Line.Text:matches('[ \t]+$')
+
+# SA1106: Code must not contain empty statements (stray semicolons)
+predicate isEmptyStatement(Line) => Line.Text:matches('^\s*;\s*$')
+
+# SA1120: Comments must contain text (not just //)
+predicate isEmptyComment(Line) => Line.Text:matches('//\s*$')
+
+# SA1122: Use string.Empty for empty strings in comparisons
+predicate hasEmptyStringLiteral(Line) => Line.Text:matches('(==|!=)\s*""') || Line.Text:matches('""\s*(==|!=)')
+
+# SA1206: Declaration keywords must follow order (access, static, other)
+# Flag common misordering: static before access modifier
+predicate hasWrongModifierOrder(Line) => Line.Text:matches('^\s*(static|sealed|abstract|virtual|override|readonly)\s+(public|private|protected|internal)\s')
+
+## SA1005: Single-line comment must begin with a space after //
+export let comment-spacing = Code.Lines:csharp:isCommentMissingSpace
+    :toWarning('SA1005: Single-line comment should begin with a space')
+
+## SA1027: Code must not contain tabs
+export let no-tabs = Code.Lines:csharp:hasTab
+    :toWarning('SA1027: Use spaces instead of tabs')
+
+## SA1028: Code must not contain trailing whitespace
+export let no-trailing-whitespace = Code.Lines:csharp:hasTrailingWhitespace
+    :toWarning('SA1028: Remove trailing whitespace')
+
+## SA1106: Code must not contain empty statements
+export let no-empty-statements = Code.Lines:csharp:isEmptyStatement
+    :toWarning('SA1106: Remove empty statement')
+
+## SA1120: Comments must contain text
+export let no-empty-comments = Code.Lines:csharp:isEmptyComment
+    :toWarning('SA1120: Comment must contain text')
+
+## SA1122: Use string.Empty instead of ""
+export let use-string-empty = Code.Lines:csharp:hasEmptyStringLiteral
+    :toWarning('SA1122: Use string.Empty instead of ""')
+
+## SA1206: Declaration keywords must follow order
+export let modifier-order = Code.Lines:csharp:hasWrongModifierOrder
+    :toWarning('SA1206: Access modifier should come before other modifiers')
+
+# Braces
+
+# SA1500: Braces must not be on the same line as the preceding statement
+# Detects opening brace at end of line (K&R style) instead of Allman style
+predicate hasBraceNotOnOwnLine(Line) => Line.Text:matches('(if|else|for|foreach|while|do|try|catch|finally|switch|lock|using)\s*\(.*\)\s*\{') || Line.Text:matches('(else|try|catch|finally|do)\s*\{')
+
+# SA1503: Braces must not be omitted from control flow
+# Detects single-line if/for/while/foreach without braces
+predicate isMissingBraces(Line) => Line.Text:matches('^\s*(if|else if|for|foreach|while)\s*\(.*\)\s*[^{;\s]') || Line.Text:matches('^\s*else\s+[^{i]')
+
+# SA1518: File must end with a single newline
+predicate isMissingTrailingNewline(Line) => Line.File.Types.Count >= 0 && Line.Number == 1 && !Line.File.Path:matches('placeholder')
+
+## SA1500: Braces must be on their own line (Allman style)
+export let braces-on-own-line = Code.Lines:csharp:hasBraceNotOnOwnLine
+    :toWarning('SA1500: Opening brace should be on its own line')
+
+## SA1503: Braces must not be omitted
+export let required-braces = Code.Lines:csharp:isMissingBraces
+    :toWarning('SA1503: Braces must not be omitted from control flow statement')
+
+# Documentation
+
+# SA1600: Public elements should be documented (have XML doc comments)
+predicate isPublicUndocumented(Type) => Type:isPublic && !Type.Documented
+predicate isUndocumentedPublicMethod(Method) => Method:isPublic && !Method.Documented
+predicate hasUndocumentedPublicMethod(Type) => Type.Methods:any(isUndocumentedPublicMethod)
+
+# SA1600: Public properties should be documented
+predicate isUndocumentedPublicProperty(Property) => Property:isPublic && !Property.Documented
+predicate hasUndocumentedPublicProperty(Type) => Type.Properties:any(isUndocumentedPublicProperty)
+
+## SA1600: Public elements should be documented
+export let public-documented = Code.Types:csharp:isPublicUndocumented
+    :toWarning('SA1600: Public type {item.Name} should have XML documentation')
+
+export let public-method-documented = Code.Types:csharp:hasUndocumentedPublicMethod
+    :toWarning('SA1600: {item.Name} has a public method without XML documentation')
+
+## SA1600: Public properties should be documented
+export let public-property-documented = Code.Types:csharp:hasUndocumentedPublicProperty
+    :toWarning('SA1600: {item.Name} has a public property without XML documentation')
+
+# Fields
+
+# SA1401: Fields should be private (non-const public fields are bad)
+predicate isPublicNonConstField(Field) => Field:isPublic && Field:!isConst
+predicate hasPublicField(Type) => Type.Fields:any(isPublicNonConstField)
+
+# .editorconfig naming: private fields should start with _
+predicate isPrivateFieldMissingUnderscore(Field) => Field:isPrivate && Field:!isStatic && !Field.Name:matches('^_')
+predicate hasPrivateFieldNamingViolation(Type) => Type.Fields:any(isPrivateFieldMissingUnderscore)
+
+# .editorconfig naming: private static fields should start with s_
+predicate isStaticFieldMissingSPrefix(Field) => Field:isPrivate && Field:isStatic && Field:!isConst && !Field.Name:matches('^s_')
+predicate hasStaticFieldNamingViolation(Type) => Type.Fields:any(isStaticFieldMissingSPrefix)
+
+# .editorconfig naming: constants should be PascalCase
+predicate isConstFieldNotPascalCase(Field) => Field:isConst && !Field.Name:matches('^[A-Z]')
+predicate hasConstNamingViolation(Type) => Type.Fields:any(isConstFieldNotPascalCase)
+
+## SA1401: Fields should be private
+export let no-public-fields = Code.Types:csharp:hasPublicField
+    :toWarning('SA1401: {item.Name} has a public non-const field; use a property instead')
+
+## .editorconfig naming: private field underscore prefix
+export let private-field-naming = Code.Types:csharp:hasPrivateFieldNamingViolation
+    :toWarning('{item.Name} has a private field that should start with underscore (_)')
+
+## .editorconfig naming: static field s_ prefix
+export let static-field-naming = Code.Types:csharp:hasStaticFieldNamingViolation
+    :toWarning('{item.Name} has a private static field that should start with s_')
+
+## .editorconfig naming: const PascalCase
+export let const-naming = Code.Types:csharp:hasConstNamingViolation
+    :toWarning('{item.Name} has a constant that should be PascalCase')
+
+## All style checks combined
+export let csharp-style-checks = interface-prefix + type-name-casing + method-name-casing + single-type-per-file + comment-spacing + no-tabs + no-trailing-whitespace + no-empty-statements + no-empty-comments + use-string-empty + modifier-order + file-header-required + public-documented + public-method-documented + no-public-fields + private-field-naming + static-field-naming + const-naming + braces-on-own-line + required-braces + public-property-documented

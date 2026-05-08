@@ -1,0 +1,56 @@
+# General Python source code style checks
+
+import code-analysis
+
+# Avoid print() — use logging
+predicate isPrintCall(Statement) => Statement.Kind == 'call' && Statement.MemberName == 'print'
+
+## Avoid print() — use logging instead
+export let print-calls = Code.Statements:python:isPrintCall
+    :toWarning('Avoid print() — use logging instead')
+
+# Do not use bare except — catch a specific exception type
+predicate isBareExcept(Statement) => Statement.ErrorHandler == true && Statement.TypeName == null
+
+## Do not use bare except — catch a specific exception type
+export let bare-except-clauses = Code.Statements:python:isBareExcept
+    :toWarning('Do not use bare except — catch a specific exception type')
+
+# Do not silence Exception — reraise or catch a specific type
+predicate isCatchingException(Statement) => Statement.ErrorHandler == true
+    && Statement.Generic == true
+
+predicate isSwallowingException(Statement) => Statement.ErrorHandler == true
+    && Statement.Generic == true && !Statement.Rethrows
+
+## Do not silence Exception — reraise or catch a specific type
+export let silenced-exceptions = Code.Statements:python:isSwallowingException
+    :toWarning('Do not silence Exception — reraise or catch a specific type')
+
+# Do not import the six package (Python 2 compatibility layer)
+predicate isImportingSix(Line) => Line.Text:matches('^(import six|from six)')
+
+## Do not import the six package — Python 2 is no longer supported
+export let no-six-import = Code.Lines:python:isImportingSix
+    :toError('Do not import six — Python 2 is no longer supported')
+
+# Do not use legacy typing via comments — use Python 3.9+ type hints
+predicate hasLegacyTypingComment(Line) => Line.Text:matches('#\\s*type:')
+
+## Do not use legacy type comments — use Python 3.9+ type annotations
+export let no-legacy-typing = Code.Lines:python:hasLegacyTypingComment
+    :toWarning('Do not use type comments — use Python 3.9+ type annotations')
+
+# eval() is a security risk
+predicate isEvalCall(Statement) => Statement.Kind == 'call' && Statement.MemberName == 'eval'
+
+## Do not use eval() — it is a security risk
+export let no-eval = Code.Statements:python:isEvalCall
+    :toError('Do not use eval() — it is a security risk')
+
+# Naming: functions/methods should use snake_case
+predicate isNotSnakeCase(Type) => Type.Methods.Count > 0
+    && Type.Name:matches('^[a-z]') == false && Type.Kind == 'Class'
+
+## All Python checks combined
+export let python-checks = print-calls + bare-except-clauses + silenced-exceptions + no-six-import + no-legacy-typing + no-eval

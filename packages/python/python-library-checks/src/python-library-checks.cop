@@ -1,0 +1,29 @@
+# Library API design checks for Python
+
+import code-analysis
+
+# Parameter type detection
+predicate isUntypedParam(Parameter) => Parameter.Type == null
+    && !Parameter.Variadic && !Parameter.Kwargs
+
+predicate isMissingParamTypes(Method) => Method:isPublic
+    && Method.Parameters:any(isUntypedParam)
+
+predicate hasUntypedParams(Type) => Type.Methods:any(isMissingParamTypes)
+
+## Public methods should have type hints on all parameters
+export let untyped-public-params = Code.Types:python:hasUntypedParams
+    :toWarning('{item.Name} has public methods with missing parameter type hints')
+
+# Return type detection
+predicate isMissingReturnType(Method) => Method:isPublic
+    && Method.ReturnType == null
+
+predicate hasMissingReturnTypes(Type) => Type.Methods:any(isMissingReturnType)
+
+## Public methods should declare a return type
+export let missing-return-types = Code.Types:python:hasMissingReturnTypes
+    :toWarning('{item.Name} has public methods without return type annotations')
+
+## All Python library checks combined
+export let python-library-checks = untyped-public-params + missing-return-types

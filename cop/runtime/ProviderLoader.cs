@@ -204,6 +204,14 @@ public static class ProviderLoader
             {
                 errors?.Add($"Provider '{instance}' does not support any query format.");
             }
+
+            // Register provider functions (e.g., http.Get, http.Post) regardless of data format
+            var providerFunctions = instance.GetProviderFunctions();
+            if (providerFunctions is not null)
+            {
+                foreach (var (funcName, func) in providerFunctions)
+                    registry.RegisterProviderFunction(ns, funcName, func);
+            }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

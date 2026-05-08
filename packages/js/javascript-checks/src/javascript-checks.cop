@@ -1,0 +1,42 @@
+# General JavaScript/TypeScript source code style definitions
+
+import code-analysis
+
+## Avoid console output in production code
+predicate isConsoleCall(Statement) => Statement.Kind == 'call'
+    && Statement.TypeName == 'console'
+export let console-calls = Code.Statements:javascript:isConsoleCall
+    :toWarning('Avoid console.{item.MemberName} in production code')
+
+## Do not use alert()
+predicate isAlertCall(Statement) => Statement.Kind == 'call'
+    && Statement.MemberName == 'alert'
+export let alert-calls = Code.Statements:javascript:isAlertCall
+    :toError('Do not use alert()')
+
+## Do not use eval()
+predicate isEvalCall(Statement) => Statement.Kind == 'call'
+    && Statement.MemberName == 'eval'
+export let eval-calls = Code.Statements:javascript:isEvalCall
+    :toError('Do not use eval() — it is a security risk')
+
+## Remove debugger statements
+predicate isDebuggerStatement(Statement) => Statement.Kind == 'call'
+    && Statement.MemberName == 'debugger'
+export let debugger-statements = Code.Statements:javascript:isDebuggerStatement
+    :toError('Remove debugger statement')
+
+## Use const or let instead of var
+predicate isUsingVar(Statement) => Statement.Kind == 'declaration'
+    && Statement.Keywords:contains('var')
+export let var-declarations = Code.Statements:javascript:isUsingVar
+    :toWarning('Use const or let instead of var')
+
+## Catch blocks should rethrow or handle errors explicitly
+predicate isCatchWithoutRethrow(Statement) => Statement.ErrorHandler == true
+    && Statement.Generic == true && !Statement.Rethrows
+export let swallowed-exceptions = Code.Statements:javascript:isCatchWithoutRethrow
+    :toWarning('Do not swallow errors — rethrow or handle explicitly')
+
+## All JavaScript checks combined
+export let javascript-checks = console-calls + alert-calls + eval-calls + debugger-statements + var-declarations + swallowed-exceptions

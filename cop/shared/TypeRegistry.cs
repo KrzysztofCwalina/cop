@@ -33,6 +33,7 @@ public class TypeRegistry
     private readonly Dictionary<string, Func<string, string, List<object>>> _fileParsers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Dictionary<string, DataSink>> _nsSinks = new(StringComparer.Ordinal);
     private readonly Dictionary<string, IStreamingCollectionSource> _streamingSources = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Dictionary<string, Func<List<object?>, Task<object?>>>> _nsProviderFunctions = new(StringComparer.Ordinal);
     private Func<string, List<Document>>? _documentLoader;
 
     public TypeRegistry()
@@ -495,6 +496,39 @@ public class TypeRegistry
     /// Returns all registered streaming source names (for diagnostics).
     /// </summary>
     public IEnumerable<string> GetStreamingSourceNames() => _streamingSources.Keys;
+
+    /// <summary>
+    /// Registers a provider function under a namespace (e.g., "http", "Post").
+    /// Provider functions are async and accept evaluated arguments.
+    /// Called as namespace.FunctionName(args) in cop scripts.
+    /// </summary>
+    public void RegisterProviderFunction(string ns, string name, Func<List<object?>, Task<object?>> func)
+    {
+        if (!_nsProviderFunctions.TryGetValue(ns, out var nsDict))
+        {
+            nsDict = new(StringComparer.OrdinalIgnoreCase);
+            _nsProviderFunctions[ns] = nsDict;
+        }
+        nsDict[name] = func;
+    }
+
+    /// <summary>
+    /// Resolves a provider function by namespace and name.
+    /// Returns null if the namespace or function is not registered.
+    /// </summary>
+    public Func<List<object?>, Task<object?>>? ResolveProviderFunction(string ns, string name)
+    {
+        if (_nsProviderFunctions.TryGetValue(ns, out var nsDict) && nsDict.TryGetValue(name, out var func))
+            return func;
+        return null;
+    }
+
+    /// <summary>
+    /// Returns true if the given name is a registered provider namespace that has functions.
+    /// Used by the evaluator to resolve bare identifiers like "http" as namespace references.
+    /// </summary>
+    public bool IsProviderFunctionNamespace(string name)
+        => _nsProviderFunctions.ContainsKey(name);
 
     /// <summary>
     /// Gets the names of all registered global collections (flat + namespaced bare names).

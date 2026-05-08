@@ -501,6 +501,20 @@ public static class Engine
         var providerPackages = new List<(string Dir, PackageMetadata Meta)>();
         var typeRegistry = CreateTypeRegistry(scriptFiles, feedPaths, parseErrors, fatalErrors, packageNames, providerPackages: providerPackages);
 
+        // Also detect providers from top-level packages themselves (not just imports)
+        foreach (var packageName in packageNames)
+        {
+            foreach (var feed in feedPaths)
+            {
+                var packageDir = ImportResolver.FindPackageDir(Path.GetFullPath(feed), packageName);
+                if (packageDir is null) continue;
+                var copDir = Directory.Exists(Path.Combine(packageDir, "src")) ? Path.Combine(packageDir, "src") : Path.Combine(packageDir, "types");
+                if (Directory.Exists(copDir))
+                    DetectProviderPackage(copDir, packageName, feedPaths, providerPackages, parseErrors);
+                break;
+            }
+        }
+
         if (fatalErrors.Count > 0)
             return new EngineResult([], parseErrors, fatalErrors);
 

@@ -1,0 +1,123 @@
+# Client library design checks for Python
+
+import python-checks
+import code-analysis
+
+# Client type detection
+export predicate isClient(Type) => Type.Name:endsWith('Client')
+export predicate isAsyncClient(Type) => Type.Name:contains('Async') && isClient
+
+# Collect all Python client types
+export let Clients = Code.Types:python:isClient
+
+# Naming
+export predicate hasBadAsyncName(Type) => isClient && Type.Name:contains('Async')
+
+## Async clients should not have 'Async' in the name
+export let async-client-bad-name = Clients:hasBadAsyncName
+    :toWarning('{item.Name} — async clients should not include Async in the class name')
+
+# Constructor conventions
+predicate isKwargsParam(Parameter) => Parameter.Kwargs
+predicate isCredentialParam(Parameter) => Parameter.Name == 'credential'
+predicate isConnectionStringParam(Parameter) => Parameter.Name:contains('connection_string')
+    || Parameter.Name:contains('conn_str')
+
+predicate isMissingKwargs(Type) => Type.Constructors.Count > 0
+    && Type.Constructors.First.Parameters:!any(isKwargsParam)
+
+## Client constructor must accept **kwargs
+export let client-missing-kwargs = Clients:isMissingKwargs
+    :toWarning('{item.Name} constructor should accept **kwargs')
+
+predicate hasConnectionString(Type) => Type.Constructors.Count > 0
+    && Type.Constructors.First.Parameters:any(isConnectionStringParam)
+
+## Client constructor should not have a connection_string parameter (use factory method)
+export let no-connection-string-in-ctor = Clients:hasConnectionString
+    :toWarning('{item.Name} should use a class method factory for connection strings, not a constructor parameter')
+
+# Static methods on client (should be module-level)
+predicate isPublicMethod(Method) => Method:isPublic && !Method.Name:startsWith('_')
+predicate isStaticOnClient(Method) => Method:isStatic && isPublicMethod
+
+predicate hasStaticMethod(Type) => Type.Methods:any(isStaticOnClient)
+
+## Client methods should not use static methods (use module-level functions)
+export let no-static-methods = Clients:hasStaticMethod
+    :toWarning('{item.Name} uses @staticmethod — prefer module-level functions')
+
+# Too many positional parameters (>5)
+predicate hasTooManyPositionalParams(Method) => isPublicMethod && Method.Parameters.Count > 5
+
+predicate hasTooManyParams(Type) => Type.Methods:any(hasTooManyPositionalParams)
+
+## Client methods with more than 5 positional parameters
+export let too-many-positional-params = Clients:hasTooManyParams
+    :toWarning('{item.Name} has a method with more than 5 positional parameters — use keyword arguments')
+
+# Missing **kwargs on network methods
+predicate isNetworkMethodMissingKwargs(Method) => isPublicMethod
+    && Method:isAsync && Method.Parameters:!any(isKwargsParam)
+
+predicate hasMethodMissingKwargs(Type) => Type.Methods:any(isNetworkMethodMissingKwargs)
+
+## Async client methods should accept **kwargs
+export let async-method-missing-kwargs = Clients:hasMethodMissingKwargs
+    :toWarning('{item.Name} has an async method without **kwargs')
+
+# LRO naming: methods returning LROPoller should be prefixed with begin_
+predicate isLroMethod(Method) => isPublicMethod && Method.ReturnType != null
+    && (Method.ReturnType.Name:contains('LROPoller') || Method.ReturnType.Name:contains('Poller'))
+predicate hasLroBadName(Method) => isLroMethod && !Method.Name:startsWith('begin_')
+
+predicate hasLroBadName(Type) => Type.Methods:any(hasLroBadName)
+
+## LRO methods should be prefixed with begin_
+export let lro-naming = Clients:hasLroBadName
+    :toWarning('{item.Name} has an LRO method not prefixed with begin_')
+
+# Paging: methods returning paging types should be prefixed with list_
+predicate isPagingMethod(Method) => isPublicMethod && Method.ReturnType != null
+    && (Method.ReturnType.Name:contains('ItemPaged') || Method.ReturnType.Name:contains('Pager')
+        || Method.ReturnType.Name:contains('AsyncItemPaged'))
+predicate hasPagingBadName(Method) => isPagingMethod && !Method.Name:startsWith('list_')
+    && !Method.Name:startsWith('_list_')
+
+predicate hasPagingBadName(Type) => Type.Methods:any(hasPagingBadName)
+
+## Paging methods should be prefixed with list_
+export let paging-naming = Clients:hasPagingBadName
+    :toWarning('{item.Name} has a paging method not prefixed with list_')
+
+# Method naming: approved prefixes for client methods
+let approvedPrefixes = ['get' 'list' 'create' 'upsert' 'update' 'replace'
+    'delete' 'add' 'set' 'remove' 'begin' 'send' 'query' 'close'
+    'download' 'upload' 'analyze' 'extract' 'recognize' 'synthesize']
+
+predicate hasBadMethodPrefix(Method) => isPublicMethod
+    && !Method.Name:matches('^(get|list|create|upsert|update|replace|delete|add|set|remove|begin|send|query|close|download|upload|analyze|extract|recognize|synthesize|from|__)')
+    && !Method.Name:matches('^_')
+
+# Method name validation
+predicate isDoubleUnderscoreMethod(Method) => Method.Name:startsWith('__')
+    && Method.Name != '__init__' && Method.Name != '__enter__' && Method.Name != '__exit__'
+    && Method.Name != '__aenter__' && Method.Name != '__aexit__'
+    && Method.Name != '__repr__' && Method.Name != '__str__'
+
+# Client suffix detection: classes that look like service clients but don't end with Client
+predicate isClientLike(Type) => Type.Kind == 'Class'
+    && Type.Methods.Count > 3
+    && !Type.Name:endsWith('Client')
+    && (Type.Name:endsWith('Service') || Type.Name:endsWith('Manager') || Type.Name:endsWith('Handler'))
+
+# Name length
+export predicate hasNameTooLong(Type) => Type.Name.Length > 40
+predicate hasMethodNameTooLong(Method) => isPublicMethod && Method.Name.Length > 40
+
+## Type/class names should be under 40 characters
+export let name-too-long = Code.Types:python:hasNameTooLong
+    :toWarning('{item.Name} exceeds 40 characters — use a shorter name')
+
+## All Python client library checks combined
+export let python-library-client-checks = async-client-bad-name + client-missing-kwargs + no-connection-string-in-ctor + no-static-methods + too-many-positional-params + async-method-missing-kwargs + lro-naming + paging-naming + name-too-long

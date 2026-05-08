@@ -1,0 +1,27 @@
+# TypeScript-specific predicate definitions
+
+import code-analysis
+
+## Detects await on a value that is clearly not a Thenable (literal values).
+## Inspired by @typescript-eslint/await-thenable.
+## Since Cop uses structural analysis (no type resolution), this catches
+## the highest-confidence subset: await on literal numbers, strings,
+## booleans, null, undefined, arrays, and object literals.
+predicate isAwaitOfNonThenable(Statement) =>
+    Statement.Kind == 'await'
+    && Statement.MemberName == null
+    && (Statement.Expression:matches('^\d')
+        || Statement.Expression:matches('^[\'"`]')
+        || Statement.Expression:equals('true')
+        || Statement.Expression:equals('false')
+        || Statement.Expression:equals('null')
+        || Statement.Expression:equals('undefined')
+        || Statement.Expression:startsWith('[')
+        || Statement.Expression:startsWith('{'))
+
+## Disallow awaiting a value that is not a Thenable (@typescript-eslint/await-thenable)
+export let await-thenable = Code.Statements:javascript:isAwaitOfNonThenable
+    :toError('Unexpected await of a non-Promise (non-Thenable) value')
+
+## All TypeScript checks combined
+export let typescript-checks = await-thenable

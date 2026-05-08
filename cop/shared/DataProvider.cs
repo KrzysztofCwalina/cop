@@ -101,6 +101,14 @@ public abstract class DataProvider
     /// under the provider's namespace (e.g., "http.Send").
     /// </summary>
     public virtual IEnumerable<DataSink>? GetSinks() => null;
+
+    /// <summary>
+    /// Returns namespace-scoped functions that this provider exposes (e.g., http.Get, http.Post).
+    /// Functions are async (return Task&lt;object?&gt;) and accept a list of evaluated arguments.
+    /// The engine registers these under the provider's namespace so they can be called as
+    /// namespace.FunctionName(args) in cop scripts.
+    /// </summary>
+    public virtual Dictionary<string, Func<List<object?>, Task<object?>>>? GetProviderFunctions() => null;
 }
 
 /// <summary>

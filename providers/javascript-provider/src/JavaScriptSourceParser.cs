@@ -267,6 +267,15 @@ public class JavaScriptSourceParser : ISourceParser
                 continue;
             }
 
+            // await statement (standalone or return await)
+            if (trimmed.StartsWith("return await ") || trimmed.StartsWith("await "))
+            {
+                var awaitStart = trimmed.StartsWith("return await ") ? 13 : 6;
+                var awaitExpr = trimmed[awaitStart..].TrimEnd(';').Trim();
+                ExtractAwaitStatement(awaitExpr, i + 1, true, statements);
+                continue;
+            }
+
             ExtractLineStatement(trimmed, i + 1, true, statements);
         }
     }
@@ -304,6 +313,13 @@ public class JavaScriptSourceParser : ISourceParser
                 statements.Add(new StatementInfo("throw", [], typeName, null, [], lineNumber, isInMethod));
                 continue;
             }
+            if (part.StartsWith("return await ") || part.StartsWith("await "))
+            {
+                var awaitStart = part.StartsWith("return await ") ? 13 : 6;
+                var awaitExpr = part[awaitStart..].Trim();
+                ExtractAwaitStatement(awaitExpr, lineNumber, isInMethod, statements);
+                continue;
+            }
             ExtractLineStatement(part, lineNumber, isInMethod, statements);
         }
     }
@@ -327,7 +343,15 @@ public class JavaScriptSourceParser : ISourceParser
             if (afterEq > 0)
             {
                 var rhs = trimmed[(afterEq + 1)..].TrimStart();
-                ExtractCallFromExpression(rhs, lineNumber, isInMethod, statements);
+                if (rhs.StartsWith("await "))
+                {
+                    var awaitExpr = rhs[6..].TrimEnd(';').Trim();
+                    ExtractAwaitStatement(awaitExpr, lineNumber, isInMethod, statements);
+                }
+                else
+                {
+                    ExtractCallFromExpression(rhs, lineNumber, isInMethod, statements);
+                }
             }
             return;
         }
@@ -366,6 +390,35 @@ public class JavaScriptSourceParser : ISourceParser
             : new List<string>();
 
         statements.Add(new StatementInfo("call", [], typeName, memberName, args, lineNumber, isInMethod));
+    }
+
+    private static void ExtractAwaitStatement(string awaitExpr, int lineNumber, bool isInMethod,
+        List<StatementInfo> statements)
+    {
+        var callMatch = Regex.Match(awaitExpr, @"^(?:(\w[\w.]*?)\.)?(\w+)\s*\(");
+        string? typeName = null;
+        string? memberName = null;
+
+        if (callMatch.Success)
+        {
+            typeName = callMatch.Groups[1].Success ? callMatch.Groups[1].Value : null;
+            memberName = callMatch.Groups[2].Value;
+
+            if (memberName is "if" or "for" or "while" or "switch" or "function" or "class"
+                or "return" or "new" or "typeof" or "import" or "require" or "catch" or "throw")
+            {
+                typeName = null;
+                memberName = null;
+            }
+        }
+
+        statements.Add(new StatementInfo("await", [], typeName, memberName, [], lineNumber, isInMethod)
+        {
+            Expression = awaitExpr
+        });
+
+        // Also emit the inner call for backward compatibility
+        ExtractCallFromExpression(awaitExpr, lineNumber, isInMethod, statements);
     }
 
     private static bool HasRethrow(string[] lines, int start, int end)

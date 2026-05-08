@@ -1,0 +1,104 @@
+# Library API design checks for C#
+
+import csharp-checks
+import code-analysis
+
+# Public API surface
+
+predicate hasAsyncBoolParam(Parameter) => Parameter.Name == 'async' && Parameter.Type == 'bool'
+predicate isPublicWithAsyncBool(Method) => Method:isPublic && Method.Parameters:any(hasAsyncBoolParam)
+predicate isExposingAsyncBool(Type) => Type.Methods:any(isPublicWithAsyncBool)
+
+predicate isNonPublicAsync(Method) => Method:!isPublic && Method:isAsync
+predicate isMissingAsyncParam(Method) => Method.Parameters:!any(hasAsyncBoolParam)
+predicate hasNonPublicAsyncWithoutParam(Type) => Type.Methods.Where(isNonPublicAsync):any(isMissingAsyncParam)
+
+export predicate hasBannedInternalType(Parameter) => Parameter.Type.Namespace == 'System.Runtime.CompilerServices'
+    || Parameter.Type.Namespace == 'System.Runtime.InteropServices'
+export predicate hasBannedParamType(Method) => Method:isPublic && Method.Parameters:any(hasBannedInternalType)
+export predicate hasBannedParams(Type) => Type.Methods:any(hasBannedParamType)
+
+## Public methods should not have a bool parameter named 'async'
+export let public-async-bool-params = Code.Types:csharp:isExposingAsyncBool
+    :toWarning('{item.Name} should not have a bool \'async\' parameter in public API')
+
+## Non-public async methods should accept a bool 'async' parameter
+export let async-missing-bool-param = Code.Types:csharp:hasNonPublicAsyncWithoutParam
+    :toWarning('{item.Name} non-public async method should have \'async\' parameter')
+
+# ConfigureAwait
+
+predicate isAwaitUsingDefault(Statement) => Statement.Kind == 'await'
+    && (Statement.MemberName != 'ConfigureAwait' || Statement.Arguments:contains('true'))
+
+## Library code must use ConfigureAwait(false) on all await expressions
+export let awaits-using-default = Code.Statements:csharp:isAwaitUsingDefault
+    :toWarning('Library code must use ConfigureAwait(false) on await expressions')
+
+# Dual-mode method patterns
+
+# Method uses the dual-mode async bool parameter pattern
+export predicate hasSyncAndAsyncVariants(Method) => Method.Parameters:any(hasAsyncBoolParam)
+
+# Statement is in a dual-mode method (has async bool parameter)
+export predicate isInDualModeMethod(Statement) => Statement.Method != null
+    && Statement.Method:hasSyncAndAsyncVariants
+
+# Statement has an ancestor if-statement whose condition references 'async'
+predicate isAsyncGuard(Ancestor) => Ancestor.Kind == 'if' && Ancestor.Condition:contains('async')
+export predicate isGuardedByAsyncCheck(Statement) => Statement.Ancestors:any(isAsyncGuard)
+
+# Unconditional await in dual-mode method (AZC0110)
+predicate isUnconditionalAwait(Statement) => Statement.Kind == 'await'
+    && isInDualModeMethod && !isGuardedByAsyncCheck
+
+## Unconditional await in dual-mode method (AZC0110)
+export let unconditional-await-in-dual-mode = Code.Statements:csharp:isUnconditionalAwait
+    :toError('Await must be guarded by if (async) in dual-mode methods')
+
+# Unconditional EnsureCompleted in dual-mode method (AZC0111)
+predicate isUnconditionalEnsureCompleted(Statement) => Statement.Kind == 'call'
+    && Statement.MemberName == 'EnsureCompleted' && isInDualModeMethod && !isGuardedByAsyncCheck
+
+## Unconditional EnsureCompleted in dual-mode method (AZC0111)
+export let unconditional-sync-in-dual-mode = Code.Statements:csharp:isUnconditionalEnsureCompleted
+    :toError('EnsureCompleted must be guarded by if (!async) in dual-mode methods')
+
+# AZC0108: Detect wrong async argument values in guarded branches
+
+# In if(async) branch, passing async: false is wrong
+predicate isPositiveAsyncGuard(Ancestor) => Ancestor.Kind == 'if' && Ancestor.Condition == 'async'
+predicate isInPositiveAsyncGuard(Statement) => Statement.Ancestors:any(isPositiveAsyncGuard)
+# In else branch of if(async) or in if(!async), passing async: true is wrong
+predicate isNegatedAsyncGuard(Ancestor) => Ancestor.Kind == 'if' && Ancestor.Condition:contains('!async')
+predicate isElseBranch(Ancestor) => Ancestor.Kind == 'else'
+predicate isInNegatedAsyncGuard(Statement) => Statement.Ancestors:any(isNegatedAsyncGuard)
+    || Statement.Ancestors:any(isElseBranch)
+predicate hasAsyncFalseArg(Argument) => Argument:contains('async: false')
+export predicate hasWrongAsyncFalseInAsyncGuard(Statement) => Statement.Kind == 'call'
+    && isInDualModeMethod && isInPositiveAsyncGuard
+    && Statement.Arguments:any(hasAsyncFalseArg)
+predicate hasAsyncTrueArg(Argument) => Argument:contains('async: true')
+export predicate hasWrongAsyncTrueInSyncGuard(Statement) => Statement.Kind == 'call'
+    && isInDualModeMethod && isInNegatedAsyncGuard
+    && Statement.Arguments:any(hasAsyncTrueArg)
+
+## Wrong async argument value in guarded branch (AZC0108)
+export let wrong-async-arg-value = Code.Statements:csharp:hasWrongAsyncFalseInAsyncGuard
+    :toError('Passing async: false inside async guard — should be async: true')
+export let wrong-sync-arg-value = Code.Statements:csharp:hasWrongAsyncTrueInSyncGuard
+    :toError('Passing async: true inside sync guard — should be async: false')
+
+# AZC0109: async parameter used outside of if condition or ternary
+
+# Detects calls that pass the 'async' variable as an argument (misuse)
+export predicate isPassingAsyncParamAsArg(Statement) => Statement.Kind == 'call'
+    && isInDualModeMethod && !isGuardedByAsyncCheck
+    && Statement.Arguments:contains('async')
+
+## Misuse of async parameter (AZC0109)
+export let async-param-misuse = Code.Statements:csharp:isPassingAsyncParamAsArg
+    :toWarning('Do not pass async parameter as argument — use if/else branching instead')
+
+## All C# library checks combined
+export let csharp-library-checks = public-async-bool-params + async-missing-bool-param + awaits-using-default + unconditional-await-in-dual-mode + unconditional-sync-in-dual-mode + wrong-async-arg-value + wrong-sync-arg-value + async-param-misuse

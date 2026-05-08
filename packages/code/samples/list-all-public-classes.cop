@@ -1,4 +1,3 @@
 import code
 
-foreach Types:isPublic
-  => '{Type.Name} ({Type.Kind})'
+foreach Types:isPublic => '{Type.Name} ({Type.Kind})'
