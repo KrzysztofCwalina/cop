@@ -103,6 +103,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .fn-block:hover { background: #f6f8fa; }
 .fn-signature { display: flex; align-items: center; }
 .fn-desc { color: #57606a; font-size: 12px; margin-top: 3px; padding-left: 2px; }
+.source-link { font-size: 11px; color: #57606a; text-decoration: none; margin-left: 8px; opacity: 0.4; transition: opacity 0.2s; flex-shrink: 0; }
+.source-link:hover { opacity: 1; color: #0969da; }
 .item-type-inline { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px; color: #8250df; }
 .item-type-inline a.type-nav-link { color: #8250df; text-decoration: none; border-bottom: 1px dotted #8250df; }
 .item-type-inline a.type-nav-link:hover { color: #6639ba; border-bottom-style: solid; }
@@ -448,7 +450,7 @@ function renderType(pkgId, typeName) {
   const type = pkg.types[typeName];
   const content = document.getElementById('content');
 
-  let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> ${typeName}</h1>`;
+  let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> ${typeName}${sourceLink(type.sourceUrl)}</h1>`;
   if (type.desc) {
     html += `<div class="type-overview">${type.desc}</div>`;
   }
@@ -499,13 +501,12 @@ function renderType(pkgId, typeName) {
           <div class="item-row">
             <span class="item-name">${pred.name}${paramsHtml}${fromLabel}</span>
             <span class="item-detail">${escapeHtml(pred.desc)}</span>
+            ${sourceLink(pred.sourceUrl)}
             <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
           </div>
           <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
         </div>
       `;
-    }
-  }
 
   content.innerHTML = html;
   wireUpComments(content);
@@ -537,6 +538,7 @@ function renderPredicates(pkgId) {
           <div class="item-row">
             <span class="item-name">${pred.name}(${formatTypeLink(pkgId, pred.appliesTo)}${paramsHtml})</span>
             <span class="item-detail">${escapeHtml(pred.desc)}</span>
+            ${sourceLink(pred.sourceUrl)}
             <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
           </div>
           <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
@@ -570,6 +572,7 @@ function renderCallables(pkgId, items, sectionTitle, keyPrefix) {
         <div class="fn-block">
           <div class="fn-signature">
             <span class="item-name">${fn.name}(${paramsHtml})${returnsHtml}</span>
+            ${sourceLink(fn.sourceUrl)}
             <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
           </div>
           <div class="fn-desc">${escapeHtml(fn.desc)}</div>
@@ -599,6 +602,7 @@ function renderChecks(pkgId) {
         <div class="item-row">
           <span class="item-name">${check.name}</span>
           <span class="item-detail">${escapeHtml(check.desc)}</span>
+          ${sourceLink(check.sourceUrl)}
           <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
         </div>
         <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
@@ -630,6 +634,7 @@ function renderEnums(pkgId) {
         <div class="fn-block">
           <div class="fn-signature">
             <span class="item-name">${enumItem.name}</span>
+            ${sourceLink(enumItem.sourceUrl)}
             <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
           </div>
           <div class="enum-values">${values.map(v => `<span class="enum-value">${escapeHtml(v)}</span>`).join('')}</div>
@@ -830,6 +835,11 @@ function highlightCop(code) {
 function escapeHtml(str) {
   if (!str) return '';
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function sourceLink(url) {
+  if (!url) return '';
+  return `<a href="${url}" target="_blank" class="source-link" title="View source">📄</a>`;
 }
 
 function copySample(btn) {

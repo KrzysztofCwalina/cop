@@ -11,6 +11,7 @@ using CopDocs;
 var packageDirs = new List<string>();
 string? outputPath = null;
 string? overridesPath = null;
+string? repoUrl = null;
 
 // Parse arguments
 for (int i = 0; i < args.Length; i++)
@@ -19,6 +20,8 @@ for (int i = 0; i < args.Length; i++)
         outputPath = args[++i];
     else if (args[i] == "--overrides" && i + 1 < args.Length)
         overridesPath = args[++i];
+    else if (args[i] == "--repo-url" && i + 1 < args.Length)
+        repoUrl = args[++i];
     else if (!args[i].StartsWith("--"))
         packageDirs.Add(args[i]);
 }
@@ -36,7 +39,52 @@ if (packageDirs.Count == 0)
 
 // Discover all packages
 var discoveredPackages = new List<(string Dir, string Id, string Category)>();
-var extractor = new PackageExtractor();
+
+// Detect repo root and source URL for linking
+string? repoRoot = null;
+string? repoBaseUrl = null;
+var firstDir = Path.GetFullPath(packageDirs[0]);
+try
+{
+    var dir = new DirectoryInfo(firstDir);
+    while (dir != null)
+    {
+        if (Directory.Exists(Path.Combine(dir.FullName, ".git")))
+        {
+            repoRoot = dir.FullName;
+            break;
+        }
+        dir = dir.Parent;
+    }
+}
+catch { /* ignore */ }
+
+if (repoRoot != null)
+{
+    if (repoUrl != null)
+    {
+        // User-provided URL: use as blob base
+        repoBaseUrl = repoUrl.TrimEnd('/') + "/blob/master";
+    }
+    else
+    {
+        // Auto-detect from git remote
+        try
+        {
+            var gitConfigPath = Path.Combine(repoRoot, ".git", "config");
+            if (File.Exists(gitConfigPath))
+            {
+                var gitConfig = File.ReadAllText(gitConfigPath);
+                var match = System.Text.RegularExpressions.Regex.Match(gitConfig, @"url\s*=\s*(https://github\.com/[^\s]+?)(?:\.git)?$", System.Text.RegularExpressions.RegexOptions.Multiline);
+                if (match.Success)
+                    repoBaseUrl = match.Groups[1].Value + "/blob/master";
+            }
+        }
+        catch { /* ignore */ }
+    }
+}
+
+var extractor = new PackageExtractor(repoBaseUrl, repoRoot);
 
 foreach (var dir in packageDirs)
 {

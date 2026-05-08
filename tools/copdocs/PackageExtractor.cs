@@ -7,6 +7,25 @@ using Cop.Lang;
 /// </summary>
 public class PackageExtractor
 {
+    private readonly string? _repoBaseUrl;
+    private readonly string? _repoRoot;
+
+    public PackageExtractor(string? repoBaseUrl = null, string? repoRoot = null)
+    {
+        _repoBaseUrl = repoBaseUrl?.TrimEnd('/');
+        _repoRoot = repoRoot != null ? Path.GetFullPath(repoRoot) : null;
+    }
+
+    private string? MakeSourceUrl(string filePath, int line)
+    {
+        if (_repoBaseUrl == null || _repoRoot == null) return null;
+        var fullPath = Path.GetFullPath(filePath);
+        if (!fullPath.StartsWith(_repoRoot, StringComparison.OrdinalIgnoreCase)) return null;
+        var relativePath = fullPath[_repoRoot.Length..].TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        relativePath = relativePath.Replace('\\', '/');
+        return $"{_repoBaseUrl}/{relativePath}#L{line}";
+    }
+
     /// <summary>
     /// Extract package documentation from a directory containing a manifest .md and src/*.cop files.
     /// </summary>
@@ -26,7 +45,7 @@ public class PackageExtractor
             ? Directory.GetFiles(srcDir, "*.cop")
             : [];
 
-        var allLets = new List<LetDeclaration>();
+        var allLets = new List<(LetDeclaration Let, string FilePath)>();
 
         foreach (var copFile in copFiles)
         {
@@ -35,13 +54,13 @@ public class PackageExtractor
             try
             {
                 var scriptFile = ScriptParser.Parse(source, copFile);
-                ExtractTypes(scriptFile, entry);
-                ExtractPredicates(scriptFile, entry);
-                ExtractFunctions(scriptFile, entry);
+                ExtractTypes(scriptFile, entry, copFile);
+                ExtractPredicates(scriptFile, entry, copFile);
+                ExtractFunctions(scriptFile, entry, copFile);
                 ExtractCollections(scriptFile, entry);
-                ExtractEnums(scriptFile, entry);
-                ExtractCommands(scriptFile, entry);
-                allLets.AddRange(scriptFile.LetDeclarations);
+                ExtractEnums(scriptFile, entry, copFile);
+                ExtractCommands(scriptFile, entry, copFile);
+                allLets.AddRange(scriptFile.LetDeclarations.Select(l => (l, copFile)));
             }
             catch (ParseException)
             {
@@ -58,11 +77,11 @@ public class PackageExtractor
         return entry;
     }
 
-    private static void ExtractTypes(ScriptFile sf, PackageEntry entry)
+    private void ExtractTypes(ScriptFile sf, PackageEntry entry, string copFile)
     {
         foreach (var td in sf.TypeDefinitions.Where(t => t.IsExported))
         {
-            var typeEntry = new TypeEntry { Desc = td.DocComment };
+            var typeEntry = new TypeEntry { Desc = td.DocComment, SourceUrl = MakeSourceUrl(copFile, td.Line) };
             foreach (var prop in td.Properties)
             {
                 var typeName = prop.IsCollection ? $"[{prop.TypeName}]" : prop.TypeName;
@@ -78,7 +97,7 @@ public class PackageExtractor
         }
     }
 
-    private static void ExtractPredicates(ScriptFile sf, PackageEntry entry)
+    private void ExtractPredicates(ScriptFile sf, PackageEntry entry, string copFile)
     {
         foreach (var pd in sf.Predicates.Where(p => p.IsExported))
         {
@@ -86,12 +105,13 @@ public class PackageExtractor
             {
                 Name = pd.Name,
                 AppliesTo = pd.ParameterType,
-                Desc = pd.DocComment ?? ""
+                Desc = pd.DocComment ?? "",
+                SourceUrl = MakeSourceUrl(copFile, pd.Line)
             });
         }
     }
 
-    private static void ExtractFunctions(ScriptFile sf, PackageEntry entry)
+    private void ExtractFunctions(ScriptFile sf, PackageEntry entry, string copFile)
     {
         foreach (var fd in sf.Functions.Where(f => f.IsExported))
         {
@@ -101,7 +121,8 @@ public class PackageExtractor
                 Name = fd.Name,
                 Params = paramStr,
                 Returns = fd.ReturnType,
-                Desc = fd.DocComment ?? ""
+                Desc = fd.DocComment ?? "",
+                SourceUrl = MakeSourceUrl(copFile, fd.Line)
             });
         }
     }
@@ -114,7 +135,7 @@ public class PackageExtractor
         }
     }
 
-    private static void ExtractEnums(ScriptFile sf, PackageEntry entry)
+    private void ExtractEnums(ScriptFile sf, PackageEntry entry, string copFile)
     {
         if (sf.EnumDefinitions is { Count: > 0 })
         {
@@ -124,7 +145,8 @@ public class PackageExtractor
                 entry.Enums.Add(new EnumEntry
                 {
                     Name = ed.Name,
-                    Values = string.Join("|", ed.Members)
+                    Values = string.Join("|", ed.Members),
+                    SourceUrl = MakeSourceUrl(copFile, ed.Line)
                 });
             }
         }
@@ -137,13 +159,14 @@ public class PackageExtractor
                 entry.Enums.Add(new EnumEntry
                 {
                     Name = fd.Name,
-                    Values = string.Join("|", fd.Members)
+                    Values = string.Join("|", fd.Members),
+                    SourceUrl = MakeSourceUrl(copFile, fd.Line)
                 });
             }
         }
     }
 
-    private static void ExtractCommands(ScriptFile sf, PackageEntry entry)
+    private void ExtractCommands(ScriptFile sf, PackageEntry entry, string copFile)
     {
         foreach (var cmd in sf.Commands.Where(c => c.IsExported && c.IsCommand))
         {
@@ -151,18 +174,25 @@ public class PackageExtractor
             {
                 Name = cmd.Name,
                 Params = cmd.Parameters != null ? string.Join(", ", cmd.Parameters) : "",
-                Desc = cmd.DocComment ?? ""
+                Desc = cmd.DocComment ?? "",
+                SourceUrl = MakeSourceUrl(copFile, cmd.Line)
             });
         }
     }
 
-    private static void ExtractChecks(List<LetDeclaration> allLets, PackageEntry entry)
+    private void ExtractChecks(List<(LetDeclaration Let, string FilePath)> allLets, PackageEntry entry)
     {
-        foreach (var let in allLets.Where(l => l.IsExported && !l.IsRuntime))
+        var lets = allLets.Select(l => l.Let).ToList();
+        foreach (var (let, filePath) in allLets.Where(l => l.Let.IsExported && !l.Let.IsRuntime))
         {
-            if (IsViolationCollection(let, allLets))
+            if (IsViolationCollection(let, lets))
             {
-                entry.Checks.Add(new CheckEntry { Name = let.Name, Desc = let.DocComment ?? "" });
+                entry.Checks.Add(new CheckEntry
+                {
+                    Name = let.Name,
+                    Desc = let.DocComment ?? "",
+                    SourceUrl = MakeSourceUrl(filePath, let.Line)
+                });
             }
         }
     }

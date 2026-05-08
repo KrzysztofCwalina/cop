@@ -70,6 +70,10 @@ public class EnumEntry
 
     [JsonPropertyName("values")]
     public string Values { get; set; } = "";
+
+    [JsonPropertyName("sourceUrl")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceUrl { get; set; }
 }
 
 public class TypeEntry
@@ -77,6 +81,10 @@ public class TypeEntry
     [JsonPropertyName("desc")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Desc { get; set; }
+
+    [JsonPropertyName("sourceUrl")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceUrl { get; set; }
 
     [JsonPropertyName("props")]
     public List<PropEntry> Props { get; set; } = [];
@@ -104,6 +112,10 @@ public class PredicateEntry
 
     [JsonPropertyName("desc")]
     public string Desc { get; set; } = "";
+
+    [JsonPropertyName("sourceUrl")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceUrl { get; set; }
 }
 
 public class FunctionEntry
@@ -119,6 +131,10 @@ public class FunctionEntry
 
     [JsonPropertyName("desc")]
     public string Desc { get; set; } = "";
+
+    [JsonPropertyName("sourceUrl")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceUrl { get; set; }
 }
 
 public class CheckEntry
@@ -128,6 +144,10 @@ public class CheckEntry
 
     [JsonPropertyName("desc")]
     public string Desc { get; set; } = "";
+
+    [JsonPropertyName("sourceUrl")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceUrl { get; set; }
 }
 
 public class CommandEntry
@@ -140,4 +160,8 @@ public class CommandEntry
 
     [JsonPropertyName("desc")]
     public string Desc { get; set; } = "";
+
+    [JsonPropertyName("sourceUrl")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceUrl { get; set; }
 }
