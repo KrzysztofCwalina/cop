@@ -550,7 +550,7 @@ public static class Engine
         foreach (var bp in _builtinProviders)
             queryService.RegisterProvider(bp.Name, bp.Instance, bp.Schema);
 
-        var interpreter = new ScriptInterpreter(typeRegistry, providerQueryService: queryService);
+        var interpreter = new ScriptInterpreter(typeRegistry, maxOutputsPerCommand: 100_000, providerQueryService: queryService);
 
         // Inject built-in CHECK command so packages don't need to define it
         const string builtinCheckDef = "command CHECK(violations) = foreach violations => '{item.File@dim}({item.Line@dim}): {item.Severity@auto}: {item.Message}'";
