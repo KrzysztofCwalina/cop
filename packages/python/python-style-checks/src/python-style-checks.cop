@@ -9,7 +9,7 @@ predicate isNonPascalCaseClass(Type) => Type.Kind == 'Class'
     && !Type.Name:startsWith('__')
 
 ## Class names should use PascalCase (CapWords convention)
-let class-name-casing = Code.Types:python:isNonPascalCaseClass
+export let class-name-casing = Code.Types:python:isNonPascalCaseClass
     :toWarning('{item.Name} — class names should use PascalCase (CapWords)')
 
 # Function/method names should use snake_case
@@ -19,14 +19,14 @@ predicate isNonSnakeCaseMethod(Method) => !Method.Name:matches('^_*[a-z][a-z0-9_
 predicate hasNonSnakeCaseMethods(Type) => Type.Methods:any(isNonSnakeCaseMethod)
 
 ## Function and method names should use snake_case
-let function-name-casing = Code.Types:python:hasNonSnakeCaseMethods
+export let function-name-casing = Code.Types:python:hasNonSnakeCaseMethods
     :toWarning('{item.Name} has methods that do not follow snake_case naming')
 
 # Wildcard imports: from x import *
 predicate isWildcardImport(Line) => Line.Text:matches('^\\s*from\\s+\\S+\\s+import\\s+\\*')
 
 ## Avoid wildcard imports — import specific names instead
-let import-wildcard = Code.Lines:python:isWildcardImport
+export let import-wildcard = Code.Lines:python:isWildcardImport
     :toWarning('Avoid wildcard imports — import specific names instead')
 
 # Mutable default arguments
@@ -40,21 +40,21 @@ predicate hasMutableDefaultParam(Method) => Method.Parameters:any(hasMutableDefa
 predicate hasMutableDefaults(Type) => Type.Methods:any(hasMutableDefaultParam)
 
 ## Do not use mutable default arguments — use None and assign inside the function
-let mutable-default-arg = Code.Types:python:hasMutableDefaults
+export let mutable-default-arg = Code.Types:python:hasMutableDefaults
     :toWarning('{item.Name} has methods with mutable default arguments — use None instead')
 
 # Trailing whitespace
 predicate hasTrailingWhitespace(Line) => Line.Text:matches('\\S\\s+$')
 
 ## Lines should not have trailing whitespace
-let trailing-whitespace = Code.Lines:python:hasTrailingWhitespace
+export let trailing-whitespace = Code.Lines:python:hasTrailingWhitespace
     :toInfo('Line has trailing whitespace')
 
 # Mixed indentation (tabs)
 predicate hasTabs(Line) => Line.Text:matches('^\\t')
 
 ## Use spaces for indentation, not tabs
-let mixed-indentation = Code.Lines:python:hasTabs
+export let mixed-indentation = Code.Lines:python:hasTabs
     :toWarning('Use spaces for indentation, not tabs (PEP 8)')
 
 ## All Python style checks combined

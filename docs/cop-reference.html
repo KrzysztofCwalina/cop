@@ -2927,6 +2927,14 @@ const packages = {
     "functions": [],
     "checks": [
       {
+        "name": "missing-class-docstring",
+        "desc": "Public classes should have a docstring"
+      },
+      {
+        "name": "missing-function-docstring",
+        "desc": "Public functions and methods should have a docstring"
+      },
+      {
         "name": "python-doc-checks",
         "desc": "All Python documentation checks combined"
       }
@@ -2947,6 +2955,26 @@ const packages = {
     "predicates": [],
     "functions": [],
     "checks": [
+      {
+        "name": "none-comparison",
+        "desc": "Use 'is None' or 'is not None' instead of '== None' / '!= None'"
+      },
+      {
+        "name": "type-comparison",
+        "desc": "Use isinstance() instead of type() comparison"
+      },
+      {
+        "name": "old-style-format",
+        "desc": "Prefer f-strings over %-style string formatting"
+      },
+      {
+        "name": "range-len-pattern",
+        "desc": "Use enumerate() instead of range(len(...))"
+      },
+      {
+        "name": "global-statement",
+        "desc": "Avoid the global statement — pass values as parameters or use a class"
+      },
       {
         "name": "python-idiom-checks",
         "desc": "All Pythonic idiom checks combined"
@@ -3137,6 +3165,18 @@ const packages = {
     "functions": [],
     "checks": [
       {
+        "name": "too-many-params",
+        "desc": "Functions should not have more than 5 parameters — consider using a config object or **kwargs"
+      },
+      {
+        "name": "empty-except-body",
+        "desc": "Do not use empty except blocks — handle or log the exception"
+      },
+      {
+        "name": "broad-exception-raise",
+        "desc": "Raise specific exception types instead of generic Exception"
+      },
+      {
         "name": "python-quality-checks",
         "desc": "All Python quality checks combined"
       }
@@ -3157,6 +3197,30 @@ const packages = {
     "predicates": [],
     "functions": [],
     "checks": [
+      {
+        "name": "class-name-casing",
+        "desc": "Class names should use PascalCase (CapWords convention)"
+      },
+      {
+        "name": "function-name-casing",
+        "desc": "Function and method names should use snake_case"
+      },
+      {
+        "name": "import-wildcard",
+        "desc": "Avoid wildcard imports — import specific names instead"
+      },
+      {
+        "name": "mutable-default-arg",
+        "desc": "Do not use mutable default arguments — use None and assign inside the function"
+      },
+      {
+        "name": "trailing-whitespace",
+        "desc": "Lines should not have trailing whitespace"
+      },
+      {
+        "name": "mixed-indentation",
+        "desc": "Use spaces for indentation, not tabs"
+      },
       {
         "name": "python-style-checks",
         "desc": "All Python style checks combined"

@@ -10,7 +10,7 @@ predicate isPublicClass(Type) => Type.Kind == 'Class'
 predicate isUndocumentedPublicClass(Type) => isPublicClass && !Type.Documented
 
 ## Public classes should have a docstring
-let missing-class-docstring = Code.Types:python:isUndocumentedPublicClass
+export let missing-class-docstring = Code.Types:python:isUndocumentedPublicClass
     :toWarning('{item.Name} — public classes should have a docstring')
 
 # Missing function/method docstring
@@ -21,7 +21,7 @@ predicate isUndocumentedPublicMethod(Method) => Method:isPublic
 predicate hasUndocumentedMethods(Type) => Type.Methods:any(isUndocumentedPublicMethod)
 
 ## Public functions and methods should have a docstring
-let missing-function-docstring = Code.Types:python:hasUndocumentedMethods
+export let missing-function-docstring = Code.Types:python:hasUndocumentedMethods
     :toWarning('{item.Name} has public methods without docstrings')
 
 ## All Python documentation checks combined

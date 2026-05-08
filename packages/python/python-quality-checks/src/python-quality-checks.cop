@@ -11,7 +11,7 @@ predicate hasExcessiveParams(Method) => Method:isPublic
 predicate hasTooManyParams(Type) => Type.Methods:any(hasExcessiveParams)
 
 ## Functions should not have more than 5 parameters — consider using a config object or **kwargs
-let too-many-params = Code.Types:python:hasTooManyParams
+export let too-many-params = Code.Types:python:hasTooManyParams
     :toWarning('{item.Name} has methods with more than 5 parameters')
 
 # Empty except body (except with only pass)
@@ -19,7 +19,7 @@ predicate isEmptyExcept(Statement) => Statement.ErrorHandler == true
     && Statement.Children.Count == 0
 
 ## Do not use empty except blocks — handle or log the exception
-let empty-except-body = Code.Statements:python:isEmptyExcept
+export let empty-except-body = Code.Statements:python:isEmptyExcept
     :toWarning('Empty except block — handle or log the exception instead of silencing it')
 
 # Raising generic Exception()
@@ -27,7 +27,7 @@ predicate isRaisingGenericException(Statement) => Statement.Kind == 'throw'
     && (Statement.TypeName == 'Exception' || Statement.TypeName == 'BaseException')
 
 ## Raise specific exception types instead of generic Exception
-let broad-exception-raise = Code.Statements:python:isRaisingGenericException
+export let broad-exception-raise = Code.Statements:python:isRaisingGenericException
     :toWarning('Raise a specific exception type instead of generic Exception')
 
 ## All Python quality checks combined
