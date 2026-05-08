@@ -1,0 +1,44 @@
+# Pythonic idiom checks
+
+import python-checks
+import code-analysis
+
+# Use 'is None' / 'is not None' instead of '== None' / '!= None'
+predicate isNoneEquality(Line) => Line.Text:matches('==\\s*None') || Line.Text:matches('!=\\s*None')
+
+## Use 'is None' or 'is not None' instead of '== None' / '!= None'
+let none-comparison = Code.Lines:python:isNoneEquality
+    :toWarning('Use "is None" or "is not None" instead of equality comparison')
+
+# Use isinstance() instead of type() comparison
+predicate isTypeComparison(Line) => Line.Text:matches('type\\s*\\(.*\\)\\s*==')
+    || Line.Text:matches('type\\s*\\(.*\\)\\s*is\\s')
+
+## Use isinstance() instead of type() comparison
+let type-comparison = Code.Lines:python:isTypeComparison
+    :toWarning('Use isinstance() instead of type() comparison')
+
+# Prefer f-strings over % formatting
+predicate isPercentFormat(Line) => Line.Text:matches('%[sdrf]') && Line.Text:matches('%\\s*\\(')
+    || Line.Text:matches('\\.format\\s*\\(')
+
+## Prefer f-strings over %-style string formatting
+let old-style-format = Code.Lines:python:isPercentFormat
+    :toInfo('Prefer f-strings over %-style string formatting')
+
+# Prefer enumerate() over range(len(...))
+predicate isRangeLen(Line) => Line.Text:matches('range\\s*\\(\\s*len\\s*\\(')
+
+## Use enumerate() instead of range(len(...))
+let range-len-pattern = Code.Lines:python:isRangeLen
+    :toWarning('Use enumerate() instead of range(len(...))')
+
+# Avoid global statement
+predicate isGlobalStatement(Line) => Line.Text:matches('^\\s*global\\s+')
+
+## Avoid the global statement — pass values as parameters or use a class
+let global-statement = Code.Lines:python:isGlobalStatement
+    :toWarning('Avoid the global statement — pass values as parameters or use a class')
+
+## All Pythonic idiom checks combined
+export let python-idiom-checks = none-comparison + type-comparison + old-style-format + range-len-pattern + global-statement

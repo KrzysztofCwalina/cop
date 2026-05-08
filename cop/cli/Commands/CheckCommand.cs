@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Text.Json;
 using Cop.Core;
 using Cop.Lang;
 using Cop.Providers;
@@ -88,14 +89,28 @@ public static class CheckCommand
         foreach (var error in result.ParseErrors)
             Console.Error.WriteLine(error);
 
+        bool isJson = string.Equals(format, "json", StringComparison.OrdinalIgnoreCase);
+
         if (result.Outputs.Count == 0)
         {
-            Console.WriteLine("  All checks passed.");
+            if (isJson)
+                Console.WriteLine("[]");
+            else
+                Console.WriteLine("  All checks passed.");
             return 0;
         }
 
-        foreach (var output in result.Outputs)
-            Console.WriteLine(AnsiRenderer.Render(output.Content));
+        if (isJson)
+        {
+            var items = result.Outputs.Select(o => new { message = o.Message });
+            var json = JsonSerializer.Serialize(items, new JsonSerializerOptions { WriteIndented = true });
+            Console.WriteLine(json);
+        }
+        else
+        {
+            foreach (var output in result.Outputs)
+                Console.WriteLine(AnsiRenderer.Render(output.Content));
+        }
 
         return 1;
     }
