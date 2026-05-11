@@ -46,7 +46,7 @@ See [Working with the REPL](working-with-repl.md) for a full walkthrough.
 Run `.cop` programs. This is the primary command for executing checks, queries, and transformations.
 
 ```bash
-cop run [<command>] [<args>] [-t <target>] [-c <commands>] [-f text|json] [-d]
+cop run [<command>] [<args>] [-t <target>] [-c <commands>] [-f text|json] [-d] [-cql]
 ```
 
 | Argument / Option | Description |
@@ -57,6 +57,7 @@ cop run [<command>] [<args>] [-t <target>] [-c <commands>] [-f text|json] [-d]
 | `-f <format>` | Output format: `text` (default) or `json` |
 | `-c <commands>` | Comma-separated list of commands to run. By default, all unnamed statements run; named commands only run when invoked by name or with `-c`. |
 | `-d` | Enable diagnostic mode: print timing, collection counts, filter traces (`[trace]`), and `DEBUG` action output (`[debug]`) to stderr |
+| `-cql` | Transpile `.cop` checks to CodeQL `.ql` query files instead of running them. Output is written to a `codeql/` subdirectory next to the source `.cop` file. Only Code provider collections (`Code.Types`, `Code.Statements`, `Code.Calls`) are supported. |
 
 ### Discovery behavior
 
@@ -128,6 +129,61 @@ Show diagnostics (timing, collection counts, filter traces, and DEBUG output):
 cop run checks.cop -d
 ```
 
+### CodeQL generation (`-cql`)
+
+Generate standalone CodeQL `.ql` query files from cop checks. This transpiles your `.cop` predicates and filter chains into equivalent CodeQL `from`/`where`/`select` queries. Generated files are written to a `codeql/` subdirectory next to the source `.cop` file.
+
+```bash
+cop run checks.cop -cql
+```
+
+Only Code provider collections are supported (`Code.Types`, `Code.Statements`, `Code.Calls`). If a predicate uses constructs that cannot be fully expressed in CodeQL, the transpiler reports an error and produces no output for that check.
+
+Example — given this cop check:
+
+```ruby
+import code
+
+predicate isGodClass(Type) => Type.Name:endsWith('Manager') && Modifiers:isSet(Public)
+
+export let god-classes = Code.Types:csharp:isGodClass:toWarning('Avoid God classes')
+```
+
+Running `cop run my-checks.cop -cql` generates `codeql/god_classes.ql`:
+
+```ql
+/**
+ * @name god-classes
+ * @description god-classes
+ * @kind problem
+ * @problem.severity warning
+ * @id cop/god_classes
+ */
+
+import csharp
+
+from RefType t
+where t.getName().toLowerCase().matches("%manager")
+  and t.isPublic()
+select t, "Avoid God classes"
+```
+
+**Supported patterns:**
+
+| Cop construct | CodeQL equivalent |
+|---|---|
+| `Code.Types` collection | `from RefType t` (or narrowed by Kind) |
+| `Code.Statements` with Kind filter | `from MethodAccess m`, `from ThrowStmt s`, etc. |
+| `Modifiers:isSet(Public)` | `t.isPublic()` |
+| `Name:startsWith('X')` | `t.getName().toLowerCase().matches("x%")` |
+| `Name:endsWith('Y')` | `t.getName().toLowerCase().matches("%y")` |
+| `Kind == 'call'` | `from MethodAccess` (type narrowing) |
+| `BaseTypes:contains('IFoo')` | `exists(RefType base \| t.getABaseType() = base and ...)` |
+| Language filter `:csharp` | `import csharp` |
+| `toError` / `toWarning` | `@problem.severity error` / `warning` |
+
+**Limitations:** Cross-provider checks (e.g., checks referencing both `Code.Types` and markdown documentation) cannot be expressed in CodeQL and will produce an error. CodeQL operates only on source code graphs — cop's multi-provider capability is a superset.
+
 ## cop check
 
 Run pre-built analysis checks from packages against your code. This is the fastest way to run checks without writing `.cop` files. See the [All Checks Catalog](checks.md) for a complete list of available checks across all packages.
@@ -152,28 +208,28 @@ Packages are discovered from `packages/` directories in the project tree and fro
 
 ### Examples
 
-Run C# style checks on the current directory:
+Run C# checks on the current directory:
 
 ```bash
-cop check csharp-style-checks
+cop check csharp-checks
 ```
 
 Run multiple packages:
 
 ```bash
-cop check csharp-style-checks csharp-library-checks
+cop check csharp-checks csharp-library-checks
 ```
 
 Target a specific directory:
 
 ```bash
-cop check csharp-style-checks -t src/
+cop check csharp-checks -t src/
 ```
 
 Run only specific rules from a package:
 
 ```bash
-cop check csharp-style-checks -c interface-prefix,type-name-casing
+cop check csharp-checks -c interface-prefix,type-name-casing
 ```
 
 ## cop test

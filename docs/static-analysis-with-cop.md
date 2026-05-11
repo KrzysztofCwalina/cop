@@ -7,24 +7,28 @@ Agent Cop ships with pre-built analysis packages that check your code for common
 The fastest way to analyze your code:
 
 ```bash
-cop check csharp-style-checks           # run C# style checks (naming, formatting, docs)
-cop check fdg-checks                    # run .NET Framework Design Guidelines checks
-cop check csharp-style-checks fdg-checks  # run multiple packages at once
-cop check csharp-style-checks -t src/   # analyze a specific directory
+cop check csharp-checks                 # run C# checks (naming, formatting, docs, design)
+cop check python-checks                 # run Python checks
+cop check csharp-checks python-checks   # run multiple packages at once
+cop check csharp-checks -t src/         # analyze a specific directory
 ```
 
 ### Available Check Packages
 
 | Package | What it checks |
 |---|---|
-| `csharp-style-checks` | StyleCop-style rules: naming, formatting, documentation, braces |
-| `fdg-checks` | .NET Framework Design Guidelines: naming, type/member/exception design (~26 rules) |
-| `csharp-library-checks` | Library design: sealed clients, method conventions, constructor patterns |
-| `csharp-library-client-checks` | Client library patterns: client naming, options types, service methods |
-| `python-checks` | Python coding conventions: print, bare except, eval |
-| `python-library-client-checks` | Python client library patterns: naming, kwargs, LRO, paging |
+| `csharp-checks` | C# conventions: naming, formatting, documentation, error handling, design rules |
+| `csharp-library-checks` | Library API design: sealed clients, method conventions, constructor patterns |
+| `csharp-library-azure-checks` | Azure SDK conventions: client naming, options, service methods, LRO, paging |
+| `csharp-snippets-checks` | Snippet region ↔ markdown fence consistency |
+| `python-checks` | Python conventions: print, bare except, eval, naming, docstrings |
+| `python-library-checks` | Python library patterns: naming, kwargs, LRO, paging |
+| `python-library-azure-checks` | Azure SDK for Python: client naming, async patterns, credentials |
+| `python-snippets-checks` | Snippet region ↔ markdown fence consistency |
 | `javascript-checks` | JavaScript/TypeScript conventions: console, eval, var, debugger |
-| `javascript-library-client-checks` | JS/TS client library patterns: verbs, cancellation, pagination |
+| `javascript-library-checks` | JS/TS library patterns: verbs, cancellation, pagination |
+| `javascript-library-azure-checks` | Azure SDK for JS: client naming, options, pipeline policies |
+| `javascript-snippets-checks` | Snippet region ↔ markdown fence consistency |
 
 For a complete list of every individual check, see the [All Checks Catalog](checks.md).
 
@@ -40,7 +44,7 @@ This makes cop easy to integrate into CI pipelines:
 
 ```yaml
 - name: Run cop checks
-  run: cop check csharp-style-checks csharp-library-checks
+  run: cop check csharp-checks csharp-library-checks
   # Fails the build if any checks produce violations (exit code 1)
 ```
 
@@ -49,7 +53,7 @@ This makes cop easy to integrate into CI pipelines:
 Each check package exports named rule sets. Use `-c` to run specific ones:
 
 ```bash
-cop check csharp-style-checks -c interface-prefix,type-name-casing
+cop check csharp-checks -c interface-prefix,type-name-casing
 ```
 
 ## Writing Custom Checks
@@ -330,12 +334,12 @@ This runs all built-in checks for all three languages. Each package only matches
 Built-in packages form a dependency chain. Importing a leaf package brings in everything above it:
 
 ```
-code → code-analysis → csharp → csharp-library → csharp-library-client → csharp-library-client-azure
-                      → javascript
-                      → python → python-library
+code → code-analysis → csharp-checks → csharp-library-checks → csharp-library-azure-checks
+                      → python-checks → python-library-checks → python-library-azure-checks
+                      → javascript-checks → javascript-library-checks → javascript-library-azure-checks
 ```
 
-For example, `import csharp-library-client-checks` gives you all of `csharp-library-checks`, `csharp-checks`, `code-analysis`, and `code`.
+For example, `import csharp-library-checks` gives you all of `csharp-library-checks`, `csharp-checks`, `code-analysis`, and `code`.
 
 ## Excluding Files
 
@@ -380,9 +384,9 @@ cop run                     # run all statements (but not named commands)
 ### Using Pre-Built Packages
 
 ```bash
-cop check csharp-style-checks            # run style checks from a package
-cop check csharp-style-checks -t src/    # analyze a specific directory
-cop check csharp-style-checks -c type-name-casing  # run specific rules only
+cop check csharp-checks                  # run checks from a package
+cop check csharp-checks -t src/          # analyze a specific directory
+cop check csharp-checks -c type-name-casing  # run specific rules only
 ```
 
 ### Using Custom .cop Files
@@ -467,6 +471,72 @@ client/src/utils.ts(23): warning: Use const or let instead of var
 scripts/deploy.py(7): warning: Avoid print() — use logging instead
 tests/helpers.py(3): info: # TODO: refactor this after migration
 src/Helpers/QueryTestHelper.cs(1): warning: QueryTestHelper should be public so tests in other projects can use it
+```
+
+## Exporting to CodeQL
+
+If your organization uses GitHub CodeQL for code scanning, you can transpile cop checks into standalone `.ql` query files:
+
+```bash
+cop run checks.cop -cql
+```
+
+This generates a `codeql/` directory next to your `.cop` file containing one `.ql` file per exported check. The generated queries can be added to a CodeQL query suite and run with `codeql analyze` in CI.
+
+### What transpiles
+
+Checks that operate on Code provider collections (`Code.Types`, `Code.Statements`, `Code.Calls`) with supported predicates:
+
+```ruby
+import code
+
+predicate isGodClass(Type) => Type.Name:endsWith('Manager') && Modifiers:isSet(Public)
+
+export let god-classes = Code.Types:csharp:isGodClass:toWarning('Avoid God classes')
+```
+
+Generates `codeql/god_classes.ql`:
+
+```ql
+/**
+ * @name god-classes
+ * @kind problem
+ * @problem.severity warning
+ * @id cop/god_classes
+ */
+
+import csharp
+
+from RefType t
+where t.getName().toLowerCase().matches("%manager")
+  and t.isPublic()
+select t, "Avoid God classes"
+```
+
+### What doesn't transpile
+
+CodeQL operates solely on source code graphs. Cop checks that use cross-provider features have no CodeQL equivalent:
+
+- **Multi-provider checks** — combining `Code.Types` with `markdown.Sections` or `Filesystem.Folders`
+- **Raw line analysis** — `Code.Lines` (regex on source text)
+- **Complex predicate bodies** — predicates referencing other collections or using nested queries
+- **Runtime/streaming providers** — HTTP endpoints, live services
+
+When a check cannot be fully expressed in CodeQL, the transpiler reports an error and skips that check (strict mode — no partial output).
+
+### Workflow
+
+A typical workflow uses cop as the authoring experience and exports to CodeQL for CI enforcement:
+
+```bash
+# Develop and test checks locally with cop (fast iteration)
+cop run checks.cop -t src/
+
+# Export the code-only subset to CodeQL for GitHub code scanning
+cop run checks.cop -cql
+
+# Commit generated .ql files alongside your cop sources
+git add codeql/
 ```
 
 ## Further Reading
