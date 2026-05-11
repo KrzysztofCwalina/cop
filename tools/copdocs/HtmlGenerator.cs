@@ -507,6 +507,8 @@ function renderType(pkgId, typeName) {
           <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
         </div>
       `;
+    }
+  }
 
   content.innerHTML = html;
   wireUpComments(content);
