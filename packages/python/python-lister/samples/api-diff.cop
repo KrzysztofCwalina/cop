@@ -1,0 +1,21 @@
+import python-library-checks
+import code-analysis
+
+# Baseline: stub files in api/ directory
+predicate baselineApi(Api) => isPublicApi && Api.File.Path:matches('[/\\]api[/\\]')
+# Source: everything NOT in api/
+predicate sourceApi(Api) => isPublicApi && !Api.File.Path:matches('[/\\]api[/\\]')
+
+# Build lookup lists from current source and baseline
+let baselineSignatures = Code.Api:python:baselineApi.Select(item.Signature)
+let currentSignatures = Code.Api:python:sourceApi.Select(item.Signature)
+
+# Diff predicates
+predicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)
+predicate addedApi(Api) => sourceApi && !Api.Signature:in(baselineSignatures)
+
+# Report results
+export let api-removed = Code.Api:removedApi
+    :toError('API REMOVED (breaking): {item.Signature}')
+export let api-added = Code.Api:addedApi
+    :toInfo('API ADDED: {item.Signature}')

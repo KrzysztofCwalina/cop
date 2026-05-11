@@ -3,6 +3,7 @@
 import code
 import markdown
 import code-analysis
+import csharp-checks
 
 # Snippet identification
 

@@ -1,16 +1,16 @@
 ---
-name: python
+name: python-checks
 version: 1.0.0
-title: Python Coding Rules
-description: Core Python coding conventions and best practices for coding agents
+title: Python Checks
+description: Python correctness, style, idiom, quality, and documentation checks for coding agents
 authors: cop-team
-tags: python, coding-standards
+tags: python, coding-standards, style, idioms, quality, documentation
 language: Python
 dependencies: []
 provider: clr
 providerEntry: Cop.Providers.PythonProvider
 ---
 
-# Python Coding Rules
+# Python Checks
 
-Standard Python coding conventions for governed agentic development.
+Comprehensive Python checks covering correctness, PEP 8 style, Pythonic idioms, code quality, and documentation.

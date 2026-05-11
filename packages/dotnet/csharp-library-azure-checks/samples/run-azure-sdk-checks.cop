@@ -1,0 +1,3 @@
+import csharp-library-azure-checks
+
+CHECK azure-client-checks

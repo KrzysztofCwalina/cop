@@ -1,6 +1,0 @@
-import csharp-style-checks
-
-CHECK interface-prefix
-CHECK type-name-casing
-CHECK method-name-casing
-CHECK single-type-per-file

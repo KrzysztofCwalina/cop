@@ -1,15 +1,15 @@
 ---
 name: python-library-checks
 version: 1.0.0
-title: Python Library Design
-description: Library design conventions for Python packages
+title: Python Library and Client Library Development
+description: Library API design and client SDK patterns for Python including type hints, naming, method signatures, and API design
 authors: cop-team
-tags: python, library, api-design
+tags: python, sdk, client, library, api-design
 language: Python
 dependencies:
-  - github.com/cop/cop/python
+  - github.com/cop/cop/python-checks
 ---
 
-# Python Library Design
+# Python Library and Client Library Development
 
-Conventions for designing and packaging Python libraries.
+Design patterns for building Python libraries and client SDKs. Covers type hints, constructor conventions, method naming, parameter design, LRO, pagination, and client structure.

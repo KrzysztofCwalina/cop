@@ -137,7 +137,7 @@ let tracked-types = [
     'ContentType'
     'Response'
     'Request'
-    # csharp-api package
+    # csharp-lister package
     'ApiLine'
     # typespec package
     'TspDecorator'

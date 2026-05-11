@@ -1,6 +1,8 @@
-# General Python source code style checks
+# Python checks — correctness, style, and idioms
 
 import code-analysis
+
+## Correctness Checks
 
 # Avoid print() — use logging
 predicate isPrintCall(Statement) => Statement.Kind == 'call' && Statement.MemberName == 'print'
@@ -48,9 +50,167 @@ predicate isEvalCall(Statement) => Statement.Kind == 'call' && Statement.MemberN
 export let no-eval = Code.Statements:python:isEvalCall
     :toError('Do not use eval() — it is a security risk')
 
-# Naming: functions/methods should use snake_case
-predicate isNotSnakeCase(Type) => Type.Methods.Count > 0
-    && Type.Name:matches('^[a-z]') == false && Type.Kind == 'Class'
+## Combined correctness checks
+export let python-correctness-checks = print-calls + bare-except-clauses + silenced-exceptions + no-six-import + no-legacy-typing + no-eval
+
+## Style Checks
+
+# Class names should use PascalCase (CapWords)
+predicate isNonPascalCaseClass(Type) => Type.Kind == 'Class'
+    && !Type.Name:matches('^_?[A-Z][a-zA-Z0-9]*$')
+    && !Type.Name:startsWith('__')
+
+## Class names should use PascalCase (CapWords convention)
+export let class-name-casing = Code.Types:python:isNonPascalCaseClass
+    :toWarning('{item.Name} — class names should use PascalCase (CapWords)')
+
+# Function/method names should use snake_case
+predicate isNonSnakeCaseMethod(Method) => !Method.Name:matches('^_*[a-z][a-z0-9_]*$')
+    && !Method.Name:startsWith('__')
+
+predicate hasNonSnakeCaseMethods(Type) => Type.Methods:any(isNonSnakeCaseMethod)
+
+## Function and method names should use snake_case
+export let function-name-casing = Code.Types:python:hasNonSnakeCaseMethods
+    :toWarning('{item.Name} has methods that do not follow snake_case naming')
+
+# Wildcard imports: from x import *
+predicate isWildcardImport(Line) => Line.Text:matches('^\\s*from\\s+\\S+\\s+import\\s+\\*')
+
+## Avoid wildcard imports — import specific names instead
+export let import-wildcard = Code.Lines:python:isWildcardImport
+    :toWarning('Avoid wildcard imports — import specific names instead')
+
+# Mutable default arguments
+predicate hasMutableDefault(Parameter) => Parameter.Defaulted
+    && (Parameter.DefaultValue == '[]' || Parameter.DefaultValue == '{}'
+        || Parameter.DefaultValue:startsWith('list(') || Parameter.DefaultValue:startsWith('dict(')
+        || Parameter.DefaultValue:startsWith('set('))
+
+predicate hasMutableDefaultParam(Method) => Method.Parameters:any(hasMutableDefault)
+
+predicate hasMutableDefaults(Type) => Type.Methods:any(hasMutableDefaultParam)
+
+## Do not use mutable default arguments — use None and assign inside the function
+export let mutable-default-arg = Code.Types:python:hasMutableDefaults
+    :toWarning('{item.Name} has methods with mutable default arguments — use None instead')
+
+# Trailing whitespace
+predicate hasTrailingWhitespace(Line) => Line.Text:matches('\\S\\s+$')
+
+## Lines should not have trailing whitespace
+export let trailing-whitespace = Code.Lines:python:hasTrailingWhitespace
+    :toInfo('Line has trailing whitespace')
+
+# Mixed indentation (tabs)
+predicate hasTabs(Line) => Line.Text:matches('^\\t')
+
+## Use spaces for indentation, not tabs
+export let mixed-indentation = Code.Lines:python:hasTabs
+    :toWarning('Use spaces for indentation, not tabs (PEP 8)')
+
+## Combined style checks
+export let python-style-checks = class-name-casing + function-name-casing + import-wildcard + mutable-default-arg + trailing-whitespace + mixed-indentation
+
+## Idiom Checks
+
+# Use 'is None' / 'is not None' instead of '== None' / '!= None'
+predicate isNoneEquality(Line) => Line.Text:matches('==\\s*None') || Line.Text:matches('!=\\s*None')
+
+## Use 'is None' or 'is not None' instead of '== None' / '!= None'
+export let none-comparison = Code.Lines:python:isNoneEquality
+    :toWarning('Use "is None" or "is not None" instead of equality comparison')
+
+# Use isinstance() instead of type() comparison
+predicate isTypeComparison(Line) => Line.Text:matches('type\\s*\\(.*\\)\\s*==')
+    || Line.Text:matches('type\\s*\\(.*\\)\\s*is\\s')
+
+## Use isinstance() instead of type() comparison
+export let type-comparison = Code.Lines:python:isTypeComparison
+    :toWarning('Use isinstance() instead of type() comparison')
+
+# Prefer f-strings over % formatting
+predicate isPercentFormat(Line) => Line.Text:matches('%[sdrf]') && Line.Text:matches('%\\s*\\(')
+    || Line.Text:matches('\\.format\\s*\\(')
+
+## Prefer f-strings over %-style string formatting
+export let old-style-format = Code.Lines:python:isPercentFormat
+    :toInfo('Prefer f-strings over %-style string formatting')
+
+# Prefer enumerate() over range(len(...))
+predicate isRangeLen(Line) => Line.Text:matches('range\\s*\\(\\s*len\\s*\\(')
+
+## Use enumerate() instead of range(len(...))
+export let range-len-pattern = Code.Lines:python:isRangeLen
+    :toWarning('Use enumerate() instead of range(len(...))')
+
+# Avoid global statement
+predicate isGlobalStatement(Line) => Line.Text:matches('^\\s*global\\s+')
+
+## Avoid the global statement — pass values as parameters or use a class
+export let global-statement = Code.Lines:python:isGlobalStatement
+    :toWarning('Avoid the global statement — pass values as parameters or use a class')
+
+## Combined idiom checks
+export let python-idiom-checks = none-comparison + type-comparison + old-style-format + range-len-pattern + global-statement
+
+## Quality Checks
+
+# Too many parameters (>5, excluding self/cls)
+predicate hasExcessiveParams(Method) => Method:isPublic
+    && Method.Parameters.Count > 5
+    && !Method.Name:startsWith('_')
+
+predicate hasTooManyParams(Type) => Type.Methods:any(hasExcessiveParams)
+
+## Functions should not have more than 5 parameters — consider using a config object or **kwargs
+export let too-many-params = Code.Types:python:hasTooManyParams
+    :toWarning('{item.Name} has methods with more than 5 parameters')
+
+# Empty except body (except with only pass)
+predicate isEmptyExcept(Statement) => Statement.ErrorHandler == true
+    && Statement.Children.Count == 0
+
+## Do not use empty except blocks — handle or log the exception
+export let empty-except-body = Code.Statements:python:isEmptyExcept
+    :toWarning('Empty except block — handle or log the exception instead of silencing it')
+
+# Raising generic Exception()
+predicate isRaisingGenericException(Statement) => Statement.Kind == 'throw'
+    && (Statement.TypeName == 'Exception' || Statement.TypeName == 'BaseException')
+
+## Raise specific exception types instead of generic Exception
+export let broad-exception-raise = Code.Statements:python:isRaisingGenericException
+    :toWarning('Raise a specific exception type instead of generic Exception')
+
+## Combined quality checks
+export let python-quality-checks = too-many-params + empty-except-body + broad-exception-raise
+
+## Documentation Checks
+
+# Missing class docstring
+predicate isPublicClass(Type) => Type.Kind == 'Class'
+    && !Type.Name:startsWith('_')
+
+predicate isUndocumentedPublicClass(Type) => isPublicClass && !Type.Documented
+
+## Public classes should have a docstring
+export let missing-class-docstring = Code.Types:python:isUndocumentedPublicClass
+    :toWarning('{item.Name} — public classes should have a docstring')
+
+# Missing function/method docstring
+predicate isUndocumentedPublicMethod(Method) => Method:isPublic
+    && !Method.Name:startsWith('_')
+    && !Method.Documented
+
+predicate hasUndocumentedMethods(Type) => Type.Methods:any(isUndocumentedPublicMethod)
+
+## Public functions and methods should have a docstring
+export let missing-function-docstring = Code.Types:python:hasUndocumentedMethods
+    :toWarning('{item.Name} has public methods without docstrings')
+
+## Combined documentation checks
+export let python-doc-checks = missing-class-docstring + missing-function-docstring
 
 ## All Python checks combined
-export let python-checks = print-calls + bare-except-clauses + silenced-exceptions + no-six-import + no-legacy-typing + no-eval
+export let python-checks = python-correctness-checks + python-style-checks + python-idiom-checks + python-quality-checks + python-doc-checks

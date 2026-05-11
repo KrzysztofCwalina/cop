@@ -27,6 +27,7 @@ public static class RunCommand
         formatOption.DefaultValueFactory = _ => "text";
         var commandsOption = new Option<string>("-c") { Description = "Comma-separated list of commands to run (default: all)" };
         var diagOption = new Option<bool>("-d") { Description = "Print diagnostic timing for each engine phase to stderr" };
+        var cqlOption = new Option<bool>("-cql") { Description = "Transpile .cop checks to CodeQL .ql files instead of running them" };
         var command = new Command("run", "Run .cop programs")
         {
             commandArg,
@@ -34,16 +35,142 @@ public static class RunCommand
             targetOption,
             formatOption,
             commandsOption,
-            diagOption
+            diagOption,
+            cqlOption
         };
-        command.SetAction(parseResult => Execute(
-            parseResult.GetValue(commandArg),
-            parseResult.GetValue(extraArgsArg),
-            parseResult.GetValue(targetOption),
-            parseResult.GetValue(formatOption),
-            parseResult.GetValue(commandsOption),
-            parseResult.GetValue(diagOption)));
+        command.SetAction(parseResult =>
+        {
+            if (parseResult.GetValue(cqlOption))
+                return ExecuteCodeQL(parseResult.GetValue(commandArg));
+            return Execute(
+                parseResult.GetValue(commandArg),
+                parseResult.GetValue(extraArgsArg),
+                parseResult.GetValue(targetOption),
+                parseResult.GetValue(formatOption),
+                parseResult.GetValue(commandsOption),
+                parseResult.GetValue(diagOption));
+        });
         return command;
+    }
+
+    /// <summary>
+    /// Transpiles .cop files to CodeQL .ql files instead of executing them.
+    /// </summary>
+    public static int ExecuteCodeQL(string? copFileArg)
+    {
+        string scriptsDir;
+        if (copFileArg != null && copFileArg.EndsWith(".cop", StringComparison.OrdinalIgnoreCase))
+        {
+            var spec = new FileInfo(copFileArg);
+            if (!spec.Exists)
+            {
+                Console.Error.WriteLine($"Error: File '{spec.FullName}' not found");
+                return 1;
+            }
+            scriptsDir = spec.DirectoryName ?? Directory.GetCurrentDirectory();
+        }
+        else
+        {
+            scriptsDir = Directory.GetCurrentDirectory();
+        }
+
+        // Parse all .cop files in the directory
+        var scriptFilePaths = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
+        if (scriptFilePaths.Length == 0)
+        {
+            Console.Error.WriteLine("Error: No .cop files found");
+            return 1;
+        }
+
+        var scriptFiles = new List<ScriptFile>();
+        var parseErrors = new List<string>();
+
+        foreach (var path in scriptFilePaths)
+        {
+            try
+            {
+                var source = File.ReadAllText(path);
+                scriptFiles.Add(ScriptParser.Parse(source, path));
+            }
+            catch (ParseException ex)
+            {
+                parseErrors.Add(ex.Message);
+            }
+        }
+
+        if (parseErrors.Count > 0)
+        {
+            foreach (var error in parseErrors)
+                Console.Error.WriteLine(error);
+            return 2;
+        }
+
+        // Resolve imports to find imported script files
+        var feedPaths = FindFeedPathsFromCwd();
+        var importedFiles = new List<ScriptFile>();
+        foreach (var sf in scriptFiles)
+        {
+            foreach (var imp in sf.Imports)
+            {
+                foreach (var feed in feedPaths)
+                {
+                    var pkgDir = ImportResolver.FindPackageDir(feed, imp);
+                    if (pkgDir is not null)
+                    {
+                        var impFiles = Directory.GetFiles(pkgDir, "*.cop", SearchOption.AllDirectories);
+                        foreach (var impFile in impFiles)
+                        {
+                            try
+                            {
+                                var source = File.ReadAllText(impFile);
+                                importedFiles.Add(ScriptParser.Parse(source, impFile));
+                            }
+                            catch { /* skip unparseable import files */ }
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Transpile each script file
+        int totalFiles = 0;
+        bool hasErrors = false;
+
+        foreach (var sf in scriptFiles)
+        {
+            var transpiler = new CqlTranspiler(sf, importedFiles);
+            var result = transpiler.Transpile();
+
+            if (result.HasErrors)
+            {
+                foreach (var error in result.Errors)
+                    Console.Error.WriteLine(error);
+                hasErrors = true;
+                continue;
+            }
+
+            if (result.Files.Count == 0)
+                continue;
+
+            // Write .ql files to codeql/ subdirectory next to the .cop file
+            var copDir = Path.GetDirectoryName(sf.FilePath) ?? scriptsDir;
+            var cqlDir = Path.Combine(copDir, "codeql");
+            Directory.CreateDirectory(cqlDir);
+
+            foreach (var qlFile in result.Files)
+            {
+                var outPath = Path.Combine(cqlDir, qlFile.FileName);
+                File.WriteAllText(outPath, qlFile.Content);
+                Console.WriteLine($"  Generated: {Path.GetRelativePath(scriptsDir, outPath)}");
+                totalFiles++;
+            }
+        }
+
+        if (hasErrors) return 2;
+
+        Console.WriteLine($"CodeQL: {totalFiles} query file(s) generated.");
+        return 0;
     }
 
     public static int Execute(string? command, string[]? programArgs = null, string? target = null, string? format = null, string? commands = null, bool diag = false)

@@ -42,7 +42,7 @@ public class AzureSdkRuleTests
             .Select(l => l.Name)
             .ToList();
 
-        // Resolve imports (e.g., csharp-library-client-azure imports csharp-library-client)
+        // Resolve imports (e.g., csharp-library-azure imports csharp-library)
         var importResolver = new ImportResolver(apmRoot);
         var resolved = new HashSet<string>();
         var imported = new List<ScriptFile>();
@@ -78,7 +78,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_GoodClient_NoClientDiagnostics()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure-checks",
+        var diags = RunPackageChecks("csharp-library-azure-checks",
             SamplePath("AzureGoodClient.cs"));
 
         var clientDiags = diags.Where(d =>
@@ -94,7 +94,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_BadClient_MissingTokenCredential()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure-checks",
+        var diags = RunPackageChecks("csharp-library-azure-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("must accept TokenCredential")
@@ -105,7 +105,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_BadClient_MissingMockingCtor()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure-checks",
+        var diags = RunPackageChecks("csharp-library-azure-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("protected parameterless constructor")
@@ -116,7 +116,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_BadClient_MissingCtorWithOptions()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure-checks",
+        var diags = RunPackageChecks("csharp-library-azure-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("should have a constructor that accepts options")
@@ -127,7 +127,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_BadClient_ServiceVersionNaming()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure-checks",
+        var diags = RunPackageChecks("csharp-library-azure-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("ServiceVersion")),
@@ -137,7 +137,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_BadClient_ServiceVersionFirstParam()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure-checks",
+        var diags = RunPackageChecks("csharp-library-azure-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("BadServiceClientOptions")
@@ -148,7 +148,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_BadClient_ConvenienceWithRequestContent()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure-checks",
+        var diags = RunPackageChecks("csharp-library-azure-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("RequestContent")
@@ -159,7 +159,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_BadClient_BannedReturnType()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure-checks",
+        var diags = RunPackageChecks("csharp-library-azure-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("BadServiceClient")
@@ -170,7 +170,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_BadClient_ModelNameSuffixes()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure-checks",
+        var diags = RunPackageChecks("csharp-library-azure-checks",
             SamplePath("AzureBadClient.cs"));
 
         // Check for various suffix violations in messages
@@ -187,7 +187,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_BadClient_ProtocolMethodReturnType()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure-checks",
+        var diags = RunPackageChecks("csharp-library-azure-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("BadServiceClient")
@@ -200,7 +200,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_BadClient_SingleWordTypeName()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure-checks",
+        var diags = RunPackageChecks("csharp-library-azure-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("Processor")
@@ -213,7 +213,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_BadClient_MissingTokenPropagation()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure-checks",
+        var diags = RunPackageChecks("csharp-library-azure-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("propagate")
@@ -226,7 +226,7 @@ public class AzureSdkRuleTests
     [Test]
     public void ClientChecks_BadClient_NonVirtualMethods()
     {
-        var diags = RunPackageChecks("csharp-library-client-checks",
+        var diags = RunPackageChecks("csharp-library-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("virtual")
@@ -237,7 +237,7 @@ public class AzureSdkRuleTests
     [Test]
     public void ClientChecks_BadClient_AsyncWithoutSync()
     {
-        var diags = RunPackageChecks("csharp-library-client-checks",
+        var diags = RunPackageChecks("csharp-library-checks",
             SamplePath("AzureBadClient.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("sync")),
@@ -247,7 +247,7 @@ public class AzureSdkRuleTests
     [Test]
     public void ClientChecks_GoodClient_NoDiagnostics()
     {
-        var diags = RunPackageChecks("csharp-library-client-checks",
+        var diags = RunPackageChecks("csharp-library-checks",
             SamplePath("AzureGoodClient.cs"));
 
         var clientDiags = diags.Where(d =>
@@ -343,7 +343,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_AssemblyAttributes_FlagsAllInternalsVisibleTo()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure-checks",
+        var diags = RunPackageChecks("csharp-library-azure-checks",
             SamplePath("AssemblyAttributes.cs"));
 
         var ivtDiags = diags.Where(d => d.Message.Contains("InternalsVisibleTo")).ToList();
@@ -420,7 +420,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_AsyncSyncBad_UseEnsureCompleted()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure-checks",
+        var diags = RunPackageChecks("csharp-library-azure-checks",
             SamplePath("AsyncSyncBad.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("EnsureCompleted")
@@ -433,7 +433,7 @@ public class AzureSdkRuleTests
     [Test]
     public void AzureChecks_AsyncSyncBad_NoAsyncInSync()
     {
-        var diags = RunPackageChecks("csharp-library-client-azure-checks",
+        var diags = RunPackageChecks("csharp-library-azure-checks",
             SamplePath("AsyncSyncBad.cs"));
 
         Assert.That(diags.Any(d => d.Message.Contains("DoWorkAsync")
@@ -630,7 +630,7 @@ public class AzureSdkRuleTests
     // Api-to-Api comparison: baseline is a C# stub file (like Azure SDK's api/*.cs)
     // Both sides parsed through the same C# parser, so signatures match naturally.
     private const string ApiCompatPolicy = @"
-import csharp-api
+import csharp-library-checks
 import code-analysis
 
 # Baseline: C# stub files in api/ directory (Azure SDK convention)
@@ -654,7 +654,7 @@ export let api-compat = api-removed + api-added
     {
         // Use a simple export policy to verify Api collection works
         var exportPolicy = @"
-import csharp-api
+import csharp-library-checks
 import code-analysis
 export command api-export = SAVE('api-baseline.txt', '{item.Signature}', Code.Api:csharp:isPublicApi)
 ";

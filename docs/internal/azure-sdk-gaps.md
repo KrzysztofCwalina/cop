@@ -15,37 +15,37 @@ These are the primary SDK design-guideline analyzers, shipped as the `Azure.Clie
 
 | AZC | Title | Agent Cop Coverage | Agent Cop Check |
 |-----|-------|:---:|-----------|
-| AZC0002 | Service methods need CancellationToken / RequestContext | ✅ | `csharp-library-client:async-needs-cancellation-token`, `csharp-library-client-azure:service-method-needs-cancellation` |
-| AZC0003 | Service methods must be virtual | ✅ | `csharp-library-client:client-methods-virtual` |
-| AZC0004 | Provide both async and sync variants | ✅ | `csharp-library-client:async-needs-sync-counterpart` |
-| AZC0005 | Protected parameterless constructor for mocking | ✅ | `csharp-library-client-azure:client-needs-mocking-ctor` |
-| AZC0006 | Constructor overload with ClientOptions | ✅ | `csharp-library-client:client-needs-options-ctor`, `csharp-library-client-azure:client-needs-options-ctor` |
-| AZC0007 | Minimal constructor without ClientOptions | ✅ | `csharp-library-client-azure:client-needs-simple-ctor` |
-| AZC0008 | ClientOptions needs nested ServiceVersion enum | ✅ | `csharp-library-client-azure:options-needs-service-version-enum` |
-| AZC0009 | ClientOptions ctor first param is ServiceVersion | ✅ | `csharp-library-client-azure:options-first-param-service-version` |
-| AZC0010 | ServiceVersion defaults to latest version | ✅ | `csharp-library-client-azure:service-version-default-value` |
-| AZC0011 | Avoid InternalsVisibleTo to non-test assemblies | ✅ | `csharp-library-client-azure:internals-visible-to` |
+| AZC0002 | Service methods need CancellationToken / RequestContext | ✅ | `csharp-library:async-needs-cancellation-token`, `csharp-library-azure:service-method-needs-cancellation` |
+| AZC0003 | Service methods must be virtual | ✅ | `csharp-library:client-methods-virtual` |
+| AZC0004 | Provide both async and sync variants | ✅ | `csharp-library:async-needs-sync-counterpart` |
+| AZC0005 | Protected parameterless constructor for mocking | ✅ | `csharp-library-azure:client-needs-mocking-ctor` |
+| AZC0006 | Constructor overload with ClientOptions | ✅ | `csharp-library:client-needs-options-ctor`, `csharp-library-azure:client-needs-options-ctor` |
+| AZC0007 | Minimal constructor without ClientOptions | ✅ | `csharp-library-azure:client-needs-simple-ctor` |
+| AZC0008 | ClientOptions needs nested ServiceVersion enum | ✅ | `csharp-library-azure:options-needs-service-version-enum` |
+| AZC0009 | ClientOptions ctor first param is ServiceVersion | ✅ | `csharp-library-azure:options-first-param-service-version` |
+| AZC0010 | ServiceVersion defaults to latest version | ✅ | `csharp-library-azure:service-version-default-value` |
+| AZC0011 | Avoid InternalsVisibleTo to non-test assemblies | ✅ | `csharp-library-azure:internals-visible-to` |
 | AZC0013 | TaskCompletionSource needs RunContinuationsAsynchronously | ✅ | `csharp:bare-task-completion-sources` |
-| AZC0014 | Avoid banned types in public API | ✅ | `csharp-library-client-azure:no-banned-internal-types` |
-| AZC0015 | Unexpected client method return type | ✅ | `csharp-library-client-azure:no-raw-http-return-types` |
-| AZC0016 | Invalid ServiceVersion member naming | ✅ | `csharp-library-client-azure:service-version-naming` |
-| AZC0017 | Convenience methods must not take RequestContent | ✅ | `csharp-library-client-azure:no-request-content-in-convenience` |
-| AZC0018 | Protocol method signature validation | ✅ | `csharp-library-client-azure:protocol-method-return-type` |
-| AZC0019 | Avoid ambiguous overloads | ✅ | `csharp-library-client-azure:no-ambiguous-overloads` |
-| AZC0020 | Avoid Azure.Core internal shared-source types in public API | ✅ | `csharp-library-client-azure:no-pipeline-types-in-api` |
-| AZC0021 | ClientSettings ctor params should not be combined with others | ✅ | `csharp-library-client-azure:settings-ctor-isolation` |
+| AZC0014 | Avoid banned types in public API | ✅ | `csharp-library-azure:no-banned-internal-types` |
+| AZC0015 | Unexpected client method return type | ✅ | `csharp-library-azure:no-raw-http-return-types` |
+| AZC0016 | Invalid ServiceVersion member naming | ✅ | `csharp-library-azure:service-version-naming` |
+| AZC0017 | Convenience methods must not take RequestContent | ✅ | `csharp-library-azure:no-request-content-in-convenience` |
+| AZC0018 | Protocol method signature validation | ✅ | `csharp-library-azure:protocol-method-return-type` |
+| AZC0019 | Avoid ambiguous overloads | ✅ | `csharp-library-azure:no-ambiguous-overloads` |
+| AZC0020 | Avoid Azure.Core internal shared-source types in public API | ✅ | `csharp-library-azure:no-pipeline-types-in-api` |
+| AZC0021 | ClientSettings ctor params should not be combined with others | ✅ | `csharp-library-azure:settings-ctor-isolation` |
 
 ### Model Naming Rules (AZC0030–AZC0036)
 
 | AZC | Title | Agent Cop Coverage | Agent Cop Check |
 |-----|-------|:---:|-----------|
-| AZC0030 | Improper model suffix — 'Collection' | ✅ | `csharp-library-client-azure:no-collection-suffix` |
-| AZC0031 | Improper model suffix — 'Request' | ✅ | `csharp-library-client-azure:no-request-suffix` |
-| AZC0032 | Improper model suffix — 'Parameter(s)' | ✅ | `csharp-library-client-azure:no-parameter-suffix` |
-| AZC0033 | Improper model suffix — 'Option(s)' | ✅ | `csharp-library-client-azure:no-option-suffix` |
-| AZC0034 | Duplicate type names across SDK and .NET | ✅ | `csharp-library-client-azure:duplicate-bcl-type-name` |
-| AZC0035 | Output model type needs model factory method | ✅ | `csharp-library-client-azure:model-needs-factory` |
-| AZC0036 | Improper model suffix — 'Resource' | ✅ | `csharp-library-client-azure:no-resource-suffix` |
+| AZC0030 | Improper model suffix — 'Collection' | ✅ | `csharp-library-azure:no-collection-suffix` |
+| AZC0031 | Improper model suffix — 'Request' | ✅ | `csharp-library-azure:no-request-suffix` |
+| AZC0032 | Improper model suffix — 'Parameter(s)' | ✅ | `csharp-library-azure:no-parameter-suffix` |
+| AZC0033 | Improper model suffix — 'Option(s)' | ✅ | `csharp-library-azure:no-option-suffix` |
+| AZC0034 | Duplicate type names across SDK and .NET | ✅ | `csharp-library-azure:duplicate-bcl-type-name` |
+| AZC0035 | Output model type needs model factory method | ✅ | `csharp-library-azure:model-needs-factory` |
+| AZC0036 | Improper model suffix — 'Resource' | ✅ | `csharp-library-azure:no-resource-suffix` |
 
 ### Async / Sync Pattern Rules (AZC0100–AZC0112)
 
@@ -55,21 +55,21 @@ These are the primary SDK design-guideline analyzers, shipped as the `Azure.Clie
 | AZC0101 | Do not use ConfigureAwait(true) | ✅ | `csharp:configure-await-true-calls` |
 | AZC0102 | Do not use GetAwaiter().GetResult() | ✅ | `csharp:sync-over-async-calls` |
 | AZC0103 | Do not wait synchronously in async scope | ✅ | `csharp:sync-wait-in-async` |
-| AZC0104 | Use EnsureCompleted() directly on async return | ✅ | `csharp-library-client-azure:use-ensure-completed` |
+| AZC0104 | Use EnsureCompleted() directly on async return | ✅ | `csharp-library-azure:use-ensure-completed` |
 | AZC0105 | Do not add 'async' bool param to public methods | ✅ | `csharp-library:public-async-bool-params` |
 | AZC0106 | Non-public async method needs 'async' bool param | ✅ | `csharp-library:async-missing-bool-param` |
-| AZC0107 | Do not call public async method in sync scope | ✅ | `csharp-library-client-azure:no-public-async-in-sync` |
+| AZC0107 | Do not call public async method in sync scope | ✅ | `csharp-library-azure:no-public-async-in-sync` |
 | AZC0108 | Incorrect 'async' parameter value in call | ✅ | `csharp-library:wrong-async-arg-value` / `wrong-sync-arg-value` |
 | AZC0109 | Misuse of 'async' parameter (only allowed in ?: or if) | ✅ | `csharp-library:async-param-misuse` |
 | AZC0110 | Do not use await in possibly-synchronous scope | ✅ | `csharp-library:unconditional-await-in-dual-mode` |
 | AZC0111 | Do not use EnsureCompleted in possibly-async scope | ✅ | `csharp-library:unconditional-sync-in-dual-mode` |
-| AZC0112 | Misuse of internal type via [InternalsVisibleTo] | ✅ | `csharp-library-client-azure:internals-visible-to-non-test` |
+| AZC0112 | Misuse of internal type via [InternalsVisibleTo] | ✅ | `csharp-library-azure:internals-visible-to-non-test` |
 
 ### AOT Compatibility (AZC0150)
 
 | AZC | Title | Agent Cop Coverage | Agent Cop Check |
 |-----|-------|:---:|-----------|
-| AZC0150 | Use ModelReaderWriter overload with ModelReaderWriterContext | ✅ | `csharp-library-client-azure:model-reader-writer-context` |
+| AZC0150 | Use ModelReaderWriter overload with ModelReaderWriterContext | ✅ | `csharp-library-azure:model-reader-writer-context` |
 
 ---
 
@@ -79,8 +79,8 @@ These are .NET-specific analyzers maintained in `sdk/tools/Azure.SdkAnalyzers/`.
 
 | AZC | Title | Agent Cop Coverage | Agent Cop Check |
 |-----|-------|:---:|-----------|
-| AZC0012 | Avoid single-word type names | ✅ | `csharp-library-client-azure:no-single-word-type-name` |
-| AZC0020 | Propagate CancellationToken to RequestContext | ✅ | `csharp-library-client-azure:cancellation-token-propagation` |
+| AZC0012 | Avoid single-word type names | ✅ | `csharp-library-azure:no-single-word-type-name` |
+| AZC0020 | Propagate CancellationToken to RequestContext | ✅ | `csharp-library-azure:cancellation-token-propagation` |
 | AZC0101 | Do not use ConfigureAwait(true) | ✅ | `csharp:configure-await-true-calls` |
 
 > Note: AZC0012 and AZC0020 in `Azure.SdkAnalyzers` are different rules from the same IDs in
@@ -94,11 +94,11 @@ These analyzers overlap with some Agent Cop checks and provide compile-time enfo
 
 | Diagnostic | Title | AZC Equivalent | Also in Agent Cop? |
 |-----------|-------|----------------|:---:|
-| CLIENT001 | Client class should accept options parameter | AZC0006 | ✅ `csharp-library-client:client-needs-options-ctor` |
-| CLIENT002 | Async method should accept CancellationToken | AZC0002 | ✅ `csharp-library-client:async-needs-cancellation-token` |
-| CLIENT003 | Client class should be sealed or abstract | — (no AZC) | ✅ `csharp-library-client:client-sealed-or-abstract` |
-| AZURE001 | Azure client must accept TokenCredential | — (no AZC) | ✅ `csharp-library-client-azure:client-needs-token-credential` |
-| AZURE002 | Options must inherit ClientOptions/ClientPipelineOptions | — (no AZC) | ✅ `csharp-library-client-azure:options-inherits-base` |
+| CLIENT001 | Client class should accept options parameter | AZC0006 | ✅ `csharp-library:client-needs-options-ctor` |
+| CLIENT002 | Async method should accept CancellationToken | AZC0002 | ✅ `csharp-library:async-needs-cancellation-token` |
+| CLIENT003 | Client class should be sealed or abstract | — (no AZC) | ✅ `csharp-library:client-sealed-or-abstract` |
+| AZURE001 | Azure client must accept TokenCredential | — (no AZC) | ✅ `csharp-library-azure:client-needs-token-credential` |
+| AZURE002 | Options must inherit ClientOptions/ClientPipelineOptions | — (no AZC) | ✅ `csharp-library-azure:options-inherits-base` |
 
 ---
 
@@ -161,8 +161,8 @@ Agent Cop now handles text file analysis (markdown, XML, csproj) via the text fi
 | Check | Tool / Script | Agent Cop Coverage |
 |-------|---------------|:---:|
 | Code formatting | `dotnet format` via CodeChecks.ps1 | ✅ `csharp-style:braces-on-own-line`, `csharp-style:required-braces`, `csharp-style:modifier-order` + line-level style checks |
-| API listing export & diff | Export-API.ps1 + GenAPI | ✅ `csharp-api:public-api-types/methods/properties/enums` — extracts full public API surface from source |
-| API compatibility / breaking changes | Microsoft.DotNet.ApiCompat | ✅ `csharp-api:public-api-types/methods/properties/enums` — compares public API surface from source against baseline |
+| API listing export & diff | Export-API.ps1 + GenAPI | ✅ `csharp-lister:public-api-types/methods/properties/enums` — extracts full public API surface from source |
+| API compatibility / breaking changes | Microsoft.DotNet.ApiCompat | ✅ `csharp-lister:public-api-types/methods/properties/enums` — compares public API surface from source against baseline |
 | Public API spell checking | spell-check-public-api.ps1 (cspell) | ✅ Agent Cop can regex-check Type.Name and Method.Name for common misspelling patterns |
 | Code snippet validation | Update-Snippets.ps1 (snippet-generator) | ✅ `csharp-snippets` package — matches `#region Snippet:X` to markdown fences, detects stale content |
 | CHANGELOG.md validation | Verify-ChangeLog.ps1 | ✅ Agent Cop reads .md files via text parser — line-pattern checks on markdown content |
@@ -202,10 +202,10 @@ These checks exist in Agent Cop packages but have **no equivalent** enforcement 
 | `dynamic-declarations` | csharp | Disallow dynamic typing |
 | `thread-sleep-calls` | csharp | Use Task.Delay instead of Thread.Sleep |
 | `console-calls` | csharp | Avoid Console output in library code |
-| `client-sealed-or-abstract` | csharp-library-client | Client types must be sealed or abstract |
-| `client-needs-token-credential` | csharp-library-client-azure | Azure clients must accept TokenCredential |
-| `options-inherits-base` | csharp-library-client-azure | Options must inherit ClientOptions base |
-| `options-single-ctor-param` | csharp-library-client-azure | ClientOptions ctor should only accept optional ServiceVersion |
+| `client-sealed-or-abstract` | csharp-library | Client types must be sealed or abstract |
+| `client-needs-token-credential` | csharp-library-azure | Azure clients must accept TokenCredential |
+| `options-inherits-base` | csharp-library-azure | Options must inherit ClientOptions base |
+| `options-single-ctor-param` | csharp-library-azure | ClientOptions ctor should only accept optional ServiceVersion |
 
 > `client-needs-token-credential` and `options-inherits-base` are enforced by our Roslyn
 > analyzers (AZURE001, AZURE002) but not by any azure-sdk-for-net tool. `options-single-ctor-param`
@@ -239,7 +239,7 @@ All 42 AZC rules are now fully covered by Agent Cop checks — zero gaps remain.
 | Banned API | 1 | ✅ | `csharp:uri-tostring` |
 | Build scripts | 11 | ✅ (9/11) | 9 covered by Agent Cop; 2 require external tool binaries (Bicep, MSBuild) |
 | .editorconfig | ~20 | ✅ | Field naming, brace style, modifier order, indentation all covered |
-| API Surface | — | ✅ | `csharp-api` package: full public API extraction (types, methods, properties, events, enums) |
+| API Surface | — | ✅ | `csharp-lister` package: full public API extraction (types, methods, properties, events, enums) |
 
 ### Overall
 
@@ -251,4 +251,4 @@ All 42 AZC rules are now fully covered by Agent Cop checks — zero gaps remain.
   - MSBuild ConfigurationSchema: requires MSBuild evaluation
 - **Everything else is now ✅** — Agent Cop implements checks directly or via text file parsing
 - Agent Cop provides **8 unique checks** with no azure-sdk-for-net equivalent, adding value for `var`/`dynamic` bans, `Thread.Sleep`, `Console` calls, sealed-or-abstract enforcement, Azure identity requirements, and ClientOptions single-parameter enforcement.
-- **New `csharp-api` package** provides full public API surface extraction from source (types, methods, properties, events, enums) — replaces GenAPI for source-based API listing.
+- **New `csharp-lister` package** provides full public API surface extraction from source (types, methods, properties, events, enums) — replaces GenAPI for source-based API listing.

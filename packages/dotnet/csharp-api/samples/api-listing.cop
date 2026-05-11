@@ -1,8 +1,0 @@
-import csharp-api
-
-# Print API surface as C# stubs
-export command api-listing = foreach Code.Api:csharp:publicApi => '{item.ApiAsText}'
-
-# Save API surface to a file
-let apiText = Code.Api:csharp:publicApi.Text('{item.ApiAsText}')
-export command save-api = save('api-surface.txt', apiText)

@@ -1,6 +1,8 @@
-# General JavaScript/TypeScript source code style definitions
+# JavaScript/TypeScript checks — correctness and style
 
 import code-analysis
+
+## JavaScript Correctness
 
 ## Avoid console output in production code
 predicate isConsoleCall(Statement) => Statement.Kind == 'call'
@@ -38,5 +40,31 @@ predicate isCatchWithoutRethrow(Statement) => Statement.ErrorHandler == true
 export let swallowed-exceptions = Code.Statements:javascript:isCatchWithoutRethrow
     :toWarning('Do not swallow errors — rethrow or handle explicitly')
 
-## All JavaScript checks combined
-export let javascript-checks = console-calls + alert-calls + eval-calls + debugger-statements + var-declarations + swallowed-exceptions
+## Combined JavaScript correctness checks
+export let javascript-correctness-checks = console-calls + alert-calls + eval-calls + debugger-statements + var-declarations + swallowed-exceptions
+
+## TypeScript Checks
+
+## Detects await on a value that is clearly not a Thenable (literal values).
+## Inspired by @typescript-eslint/await-thenable.
+predicate isAwaitOfNonThenable(Statement) =>
+    Statement.Kind == 'await'
+    && Statement.MemberName == null
+    && (Statement.Expression:matches('^\d')
+        || Statement.Expression:matches('^[\'"`]')
+        || Statement.Expression:equals('true')
+        || Statement.Expression:equals('false')
+        || Statement.Expression:equals('null')
+        || Statement.Expression:equals('undefined')
+        || Statement.Expression:startsWith('[')
+        || Statement.Expression:startsWith('{'))
+
+## Disallow awaiting a value that is not a Thenable (@typescript-eslint/await-thenable)
+export let await-thenable = Code.Statements:javascript:isAwaitOfNonThenable
+    :toError('Unexpected await of a non-Promise (non-Thenable) value')
+
+## Combined TypeScript checks
+export let typescript-checks = await-thenable
+
+## All JavaScript/TypeScript checks combined
+export let javascript-checks = javascript-correctness-checks + typescript-checks

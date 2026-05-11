@@ -1,0 +1,3 @@
+# Azure SDK client library checks — all combined
+
+export let csharp-library-azure-checks = client-design + options-design + naming + method-design + code-quality

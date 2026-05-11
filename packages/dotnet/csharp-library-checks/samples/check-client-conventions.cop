@@ -1,0 +1,8 @@
+import csharp-library-checks
+
+# Find all client types
+foreach Clients
+    => '{Type.Name}'
+
+# Run all client checks
+CHECK csharp-library-checks

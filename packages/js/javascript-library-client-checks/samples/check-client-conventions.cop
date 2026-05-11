@@ -1,6 +1,0 @@
-import javascript-library-client-checks
-
-foreach Clients
-    => '{Type.Name}'
-
-CHECK js-client-checks

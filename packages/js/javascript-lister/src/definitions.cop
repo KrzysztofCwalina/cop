@@ -1,0 +1,5 @@
+# API Surface listing and diff commands for JavaScript/TypeScript
+# Predicates (isPublicApi, isApiType, etc.) are in javascript-library-checks
+
+import javascript-library-checks
+import code-analysis

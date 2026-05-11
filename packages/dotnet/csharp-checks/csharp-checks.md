@@ -1,16 +1,16 @@
 ---
 name: csharp-checks
 version: 1.0.0
-title: C# Coding Rules
-description: Core C# coding conventions and best practices for coding agents
+title: C# Checks
+description: C# correctness, StyleCop style, and Framework Design Guidelines checks for coding agents
 authors: cop-team
-tags: csharp, dotnet, coding-standards
+tags: csharp, dotnet, coding-standards, stylecop, fdg, naming, design
 language: C#
 dependencies: []
 provider: clr
 providerEntry: Cop.Providers.CSharpProvider
 ---
 
-# C# Coding Rules
+# C# Checks
 
-Standard C# coding conventions for governed agentic development.
+Comprehensive C# checks covering correctness, StyleCop style rules, and .NET Framework Design Guidelines.

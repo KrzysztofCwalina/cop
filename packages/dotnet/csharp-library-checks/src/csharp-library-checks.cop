@@ -1,7 +1,9 @@
-# Library API design checks for C#
+# C# library and client library design checks
 
 import csharp-checks
 import code-analysis
+
+## Library API Design
 
 # Public API surface
 
@@ -66,10 +68,8 @@ export let unconditional-sync-in-dual-mode = Code.Statements:csharp:isUnconditio
 
 # AZC0108: Detect wrong async argument values in guarded branches
 
-# In if(async) branch, passing async: false is wrong
 predicate isPositiveAsyncGuard(Ancestor) => Ancestor.Kind == 'if' && Ancestor.Condition == 'async'
 predicate isInPositiveAsyncGuard(Statement) => Statement.Ancestors:any(isPositiveAsyncGuard)
-# In else branch of if(async) or in if(!async), passing async: true is wrong
 predicate isNegatedAsyncGuard(Ancestor) => Ancestor.Kind == 'if' && Ancestor.Condition:contains('!async')
 predicate isElseBranch(Ancestor) => Ancestor.Kind == 'else'
 predicate isInNegatedAsyncGuard(Statement) => Statement.Ancestors:any(isNegatedAsyncGuard)
@@ -91,7 +91,6 @@ export let wrong-sync-arg-value = Code.Statements:csharp:hasWrongAsyncTrueInSync
 
 # AZC0109: async parameter used outside of if condition or ternary
 
-# Detects calls that pass the 'async' variable as an argument (misuse)
 export predicate isPassingAsyncParamAsArg(Statement) => Statement.Kind == 'call'
     && isInDualModeMethod && !isGuardedByAsyncCheck
     && Statement.Arguments:contains('async')
@@ -100,5 +99,111 @@ export predicate isPassingAsyncParamAsArg(Statement) => Statement.Kind == 'call'
 export let async-param-misuse = Code.Statements:csharp:isPassingAsyncParamAsArg
     :toWarning('Do not pass async parameter as argument — use if/else branching instead')
 
-## All C# library checks combined
+## Combined library checks
 export let csharp-library-checks = public-async-bool-params + async-missing-bool-param + awaits-using-default + unconditional-await-in-dual-mode + unconditional-sync-in-dual-mode + wrong-async-arg-value + wrong-sync-arg-value + async-param-misuse
+
+## Client Library Design
+
+# Client type identification
+
+export predicate isClient(Type) => Type.Name:endsWith('Client')
+export predicate isClientOptionsType(Type) => Type.Name:endsWith('ClientOptions')
+export predicate Clients(Types) => csharp && isClient
+
+export predicate isModel(Type) => Type.Kind == 'Class' && Type:isPublic && !isClient && !isClientOptionsType
+export predicate Models(Types) => csharp && isModel
+export predicate ClientOptions(Types) => csharp && isClientOptionsType
+
+# Naming suffixes
+
+export predicate hasCollectionSuffix(Type) => Type.Name:endsWith('Collection')
+export predicate hasRequestSuffix(Type) => Type.Name:endsWith('Request')
+export predicate hasParameterSuffix(Type) => Type.Name:endsWith('Parameter') || Type.Name:endsWith('Parameters')
+export predicate hasOptionSuffix(Type) => Type.Name:endsWith('Option') || Type.Name:endsWith('Options')
+
+# Constructor checks
+
+predicate isOptionsParam(Parameter) => Parameter.Type:endsWith('Options')
+predicate isConstructorWithOptions(Constructor) => Constructor.Parameters:any(isOptionsParam)
+
+export predicate isProtectedParameterless(Constructor) => Constructor:isProtected && Constructor.Parameters.Count == 0
+
+predicate isMissingOptionsConstructor(Type) => Type.Constructors:!any(isConstructorWithOptions)
+predicate isNotSealedOrAbstract(Type) => Type:!isSealed && Type:!isAbstract
+
+export predicate isMissingMockingConstructor(Type) => Type.Constructors:!any(isProtectedParameterless)
+
+## Client types must have a constructor that accepts an Options parameter
+export let client-needs-options-ctor = Clients:isMissingOptionsConstructor
+    :toWarning('{item.Name} should accept an options parameter')
+
+## Client types must be sealed or abstract to prevent unintended inheritance
+export let client-sealed-or-abstract = Clients:isNotSealedOrAbstract
+    :toWarning('{item.Name} should be sealed or abstract')
+
+# Method checks
+
+predicate isCancellationToken(Parameter) => Parameter.Type == 'CancellationToken'
+predicate isPublicAsync(Method) => Method:isPublic && Method:isAsync
+predicate isMissingCancellationToken(Method) => Method.Parameters:!any(isCancellationToken)
+predicate hasAsyncWithoutCancellation(Type) => Type.Methods.Where(isPublicAsync):any(isMissingCancellationToken)
+
+predicate isPublicInstance(Method) => Method:isPublic && Method:!isStatic
+predicate isNotVirtual(Method) => Method:!isVirtual && Method:!isOverride && Method:!isAbstract
+predicate hasNonVirtualServiceMethod(Type) => Type.Methods.Where(isPublicInstance):any(isNotVirtual)
+
+predicate isAsyncServiceMethod(Method) => Method:isPublic && Method:isVirtual && Method.Name:endsWith('Async')
+predicate isMissingSyncCounterpart(Method) => !Type.MethodNames:contains(Method.Name.Trim('Async'))
+predicate hasAsyncWithoutSync(Type) => Type.Methods.Where(isAsyncServiceMethod):any(isMissingSyncCounterpart)
+
+## Async methods on client types must accept a CancellationToken parameter
+export let async-needs-cancellation-token = Clients:hasAsyncWithoutCancellation
+    :toWarning('{item.Name} is async without CancellationToken')
+
+## Public instance methods on client types should be virtual for mocking
+export let client-methods-virtual = Clients:hasNonVirtualServiceMethod
+    :toWarning('{item.Name} has non-virtual service method')
+
+## Every public async method on a client type must have a matching sync method
+export let async-needs-sync-counterpart = Clients:hasAsyncWithoutSync
+    :toWarning('{item.Name} has async method without sync counterpart')
+
+# Content parameters
+
+predicate isRequestContent(Parameter) => Parameter.Type == 'RequestContent' || Parameter.Type == 'RequestBody'
+predicate hasRequestContent(Method) => Method.Parameters:any(isRequestContent)
+
+## All client library checks combined
+export let csharp-library-checks = csharp-library-checks + client-needs-options-ctor + client-sealed-or-abstract + async-needs-cancellation-token + client-methods-virtual + async-needs-sync-counterpart
+
+## Public API Surface Predicates
+
+# A public API entry (type, method, property, event, etc.)
+export predicate isPublicApi(Api) => Api.Kind != ''
+
+# Filter by API kind
+export predicate isApiType(Api) => Api.Kind:in(['class' 'interface' 'struct' 'enum'])
+export predicate isApiMethod(Api) => Api.Kind == 'method'
+export predicate isApiProperty(Api) => Api.Kind == 'property'
+export predicate isApiEvent(Api) => Api.Kind == 'event'
+export predicate isApiCtor(Api) => Api.Kind == 'ctor'
+export predicate isApiEnumValue(Api) => Api.Kind == 'enumvalue'
+
+# API line representation for listings and diff
+export type ApiLine = {
+    Text : string,
+    Kind : string,
+    TypeName : string,
+    MemberName : string,
+    File : string,
+    Line : int
+}
+
+export function toApiLine(Api) => ApiLine {
+    Text = item.ApiAsText,
+    Kind = item.Kind,
+    TypeName = item.TypeName,
+    MemberName = item.MemberName,
+    File = item.File.Path,
+    Line = item.Line
+}
