@@ -75,7 +75,8 @@ public class PythonSourceParser : ISourceParser
 
         return new SourceFile(filePath, "python", types, statements, sourceText)
         {
-            Usings = usings
+            Usings = usings,
+            Regions = ExtractRegions(lines)
         };
     }
 
@@ -97,6 +98,18 @@ public class PythonSourceParser : ISourceParser
         var constructors = new List<MethodDeclaration>();
 
         int i = startLine + 1;
+
+        // Detect class docstring (first non-blank line after class: is a triple-quoted string)
+        bool hasDocstring = false;
+        int docCheckLine = i;
+        while (docCheckLine < lines.Length && string.IsNullOrWhiteSpace(lines[docCheckLine])) docCheckLine++;
+        if (docCheckLine < lines.Length)
+        {
+            var docTrimmed = lines[docCheckLine].TrimStart();
+            if (docTrimmed.StartsWith("\"\"\"") || docTrimmed.StartsWith("'''"))
+                hasDocstring = true;
+        }
+
         while (i < lines.Length)
         {
             if (string.IsNullOrWhiteSpace(lines[i])) { i++; continue; }
@@ -123,7 +136,8 @@ public class PythonSourceParser : ISourceParser
         }
 
         return (new TypeDeclaration(className, TypeKind.Class, Modifier.Public,
-            baseTypes, decorators, constructors, methods, [], [], startLine + 1), i);
+            baseTypes, decorators, constructors, methods, [], [], startLine + 1)
+        { HasDocComment = hasDocstring }, i);
     }
 
     private static (MethodDeclaration?, int) ParseMethod(string[] lines, int startLine, int methodIndent,
@@ -153,13 +167,24 @@ public class PythonSourceParser : ISourceParser
         var modifiers = Modifier.None;
         if (isAsync) modifiers |= Modifier.Async;
         if (decorators.Contains("staticmethod")) modifiers |= Modifier.Static;
-        if (decorators.Contains("classmethod")) modifiers |= Modifier.Static;
         if (decorators.Contains("abstractmethod")) modifiers |= Modifier.Abstract;
         if (!methodName.StartsWith("_")) modifiers |= Modifier.Public;
         else modifiers |= Modifier.Private;
 
         // Extract statements from method body — collect per-method and add to global list
         int bodyStart = nextLine;
+
+        // Detect method docstring
+        bool hasDocstring = false;
+        int docLine = bodyStart;
+        while (docLine < lines.Length && string.IsNullOrWhiteSpace(lines[docLine])) docLine++;
+        if (docLine < lines.Length)
+        {
+            var docTrimmed = lines[docLine].TrimStart();
+            if (docTrimmed.StartsWith("\"\"\"") || docTrimmed.StartsWith("'''"))
+                hasDocstring = true;
+        }
+
         while (nextLine < lines.Length)
         {
             if (string.IsNullOrWhiteSpace(lines[nextLine])) { nextLine++; continue; }
@@ -177,7 +202,7 @@ public class PythonSourceParser : ISourceParser
 
         var retRef = returnType != null ? new TypeReference(returnType, null, [], returnType) : null;
         return (new MethodDeclaration(methodName, modifiers, decorators,
-            retRef, parameters, startLine + 1) { Statements = methodStatements }, nextLine);
+            retRef, parameters, startLine + 1) { Statements = methodStatements, HasDocComment = hasDocstring }, nextLine);
     }
 
     /// <summary>
@@ -397,5 +422,54 @@ public class PythonSourceParser : ISourceParser
         }
         result.Add(s[start..]);
         return result;
+    }
+
+    // Extracts regions from # [START name] / # [END name] comment markers
+    private static List<RegionInfo> ExtractRegions(string[] lines)
+    {
+        var regions = new List<RegionInfo>();
+        var stack = new Stack<(string Name, int Line)>();
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var trimmed = lines[i].TrimStart();
+            if (trimmed.StartsWith("# [START"))
+            {
+                var match = Regex.Match(trimmed, @"^#\s*\[START\s+(.+?)\]");
+                if (match.Success)
+                    stack.Push((match.Groups[1].Value, i + 1));
+            }
+            else if (trimmed.StartsWith("# [END") && stack.Count > 0)
+            {
+                var match = Regex.Match(trimmed, @"^#\s*\[END\s+(.+?)\]");
+                if (match.Success)
+                {
+                    var endName = match.Groups[1].Value;
+                    // Pop matching region from stack
+                    var items = new List<(string Name, int Line)>();
+                    while (stack.Count > 0)
+                    {
+                        var top = stack.Pop();
+                        if (top.Name == endName)
+                        {
+                            int startLine = top.Line;
+                            int endLine = i + 1;
+                            var contentLines = new List<string>();
+                            for (int j = startLine; j < endLine - 1 && j < lines.Length; j++)
+                                contentLines.Add(lines[j].TrimEnd('\r'));
+                            var content = string.Join('\n', contentLines);
+                            regions.Add(new RegionInfo(endName, startLine, endLine, content));
+                            // Push back any items that weren't the match
+                            for (int k = items.Count - 1; k >= 0; k--)
+                                stack.Push(items[k]);
+                            break;
+                        }
+                        items.Add(top);
+                    }
+                }
+            }
+        }
+
+        return regions;
     }
 }

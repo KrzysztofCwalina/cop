@@ -614,6 +614,17 @@ public static class Engine
                 .Where(l => l.IsExported && !l.IsRuntime && IsViolationCollection(l, allLetDecls))
                 .Select(l => l.Name).ToList();
 
+            // Exclude union collections whose constituents are all already in the set.
+            // This prevents duplicate output when individual checks AND their union are both exported.
+            var letNameSet = new HashSet<string>(letNames);
+            letNames.RemoveAll(name =>
+            {
+                var decl = allLetDecls.FirstOrDefault(l => l.Name == name);
+                if (decl is null || !decl.IsCollectionUnion || decl.ValueExpression is not CollectionUnionExpr union)
+                    return false;
+                return union.Elements.All(e => e is IdentifierExpr id && letNameSet.Contains(id.Name));
+            });
+
             if (letNames.Count > 0 && hasCheckCommand)
             {
                 var runStatements = string.Join("\n", letNames.Select(name => $"RUN CHECK({name})"));

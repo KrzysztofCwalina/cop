@@ -627,7 +627,9 @@ public class ScriptInterpreter
         // Global collections are processed once (not per-source-file)
         if (isGlobal)
         {
-            var evaluator = CreateEvaluator(predicateGroups, "", letDeclarations, functionGroups);
+            // Pre-resolve intermediate collection lets so cross-collection predicates work
+            var resolvedCollections = ResolveGlobalCollectionLetBindings(letDeclarations, predicateGroups, functionGroups);
+            var evaluator = CreateEvaluator(predicateGroups, "", letDeclarations, functionGroups, resolvedCollections);
             List<object> items;
 
             if (cmd.PathOverride is not null && _providerQueryService is not null)
@@ -1185,6 +1187,49 @@ public class ScriptInterpreter
 
     private static bool IsActionFilter(string name) =>
         name is "toError" or "toWarning" or "toInfo" or "toOutput" or "toSave";
+
+    /// <summary>
+    /// Pre-resolve non-action collection let bindings for global commands.
+    /// Same purpose as ResolveCollectionLetBindings but uses ResolveGlobalCollection
+    /// (no Document context required).
+    /// </summary>
+    private Dictionary<string, IList>? ResolveGlobalCollectionLetBindings(
+        Dictionary<string, LetDeclaration> letDeclarations,
+        Dictionary<string, List<PredicateDefinition>> predicateGroups,
+        Dictionary<string, List<FunctionDefinition>> functionGroups)
+    {
+        Dictionary<string, IList>? resolved = null;
+        var bootstrapEvaluator = CreateEvaluator(predicateGroups, "", letDeclarations, functionGroups);
+
+        foreach (var (name, letDecl) in letDeclarations)
+        {
+            if (letDecl.IsExternalLoad) continue;
+            if (letDecl.IsFileParse) continue;
+            if (letDecl.IsValueBinding || letDecl.IsCollectionUnion) continue;
+            if (letDecl.Filters.Any(f =>
+                (f is FunctionCallExpr fc && IsActionFilter(fc.Name)) ||
+                (f is PredicateCallExpr pc && IsActionFilter(pc.Name)))) continue;
+
+            // Only pre-resolve "leaf" lets whose base is a direct global collection.
+            // Lets whose base is another let may depend on cross-collection predicates
+            // that the bootstrap evaluator cannot properly evaluate (it lacks _resolvedCollections).
+            var resolvedBase = ResolveDottedCollection(letDecl.BaseCollection, letDeclarations);
+            if (letDeclarations.ContainsKey(resolvedBase)) continue;
+
+            try
+            {
+                var items = ResolveGlobalCollection(
+                    name, bootstrapEvaluator, predicateGroups, letDeclarations, functionGroups);
+                resolved ??= new Dictionary<string, IList>();
+                resolved[name] = items;
+            }
+            catch
+            {
+                // Skip — may depend on unresolved bindings
+            }
+        }
+        return resolved;
+    }
 
     /// <summary>
     /// Apply a chain of filters to a list of items. Each filter is either:

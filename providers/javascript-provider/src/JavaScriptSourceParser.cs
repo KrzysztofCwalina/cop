@@ -75,7 +75,8 @@ public class JavaScriptSourceParser : ISourceParser
 
         return new SourceFile(filePath, "javascript", types, statements, sourceText)
         {
-            Usings = usings
+            Usings = usings,
+            Regions = ExtractRegions(lines)
         };
     }
 
@@ -542,5 +543,52 @@ public class JavaScriptSourceParser : ISourceParser
             if (line[i] == ch) count++;
         }
         return count;
+    }
+
+    // Extracts regions from // [START name] / // [END name] comment markers
+    private static List<RegionInfo> ExtractRegions(string[] lines)
+    {
+        var regions = new List<RegionInfo>();
+        var stack = new Stack<(string Name, int Line)>();
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var trimmed = lines[i].TrimStart();
+            if (trimmed.StartsWith("// [START"))
+            {
+                var match = Regex.Match(trimmed, @"^//\s*\[START\s+(.+?)\]");
+                if (match.Success)
+                    stack.Push((match.Groups[1].Value, i + 1));
+            }
+            else if (trimmed.StartsWith("// [END") && stack.Count > 0)
+            {
+                var match = Regex.Match(trimmed, @"^//\s*\[END\s+(.+?)\]");
+                if (match.Success)
+                {
+                    var endName = match.Groups[1].Value;
+                    var items = new List<(string Name, int Line)>();
+                    while (stack.Count > 0)
+                    {
+                        var top = stack.Pop();
+                        if (top.Name == endName)
+                        {
+                            int startLine = top.Line;
+                            int endLine = i + 1;
+                            var contentLines = new List<string>();
+                            for (int j = startLine; j < endLine - 1 && j < lines.Length; j++)
+                                contentLines.Add(lines[j].TrimEnd('\r'));
+                            var content = string.Join('\n', contentLines);
+                            regions.Add(new RegionInfo(endName, startLine, endLine, content));
+                            for (int k = items.Count - 1; k >= 0; k--)
+                                stack.Push(items[k]);
+                            break;
+                        }
+                        items.Add(top);
+                    }
+                }
+            }
+        }
+
+        return regions;
     }
 }

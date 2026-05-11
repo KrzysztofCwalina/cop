@@ -397,6 +397,15 @@ public class PredicateEvaluator
         if (_registry.IsProviderFunctionNamespace(name))
             return new ProviderNamespaceRef(name);
 
+        // Global collection fallback: if the identifier is a registered global collection,
+        // return its items. This enables predicate bodies to reference collections
+        // (e.g., snippetFences:any(pred)) even when _resolvedCollections is not populated.
+        if (_registry.IsGlobalCollection(name))
+        {
+            var globalItems = _registry.GetGlobalCollectionItems(name);
+            if (globalItems is not null) return globalItems;
+        }
+
         // Language filter fallback: if the item has a File.Language property,
         // check if the identifier matches the language. This enables filter chains
         // like Types:csharp:client where "csharp" matches File.Language == "csharp".
