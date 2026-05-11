@@ -29,6 +29,14 @@ This publishes self-contained single-file EXEs into `install/<rid>/` subfolders.
 install/publish.ps1 -Runtimes win-x64
 ```
 
+**After modifying `install/publish.ps1`**, always verify Unix archives are correct:
+
+```bash
+install/verify-archives.ps1
+```
+
+This validates that Linux/macOS zip archives have the correct ZIP "version made by" host OS (Unix) and executable permission bits. Without these, `unzip`/`mise` extract the `cop` binary as non-executable (0644) and users get "Permission denied".
+
 ## Regenerating Docs
 
 After any change to packages (new/renamed packages, updated doc comments, added/removed samples), regenerate the reference app:
