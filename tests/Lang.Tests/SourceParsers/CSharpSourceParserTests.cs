@@ -234,4 +234,61 @@ public class CSharpSourceParserTests
 
     private static string SamplePath(string fileName) =>
         Path.Combine(AppContext.BaseDirectory, "Samples", fileName);
+
+    // ── Comment line detection ──
+
+    [Test]
+    public void Parse_CommentLines_SingleLine()
+    {
+        var source = """
+            using System;
+            // This is a comment
+            public class Foo { }
+            """;
+        var result = _parser.Parse("test.cs", source)!;
+        Assert.That(result.CommentLines, Does.Contain(2));
+        Assert.That(result.CommentLines, Does.Not.Contain(1));
+        Assert.That(result.CommentLines, Does.Not.Contain(3));
+    }
+
+    [Test]
+    public void Parse_CommentLines_MultiLine()
+    {
+        var source = """
+            /* multi
+               line
+               comment */
+            public class Foo { }
+            """;
+        var result = _parser.Parse("test.cs", source)!;
+        Assert.That(result.CommentLines, Does.Contain(1));
+        Assert.That(result.CommentLines, Does.Contain(2));
+        Assert.That(result.CommentLines, Does.Contain(3));
+        Assert.That(result.CommentLines, Does.Not.Contain(4));
+    }
+
+    [Test]
+    public void Parse_CommentLines_DocComment()
+    {
+        var source = """
+            /// <summary>Doc comment</summary>
+            public class Foo { }
+            """;
+        var result = _parser.Parse("test.cs", source)!;
+        Assert.That(result.CommentLines, Does.Contain(1));
+        Assert.That(result.CommentLines, Does.Not.Contain(2));
+    }
+
+    [Test]
+    public void Parse_CommentLines_InlineComment()
+    {
+        var source = """
+            public class Foo { } // trailing comment
+            public class Bar { }
+            """;
+        var result = _parser.Parse("test.cs", source)!;
+        // Line 1 has a trailing comment — should be detected
+        Assert.That(result.CommentLines, Does.Contain(1));
+        Assert.That(result.CommentLines, Does.Not.Contain(2));
+    }
 }

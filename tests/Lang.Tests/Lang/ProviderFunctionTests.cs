@@ -48,8 +48,8 @@ public class ProviderFunctionTests
         var predicates = new Dictionary<string, List<PredicateDefinition>>();
         var evaluator = new PredicateEvaluator(predicates, "test.cop", registry);
 
-        // http.Get('https://example.com') → PredicateCallExpr(IdentifierExpr("http"), "Get", [url])
-        var expr = new PredicateCallExpr(
+        // http.Get('https://example.com') → CallExpr(IdentifierExpr("http"), "Get", [url])
+        var expr = new CallExpr(
             new IdentifierExpr("http"),
             "Get",
             [new LiteralExpr("https://example.com")]);
@@ -80,7 +80,7 @@ public class ProviderFunctionTests
         var evaluator = new PredicateEvaluator(predicates, "test.cop", registry);
 
         // http.Post('url', 'body').StatusCode
-        var callExpr = new PredicateCallExpr(
+        var callExpr = new CallExpr(
             new IdentifierExpr("http"),
             "Post",
             [new LiteralExpr("https://api.example.com"), new LiteralExpr("payload")]);
@@ -101,7 +101,7 @@ public class ProviderFunctionTests
         var evaluator = new PredicateEvaluator(predicates, "test.cop", registry);
 
         // http.Delete(...) should throw since Delete is not registered
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new IdentifierExpr("http"),
             "Delete",
             [new LiteralExpr("https://example.com")]);
@@ -136,7 +136,7 @@ public class ProviderFunctionTests
         var evaluator = new PredicateEvaluator(predicates, "test.cop", registry, functions: functions);
 
         // http.Get('url') should call the provider, not the user function
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new IdentifierExpr("http"),
             "Get",
             [new LiteralExpr("https://example.com")]);
@@ -157,7 +157,7 @@ public class ProviderFunctionTests
         var predicates = new Dictionary<string, List<PredicateDefinition>>();
         var evaluator = new PredicateEvaluator(predicates, "test.cop", registry);
 
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new IdentifierExpr("http"),
             "Get",
             [new LiteralExpr("https://bad-url.invalid")]);
@@ -188,7 +188,7 @@ public class ProviderFunctionTests
             ["Content-Type"] = new LiteralExpr("application/json")
         });
 
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new IdentifierExpr("http"),
             "Post",
             [new LiteralExpr("https://api.example.com"), new LiteralExpr("{}"), headersExpr]);

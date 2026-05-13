@@ -164,21 +164,21 @@ import code
 import csharp-library
 ```
 
-2. Restore packages locally (downloads them into your project's `packages/` directory):
+2. Restore packages locally (downloads them into your project's `.cop/` directory):
 
 ```bash
 cop package restore my-checks.cop
 ```
 
-3. Run your program (imports resolve from the local `packages/` directory):
+3. Run your program (imports resolve from the local `.cop/packages/` directory):
 
 ```bash
 cop run my-checks.cop
 ```
 
-The `cop restore` command reads `feed` and `import` declarations, downloads the referenced packages from GitHub, resolves transitive dependencies, and places all files under `packages/` in your project root. After restore, `cop run` resolves imports entirely from local directories — no network access is required at runtime.
+The `cop package restore` command reads `feed` and `import` declarations, downloads the referenced packages from GitHub, resolves transitive dependencies, and places files under `.cop/` in your project root (e.g., `.cop/packages/`, `.cop/checks/`). After restore, `cop run` resolves imports entirely from local directories — no network access is required at runtime.
 
-> **Tip:** Commit the restored `packages/` directory to version control so CI/CD pipelines and teammates don't need to run `cop restore` separately.
+> **Tip:** Commit the restored `.cop/` directory to version control so CI/CD pipelines and teammates don't need to run `cop package restore` separately.
 
 ### Export
 
@@ -234,6 +234,8 @@ predicate notAbstract(Type) => Type.Modifiers:isClear(Abstract)
 |-----------|---------|
 | `isSet(flag)` | True if the flag bit is set — `(value & flag) != 0` |
 | `isClear(flag)` | True if the flag bit is clear — `(value & flag) == 0` |
+
+Flag members can be referenced bare (`Public`) when unambiguous, or qualified with the type name (`Modifier.Public`) to disambiguate when multiple flags types define the same member.
 
 The `code` package defines a `Modifier` flags enum and provides `isX` predicates for all common modifiers (see [Code Package Reference](packages/code.md)).
 
@@ -479,8 +481,20 @@ Provider identifiers must be imported packages. The proxy exposes the same colle
 
 Agent Cop uses two operators for accessing members:
 
-- **`:` (colon)** — applies a **predicate** or **function** to a value. On collections it filters; on single values it pipes through a function. Names use `camelCase`: `:equals()`, `:startsWith()`, `:ok`, `:Text`.
-- **`.` (dot)** — accesses a **property** or **transform** (returns a value). Properties and transforms use `PascalCase` names: `.Name`, `.Count`, `.Where()`, `.Select()`.
+- **`:` (colon)** — applies a predicate or function **to each item**. On collections it filters (`:isPublic`) or quantifies (`:any(pred)`, `:all(pred)`, `:none(pred)`, `:count(pred)`). On single values it pipes through a function (`:Text`, `:ok`).
+- **`.` (dot)** — operates **on the object or collection itself**. Accesses properties (`.Name`, `.Count`), transforms collections (`.Where()`, `.Select()`, `.OrderBy()`), and projects values.
+
+### Naming Convention
+
+Built-in names follow a consistent casing convention based on their role:
+
+| Convention | Role | Operator | Examples |
+|-----------|------|----------|---------|
+| `camelCase` | Predicates (return bool, applied per-item) | `:` | `startsWith`, `endsWith`, `any`, `none`, `isSet` |
+| `PascalCase` | Transforms & properties (return values) | `.` | `Where`, `Select`, `Count`, `Text`, `Trim` |
+| `UPPERCASE` | Commands (produce output/side effects) | — | `FAIL`, `PRINT`, `SAVE`, `ASSERT`, `DEBUG` |
+
+User-defined predicates and functions should follow the same convention: `camelCase` for predicates, `PascalCase` for transforms and record-body functions.
 
 ### Subset (`:`)
 
@@ -679,9 +693,9 @@ Items.Last                   # last item (nic if empty)
 Items.Single                 # single item (nic if 0 or 2+)
 ```
 
-### List Predicates
+### List Predicates (`:`)
 
-Predicate applications test a list and return a boolean:
+Predicate applications test a list per-item and return a boolean. These use `:` because the predicate is applied **to each item**:
 
 ```ruby
 Items:any(predicate)         # true if any item matches
@@ -691,9 +705,9 @@ Items:contains('value')      # true if list contains value
 Items:empty                  # true if list has no items
 ```
 
-### List Transforms
+### List Transforms (`.`)
 
-Transforms return a new list or value from an existing list:
+Transforms operate on the collection as a whole and return a new list or value. These use `.` because they are **collection-level operations**:
 
 ```ruby
 Items.Where(predicate)       # subset of matching items
@@ -866,6 +880,33 @@ Commands are **named** using `command`, which makes them invocable by name with 
 command list-types = foreach Types => '{item.Name}'
 command export-names = foreach Types:csharp:client => SAVE('names.txt', '{item.Name}')
 command test-has-types = ASSERT(csharp.Types)
+```
+
+#### Command Composition
+
+Chain multiple commands with `&` to compose a single named command:
+
+```ruby
+command TYPE-COUNT = PRINT('{Code.Types.Count} types')
+command FILE-COUNT = PRINT('{Code.Files.Count} files')
+command STATISTICS = TYPE-COUNT & FILE-COUNT
+```
+
+Running `cop run STATISTICS` executes both commands in order.
+
+#### Conditional Commands
+
+Use `predicate? command` to conditionally execute a command — a degenerate ternary where the command is skipped when the condition is false:
+
+```ruby
+predicate showStats(Program) => Program.Args:contains('/s')
+command LIST-TYPES = foreach Types => '{item.Name}' & showStats? TYPE-COUNT
+```
+
+The `?` operator reads as: "if showStats is true, run TYPE-COUNT." For complex conditions, use parentheses:
+
+```ruby
+command LIST-TYPES = foreach Types => '{item.Name}' & (hasCode && showStats)? TYPE-COUNT
 ```
 
 ### Implicit Output

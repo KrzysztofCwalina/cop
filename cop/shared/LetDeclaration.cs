@@ -16,7 +16,8 @@ public record LetDeclaration(
     Expression? Exclusions = null,
     Expression? SourceExpression = null,
     string? PathOverride = null,
-    string? DocComment = null)
+    string? DocComment = null,
+    string? PackageName = null)
 {
     public bool IsValueBinding => ValueExpression is not null;
 
@@ -24,13 +25,13 @@ public record LetDeclaration(
     /// True when this let is a Load('path') external document load.
     /// Treated as a collection (not a value binding) at runtime.
     /// </summary>
-    public bool IsExternalLoad => ValueExpression is FunctionCallExpr fc && fc.Name == "Load";
+    public bool IsExternalLoad => ValueExpression is CallExpr { Target: null, Name: "Load" };
 
     /// <summary>
     /// True when this let is a Parse('file.json', [Type]) JSON/CSV file parse.
     /// Returns a flat typed collection at runtime (unlike Load which returns Documents).
     /// </summary>
-    public bool IsFileParse => ValueExpression is FunctionCallExpr fc && fc.Name == "Parse";
+    public bool IsFileParse => ValueExpression is CallExpr { Target: null, Name: "Parse" };
 
     /// <summary>
     /// True when this let is a union of other collections: let Name = a + b + c

@@ -71,7 +71,7 @@ public static class FilterHintExtractor
 
             // Predicate call — Name:sw('Client'), Size:gt(100), Extension:eq('.cs')
             // or collection predicate — Keywords:contains('var')
-            case PredicateCallExpr pc when pc.Target is IdentifierExpr prop:
+            case CallExpr pc when pc.Target is IdentifierExpr prop:
                 return TryExtractPredicateCall(prop.Name, pc.Name, pc.Args, itemType);
 
             // Binary expression — Depth < 3, Size > 1000, Extension == '.cs'
@@ -144,13 +144,13 @@ public static class FilterHintExtractor
                 return TryExtractBoolProperty(ma.Member, negated: true, itemType);
 
             // Param.Prop:predicate('value') — string/numeric or collection operation
-            case PredicateCallExpr pc
+            case CallExpr pc
                 when pc.Target is MemberAccessExpr ma
                 && IsParamAccess(ma.Target, paramName):
                 return TryExtractPredicateCall(ma.Member, pc.Name, pc.Args, itemType);
 
             // !Param.Prop:predicate('value') — negated string/numeric operation
-            case UnaryExpr { Operator: "!" or "not", Operand: PredicateCallExpr pc }
+            case UnaryExpr { Operator: "!" or "not", Operand: CallExpr pc }
                 when pc.Target is MemberAccessExpr ma
                 && IsParamAccess(ma.Target, paramName):
                 var inner = TryExtractPredicateCall(ma.Member, pc.Name, pc.Args, itemType);

@@ -56,15 +56,32 @@ public class EnumTests
     }
 
     [Test]
-    public void TypeRegistry_EnumMemberCollision_ReportsError()
+    public void TypeRegistry_EnumMemberCollision_AllowsQualifiedAccess()
     {
         var registry = new TypeRegistry();
         var kind1 = new EnumDefinition("TypeKind", ["Class", "Interface"], 1);
         var kind2 = new EnumDefinition("ApiKind", ["Class", "Method"], 2);
         registry.LoadEnumDefinitions([kind1]);
         var errors = registry.LoadEnumDefinitions([kind2]);
-        Assert.That(errors, Has.Count.EqualTo(1));
-        Assert.That(errors[0], Does.Contain("Class"));
+        Assert.That(errors, Has.Count.EqualTo(0), "Overlapping members should not produce load errors");
+
+        // Bare lookup should return null (ambiguous)
+        Assert.That(registry.TryResolveEnumConstant("Class"), Is.Null);
+
+        // Qualified lookup should work for both types
+        Assert.That(registry.TryResolveQualifiedEnumConstant("TypeKind", "Class"), Is.EqualTo("Class"));
+        Assert.That(registry.TryResolveQualifiedEnumConstant("ApiKind", "Class"), Is.EqualTo("Class"));
+
+        // Non-ambiguous members still resolve bare
+        Assert.That(registry.TryResolveEnumConstant("Interface"), Is.EqualTo("Interface"));
+        Assert.That(registry.TryResolveEnumConstant("Method"), Is.EqualTo("Method"));
+
+        // Ambiguity info available for error messages
+        var owners = registry.GetEnumMemberOwners("Class");
+        Assert.That(owners, Is.Not.Null);
+        Assert.That(owners, Has.Count.EqualTo(2));
+        Assert.That(owners, Does.Contain("TypeKind"));
+        Assert.That(owners, Does.Contain("ApiKind"));
     }
 
     [Test]

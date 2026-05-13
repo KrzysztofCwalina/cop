@@ -101,15 +101,32 @@ public class FlagsTests
     }
 
     [Test]
-    public void TypeRegistry_FlagsMemberCollision_ReportsError()
+    public void TypeRegistry_FlagsMemberCollision_AllowsQualifiedAccess()
     {
         var registry = new TypeRegistry();
         var vis = new FlagsDefinition("Visibility", ["Public", "Private"], 1);
         var acc = new FlagsDefinition("Access", ["Public", "Restricted"], 2);
         registry.LoadFlagsDefinitions([vis]);
         var errors = registry.LoadFlagsDefinitions([acc]);
-        Assert.That(errors, Has.Count.EqualTo(1));
-        Assert.That(errors[0], Does.Contain("Public"));
+        Assert.That(errors, Has.Count.EqualTo(0), "Overlapping members should not produce load errors");
+
+        // Bare lookup should return null (ambiguous)
+        Assert.That(registry.TryResolveFlagsConstant("Public"), Is.Null);
+
+        // Qualified lookup should work for both types
+        Assert.That(registry.TryResolveQualifiedFlagsConstant("Visibility", "Public"), Is.EqualTo(1));
+        Assert.That(registry.TryResolveQualifiedFlagsConstant("Access", "Public"), Is.EqualTo(1));
+
+        // Non-ambiguous members still resolve bare
+        Assert.That(registry.TryResolveFlagsConstant("Private"), Is.EqualTo(2));
+        Assert.That(registry.TryResolveFlagsConstant("Restricted"), Is.EqualTo(2));
+
+        // Ambiguity info available for error messages
+        var owners = registry.GetFlagsMemberOwners("Public");
+        Assert.That(owners, Is.Not.Null);
+        Assert.That(owners, Has.Count.EqualTo(2));
+        Assert.That(owners, Does.Contain("Visibility"));
+        Assert.That(owners, Does.Contain("Access"));
     }
 
     [Test]
@@ -309,8 +326,8 @@ public class FlagsTests
         var (bodyResult, _) = evaluator.EvaluateAsBool(isSealedPred.Body, sealedType, "Type");
         Assert.That(bodyResult, Is.True, "isSealed body should be true for sealed type with File");
 
-        // Type:isSealed via PredicateCallExpr
-        var callExpr = new PredicateCallExpr(new IdentifierExpr("Type"), "isSealed", []);
+        // Type:isSealed via CallExpr
+        var callExpr = new CallExpr(new IdentifierExpr("Type"), "isSealed", []);
         var (callResult, _) = evaluator.EvaluateAsBool(callExpr, sealedType, "Type");
         Assert.That(callResult, Is.True, "Type:isSealed should be true for sealed type with File");
     }

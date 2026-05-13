@@ -105,8 +105,9 @@ public class TypeBinder
                 ValidateMemberAccess(ma, contextType, filePath, line);
                 break;
 
-            case PredicateCallExpr mc:
-                ValidateExpression(mc.Target, contextType, filePath, line);
+            case CallExpr mc:
+                if (mc.Target is not null)
+                    ValidateExpression(mc.Target, contextType, filePath, line);
                 foreach (var arg in mc.Args)
                     ValidateExpression(arg, contextType, filePath, line);
                 break;
@@ -118,11 +119,6 @@ public class TypeBinder
 
             case UnaryExpr un:
                 ValidateExpression(un.Operand, contextType, filePath, line);
-                break;
-
-            case FunctionCallExpr fc:
-                foreach (var arg in fc.Args)
-                    ValidateExpression(arg, contextType, filePath, line);
                 break;
 
             case ListLiteralExpr list:
@@ -177,6 +173,14 @@ public class TypeBinder
 
     private void ValidateMemberAccess(MemberAccessExpr ma, string contextType, string filePath, int line)
     {
+        // Qualified flags/enum constant: Modifier.Public, TypeKind.Class
+        if (ma.Target is IdentifierExpr id)
+        {
+            if (_registry.TryResolveQualifiedFlagsConstant(id.Name, ma.Member) is not null
+                || _registry.TryResolveQualifiedEnumConstant(id.Name, ma.Member) is not null)
+                return; // Valid qualified constant — skip property validation
+        }
+
         // Resolve the target to a type name
         var targetType = InferExpressionType(ma.Target, contextType);
         if (targetType is null)
@@ -318,8 +322,7 @@ public class TypeBinder
         {
             var funcName = filter switch
             {
-                PredicateCallExpr pc => pc.Name,
-                FunctionCallExpr fc => fc.Name,
+                CallExpr c => c.Name,
                 _ => null
             };
 

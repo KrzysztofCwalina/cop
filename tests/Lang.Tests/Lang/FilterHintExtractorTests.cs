@@ -53,7 +53,7 @@ public class FilterHintExtractorTests
     {
         var filters = new List<Expression>
         {
-            new PredicateCallExpr(new IdentifierExpr("Name"), "startsWith", [new LiteralExpr("Client")])
+            new CallExpr(new IdentifierExpr("Name"), "startsWith", [new LiteralExpr("Client")])
         };
         var (hints, idx) = FilterHintExtractor.Extract(filters, FileType);
         Assert.That(hints, Is.InstanceOf<StringOpFilter>());
@@ -69,7 +69,7 @@ public class FilterHintExtractorTests
     {
         var filters = new List<Expression>
         {
-            new PredicateCallExpr(new IdentifierExpr("Extension"), "equals", [new LiteralExpr(".cs")])
+            new CallExpr(new IdentifierExpr("Extension"), "equals", [new LiteralExpr(".cs")])
         };
         var (hints, idx) = FilterHintExtractor.Extract(filters, FileType);
         Assert.That(hints, Is.InstanceOf<StringOpFilter>());
@@ -86,7 +86,7 @@ public class FilterHintExtractorTests
     {
         var filters = new List<Expression>
         {
-            new PredicateCallExpr(new IdentifierExpr("Path"), opName, [new LiteralExpr("test")])
+            new CallExpr(new IdentifierExpr("Path"), opName, [new LiteralExpr("test")])
         };
         var (hints, _) = FilterHintExtractor.Extract(filters, FileType);
         Assert.That(hints, Is.InstanceOf<StringOpFilter>());
@@ -247,7 +247,7 @@ public class FilterHintExtractorTests
         {
             new IdentifierExpr("Public"),
             new BinaryExpr(new IdentifierExpr("Size"), ">", new LiteralExpr(100)),
-            new PredicateCallExpr(new IdentifierExpr("Extension"), "endsWith", [new LiteralExpr(".cs")])
+            new CallExpr(new IdentifierExpr("Extension"), "endsWith", [new LiteralExpr(".cs")])
         };
         var (hints, idx) = FilterHintExtractor.Extract(filters, FileType);
         Assert.That(hints, Is.InstanceOf<AndFilter>());
@@ -323,7 +323,7 @@ public class FilterHintExtractorTests
         var preds = new Dictionary<string, List<PredicateDefinition>>
         {
             ["csharp"] = [new PredicateDefinition("csharp", "TestItem", null,
-                new PredicateCallExpr(
+                new CallExpr(
                     new MemberAccessExpr(new IdentifierExpr("TestItem"), "Extension"),
                     "equals", [new LiteralExpr(".cs")]), 1)]
         };
@@ -445,7 +445,7 @@ public class FilterHintExtractorTests
     {
         var filters = new List<Expression>
         {
-            new PredicateCallExpr(new IdentifierExpr("Size"), predName, [new LiteralExpr(100)])
+            new CallExpr(new IdentifierExpr("Size"), predName, [new LiteralExpr(100)])
         };
         var (hints, _) = FilterHintExtractor.Extract(filters, FileType);
         Assert.That(hints, Is.InstanceOf<ComparisonFilter>());
@@ -462,7 +462,7 @@ public class FilterHintExtractorTests
     {
         var filters = new List<Expression>
         {
-            new PredicateCallExpr(new IdentifierExpr("Depth"), "equals", [new LiteralExpr(0)])
+            new CallExpr(new IdentifierExpr("Depth"), "equals", [new LiteralExpr(0)])
         };
         var (hints, _) = FilterHintExtractor.Extract(filters, FileType);
         Assert.That(hints, Is.InstanceOf<ComparisonFilter>());
@@ -476,7 +476,7 @@ public class FilterHintExtractorTests
     {
         var filters = new List<Expression>
         {
-            new PredicateCallExpr(new IdentifierExpr("Size"), "notEquals", [new LiteralExpr(0)])
+            new CallExpr(new IdentifierExpr("Size"), "notEquals", [new LiteralExpr(0)])
         };
         var (hints, _) = FilterHintExtractor.Extract(filters, FileType);
         Assert.That(hints, Is.InstanceOf<NotFilter>());
@@ -490,7 +490,7 @@ public class FilterHintExtractorTests
     {
         var filters = new List<Expression>
         {
-            new PredicateCallExpr(new IdentifierExpr("Extension"), "equals", [new LiteralExpr(".cs")])
+            new CallExpr(new IdentifierExpr("Extension"), "equals", [new LiteralExpr(".cs")])
         };
         var (hints, _) = FilterHintExtractor.Extract(filters, FileType);
         Assert.That(hints, Is.InstanceOf<StringOpFilter>());
@@ -504,7 +504,7 @@ public class FilterHintExtractorTests
     {
         var filters = new List<Expression>
         {
-            new PredicateCallExpr(new IdentifierExpr("Extension"), "notEquals", [new LiteralExpr(".cs")])
+            new CallExpr(new IdentifierExpr("Extension"), "notEquals", [new LiteralExpr(".cs")])
         };
         var (hints, _) = FilterHintExtractor.Extract(filters, FileType);
         Assert.That(hints, Is.InstanceOf<NotFilter>());
@@ -516,7 +516,7 @@ public class FilterHintExtractorTests
     {
         var filters = new List<Expression>
         {
-            new PredicateCallExpr(new IdentifierExpr("Name"), "startsWith", [new LiteralExpr("Client")])
+            new CallExpr(new IdentifierExpr("Name"), "startsWith", [new LiteralExpr("Client")])
         };
         var (hints, _) = FilterHintExtractor.Extract(filters, FileType);
         Assert.That(hints, Is.InstanceOf<StringOpFilter>());
@@ -528,7 +528,7 @@ public class FilterHintExtractorTests
     {
         var filters = new List<Expression>
         {
-            new PredicateCallExpr(new IdentifierExpr("Name"), "endsWith", [new LiteralExpr("Async")])
+            new CallExpr(new IdentifierExpr("Name"), "endsWith", [new LiteralExpr("Async")])
         };
         var (hints, _) = FilterHintExtractor.Extract(filters, FileType);
         Assert.That(hints, Is.InstanceOf<StringOpFilter>());
@@ -542,7 +542,7 @@ public class FilterHintExtractorTests
     {
         var filters = new List<Expression>
         {
-            new PredicateCallExpr(new IdentifierExpr("Extension"), "greaterThan", [new LiteralExpr(100)])
+            new CallExpr(new IdentifierExpr("Extension"), "greaterThan", [new LiteralExpr(100)])
         };
         var (hints, _) = FilterHintExtractor.Extract(filters, FileType);
         Assert.That(hints, Is.Null);
@@ -555,7 +555,7 @@ public class FilterHintExtractorTests
     {
         var filters = new List<Expression>
         {
-            new PredicateCallExpr(new IdentifierExpr("Size"), "startsWith", [new LiteralExpr("abc")])
+            new CallExpr(new IdentifierExpr("Size"), "startsWith", [new LiteralExpr("abc")])
         };
         var (hints, _) = FilterHintExtractor.Extract(filters, FileType);
         Assert.That(hints, Is.Null);
@@ -568,9 +568,9 @@ public class FilterHintExtractorTests
     {
         var filters = new List<Expression>
         {
-            new PredicateCallExpr(new IdentifierExpr("Depth"), "lessThan", [new LiteralExpr(3)]),
-            new PredicateCallExpr(new IdentifierExpr("Size"), "greaterThan", [new LiteralExpr(100)]),
-            new PredicateCallExpr(new IdentifierExpr("Extension"), "equals", [new LiteralExpr(".cs")])
+            new CallExpr(new IdentifierExpr("Depth"), "lessThan", [new LiteralExpr(3)]),
+            new CallExpr(new IdentifierExpr("Size"), "greaterThan", [new LiteralExpr(100)]),
+            new CallExpr(new IdentifierExpr("Extension"), "equals", [new LiteralExpr(".cs")])
         };
         var (hints, idx) = FilterHintExtractor.Extract(filters, FileType);
         Assert.That(hints, Is.InstanceOf<AndFilter>());

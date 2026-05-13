@@ -26,6 +26,11 @@ public class PredicateEvaluator
     private readonly IProviderQueryService? _providerQueryService;
     private readonly HashSet<string> _evaluatingLetValues = [];
 
+    // Package-qualified stores for disambiguation (packageName → symbolName → definitions)
+    private readonly Dictionary<string, Dictionary<string, List<PredicateDefinition>>>? _packagePredicates;
+    private readonly Dictionary<string, Dictionary<string, List<FunctionDefinition>>>? _packageFunctions;
+    private readonly Dictionary<string, Dictionary<string, LetDeclaration>>? _packageLets;
+
     public PredicateEvaluator(
         Dictionary<string, List<PredicateDefinition>> predicates,
         string filePath,
@@ -33,7 +38,10 @@ public class PredicateEvaluator
         Dictionary<string, LetDeclaration>? letDeclarations = null,
         Dictionary<string, List<FunctionDefinition>>? functions = null,
         Dictionary<string, IList>? resolvedCollections = null,
-        IProviderQueryService? providerQueryService = null)
+        IProviderQueryService? providerQueryService = null,
+        Dictionary<string, Dictionary<string, List<PredicateDefinition>>>? packagePredicates = null,
+        Dictionary<string, Dictionary<string, List<FunctionDefinition>>>? packageFunctions = null,
+        Dictionary<string, Dictionary<string, LetDeclaration>>? packageLets = null)
     {
         _predicates = predicates;
         _filePath = filePath;
@@ -42,6 +50,9 @@ public class PredicateEvaluator
         _functions = functions ?? [];
         _resolvedCollections = resolvedCollections;
         _providerQueryService = providerQueryService;
+        _packagePredicates = packagePredicates;
+        _packageFunctions = packageFunctions;
+        _packageLets = packageLets;
     }
 
     public (bool result, EvaluationContext context) EvaluateAsBool(
@@ -72,9 +83,9 @@ public class PredicateEvaluator
             CollectionUnionExpr union => EvalCollectionUnion(union, item, paramType, ctx),
             ObjectLiteralExpr obj => EvalObjectLiteral(obj, item, paramType, ctx),
             IdentifierExpr id => EvalIdentifier(id.Name, item, paramType, ctx),
-            MemberAccessExpr ma => GetMember(Eval(ma.Target, item, paramType, ctx), ma.Member),
-            PredicateCallExpr mc => EvalPredicateCall(mc, item, paramType, ctx),
-            FunctionCallExpr fc => EvalFunctionCall(fc, item, paramType, ctx),
+            MemberAccessExpr ma => EvalMemberAccess(ma, item, paramType, ctx),
+            CallExpr { Target: not null } mc => EvalTargetedCall(mc, item, paramType, ctx),
+            CallExpr fc => EvalStandaloneCall(fc, item, paramType, ctx),
             BinaryExpr bin => EvalBinary(bin, item, paramType, ctx),
             UnaryExpr { Operator: "!" } un => !ToBool(Eval(un.Operand, item, paramType, ctx)),
             ConditionalExpr cond => ToBool(Eval(cond.Condition, item, paramType, ctx))
@@ -108,7 +119,7 @@ public class PredicateEvaluator
         return result;
     }
 
-    private object? EvalFunctionCall(FunctionCallExpr fc, object item, string paramType, EvaluationContext ctx)
+    private object? EvalStandaloneCall(CallExpr fc, object item, string paramType, EvaluationContext ctx)
     {
         // Built-in error('message') constructor
         if (fc.Name == "error")
@@ -209,7 +220,7 @@ public class PredicateEvaluator
         return CreateCodeObject(providers, path);
     }
 
-    private object? EvalPredicateCall(PredicateCallExpr mc, object item, string paramType, EvaluationContext ctx)
+    private object? EvalTargetedCall(CallExpr mc, object item, string paramType, EvaluationContext ctx)
     {
         // Provider namespace function call (e.g., http.Post(...)) — check before user functions
         // to prevent shadowing by user-defined functions named "Post", "Get", etc.
@@ -224,12 +235,45 @@ public class PredicateEvaluator
             }
         }
 
+        // Package-qualified predicate/function call: packageName.symbol(args)
+        if (mc.Target is IdentifierExpr pkgId)
+        {
+            // Package-qualified predicate
+            if (_packagePredicates is not null
+                && _packagePredicates.TryGetValue(pkgId.Name, out var pkgPredMap)
+                && pkgPredMap.TryGetValue(mc.Name, out var pkgPredGroup))
+            {
+                var target = Eval(mc.Target!, item, paramType, ctx);
+                // If target resolved to something other than a provider namespace, use it as the call target
+                // Otherwise this is a qualified predicate call, so use item as the subject
+                var subject = target is ProviderNamespaceRef ? item : target ?? item;
+                var pred = ResolvePredicate(pkgPredGroup, subject, paramType, ctx);
+                if (pred is not null)
+                {
+                    var result2 = ToBool(Eval(pred.Body, subject, pred.ParameterType, ctx));
+                    return mc.Negated ? !result2 : (object)result2;
+                }
+            }
+
+            // Package-qualified function
+            if (_packageFunctions is not null
+                && _packageFunctions.TryGetValue(pkgId.Name, out var pkgFuncMap)
+                && pkgFuncMap.TryGetValue(mc.Name, out var pkgFuncGroup))
+            {
+                if (mc.Negated)
+                    throw new InvalidOperationException($"Cannot negate function call '{mc.Name}' — functions produce values, not booleans");
+                // For qualified functions, there is no "target" to pipe through — apply directly to item
+                var func = ResolveFunction(pkgFuncGroup, paramType, item, ctx, callArgCount: mc.Args.Count);
+                return ApplyFunction(func, item, mc.Args, item, paramType, ctx);
+            }
+        }
+
         // Check if this is a function call (transforms type, not a boolean filter)
         if (_functions.TryGetValue(mc.Name, out var funcGroup))
         {
             if (mc.Negated)
                 throw new InvalidOperationException($"Cannot negate function call '{mc.Name}' — functions produce values, not booleans");
-            var target = Eval(mc.Target, item, paramType, ctx);
+            var target = Eval(mc.Target!, item, paramType, ctx);
             if (target is null) return null;
             // Resolve overload using the target's actual type (pipe semantics)
             var targetType = InferValueType(target);
@@ -277,7 +321,7 @@ public class PredicateEvaluator
         {
             if (mc.Negated)
                 throw new InvalidOperationException($"Cannot negate function call '{mc.Name}' — functions produce values, not booleans");
-            var target = Eval(mc.Target, item, paramType, ctx);
+            var target = Eval(mc.Target!, item, paramType, ctx);
             if (target is null) return null;
             return mc.Name switch
             {
@@ -287,8 +331,49 @@ public class PredicateEvaluator
             };
         }
 
-        var result = CallPredicate(Eval(mc.Target, item, paramType, ctx), mc.Name, mc.Args, item, paramType, ctx);
+        var result = CallPredicate(Eval(mc.Target!, item, paramType, ctx), mc.Name, mc.Args, item, paramType, ctx);
         return mc.Negated ? !ToBool(result) : result;
+    }
+
+    /// <summary>Evaluate a let-bound value with cycle detection.</summary>
+    private object? EvalLetValue(string name, LetDeclaration decl)
+    {
+        if (!_evaluatingLetValues.Add(name))
+            throw new InvalidOperationException($"Circular let value reference: '{name}'");
+        try
+        {
+            var expr = decl.IsValueBinding ? decl.ValueExpression! : decl.SourceExpression!;
+            // Let value expressions are context-independent (no item/paramType needed)
+            return Eval(expr, new object(), "", new EvaluationContext());
+        }
+        finally
+        {
+            _evaluatingLetValues.Remove(name);
+        }
+    }
+
+    private object? EvalMemberAccess(MemberAccessExpr ma, object item, string paramType, EvaluationContext ctx)
+    {
+        // Qualified flags/enum constant: Modifier.Public, TypeKind.Class
+        if (ma.Target is IdentifierExpr id)
+        {
+            var flagsValue = _registry.TryResolveQualifiedFlagsConstant(id.Name, ma.Member);
+            if (flagsValue is not null) return flagsValue.Value;
+
+            var enumValue = _registry.TryResolveQualifiedEnumConstant(id.Name, ma.Member);
+            if (enumValue is not null) return enumValue;
+
+            // Package-qualified let binding: packageName.letName
+            if (_packageLets is not null
+                && _packageLets.TryGetValue(id.Name, out var pkgLetMap)
+                && pkgLetMap.TryGetValue(ma.Member, out var letDecl)
+                && letDecl.IsValueBinding)
+            {
+                return EvalLetValue(letDecl.Name, letDecl);
+            }
+        }
+
+        return GetMember(Eval(ma.Target, item, paramType, ctx), ma.Member);
     }
 
     private object? EvalIdentifier(string name, object item, string paramType, EvaluationContext ctx)
@@ -389,9 +474,23 @@ public class PredicateEvaluator
         var flagsValue = _registry.TryResolveFlagsConstant(name);
         if (flagsValue is not null) return flagsValue.Value;
 
+        // Check for ambiguous flags constant (defined in multiple flags types)
+        var flagsOwners = _registry.GetFlagsMemberOwners(name);
+        if (flagsOwners is not null && flagsOwners.Count > 1)
+            throw new InvalidOperationException(
+                $"Flags member '{name}' is ambiguous — defined in: {string.Join(", ", flagsOwners)}. " +
+                $"Use qualified syntax: {flagsOwners[0]}.{name}");
+
         // Enum constant resolution (e.g., Class → "Class", Method → "Method")
         var enumValue = _registry.TryResolveEnumConstant(name);
         if (enumValue is not null) return enumValue;
+
+        // Check for ambiguous enum constant (defined in multiple enum types)
+        var enumOwners = _registry.GetEnumMemberOwners(name);
+        if (enumOwners is not null && enumOwners.Count > 1)
+            throw new InvalidOperationException(
+                $"Enum member '{name}' is ambiguous — defined in: {string.Join(", ", enumOwners)}. " +
+                $"Use qualified syntax: {enumOwners[0]}.{name}");
 
         // Provider namespace resolution (e.g., "http" → ProviderNamespaceRef for http.Get/Post/Send)
         if (_registry.IsProviderFunctionNamespace(name))
@@ -406,10 +505,25 @@ public class PredicateEvaluator
             if (globalItems is not null) return globalItems;
         }
 
+        // Bool property resolution: if the identifier matches a bool property on the item,
+        // return its value. This enables filter chains like Lines:isComment where
+        // isComment is a provider-registered boolean property on the Line type.
+        var itemTypeName = _registry.InferTypeName(item);
+        if (itemTypeName is not null)
+        {
+            var typeDesc = _registry.GetType(itemTypeName);
+            var propDesc = typeDesc?.GetProperty(name);
+            if (propDesc?.Accessor is not null)
+            {
+                var val = propDesc.Accessor(item);
+                if (val is bool) return val;
+            }
+        }
+
         // Language filter fallback: if the item has a File.Language property,
         // check if the identifier matches the language. This enables filter chains
         // like Types:csharp:client where "csharp" matches File.Language == "csharp".
-        var itemTypeName = _registry.InferTypeName(item);
+        if (itemTypeName is not null)
         if (itemTypeName is not null)
         {
             var fileDesc = _registry.GetType(itemTypeName)?.GetProperty("File");
@@ -461,6 +575,17 @@ public class PredicateEvaluator
                     var constraintPred = constraintGroup.FirstOrDefault(p => p.Constraint is null);
                     if (constraintPred is not null && ToBool(Eval(constraintPred.Body, item, constraintPred.ParameterType, ctx)))
                         return pred;
+                }
+                else
+                {
+                    // Bool property fallback: a bool property IS a predicate (Type → bool)
+                    var itemType = _registry.InferTypeName(item);
+                    if (itemType is not null)
+                    {
+                        var propDesc = _registry.GetType(itemType)?.GetProperty(pred.Constraint);
+                        if (propDesc?.Accessor is not null && propDesc.Accessor(item) is bool boolVal && boolVal)
+                            return pred;
+                    }
                 }
             }
             else if (pred.ParameterType == matchType)
@@ -1636,7 +1761,7 @@ public class PredicateEvaluator
     {
         if (_letDeclarations is null || !_letDeclarations.TryGetValue(name, out var letDecl))
             return false;
-        if (!letDecl.IsValueBinding || letDecl.ValueExpression is not FunctionCallExpr fc)
+        if (!letDecl.IsValueBinding || letDecl.ValueExpression is not CallExpr fc)
             return false;
         // It's a closure if the function call name maps to a known function
         return _functions.ContainsKey(fc.Name);

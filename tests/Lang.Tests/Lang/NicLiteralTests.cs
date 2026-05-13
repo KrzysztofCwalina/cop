@@ -162,7 +162,7 @@ public class NicLiteralTests
         var file = ScriptParser.Parse(source, "test.cop");
         var body = (ObjectLiteralExpr)file.Predicates[0].Body;
         Assert.That(body.Fields, Has.Count.EqualTo(2));
-        Assert.That(body.Fields["y"], Is.TypeOf<PredicateCallExpr>());
+        Assert.That(body.Fields["y"], Is.TypeOf<CallExpr>());
         Assert.That(body.Fields["x"], Is.TypeOf<LiteralExpr>());
     }
 }

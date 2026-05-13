@@ -16,4 +16,9 @@ public record SourceFile(
     public string? Namespace { get; init; }
 
     public List<RegionInfo> Regions { get; init; } = [];
+
+    /// <summary>
+    /// Line numbers (1-based) that are comment lines, populated by source parsers.
+    /// </summary>
+    public HashSet<int> CommentLines { get; init; } = [];
 }

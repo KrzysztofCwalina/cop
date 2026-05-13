@@ -122,6 +122,24 @@ public class CqlTranspiler
                 outputs.Add(query);
         }
 
+        // Phase 4: Transpile commands that delegate to an action like CHECK(letRef)
+        // Pattern: command CHECK-TODOS = CHECK(todos) where CHECK is an imported command and todos is a local let
+        foreach (var cmd in _mainFile.Commands)
+        {
+            if (!cmd.IsCommand) continue;
+            if (string.IsNullOrEmpty(cmd.ActionName)) continue;
+            if (string.IsNullOrEmpty(cmd.Collection)) continue;
+
+            // See if the collection name references a local let binding
+            var let = _mainFile.LetDeclarations.FirstOrDefault(l =>
+                string.Equals(l.Name, cmd.Collection, StringComparison.OrdinalIgnoreCase));
+            if (let is null || let.IsValueBinding) continue;
+
+            var query = TryTranspileLet(let, overrideName: cmd.Name, overrideDoc: cmd.DocComment ?? let.DocComment);
+            if (query is not null)
+                outputs.Add(query);
+        }
+
         return new CqlTranspileResult(outputs, _errors.ToList());
     }
 
@@ -156,13 +174,14 @@ public class CqlTranspiler
 
     private static string NormalizeCollectionName(string name)
     {
-        // Strip namespace prefix: "Code.Types" → "Types", "code.Types" → "Types"
-        if (name.StartsWith("Code.", StringComparison.OrdinalIgnoreCase))
-            return name[5..];
+        // Strip namespace prefix: "Code.Types" → "Types", "csharp.Types" → "Types"
+        var dot = name.LastIndexOf('.');
+        if (dot >= 0)
+            return name[(dot + 1)..];
         return name;
     }
 
-    private CqlQueryFile? TryTranspileLet(LetDeclaration let)
+    private CqlQueryFile? TryTranspileLet(LetDeclaration let, string? overrideName = null, string? overrideDoc = null)
     {
         var collName = NormalizeCollectionName(let.BaseCollection);
 
@@ -188,7 +207,7 @@ public class CqlTranspiler
             }
 
             // toError/toWarning/toInfo function → extract severity and message
-            if (filter is FunctionCallExpr fc && fc.Name is "toError" or "toWarning" or "toInfo")
+            if (filter is CallExpr { Target: null } fc && fc.Name is "toError" or "toWarning" or "toInfo")
             {
                 severity = fc.Name switch
                 {
@@ -231,8 +250,9 @@ public class CqlTranspiler
 
         // Build the .ql file
         var sb = new StringBuilder();
-        var queryName = SanitizeIdentifier(let.Name);
-        var docComment = let.DocComment ?? let.Name;
+        var effectiveName = overrideName ?? let.Name;
+        var queryName = SanitizeIdentifier(effectiveName);
+        var docComment = overrideDoc ?? let.DocComment ?? effectiveName;
 
         // Metadata
         sb.AppendLine("/**");
@@ -413,7 +433,7 @@ public class CqlTranspiler
             }
 
             // Predicate call: Kind:equals('call')
-            if (f is PredicateCallExpr pc && pc.Name is "equals" or "eq"
+            if (f is CallExpr pc && pc.Name is "equals" or "eq"
                 && pc.Target is IdentifierExpr propId && propId.Name == "Kind"
                 && pc.Args.Count == 1 && pc.Args[0] is LiteralExpr lit && lit.Value is string sv)
             {
@@ -502,16 +522,16 @@ public class CqlTranspiler
             case UnaryExpr { Operator: "!" or "not", Operand: IdentifierExpr id }:
                 return TryTranspileIdentifier(id.Name, negated: true, cqlVar, collName);
 
-            // Predicate call: Name:startsWith('X'), Modifiers:isSet(Public)
-            case PredicateCallExpr pc:
+            // Call expression: Name:startsWith('X'), Modifiers:isSet(Public)
+            case CallExpr pc when pc.Target is not null:
                 return TryTranspilePredicateCall(pc, cqlVar, collName);
 
             // Binary expression: Name == 'Foo', Line > 10, && / ||
             case BinaryExpr bin:
                 return TryTranspileBinary(bin, cqlVar, collName);
 
-            // FunctionCallExpr in filter chain (e.g., toError/toWarning or standalone predicate call)
-            case FunctionCallExpr fc:
+            // Standalone CallExpr in filter chain (e.g., toError/toWarning)
+            case CallExpr fc:
                 // toError/toWarning/toInfo are handled at the let level, skip here
                 if (fc.Name is "toError" or "toWarning" or "toInfo")
                     return null; // already extracted
@@ -548,10 +568,10 @@ public class CqlTranspiler
         return null;
     }
 
-    private string? TryTranspilePredicateCall(PredicateCallExpr pc, string cqlVar, string collName)
+    private string? TryTranspilePredicateCall(CallExpr pc, string cqlVar, string collName)
     {
         // Target.PredicateName(args) — target is property reference
-        var propName = GetTargetPropertyName(pc.Target);
+        var propName = GetTargetPropertyName(pc.Target!);
         if (propName is null) return null;
 
         var prefix = pc.Negated ? "not " : "";
@@ -637,7 +657,7 @@ public class CqlTranspiler
         return null;
     }
 
-    private string? TryTranspileModifierCheck(PredicateCallExpr pc, string cqlVar, string collName)
+    private string? TryTranspileModifierCheck(CallExpr pc, string cqlVar, string collName)
     {
         if (pc.Args.Count != 1) return null;
 

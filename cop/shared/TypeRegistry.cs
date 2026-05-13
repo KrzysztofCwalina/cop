@@ -23,8 +23,10 @@ public class TypeRegistry
     private readonly Dictionary<string, CollectionDeclaration> _collections = new();
     private readonly Dictionary<string, FlagsDefinition> _flagsTypes = new();
     private readonly Dictionary<string, int> _flagsConstants = new();
+    private readonly Dictionary<string, List<string>> _flagsMemberOwners = new();
     private readonly Dictionary<string, EnumDefinition> _enumTypes = new();
     private readonly Dictionary<string, string> _enumConstants = new();
+    private readonly Dictionary<string, List<string>> _enumMemberOwners = new();
     private readonly Dictionary<Type, string> _clrTypeMappings = new();
     private readonly Dictionary<string, Func<Document, List<object>>> _collectionExtractors = new();
     private readonly Dictionary<string, List<object>> _globalCollections = new();
@@ -99,12 +101,22 @@ public class TypeRegistry
             int bit = 1;
             foreach (var member in fd.Members)
             {
-                if (_flagsConstants.TryGetValue(member, out _))
+                if (!_flagsMemberOwners.TryGetValue(member, out var owners))
                 {
-                    errors.Add($"line {fd.Line}: flags member '{member}' already defined in another flags type");
-                    continue;
+                    owners = [];
+                    _flagsMemberOwners[member] = owners;
                 }
-                _flagsConstants[member] = bit;
+                owners.Add(fd.Name);
+
+                if (owners.Count == 1)
+                {
+                    _flagsConstants[member] = bit;
+                }
+                else
+                {
+                    // Ambiguous — remove from bare-name lookup
+                    _flagsConstants.Remove(member);
+                }
                 bit <<= 1;
             }
         }
@@ -130,6 +142,29 @@ public class TypeRegistry
     public bool IsFlagsType(string typeName) => _flagsTypes.ContainsKey(typeName);
 
     /// <summary>
+    /// Resolves a qualified flags constant (e.g., "Modifier", "Public" → 1).
+    /// Returns the bit value, or null if the type or member is not found.
+    /// </summary>
+    public int? TryResolveQualifiedFlagsConstant(string typeName, string memberName)
+    {
+        if (!_flagsTypes.TryGetValue(typeName, out var fd)) return null;
+        int bit = 1;
+        foreach (var member in fd.Members)
+        {
+            if (member == memberName) return bit;
+            bit <<= 1;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Returns the list of flags type names that define a given member, for error messages.
+    /// Returns null if the member is not known.
+    /// </summary>
+    public List<string>? GetFlagsMemberOwners(string memberName) =>
+        _flagsMemberOwners.TryGetValue(memberName, out var owners) ? owners : null;
+
+    /// <summary>
     /// Loads extensible enum definitions. Members resolve to their string name.
     /// </summary>
     public List<string> LoadEnumDefinitions(IEnumerable<EnumDefinition> enumDefs)
@@ -146,17 +181,29 @@ public class TypeRegistry
 
             foreach (var member in ed.Members)
             {
-                if (_enumConstants.TryGetValue(member, out _))
-                {
-                    errors.Add($"line {ed.Line}: enum member '{member}' already defined in another enum");
-                    continue;
-                }
-                if (_flagsConstants.ContainsKey(member))
+                // Cross-kind collision: enum member conflicts with a flags constant
+                if (_flagsMemberOwners.ContainsKey(member))
                 {
                     errors.Add($"line {ed.Line}: enum member '{member}' conflicts with a flags constant");
                     continue;
                 }
-                _enumConstants[member] = member;
+
+                if (!_enumMemberOwners.TryGetValue(member, out var owners))
+                {
+                    owners = [];
+                    _enumMemberOwners[member] = owners;
+                }
+                owners.Add(ed.Name);
+
+                if (owners.Count == 1)
+                {
+                    _enumConstants[member] = member;
+                }
+                else
+                {
+                    // Ambiguous — remove from bare-name lookup
+                    _enumConstants.Remove(member);
+                }
             }
         }
         return errors;
@@ -179,6 +226,23 @@ public class TypeRegistry
     /// Returns true if the given type name is a registered enum type.
     /// </summary>
     public bool IsEnumType(string typeName) => _enumTypes.ContainsKey(typeName);
+
+    /// <summary>
+    /// Resolves a qualified enum constant (e.g., "TypeKind", "Class" → "Class").
+    /// Returns the member string, or null if the type or member is not found.
+    /// </summary>
+    public string? TryResolveQualifiedEnumConstant(string typeName, string memberName)
+    {
+        if (!_enumTypes.TryGetValue(typeName, out var ed)) return null;
+        return ed.Members.Contains(memberName) ? memberName : null;
+    }
+
+    /// <summary>
+    /// Returns the list of enum type names that define a given member, for error messages.
+    /// Returns null if the member is not known.
+    /// </summary>
+    public List<string>? GetEnumMemberOwners(string memberName) =>
+        _enumMemberOwners.TryGetValue(memberName, out var owners) ? owners : null;
 
     /// <summary>
     /// Maps a CLR type to an cop type name for runtime type inference.
@@ -679,6 +743,20 @@ public class TypeRegistry
         {
             if (_types.ContainsKey(td.Name) && !IsCorePrimitive(td.Name))
             {
+                // If the existing type was registered by a provider schema,
+                // merge new properties from the .cop definition rather than erroring.
+                var existing = _types[td.Name];
+                if (existing.IsProviderType)
+                {
+                    foreach (var prop in td.Properties)
+                    {
+                        if (!existing.Properties.ContainsKey(prop.Name))
+                            existing.Properties[prop.Name] = new PropertyDescriptor(
+                                prop.Name, prop.TypeName, prop.IsOptional, prop.IsCollection);
+                    }
+                    continue;
+                }
+
                 errors.Add($"line {td.Line}: duplicate type definition '{td.Name}'");
                 continue;
             }
@@ -686,6 +764,7 @@ public class TypeRegistry
             var descriptor = new TypeDescriptor(td.Name);
             foreach (var prop in td.Properties)
             {
+                ValidatePropertyCasing(td.Name, prop.Name);
                 descriptor.Properties[prop.Name] = new PropertyDescriptor(
                     prop.Name, prop.TypeName, prop.IsOptional, prop.IsCollection);
             }
@@ -876,9 +955,12 @@ public class TypeRegistry
         foreach (var ts in schema.Types)
         {
             if (HasType(ts.Name)) continue;
-            var desc = new TypeDescriptor(ts.Name);
+            var desc = new TypeDescriptor(ts.Name) { IsProviderType = true };
             foreach (var ps in ts.Properties)
+            {
+                ValidatePropertyCasing(ts.Name, ps.Name);
                 desc.Properties[ps.Name] = new PropertyDescriptor(ps.Name, ps.Type, ps.Optional, ps.Collection);
+            }
             Register(desc);
         }
 
@@ -898,6 +980,14 @@ public class TypeRegistry
             if (!HasCollection(cs.Name))
                 RegisterCollection(new CollectionDeclaration(cs.Name, cs.ItemType, 0));
         }
+    }
+
+    private static void ValidatePropertyCasing(string typeName, string propName)
+    {
+        if (propName.Length > 0 && char.IsLower(propName[0]))
+            throw new InvalidOperationException(
+                $"Property '{propName}' on type '{typeName}' must be PascalCase. " +
+                $"Use a predicate for boolean queries (e.g., predicate {propName}({typeName}) => ...).");
     }
 
     /// <summary>

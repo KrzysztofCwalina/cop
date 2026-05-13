@@ -169,7 +169,16 @@ public static class RunCommand
 
         if (hasErrors) return 2;
 
-        Console.WriteLine($"CodeQL: {totalFiles} query file(s) generated.");
+        if (totalFiles == 0)
+        {
+            Console.WriteLine("CodeQL: 0 query file(s) generated.");
+            Console.WriteLine("  Hint: Only Code provider collections (Types, Statements, Calls, Methods) can be transpiled to CodeQL.");
+            Console.WriteLine("  Hint: Collections like Lines, Files, and Api have no CodeQL equivalent.");
+        }
+        else
+        {
+            Console.WriteLine($"CodeQL: {totalFiles} query file(s) generated.");
+        }
         return 0;
     }
 
@@ -218,6 +227,17 @@ public static class RunCommand
 
         Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(ColorDiagLine(msg)) : null;
 
+        // Package mode: if no local .cop files and command looks like a package name, run as packages
+        var localCopFiles = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
+        if (localCopFiles.Length == 0 && command != null && !command.EndsWith(".cop", StringComparison.OrdinalIgnoreCase))
+        {
+            // Treat command + programArgs as package names
+            var packages = new List<string> { command };
+            if (programArgs is { Length: > 0 })
+                packages.AddRange(programArgs.TakeWhile(a => !a.StartsWith('-') && !a.StartsWith('/')));
+            return ExecutePackages(packages.ToArray(), rootPath, commandFilter, format, diag);
+        }
+
         // Auto-restore missing imports before execution
         AutoRestoreImports(scriptsDir, diagLog);
 
@@ -237,6 +257,50 @@ public static class RunCommand
         }
 
         var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog, additionalFeedPaths: FindFeedPathsFromCwd());
+
+        return HandleResult(result, format, rootPath);
+    }
+
+    /// <summary>
+    /// Runs named packages against the target directory (merged from cop check).
+    /// Packages are auto-restored from configured GitHub feeds if not found locally.
+    /// </summary>
+    public static int ExecutePackages(string[] packages, string? target = null, string[]? rules = null, string? format = null, bool diag = false)
+    {
+        string rootPath = target != null ? Path.GetFullPath(target) : Directory.GetCurrentDirectory();
+        Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(ColorDiagLine(msg)) : null;
+
+        // Discover local feed paths (walking up from target to find packages/ dirs)
+        var feedPaths = FindFeedPaths(rootPath);
+
+        // ~/.cop/packages/ is always a feed path (auto-restored packages live here)
+        var cachePath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".cop", "packages");
+
+        // Auto-restore any packages not found locally from configured GitHub feeds
+        var missing = FindMissingPackages(packages, feedPaths, cachePath);
+        if (missing.Count > 0)
+        {
+            var restored = AutoRestorePackagesAsync(missing, cachePath).GetAwaiter().GetResult();
+            if (!restored)
+                return 2;
+        }
+
+        // Ensure cache path is in feed list
+        if (Directory.Exists(cachePath) && !feedPaths.Contains(cachePath))
+            feedPaths.Add(cachePath);
+
+        if (feedPaths.Count == 0)
+        {
+            Console.Error.WriteLine("Error: No package feeds found.");
+            return 2;
+        }
+
+        // Convert rules filter
+        var rulesList = rules?.ToList() ?? [];
+
+        var result = Engine.RunProject(feedPaths, [.. packages], rootPath, rulesList);
 
         return HandleResult(result, format, rootPath);
     }
@@ -576,5 +640,151 @@ public static class RunCommand
             if (!restored)
                 Console.Error.WriteLine($"Warning: Package '{pkgName}' not found in any configured feed.");
         }
+    }
+
+    /// <summary>
+    /// Walks up from startDir to find packages/ directories (for package mode).
+    /// </summary>
+    private static List<string> FindFeedPaths(string startDir)
+    {
+        var paths = new List<string>();
+        var dir = startDir;
+        while (dir is not null)
+        {
+            var packagesDir = Path.Combine(dir, "packages");
+            if (Directory.Exists(packagesDir))
+                paths.Add(packagesDir);
+            dir = Path.GetDirectoryName(dir);
+        }
+        return paths;
+    }
+
+    /// <summary>
+    /// Returns package names that cannot be found in any local feed path or cache.
+    /// </summary>
+    private static List<string> FindMissingPackages(string[] packages, List<string> feedPaths, string cachePath)
+    {
+        var allPaths = new List<string>(feedPaths);
+        if (Directory.Exists(cachePath))
+            allPaths.Add(cachePath);
+
+        var missing = new List<string>();
+        foreach (var pkg in packages)
+        {
+            bool found = false;
+            foreach (var feed in allPaths)
+            {
+                if (ImportResolver.FindPackageDir(Path.GetFullPath(feed), pkg) is not null)
+                {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found)
+                missing.Add(pkg);
+        }
+        return missing;
+    }
+
+    /// <summary>
+    /// Downloads missing packages from configured GitHub feeds into the cache directory.
+    /// Recursively resolves imports from downloaded .cop files.
+    /// </summary>
+    private static async Task<bool> AutoRestorePackagesAsync(List<string> packageNames, string cachePath)
+    {
+        var feedManager = new FeedManager();
+        var feeds = feedManager.GetFeeds();
+
+        var githubFeeds = feeds
+            .Where(f => f.StartsWith("github.com/", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (githubFeeds.Count == 0)
+        {
+            Console.Error.WriteLine("Error: No GitHub feeds configured. Run 'cop feed add github.com/owner/repo'.");
+            return false;
+        }
+
+        string? githubToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+        using var httpClient = new HttpClient();
+        var source = new GitHubPackageSource(httpClient, githubToken);
+
+        Directory.CreateDirectory(cachePath);
+
+        // BFS: download requested packages, then their imports
+        var queue = new Queue<string>(packageNames);
+        var downloaded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        while (queue.Count > 0)
+        {
+            var pkgName = queue.Dequeue();
+            if (downloaded.Contains(pkgName)) continue;
+
+            if (ImportResolver.FindPackageDir(cachePath, pkgName) is not null)
+            {
+                downloaded.Add(pkgName);
+                continue;
+            }
+
+            bool restored = false;
+            foreach (var feed in githubFeeds)
+            {
+                try
+                {
+                    var pkgRef = PackageReference.Parse($"{feed}/{pkgName}");
+                    Console.Error.Write($"  Downloading {pkgName}...");
+                    var files = await source.DownloadPackageFilesAsync(pkgRef);
+
+                    if (files.Count == 0) { Console.Error.WriteLine(" no files"); continue; }
+
+                    var pkgDir = Path.Combine(cachePath, pkgName);
+                    foreach (var (relativePath, content) in files)
+                    {
+                        var destPath = Path.Combine(pkgDir, relativePath);
+                        Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
+                        await File.WriteAllBytesAsync(destPath, content);
+                    }
+
+                    Console.Error.WriteLine(" ok");
+                    downloaded.Add(pkgName);
+                    restored = true;
+
+                    // Parse .cop files to discover transitive imports
+                    foreach (var (relPath, _) in files.Where(f => f.Key.EndsWith(".cop", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        var filePath = Path.Combine(pkgDir, relPath);
+                        try
+                        {
+                            var src = File.ReadAllText(filePath);
+                            var sf = ScriptParser.Parse(src, filePath);
+                            foreach (var imp in sf.Imports)
+                            {
+                                if (!downloaded.Contains(imp))
+                                    queue.Enqueue(imp);
+                            }
+                        }
+                        catch { /* skip unparseable files */ }
+                    }
+                    break;
+                }
+                catch (PackageNotFoundException)
+                {
+                    Console.Error.WriteLine(" not found");
+                    continue;
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($" failed: {ex.Message}");
+                }
+            }
+
+            if (!restored)
+            {
+                Console.Error.WriteLine($"Error: Package '{pkgName}' not found in any configured feed.");
+                return false;
+            }
+        }
+
+        return true;
     }
 }

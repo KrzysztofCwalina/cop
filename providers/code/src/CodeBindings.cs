@@ -152,6 +152,7 @@ public static class CodeBindings
             {
                 ["Text"] = o => ((LineInfo)o).Text,
                 ["Number"] = o => (object)((LineInfo)o).Number,
+                ["Kind"] = o => ((LineInfo)o).Kind,
                 ["File"] = o => ((LineInfo)o).File,
                 ["Source"] = o => ((LineInfo)o).Source,
             },
@@ -210,7 +211,18 @@ public static class CodeBindings
             ["Lines"] = doc =>
             {
                 var file = (SourceFile)doc;
-                return file.Lines.Select((text, i) => (object)new LineInfo(text, i + 1) { File = file }).ToList();
+                return file.Lines.Select((text, i) =>
+                {
+                    var lineNum = i + 1;
+                    var kind = file.CommentLines.Contains(lineNum) ? "comment"
+                             : string.IsNullOrWhiteSpace(text) ? "blank"
+                             : "code";
+                    return (object)new LineInfo(text, lineNum)
+                    {
+                        File = file,
+                        Kind = kind
+                    };
+                }).ToList();
             },
             ["Files"] = doc => [(object)(SourceFile)doc],
             ["Members"] = doc => ((SourceFile)doc).Types.SelectMany(t =>

@@ -80,7 +80,7 @@ public class PredicateEvaluatorTests
     {
         var eval = CreateEvaluator();
         var type = MakeType("BlobClient");
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Name"),
             "endsWith", [new LiteralExpr("Client")]);
         var (result, _) = eval.EvaluateAsBool(expr, type, "Type");
@@ -92,7 +92,7 @@ public class PredicateEvaluatorTests
     {
         var eval = CreateEvaluator();
         var type = MakeType("BlobClient");
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Name"),
             "startsWith", [new LiteralExpr("Blob")]);
         var (result, _) = eval.EvaluateAsBool(expr, type, "Type");
@@ -105,9 +105,9 @@ public class PredicateEvaluatorTests
         var eval = CreateEvaluator();
         var type = MakeType("BlobClient", isSealed: true);
         var expr = new BinaryExpr(
-            new PredicateCallExpr(new IdentifierExpr("Type"), "isPublic", []),
+            new CallExpr(new IdentifierExpr("Type"), "isPublic", []),
             "&&",
-            new PredicateCallExpr(new IdentifierExpr("Type"), "isSealed", []));
+            new CallExpr(new IdentifierExpr("Type"), "isSealed", []));
         var (result, _) = eval.EvaluateAsBool(expr, type, "Type");
         Assert.That(result, Is.True);
     }
@@ -118,7 +118,7 @@ public class PredicateEvaluatorTests
         var eval = CreateEvaluator();
         var type = MakeType("BlobClient");
         var expr = new UnaryExpr("!",
-            new PredicateCallExpr(new IdentifierExpr("Type"), "isSealed", []));
+            new CallExpr(new IdentifierExpr("Type"), "isSealed", []));
         var (result, _) = eval.EvaluateAsBool(expr, type, "Type");
         Assert.That(result, Is.True);
     }
@@ -128,7 +128,7 @@ public class PredicateEvaluatorTests
     {
         // Build IsOptionsType predicate
         var isOptionsType = new PredicateDefinition("IsOptionsType", "Parameter", null,
-            new PredicateCallExpr(
+            new CallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Parameter"), "Type"),
                 "endsWith", [new LiteralExpr("Options")]), 1);
 
@@ -141,7 +141,7 @@ public class PredicateEvaluatorTests
             new ParameterDeclaration("options", TR("BlobClientOptions"), false, false, false, 1)
         ], 1);
 
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("Constructor"), "Parameters"),
             "any", [new IdentifierExpr("IsOptionsType")]);
         var (result, _) = eval.EvaluateAsBool(expr, ctor, "Constructor");
@@ -152,7 +152,7 @@ public class PredicateEvaluatorTests
     public void CollectionMethod_None()
     {
         var isOptionsType = new PredicateDefinition("IsOptionsType", "Parameter", null,
-            new PredicateCallExpr(
+            new CallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Parameter"), "Type"),
                 "endsWith", [new LiteralExpr("Options")]), 1);
 
@@ -165,7 +165,7 @@ public class PredicateEvaluatorTests
             new ParameterDeclaration("connectionString", TR("string"), false, false, false, 1)
         ], 1);
 
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("Constructor"), "Parameters"),
             "none", [new IdentifierExpr("IsOptionsType")]);
         var (result, _) = eval.EvaluateAsBool(expr, ctor, "Constructor");
@@ -177,7 +177,7 @@ public class PredicateEvaluatorTests
     {
         // IsClient(Type) => Type.Name:endsWith("Client")
         var isClient = new PredicateDefinition("IsClient", "Type", null,
-            new PredicateCallExpr(
+            new CallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Type"), "Name"),
                 "endsWith", [new LiteralExpr("Client")]), 1);
 
@@ -201,7 +201,7 @@ public class PredicateEvaluatorTests
         // "csharp" is now a regular predicate, not a built-in keyword.
         // Register it as a predicate that checks Type.Name:endsWith('Client').
         var csharpPred = new PredicateDefinition("csharp", "Type", null,
-            new PredicateCallExpr(new MemberAccessExpr(new IdentifierExpr("Type"), "Name"),
+            new CallExpr(new MemberAccessExpr(new IdentifierExpr("Type"), "Name"),
                 "endsWith", [new LiteralExpr("Client")]), 1);
         var preds = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -221,16 +221,16 @@ public class PredicateEvaluatorTests
     {
         // Constraint predicates that distinguish items
         var sealedPred = new PredicateDefinition("sealed", "Type", null,
-            new PredicateCallExpr(new IdentifierExpr("Type"), "isSealed", []), 1);
+            new CallExpr(new IdentifierExpr("Type"), "isSealed", []), 1);
         var unsealedPred = new PredicateDefinition("unsealed", "Type", null,
-            new PredicateCallExpr(new IdentifierExpr("Type"), "isSealed", [], Negated: true), 1);
+            new CallExpr(new IdentifierExpr("Type"), "isSealed", [], Negated: true), 1);
 
         // Two constrained overloads of "client"
         var sealedClient = new PredicateDefinition("client", "Type", "sealed",
-            new PredicateCallExpr(new MemberAccessExpr(new IdentifierExpr("Type"), "Name"),
+            new CallExpr(new MemberAccessExpr(new IdentifierExpr("Type"), "Name"),
                 "endsWith", [new LiteralExpr("_client")]), 1);
         var unsealedClient = new PredicateDefinition("client", "Type", "unsealed",
-            new PredicateCallExpr(new MemberAccessExpr(new IdentifierExpr("Type"), "Name"),
+            new CallExpr(new MemberAccessExpr(new IdentifierExpr("Type"), "Name"),
                 "endsWith", [new LiteralExpr("Client")]), 1);
 
         var preds = new Dictionary<string, List<PredicateDefinition>>
@@ -261,7 +261,7 @@ public class PredicateEvaluatorTests
         var constrained = new PredicateDefinition("client", "Type", "never",
             new LiteralExpr(false), 1);
         var unconstrained = new PredicateDefinition("client", "Type", null,
-            new PredicateCallExpr(new MemberAccessExpr(new IdentifierExpr("Type"), "Name"),
+            new CallExpr(new MemberAccessExpr(new IdentifierExpr("Type"), "Name"),
                 "endsWith", [new LiteralExpr("Client")]), 1);
 
         var preds = new Dictionary<string, List<PredicateDefinition>>
@@ -321,9 +321,9 @@ public class PredicateEvaluatorTests
     {
         var isPublicAsync = new PredicateDefinition("IsPublicAsync", "Method", null,
             new BinaryExpr(
-                new PredicateCallExpr(new IdentifierExpr("Method"), "isPublic", []),
+                new CallExpr(new IdentifierExpr("Method"), "isPublic", []),
                 "&&",
-                new PredicateCallExpr(new IdentifierExpr("Method"), "isAsync", [])),
+                new CallExpr(new IdentifierExpr("Method"), "isAsync", [])),
             1);
 
         var eval = CreateEvaluator(new Dictionary<string, List<PredicateDefinition>>
@@ -336,7 +336,7 @@ public class PredicateEvaluatorTests
             new MethodDeclaration("AsyncMethod", Modifier.Public | Modifier.Async, [], TR("Task"), [], 2)
         ]);
 
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
             "any", [new IdentifierExpr("IsPublicAsync")]);
         var (result, ctx) = eval.EvaluateAsBool(expr, type, "Type");
@@ -472,7 +472,7 @@ public class PredicateEvaluatorTests
             new ParameterDeclaration("version", TR("ServiceVersion"), false, false, false, 1)
         ], 1);
 
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(
                 new MemberAccessExpr(
                     new MemberAccessExpr(new IdentifierExpr("Constructor"), "Parameters"),
@@ -491,7 +491,7 @@ public class PredicateEvaluatorTests
     public void CollectionMethod_FirstWithPredicate_ReturnsFirstMatch()
     {
         var isOptions = new PredicateDefinition("IsOptions", "Parameter", null,
-            new PredicateCallExpr(
+            new CallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Parameter"), "Type"),
                 "endsWith", [new LiteralExpr("Options")]), 1);
 
@@ -508,7 +508,7 @@ public class PredicateEvaluatorTests
 
         // Parameters.First(IsOptions) → should return "options" (first match)
         var expr = new MemberAccessExpr(
-            new PredicateCallExpr(
+            new CallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Constructor"), "Parameters"),
                 "First", [new IdentifierExpr("IsOptions")]),
             "Name");
@@ -522,7 +522,7 @@ public class PredicateEvaluatorTests
     public void CollectionMethod_FirstWithPredicate_ReturnsNullWhenNoMatch()
     {
         var isOptions = new PredicateDefinition("IsOptions", "Parameter", null,
-            new PredicateCallExpr(
+            new CallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Parameter"), "Type"),
                 "endsWith", [new LiteralExpr("Options")]), 1);
 
@@ -535,7 +535,7 @@ public class PredicateEvaluatorTests
             new ParameterDeclaration("endpoint", TR("string"), false, false, false, 1)
         ], 1);
 
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("Constructor"), "Parameters"),
             "First", [new IdentifierExpr("IsOptions")]);
         var (result, _) = eval.EvaluateAsBool(
@@ -550,7 +550,7 @@ public class PredicateEvaluatorTests
     public void CollectionMethod_LastWithPredicate_ReturnsLastMatch()
     {
         var isOptions = new PredicateDefinition("IsOptions", "Parameter", null,
-            new PredicateCallExpr(
+            new CallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Parameter"), "Type"),
                 "endsWith", [new LiteralExpr("Options")]), 1);
 
@@ -567,7 +567,7 @@ public class PredicateEvaluatorTests
 
         // Parameters.Last(IsOptions) → should return "retryOptions" (last match)
         var expr = new MemberAccessExpr(
-            new PredicateCallExpr(
+            new CallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Constructor"), "Parameters"),
                 "Last", [new IdentifierExpr("IsOptions")]),
             "Name");
@@ -581,7 +581,7 @@ public class PredicateEvaluatorTests
     public void CollectionMethod_SingleWithPredicate_ReturnsItemWhenExactlyOneMatch()
     {
         var isOptions = new PredicateDefinition("IsOptions", "Parameter", null,
-            new PredicateCallExpr(
+            new CallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Parameter"), "Type"),
                 "endsWith", [new LiteralExpr("Options")]), 1);
 
@@ -597,7 +597,7 @@ public class PredicateEvaluatorTests
 
         // Parameters.Single(IsOptions) → "options" (exactly one match)
         var expr = new MemberAccessExpr(
-            new PredicateCallExpr(
+            new CallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Constructor"), "Parameters"),
                 "Single", [new IdentifierExpr("IsOptions")]),
             "Name");
@@ -611,7 +611,7 @@ public class PredicateEvaluatorTests
     public void CollectionMethod_SingleWithPredicate_ReturnsNullWhenMultipleMatch()
     {
         var isOptions = new PredicateDefinition("IsOptions", "Parameter", null,
-            new PredicateCallExpr(
+            new CallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Parameter"), "Type"),
                 "endsWith", [new LiteralExpr("Options")]), 1);
 
@@ -626,7 +626,7 @@ public class PredicateEvaluatorTests
         ], 1);
 
         // Parameters.Single(IsOptions) → null (two matches)
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("Constructor"), "Parameters"),
             "Single", [new IdentifierExpr("IsOptions")]);
         var (result, _) = eval.EvaluateAsBool(
@@ -641,7 +641,7 @@ public class PredicateEvaluatorTests
     public void CollectionMethod_FirstWithPredicate_CapturesContext()
     {
         var isAsync = new PredicateDefinition("IsAsync", "Method", null,
-            new PredicateCallExpr(new IdentifierExpr("Method"), "isAsync", []), 1);
+            new CallExpr(new IdentifierExpr("Method"), "isAsync", []), 1);
 
         var eval = CreateEvaluator(new Dictionary<string, List<PredicateDefinition>>
         {
@@ -654,7 +654,7 @@ public class PredicateEvaluatorTests
         ]);
 
         // Methods.First(IsAsync) → captures AsyncMethod in context
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
             "First", [new IdentifierExpr("IsAsync")]);
         var (_, ctx) = eval.EvaluateAsBool(
@@ -683,10 +683,10 @@ public class PredicateEvaluatorTests
 
         // Type.Methods:any(item:isPublic && item:isAsync) — inline expression with item keyword
         var inlineExpr = new BinaryExpr(
-            new PredicateCallExpr(new IdentifierExpr("item"), "isPublic", []),
+            new CallExpr(new IdentifierExpr("item"), "isPublic", []),
             "&&",
-            new PredicateCallExpr(new IdentifierExpr("item"), "isAsync", []));
-        var expr = new PredicateCallExpr(
+            new CallExpr(new IdentifierExpr("item"), "isAsync", []));
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
             "any", [inlineExpr]);
         var (result, _) = eval.EvaluateAsBool(expr, type, "Type");
@@ -703,10 +703,10 @@ public class PredicateEvaluatorTests
         ]);
 
         // Type.Methods:none(item.Name:startsWith("Delete")) — should be true (no Delete methods)
-        var inlineExpr = new PredicateCallExpr(
+        var inlineExpr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("item"), "Name"),
             "startsWith", [new LiteralExpr("Delete")]);
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
             "none", [inlineExpr]);
         var (result, _) = eval.EvaluateAsBool(expr, type, "Type");
@@ -723,8 +723,8 @@ public class PredicateEvaluatorTests
         ]);
 
         // Type.Methods:all(item:isPublic) — all public
-        var inlineExpr = new PredicateCallExpr(new IdentifierExpr("item"), "isPublic", []);
-        var expr = new PredicateCallExpr(
+        var inlineExpr = new CallExpr(new IdentifierExpr("item"), "isPublic", []);
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
             "all", [inlineExpr]);
         var (result, _) = eval.EvaluateAsBool(expr, type, "Type");
@@ -743,7 +743,7 @@ public class PredicateEvaluatorTests
         var inlineExpr = new BinaryExpr(
             new MemberAccessExpr(new IdentifierExpr("item"), "Name"),
             "==", new LiteralExpr("Dispose"));
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
             "any", [inlineExpr]);
         var (result, _) = eval.EvaluateAsBool(expr, type, "Type");
@@ -760,8 +760,8 @@ public class PredicateEvaluatorTests
         ]);
 
         // Type.Methods:any(item:!isPublic) — at least one non-public method
-        var inlineExpr = new PredicateCallExpr(new IdentifierExpr("item"), "isPublic", [], Negated: true);
-        var expr = new PredicateCallExpr(
+        var inlineExpr = new CallExpr(new IdentifierExpr("item"), "isPublic", [], Negated: true);
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
             "any", [inlineExpr]);
         var (result, _) = eval.EvaluateAsBool(expr, type, "Type");
@@ -775,10 +775,10 @@ public class PredicateEvaluatorTests
         var type = MakeType("BlobClient", baseTypes: ["ServiceClient", "IDisposable"]);
 
         // Type.BaseTypes:any(item:contains("Service"))
-        var inlineExpr = new PredicateCallExpr(
+        var inlineExpr = new CallExpr(
             new IdentifierExpr("item"),
             "contains", [new LiteralExpr("Service")]);
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "BaseTypes"),
             "any", [inlineExpr]);
         var (result, _) = eval.EvaluateAsBool(expr, type, "Type");
@@ -797,7 +797,7 @@ public class PredicateEvaluatorTests
 
         // Type.Methods.OrderBy(item.Name) — sort by name ascending
         var fieldExpr = new MemberAccessExpr(new IdentifierExpr("item"), "Name");
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
             "OrderBy", [fieldExpr]);
         var result = eval.EvaluateField(expr, type, "Type") as IList;
@@ -817,7 +817,7 @@ public class PredicateEvaluatorTests
         ]);
 
         var fieldExpr = new MemberAccessExpr(new IdentifierExpr("item"), "Name");
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
             "OrderByDescending", [fieldExpr]);
         var result = eval.EvaluateField(expr, type, "Type") as IList;
@@ -838,7 +838,7 @@ public class PredicateEvaluatorTests
 
         // Type.Methods.Select(item.Name) — returns actual string values, not ToString()
         var fieldExpr = new MemberAccessExpr(new IdentifierExpr("item"), "Name");
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
             "Select", [fieldExpr]);
         var result = eval.EvaluateField(expr, type, "Type") as IList;
@@ -861,7 +861,7 @@ public class PredicateEvaluatorTests
 
         // Type.Methods.Distinct(item.Name) — deduplicate by name
         var fieldExpr = new MemberAccessExpr(new IdentifierExpr("item"), "Name");
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
             "Distinct", [fieldExpr]);
         var result = eval.EvaluateField(expr, type, "Type") as IList;
@@ -888,7 +888,7 @@ public class PredicateEvaluatorTests
         // File.Path returns the path from the SourceFile object
         var expr = new MemberAccessExpr(new IdentifierExpr("File"), "Path");
         var (result, _) = eval.EvaluateAsBool(
-            new PredicateCallExpr(expr, "contains", [new LiteralExpr("Controllers")]),
+            new CallExpr(expr, "contains", [new LiteralExpr("Controllers")]),
             sf, "File");
         Assert.That(result, Is.True);
     }
@@ -915,7 +915,7 @@ public class PredicateEvaluatorTests
             Namespace = "MyApp.Domain"
         };
 
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("File"), "Namespace"),
             "startsWith", [new LiteralExpr("MyApp")]);
         var (result, _) = eval.EvaluateAsBool(expr, sf, "File");
@@ -932,10 +932,10 @@ public class PredicateEvaluatorTests
         };
 
         // File.Usings:any(item:contains("System.IO"))
-        var inlineExpr = new PredicateCallExpr(
+        var inlineExpr = new CallExpr(
             new IdentifierExpr("item"),
             "contains", [new LiteralExpr("System.IO")]);
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("File"), "Usings"),
             "any", [inlineExpr]);
         var (result, _) = eval.EvaluateAsBool(expr, sf, "File");
@@ -952,10 +952,10 @@ public class PredicateEvaluatorTests
         };
 
         // File.Usings:none(item:startsWith("Microsoft"))
-        var inlineExpr = new PredicateCallExpr(
+        var inlineExpr = new CallExpr(
             new IdentifierExpr("item"),
             "startsWith", [new LiteralExpr("Microsoft")]);
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("File"), "Usings"),
             "none", [inlineExpr]);
         var (result, _) = eval.EvaluateAsBool(expr, sf, "File");
@@ -989,7 +989,7 @@ public class PredicateEvaluatorTests
         var eval = CreateEvaluator();
         var type = MakeType("BlobClient");
         // Type.Name:!ew("Options") → true (BlobClient does NOT end with Options)
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Name"),
             "endsWith", [new LiteralExpr("Options")], Negated: true);
         var (result, _) = eval.EvaluateAsBool(expr, type, "Type");
@@ -1002,7 +1002,7 @@ public class PredicateEvaluatorTests
         var eval = CreateEvaluator();
         var type = MakeType("BlobClient");
         // Type.Name:!ew("Client") → false (BlobClient DOES end with Client)
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Name"),
             "endsWith", [new LiteralExpr("Client")], Negated: true);
         var (result, _) = eval.EvaluateAsBool(expr, type, "Type");
@@ -1013,7 +1013,7 @@ public class PredicateEvaluatorTests
     public void NegatedMethodCall_CollectionAny_EquivalentToNone()
     {
         var isOptionsType = new PredicateDefinition("IsOptionsType", "Parameter", null,
-            new PredicateCallExpr(
+            new CallExpr(
                 new MemberAccessExpr(new IdentifierExpr("Parameter"), "Type"),
                 "endsWith", [new LiteralExpr("Options")]), 1);
 
@@ -1027,7 +1027,7 @@ public class PredicateEvaluatorTests
         ], 1);
 
         // Parameters:!any(IsOptionsType) — equivalent to Parameters:none(IsOptionsType)
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("Constructor"), "Parameters"),
             "any", [new IdentifierExpr("IsOptionsType")], Negated: true);
         var (result, _) = eval.EvaluateAsBool(expr, ctor, "Constructor");
@@ -1042,7 +1042,7 @@ public class PredicateEvaluatorTests
             predicate IsNotClient(Type) => Type.Name:!ew('Client')
             """, "test.cop");
         var pred = ScriptFile.Predicates[0];
-        var body = pred.Body as PredicateCallExpr;
+        var body = pred.Body as CallExpr;
         Assert.That(body, Is.Not.Null);
         Assert.That(body!.Negated, Is.True);
         Assert.That(body.Name, Is.EqualTo("ew"));
@@ -1112,7 +1112,7 @@ public class PredicateEvaluatorTests
 
         var stmt = MakeStatement("var", "x", 10);
         // Simulate :error("Do not use var") in chain
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new IdentifierExpr("Statement"),
             "error",
             [new LiteralExpr("Do not use var")]);
@@ -1142,7 +1142,7 @@ public class PredicateEvaluatorTests
         var eval = new PredicateEvaluator([], "test.cs", CreateTestRegistry(), functions: functions);
 
         var stmt = MakeStatement("var", "x", 10);
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new IdentifierExpr("Statement"),
             "error",
             [new LiteralExpr("msg")],
@@ -1262,7 +1262,7 @@ public class PredicateEvaluatorTests
         Assert.That(map, Is.TypeOf<DataObject>());
 
         // Get with a literal key
-        var getExpr = new PredicateCallExpr(mapExpr, "Get", [new LiteralExpr("error")]);
+        var getExpr = new CallExpr(mapExpr, "Get", [new LiteralExpr("error")]);
         var result = eval.EvaluateField(getExpr, MakeType("Dummy"), "Type");
         Assert.That(result, Is.EqualTo("red"));
     }
@@ -1276,7 +1276,7 @@ public class PredicateEvaluatorTests
             ["Error"] = new LiteralExpr("red")
         });
         // DataObject field lookup is case-insensitive by default
-        var getExpr = new PredicateCallExpr(mapExpr, "Get", [new LiteralExpr("error")]);
+        var getExpr = new CallExpr(mapExpr, "Get", [new LiteralExpr("error")]);
         var result = eval.EvaluateField(getExpr, MakeType("Dummy"), "Type");
         Assert.That(result, Is.EqualTo("red"));
     }
@@ -1289,8 +1289,8 @@ public class PredicateEvaluatorTests
         {
             ["error"] = new LiteralExpr("red")
         });
-        var containsTrue = new PredicateCallExpr(mapExpr, "containsKey", [new LiteralExpr("error")]);
-        var containsFalse = new PredicateCallExpr(mapExpr, "containsKey", [new LiteralExpr("missing")]);
+        var containsTrue = new CallExpr(mapExpr, "containsKey", [new LiteralExpr("error")]);
+        var containsFalse = new CallExpr(mapExpr, "containsKey", [new LiteralExpr("missing")]);
 
         Assert.That(eval.EvaluateField(containsTrue, MakeType("Dummy"), "Type"), Is.EqualTo(true));
         Assert.That(eval.EvaluateField(containsFalse, MakeType("Dummy"), "Type"), Is.EqualTo(false));
@@ -1355,11 +1355,11 @@ public class PredicateEvaluatorTests
         var registry = new TypeRegistry();
 
         // Two overloads: one constrained to Path:equals('/'), one unconstrained
-        // Constraint: PredicateCallExpr(MemberAccessExpr(IdentifierExpr("item"), "Path"), "equals", ["/"])
+        // Constraint: CallExpr(MemberAccessExpr(IdentifierExpr("item"), "Path"), "equals", ["/"])
         var constrained = new FunctionDefinition(
             "handle", "Request", "Response", [],
             new() { ["StatusCode"] = new LiteralExpr(200) }, 1,
-            Constraint: new PredicateCallExpr(
+            Constraint: new CallExpr(
                 new MemberAccessExpr(new IdentifierExpr("item"), "Path"),
                 "equals", [new LiteralExpr("/")], false));
 
@@ -1407,10 +1407,10 @@ public class PredicateEvaluatorTests
         ]);
 
         // Type.Methods.count(item.Name:startsWith('Get')) — should return 2
-        var inlineExpr = new PredicateCallExpr(
+        var inlineExpr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("item"), "Name"),
             "startsWith", [new LiteralExpr("Get")]);
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
             "count", [inlineExpr]);
         var result = eval.EvaluateField(expr, type, "Type");
@@ -1427,10 +1427,10 @@ public class PredicateEvaluatorTests
         ]);
 
         // Type.Methods.count(item.Name:startsWith('Delete')) — should return 0
-        var inlineExpr = new PredicateCallExpr(
+        var inlineExpr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("item"), "Name"),
             "startsWith", [new LiteralExpr("Delete")]);
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new MemberAccessExpr(new IdentifierExpr("Type"), "Methods"),
             "count", [inlineExpr]);
         var result = eval.EvaluateField(expr, type, "Type");

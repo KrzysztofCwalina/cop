@@ -10,6 +10,7 @@ export flags Modifier = Public | Private | Protected | Internal | Static | Seale
 export enum TypeKind = Class | Struct | Interface | Enum
 export enum StatementKind = call | declaration | import | command | attribute | throw | return | using | foreach | try | catch | if | else | while | for | switch | await
 export enum ApiKind = class | struct | interface | enum | enumvalue | ctor | method | property | event | field
+export enum LineKind = code | comment | blank
 export enum Language = csharp | python | javascript | cop | text
 
 export type Type = {
@@ -187,9 +188,13 @@ export predicate isGeneric(ErrorHandler) => ErrorHandler.Generic == true
 export type Line = {
     Text : string,
     Number : int,
+    Kind : LineKind,
     File : File?,
     Source : string
 }
+
+export predicate isComment(Line) => Line.Kind == comment
+export predicate isBlank(Line) => Line.Kind == blank
 
 export type Region = {
     Name : string,

@@ -57,7 +57,182 @@ public class ScriptInterpreter
         Dictionary<string, IList>? resolvedCollections = null)
     {
         return new PredicateEvaluator(predicateGroups, filePath, _typeRegistry,
-            letDeclarations, functionGroups, resolvedCollections, _providerQueryService);
+            letDeclarations, functionGroups, resolvedCollections, _providerQueryService,
+            packagePredicates: _packagePredicates, packageFunctions: _packageFunctions, packageLets: _packageLets);
+    }
+
+    // Package-qualified symbol stores for disambiguation (populated by BuildSymbolTables)
+    private Dictionary<string, Dictionary<string, List<PredicateDefinition>>>? _packagePredicates;
+    private Dictionary<string, Dictionary<string, List<FunctionDefinition>>>? _packageFunctions;
+    private Dictionary<string, Dictionary<string, LetDeclaration>>? _packageLets;
+
+    /// <summary>
+    /// Builds predicate groups, function groups, and let declarations from script files.
+    /// Detects name conflicts: local-local duplicates are errors, import-import duplicates
+    /// require qualified access, local-import conflicts give local precedence with a warning.
+    /// Also populates package-qualified symbol stores for disambiguation.
+    /// </summary>
+    private (Dictionary<string, List<PredicateDefinition>> predicateGroups,
+             Dictionary<string, List<FunctionDefinition>> functionGroups,
+             Dictionary<string, LetDeclaration> letDeclarations)
+        BuildSymbolTables(List<ScriptFile> scriptFiles, List<string> errors)
+    {
+        var predicateGroups = new Dictionary<string, List<PredicateDefinition>>();
+        var functionGroups = new Dictionary<string, List<FunctionDefinition>>();
+        var letDeclarations = new Dictionary<string, LetDeclaration>();
+
+        // Package-qualified stores: packageName → (symbolName → definition(s))
+        var pkgPredicates = new Dictionary<string, Dictionary<string, List<PredicateDefinition>>>();
+        var pkgFunctions = new Dictionary<string, Dictionary<string, List<FunctionDefinition>>>();
+        var pkgLets = new Dictionary<string, Dictionary<string, LetDeclaration>>();
+
+        foreach (var sf in scriptFiles)
+        {
+            // Register predicates with conflict detection
+            foreach (var pred in sf.Predicates)
+            {
+                if (!predicateGroups.TryGetValue(pred.Name, out var group))
+                {
+                    group = [];
+                    predicateGroups[pred.Name] = group;
+                }
+
+                // Check for same-name, same-type conflicts
+                foreach (var existing in group)
+                {
+                    if (!string.Equals(existing.ParameterType, pred.ParameterType, StringComparison.Ordinal))
+                        continue; // different input types = valid overload
+
+                    if (existing.PackageName is null && pred.PackageName is null)
+                    {
+                        // Local-local duplicate with same input type
+                        errors.Add($"Duplicate predicate '{pred.Name}({pred.ParameterType})' defined in multiple local files");
+                        break;
+                    }
+                    if (existing.PackageName is not null && pred.PackageName is not null
+                        && existing.PackageName != pred.PackageName)
+                    {
+                        // Import-import conflict — both stay, user must qualify
+                        errors.Add($"Ambiguous predicate '{pred.Name}({pred.ParameterType})' defined in packages '{existing.PackageName}' and '{pred.PackageName}'. Use '{existing.PackageName}.{pred.Name}' or '{pred.PackageName}.{pred.Name}' to disambiguate.");
+                        break;
+                    }
+                }
+
+                group.Add(pred);
+
+                // Track in package-qualified store
+                if (pred.PackageName is not null)
+                {
+                    if (!pkgPredicates.TryGetValue(pred.PackageName, out var pkgGroup))
+                    {
+                        pkgGroup = new Dictionary<string, List<PredicateDefinition>>();
+                        pkgPredicates[pred.PackageName] = pkgGroup;
+                    }
+                    if (!pkgGroup.TryGetValue(pred.Name, out var pkgNameGroup))
+                    {
+                        pkgNameGroup = [];
+                        pkgGroup[pred.Name] = pkgNameGroup;
+                    }
+                    pkgNameGroup.Add(pred);
+                }
+            }
+
+            // Register functions with conflict detection
+            foreach (var func in sf.Functions)
+            {
+                if (!functionGroups.TryGetValue(func.Name, out var group))
+                {
+                    group = [];
+                    functionGroups[func.Name] = group;
+                }
+
+                // Check for same-name, same-type conflicts
+                foreach (var existing in group)
+                {
+                    if (!string.Equals(existing.InputType, func.InputType, StringComparison.Ordinal))
+                        continue; // different input types = valid overload
+
+                    if (existing.PackageName is null && func.PackageName is null)
+                    {
+                        errors.Add($"Duplicate function '{func.Name}({func.InputType})' defined in multiple local files");
+                        break;
+                    }
+                    if (existing.PackageName is not null && func.PackageName is not null
+                        && existing.PackageName != func.PackageName)
+                    {
+                        errors.Add($"Ambiguous function '{func.Name}({func.InputType})' defined in packages '{existing.PackageName}' and '{func.PackageName}'. Use '{existing.PackageName}.{func.Name}' or '{func.PackageName}.{func.Name}' to disambiguate.");
+                        break;
+                    }
+                }
+
+                group.Add(func);
+
+                // Track in package-qualified store
+                if (func.PackageName is not null)
+                {
+                    if (!pkgFunctions.TryGetValue(func.PackageName, out var pkgGroup))
+                    {
+                        pkgGroup = new Dictionary<string, List<FunctionDefinition>>();
+                        pkgFunctions[func.PackageName] = pkgGroup;
+                    }
+                    if (!pkgGroup.TryGetValue(func.Name, out var pkgNameGroup))
+                    {
+                        pkgNameGroup = [];
+                        pkgGroup[func.Name] = pkgNameGroup;
+                    }
+                    pkgNameGroup.Add(func);
+                }
+            }
+
+            // Register let declarations with conflict detection
+            foreach (var let in sf.LetDeclarations)
+            {
+                if (letDeclarations.TryGetValue(let.Name, out var existing))
+                {
+                    if (existing.PackageName is null && let.PackageName is null)
+                    {
+                        errors.Add($"Duplicate let binding '{let.Name}' defined in multiple local files");
+                    }
+                    else if (existing.PackageName is null && let.PackageName is not null)
+                    {
+                        // Local already registered, imported version comes later — local wins, skip
+                        // Track in package store for qualified access
+                    }
+                    else if (existing.PackageName is not null && let.PackageName is null)
+                    {
+                        // Local overrides import — replace
+                        letDeclarations[let.Name] = let;
+                    }
+                    else if (existing.PackageName is not null && let.PackageName is not null
+                             && existing.PackageName != let.PackageName)
+                    {
+                        errors.Add($"Ambiguous let binding '{let.Name}' defined in packages '{existing.PackageName}' and '{let.PackageName}'. Use '{existing.PackageName}.{let.Name}' or '{let.PackageName}.{let.Name}' to disambiguate.");
+                    }
+                    // else: same package redefinition — last one wins (within same package)
+                }
+                else
+                {
+                    letDeclarations[let.Name] = let;
+                }
+
+                // Track in package-qualified store
+                if (let.PackageName is not null)
+                {
+                    if (!pkgLets.TryGetValue(let.PackageName, out var pkgLetMap))
+                    {
+                        pkgLetMap = new Dictionary<string, LetDeclaration>();
+                        pkgLets[let.PackageName] = pkgLetMap;
+                    }
+                    pkgLetMap[let.Name] = let;
+                }
+            }
+        }
+
+        _packagePredicates = pkgPredicates;
+        _packageFunctions = pkgFunctions;
+        _packageLets = pkgLets;
+
+        return (predicateGroups, functionGroups, letDeclarations);
     }
 
     public InterpreterResult Run(
@@ -75,43 +250,10 @@ public class ScriptInterpreter
         // Create Program built-in
         var program = new ProgramInfo(new List<string>(programArgs ?? []));
 
-        // Build predicate dictionary across all script files (grouped by name for overloading)
-        var predicateGroups = new Dictionary<string, List<PredicateDefinition>>();
-        foreach (var ScriptFile in scriptFiles)
-        {
-            foreach (var pred in ScriptFile.Predicates)
-            {
-                if (!predicateGroups.TryGetValue(pred.Name, out var group))
-                {
-                    group = [];
-                    predicateGroups[pred.Name] = group;
-                }
-                group.Add(pred);
-            }
-        }
-
-        // Build function dictionary across all script files (grouped by name)
-        var functionGroups = new Dictionary<string, List<FunctionDefinition>>();
-        foreach (var ScriptFile in scriptFiles)
-        {
-            foreach (var func in ScriptFile.Functions)
-            {
-                if (!functionGroups.TryGetValue(func.Name, out var group))
-                {
-                    group = [];
-                    functionGroups[func.Name] = group;
-                }
-                group.Add(func);
-            }
-        }
-
-        // Build let declaration dictionary across all script files
-        var letDeclarations = new Dictionary<string, LetDeclaration>();
-        foreach (var ScriptFile in scriptFiles)
-        {
-            foreach (var let in ScriptFile.LetDeclarations)
-                letDeclarations[let.Name] = let;
-        }
+        // Build symbol tables with conflict detection
+        var errors = new List<string>();
+        var (predicateGroups, functionGroups, letDeclarations) = BuildSymbolTables(scriptFiles, errors);
+        // Report symbol conflicts as interpreter errors (non-fatal — continue with best-effort resolution)
 
         // Compute aggregate collection counts
         var aggregateCounts = ComputeAggregateCounts(documents);
@@ -244,13 +386,130 @@ public class ScriptInterpreter
             }
         }
 
+        // Execute action-lets: let bindings whose filters produce command objects
+        // (Violations from toWarning, strings from toOutput, SaveActions from toSave, assertions from assert)
+        {
+            // Collect let names already consumed by explicit commands (avoid double execution during transition)
+            var consumedLets = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var sf in scriptFiles)
+                foreach (var c in sf.Commands)
+                    if (c.Collection != null)
+                        consumedLets.Add(c.Collection);
+
+            foreach (var (name, letDecl) in letDeclarations)
+            {
+                if (letDecl.IsValueBinding || letDecl.IsCollectionUnion || letDecl.IsExternalLoad || letDecl.IsFileParse) continue;
+                if (letDecl.Filters.Count == 0) continue;
+
+                // Only auto-execute LOCAL action-lets (not from imported packages)
+                if (letDecl.PackageName != null) continue;
+
+                // Find terminal action filter
+                var terminalFilter = letDecl.Filters[^1];
+                if (terminalFilter is not CallExpr terminalCall || !IsActionFilter(terminalCall.Name)) continue;
+
+                // Skip if already consumed by an explicit command
+                if (consumedLets.Contains(name)) continue;
+
+                // Respect commandName/commandFilter selection
+                if (commandName != null && !string.Equals(name, commandName, StringComparison.Ordinal)) continue;
+                if (commandFilter != null && !commandFilter.Contains(name)) continue;
+
+                // assertMode: only run assert action-lets; normal mode: skip asserts
+                bool isAssert = terminalCall.Name is "assert" or "assertEmpty";
+                if (assertMode && !isAssert) continue;
+                if (!assertMode && isAssert) continue;
+
+                // Skip toSave in default mode (requires explicit invocation, like SAVE commands)
+                if (!assertMode && commandName == null && commandFilter == null && terminalCall.Name == "toSave") continue;
+
+                try
+                {
+                    // Resolve the collection with ALL filters applied (action filter produces command objects)
+                    var evaluator = CreateEvaluator(predicateGroups, "", letDeclarations, functionGroups);
+                    var items = ResolveGlobalCollection(letDecl.BaseCollection, evaluator, predicateGroups, letDeclarations, functionGroups);
+                    var itemType = ResolveItemType(letDecl.BaseCollection, predicateGroups, letDeclarations, functionGroups);
+                    items = ApplyFilters(items, itemType, letDecl.Filters, evaluator, functionGroups);
+
+                    if (letDecl.Exclusions != null)
+                    {
+                        var finalType = ResolveItemTypeAfterFilters(itemType, letDecl.Filters, functionGroups);
+                        items = ApplyExclusions(items, finalType, letDecl.Exclusions, evaluator, letDeclarations);
+                    }
+
+                    // Execute based on action type
+                    if (terminalCall.Name is "toWarning" or "toError" or "toInfo")
+                    {
+                        // Items are Violations — format with check template
+                        foreach (var item in items)
+                        {
+                            var ctx = new EvaluationContext();
+                            ctx.Capture("Violation", item);
+                            ctx.Capture("item", item);
+                            if (item is DataObject ao)
+                                CaptureAlanObjectFields(ctx, ao);
+                            var richMessage = ResolveTemplate(CheckOutputTemplate, ctx);
+                            allOutputs.Add(new PrintOutput(richMessage));
+                        }
+                    }
+                    else if (terminalCall.Name == "toOutput")
+                    {
+                        // Items are formatted strings from ApplyFilters native handling
+                        foreach (var item in items)
+                            allOutputs.Add(new PrintOutput(new RichString(new[] { new TextSpan(item?.ToString() ?? "") })));
+                    }
+                    else if (terminalCall.Name == "toSave")
+                    {
+                        // Items are SaveAction DataObjects with Path/Content
+                        foreach (var item in items)
+                        {
+                            if (item is DataObject sa)
+                            {
+                                var path = sa.GetField("Path")?.ToString() ?? "";
+                                var content = sa.GetField("Content")?.ToString() ?? "";
+                                if (!fileOutputs.TryGetValue(path, out var lines)) { lines = []; fileOutputs[path] = lines; }
+                                lines.Add(content);
+                            }
+                        }
+                    }
+                    else if (terminalCall.Name == "assert")
+                    {
+                        var msg = GetAssertMessage(terminalCall) ?? name;
+                        allAsserts.Add(new AssertResult(name, items.Count > 0, msg, items.Count));
+                    }
+                    else if (terminalCall.Name == "assertEmpty")
+                    {
+                        var msg = GetAssertMessage(terminalCall) ?? name;
+                        allAsserts.Add(new AssertResult(name, items.Count == 0, msg, items.Count));
+                    }
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+                {
+                    _diagLog?.Invoke($"[trace] action-let '{name}' failed: {ex.Message}");
+
+                    // If the base collection derives from a runtime:: binding (Code aggregator),
+                    // surface a clear error — Code with no providers is never valid.
+                    var dotIdx = letDecl.BaseCollection.IndexOf('.');
+                    if (dotIdx > 0)
+                    {
+                        var parentName = letDecl.BaseCollection[..dotIdx];
+                        if (letDeclarations.TryGetValue(parentName, out var parentLet) && parentLet.IsRuntime)
+                        {
+                            errors.Add($"Error: {letDecl.BaseCollection} has no data — no language provider is imported. " +
+                                       $"Add 'import csharp' (or another language provider) to your .cop file.");
+                        }
+                    }
+                }
+            }
+        }
+
         outputs = fileOutputs.Select(kv =>
             new FileOutput(kv.Key, string.Join(Environment.NewLine, kv.Value)))
             .ToList();
 
         // Warn about empty root collections referenced by executed commands
         // Skip warning in assert mode — test results are the intended output
-        var warnings = new List<string>();
+        var warnings = new List<string>(errors);
         if (!assertMode && allOutputs.Count == 0 && outputs.Count == 0)
         {
             // Only check collections from commands that actually executed (not all commands in all files)
@@ -318,33 +577,12 @@ public class ScriptInterpreter
             ? ResolveSink(cmd.Sink)
             : ConsoleWriteLineSink.Instance;
 
-        // Build predicate/function/let dictionaries from script files
-        var predicateGroups = new Dictionary<string, List<PredicateDefinition>>();
-        var functionGroups = new Dictionary<string, List<FunctionDefinition>>();
-        var letDeclarations = new Dictionary<string, LetDeclaration>();
-        foreach (var sf in scriptFiles)
-        {
-            foreach (var pred in sf.Predicates)
-            {
-                if (!predicateGroups.TryGetValue(pred.Name, out var group))
-                {
-                    group = [];
-                    predicateGroups[pred.Name] = group;
-                }
-                group.Add(pred);
-            }
-            foreach (var func in sf.Functions)
-            {
-                if (!functionGroups.TryGetValue(func.Name, out var group))
-                {
-                    group = [];
-                    functionGroups[func.Name] = group;
-                }
-                group.Add(func);
-            }
-            foreach (var let in sf.LetDeclarations)
-                letDeclarations[let.Name] = let;
-        }
+        // Build predicate/function/let dictionaries from script files (with conflict detection)
+        var symbolErrors = new List<string>();
+        var (predicateGroups, functionGroups, letDeclarations) = BuildSymbolTables(scriptFiles, symbolErrors);
+        // Streaming mode: log symbol conflicts but don't block execution
+        foreach (var err in symbolErrors)
+            _diagLog?.Invoke($"[diag] {err}");
 
         string itemType = ResolveItemType(cmd.Collection, predicateGroups, letDeclarations, functionGroups);
         string finalItemType = ResolveItemTypeAfterFilters(itemType, cmd.Filters, functionGroups);
@@ -1164,8 +1402,7 @@ public class ScriptInterpreter
             if (letDecl.IsValueBinding || letDecl.IsCollectionUnion) continue;
             // Skip check-level lets (those with actions like :toWarning) — they are commands, not data
             if (letDecl.Filters.Any(f =>
-                (f is FunctionCallExpr fc && IsActionFilter(fc.Name)) ||
-                (f is PredicateCallExpr pc && IsActionFilter(pc.Name)))) continue;
+                (f is CallExpr fc && IsActionFilter(fc.Name)))) continue;
 
             try
             {
@@ -1186,7 +1423,18 @@ public class ScriptInterpreter
     }
 
     private static bool IsActionFilter(string name) =>
-        name is "toError" or "toWarning" or "toInfo" or "toOutput" or "toSave";
+        name is "toError" or "toWarning" or "toInfo" or "toOutput" or "toSave" or "assert" or "assertEmpty";
+
+    /// <summary>
+    /// Output template for Violation objects (check results).
+    /// </summary>
+    private const string CheckOutputTemplate = "{item.File@dim}({item.Line@dim}): {item.Severity@auto}: {item.Message}";
+
+    /// <summary>
+    /// Extract assertion message from an assert/assertEmpty filter call.
+    /// </summary>
+    private static string? GetAssertMessage(CallExpr call) =>
+        call.Args.Count > 0 && call.Args[0] is LiteralExpr lit ? lit.Value?.ToString() : null;
 
     /// <summary>
     /// Pre-resolve non-action collection let bindings for global commands.
@@ -1207,8 +1455,7 @@ public class ScriptInterpreter
             if (letDecl.IsFileParse) continue;
             if (letDecl.IsValueBinding || letDecl.IsCollectionUnion) continue;
             if (letDecl.Filters.Any(f =>
-                (f is FunctionCallExpr fc && IsActionFilter(fc.Name)) ||
-                (f is PredicateCallExpr pc && IsActionFilter(pc.Name)))) continue;
+                (f is CallExpr fc && IsActionFilter(fc.Name)))) continue;
 
             // Only pre-resolve "leaf" lets whose base is a direct global collection.
             // Lets whose base is another let may depend on cross-collection predicates
@@ -1507,6 +1754,58 @@ public class ScriptInterpreter
                     continue;
                 }
             }
+            // Handle :toOutput(template) — format each item with template, keep as individual strings
+            else if (funcName == "toOutput")
+            {
+                var templateArgs = GetFilterArgs(filter);
+                if (templateArgs.Count > 0 && templateArgs[0] is LiteralExpr litOut && litOut.Value is string outputTemplate)
+                {
+                    var lines = current.Where(item => item is not null)
+                        .Select(item =>
+                        {
+                            var ctx = new EvaluationContext();
+                            ctx.Capture(currentType, item);
+                            ctx.Capture("item", item);
+                            if (item is DataObject ao)
+                                CaptureAlanObjectFields(ctx, ao);
+                            return (object)ResolveTemplate(outputTemplate, ctx).ToPlainText();
+                        }).ToList();
+                    _diagLog?.Invoke($"[trace] filter: :toOutput -> {lines.Count} items");
+                    current = lines;
+                    currentType = "string";
+                    continue;
+                }
+            }
+            // Handle :toSave(file, template) — produce SaveAction objects with Path/Content
+            else if (funcName == "toSave")
+            {
+                var saveArgs = GetFilterArgs(filter);
+                if (saveArgs.Count > 0)
+                {
+                    string filePath = (saveArgs[0] as LiteralExpr)?.Value?.ToString() ?? "";
+                    string saveTemplate = saveArgs.Count > 1
+                        ? (saveArgs[1] as LiteralExpr)?.Value?.ToString() ?? "{item}"
+                        : "{item}";
+                    var results = current.Where(item => item is not null)
+                        .Select(item =>
+                        {
+                            var ctx = new EvaluationContext();
+                            ctx.Capture(currentType, item);
+                            ctx.Capture("item", item);
+                            if (item is DataObject ao)
+                                CaptureAlanObjectFields(ctx, ao);
+                            var content = ResolveTemplate(saveTemplate, ctx).ToPlainText();
+                            var sa = new DataObject("SaveAction");
+                            sa.Set("Path", filePath);
+                            sa.Set("Content", content);
+                            return (object)sa;
+                        }).ToList();
+                    _diagLog?.Invoke($"[trace] filter: :toSave -> {results.Count} items");
+                    current = results;
+                    currentType = "SaveAction";
+                    continue;
+                }
+            }
             else if (funcName != null && functionGroups.ContainsKey(funcName))
             {
                 // Barrier: function map transforms items (type changes)
@@ -1627,8 +1926,7 @@ public class ScriptInterpreter
     {
         return filter switch
         {
-            PredicateCallExpr pc => pc.Name,
-            FunctionCallExpr fc => fc.Name,
+            CallExpr c => c.Name,
             IdentifierExpr id => id.Name,
             _ => null
         };
@@ -1641,8 +1939,7 @@ public class ScriptInterpreter
     {
         return filter switch
         {
-            PredicateCallExpr pc => pc.Args,
-            FunctionCallExpr fc => fc.Args,
+            CallExpr c => c.Args,
             _ => []
         };
     }
@@ -1654,8 +1951,7 @@ public class ScriptInterpreter
     {
         return filter switch
         {
-            PredicateCallExpr pc => pc.Name,
-            FunctionCallExpr fc => fc.Name,
+            CallExpr c => c.Name,
             IdentifierExpr id => id.Name,
             MemberAccessExpr ma => ma.Member,
             UnaryExpr { Operator: "!" } neg => $"!{GetFilterDisplayName(neg.Operand)}",
@@ -1920,6 +2216,7 @@ public class ScriptInterpreter
             }).ToList();
         }
 
+        _diagLog?.Invoke($"[trace] Unknown collection '{collection}'");
         throw new InvalidOperationException($"Unknown collection '{collection}'");
     }
 
@@ -2222,7 +2519,7 @@ public class ScriptInterpreter
         // Find let declarations that use .Select()
         var selectLets = letDeclarations
             .Where(kv => !kv.Value.IsValueBinding && !kv.Value.IsCollectionUnion &&
-                         kv.Value.Filters.Any(f => f is FunctionCallExpr fc && fc.Name == "Select"))
+                         kv.Value.Filters.Any(f => f is CallExpr fc && fc.Name == "Select"))
             .ToList();
 
         if (selectLets.Count == 0) return null;
@@ -2584,7 +2881,7 @@ public class ScriptInterpreter
     /// </summary>
     private static string ExtractLoadPath(LetDeclaration letDecl)
     {
-        var loadExpr = (FunctionCallExpr)letDecl.ValueExpression!;
+        var loadExpr = (CallExpr)letDecl.ValueExpression!;
         if (loadExpr.Args.Count == 0)
             throw new InvalidOperationException("Load() requires a path argument");
 
@@ -2617,7 +2914,7 @@ public class ScriptInterpreter
     /// </summary>
     private static (string FilePath, string TypeName) ExtractParseArgs(LetDeclaration letDecl)
     {
-        var parseExpr = (FunctionCallExpr)letDecl.ValueExpression!;
+        var parseExpr = (CallExpr)letDecl.ValueExpression!;
 
         if (parseExpr.Args.Count < 2)
             throw new InvalidOperationException(

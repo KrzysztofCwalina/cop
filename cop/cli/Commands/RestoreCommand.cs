@@ -10,7 +10,7 @@ using Cop.Lang;
 namespace Cop.Cli.Commands;
 
 /// <summary>
-/// Implements the `cop restore` command.
+/// Implements the `cop package restore` command.
 /// Restores packages from a .cop file by parsing feed and import declarations,
 /// resolving dependencies, downloading packages, and placing files in the repository.
 /// </summary>

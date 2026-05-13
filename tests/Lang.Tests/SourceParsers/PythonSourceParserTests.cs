@@ -196,4 +196,26 @@ public class PythonSourceParserTests
         var prints = result.Statements.Where(s => s.MemberName == "print").ToList();
         Assert.That(prints, Is.Empty);
     }
+
+    // ── Comment line detection ──
+
+    [Test]
+    public void Parse_CommentLines_HashComment()
+    {
+        var source = "# This is a comment\nx = 1\n# Another comment\n";
+        var result = _parser.Parse("test.py", source)!;
+        Assert.That(result.CommentLines, Does.Contain(1));
+        Assert.That(result.CommentLines, Does.Not.Contain(2));
+        Assert.That(result.CommentLines, Does.Contain(3));
+    }
+
+    [Test]
+    public void Parse_CommentLines_IndentedComment()
+    {
+        var source = "class Foo:\n    # indented comment\n    x = 1\n";
+        var result = _parser.Parse("test.py", source)!;
+        Assert.That(result.CommentLines, Does.Contain(2));
+        Assert.That(result.CommentLines, Does.Not.Contain(1));
+        Assert.That(result.CommentLines, Does.Not.Contain(3));
+    }
 }

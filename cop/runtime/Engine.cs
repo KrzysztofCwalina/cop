@@ -51,6 +51,7 @@ public static class Engine
             return new EngineResult([], [], [$"Scripts directory not found: {scriptsDir}"]);
 
         var scriptFilePaths = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
+        Array.Sort(scriptFilePaths, StringComparer.Ordinal);
         if (scriptFilePaths.Length == 0)
             return new EngineResult([], [], []);
 
@@ -84,6 +85,10 @@ public static class Engine
         {
             var availableCommands = scriptFiles
                 .SelectMany(f => f.Commands.Where(c => c.IsCommand).Select(c => c.Name))
+                .Concat(scriptFiles.SelectMany(f => f.LetDeclarations
+                    .Where(l => l.Filters.Count > 0 && l.Filters[^1] is CallExpr fc &&
+                        (fc.Name is "toError" or "toWarning" or "toInfo" or "toOutput" or "toSave" or "assert" or "assertEmpty"))
+                    .Select(l => l.Name)))
                 .Distinct()
                 .ToList();
 
@@ -289,7 +294,13 @@ public static class Engine
         diagLog?.Invoke($"[diag] Interpreter: {phaseSw.ElapsedMilliseconds}ms ({result.Outputs.Count} outputs)");
         diagLog?.Invoke($"[diag] Total: {totalSw.ElapsedMilliseconds}ms");
 
-        return new EngineResult(result.Outputs, parseErrors, [], commandName, result.FileOutputs, result.Warnings, result.Asserts);
+        // Promote runtime errors (e.g., missing Code providers) from warnings to fatal errors
+        var runtimeErrors = result.Warnings.Where(w => w.StartsWith("Error:", StringComparison.Ordinal)).ToList();
+        var remainingWarnings = runtimeErrors.Count > 0
+            ? result.Warnings.Where(w => !w.StartsWith("Error:", StringComparison.Ordinal)).ToList()
+            : result.Warnings;
+
+        return new EngineResult(result.Outputs, parseErrors, runtimeErrors, commandName, result.FileOutputs, remainingWarnings, result.Asserts);
     }
 
     /// <summary>
@@ -308,6 +319,7 @@ public static class Engine
             throw new InvalidOperationException($"Scripts directory not found: {scriptsDir}");
 
         var scriptFilePaths = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
+        Array.Sort(scriptFilePaths, StringComparer.Ordinal);
         if (scriptFilePaths.Length == 0)
             throw new InvalidOperationException("No .cop files found.");
 
@@ -464,6 +476,7 @@ public static class Engine
                 if (copDir is null) continue;
 
                 var copFiles = Directory.GetFiles(copDir, "*.cop");
+                Array.Sort(copFiles, StringComparer.Ordinal);
                 if (copFiles.Length == 0) continue;
 
                 foreach (var file in copFiles)
@@ -576,12 +589,14 @@ public static class Engine
             try
             {
                 // Run actual commands directly
+                var allWarnings = new List<string>();
                 foreach (var rule in commandRules)
                 {
                     var result = interpreter.Run(scriptFiles, documents, rule, programArgs);
                     allOutputs.AddRange(result.Outputs);
                     if (result.FileOutputs is not null)
                         allFileOutputs.AddRange(result.FileOutputs);
+                    allWarnings.AddRange(result.Warnings);
                 }
 
                 // For let collections, synthesize RUN CHECK(name) if check command exists
@@ -594,7 +609,13 @@ public static class Engine
                     allOutputs.AddRange(result.Outputs);
                     if (result.FileOutputs is not null)
                         allFileOutputs.AddRange(result.FileOutputs);
+                    allWarnings.AddRange(result.Warnings);
                 }
+
+                // Promote runtime errors from warnings to fatal errors
+                var ruleFatalErrors = allWarnings.Where(w => w.StartsWith("Error:", StringComparison.Ordinal)).ToList();
+                if (ruleFatalErrors.Count > 0)
+                    return new EngineResult(allOutputs, parseErrors, ruleFatalErrors, rules[0], allFileOutputs);
             }
             catch (AmbiguousCollectionException ex)
             {
@@ -635,7 +656,14 @@ public static class Engine
             try
             {
                 var result = interpreter.Run(scriptFiles, documents, null, programArgs);
-                return new EngineResult(result.Outputs, parseErrors, [], null, result.FileOutputs, result.Warnings);
+
+                // Promote runtime errors (e.g., missing Code providers) from warnings to fatal errors
+                var globalFatalErrors = result.Warnings.Where(w => w.StartsWith("Error:", StringComparison.Ordinal)).ToList();
+                var remainingWarnings = globalFatalErrors.Count > 0
+                    ? result.Warnings.Where(w => !w.StartsWith("Error:", StringComparison.Ordinal)).ToList()
+                    : result.Warnings;
+
+                return new EngineResult(result.Outputs, parseErrors, globalFatalErrors, null, result.FileOutputs, remainingWarnings);
             }
             catch (AmbiguousCollectionException ex)
             {
@@ -690,8 +718,7 @@ public static class Engine
         {
             var name = filter switch
             {
-                PredicateCallExpr pc => pc.Name,
-                FunctionCallExpr fc => fc.Name,
+                CallExpr c => c.Name,
                 _ => null
             };
             if (name is "toError" or "toWarning" or "toInfo")
@@ -706,6 +733,13 @@ public static class Engine
     private static TypeRegistry CreateTypeRegistry(List<ScriptFile> scriptFiles, List<string> feedPaths, List<string> errors, List<string> fatalErrors, List<string>? preloadedPackages = null, List<(string Dir, PackageMetadata Meta)>? providerPackages = null)
     {
         var typeRegistry = new TypeRegistry();
+
+        // Register built-in provider schemas FIRST so they define authoritative type descriptors
+        // (e.g., Line type with isComment). Package .cop type definitions merge but don't replace.
+        foreach (var bp in _builtinProviders)
+            ProviderLoader.RegisterSchema(bp.Instance, typeRegistry);
+        typeRegistry.RegisterProgramType();
+
         var importResolver = new ImportResolver([.. feedPaths]);
 
         var resolvedPackages = new HashSet<string>();
@@ -757,6 +791,9 @@ public static class Engine
             foreach (var coll in packageFile.CollectionDeclarations)
                 typeRegistry.RegisterCollection(coll);
 
+            // Stamp PackageName on all definitions so the interpreter can detect cross-package conflicts
+            StampPackageName(packageFile, import);
+
             importedFiles.Add(packageFile);
 
             // Detect provider packages: check for package metadata with provider:clr
@@ -792,11 +829,6 @@ public static class Engine
 
         scriptFiles.AddRange(importedFiles);
 
-        // Register all built-in provider schemas uniformly
-        foreach (var bp in _builtinProviders)
-            ProviderLoader.RegisterSchema(bp.Instance, typeRegistry);
-        typeRegistry.RegisterProgramType();
-
         // Register built-in sinks
         typeRegistry.RegisterSink("console", ConsoleWriteLineSink.Instance);
         typeRegistry.RegisterSink("file", new FileWriteSink());
@@ -829,6 +861,20 @@ public static class Engine
     /// <summary>
     /// Detects if a resolved package is a CLR provider package and adds it to the list.
     /// </summary>
+    /// <summary>
+    /// Stamps PackageName on all predicates, functions, and let declarations in a ScriptFile.
+    /// Uses record mutation via mutable list replacement since records are immutable.
+    /// </summary>
+    private static void StampPackageName(ScriptFile packageFile, string packageName)
+    {
+        for (int i = 0; i < packageFile.Predicates.Count; i++)
+            packageFile.Predicates[i] = packageFile.Predicates[i] with { PackageName = packageName };
+        for (int i = 0; i < packageFile.Functions.Count; i++)
+            packageFile.Functions[i] = packageFile.Functions[i] with { PackageName = packageName };
+        for (int i = 0; i < packageFile.LetDeclarations.Count; i++)
+            packageFile.LetDeclarations[i] = packageFile.LetDeclarations[i] with { PackageName = packageName };
+    }
+
     private static void DetectProviderPackage(string copDirPath, string packageName, List<string> feedPaths, List<(string Dir, PackageMetadata Meta)> providerPackages, List<string> errors)
     {
         // copDirPath is the package's src/ or types/ directory (from ImportResolver).
@@ -924,13 +970,33 @@ public static class Engine
                 .ToList();
         }
 
-        if (commands.Count == 0) return null;
-
         // Build let declaration dictionary for resolving transitive references
         var letDeclarations = new Dictionary<string, LetDeclaration>(StringComparer.Ordinal);
         foreach (var sf in scriptFiles)
             foreach (var let in sf.LetDeclarations)
                 letDeclarations[let.Name] = let;
+
+        // Also include action-lets as collection sources (they auto-execute like commands)
+        var actionLetCollections = new List<(string Collection, List<Expression> Filters)>();
+        foreach (var sf in scriptFiles)
+        {
+            foreach (var let in sf.LetDeclarations)
+            {
+                if (let.Filters.Count == 0) continue;
+                var lastFilter = let.Filters[^1];
+                string? funcName = lastFilter is CallExpr fc ? fc.Name
+                    : lastFilter is IdentifierExpr ie ? ie.Name : null;
+                if (funcName is "toError" or "toWarning" or "toInfo" or "toOutput" or "toSave" or "assert" or "assertEmpty")
+                {
+                    // If a specific commandName was requested, only include matching action-lets
+                    if (commandName is not null && !string.Equals(let.Name, commandName, StringComparison.Ordinal))
+                        continue;
+                    actionLetCollections.Add((let.BaseCollection, new List<Expression>(let.Filters)));
+                }
+            }
+        }
+
+        if (commands.Count == 0 && actionLetCollections.Count == 0) return null;
 
         // Collect predicate names and definitions for filter inlining
         var predicateNames = new HashSet<string>(StringComparer.Ordinal);
@@ -977,6 +1043,31 @@ public static class Engine
             var (hints, _) = FilterHintExtractor.Extract(allCmdFilters, itemTypeDesc, predicateNames, predicateDefs, allowPartial: true);
 
             // Merge: if same collection from multiple command blocks, AND the filters
+            if (collectionFilters.TryGetValue(bareCollection, out var existing) && existing is not null && hints is not null)
+                collectionFilters[bareCollection] = FilterExpression.And(existing, hints);
+            else
+                collectionFilters[bareCollection] = hints ?? existing;
+        }
+
+        // Process action-lets the same way
+        foreach (var (collection, filters) in actionLetCollections)
+        {
+            var baseCollection = ResolveBaseCollection(collection, letDeclarations, filters);
+            var bareCollection = baseCollection;
+            var dotIdx = baseCollection.IndexOf('.');
+            if (dotIdx > 0)
+                bareCollection = baseCollection[(dotIdx + 1)..];
+
+            var itemTypeName = typeRegistry.GetCollectionItemType(baseCollection);
+            if (itemTypeName is null)
+            {
+                collectionFilters.TryAdd(bareCollection, null);
+                continue;
+            }
+
+            var itemTypeDesc = typeRegistry.GetType(itemTypeName);
+            var (hints, _) = FilterHintExtractor.Extract(filters, itemTypeDesc, predicateNames, predicateDefs, allowPartial: true);
+
             if (collectionFilters.TryGetValue(bareCollection, out var existing) && existing is not null && hints is not null)
                 collectionFilters[bareCollection] = FilterExpression.And(existing, hints);
             else
@@ -1081,6 +1172,7 @@ public static class Engine
 
         // REPL only loads top-level .cop files; packages are resolved via import directives
         var scriptFilePaths = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.TopDirectoryOnly);
+        Array.Sort(scriptFilePaths, StringComparer.Ordinal);
         var scriptFiles = new List<ScriptFile>();
         var parseErrors = new List<string>();
 

@@ -433,7 +433,7 @@ public class ScriptParser
                 Advance();
                 var args = ParseArgList();
                 Expect(TokenKind.RParen);
-                constraint = new PredicateCallExpr(new IdentifierExpr("item"), constraintIdent.Value, args, negated);
+                constraint = new CallExpr(new IdentifierExpr("item"), constraintIdent.Value, args, negated);
             }
             else if (Current.Kind == TokenKind.Colon)
             {
@@ -452,11 +452,11 @@ public class ScriptParser
                         Advance();
                         var args = ParseArgList();
                         Expect(TokenKind.RParen);
-                        chainExpr = new PredicateCallExpr(chainExpr, predName.Value, args, neg);
+                        chainExpr = new CallExpr(chainExpr, predName.Value, args, neg);
                     }
                     else
                     {
-                        chainExpr = new PredicateCallExpr(chainExpr, predName.Value, [], neg);
+                        chainExpr = new CallExpr(chainExpr, predName.Value, [], neg);
                     }
                 }
                 constraint = chainExpr;
@@ -560,13 +560,13 @@ public class ScriptParser
         var expr = ParseExpression();
 
         // Handle Load('path') and Parse('file', [Type]) as value bindings
-        if (expr is FunctionCallExpr call && call.Name is "Load" or "Parse" or "Code")
+        if (expr is CallExpr { Target: null } call && call.Name is "Load" or "Parse" or "Code")
         {
             return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: call, DocComment: docComment);
         }
 
         // Handle namespace.Code('path') — provider-scoped Code (e.g., csharp.Code('path'))
-        if (expr is PredicateCallExpr { Name: "Code" } nsCode && nsCode.Target is IdentifierExpr)
+        if (expr is CallExpr { Target: not null, Name: "Code" } nsCode && nsCode.Target is IdentifierExpr)
         {
             return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: nsCode, DocComment: docComment);
         }
@@ -702,8 +702,28 @@ public class ScriptParser
     }
 
     // Parse a single command atom: foreach..., 'template', <identifier>(...), or a command reference
+    // Supports prefix guard (degenerate ternary): pred? COMMAND or (expr)? COMMAND
     private CommandBlock ParseCommandAtom(string commandName, string? docComment, int line)
     {
+        // Check for prefix guard: identifier? or (expr)?
+        // This is a degenerate ternary — condition? command (skip if false)
+        Expression? prefixGuard = null;
+        if (Current.Kind == TokenKind.Identifier && _pos + 1 < _tokens.Count && _tokens[_pos + 1].Kind == TokenKind.QuestionMark)
+        {
+            var guardId = Advance(); // consume identifier
+            Advance(); // consume '?'
+            prefixGuard = new IdentifierExpr(guardId.Value);
+        }
+        else if (Current.Kind == TokenKind.LParen)
+        {
+            // Complex guard: (expr)? COMMAND
+            Advance(); // consume '('
+            var expr = ParseExpression();
+            Expect(TokenKind.RParen);
+            Expect(TokenKind.QuestionMark);
+            prefixGuard = expr;
+        }
+
         CommandBlock block;
         if (Current.Kind == TokenKind.ForeachKeyword)
         {
@@ -735,13 +755,8 @@ public class ScriptParser
                 null, [], line, docComment, IsCommand: true, CommandRef: refName);
         }
 
-        // Check for :guard on this element
-        if (Current.Kind == TokenKind.Colon)
-        {
-            Advance(); // consume ':'
-            var guard = ParseExpression();
-            block = block with { Guard = guard };
-        }
+        if (prefixGuard is not null)
+            block = block with { Guard = prefixGuard };
 
         return block;
     }
@@ -988,9 +1003,9 @@ public class ScriptParser
         string filterName = first switch
         {
             IdentifierExpr id => id.Name,
-            FunctionCallExpr fc => fc.Name,
+            CallExpr fc => fc.Name,
             UnaryExpr { Operand: IdentifierExpr id } => id.Name,
-            UnaryExpr { Operand: FunctionCallExpr fc } => fc.Name,
+            UnaryExpr { Operand: CallExpr fc } => fc.Name,
             _ => ""
         };
         return string.IsNullOrEmpty(filterName) ? collection : $"{collection}.{filterName}";
@@ -1014,10 +1029,10 @@ public class ScriptParser
 
         var filters = new List<Expression>();
 
-        // Collect PredicateCallExprs from outermost to innermost
-        var calls = new List<PredicateCallExpr>();
+        // Collect CallExprs from outermost to innermost
+        var calls = new List<CallExpr>();
         var current = expr;
-        while (current is PredicateCallExpr pc)
+        while (current is CallExpr pc)
         {
             calls.Add(pc);
             current = pc.Target;
@@ -1035,7 +1050,7 @@ public class ScriptParser
                 {
                     Expression filter;
                     if (call.Args.Count > 0)
-                        filter = new FunctionCallExpr(call.Name, call.Args);
+                        filter = new CallExpr(null, call.Name, call.Args);
                     else
                         filter = new IdentifierExpr(call.Name);
                     if (call.Negated)
@@ -1047,8 +1062,9 @@ public class ScriptParser
 
             var exprText = current switch
             {
-                UnaryExpr u => $"'!{(u.Operand is FunctionCallExpr fc ? fc.Name : u.Operand.GetType().Name)}(...)'",
-                FunctionCallExpr f => $"'{f.Name}(...)'",
+                null => "null",
+                UnaryExpr u => $"'!{(u.Operand is CallExpr fc ? fc.Name : u.Operand.GetType().Name)}(...)'",
+                CallExpr f => $"'{f.Name}(...)'",
                 _ => current.GetType().Name
             };
             throw new InvalidOperationException(
@@ -1056,7 +1072,7 @@ public class ScriptParser
         }
 
         // Check for path-parameterized collection: namespace.Collection('path')
-        // Pattern: innermost PredicateCallExpr has target=IdentifierExpr, PascalCase name, and single string arg
+        // Pattern: innermost CallExpr has target=IdentifierExpr, PascalCase name, and single string arg
         string? pathOverride = null;
         if (calls.Count > 0)
         {
@@ -1076,7 +1092,7 @@ public class ScriptParser
                 {
                     Expression filter;
                     if (call.Args.Count > 0)
-                        filter = new FunctionCallExpr(call.Name, call.Args);
+                        filter = new CallExpr(null, call.Name, call.Args);
                     else
                         filter = new IdentifierExpr(call.Name);
                     if (call.Negated)
@@ -1093,7 +1109,7 @@ public class ScriptParser
         {
             Expression filter;
             if (call.Args.Count > 0)
-                filter = new FunctionCallExpr(call.Name, call.Args);
+                filter = new CallExpr(null, call.Name, call.Args);
             else
                 filter = new IdentifierExpr(call.Name);
             if (call.Negated)
@@ -1259,7 +1275,7 @@ public class ScriptParser
                     Advance();
                     var args = ParseArgList();
                     Expect(TokenKind.RParen);
-                    expr = new PredicateCallExpr(expr, member.Value, args, false);
+                    expr = new CallExpr(expr, member.Value, args, false);
                 }
                 else
                 {
@@ -1283,11 +1299,11 @@ public class ScriptParser
                     Advance();
                     var args = ParseArgList();
                     Expect(TokenKind.RParen);
-                    expr = new PredicateCallExpr(expr, predName.Value, args, negated);
+                    expr = new CallExpr(expr, predName.Value, args, negated);
                 }
                 else
                 {
-                    expr = new PredicateCallExpr(expr, predName.Value, [], negated);
+                    expr = new CallExpr(expr, predName.Value, [], negated);
                 }
             }
             else
@@ -1311,10 +1327,10 @@ public class ScriptParser
                     Advance();
                     var args = ParseArgList();
                     Expect(TokenKind.RParen);
-                    return new FunctionCallExpr(token.Value, args);
+                    return new CallExpr(null, token.Value, args);
                 }
-                // Record construction: TypeName { Field: expr, ... } (must be on same line)
-                if (Current.Kind == TokenKind.LBrace && Current.Line == token.Line)
+                // Record construction: TypeName { Field: expr, ... }
+                if (Current.Kind == TokenKind.LBrace)
                 {
                     return ParseObjectLiteral(token.Value);
                 }

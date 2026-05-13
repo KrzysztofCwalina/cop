@@ -224,8 +224,7 @@ public class PackageExtractor
         {
             var name = filter switch
             {
-                PredicateCallExpr pc => pc.Name,
-                FunctionCallExpr fc => fc.Name,
+                CallExpr c => c.Name,
                 _ => null
             };
             if (name is "toError" or "toWarning" or "toInfo")

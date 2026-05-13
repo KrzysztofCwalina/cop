@@ -300,4 +300,26 @@ public class JavaScriptSourceParserTests
         var result = _parser.Parse("test.js", "const x = 1;\n")!;
         Assert.That(result.Language, Is.EqualTo("javascript"));
     }
+
+    // ── Comment line detection ──
+
+    [Test]
+    public void Parse_CommentLines_SingleLine()
+    {
+        var source = "// comment\nconst x = 1;\n// another\n";
+        var result = _parser.Parse("test.js", source)!;
+        Assert.That(result.CommentLines, Does.Contain(1));
+        Assert.That(result.CommentLines, Does.Not.Contain(2));
+        Assert.That(result.CommentLines, Does.Contain(3));
+    }
+
+    [Test]
+    public void Parse_CommentLines_MultiLine()
+    {
+        var source = "/* multi\n   line */\nconst x = 1;\n";
+        var result = _parser.Parse("test.js", source)!;
+        Assert.That(result.CommentLines, Does.Contain(1));
+        Assert.That(result.CommentLines, Does.Contain(2));
+        Assert.That(result.CommentLines, Does.Not.Contain(3));
+    }
 }

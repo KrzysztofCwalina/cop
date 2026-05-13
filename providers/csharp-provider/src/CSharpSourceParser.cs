@@ -76,7 +76,8 @@ public class CSharpSourceParser : ISourceParser
         {
             Usings = usings,
             Namespace = ns,
-            Regions = ExtractRegions(root, sourceText)
+            Regions = ExtractRegions(root, sourceText),
+            CommentLines = ExtractCommentLines(root, sourceText)
         };
     }
 
@@ -647,5 +648,35 @@ public class CSharpSourceParser : ISourceParser
         }
 
         return regions;
+    }
+
+    /// <summary>
+    /// Extracts 1-based line numbers that are comment lines using Roslyn trivia.
+    /// A line is a comment if it contains single-line (//) or doc-comment (///)
+    /// trivia, or falls within a multi-line comment (/* */).
+    /// </summary>
+    private static HashSet<int> ExtractCommentLines(CompilationUnitSyntax root, string sourceText)
+    {
+        var commentLines = new HashSet<int>();
+
+        foreach (var trivia in root.DescendantTrivia())
+        {
+            switch (trivia.Kind())
+            {
+                case SyntaxKind.SingleLineCommentTrivia:
+                case SyntaxKind.SingleLineDocumentationCommentTrivia:
+                    commentLines.Add(trivia.GetLocation().GetLineSpan().StartLinePosition.Line + 1);
+                    break;
+
+                case SyntaxKind.MultiLineCommentTrivia:
+                case SyntaxKind.MultiLineDocumentationCommentTrivia:
+                    var span = trivia.GetLocation().GetLineSpan();
+                    for (int line = span.StartLinePosition.Line; line <= span.EndLinePosition.Line; line++)
+                        commentLines.Add(line + 1);
+                    break;
+            }
+        }
+
+        return commentLines;
     }
 }

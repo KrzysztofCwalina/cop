@@ -8,4 +8,5 @@ public record PredicateDefinition(
     int Line,
     bool IsExported = false,
     string? NarrowedType = null,
-    string? DocComment = null);
+    string? DocComment = null,
+    string? PackageName = null);

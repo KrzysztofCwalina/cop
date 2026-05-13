@@ -1,2 +1,5 @@
+- package versioning
+- Code functions magically adds providers. I dont like it
+- properties and predicates (Comment and isComment) are overlapping
 - no empty folders
 - one type per file

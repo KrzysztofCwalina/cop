@@ -76,7 +76,8 @@ public class JavaScriptSourceParser : ISourceParser
         return new SourceFile(filePath, "javascript", types, statements, sourceText)
         {
             Usings = usings,
-            Regions = ExtractRegions(lines)
+            Regions = ExtractRegions(lines),
+            CommentLines = ExtractCommentLines(lines)
         };
     }
 
@@ -590,5 +591,37 @@ public class JavaScriptSourceParser : ISourceParser
         }
 
         return regions;
+    }
+
+    private static HashSet<int> ExtractCommentLines(string[] lines)
+    {
+        var commentLines = new HashSet<int>();
+        bool inBlockComment = false;
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var trimmed = lines[i].TrimStart();
+
+            if (inBlockComment)
+            {
+                commentLines.Add(i + 1);
+                if (trimmed.Contains("*/"))
+                    inBlockComment = false;
+                continue;
+            }
+
+            if (trimmed.StartsWith("//"))
+            {
+                commentLines.Add(i + 1);
+            }
+            else if (trimmed.StartsWith("/*"))
+            {
+                commentLines.Add(i + 1);
+                if (!trimmed.Contains("*/"))
+                    inBlockComment = true;
+            }
+        }
+
+        return commentLines;
     }
 }

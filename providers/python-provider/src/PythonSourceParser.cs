@@ -76,7 +76,8 @@ public class PythonSourceParser : ISourceParser
         return new SourceFile(filePath, "python", types, statements, sourceText)
         {
             Usings = usings,
-            Regions = ExtractRegions(lines)
+            Regions = ExtractRegions(lines),
+            CommentLines = ExtractCommentLines(lines)
         };
     }
 
@@ -471,5 +472,17 @@ public class PythonSourceParser : ISourceParser
         }
 
         return regions;
+    }
+
+    private static HashSet<int> ExtractCommentLines(string[] lines)
+    {
+        var commentLines = new HashSet<int>();
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var trimmed = lines[i].TrimStart();
+            if (trimmed.StartsWith('#'))
+                commentLines.Add(i + 1);
+        }
+        return commentLines;
     }
 }

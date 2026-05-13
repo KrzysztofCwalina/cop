@@ -41,7 +41,7 @@ public static class QueryFingerprint
             {
                 FlushPredicates(sb, pendingPredicates);
                 // Built-in transforms (Select, Text) use '.' separator; user functions use ':'
-                bool isTransform = filter is FunctionCallExpr fc2 && BarrierFunctions.Contains(fc2.Name);
+                bool isTransform = filter is CallExpr { Target: null } fc2 && BarrierFunctions.Contains(fc2.Name);
                 sb.Append(isTransform ? '.' : ':');
                 sb.Append(Serialize(filter));
             }
@@ -70,7 +70,7 @@ public static class QueryFingerprint
 
     private static bool IsBarrier(Expression filter, IReadOnlySet<string>? functionNames)
     {
-        if (filter is FunctionCallExpr fc)
+        if (filter is CallExpr { Target: null } fc)
         {
             // Built-in barriers: select, text
             if (BarrierFunctions.Contains(fc.Name)) return true;
@@ -105,8 +105,7 @@ public static class QueryFingerprint
             UnaryExpr un => $"{un.Operator}{Serialize(un.Operand)}",
             BinaryExpr bin => $"({Serialize(bin.Left)}{bin.Operator}{Serialize(bin.Right)})",
             MemberAccessExpr ma => $"{Serialize(ma.Target)}.{ma.Member}",
-            PredicateCallExpr pc => SerializePredicateCall(pc),
-            FunctionCallExpr fc => SerializeFunctionCall(fc),
+            CallExpr pc => SerializeCall(pc),
             ListLiteralExpr list => $"[{string.Join(",", list.Elements.Select(Serialize))}]",
             CollectionUnionExpr union => $"({string.Join("+", union.Elements.Select(Serialize))})",
             ObjectLiteralExpr obj => SerializeObject(obj),
@@ -126,22 +125,18 @@ public static class QueryFingerprint
         };
     }
 
-    private static string SerializePredicateCall(PredicateCallExpr pc)
+    private static string SerializeCall(CallExpr c)
     {
-        var target = Serialize(pc.Target);
-        var args = pc.Args.Count > 0
-            ? $"({string.Join(",", pc.Args.Select(Serialize))})"
+        var args = c.Args.Count > 0
+            ? $"({string.Join(",", c.Args.Select(Serialize))})"
             : "()";
-        var prefix = pc.Negated ? "!" : "";
-        return $"{prefix}{target}.{pc.Name}{args}";
-    }
-
-    private static string SerializeFunctionCall(FunctionCallExpr fc)
-    {
-        var args = fc.Args.Count > 0
-            ? $"({string.Join(",", fc.Args.Select(Serialize))})"
-            : "()";
-        return $"{fc.Name}{args}";
+        if (c.Target is not null)
+        {
+            var target = Serialize(c.Target);
+            var prefix = c.Negated ? "!" : "";
+            return $"{prefix}{target}.{c.Name}{args}";
+        }
+        return $"{c.Name}{args}";
     }
 
     private static string SerializeObject(ObjectLiteralExpr obj)

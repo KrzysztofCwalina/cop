@@ -22,9 +22,9 @@ public class CheckFileParserTests
         var file = ScriptParser.Parse(
             "predicate IsClient(Type) => Type.Name:endsWith('Client')", "test.cop");
         var body = file.Predicates[0].Body;
-        // Type.Name:endsWith("Client") → PredicateCallExpr(MemberAccessExpr(Identifier("Type"), "Name"), "endsWith", [Literal("Client")])
-        Assert.That(body, Is.TypeOf<PredicateCallExpr>());
-        var call = (PredicateCallExpr)body;
+        // Type.Name:endsWith("Client") → CallExpr(MemberAccessExpr(Identifier("Type"), "Name"), "endsWith", [Literal("Client")])
+        Assert.That(body, Is.TypeOf<CallExpr>());
+        var call = (CallExpr)body;
         Assert.That(call.Name, Is.EqualTo("endsWith"));
         Assert.That(call.Target, Is.TypeOf<MemberAccessExpr>());
     }
@@ -143,8 +143,8 @@ public class CheckFileParserTests
         var file = ScriptParser.Parse(source, "test.cop");
         var check = file.Commands[0];
         Assert.That(check.Filters, Has.Count.EqualTo(3));
-        Assert.That(check.Filters[1], Is.TypeOf<FunctionCallExpr>());
-        var fc = (FunctionCallExpr)check.Filters[1];
+        Assert.That(check.Filters[1], Is.TypeOf<CallExpr>());
+        var fc = (CallExpr)check.Filters[1];
         Assert.That(fc.Name, Is.EqualTo("matches"));
     }
 
@@ -1080,8 +1080,8 @@ public class CheckFileParserTests
         Assert.That(func.Name, Is.EqualTo("handle"));
         Assert.That(func.InputType, Is.EqualTo("Request"));
         Assert.That(func.Constraint, Is.Not.Null);
-        Assert.That(func.Constraint, Is.TypeOf<PredicateCallExpr>());
-        var pc = (PredicateCallExpr)func.Constraint!;
+        Assert.That(func.Constraint, Is.TypeOf<CallExpr>());
+        var pc = (CallExpr)func.Constraint!;
         Assert.That(pc.Name, Is.EqualTo("equals"));
         Assert.That(pc.Target, Is.TypeOf<MemberAccessExpr>());
         var ma = (MemberAccessExpr)pc.Target;
@@ -1121,12 +1121,12 @@ public class CheckFileParserTests
         var file = ScriptParser.Parse(source, "test.cop");
         var func = file.Functions[0];
         Assert.That(func.Constraint, Is.Not.Null);
-        // Outer: PredicateCallExpr(inner, "empty", [], negated=true)
-        var outer = (PredicateCallExpr)func.Constraint!;
+        // Outer: CallExpr(inner, "empty", [], negated=true)
+        var outer = (CallExpr)func.Constraint!;
         Assert.That(outer.Negated, Is.True);
         Assert.That(outer.Name, Is.EqualTo("empty"));
-        // Inner: PredicateCallExpr(MemberAccessExpr(IdentifierExpr("item"), "Method"), "equals", ["GET"])
-        var inner = (PredicateCallExpr)outer.Target;
+        // Inner: CallExpr(MemberAccessExpr(IdentifierExpr("item"), "Method"), "equals", ["GET"])
+        var inner = (CallExpr)outer.Target;
         Assert.That(inner.Name, Is.EqualTo("equals"));
         Assert.That(inner.Target, Is.TypeOf<MemberAccessExpr>());
         var ma = (MemberAccessExpr)inner.Target;

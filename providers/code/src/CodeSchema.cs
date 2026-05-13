@@ -77,7 +77,7 @@ public static class CodeSchema
                     Opt("Condition"), Opt("Expression")),
 
                 TypeDef("Line", null,
-                    Prop("Text"), Prop("Number", "int"), Opt("File", "File"), Prop("Source")),
+                    Prop("Text"), Prop("Number", "int"), Prop("Kind"), Opt("File", "File"), Prop("Source")),
 
                 TypeDef("File", null,
                     Prop("Path"), Opt("Language"), Opt("Namespace"),

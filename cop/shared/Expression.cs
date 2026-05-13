@@ -4,7 +4,11 @@ public abstract record Expression;
 
 public record MemberAccessExpr(Expression Target, string Member) : Expression;
 
-public record PredicateCallExpr(Expression Target, string Name, List<Expression> Args, bool Negated = false) : Expression;
+/// <summary>
+/// Unified call expression. Target is null for standalone calls (e.g., Load('path'), FAIL('msg')),
+/// non-null for postfix calls (e.g., x:foo(), x.bar()). Negated is only valid for predicate calls.
+/// </summary>
+public record CallExpr(Expression? Target, string Name, List<Expression> Args, bool Negated = false) : Expression;
 
 public record IdentifierExpr(string Name) : Expression;
 
@@ -13,8 +17,6 @@ public record BinaryExpr(Expression Left, string Operator, Expression Right) : E
 public record UnaryExpr(string Operator, Expression Operand) : Expression;
 
 public record LiteralExpr(object Value) : Expression;
-
-public record FunctionCallExpr(string Name, List<Expression> Args) : Expression;
 
 public record ListLiteralExpr(List<Expression> Elements) : Expression;
 

@@ -79,7 +79,7 @@ public class QueryFingerprintTests
         {
             new IdentifierExpr("Public"),
             new IdentifierExpr("Abstract"),
-            new FunctionCallExpr("Select", [new IdentifierExpr("Name")])
+            new CallExpr(null, "Select", [new IdentifierExpr("Name")])
         };
         var result = QueryFingerprint.Compute("Types", filters, null);
         Assert.That(result, Is.EqualTo("Types:Abstract:Public.Select(Name)"));
@@ -91,7 +91,7 @@ public class QueryFingerprintTests
         var filters = new List<Expression>
         {
             new IdentifierExpr("Public"),
-            new FunctionCallExpr("Select", [new IdentifierExpr("Name")]),
+            new CallExpr(null, "Select", [new IdentifierExpr("Name")]),
             new IdentifierExpr("Zebra"),
             new IdentifierExpr("Alpha")
         };
@@ -105,7 +105,7 @@ public class QueryFingerprintTests
         var filters = new List<Expression>
         {
             new IdentifierExpr("Public"),
-            new FunctionCallExpr("Text", [new LiteralExpr("template")])
+            new CallExpr(null, "Text", [new LiteralExpr("template")])
         };
         var result = QueryFingerprint.Compute("Types", filters, null);
         Assert.That(result, Is.EqualTo("Types:Public.Text('template')"));
@@ -118,7 +118,7 @@ public class QueryFingerprintTests
         var filters = new List<Expression>
         {
             new IdentifierExpr("Public"),
-            new FunctionCallExpr("myFunc", []),
+            new CallExpr(null, "myFunc", []),
             new IdentifierExpr("Abstract")
         };
         var result = QueryFingerprint.Compute("Types", filters, null, functionNames);
@@ -128,10 +128,10 @@ public class QueryFingerprintTests
     [Test]
     public void UnknownFunction_TreatedAsCommutative()
     {
-        // FunctionCallExpr not in functionNames and not select/text → commutative
+        // CallExpr not in functionNames and not select/text → commutative
         var filters = new List<Expression>
         {
-            new FunctionCallExpr("unknownPred", [new LiteralExpr("x")]),
+            new CallExpr(null, "unknownPred", [new LiteralExpr("x")]),
             new IdentifierExpr("Public")
         };
         var result = QueryFingerprint.Compute("Types", filters, null);
@@ -180,7 +180,7 @@ public class QueryFingerprintTests
     {
         var filters = new List<Expression>
         {
-            new PredicateCallExpr(
+            new CallExpr(
                 new IdentifierExpr("Name"),
                 "startsWith",
                 [new LiteralExpr("A")])
@@ -194,7 +194,7 @@ public class QueryFingerprintTests
     {
         var filters = new List<Expression>
         {
-            new PredicateCallExpr(
+            new CallExpr(
                 new IdentifierExpr("Name"),
                 "startsWith",
                 [new LiteralExpr("A")],
@@ -214,14 +214,14 @@ public class QueryFingerprintTests
             new IdentifierExpr("Public"),
             new IdentifierExpr("csharp"),
             new IdentifierExpr("Abstract"),
-            new FunctionCallExpr("Select", [new IdentifierExpr("Name")])
+            new CallExpr(null, "Select", [new IdentifierExpr("Name")])
         };
         var filtersB = new List<Expression>
         {
             new IdentifierExpr("csharp"),
             new IdentifierExpr("Abstract"),
             new IdentifierExpr("Public"),
-            new FunctionCallExpr("Select", [new IdentifierExpr("Name")])
+            new CallExpr(null, "Select", [new IdentifierExpr("Name")])
         };
 
         var a = QueryFingerprint.Compute("Types", filtersA, "test.cs");

@@ -17,6 +17,6 @@ command MEMBER-COUNT = PRINT('{Members.Count} members')
 command STATISTICS = TYPE-COUNT & NAMESPACE-COUNT & MEMBER-COUNT
 
 # Combine a foreach listing with a conditional count summary using &
-command LIST-TYPES = foreach Types => PRINT('{item.Name}') & TYPE-COUNT:printStats
-command LIST-NAMESPACES = foreach Files => PRINT('{item.Namespace}') & NAMESPACE-COUNT:printStats
-command LIST-MEMBERS = foreach Members => PRINT('{item.Name}') & MEMBER-COUNT:printStats
+command LIST-TYPES = foreach Types => PRINT('{item.Name}') & printStats? TYPE-COUNT
+command LIST-NAMESPACES = foreach Files => PRINT('{item.Namespace}') & printStats? NAMESPACE-COUNT
+command LIST-MEMBERS = foreach Members => PRINT('{item.Name}') & printStats? MEMBER-COUNT

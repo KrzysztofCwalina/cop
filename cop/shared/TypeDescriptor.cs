@@ -11,6 +11,12 @@ public class TypeDescriptor
     public Func<object, string>? TextConverter { get; set; }
 
     /// <summary>
+    /// True if this type was registered by a built-in provider schema.
+    /// Package .cop type definitions merge into provider types rather than conflicting.
+    /// </summary>
+    public bool IsProviderType { get; set; }
+
+    /// <summary>
     /// Registered method evaluators for this type. Key is method name.
     /// Method evaluators receive (target, args) and return a result.
     /// </summary>

@@ -38,6 +38,7 @@ public class ImportResolver
             if (copDir is null) continue;
 
             var copFiles = Directory.GetFiles(copDir, "*.cop");
+            Array.Sort(copFiles, StringComparer.Ordinal); // deterministic order across platforms
             if (copFiles.Length == 0) continue;
 
             var allTypes = new List<TypeDefinition>();

@@ -17,4 +17,5 @@ public record FunctionDefinition(
     bool IsExported = false,
     Expression? BodyExpression = null,
     Expression? Constraint = null,
-    string? DocComment = null);
+    string? DocComment = null,
+    string? PackageName = null);

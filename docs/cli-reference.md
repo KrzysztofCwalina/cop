@@ -365,7 +365,7 @@ cop package <subcommand>
 
 ### cop package restore
 
-Restore packages declared in a `.cop` file. Downloads packages from GitHub feeds, resolves transitive dependencies, and places files in the local `packages/` directory.
+Restore packages declared in a `.cop` file. Downloads packages from GitHub feeds, resolves transitive dependencies, and places files under the `.cop/` directory in the project root (e.g., `.cop/packages/`, `.cop/checks/`).
 
 ```bash
 cop package restore [<file>]

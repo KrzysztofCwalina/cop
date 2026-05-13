@@ -10,7 +10,7 @@ Cop is a **lazy, declarative language** for processing typed object graphs. It c
 2. **Lazy evaluation** — Nothing is computed until demanded. Functions memoize on first application. Like Haskell, everything is a thunk until forced.
 3. **Purity** — Expressions have no side effects. Output is the only effect, isolated in `command` blocks.
 4. **One type** — The language has exactly one composite type: DataObject. Collections, functions, providers — all DataObjects with different protocols.
-5. **Two operators** — `.` applies/navigates (calls a function on a DataObject). `:` applies a predicate or function (filters collections, pipes single values).
+5. **Two operators** — `.` navigates and transforms (accesses properties, calls functions on an object or collection). `:` applies per-item (filters collections, quantifies with `any`/`all`/`none`/`count`, pipes single values through functions).
 6. **Extension methods** — Predicates and functions are extension methods resolved by their first-parameter type, like C#.
 7. **Smart comparisons** — Identifiers are case-sensitive. String comparison functions (`same`, `similar`, etc.) are case-insensitive and normalize whitespace/symbols by default, enabling fuzzy matching without boilerplate.
 
@@ -174,9 +174,15 @@ types.Methods            # apply Methods on each, flatten → list of all Method
 
 **Higher-order operator** (left side is iterable, member is a collection operator):
 ```cop
-types.any(isPublic)      # → bool (true if any item satisfies)
-types.all(isPublic)      # → bool (true if all satisfy)
-types.count(isPublic)    # → int (how many satisfy)
+types:any(isPublic)      # → bool (true if any item satisfies)
+types:all(isPublic)      # → bool (true if all satisfy)
+types:count(isPublic)    # → int (how many satisfy)
+```
+
+> **Note:** Collection quantifiers (`any`, `all`, `none`, `count`) use `:` because they apply the predicate **to each item** — the same per-item semantics as `:isPublic`. Collection transforms (`Where`, `Select`, `OrderBy`, `GroupBy`) use `.` because they operate **on the collection itself**, returning a new collection or value:
+
+```cop
+types.Where(isPublic)    # → filtered iterable (same items, fewer)
 types.First(isPublic)    # → first matching item or nic
 types.OrderBy(Name)      # → sorted iterable
 types.GroupBy(Namespace) # → iterable of {Key, Items, Count}
@@ -236,9 +242,16 @@ http.Post(url, body).Body:Text:ok
 Overload resolution uses the **target’s type** — `stringValue:ok` resolves `ok(string)`, not `ok(Request)`.
 
 #### Key distinction between `.` and `:` on collections:
+
+- **`:` applies to each item** — the predicate/quantifier runs per-element. Results are booleans or filtered same-type collections.
+- **`.` operates on the collection** — the transform runs on the collection as a whole. Results are new collections, projections, or aggregates.
+
 ```cop
-types.Name          # PROJECT → ['UserService', 'IRepo', ...] (strings! Types lost)
-types:isPublic      # FILTER  → [Type, Type, ...] (still Types, just fewer)
+types.Name              # PROJECT → ['UserService', 'IRepo', ...] (strings! Types lost)
+types:isPublic          # FILTER  → [Type, Type, ...] (still Types, just fewer)
+types:any(isPublic)     # QUANTIFY → bool (per-item test, aggregate result)
+types.Where(isPublic)   # TRANSFORM → [Type, Type, ...] (collection-level operation)
+types.Select(summarize) # MAP → [Summary, ...] (collection-level operation)
 ```
 
 ---
@@ -259,9 +272,9 @@ One definition, multiple uses:
 ```cop
 type.isPublic           # extension method call on single item → bool
 types:isPublic          # filter collection → fewer Types
-types.any(isPublic)     # higher-order operator → bool
-types.all(isPublic)     # higher-order operator → bool
-types.count(isPublic)   # higher-order operator → int
+types:any(isPublic)     # collection quantifier → bool
+types:all(isPublic)     # collection quantifier → bool
+types:count(isPublic)   # collection quantifier → int
 ```
 
 ### Functions
@@ -282,6 +295,14 @@ types.Select(summarize)    # apply to each item → list of Summaries
 ### Predicates ARE Functions
 
 A predicate is just a function that returns bool. The `predicate` keyword is syntactic sugar — it signals that `:` can use this as a filter.
+
+### Naming Convention
+
+The casing convention reflects the semantic role and corresponding operator:
+
+- **`camelCase`** — predicates (boolean, per-item, used with `:`): `isPublic`, `startsWith`, `any`, `none`
+- **`PascalCase`** — transforms & properties (value-returning, used with `.`): `Where`, `Select`, `Count`, `Text`
+- **`UPPERCASE`** — commands (side effects): `FAIL`, `PRINT`, `SAVE`, `ASSERT`
 
 ---
 

@@ -27,7 +27,7 @@ public class ColonPipeTests
         var evaluator = new PredicateEvaluator(predicates, "test.cop", registry, functions: functions);
 
         // "hello":ok → should resolve ok(string), not ok(Request)
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new LiteralExpr("hello"),
             "ok",
             []);
@@ -60,14 +60,14 @@ public class ColonPipeTests
         var responseObj = new DataObject("Response");
         responseObj.Set("StatusCode", 200);
 
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new LiteralExpr("placeholder"),  // We'll use the item itself
             "transform",
             []);
 
         // Evaluate with a Response DataObject as target
         var targetExpr = new IdentifierExpr("item");
-        var pipeExpr = new PredicateCallExpr(targetExpr, "transform", []);
+        var pipeExpr = new CallExpr(targetExpr, "transform", []);
 
         var result = evaluator.EvaluateField(pipeExpr, responseObj, "Response");
         Assert.That(result, Is.EqualTo("transformed"));
@@ -86,7 +86,7 @@ public class ColonPipeTests
 
         // response.Body:Text → should convert bytes to UTF-8 string
         var bodyAccess = new MemberAccessExpr(new IdentifierExpr("item"), "Body");
-        var textPipe = new PredicateCallExpr(bodyAccess, "Text", []);
+        var textPipe = new CallExpr(bodyAccess, "Text", []);
 
         var result = evaluator.EvaluateField(textPipe, response, "Response");
         Assert.That(result, Is.EqualTo("Hello, World!"));
@@ -100,7 +100,7 @@ public class ColonPipeTests
         var evaluator = new PredicateEvaluator(predicates, "test.cop", registry);
 
         // "hello":Text → should return "hello" unchanged
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new LiteralExpr("hello"),
             "Text",
             []);
@@ -126,7 +126,7 @@ public class ColonPipeTests
         var evaluator = new PredicateEvaluator(predicates, "test.cop", registry, functions: functions);
 
         // null:process → should return null, not apply function to outer item
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new IdentifierExpr("null"),
             "process",
             []);
@@ -158,8 +158,8 @@ public class ColonPipeTests
         var evaluator = new PredicateEvaluator(predicates, "test.cop", registry, functions: functions);
 
         // "hello":toUpper:wrap → chains: toUpper("hello") → "UPPER", then wrap("UPPER") → "wrapped"
-        var firstPipe = new PredicateCallExpr(new LiteralExpr("hello"), "toUpper", []);
-        var secondPipe = new PredicateCallExpr(firstPipe, "wrap", []);
+        var firstPipe = new CallExpr(new LiteralExpr("hello"), "toUpper", []);
+        var secondPipe = new CallExpr(firstPipe, "wrap", []);
 
         var result = evaluator.EvaluateField(secondPipe, "dummy", "string");
         Assert.That(result, Is.EqualTo("wrapped"));
@@ -173,7 +173,7 @@ public class ColonPipeTests
         var evaluator = new PredicateEvaluator(predicates, "test.cop", registry);
 
         // null:Text → should return null
-        var expr = new PredicateCallExpr(
+        var expr = new CallExpr(
             new IdentifierExpr("null"),
             "Text",
             []);
