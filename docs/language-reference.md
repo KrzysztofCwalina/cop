@@ -139,7 +139,19 @@ Use `import` to bring types and lists from a package into scope:
 import code
 ```
 
-Import statements must appear before predicates and commands.
+Package import statements must appear before predicates and commands.
+
+#### Type Member Imports
+
+`import` can also promote the members of a `flags` or `enum` type into scope, so they can be used as bare names:
+
+```ruby
+import Modifier
+```
+
+This makes all members of `Modifier` (e.g., `Public`, `Static`, `Abstract`) available as bare identifiers in the current file. Without this, members must be qualified: `Modifier.Public`.
+
+Type member imports appear in the body of the file (after declarations begin), distinguishing them from package imports at the top.
 
 ### Feed
 
@@ -194,6 +206,17 @@ export function clientInfo(Type) => ClientInfo { Name = Type.Name, Path = Type.F
 
 Any declaration — `predicate`, `let`, `command`, `type`, `flags`, or `function` — can be exported.
 
+#### Type Member Exports
+
+`export` followed by a type name promotes the members of a `flags` or `enum` type into scope **and** makes them available to importers of the package:
+
+```ruby
+flags Modifier = Public | Private | Protected | Static | Sealed | Abstract
+export Modifier
+```
+
+When a package exports a type, any file that imports that package gets the type's members as bare names (e.g., `Public` instead of `Modifier.Public`). Without `export`, the type is defined but its members require qualified access.
+
 ### Types
 
 Types describe the property structure of objects:
@@ -235,9 +258,9 @@ predicate notAbstract(Type) => Type.Modifiers:isClear(Abstract)
 | `isSet(flag)` | True if the flag bit is set — `(value & flag) != 0` |
 | `isClear(flag)` | True if the flag bit is clear — `(value & flag) == 0` |
 
-Flag members can be referenced bare (`Public`) when unambiguous, or qualified with the type name (`Modifier.Public`) to disambiguate when multiple flags types define the same member.
+Flag members can always be qualified with the type name (`Modifier.Public`). To use bare names (`Public`), the type must be imported with `import Modifier` (local scope) or the defining package must use `export Modifier` (available to all importers).
 
-The `code` package defines a `Modifier` flags enum and provides `isX` predicates for all common modifiers (see [Code Package Reference](packages/code.md)).
+The `code` package defines a `Modifier` flags enum, exports its members, and provides `isX` predicates for all common modifiers (see [Code Package Reference](packages/code.md)).
 
 ### Let Declarations
 
