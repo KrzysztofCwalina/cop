@@ -17,19 +17,13 @@ Functions declared in `core.cop` with proper types (`data`, `source`, `sink`, `r
 
 ---
 
-## Category 2: Bare-Name Collection Auto-Resolution
+## Category 2: Bare-Name Collection Auto-Resolution — ✅ ELIMINATED
 
-This is the primary "magic" that makes provider collections accessible without explicit `export let` declarations.
+Bare-name collection fallback has been removed from TypeRegistry. Collections must now be accessed via:
+- Qualified names: `namespace.Collection` (e.g., `filesystem.Folders`)
+- Explicit `export let` declarations in provider packages (e.g., `export let Folders = Disk.Folders`)
 
-| # | Location | Behavior |
-|---|----------|----------|
-| 1 | TypeRegistry.cs:403-414 | `ResolveCollection`: bare name searches ALL `_nsCollections` namespaces; resolves if exactly 1 match |
-| 2 | TypeRegistry.cs:440-458 | `IsGlobalCollection` also uses bare-name search across all namespaces |
-| 3 | TypeRegistry.cs:538-559 | Streaming sources: bare-name fallback by last-segment suffix match |
-| 4 | TypeRegistry.cs:487-525 | Sink registry: bare-name lookup across all registered sinks |
-| 5 | PredicateEvaluator.cs:518-521 | `EvalIdentifier` falls back to `IsGlobalCollection` — bare names resolve as collections in predicate/expression contexts |
-
-**Impact:** This is how the s18-Provider sample works without declaring `export let Widgets`. The provider registers `_nsCollections["sample"]["Widgets"]` and bare-name resolution finds it automatically.
+All provider packages (csharp, python, javascript, files, typespec-http) now have explicit `export let` exports for their collections.
 
 ---
 
@@ -175,25 +169,23 @@ Syntax-level behavior that's not available to `.cop` declarations.
 
 ---
 
-## Summary: How Does a Symbol Become Available Without `export let`?
+## Summary: How Does a Symbol Become Available?
 
-The full chain for "magic" symbol availability:
+Collections are now available through explicit mechanisms only:
 
-1. **Provider loaded** → `ProviderLoader.QueryAndRegister` queries provider, registers results in `_nsCollections[ns][collectionName]` (Category 8, #1)
-2. **Bare-name resolution** → `TypeRegistry.ResolveCollection` searches all namespaces for bare names (Category 2, #1)
-3. **EvalIdentifier fallback** → `IsGlobalCollection` check exposes collections in expression contexts (Category 2, #5)
-4. **Import resolution** → all symbols (not just exports) from imported packages become available (Category 11, #1)
+1. **Provider loaded** → `ProviderLoader.QueryAndRegister` registers results in `_nsCollections[ns][collectionName]` (Category 8, #1)
+2. **Qualified access** → `namespace.Collection` (e.g., `filesystem.Folders`) resolves directly
+3. **Explicit exports** → Provider packages declare `export let Folders = data('filesystem').Folders` — importers get `Folders` through the import
 
-**Example (s18-Provider):** Provider registers `_nsCollections["sample"]["Widgets"]` → user writes `foreach Widgets` → bare-name resolution finds it in namespace `"sample"` → it works without any `export let Widgets = data('sample').Widgets` declaration.
+**Example (s18-Provider):** Provider registers `_nsCollections["sample"]["Widgets"]` → package declares `export let Widgets = data('sample').Widgets` → user imports the package and writes `foreach Widgets`.
 
 ---
 
 ## Recommendations
 
-To eliminate the primary "magic" (Categories 2, 8, 11):
+Remaining magic to consider eliminating:
 
-1. **Remove bare-name auto-resolution** — require qualified names (`ns.Collection`) or explicit `export let` declarations
-2. **Enforce export filtering on imports** — only `export`-marked symbols should be available to importers (not just commands)
-3. **Require explicit `export let`** for provider collections — providers register under namespaces, but packages must explicitly declare what they expose
+1. **Enforce export filtering on imports** — only `export`-marked symbols should be available to importers (not just commands)
+2. **Streaming source/sink bare-name fallback** — still present in TypeRegistry for streaming sources and sinks
 
 Language-level features (Categories 4-6, 9-10) are appropriate to keep as built-in — they define the language itself and are documented in the language reference.
