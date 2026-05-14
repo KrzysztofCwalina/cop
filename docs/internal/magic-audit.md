@@ -4,12 +4,6 @@ This document catalogs every instance of "magic" behavior in the Cop runtime —
 
 ---
 
-## Implicit Identifiers (always available without import)
-
-None remaining — all former implicit identifiers have been made explicit or are language keywords (`item` is a keyword like `predicate` or `function`).
-
----
-
 ## Built-in Collection/String Members
 
 Hardcoded member access, resolved before type registry lookup.
