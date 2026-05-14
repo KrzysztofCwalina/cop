@@ -143,11 +143,10 @@ Syntax-level behavior that's not available to `.cop` declarations.
 
 | # | What | File:Line | Behavior |
 |---|------|-----------|----------|
-| 1 | Action detection | ScriptParser.cs:589-651 | UPPERCASE-only identifiers parsed as action invocations |
+| 1 | Action keywords | ScriptParser.cs:898 | `PRINT`, `SAVE`, `DEBUG`, `ASSERT`, `ASSERT_EMPTY` are hardcoded action keywords — cannot be declared in `.cop` packages |
 | 2 | Implicit output | ScriptParser.cs:154-177 | Bare string/expression at top level → output command |
 | 3 | `export` keyword scope | ScriptParser.cs:77-105 | Only works before type/collection/let/command/predicate/function/flags/enum |
-| 4 | `Code(...)` in let | ScriptParser.cs:529-586 | Recognized as special value binding (not a function call) |
-| 5 | `Load(...)`, `Parse(...)` | ScriptParser.cs:529-586 | Recognized as special file parser bindings |
+| 4 | `Load(...)`, `Parse(...)` | ScriptParser.cs:529-586 | Recognized as special file parser bindings |
 
 ---
 
