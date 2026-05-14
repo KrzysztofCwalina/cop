@@ -121,18 +121,6 @@ public class PredicateEvaluator
 
     private object? EvalStandaloneCall(CallExpr fc, object item, string paramType, EvaluationContext ctx)
     {
-        // Built-in error('message') constructor
-        if (fc.Name == "error")
-        {
-            string? message = null;
-            if (fc.Args.Count > 0)
-            {
-                var msgValue = Eval(fc.Args[0], item, paramType, ctx);
-                message = msgValue is string s ? s : msgValue?.ToString();
-            }
-            return new ErrorValue(message);
-        }
-
         // Built-in FAIL('message') — terminates execution immediately
         if (fc.Name == "FAIL")
         {
@@ -372,9 +360,6 @@ public class PredicateEvaluator
         if (name == "item") return item;
         if (name == "null") return null;
 
-        // Built-in error constructor (bare, no args)
-        if (name == "error") return new ErrorValue(null);
-
         // Built-in isError predicate (when used as bare identifier in filter/predicate position)
         if (name == "isError") return ErrorValue.IsError(item);
 
@@ -390,22 +375,6 @@ public class PredicateEvaluator
         {
             var func = ResolveFunction(funcGroup, paramType, item, ctx, callArgCount: 0);
             return ApplyFunction(func, item, [], item, paramType, ctx);
-        }
-
-        // Built-in 'empty' predicate — checks collections and strings on the item
-        if (name == "empty")
-        {
-            if (item is string s) return s.Length == 0;
-            if (item is IList col) return col.Count == 0;
-            // For objects, check boolean 'Empty' property via registry
-            var typeName = _registry.InferTypeName(item);
-            if (typeName is not null)
-            {
-                var prop = _registry.GetType(typeName)?.GetProperty("Empty");
-                if (prop?.Accessor is not null)
-                    return ToBool(prop.Accessor(item));
-            }
-            return false;
         }
 
         // Let-bound value (e.g., let TestKeywords = ["Test", "Tests", ...])
@@ -500,11 +469,15 @@ public class PredicateEvaluator
         // Bool property resolution: if the identifier matches a bool property on the item,
         // return its value. This enables filter chains like Lines:isComment where
         // isComment is a provider-registered boolean property on the Line type.
+        // Also tries PascalCase (e.g., "empty" → "Empty") since Cop properties are PascalCase.
         var itemTypeName = _registry.InferTypeName(item);
         if (itemTypeName is not null)
         {
             var typeDesc = _registry.GetType(itemTypeName);
             var propDesc = typeDesc?.GetProperty(name);
+            // Try PascalCase variant if exact match fails (camelCase predicate → PascalCase property)
+            if (propDesc is null && name.Length > 0 && char.IsLower(name[0]))
+                propDesc = typeDesc?.GetProperty(char.ToUpperInvariant(name[0]) + name[1..]);
             if (propDesc?.Accessor is not null)
             {
                 var val = propDesc.Accessor(item);
@@ -1625,8 +1598,7 @@ public class PredicateEvaluator
                 _ => throw new InvalidOperationException($"No intrinsic text() overload for type '{inputItem?.GetType().Name ?? "null"}'")
             },
             "read" => ReadFileSandboxed(inputItem?.ToString() ?? ""),
-            "error" => new ErrorValue(paramBindings.TryGetValue("message", out var msg)
-                ? msg?.ToString() : inputItem?.ToString()),
+            "error" => new ErrorValue(inputItem?.ToString()),
             "pathMatches" => GlobMatch(
                 paramBindings.TryGetValue("path", out var pm) ? pm?.ToString() ?? "" : "",
                 paramBindings.TryGetValue("pattern", out var pp) ? pp?.ToString() ?? "" : ""),

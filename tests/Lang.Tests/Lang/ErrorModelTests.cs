@@ -23,7 +23,12 @@ public class ErrorModelTests
         Dictionary<string, List<PredicateDefinition>>? predicates = null)
     {
         var allPredicates = predicates ?? new Dictionary<string, List<PredicateDefinition>>();
-        return new PredicateEvaluator(allPredicates, "test.cop", CreateTestRegistry());
+        var errorFunc = new FunctionDefinition("error", "Data", "Error", [], [], 0, IsIntrinsic: true);
+        var functions = new Dictionary<string, List<FunctionDefinition>>
+        {
+            ["error"] = [errorFunc]
+        };
+        return new PredicateEvaluator(allPredicates, "test.cop", CreateTestRegistry(), functions: functions);
     }
 
     // --- ErrorValue tests ---
@@ -125,10 +130,9 @@ public class ErrorModelTests
         {
             ["test"] = [file.Predicates[0]]
         };
-        var evaluator = new PredicateEvaluator(predicates, "test.cop", CreateTestRegistry());
+        var evaluator = CreateEvaluator(predicates);
         var result = evaluator.EvaluateField(file.Predicates[0].Body, MakeType(), "Type");
         Assert.That(result, Is.InstanceOf<ErrorValue>());
-        Assert.That(((ErrorValue)result!).GetField("Message"), Is.Null);
     }
 
     [Test]
@@ -140,7 +144,7 @@ public class ErrorModelTests
         {
             ["test"] = [file.Predicates[0]]
         };
-        var evaluator = new PredicateEvaluator(predicates, "test.cop", CreateTestRegistry());
+        var evaluator = CreateEvaluator(predicates);
         var result = evaluator.EvaluateField(file.Predicates[0].Body, MakeType(), "Type");
         Assert.That(result, Is.InstanceOf<ErrorValue>());
         Assert.That(((ErrorValue)result!).GetField("Message"), Is.EqualTo("timeout"));
@@ -240,7 +244,7 @@ public class ErrorModelTests
         {
             ["test"] = [file.Predicates[0]]
         };
-        var evaluator = new PredicateEvaluator(predicates, "test.cop", CreateTestRegistry());
+        var evaluator = CreateEvaluator(predicates);
         var result = evaluator.EvaluateField(file.Predicates[0].Body, MakeType(), "Type");
         Assert.That(result, Is.InstanceOf<ErrorValue>());
     }
@@ -254,7 +258,7 @@ public class ErrorModelTests
         {
             ["test"] = [file.Predicates[0]]
         };
-        var evaluator = new PredicateEvaluator(predicates, "test.cop", CreateTestRegistry());
+        var evaluator = CreateEvaluator(predicates);
         var result = evaluator.EvaluateField(file.Predicates[0].Body, MakeType(), "Type");
         Assert.That(result, Is.EqualTo("ok"));
     }

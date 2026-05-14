@@ -10,12 +10,13 @@ This document catalogs every instance of "magic" behavior in the Cop runtime —
 |---|------|-----------|-------------|
 | 1 | `item` | PredicateEvaluator.cs:372 | Current iteration item in any predicate/filter |
 | 2 | `null` | PredicateEvaluator.cs:373 | Null literal |
-| 3 | `error` (bare) | PredicateEvaluator.cs:376 | ErrorValue with no message |
-| 4 | `isError` (bare) | PredicateEvaluator.cs:379 | Check if current item is an error |
-| 5 | `empty` (bare) | PredicateEvaluator.cs:396 | Check if item/collection/string is empty |
-| 6 | `Program` | ScriptInterpreter.cs:251 | Built-in ProgramInfo from CLI args |
-| 7 | Flags constants | PredicateEvaluator.cs:466 | All `flags` members are global identifiers (e.g., `Public`, `Static`) |
-| 8 | Enum constants | PredicateEvaluator.cs:477 | All `enum` members are global identifiers (e.g., `Class`, `Interface`) |
+| 3 | `isError` (bare) | PredicateEvaluator.cs:376 | Check if current item is an error |
+| 4 | `Program` | ScriptInterpreter.cs:251 | Built-in ProgramInfo from CLI args |
+| 5 | Flags constants | PredicateEvaluator.cs:466 | All `flags` members are global identifiers (e.g., `Public`, `Static`) |
+| 6 | Enum constants | PredicateEvaluator.cs:477 | All `enum` members are global identifiers (e.g., `Class`, `Interface`) |
+
+`error` is now a regular intrinsic function declared in `core.cop` — requires `import core` (auto-imported).
+`empty` is now handled through the collection method dispatcher and bool property fallback (no special magic).
 
 ---
 

@@ -77,9 +77,10 @@ export type Error = {
     Source : string
 }
 
-## Creates an Error value with the given message.
-## The error flows through the pipeline as data (does not terminate execution).
-export function error(message : string) : Error = intrinsic
+## Creates an Error value from the given input.
+## When called with a string argument: error('message') creates an error with that message.
+## When used bare in a pipeline, uses the current item as the error message.
+export function error(Data) : Error = intrinsic
 
 ## Terminates execution immediately with a fatal diagnostic.
 ## Use for programmer assertions — situations that should never occur.
