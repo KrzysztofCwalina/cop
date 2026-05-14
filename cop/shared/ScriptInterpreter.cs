@@ -1873,8 +1873,16 @@ public class ScriptInterpreter
                     var capturedFilter = filter;
                     var materialized = current.Where(item =>
                     {
-                        var (result, _) = evaluator.EvaluateAsBool(capturedFilter, item, "item");
-                        return result;
+                        try
+                        {
+                            var (result, _) = evaluator.EvaluateAsBool(capturedFilter, item, "item");
+                            return result;
+                        }
+                        catch (InvalidOperationException)
+                        {
+                            // Unknown identifier in filter position — treat as non-match
+                            return false;
+                        }
                     }).ToList();
                     var filterName = GetFilterDisplayName(filter);
                     _diagLog($"[trace] filter: :{filterName} -> {beforeCount} -> {materialized.Count} items");
@@ -1887,8 +1895,16 @@ public class ScriptInterpreter
                     var capturedFilter = filter;
                     current = current.Where(item =>
                     {
-                        var (result, _) = evaluator.EvaluateAsBool(capturedFilter, item, "item");
-                        return result;
+                        try
+                        {
+                            var (result, _) = evaluator.EvaluateAsBool(capturedFilter, item, "item");
+                            return result;
+                        }
+                        catch (InvalidOperationException)
+                        {
+                            // Unknown identifier in filter position — treat as non-match
+                            return false;
+                        }
                     });
                 }
             }

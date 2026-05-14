@@ -394,20 +394,20 @@ Append `:constraint` to the parameter type to create predicate overloads constra
 
 ```ruby
 predicate client(Type) => Type.Name:endsWith('Client')
-predicate client(Type:csharp) => Type.Name:endsWith('Client')
-predicate client(Type:python) => Type.Name:endsWith('_client')
+predicate client(Type:isCSharp) => Type.Name:endsWith('Client')
+predicate client(Type:isPython) => Type.Name:endsWith('_client')
 ```
 
 Resolution order:
-1. Exact constraint match (e.g., `:python` for Python files)
+1. Exact constraint match (e.g., `:isPython` for Python files)
 2. Unconstrained fallback
 3. No match → `false`
 
 Constraints are not limited to languages — any predicate can be used:
 
 ```ruby
-predicate sealed(Type:csharp) => Type:isSealed
-predicate sealed(Type:python) => Type.Decorators:any(Decorator:contains('final'))
+predicate sealed(Type:isCSharp) => Type:isSealed
+predicate sealed(Type:isPython) => Type.Decorators:any(Decorator:contains('final'))
 ```
 
 ### Functions
@@ -534,7 +534,7 @@ The `:` operator filters a list with a predicate, producing a subset:
 
 ```ruby
 Types:isClient                       # Types where isClient is true
-Statements:csharp:usesVar            # Statements in C# files using var
+Statements:isCSharp:usesVar            # Statements in C# files using var
 Types:isClient:notSealed             # AND-chained: client types that aren't sealed
 Types:isClient:!isAbstract           # negated filter
 ```
@@ -972,7 +972,7 @@ Commands are **named** using `command`, which makes them invocable by name with 
 
 ```ruby
 command list-types = foreach Types => '{item.Name}'
-command export-names = foreach Types:csharp:client => SAVE('names.txt', '{item.Name}')
+command export-names = foreach Types:isCSharp:client => SAVE('names.txt', '{item.Name}')
 command test-has-types = ASSERT(csharp.Types)
 ```
 
@@ -1045,7 +1045,7 @@ Objects output as JSON:
 Use `foreach` to iterate over a collection with formatted output — one line per item:
 
 ```ruby
-foreach Types:csharp:client => '{error:@red} {item.Name} is a client'
+foreach Types:isCSharp:client => '{error:@red} {item.Name} is a client'
 ```
 
 | Part | Required | Description |
@@ -1073,11 +1073,11 @@ The pipe operator means **dequeue → transform → enqueue**: items are dequeue
 
 #### Language Filtering
 
-Use a language name as a filter (`:csharp`, `:python`, etc.) to scope iteration to files of that language:
+Use the language predicates (`:isCSharp`, `:isPython`, `:isJavaScript`) from the `code` package to scope iteration to items from files of a specific language:
 
 ```ruby
-foreach Clients:csharp:!isSealed => '{error:@red} {item.Name} should be sealed'
-foreach Lines:python:matches(@'\bprint\s*\(') => '{warning:@yellow} Use logging instead of print'
+foreach Clients:isCSharp:!isSealed => '{error:@red} {item.Name} should be sealed'
+foreach Lines:isPython:matches(@'\bprint\s*\(') => '{warning:@yellow} Use logging instead of print'
 ```
 
 ### PRINT
@@ -1100,8 +1100,8 @@ Writes output to a file. The first argument is the file path (relative to the co
 
 ```ruby
 SAVE('output.txt', 'Hello World')                                                      # bare — writes once
-foreach Types:csharp:client => SAVE('clients.txt', '{item.Name}')                      # list — one line per item
-foreach Clients:csharp:!isSealed => SAVE('report.txt', '{item.Name}: not sealed')        # filtered subset
+foreach Types:isCSharp:client => SAVE('clients.txt', '{item.Name}')                      # list — one line per item
+foreach Clients:isCSharp:!isSealed => SAVE('report.txt', '{item.Name}: not sealed')        # filtered subset
 ```
 
 | Part | Required | Description |

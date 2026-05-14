@@ -111,9 +111,9 @@ let SwallowedExceptions = Code.Statements:swallowsException
 Use a language keyword to restrict a check to specific file types:
 
 ```ruby
-let CSharpSleepCalls = Code.Statements:csharp:sleepCall     # only .cs files
-let PythonSleepCalls = Code.Statements:python:sleepCall     # only .py files
-let JsSleepCalls = Code.Statements:javascript:sleepCall     # only .ts/.js files
+let CSharpSleepCalls = Code.Statements:isCSharp:sleepCall     # only .cs files
+let PythonSleepCalls = Code.Statements:isPython:sleepCall     # only .py files
+let JsSleepCalls = Code.Statements:isJavaScript:sleepCall     # only .ts/.js files
 ```
 
 Available language keywords: `csharp` (`.cs`), `python` (`.py`), `javascript` (`.ts`), `java` (`.java`), `go` (`.go`).
@@ -133,7 +133,7 @@ Predicates chain left to right. Each `:predicate` filters the list further:
 
 ```ruby
 # Start with all types → keep only C# → keep only clients → remove sealed ones
-let UnsealedCSharpClients = Code.Types:csharp:client:!sealed
+let UnsealedCSharpClients = Code.Types:isCSharp:client:!sealed
 ```
 
 ## Producing Output
@@ -143,7 +143,7 @@ let UnsealedCSharpClients = Code.Types:csharp:client:!sealed
 Output is implicit in cop — the evaluated result of a `foreach` expression IS the output. The template string uses `{Property}` for interpolation:
 
 ```ruby
-foreach Code.Types:csharp:client:!sealed
+foreach Code.Types:isCSharp:client:!sealed
     => '{item.File.Path}:{item.Line} {item.Name} should be sealed'
 ```
 
@@ -159,7 +159,7 @@ src/Azure/QueueClient.cs:8 QueueClient should be sealed
 Use `{text@style}` for colored/styled output:
 
 ```ruby
-foreach Code.Statements:javascript:evalCall
+foreach Code.Statements:isJavaScript:evalCall
     => '{error@red} {item.File.Path}:{item.Line} Do not use eval()'
 ```
 
@@ -172,13 +172,13 @@ For production checks, use the `code-analysis` package which provides typed `Vio
 ```ruby
 import code-analysis
 
-let sleepErrors = Code.Statements:csharp:sleepCall
+let sleepErrors = Code.Statements:isCSharp:sleepCall
     :toError('Use Task.Delay instead of Thread.Sleep')
 
-let evalErrors = Code.Statements:javascript:evalCall
+let evalErrors = Code.Statements:isJavaScript:evalCall
     :toError('Do not use eval() — it is a security risk')
 
-let printWarnings = Code.Statements:python:printCall
+let printWarnings = Code.Statements:isPython:printCall
     :toWarning('Avoid print() — use logging instead')
 
 CHECK(sleepErrors + evalErrors + printWarnings)
@@ -492,7 +492,7 @@ import code
 
 predicate isGodClass(Type) => Type.Name:endsWith('Manager') && Modifiers:isSet(Public)
 
-export let god-classes = Code.Types:csharp:isGodClass:toWarning('Avoid God classes')
+export let god-classes = Code.Types:isCSharp:isGodClass:toWarning('Avoid God classes')
 ```
 
 Generates `codeql/god_classes.ql`:

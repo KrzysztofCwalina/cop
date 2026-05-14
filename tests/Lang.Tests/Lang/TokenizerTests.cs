@@ -111,12 +111,12 @@ public class TokenizerTests
     [Test]
     public void Tokenize_ColonAndAllLanguages()
     {
-        var tokens = new Tokenizer("Type:csharp java go typescript").Tokenize();
+        var tokens = new Tokenizer("Type:isCSharp java go typescript").Tokenize();
         Assert.That(tokens[0].Kind, Is.EqualTo(TokenKind.Identifier));
         Assert.That(tokens[0].Value, Is.EqualTo("Type"));
         Assert.That(tokens[1].Kind, Is.EqualTo(TokenKind.Colon));
         Assert.That(tokens[2].Kind, Is.EqualTo(TokenKind.Identifier));
-        Assert.That(tokens[2].Value, Is.EqualTo("csharp"));
+        Assert.That(tokens[2].Value, Is.EqualTo("isCSharp"));
         Assert.That(tokens[3].Kind, Is.EqualTo(TokenKind.Identifier));
         Assert.That(tokens[3].Value, Is.EqualTo("java"));
         Assert.That(tokens[4].Kind, Is.EqualTo(TokenKind.Identifier));

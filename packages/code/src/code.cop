@@ -236,3 +236,22 @@ export type Codebase = {
     Regions : [Region],
     Projects : [Project]
 }
+
+# Language filter predicates
+export predicate isCSharp(Type) => Type.File.Language == csharp
+export predicate isCSharp(Statement) => Statement.File.Language == csharp
+export predicate isCSharp(Line) => Line.File.Language == csharp
+export predicate isCSharp(Region) => Region.File.Language == csharp
+export predicate isCSharp(Api) => Api.File.Language == csharp
+
+export predicate isPython(Type) => Type.File.Language == python
+export predicate isPython(Statement) => Statement.File.Language == python
+export predicate isPython(Line) => Line.File.Language == python
+export predicate isPython(Region) => Region.File.Language == python
+export predicate isPython(Api) => Api.File.Language == python
+
+export predicate isJavaScript(Type) => Type.File.Language == javascript
+export predicate isJavaScript(Statement) => Statement.File.Language == javascript
+export predicate isJavaScript(Line) => Line.File.Language == javascript
+export predicate isJavaScript(Region) => Region.File.Language == javascript
+export predicate isJavaScript(Api) => Api.File.Language == javascript

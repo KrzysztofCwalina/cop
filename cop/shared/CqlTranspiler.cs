@@ -199,10 +199,10 @@ public class CqlTranspiler
 
         foreach (var filter in let.Filters)
         {
-            // Language filter: bare identifier "csharp", "python", "javascript"
+            // Language filter: predicate "isCSharp", "isPython", "isJavaScript"
             if (filter is IdentifierExpr langId && IsLanguageFilter(langId.Name))
             {
-                language = langId.Name;
+                language = LanguageFilterToName(langId.Name);
                 continue;
             }
 
@@ -307,7 +307,7 @@ public class CqlTranspiler
         {
             if (filter is IdentifierExpr langId && IsLanguageFilter(langId.Name))
             {
-                language = langId.Name;
+                language = LanguageFilterToName(langId.Name);
                 continue;
             }
             predicateFilters.Add(filter);
@@ -991,7 +991,15 @@ public class CqlTranspiler
     }
 
     private static bool IsLanguageFilter(string name) =>
-        name is "csharp" or "python" or "javascript";
+        name is "isCSharp" or "isPython" or "isJavaScript";
+
+    private static string LanguageFilterToName(string predName) => predName switch
+    {
+        "isCSharp" => "csharp",
+        "isPython" => "python",
+        "isJavaScript" => "javascript",
+        _ => predName
+    };
 
     internal static string SanitizeIdentifier(string name)
     {

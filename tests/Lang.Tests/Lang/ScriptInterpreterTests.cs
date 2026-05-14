@@ -164,7 +164,8 @@ public class CheckInterpreterTests
     {
         var source = """
             let list-types = foreach Types => '{item.Name}'
-            let check-sealed = foreach Types:csharp => '{warning:@yellow} {item.Name} not sealed'
+            predicate isSealed(Type) => Type.Modifiers:isSet(Sealed)
+            let check-sealed = foreach Types:isSealed => '{warning:@yellow} {item.Name} not sealed'
             foreach Types => 'unnamed check'
             """;
         var ScriptFile = ScriptParser.Parse(source, "test.cop");
@@ -222,7 +223,7 @@ public class CheckInterpreterTests
                 Message = message,
                 Line = Statement.Line
             }
-            let VarErrors = Statements:csharp:isVar:error('Do not use var')
+            let VarErrors = Statements:isVar:error('Do not use var')
             foreach VarErrors => '{item.Severity}:{item.Line} {item.Message}'
             """;
         var ScriptFile = ScriptParser.Parse(source, "test.cop");
@@ -253,7 +254,7 @@ public class CheckInterpreterTests
                 Severity = 'warning',
                 Message = message
             }
-            foreach Statements:csharp:isVar:warning('Avoid var usage') => '{item.Severity}: {item.Message}'
+            foreach Statements:isVar:warning('Avoid var usage') => '{item.Severity}: {item.Message}'
             """;
         var ScriptFile = ScriptParser.Parse(source, "test.cop");
 
@@ -280,7 +281,7 @@ public class CheckInterpreterTests
                 Severity = 'error',
                 Message = message
             }
-            foreach Statements:csharp:isVar:error('Var used for {item.MemberName}') => '{item.Message}'
+            foreach Statements:isVar:error('Var used for {item.MemberName}') => '{item.Message}'
             """;
         var ScriptFile = ScriptParser.Parse(source, "test.cop");
 
@@ -651,8 +652,8 @@ CHECK(var-usage)
                 Message = message
             }
 
-            export let var-decls = Statements:csharp:isVar:toWarning('no var')
-            export let sleep-calls = Statements:csharp:threadSleep:toWarning('no sleep')
+            export let var-decls = Statements:isVar:toWarning('no var')
+            export let sleep-calls = Statements:threadSleep:toWarning('no sleep')
             export let all-checks = var-decls + sleep-calls
 
             command CHECK(violations) = foreach violations => '{item.Message}'

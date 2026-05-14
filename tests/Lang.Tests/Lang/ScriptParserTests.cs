@@ -33,12 +33,12 @@ public class CheckFileParserTests
     public void Parse_PrintWithAllParts()
     {
         var source = """
-            foreach Statements:csharp:isVar:!Path('**/Tests/**') => PRINT('ERROR: Don\'t use var for {item.MemberName}')
+            foreach Statements:isCSharp:isVar:!Path('**/Tests/**') => PRINT('ERROR: Don\'t use var for {item.MemberName}')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         Assert.That(file.Commands, Has.Count.EqualTo(1));
         var check = file.Commands[0];
-        Assert.That(check.Name, Is.EqualTo("Statements.csharp"));
+        Assert.That(check.Name, Is.EqualTo("Statements.isCSharp"));
         Assert.That(check.Collection, Is.EqualTo("Statements"));
         Assert.That(check.Filters, Has.Count.EqualTo(3)); // csharp, isVar, !Path(...)
         Assert.That(check.ActionName, Is.EqualTo("PRINT"));
@@ -50,7 +50,7 @@ public class CheckFileParserTests
     {
         var source = """
             predicate isClient(Type) => Type.Name:endsWith('Client')
-            foreach Types:csharp:isClient => PRINT('WARNING: msg')
+            foreach Types:isCSharp:isClient => PRINT('WARNING: msg')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         Assert.That(file.Predicates, Has.Count.EqualTo(1));
@@ -58,14 +58,14 @@ public class CheckFileParserTests
         Assert.That(file.Commands[0].Filters, Has.Count.EqualTo(2)); // csharp, isClient
         var filter = file.Commands[0].Filters[0];
         Assert.That(filter, Is.TypeOf<IdentifierExpr>());
-        Assert.That(((IdentifierExpr)filter).Name, Is.EqualTo("csharp"));
+        Assert.That(((IdentifierExpr)filter).Name, Is.EqualTo("isCSharp"));
     }
 
     [Test]
     public void Parse_MultipleInlineFilters()
     {
         var source = """
-            foreach Types:csharp:IsClient:!IsOptions => PRINT('WARNING: msg')
+            foreach Types:isCSharp:IsClient:!IsOptions => PRINT('WARNING: msg')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         var check = file.Commands[0];
@@ -79,11 +79,11 @@ public class CheckFileParserTests
     public void Parse_PredicateConstraint()
     {
         var source = """
-            predicate IsClient(Type:csharp) => Type.Name:endsWith('Client')
+            predicate IsClient(Type:isCSharp) => Type.Name:endsWith('Client')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         Assert.That(file.Predicates, Has.Count.EqualTo(1));
-        Assert.That(file.Predicates[0].Constraint, Is.EqualTo("csharp"));
+        Assert.That(file.Predicates[0].Constraint, Is.EqualTo("isCSharp"));
         Assert.That(file.Predicates[0].ParameterType, Is.EqualTo("Type"));
     }
 
@@ -92,7 +92,7 @@ public class CheckFileParserTests
     {
         var source = """
             predicate isAlways(Type) => true
-            foreach Types:python:isAlways => PRINT('WARNING: msg')
+            foreach Types:isPython:isAlways => PRINT('WARNING: msg')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         Assert.That(file.Commands, Has.Count.EqualTo(1));
@@ -138,7 +138,7 @@ public class CheckFileParserTests
     public void Parse_FunctionCall_Path()
     {
         var source = """
-            foreach Lines:python:matches('\bprint\s*\('):!Path('**/tests/**') => PRINT('WARNING: no print')
+            foreach Lines:isPython:matches('\bprint\s*\('):!Path('**/tests/**') => PRINT('WARNING: no print')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         var check = file.Commands[0];
@@ -225,7 +225,7 @@ public class CheckFileParserTests
         var source = """
             predicate isClient(Type) => Type.Name:endsWith('Client')
             predicate Clients(Types) => isClient
-            foreach Clients:csharp:isClient => PRINT('WARNING: msg')
+            foreach Clients:isCSharp:isClient => PRINT('WARNING: msg')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         Assert.That(file.Predicates, Has.Count.EqualTo(2));
@@ -239,7 +239,7 @@ public class CheckFileParserTests
     {
         var source = """
             predicate notSealed(Type) => !Type.Sealed
-            foreach Types:csharp:notSealed => PRINT('WARNING: {item.Name} should be sealed')
+            foreach Types:isCSharp:notSealed => PRINT('WARNING: {item.Name} should be sealed')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         var check = file.Commands[0];
@@ -344,9 +344,9 @@ public class CheckFileParserTests
     [Test]
     public void Parse_RuleId_DerivedFromCollectionAndFirstFilter()
     {
-        var source = """foreach Clients:csharp:missingOptions:notSealed => PRINT('WARNING: msg')""";
+        var source = """foreach Clients:isCSharp:missingOptions:notSealed => PRINT('WARNING: msg')""";
         var file = ScriptParser.Parse(source, "test.cop");
-        Assert.That(file.Commands[0].Name, Is.EqualTo("Clients.csharp"));
+        Assert.That(file.Commands[0].Name, Is.EqualTo("Clients.isCSharp"));
     }
 
     [Test]
@@ -538,7 +538,7 @@ public class CheckFileParserTests
     {
         var source = """
             let list-types = foreach Types => PRINT('{item.Name}')
-            foreach Types:csharp => PRINT('WARNING: check')
+            foreach Types:isCSharp => PRINT('WARNING: check')
             """;
         var file = ScriptParser.Parse(source, "test.cop");
         Assert.That(file.Commands, Has.Count.EqualTo(2));
@@ -851,7 +851,7 @@ public class CheckFileParserTests
     [Test]
     public void Parse_ForeachImplicitOutput_StringTemplate()
     {
-        var source = """foreach Types:csharp:isClient => '{item.Name} is a client'""";
+        var source = """foreach Types:isCSharp:isClient => '{item.Name} is a client'""";
         var file = ScriptParser.Parse(source, "test.cop");
         Assert.That(file.Commands, Has.Count.EqualTo(1));
         var cmd = file.Commands[0];

@@ -33,14 +33,13 @@ How providers make their collections/types/functions available without `.cop` de
 
 ---
 
-## Language Filter & Bool Property Fallback
+## Bool Property Fallback
 
 Implicit identifier resolution in `EvalIdentifier` that allows bare names to act as filters.
 
 | # | What | File:Line | Behavior |
 |---|------|-----------|----------|
-| 1 | Language name as filter | PredicateEvaluator.cs:490-515 | Any bare identifier matching `File.Language` becomes a boolean filter (e.g., `Types:csharp`). Checked before enum constants to avoid shadowing by `Language` enum members. |
-| 2 | Bool property fallback | PredicateEvaluator.cs:474-488 | Bare identifier matching a bool property on the item's type returns its value (e.g., `Lines:isComment`) |
+| 1 | Bool property fallback | PredicateEvaluator.cs:474-488 | Bare identifier matching a bool property on the item's type returns its value (e.g., `Lines:isComment`) |
 
 ---
 

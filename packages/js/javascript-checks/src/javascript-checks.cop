@@ -7,37 +7,37 @@ import code-analysis
 ## Avoid console output in production code
 predicate isConsoleCall(Statement) => Statement.Kind == 'call'
     && Statement.TypeName == 'console'
-export let console-calls = Code.Statements:javascript:isConsoleCall
+export let console-calls = Code.Statements:isJavaScript:isConsoleCall
     :toWarning('Avoid console.{item.MemberName} in production code')
 
 ## Do not use alert()
 predicate isAlertCall(Statement) => Statement.Kind == 'call'
     && Statement.MemberName == 'alert'
-export let alert-calls = Code.Statements:javascript:isAlertCall
+export let alert-calls = Code.Statements:isJavaScript:isAlertCall
     :toError('Do not use alert()')
 
 ## Do not use eval()
 predicate isEvalCall(Statement) => Statement.Kind == 'call'
     && Statement.MemberName == 'eval'
-export let eval-calls = Code.Statements:javascript:isEvalCall
+export let eval-calls = Code.Statements:isJavaScript:isEvalCall
     :toError('Do not use eval() — it is a security risk')
 
 ## Remove debugger statements
 predicate isDebuggerStatement(Statement) => Statement.Kind == 'call'
     && Statement.MemberName == 'debugger'
-export let debugger-statements = Code.Statements:javascript:isDebuggerStatement
+export let debugger-statements = Code.Statements:isJavaScript:isDebuggerStatement
     :toError('Remove debugger statement')
 
 ## Use const or let instead of var
 predicate isUsingVar(Statement) => Statement.Kind == 'declaration'
     && Statement.Keywords:contains('var')
-export let var-declarations = Code.Statements:javascript:isUsingVar
+export let var-declarations = Code.Statements:isJavaScript:isUsingVar
     :toWarning('Use const or let instead of var')
 
 ## Catch blocks should rethrow or handle errors explicitly
 predicate isCatchWithoutRethrow(Statement) => Statement.ErrorHandler == true
     && Statement.Generic == true && !Statement.Rethrows
-export let swallowed-exceptions = Code.Statements:javascript:isCatchWithoutRethrow
+export let swallowed-exceptions = Code.Statements:isJavaScript:isCatchWithoutRethrow
     :toWarning('Do not swallow errors — rethrow or handle explicitly')
 
 ## Combined JavaScript correctness checks
@@ -60,7 +60,7 @@ predicate isAwaitOfNonThenable(Statement) =>
         || Statement.Expression:startsWith('{'))
 
 ## Disallow awaiting a value that is not a Thenable (@typescript-eslint/await-thenable)
-export let await-thenable = Code.Statements:javascript:isAwaitOfNonThenable
+export let await-thenable = Code.Statements:isJavaScript:isAwaitOfNonThenable
     :toError('Unexpected await of a non-Promise (non-Thenable) value')
 
 ## Combined TypeScript checks

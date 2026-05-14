@@ -7,8 +7,8 @@ predicate baselineApi(Api) => isPublicApi && Api.File.Path:matches('[/\\]api[/\\
 predicate sourceApi(Api) => isPublicApi && !Api.File.Path:matches('[/\\]api[/\\]')
 
 # Build lookup lists from current source and baseline
-let baselineSignatures = Code.Api:javascript:baselineApi.Select(item.Signature)
-let currentSignatures = Code.Api:javascript:sourceApi.Select(item.Signature)
+let baselineSignatures = Code.Api:isJavaScript:baselineApi.Select(item.Signature)
+let currentSignatures = Code.Api:isJavaScript:sourceApi.Select(item.Signature)
 
 # Diff predicates
 predicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)

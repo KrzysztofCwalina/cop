@@ -146,7 +146,7 @@ import code
 
 predicate isGodClass(Type) => Type.Name:endsWith('Manager') && Modifiers:isSet(Public)
 
-export let god-classes = Code.Types:csharp:isGodClass:toWarning('Avoid God classes')
+export let god-classes = Code.Types:isCSharp:isGodClass:toWarning('Avoid God classes')
 ```
 
 Running `cop run my-checks.cop -cql` generates `codeql/god_classes.ql`:
@@ -179,7 +179,7 @@ select t, "Avoid God classes"
 | `Name:endsWith('Y')` | `t.getName().toLowerCase().matches("%y")` |
 | `Kind == 'call'` | `from MethodAccess` (type narrowing) |
 | `BaseTypes:contains('IFoo')` | `exists(RefType base \| t.getABaseType() = base and ...)` |
-| Language filter `:csharp` | `import csharp` |
+| Language filter `:isCSharp` | `import csharp` |
 | `toError` / `toWarning` | `@problem.severity error` / `warning` |
 
 **Limitations:** Cross-provider checks (e.g., checks referencing both `Code.Types` and markdown documentation) cannot be expressed in CodeQL and will produce an error. CodeQL operates only on source code graphs — cop's multi-provider capability is a superset.

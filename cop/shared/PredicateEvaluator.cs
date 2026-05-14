@@ -463,34 +463,6 @@ public class PredicateEvaluator
             }
         }
 
-        // Language filter fallback: if the item has a File.Language property,
-        // check if the identifier matches the language. This enables filter chains
-        // like Types:csharp:client where "csharp" matches File.Language == "csharp".
-        // Must come BEFORE enum constants — Language enum members (csharp, python, etc.)
-        // would resolve as truthy strings and shadow this filter.
-        if (itemTypeName is not null)
-        {
-            var fileDesc = _registry.GetType(itemTypeName)?.GetProperty("File");
-            if (fileDesc?.Accessor is not null)
-            {
-                var file = fileDesc.Accessor(item);
-                if (file is not null)
-                {
-                    var fileTypeName = _registry.InferTypeName(file);
-                    if (fileTypeName is not null)
-                    {
-                        var langDesc = _registry.GetType(fileTypeName)?.GetProperty("Language");
-                        if (langDesc?.Accessor is not null)
-                        {
-                            var lang = langDesc.Accessor(file);
-                            return lang is string langStr &&
-                                   string.Equals(langStr, name, StringComparison.Ordinal);
-                        }
-                    }
-                }
-            }
-        }
-
         // Enum constant resolution (e.g., Class → "Class", Method → "Method")
         var enumValue = _registry.TryResolveEnumConstant(name);
         if (enumValue is not null) return enumValue;
@@ -520,7 +492,7 @@ public class PredicateEvaluator
 
     /// <summary>
     /// Resolves the best predicate overload: constrained match first, then unconstrained fallback.
-    /// A constraint (e.g., predicate client(Type:csharp)) is evaluated as a predicate against the item.
+    /// A constraint (e.g., predicate client(Type:isCSharp)) is evaluated as a predicate against the item.
     /// When paramType is "item" (inline lambda context), infers actual type for matching.
     /// </summary>
     private PredicateDefinition? ResolvePredicate(List<PredicateDefinition> group, object item, string paramType, EvaluationContext ctx)

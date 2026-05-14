@@ -1,8 +1,8 @@
 import javascript-library-checks
 
 # Print API surface
-export command api-listing = foreach Code.Api:javascript:isPublicApi => '{item.Signature}'
+export command api-listing = foreach Code.Api:isJavaScript:isPublicApi => '{item.Signature}'
 
 # Save API surface to a file
-let apiText = Code.Api:javascript:isPublicApi.text('{item.Signature}')
+let apiText = Code.Api:isJavaScript:isPublicApi.text('{item.Signature}')
 export command save-api = save('api-surface.txt', apiText)

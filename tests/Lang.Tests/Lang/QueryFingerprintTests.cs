@@ -64,12 +64,12 @@ public class QueryFingerprintTests
     {
         var filters = new List<Expression>
         {
-            new IdentifierExpr("csharp"),
+            new IdentifierExpr("isCSharp"),
             new IdentifierExpr("Abstract"),
             new IdentifierExpr("Public")
         };
         var result = QueryFingerprint.Compute("Types", filters, null);
-        Assert.That(result, Is.EqualTo("Types:Abstract:Public:csharp"));
+        Assert.That(result, Is.EqualTo("Types:Abstract:Public:isCSharp"));
     }
 
     [Test]
@@ -207,18 +207,18 @@ public class QueryFingerprintTests
     [Test]
     public void ComplexChain_OrderIndependentBeforeBarrier()
     {
-        // Types:Public:csharp:Abstract.Select(Name) should equal
-        // Types:csharp:Abstract:Public.Select(Name)
+        // Types:Public:isCSharp:Abstract.Select(Name) should equal
+        // Types:isCSharp:Abstract:Public.Select(Name)
         var filtersA = new List<Expression>
         {
             new IdentifierExpr("Public"),
-            new IdentifierExpr("csharp"),
+            new IdentifierExpr("isCSharp"),
             new IdentifierExpr("Abstract"),
             new CallExpr(null, "Select", [new IdentifierExpr("Name")])
         };
         var filtersB = new List<Expression>
         {
-            new IdentifierExpr("csharp"),
+            new IdentifierExpr("isCSharp"),
             new IdentifierExpr("Abstract"),
             new IdentifierExpr("Public"),
             new CallExpr(null, "Select", [new IdentifierExpr("Name")])
@@ -227,7 +227,7 @@ public class QueryFingerprintTests
         var a = QueryFingerprint.Compute("Types", filtersA, "test.cs");
         var b = QueryFingerprint.Compute("Types", filtersB, "test.cs");
         Assert.That(a, Is.EqualTo(b));
-        Assert.That(a, Is.EqualTo("Types:Abstract:Public:csharp.Select(Name)@test.cs"));
+        Assert.That(a, Is.EqualTo("Types:Abstract:Public:isCSharp.Select(Name)@test.cs"));
     }
 
     [Test]

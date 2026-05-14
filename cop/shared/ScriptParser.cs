@@ -1052,8 +1052,8 @@ public class ScriptParser
 
     /// Decompose an expression tree (from ParseExpression) into the structured fields
     /// that LetDeclaration and CommandBlock need: baseCollection, filters, exclusions, and optional path override.
-    /// Input: Types:csharp:isClient:!isClientOptions
-    /// → (baseCollection: "Types", filters: [csharp, isClient, !isClientOptions], exclusions: null, pathOverride: null)
+    /// Input: Types:isCSharp:isClient:!isClientOptions
+    /// → (baseCollection: "Types", filters: [isCSharp, isClient, !isClientOptions], exclusions: null, pathOverride: null)
     /// Input: csharp.Types('../sdk/'):isPublic
     /// → (baseCollection: "csharp.Types", filters: [isPublic], exclusions: null, pathOverride: "../sdk/")
     public static (string baseCollection, List<Expression> filters, Expression? exclusions, string? pathOverride) DecomposeCollectionExpression(Expression expr)

@@ -39,7 +39,7 @@ public class CqlTranspilerTests
         var source = """
             import code
             predicate isSleepCall(Statement) => Statement.Kind == 'call' && Statement.MemberName == 'Sleep'
-            export let sleep-calls = Code.Statements:csharp:isSleepCall
+            export let sleep-calls = Code.Statements:isCSharp:isSleepCall
                 :toError('Do not use Sleep')
             """;
         var sf = ParseCop(source);
@@ -62,7 +62,7 @@ public class CqlTranspilerTests
         var source = """
             import code
             predicate isPublic(Type) => Type.Modifiers:isSet(Public)
-            export let public-types = Code.Types:csharp:isPublic
+            export let public-types = Code.Types:isCSharp:isPublic
                 :toWarning('Type is public')
             """;
         var sf = ParseCop(source);
@@ -83,7 +83,7 @@ public class CqlTranspilerTests
         var source = """
             import code
             predicate nameStartsWithI(Type) => Type.Name:startsWith('I')
-            export let types-starting-with-i = Code.Types:csharp:nameStartsWithI
+            export let types-starting-with-i = Code.Types:isCSharp:nameStartsWithI
                 :toInfo('Starts with I')
             """;
         var sf = ParseCop(source);
@@ -136,7 +136,7 @@ public class CqlTranspilerTests
     {
         var source = """
             import code
-            export let py-types = Code.Types:python
+            export let py-types = Code.Types:isPython
                 :toWarning('Python type')
             """;
         var sf = ParseCop(source);
@@ -156,7 +156,7 @@ public class CqlTranspilerTests
         var source = """
             import code
             predicate isSealed(Type) => Type.Modifiers:isSet(Sealed)
-            export let unsealed = Code.Types:csharp:!isSealed
+            export let unsealed = Code.Types:isCSharp:!isSealed
                 :toWarning('Not sealed')
             """;
         var sf = ParseCop(source);
@@ -178,7 +178,7 @@ public class CqlTranspilerTests
             import code
             predicate isThreadSleep(Statement) => Statement.Kind == 'call'
                 && Statement.TypeName == 'Thread' && Statement.MemberName == 'Sleep'
-            export let sleep-calls = Code.Statements:csharp:isThreadSleep
+            export let sleep-calls = Code.Statements:isCSharp:isThreadSleep
                 :toError('Use Task.Delay')
             """;
         var sf = ParseCop(source);
@@ -201,7 +201,7 @@ public class CqlTranspilerTests
             import code
 
             ## Check for public types
-            export let public-types = Code.Types:csharp
+            export let public-types = Code.Types:isCSharp
                 :toWarning('Public type')
             """;
         var sf = ParseCop(source);
@@ -225,7 +225,7 @@ public class CqlTranspilerTests
         var source = """
             import code
             predicate isACall(Statement) => Statement.Kind == 'call'
-            export let all-calls = Code.Statements:csharp:isACall
+            export let all-calls = Code.Statements:isCSharp:isACall
                 :toWarning('Call found')
             """;
         var sf = ParseCop(source);
@@ -245,7 +245,7 @@ public class CqlTranspilerTests
         var source = """
             import code
             predicate implementsDisposable(Type) => Type.BaseTypes:contains('IDisposable')
-            export let disposable-types = Code.Types:csharp:implementsDisposable
+            export let disposable-types = Code.Types:isCSharp:implementsDisposable
                 :toWarning('Implements IDisposable')
             """;
         var sf = ParseCop(source);
@@ -265,7 +265,7 @@ public class CqlTranspilerTests
     {
         var source = """
             import code
-            export let all-calls = Code.Calls:csharp
+            export let all-calls = Code.Calls:isCSharp
                 :toWarning('Call found')
             """;
         var sf = ParseCop(source);

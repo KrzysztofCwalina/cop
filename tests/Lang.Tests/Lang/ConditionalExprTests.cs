@@ -110,7 +110,7 @@ public class ConditionalExprTests
         // code.cop already defines: predicate isSealed(Type) => Type.Modifiers:isSet(Sealed)
         // Use it directly — no need to redefine.
         var file = ScriptParser.Parse(
-            "foreach Types:csharp:isSealed => '{item.Name}'", "test.cop");
+            "foreach Types:isCSharp:isSealed => '{item.Name}'", "test.cop");
         var interpreter = TestInterpreter.Create();
         var docs = TestInterpreter.ParseSourceFiles(SamplePath("GoodClient.cs"));
         var result = interpreter.Run([TestInterpreter.CodePackage, file], docs);
@@ -125,7 +125,7 @@ public class ConditionalExprTests
         // true ? isSealed | false  →  always evaluates isSealed
         var file = ScriptParser.Parse(@"
 predicate alwaysCheckSealed(Type) => true ? isSealed | false
-foreach Types:csharp:alwaysCheckSealed => '{item.Name}'
+foreach Types:isCSharp:alwaysCheckSealed => '{item.Name}'
 ", "test.cop");
 
         var interpreter = TestInterpreter.Create();
@@ -144,7 +144,7 @@ foreach Types:csharp:alwaysCheckSealed => '{item.Name}'
         // false ? true | isPublic  →  always evaluates isPublic
         var file = ScriptParser.Parse(@"
 predicate checkPublicViaFalse(Type) => false ? false | isPublic
-foreach Types:csharp:checkPublicViaFalse => '{item.Name}'
+foreach Types:isCSharp:checkPublicViaFalse => '{item.Name}'
 ", "test.cop");
 
         var interpreter = TestInterpreter.Create();
@@ -163,7 +163,7 @@ foreach Types:csharp:checkPublicViaFalse => '{item.Name}'
         // For GoodClient (sealed, not abstract): outer=false → inner: sealed=true → true
         var file = ScriptParser.Parse(@"
 predicate sealedNotAbstract(Type) => isAbstract ? false | isSealed ? true | false
-foreach Types:csharp:sealedNotAbstract => '{item.Name}'
+foreach Types:isCSharp:sealedNotAbstract => '{item.Name}'
 ", "test.cop");
 
         var interpreter = TestInterpreter.Create();

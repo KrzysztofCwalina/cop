@@ -1172,6 +1172,96 @@ const packages = {
         "appliesTo": "Line",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L203"
+      },
+      {
+        "name": "isCSharp",
+        "appliesTo": "Type",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L241"
+      },
+      {
+        "name": "isCSharp",
+        "appliesTo": "Statement",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L242"
+      },
+      {
+        "name": "isCSharp",
+        "appliesTo": "Line",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L243"
+      },
+      {
+        "name": "isCSharp",
+        "appliesTo": "Region",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L244"
+      },
+      {
+        "name": "isCSharp",
+        "appliesTo": "Api",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L245"
+      },
+      {
+        "name": "isPython",
+        "appliesTo": "Type",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L247"
+      },
+      {
+        "name": "isPython",
+        "appliesTo": "Statement",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L248"
+      },
+      {
+        "name": "isPython",
+        "appliesTo": "Line",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L249"
+      },
+      {
+        "name": "isPython",
+        "appliesTo": "Region",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L250"
+      },
+      {
+        "name": "isPython",
+        "appliesTo": "Api",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L251"
+      },
+      {
+        "name": "isJavaScript",
+        "appliesTo": "Type",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L253"
+      },
+      {
+        "name": "isJavaScript",
+        "appliesTo": "Statement",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L254"
+      },
+      {
+        "name": "isJavaScript",
+        "appliesTo": "Line",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L255"
+      },
+      {
+        "name": "isJavaScript",
+        "appliesTo": "Region",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L256"
+      },
+      {
+        "name": "isJavaScript",
+        "appliesTo": "Api",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L257"
       }
     ],
     "functions": [],
@@ -2928,11 +3018,11 @@ const packages = {
     "samples": [
       {
         "title": "Api diff",
-        "code": "import csharp-library-checks\nimport code-analysis\n\n# Baseline: C# stub files in api/ directory\npredicate baselineApi(Api) => publicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')\n# Source: everything NOT in api/\npredicate sourceApi(Api) => publicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')\n\n# Build lookup lists from current source and baseline\nlet baselineSignatures = Code.Api:csharp:baselineApi.Select(item.Signature)\nlet currentSignatures = Code.Api:csharp:sourceApi.Select(item.Signature)\n\n# Diff predicates\npredicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)\npredicate addedApi(Api) => sourceApi && !Api.Signature:in(baselineSignatures)\n\n# Report results\nexport let api-removed = Code.Api:removedApi\n    :toError('API REMOVED (breaking): {item.Signature}')\nexport let api-added = Code.Api:addedApi\n    :toInfo('API ADDED: {item.Signature}')"
+        "code": "import csharp-library-checks\nimport code-analysis\n\n# Baseline: C# stub files in api/ directory\npredicate baselineApi(Api) => publicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')\n# Source: everything NOT in api/\npredicate sourceApi(Api) => publicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')\n\n# Build lookup lists from current source and baseline\nlet baselineSignatures = Code.Api:isCSharp:baselineApi.Select(item.Signature)\nlet currentSignatures = Code.Api:isCSharp:sourceApi.Select(item.Signature)\n\n# Diff predicates\npredicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)\npredicate addedApi(Api) => sourceApi && !Api.Signature:in(baselineSignatures)\n\n# Report results\nexport let api-removed = Code.Api:removedApi\n    :toError('API REMOVED (breaking): {item.Signature}')\nexport let api-added = Code.Api:addedApi\n    :toInfo('API ADDED: {item.Signature}')"
       },
       {
         "title": "Api listing",
-        "code": "import csharp-library-checks\n\n# Print API surface as C# stubs\nexport command api-listing = foreach Code.Api:csharp:publicApi => '{item.ApiAsText}'\n\n# Save API surface to a file\nlet apiText = Code.Api:csharp:publicApi.text('{item.ApiAsText}')\nexport command save-api = save('api-surface.txt', apiText)"
+        "code": "import csharp-library-checks\n\n# Print API surface as C# stubs\nexport command api-listing = foreach Code.Api:isCSharp:publicApi => '{item.ApiAsText}'\n\n# Save API surface to a file\nlet apiText = Code.Api:isCSharp:publicApi.text('{item.ApiAsText}')\nexport command save-api = save('api-surface.txt', apiText)"
       }
     ],
     "collections": [],
@@ -3476,11 +3566,11 @@ const packages = {
     "samples": [
       {
         "title": "Api diff",
-        "code": "import javascript-library-checks\nimport code-analysis\n\n# Baseline: stub files in api/ directory\npredicate baselineApi(Api) => isPublicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')\n# Source: everything NOT in api/\npredicate sourceApi(Api) => isPublicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')\n\n# Build lookup lists from current source and baseline\nlet baselineSignatures = Code.Api:javascript:baselineApi.Select(item.Signature)\nlet currentSignatures = Code.Api:javascript:sourceApi.Select(item.Signature)\n\n# Diff predicates\npredicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)\npredicate addedApi(Api) => sourceApi && !Api.Signature:in(baselineSignatures)\n\n# Report results\nexport let api-removed = Code.Api:removedApi\n    :toError('API REMOVED (breaking): {item.Signature}')\nexport let api-added = Code.Api:addedApi\n    :toInfo('API ADDED: {item.Signature}')"
+        "code": "import javascript-library-checks\nimport code-analysis\n\n# Baseline: stub files in api/ directory\npredicate baselineApi(Api) => isPublicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')\n# Source: everything NOT in api/\npredicate sourceApi(Api) => isPublicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')\n\n# Build lookup lists from current source and baseline\nlet baselineSignatures = Code.Api:isJavaScript:baselineApi.Select(item.Signature)\nlet currentSignatures = Code.Api:isJavaScript:sourceApi.Select(item.Signature)\n\n# Diff predicates\npredicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)\npredicate addedApi(Api) => sourceApi && !Api.Signature:in(baselineSignatures)\n\n# Report results\nexport let api-removed = Code.Api:removedApi\n    :toError('API REMOVED (breaking): {item.Signature}')\nexport let api-added = Code.Api:addedApi\n    :toInfo('API ADDED: {item.Signature}')"
       },
       {
         "title": "Api listing",
-        "code": "import javascript-library-checks\n\n# Print API surface\nexport command api-listing = foreach Code.Api:javascript:isPublicApi => '{item.Signature}'\n\n# Save API surface to a file\nlet apiText = Code.Api:javascript:isPublicApi.text('{item.Signature}')\nexport command save-api = save('api-surface.txt', apiText)"
+        "code": "import javascript-library-checks\n\n# Print API surface\nexport command api-listing = foreach Code.Api:isJavaScript:isPublicApi => '{item.Signature}'\n\n# Save API surface to a file\nlet apiText = Code.Api:isJavaScript:isPublicApi.text('{item.Signature}')\nexport command save-api = save('api-surface.txt', apiText)"
       }
     ],
     "collections": [],
@@ -4299,11 +4389,11 @@ const packages = {
     "samples": [
       {
         "title": "Api diff",
-        "code": "import python-library-checks\nimport code-analysis\n\n# Baseline: stub files in api/ directory\npredicate baselineApi(Api) => isPublicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')\n# Source: everything NOT in api/\npredicate sourceApi(Api) => isPublicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')\n\n# Build lookup lists from current source and baseline\nlet baselineSignatures = Code.Api:python:baselineApi.Select(item.Signature)\nlet currentSignatures = Code.Api:python:sourceApi.Select(item.Signature)\n\n# Diff predicates\npredicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)\npredicate addedApi(Api) => sourceApi && !Api.Signature:in(baselineSignatures)\n\n# Report results\nexport let api-removed = Code.Api:removedApi\n    :toError('API REMOVED (breaking): {item.Signature}')\nexport let api-added = Code.Api:addedApi\n    :toInfo('API ADDED: {item.Signature}')"
+        "code": "import python-library-checks\nimport code-analysis\n\n# Baseline: stub files in api/ directory\npredicate baselineApi(Api) => isPublicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')\n# Source: everything NOT in api/\npredicate sourceApi(Api) => isPublicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')\n\n# Build lookup lists from current source and baseline\nlet baselineSignatures = Code.Api:isPython:baselineApi.Select(item.Signature)\nlet currentSignatures = Code.Api:isPython:sourceApi.Select(item.Signature)\n\n# Diff predicates\npredicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)\npredicate addedApi(Api) => sourceApi && !Api.Signature:in(baselineSignatures)\n\n# Report results\nexport let api-removed = Code.Api:removedApi\n    :toError('API REMOVED (breaking): {item.Signature}')\nexport let api-added = Code.Api:addedApi\n    :toInfo('API ADDED: {item.Signature}')"
       },
       {
         "title": "Api listing",
-        "code": "import python-library-checks\n\n# Print API surface\nexport command api-listing = foreach Code.Api:python:isPublicApi => '{item.Signature}'\n\n# Save API surface to a file\nlet apiText = Code.Api:python:isPublicApi.text('{item.Signature}')\nexport command save-api = save('api-surface.txt', apiText)"
+        "code": "import python-library-checks\n\n# Print API surface\nexport command api-listing = foreach Code.Api:isPython:isPublicApi => '{item.Signature}'\n\n# Save API surface to a file\nlet apiText = Code.Api:isPython:isPublicApi.text('{item.Signature}')\nexport command save-api = save('api-surface.txt', apiText)"
       }
     ],
     "collections": [],

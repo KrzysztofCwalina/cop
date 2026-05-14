@@ -654,8 +654,8 @@ predicate baselineApi(Api) => isPublicApi && Api.File.Path:matches('[/\\\\]api[/
 # Source: everything NOT in api/
 predicate sourceApi(Api) => isPublicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')
 
-let baselineSignatures = Code.Api:csharp:baselineApi.Select(item.Signature)
-let currentSignatures = Code.Api:csharp:sourceApi.Select(item.Signature)
+let baselineSignatures = Code.Api:isCSharp:baselineApi.Select(item.Signature)
+let currentSignatures = Code.Api:isCSharp:sourceApi.Select(item.Signature)
 
 predicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)
 predicate addedApi(Api) => sourceApi && !Api.Signature:in(baselineSignatures)
@@ -672,7 +672,7 @@ export let api-compat = api-removed + api-added
         var exportPolicy = @"
 import csharp-library-checks
 import code-analysis
-export command api-export = SAVE('api-baseline.txt', '{item.Signature}', Code.Api:csharp:isPublicApi)
+export command api-export = SAVE('api-baseline.txt', '{item.Signature}', Code.Api:isCSharp:isPublicApi)
 ";
         var result = RunInlineCop(exportPolicy,
             [SamplePath("GoodClient.cs")], commandName: "api-export");

@@ -324,7 +324,7 @@ public class FlagsTests
             group.Add(pred);
         }
 
-        // Create a sealed TypeDeclaration with a File (triggers the language filter path)
+        // Create a sealed TypeDeclaration with a File
         var file = new Cop.Providers.SourceModel.SourceFile("test.cs", "csharp", [], [], "");
         var sealedType = new Cop.Providers.SourceModel.TypeDeclaration(
             "GoodClient",
@@ -334,7 +334,7 @@ public class FlagsTests
 
         var evaluator = new PredicateEvaluator(predicateGroups, "test.cs", registry);
 
-        // isSealed body should be true (regression: flags constants must resolve before language filter)
+        // isSealed body should be true (flags constants resolve correctly)
         var isSealedPred = predicateGroups["isSealed"][0];
         var (bodyResult, _) = evaluator.EvaluateAsBool(isSealedPred.Body, sealedType, "Type");
         Assert.That(bodyResult, Is.True, "isSealed body should be true for sealed type with File");
