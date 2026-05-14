@@ -140,6 +140,11 @@ public class ScriptInterpreter
             // Register functions with conflict detection
             foreach (var func in sf.Functions)
             {
+                // Skip Collection-typed intrinsics — they are declaration-only (for docs/discovery).
+                // Collection methods are handled by the collection method dispatcher in PredicateEvaluator.
+                if (func.IsIntrinsic && string.Equals(func.InputType, "Collection", StringComparison.Ordinal))
+                    continue;
+
                 if (!functionGroups.TryGetValue(func.Name, out var group))
                 {
                     group = [];

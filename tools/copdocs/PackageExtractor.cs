@@ -376,6 +376,7 @@ public class PackageExtractor
         if (normalized.Contains("/js/")) return "JavaScript";
 
         var dirName = Path.GetFileName(packageDir);
+        if (dirName.StartsWith("code")) return "Code";
         if (dirName == "cop") return "Cop";
         if (dirName.StartsWith("typespec")) return "TypeSpec";
         if (dirName == "http") return "Misc";
