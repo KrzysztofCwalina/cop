@@ -25,20 +25,30 @@ Bare-name collection fallback has been removed from TypeRegistry. Collections mu
 
 All provider packages (csharp, python, javascript, files, typespec-http) now have explicit `export let` exports for their collections.
 
+### Explicit exports per package
+
+| Package | Provider | Exports |
+|---------|----------|---------|
+| `csharp` | `data('csharp')` | Types, Statements, Lines, Calls, Files, Regions, Projects |
+| `python` | `data('python')` | Types, Statements, Lines, Calls, Files, Regions, Projects |
+| `javascript` | `data('javascript')` | Types, Statements, Lines, Calls, Files, Regions, Projects |
+| `files` | `data('filesystem')` | Disk, Folders, DiskFiles |
+| `typespec-http` | `data('typespec-http')` | Operations, Services |
+
 ---
 
 ## Category 3: Implicit Identifiers (always available without import)
 
 | # | Name | File:Line | Description |
 |---|------|-----------|-------------|
-| 1 | `item` | PredicateEvaluator.cs:398 | Current iteration item in any predicate/filter |
-| 2 | `null` | PredicateEvaluator.cs:399 | Null literal |
-| 3 | `error` (bare) | PredicateEvaluator.cs:402 | ErrorValue with no message |
-| 4 | `isError` (bare) | PredicateEvaluator.cs:405 | Check if current item is an error |
-| 5 | `empty` (bare) | PredicateEvaluator.cs:422 | Check if item/collection/string is empty |
-| 6 | `Program` | ScriptInterpreter.cs:250 | Built-in ProgramInfo from CLI args |
-| 7 | Flags constants | PredicateEvaluator.cs:490 | All `flags` members are global identifiers (e.g., `Public`, `Static`) |
-| 8 | Enum constants | PredicateEvaluator.cs:501 | All `enum` members are global identifiers (e.g., `Class`, `Interface`) |
+| 1 | `item` | PredicateEvaluator.cs:372 | Current iteration item in any predicate/filter |
+| 2 | `null` | PredicateEvaluator.cs:373 | Null literal |
+| 3 | `error` (bare) | PredicateEvaluator.cs:376 | ErrorValue with no message |
+| 4 | `isError` (bare) | PredicateEvaluator.cs:379 | Check if current item is an error |
+| 5 | `empty` (bare) | PredicateEvaluator.cs:396 | Check if item/collection/string is empty |
+| 6 | `Program` | ScriptInterpreter.cs:251 | Built-in ProgramInfo from CLI args |
+| 7 | Flags constants | PredicateEvaluator.cs:466 | All `flags` members are global identifiers (e.g., `Public`, `Static`) |
+| 8 | Enum constants | PredicateEvaluator.cs:477 | All `enum` members are global identifiers (e.g., `Class`, `Interface`) |
 
 ---
 
@@ -111,7 +121,7 @@ How providers make their collections/types/functions available without `.cop` de
 
 | # | What | File:Line | Behavior |
 |---|------|-----------|----------|
-| 1 | Collections auto-exposed | ProviderLoader.cs:QueryAndRegister | Provider query results auto-added to `_nsCollections[ns][name]` — bare-name resolution (Category 2) then makes them accessible |
+| 1 | Collections auto-exposed | ProviderLoader.cs:QueryAndRegister | Provider query results auto-added to `_nsCollections[ns][name]` — accessible via qualified names (`ns.Collection`) or explicit `export let` in `.cop` packages |
 | 2 | Streaming sources auto-registered | ProviderLoader.cs:RegisterSourceProvider | Each SourceProvider collection → registered streaming source via `RegisterStreamingSource` |
 | 3 | Sink providers auto-registered | ProviderLoader.cs:RegisterSinkProvider | Each SinkProvider → registered sink via `RegisterSink` |
 | 4 | Provider functions auto-registered | ProviderLoader.cs:QueryAndRegister | Functions registered under namespace (e.g., `http.Get`) |
@@ -126,8 +136,8 @@ Implicit identifier resolution in `EvalIdentifier` that allows bare names to act
 
 | # | What | File:Line | Behavior |
 |---|------|-----------|----------|
-| 1 | Language name as filter | PredicateEvaluator.cs:539-564 | Any bare identifier matching `File.Language` becomes a boolean filter (e.g., `Types:csharp`) |
-| 2 | Bool property fallback | PredicateEvaluator.cs:527-536 | Bare identifier matching a bool property on the item's type returns its value (e.g., `Lines:isComment`) |
+| 1 | Language name as filter | PredicateEvaluator.cs:515-540 | Any bare identifier matching `File.Language` becomes a boolean filter (e.g., `Types:csharp`) |
+| 2 | Bool property fallback | PredicateEvaluator.cs:573 | Bare identifier matching a bool property on the item's type returns its value (e.g., `Lines:isComment`) |
 
 ---
 
