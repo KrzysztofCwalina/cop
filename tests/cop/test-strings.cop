@@ -7,34 +7,34 @@ import csharp
 predicate eqAnimal(Type) => Type.Name:equals('animal')
 predicate eqDOG(Type) => Type.Name:equals('DOG')
 predicate eqCaT(Type) => Type.Name:equals('CaT')
-command test-eq-lower = ASSERT(csharp.Types:eqAnimal, 'equals matches lowercase')
-command test-eq-upper = ASSERT(csharp.Types:eqDOG, 'equals matches uppercase')
-command test-eq-mixed = ASSERT(csharp.Types:eqCaT, 'equals matches mixed case')
+command test-eq-lower = ASSERT(csharp.Types:eqAnimal.Count > 0, 'equals matches lowercase')
+command test-eq-upper = ASSERT(csharp.Types:eqDOG.Count > 0, 'equals matches uppercase')
+command test-eq-mixed = ASSERT(csharp.Types:eqCaT.Count > 0, 'equals matches mixed case')
 
 # ── Case-insensitive startsWith ──
 predicate swAbstract(Type) => Type.Name:startsWith('abstract')
 predicate swFISH(Type) => Type.Name:startsWith('FISH')
-command test-sw-lower = ASSERT(csharp.Types:swAbstract, 'startsWith case-insensitive')
-command test-sw-upper = ASSERT(csharp.Types:swFISH, 'startsWith FISH matches FishClient')
+command test-sw-lower = ASSERT(csharp.Types:swAbstract.Count > 0, 'startsWith case-insensitive')
+command test-sw-upper = ASSERT(csharp.Types:swFISH.Count > 0, 'startsWith FISH matches FishClient')
 
 # ── Case-insensitive endsWith ──
 predicate ewHELPER(Type) => Type.Name:endsWith('HELPER')
 predicate ewClient(Type) => Type.Name:endsWith('client')
-command test-ew-upper = ASSERT(csharp.Types:ewHELPER, 'endsWith HELPER matches HiddenHelper')
-command test-ew-lower = ASSERT(csharp.Types:ewClient, 'endsWith client matches FishClient')
+command test-ew-upper = ASSERT(csharp.Types:ewHELPER.Count > 0, 'endsWith HELPER matches HiddenHelper')
+command test-ew-lower = ASSERT(csharp.Types:ewClient.Count > 0, 'endsWith client matches FishClient')
 
 # ── Case-insensitive contains ──
 predicate ctSERV(Type) => Type.Name:contains('SERV')
 predicate ctfish(Type) => Type.Name:contains('fish')
-command test-ct-upper = ASSERT(csharp.Types:ctSERV, 'contains SERV matches AbstractService')
-command test-ct-lower = ASSERT(csharp.Types:ctfish, 'contains fish matches FishClient')
+command test-ct-upper = ASSERT(csharp.Types:ctSERV.Count > 0, 'contains SERV matches AbstractService')
+command test-ct-lower = ASSERT(csharp.Types:ctfish.Count > 0, 'contains fish matches FishClient')
 
 # ── notEquals ──
 predicate neDog(Type) => Type.Name:notEquals('Dog')
-command test-ne = ASSERT(csharp.Types:neDog, 'notEquals excludes Dog, others remain')
+command test-ne = ASSERT(csharp.Types:neDog.Count > 0, 'notEquals excludes Dog, others remain')
 
 # ── Regex matches ──
 predicate rxCat(Type) => Type.Name:matches('^[A-Z]at$')
 predicate rxService(Type) => Type.Name:matches('Service$')
-command test-rx-cat = ASSERT(csharp.Types:rxCat, 'regex ^[A-Z]at$ matches Cat')
-command test-rx-service = ASSERT(csharp.Types:rxService, 'regex Service$ matches AbstractService')
+command test-rx-cat = ASSERT(csharp.Types:rxCat.Count > 0, 'regex ^[A-Z]at$ matches Cat')
+command test-rx-service = ASSERT(csharp.Types:rxService.Count > 0, 'regex Service$ matches AbstractService')

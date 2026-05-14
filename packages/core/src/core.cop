@@ -123,15 +123,10 @@ export command SAVE(path, template) = intrinsic
 ## Used for troubleshooting: DEBUG('{Types.Count} types loaded')
 export command DEBUG(message) = intrinsic
 
-## Asserts that a collection is non-empty. Fails the test run if empty.
-## Used in tests: ASSERT(Types:isPublic, 'should have public types')
-## Reports pass/fail with the description and item count.
-export command ASSERT(items, description) = intrinsic
-
-## Asserts that a collection IS empty. Fails the test run if non-empty.
-## Used in tests: ASSERT_EMPTY(Types:isObsolete, 'no obsolete types allowed')
-## Reports pass/fail with the description and item count.
-export command ASSERT_EMPTY(items, description) = intrinsic
+## Asserts that a condition is true. Fails the test run if false.
+## Used in tests: ASSERT(Types:isPublic.Count > 0, 'should have public types')
+## Reports pass/fail with the description.
+export command ASSERT(condition, description) = intrinsic
 
 # Collection Type
 # The built-in collection type. All [T] properties are Collection instances.

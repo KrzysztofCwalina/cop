@@ -10,38 +10,38 @@ predicate containsZzz(Type) => Type.Name:contains('Zzz')
 
 # ── Basic let ──
 let public-types = csharp.Types:isPublic
-command test-let-basic = ASSERT(public-types, 'let binding should resolve')
+command test-let-basic = ASSERT(public-types.Count > 0, 'let binding should resolve')
 
 # ── Chained let (narrowing) ──
 let sealed-public = public-types:isSealed
-command test-let-chain-sealed = ASSERT(sealed-public, 'chained let narrows to sealed')
+command test-let-chain-sealed = ASSERT(sealed-public.Count > 0, 'chained let narrows to sealed')
 
 let abstract-public = public-types:isAbstract
-command test-let-chain-abstract = ASSERT(abstract-public, 'chained let narrows to abstract')
+command test-let-chain-abstract = ASSERT(abstract-public.Count > 0, 'chained let narrows to abstract')
 
 # ── Chain producing empty ──
 let sealed-abstract = sealed-public:isAbstract
-command test-let-empty-chain = ASSERT_EMPTY(sealed-abstract, 'sealed+abstract should be empty')
+command test-let-empty-chain = ASSERT(sealed-abstract.Count == 0, 'sealed+abstract should be empty')
 
 # ── Multiple predicates ──
 let clients = public-types:endsClient
-command test-let-client = ASSERT(clients, 'should find client types via let')
+command test-let-client = ASSERT(clients.Count > 0, 'should find client types via let')
 
 let services = public-types:endsService
-command test-let-service = ASSERT(services, 'should find service types via let')
+command test-let-service = ASSERT(services.Count > 0, 'should find service types via let')
 
 # ── Deep chain (3 levels) ──
 let sealed-clients = clients:isSealed
-command test-let-deep = ASSERT(sealed-clients, 'FishClient is a sealed client')
+command test-let-deep = ASSERT(sealed-clients.Count > 0, 'FishClient is a sealed client')
 
 # ── Union of let-bound collections ──
 let important = clients + services
-command test-let-union = ASSERT(important, 'union of let-chained collections')
+command test-let-union = ASSERT(important.Count > 0, 'union of let-chained collections')
 
 # ── Negated filter on let ──
 let non-sealed = public-types:!isSealed
-command test-let-negated = ASSERT(non-sealed, 'should have non-sealed public types')
+command test-let-negated = ASSERT(non-sealed.Count > 0, 'should have non-sealed public types')
 
 # ── Let that produces empty ──
 let zzz = csharp.Types:containsZzz
-command test-let-empty = ASSERT_EMPTY(zzz, 'no types contain Zzz')
+command test-let-empty = ASSERT(zzz.Count == 0, 'no types contain Zzz')

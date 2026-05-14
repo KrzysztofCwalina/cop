@@ -827,7 +827,7 @@ public class ScriptInterpreter
             throw new FailException(message, null, cmd.Line);
         }
 
-        // ASSERT / ASSERT_EMPTY: resolve collection, count items, record result
+        // ASSERT: evaluate boolean condition, record result
         if (IsAssertAction(cmd.ActionName) && cmd.Collection is not null)
         {
             ExecuteAssert(cmd, documents, predicateGroups, letDeclarations, functionGroups, allAsserts);
@@ -2716,14 +2716,13 @@ public class ScriptInterpreter
         string.Equals(actionName, "DEBUG", StringComparison.Ordinal);
 
     private static bool IsAssertAction(string? actionName) =>
-        string.Equals(actionName, "ASSERT", StringComparison.Ordinal) ||
-        string.Equals(actionName, "ASSERT_EMPTY", StringComparison.Ordinal);
+        string.Equals(actionName, "ASSERT", StringComparison.Ordinal);
 
     private static bool IsFailAction(string? actionName) =>
         string.Equals(actionName, "FAIL", StringComparison.Ordinal);
 
     /// <summary>
-    /// Execute an ASSERT or ASSERT_EMPTY command: resolve collection, count items, record pass/fail.
+    /// Execute an ASSERT command: evaluate a boolean condition expression and record pass/fail.
     /// </summary>
     private void ExecuteAssert(
         CommandBlock cmd,
@@ -2733,36 +2732,46 @@ public class ScriptInterpreter
         Dictionary<string, List<FunctionDefinition>> functionGroups,
         List<AssertResult> allAsserts)
     {
-        bool expectEmpty = string.Equals(cmd.ActionName, "ASSERT_EMPTY", StringComparison.Ordinal);
-        string itemType = ResolveItemType(cmd.Collection!, predicateGroups, letDeclarations, functionGroups);
+        var evaluator = CreateEvaluator(predicateGroups, "", letDeclarations, functionGroups);
+        bool passed;
 
-        List<object> items;
-        if (IsGlobalRootCollection(cmd.Collection!, predicateGroups, letDeclarations))
+        if (cmd.OutputExpression is not null)
         {
-            var evaluator = CreateEvaluator(predicateGroups, "", letDeclarations, functionGroups);
-            items = ResolveGlobalCollection(cmd.Collection!, evaluator, predicateGroups, letDeclarations, functionGroups);
-            items = ApplyFilters(items, itemType, cmd.Filters, evaluator, functionGroups);
-
-            if (cmd.Exclusions != null)
+            // New form: ASSERT(boolExpr, 'description')
+            var value = evaluator.EvaluateField(cmd.OutputExpression, null!, "");
+            passed = PredicateEvaluator.ToBool(value);
+        }
+        else if (cmd.Collection is not null)
+        {
+            // Legacy form: ASSERT(collection:filters, 'description') — non-empty check
+            string itemType = ResolveItemType(cmd.Collection, predicateGroups, letDeclarations, functionGroups);
+            List<object> items;
+            if (IsGlobalRootCollection(cmd.Collection, predicateGroups, letDeclarations))
             {
-                string finalItemType = ResolveItemTypeAfterFilters(itemType, cmd.Filters, functionGroups);
-                items = ApplyExclusions(items, finalItemType, cmd.Exclusions, evaluator, letDeclarations);
+                items = ResolveGlobalCollection(cmd.Collection, evaluator, predicateGroups, letDeclarations, functionGroups);
+                items = ApplyFilters(items, itemType, cmd.Filters, evaluator, functionGroups);
+                if (cmd.Exclusions != null)
+                {
+                    string finalItemType = ResolveItemTypeAfterFilters(itemType, cmd.Filters, functionGroups);
+                    items = ApplyExclusions(items, finalItemType, cmd.Exclusions, evaluator, letDeclarations);
+                }
             }
+            else
+            {
+                items = [];
+            }
+            passed = items.Count > 0;
         }
         else
         {
-            items = [];
+            passed = false;
         }
 
-        int count = items.Count;
-        bool passed = expectEmpty ? count == 0 : count > 0;
         string message = !string.IsNullOrEmpty(cmd.MessageTemplate)
             ? cmd.MessageTemplate
-            : expectEmpty
-                ? $"{cmd.Name}: expected empty"
-                : $"{cmd.Name}: expected non-empty";
+            : $"{cmd.Name}: expected true";
 
-        allAsserts.Add(new AssertResult(cmd.Name, passed, message, count));
+        allAsserts.Add(new AssertResult(cmd.Name, passed, message, 0));
     }
 
     /// <summary>

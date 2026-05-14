@@ -862,7 +862,7 @@ function highlightCop(code) {
   // Keywords (must match tokenizer: type/collection/import/let/command/export/predicate/function/foreach/feed/flags/enum)
   code = code.replace(/\b(import|predicate|function|let|foreach|type|export|command|enum|flags|collection|feed|async)\b/g, '<span class="cop-kw">$1</span>');
   // Built-in actions (language-level uppercase commands)
-  code = code.replace(/\b(PRINT|SAVE|RUN|DEBUG|ASSERT|ASSERT_EMPTY|FAIL)\b/g, '<span class="cop-kw">$1</span>');
+  code = code.replace(/\b(PRINT|SAVE|RUN|DEBUG|ASSERT|FAIL)\b/g, '<span class="cop-kw">$1</span>');
   // Built-in functions and collection transforms
   code = code.replace(/\b(Where|Select|GroupBy|OrderBy|OrderByDescending|Sum|Average|Count|Reduce|Distinct|Min|Max|Get|File|Text|Path|Matches)\b/g, '<span class="cop-fn">$1</span>');
   // Predicate calls (:name)

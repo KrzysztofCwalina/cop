@@ -1117,34 +1117,23 @@ SAVE commands only run when explicitly invoked (e.g., `cop run export-names`), n
 Tests that a collection is non-empty. Run with `cop test`.
 
 ```ruby
-command test-has-types = ASSERT(csharp.Types)
-command test-public = ASSERT(csharp.Types:isPublic, 'expected public types')
+command test-has-types = ASSERT(csharp.Types.Count > 0)
+command test-public = ASSERT(csharp.Types:isPublic.Count > 0, 'expected public types')
 ```
 
 | Part | Required | Description |
 |---|---|---|
-| `collection` | yes | A collection name or filtered chain |
+| `condition` | yes | A boolean expression to evaluate |
 | `'message'` | no | Custom failure message (defaults to command name) |
 
-Passes when at least one item matches. Fails when the collection is empty.
-
-### ASSERT_EMPTY
-
-Tests that a collection is empty. The inverse of `ASSERT`.
+Passes when the condition is true. Fails when false. Commonly used with `.Count > 0` (non-empty) or `.Count == 0` (empty):
 
 ```ruby
-command test-no-var = ASSERT_EMPTY(csharp.Statements:isVar)
-command test-clean = ASSERT_EMPTY(violations, 'should have no violations')
+command test-no-var = ASSERT(csharp.Statements:isVar.Count == 0)
+command test-clean = ASSERT(violations.Count == 0, 'should have no violations')
 ```
 
-| Part | Required | Description |
-|---|---|---|
-| `collection` | yes | A collection name or filtered chain |
-| `'message'` | no | Custom failure message (defaults to command name) |
-
-Passes when zero items match. Fails when items are found.
-
-ASSERT and ASSERT_EMPTY commands only run via `cop test`, never during `cop run`. See [Testing with Agent Cop](testing-with-cop.md) for details.
+ASSERT commands only run via `cop test`, never during `cop run`. See [Testing with Agent Cop](testing-with-cop.md) for details.
 
 ### DEBUG
 

@@ -1541,7 +1541,7 @@ public class PredicateEvaluator
         return gi >= glob.Length && pi >= path.Length;
     }
 
-    private static bool ToBool(object? value) => value switch
+    internal static bool ToBool(object? value) => value switch
     {
         bool b => b,
         null => false,

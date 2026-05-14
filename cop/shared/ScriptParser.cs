@@ -923,13 +923,13 @@ public class ScriptParser
     }
 
     /// <summary>
-    /// Returns true if the current identifier is a special action keyword (SAVE, DEBUG, ASSERT, ASSERT_EMPTY).
+    /// Returns true if the current identifier is a special action keyword (SAVE, DEBUG, ASSERT).
     /// These are the only actions that retain explicit invocation syntax.
     /// </summary>
     private bool IsSpecialAction()
     {
         var value = Current.Value;
-        return value is "SAVE" or "DEBUG" or "ASSERT" or "ASSERT_EMPTY" or "PRINT";
+        return value is "SAVE" or "DEBUG" or "ASSERT" or "PRINT";
     }
 
     /// <summary>
@@ -975,6 +975,8 @@ public class ScriptParser
         var stringArgs = new List<string>();
         Expression? exclusions = null;
         string? pathOverride = null;
+        Expression? conditionExpr = null;
+        bool isAssert = actionName == "ASSERT";
 
         // Parse comma-separated arguments (strings and collection expressions)
         while (Current.Kind != TokenKind.RParen && Current.Kind != TokenKind.Eof)
@@ -986,7 +988,15 @@ public class ScriptParser
             else
             {
                 var expr = ParseExpression();
-                (collection, filters, exclusions, pathOverride) = DecomposeCollectionExpression(expr);
+                if (isAssert)
+                {
+                    // ASSERT takes a boolean expression as its first argument
+                    conditionExpr = expr;
+                }
+                else
+                {
+                    (collection, filters, exclusions, pathOverride) = DecomposeCollectionExpression(expr);
+                }
             }
 
             if (Current.Kind == TokenKind.Comma)
@@ -1014,7 +1024,8 @@ public class ScriptParser
             : $"action_{line}";
 
         return new CommandBlock(name, messageTemplate,
-            collection, filters, line, docComment, ActionName: actionName, OutputPath: outputPath, Exclusions: exclusions, PathOverride: pathOverride);
+            collection, filters, line, docComment, ActionName: actionName, OutputPath: outputPath,
+            Exclusions: exclusions, PathOverride: pathOverride, OutputExpression: conditionExpr);
     }
 
     // Parse: RUN <commandName>(<arg1>, <arg2>, ...)

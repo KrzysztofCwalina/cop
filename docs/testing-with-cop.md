@@ -1,18 +1,18 @@
 # Testing with Agent Cop
 
-This guide covers how to write and run tests for cop packages and programs using the `ASSERT` and `ASSERT_EMPTY` commands.
+This guide covers how to write and run tests for cop packages and programs using the `ASSERT` command.
 
 ## Overview
 
-Agent Cop provides built-in test commands that verify collection properties. Tests are regular `.cop` files that use `ASSERT` and `ASSERT_EMPTY` instead of producing output or using `CHECK`. Run them with `cop test`.
+Agent Cop provides a built-in test command that evaluates boolean conditions. Tests are regular `.cop` files that use `ASSERT` instead of producing output or using `CHECK`. Run them with `cop test`.
 
 ```ruby
 import csharp-checks
 import code
 
-command test-has-types = ASSERT(csharp-checks.Types)
-command test-has-public = ASSERT(csharp-checks.Types:isPublic)
-command test-no-var = ASSERT_EMPTY(csharp-checks.Statements:isVar)
+command test-has-types = ASSERT(csharp-checks.Types.Count > 0)
+command test-has-public = ASSERT(csharp-checks.Types:isPublic.Count > 0)
+command test-no-var = ASSERT(csharp-checks.Statements:isVar.Count == 0)
 ```
 
 ```bash
@@ -29,16 +29,16 @@ cop test checks-test.cop
 
 ## ASSERT
 
-Passes when the collection is **non-empty** (at least one item matches).
+Passes when the condition evaluates to **true**.
 
 ```ruby
-command test-name = ASSERT(collection)
-command test-name = ASSERT(collection:filter, 'optional message')
+command test-name = ASSERT(condition)
+command test-name = ASSERT(condition, 'optional message')
 ```
 
 | Part | Required | Description |
 |---|---|---|
-| `collection` | yes | A collection name or filtered chain |
+| `condition` | yes | A boolean expression to evaluate |
 | `'message'` | no | Custom failure message (defaults to command name) |
 
 Examples:
@@ -48,37 +48,16 @@ import csharp-checks
 import code
 
 # Basic: assert types exist
-command test-has-types = ASSERT(csharp-checks.Types)
+command test-has-types = ASSERT(csharp-checks.Types.Count > 0)
 
 # Filtered: assert at least one public type exists (isPublic comes from code package)
-command test-public-types = ASSERT(csharp-checks.Types:isPublic)
+command test-public-types = ASSERT(csharp-checks.Types:isPublic.Count > 0)
+
+# Assert absence of bad patterns (empty check)
+command test-no-var = ASSERT(csharp-checks.Statements:isVar.Count == 0)
 
 # With message
-command test-has-files = ASSERT(Files, 'expected source files in project')
-```
-
-## ASSERT_EMPTY
-
-Passes when the collection is **empty** (zero items match). This is the inverse of `ASSERT` — use it to verify that bad patterns are absent.
-
-```ruby
-command test-name = ASSERT_EMPTY(collection)
-command test-name = ASSERT_EMPTY(collection:filter, 'optional message')
-```
-
-Examples:
-
-```ruby
-import csharp-checks
-
-# Verify no var declarations
-predicate isVar(Statement) => Statement.Kind == 'declaration' && Statement.Keywords:contains('var')
-command test-no-var = ASSERT_EMPTY(csharp-checks.Statements:isVar)
-
-# Verify no Thread.Sleep calls
-predicate threadSleep(Statement) => Statement.Kind == 'call'
-    && Statement.TypeName == 'Thread' && Statement.MemberName == 'Sleep'
-command test-no-sleep = ASSERT_EMPTY(csharp-checks.Statements:threadSleep, 'Thread.Sleep should not be used')
+command test-has-files = ASSERT(Files.Count > 0, 'expected source files in project')
 ```
 
 ## Running Tests
@@ -113,7 +92,7 @@ cop test tests/cop/ || exit 1
 
 ## Test Isolation
 
-`ASSERT` and `ASSERT_EMPTY` commands only run via `cop test`. They are skipped during `cop run`, just like `SAVE` commands require explicit invocation. This means you can safely mix test files alongside regular `.cop` files — `cop run` will ignore the assertions.
+`ASSERT` commands only run via `cop test`. They are skipped during `cop run`, just like `SAVE` commands require explicit invocation. This means you can safely mix test files alongside regular `.cop` files — `cop run` will ignore the assertions.
 
 ## Writing Good Tests
 
@@ -129,8 +108,8 @@ import code
 predicate isClient(Type) => Type.Name:endsWith('Client')
 
 # ── Tests (isPublic comes from the code package) ──
-command test-clients-found = ASSERT(csharp-checks.Types:isClient, 'expected Client types in sample')
-command test-public-clients = ASSERT(csharp-checks.Types:isClient:isPublic)
+command test-clients-found = ASSERT(csharp-checks.Types:isClient.Count > 0, 'expected Client types in sample')
+command test-public-clients = ASSERT(csharp-checks.Types:isClient:isPublic.Count > 0)
 ```
 
 ### Test collection unions
@@ -144,12 +123,12 @@ let public-csharp = csharp-checks.Types:isPublic
 let public-python = python-checks.Types:isPublic
 let all-public = public-csharp + public-python
 
-command test-union-not-empty = ASSERT(all-public)
+command test-union-not-empty = ASSERT(all-public.Count > 0)
 ```
 
 ### Test absence of bad patterns
 
-Use `ASSERT_EMPTY` to verify that rules catch nothing in clean code:
+Use `.Count == 0` to verify that rules catch nothing in clean code:
 
 ```ruby
 import csharp-checks
@@ -157,7 +136,7 @@ import csharp-checks
 predicate isVar(Statement) => Statement.Kind == 'declaration' && Statement.Keywords:contains('var')
 
 # Run against known-clean code: should find zero violations
-command test-clean-no-var = ASSERT_EMPTY(csharp-checks.Statements:isVar)
+command test-clean-no-var = ASSERT(csharp-checks.Statements:isVar.Count == 0)
 ```
 
 ### Name tests descriptively
@@ -167,7 +146,7 @@ Use `command test-...` naming to make output clear:
 ```
   ✓ test-clients-found
   ✓ test-public-clients
-  ✗ test-clean-no-var: Thread.Sleep should not be used (found 2 items)
+  ✗ test-clean-no-var: Thread.Sleep should not be used
 ```
 
 ## Project Structure

@@ -234,7 +234,7 @@ cop check csharp-checks -c interface-prefix,type-name-casing
 
 ## cop test
 
-Run `ASSERT` and `ASSERT_EMPTY` commands in `.cop` files and report pass/fail results.
+Run `ASSERT` commands in `.cop` files and report pass/fail results.
 
 ```bash
 cop test [<file>] [-d]

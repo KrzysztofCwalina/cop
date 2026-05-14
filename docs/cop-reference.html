@@ -1685,7 +1685,7 @@ const packages = {
       },
       "Collection": {
         "desc": "The built-in ordered collection type.\nDeclared as [T] in property types (e.g., Types : [Type]).\nImmutable — all operations return new collections without modifying the original.\nProperties: Count (int), First (item or nic), Last (item or nic),\nRest (collection without first element), Single (item if exactly one, or nic).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L146",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L141",
         "props": [
           {
             "name": "Count",
@@ -1716,7 +1716,7 @@ const packages = {
       },
       "Query": {
         "desc": "A deferred query over a collection (like C# IQueryable).\nChaining where/orderBy/select builds an expression tree without materializing.\nThe query executes when consumed by foreach, Count, PRINT, or assigned to a Collection.\nProviders may optimize by pushing the full query expression down.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L158",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L153",
         "props": [
           {
             "name": "Count",
@@ -1841,7 +1841,7 @@ const packages = {
         "returns": "Collection",
         "appliesTo": "Collection",
         "desc": "Filters items matching a condition. Returns a new collection.\nExample: Types:where(isPublic)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L170"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L165"
       },
       {
         "name": "select",
@@ -1849,7 +1849,7 @@ const packages = {
         "returns": "Collection",
         "appliesTo": "Collection",
         "desc": "Projects each item through a transformation. Returns a new collection.\nExample: Types:select(item.Name)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L174"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L169"
       },
       {
         "name": "any",
@@ -1857,7 +1857,7 @@ const packages = {
         "returns": "bool",
         "appliesTo": "Collection",
         "desc": "Returns true if any item matches a condition.\nExample: Types:any(isAbstract)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L178"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L173"
       },
       {
         "name": "all",
@@ -1865,7 +1865,7 @@ const packages = {
         "returns": "bool",
         "appliesTo": "Collection",
         "desc": "Returns true if all items match a condition.\nExample: Types:all(isPublic)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L182"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L177"
       },
       {
         "name": "none",
@@ -1873,7 +1873,7 @@ const packages = {
         "returns": "bool",
         "appliesTo": "Collection",
         "desc": "Returns true if no item matches a condition.\nExample: Types:none(isObsolete)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L186"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L181"
       },
       {
         "name": "count",
@@ -1881,7 +1881,7 @@ const packages = {
         "returns": "int",
         "appliesTo": "Collection",
         "desc": "Counts items matching a condition.\nExample: Types:count(isPublic)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L190"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L185"
       },
       {
         "name": "contains",
@@ -1889,7 +1889,7 @@ const packages = {
         "returns": "bool",
         "appliesTo": "Collection",
         "desc": "Returns true if collection contains a value (case-insensitive string match).\nExample: names:contains('Foo')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L194"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L189"
       },
       {
         "name": "containsAny",
@@ -1897,7 +1897,7 @@ const packages = {
         "returns": "bool",
         "appliesTo": "Collection",
         "desc": "Returns true if collection contains any of the given values.\nExample: tags:containsAny('api', 'public')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L198"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L193"
       },
       {
         "name": "empty",
@@ -1905,7 +1905,7 @@ const packages = {
         "returns": "bool",
         "appliesTo": "Collection",
         "desc": "Returns true if the collection is empty (Count == 0).\nExample: errors:empty",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L202"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L197"
       },
       {
         "name": "first",
@@ -1913,7 +1913,7 @@ const packages = {
         "returns": "Object",
         "appliesTo": "Collection",
         "desc": "First item matching a condition, or nic.\nExample: Types:first(isPublic)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L206"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L201"
       },
       {
         "name": "last",
@@ -1921,7 +1921,7 @@ const packages = {
         "returns": "Object",
         "appliesTo": "Collection",
         "desc": "Last item matching a condition, or nic.\nExample: Types:last(isPublic)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L210"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L205"
       },
       {
         "name": "single",
@@ -1929,7 +1929,7 @@ const packages = {
         "returns": "Object",
         "appliesTo": "Collection",
         "desc": "The single item matching a condition, or nic if zero or multiple match.\nExample: Types:single(isEntryPoint)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L214"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L209"
       },
       {
         "name": "elementAt",
@@ -1937,7 +1937,7 @@ const packages = {
         "returns": "Object",
         "appliesTo": "Collection",
         "desc": "Item at a specific zero-based index.\nExample: items:elementAt(3)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L218"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L213"
       },
       {
         "name": "orderBy",
@@ -1945,7 +1945,7 @@ const packages = {
         "returns": "Collection",
         "appliesTo": "Collection",
         "desc": "Sorts ascending by a key expression.\nExample: Types:orderBy(item.Name)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L222"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L217"
       },
       {
         "name": "orderByDescending",
@@ -1953,7 +1953,7 @@ const packages = {
         "returns": "Collection",
         "appliesTo": "Collection",
         "desc": "Sorts descending by a key expression.\nExample: Types:orderByDescending(item.Count)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L226"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L221"
       },
       {
         "name": "distinct",
@@ -1961,7 +1961,7 @@ const packages = {
         "returns": "Collection",
         "appliesTo": "Collection",
         "desc": "Removes duplicate items (by string representation).\nExample: names:distinct",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L230"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L225"
       },
       {
         "name": "groupBy",
@@ -1969,7 +1969,7 @@ const packages = {
         "returns": "Collection",
         "appliesTo": "Collection",
         "desc": "Groups items by a key expression. Returns collection of groups.\nExample: Types:groupBy(item.Namespace)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L234"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L229"
       },
       {
         "name": "sum",
@@ -1977,7 +1977,7 @@ const packages = {
         "returns": "int",
         "appliesTo": "Collection",
         "desc": "Sums a numeric property across all items.\nExample: files:sum(item.Size)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L238"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L233"
       },
       {
         "name": "min",
@@ -1985,7 +1985,7 @@ const packages = {
         "returns": "int",
         "appliesTo": "Collection",
         "desc": "Minimum value of a numeric property.\nExample: files:min(item.Size)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L242"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L237"
       },
       {
         "name": "max",
@@ -1993,7 +1993,7 @@ const packages = {
         "returns": "int",
         "appliesTo": "Collection",
         "desc": "Maximum value of a numeric property.\nExample: files:max(item.Size)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L246"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L241"
       },
       {
         "name": "average",
@@ -2001,7 +2001,7 @@ const packages = {
         "returns": "int",
         "appliesTo": "Collection",
         "desc": "Average value of a numeric property.\nExample: files:average(item.Size)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L250"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L245"
       },
       {
         "name": "reduce",
@@ -2009,7 +2009,7 @@ const packages = {
         "returns": "Object",
         "appliesTo": "Collection",
         "desc": "Reduces a collection to a single value using an accumulator expression.\nExample: numbers:reduce(acc + item)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L254"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L249"
       },
       {
         "name": "push",
@@ -2017,7 +2017,7 @@ const packages = {
         "returns": "Collection",
         "appliesTo": "Collection",
         "desc": "Returns a new collection with the item appended at the end.\nExample: let updated = items:push(newItem)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L261"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L256"
       },
       {
         "name": "prepend",
@@ -2025,7 +2025,7 @@ const packages = {
         "returns": "Collection",
         "appliesTo": "Collection",
         "desc": "Returns a new collection with the item prepended at the front.\nExample: let updated = items:prepend(newItem)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L265"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L260"
       },
       {
         "name": "pop",
@@ -2033,7 +2033,7 @@ const packages = {
         "returns": "Collection",
         "appliesTo": "Collection",
         "desc": "Returns a new collection without the last element.\nExample: let shorter = items:pop",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L269"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L264"
       },
       {
         "name": "concat",
@@ -2041,7 +2041,7 @@ const packages = {
         "returns": "Collection",
         "appliesTo": "Collection",
         "desc": "Returns a new collection combining both collections.\nExample: let merged = listA:concat(listB)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L273"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L268"
       }
     ],
     "checks": [],
@@ -2072,15 +2072,9 @@ const packages = {
       },
       {
         "name": "ASSERT",
-        "params": "items, description",
-        "desc": "Asserts that a collection is non-empty. Fails the test run if empty.\nUsed in tests: ASSERT(Types:isPublic, 'should have public types')\nReports pass/fail with the description and item count.",
+        "params": "condition, description",
+        "desc": "Asserts that a condition is true. Fails the test run if false.\nUsed in tests: ASSERT(Types:isPublic.Count > 0, 'should have public types')\nReports pass/fail with the description.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L129"
-      },
-      {
-        "name": "ASSERT_EMPTY",
-        "params": "items, description",
-        "desc": "Asserts that a collection IS empty. Fails the test run if non-empty.\nUsed in tests: ASSERT_EMPTY(Types:isObsolete, 'no obsolete types allowed')\nReports pass/fail with the description and item count.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L134"
       }
     ]
   },
@@ -5645,7 +5639,7 @@ function highlightCop(code) {
   // Keywords (must match tokenizer: type/collection/import/let/command/export/predicate/function/foreach/feed/flags/enum)
   code = code.replace(/\b(import|predicate|function|let|foreach|type|export|command|enum|flags|collection|feed|async)\b/g, '<span class="cop-kw">$1</span>');
   // Built-in actions (language-level uppercase commands)
-  code = code.replace(/\b(PRINT|SAVE|RUN|DEBUG|ASSERT|ASSERT_EMPTY|FAIL)\b/g, '<span class="cop-kw">$1</span>');
+  code = code.replace(/\b(PRINT|SAVE|RUN|DEBUG|ASSERT|FAIL)\b/g, '<span class="cop-kw">$1</span>');
   // Built-in functions and collection transforms
   code = code.replace(/\b(Where|Select|GroupBy|OrderBy|OrderByDescending|Sum|Average|Count|Reduce|Distinct|Min|Max|Get|File|Text|Path|Matches)\b/g, '<span class="cop-fn">$1</span>');
   // Predicate calls (:name)

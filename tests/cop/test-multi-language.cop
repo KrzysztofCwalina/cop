@@ -6,34 +6,34 @@ import python
 import javascript
 
 # ── Namespace resolution ──
-command test-cs-types = ASSERT(csharp.Types, 'csharp.Types via namespace')
-command test-py-types = ASSERT(python.Types, 'python.Types via namespace')
-command test-js-types = ASSERT(javascript.Types, 'javascript.Types via namespace')
-command test-cs-stmts = ASSERT(csharp.Statements, 'csharp.Statements via namespace')
-command test-py-stmts = ASSERT(python.Statements, 'python.Statements via namespace')
-command test-js-stmts = ASSERT(javascript.Statements, 'javascript.Statements via namespace')
+command test-cs-types = ASSERT(csharp.Types.Count > 0, 'csharp.Types via namespace')
+command test-py-types = ASSERT(python.Types.Count > 0, 'python.Types via namespace')
+command test-js-types = ASSERT(javascript.Types.Count > 0, 'javascript.Types via namespace')
+command test-cs-stmts = ASSERT(csharp.Statements.Count > 0, 'csharp.Statements via namespace')
+command test-py-stmts = ASSERT(python.Statements.Count > 0, 'python.Statements via namespace')
+command test-js-stmts = ASSERT(javascript.Statements.Count > 0, 'javascript.Statements via namespace')
 
 # ── Python-specific ──
-command test-py-print = ASSERT(python.Statements:printCall, 'should find print() in calculator.py')
+command test-py-print = ASSERT(python.Statements:printCall.Count > 0, 'should find print() in calculator.py')
 
 # ── JavaScript-specific ──
-command test-js-console = ASSERT(javascript.Statements:consoleCall, 'should find console.log in app.js')
-command test-js-eval = ASSERT(javascript.Statements:evalCall, 'should find eval() in app.js')
-command test-js-alert = ASSERT(javascript.Statements:alertCall, 'should find alert() in app.js')
+command test-js-console = ASSERT(javascript.Statements:consoleCall.Count > 0, 'should find console.log in app.js')
+command test-js-eval = ASSERT(javascript.Statements:evalCall.Count > 0, 'should find eval() in app.js')
+command test-js-alert = ASSERT(javascript.Statements:alertCall.Count > 0, 'should find alert() in app.js')
 
 # ── Union: two languages ──
 let cs-py-types = csharp.Types + python.Types
-command test-union-two = ASSERT(cs-py-types, 'union of csharp + python types')
+command test-union-two = ASSERT(cs-py-types.Count > 0, 'union of csharp + python types')
 
 # ── Union: three languages ──
 let all-types = csharp.Types + python.Types + javascript.Types
-command test-union-three = ASSERT(all-types, 'union of all three language types')
+command test-union-three = ASSERT(all-types.Count > 0, 'union of all three language types')
 
 # ── Union: filtered branches ──
 let public-cs = csharp.Types:isPublic
 let public-all = public-cs + python.Types
-command test-union-filtered = ASSERT(public-all, 'union with filtered branch')
+command test-union-filtered = ASSERT(public-all.Count > 0, 'union with filtered branch')
 
 # ── Filesystem ──
-command test-has-files = ASSERT(DiskFiles, 'should have files')
-command test-has-folders = ASSERT(Folders, 'should have folders')
+command test-has-files = ASSERT(DiskFiles.Count > 0, 'should have files')
+command test-has-folders = ASSERT(Folders.Count > 0, 'should have folders')
