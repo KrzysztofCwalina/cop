@@ -97,28 +97,6 @@ public class TypeRegistry
                 continue;
             }
             _flagsTypes[fd.Name] = fd;
-
-            int bit = 1;
-            foreach (var member in fd.Members)
-            {
-                if (!_flagsMemberOwners.TryGetValue(member, out var owners))
-                {
-                    owners = [];
-                    _flagsMemberOwners[member] = owners;
-                }
-                owners.Add(fd.Name);
-
-                if (owners.Count == 1)
-                {
-                    _flagsConstants[member] = bit;
-                }
-                else
-                {
-                    // Ambiguous — remove from bare-name lookup
-                    _flagsConstants.Remove(member);
-                }
-                bit <<= 1;
-            }
         }
         return errors;
     }
@@ -178,32 +156,67 @@ public class TypeRegistry
                 continue;
             }
             _enumTypes[ed.Name] = ed;
+        }
+        return errors;
+    }
 
-            foreach (var member in ed.Members)
+    /// <summary>
+    /// Loads type import declarations. Promotes all members of the named flags or enum type
+    /// to global scope as bare identifiers (e.g., <c>export Modifier</c> makes Public, Static, etc. available).
+    /// Must be called AFTER LoadFlagsDefinitions and LoadEnumDefinitions.
+    /// </summary>
+    public List<string> LoadTypeImports(IEnumerable<TypeImportDeclaration> typeImports)
+    {
+        var errors = new List<string>();
+        foreach (var ti in typeImports)
+        {
+            if (_flagsTypes.TryGetValue(ti.TypeName, out var fd))
             {
-                // Cross-kind collision: enum member conflicts with a flags constant
-                if (_flagsMemberOwners.ContainsKey(member))
+                int bit = 1;
+                foreach (var member in fd.Members)
                 {
-                    errors.Add($"line {ed.Line}: enum member '{member}' conflicts with a flags constant");
-                    continue;
-                }
+                    if (!_flagsMemberOwners.TryGetValue(member, out var owners))
+                    {
+                        owners = [];
+                        _flagsMemberOwners[member] = owners;
+                    }
+                    owners.Add(fd.Name);
 
-                if (!_enumMemberOwners.TryGetValue(member, out var owners))
-                {
-                    owners = [];
-                    _enumMemberOwners[member] = owners;
-                }
-                owners.Add(ed.Name);
+                    if (owners.Count == 1)
+                        _flagsConstants[member] = bit;
+                    else
+                        _flagsConstants.Remove(member); // ambiguous
 
-                if (owners.Count == 1)
-                {
-                    _enumConstants[member] = member;
+                    bit <<= 1;
                 }
-                else
+            }
+            else if (_enumTypes.TryGetValue(ti.TypeName, out var ed))
+            {
+                foreach (var member in ed.Members)
                 {
-                    // Ambiguous — remove from bare-name lookup
-                    _enumConstants.Remove(member);
+                    // Cross-kind collision: enum member conflicts with a flags constant
+                    if (_flagsMemberOwners.ContainsKey(member))
+                    {
+                        errors.Add($"line {ti.Line}: enum member '{member}' conflicts with a flags constant");
+                        continue;
+                    }
+
+                    if (!_enumMemberOwners.TryGetValue(member, out var owners))
+                    {
+                        owners = [];
+                        _enumMemberOwners[member] = owners;
+                    }
+                    owners.Add(ed.Name);
+
+                    if (owners.Count == 1)
+                        _enumConstants[member] = member;
+                    else
+                        _enumConstants.Remove(member); // ambiguous
                 }
+            }
+            else
+            {
+                errors.Add($"line {ti.Line}: unknown flags or enum type '{ti.TypeName}' in type import");
             }
         }
         return errors;

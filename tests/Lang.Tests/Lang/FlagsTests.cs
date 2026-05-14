@@ -82,6 +82,7 @@ public class FlagsTests
             ["Public", "Protected", "Private", "Internal"], 1);
         var errors = registry.LoadFlagsDefinitions([flagsDef]);
         Assert.That(errors, Is.Empty);
+        registry.LoadTypeImports([new TypeImportDeclaration("Visibility", 1)]);
         Assert.That(registry.TryResolveFlagsConstant("Public"), Is.EqualTo(1));
         Assert.That(registry.TryResolveFlagsConstant("Protected"), Is.EqualTo(2));
         Assert.That(registry.TryResolveFlagsConstant("Private"), Is.EqualTo(4));
@@ -109,6 +110,10 @@ public class FlagsTests
         registry.LoadFlagsDefinitions([vis]);
         var errors = registry.LoadFlagsDefinitions([acc]);
         Assert.That(errors, Has.Count.EqualTo(0), "Overlapping members should not produce load errors");
+        registry.LoadTypeImports([
+            new TypeImportDeclaration("Visibility", 1),
+            new TypeImportDeclaration("Access", 2)
+        ]);
 
         // Bare lookup should return null (ambiguous)
         Assert.That(registry.TryResolveFlagsConstant("Public"), Is.Null);
@@ -147,6 +152,7 @@ public class FlagsTests
         var flagsDef = new FlagsDefinition("Visibility",
             ["Public", "Protected", "Private", "Internal"], 1);
         registry.LoadFlagsDefinitions([flagsDef]);
+        registry.LoadTypeImports([new TypeImportDeclaration("Visibility", 1)]);
 
         // Register a dummy type with a Visibility property returning int
         var typeDesc = new TypeDescriptor("MyType");
@@ -180,6 +186,7 @@ public class FlagsTests
         var flagsDef = new FlagsDefinition("Visibility",
             ["Public", "Protected", "Private", "Internal"], 1);
         registry.LoadFlagsDefinitions([flagsDef]);
+        registry.LoadTypeImports([new TypeImportDeclaration("Visibility", 1)]);
 
         var typeDesc = new TypeDescriptor("MyType");
         typeDesc.Properties["Visibility"] = new PropertyDescriptor(
@@ -212,6 +219,7 @@ public class FlagsTests
         var flagsDef = new FlagsDefinition("Visibility",
             ["Public", "Protected", "Private", "Internal"], 1);
         registry.LoadFlagsDefinitions([flagsDef]);
+        registry.LoadTypeImports([new TypeImportDeclaration("Visibility", 1)]);
 
         var typeDesc = new TypeDescriptor("MyType");
         typeDesc.Properties["Visibility"] = new PropertyDescriptor(
@@ -248,6 +256,7 @@ public class FlagsTests
         var flagsDef = new FlagsDefinition("Visibility",
             ["Public", "Protected", "Private", "Internal"], 1);
         registry.LoadFlagsDefinitions([flagsDef]);
+        registry.LoadTypeImports([new TypeImportDeclaration("Visibility", 1)]);
 
         var typeDesc = new TypeDescriptor("MyType");
         typeDesc.Properties["Visibility"] = new PropertyDescriptor(
@@ -297,6 +306,10 @@ public class FlagsTests
         var codeFile = TestInterpreter.CodePackage;
         if (codeFile.FlagsDefinitions != null)
             registry.LoadFlagsDefinitions(codeFile.FlagsDefinitions);
+        if (codeFile.EnumDefinitions != null)
+            registry.LoadEnumDefinitions(codeFile.EnumDefinitions);
+        if (codeFile.TypeImports != null)
+            registry.LoadTypeImports(codeFile.TypeImports);
 
         Assert.That(registry.TryResolveFlagsConstant("Sealed"), Is.EqualTo(32));
 

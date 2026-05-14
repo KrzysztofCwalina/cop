@@ -453,14 +453,16 @@ public class CheckFileParserTests
     }
 
     [Test]
-    public void Parse_ImportAfterPredicate_Throws()
+    public void Parse_ImportInBody_ParsesAsTypeImport()
     {
         var source = """
             predicate isClient(Type) => Type.Name:endsWith('Client')
             import code
             """;
-        Assert.Throws<ParseException>(() =>
-            ScriptParser.Parse(source, "test.cop"));
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.TypeImports, Has.Count.EqualTo(1));
+        Assert.That(file.TypeImports![0].TypeName, Is.EqualTo("code"));
+        Assert.That(file.TypeImports[0].IsExported, Is.False);
     }
 
     [Test]

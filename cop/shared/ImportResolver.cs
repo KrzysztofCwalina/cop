@@ -50,6 +50,7 @@ public class ImportResolver
             var allImports = new List<string>();
             var allFlags = new List<FlagsDefinition>();
             var allEnums = new List<EnumDefinition>();
+            var allTypeImports = new List<TypeImportDeclaration>();
             bool hasErrors = false;
 
             foreach (var file in copFiles)
@@ -69,6 +70,8 @@ public class ImportResolver
                         allFlags.AddRange(parsed.FlagsDefinitions);
                     if (parsed.EnumDefinitions != null)
                         allEnums.AddRange(parsed.EnumDefinitions);
+                    if (parsed.TypeImports != null)
+                        allTypeImports.AddRange(parsed.TypeImports.Where(ti => ti.IsExported));
                 }
                 catch (ParseException ex)
                 {
@@ -94,7 +97,8 @@ public class ImportResolver
                 allFunctions,
                 allCommands.Where(c => c.IsExported).ToList(),
                 FlagsDefinitions: allFlags.Count > 0 ? allFlags : null,
-                EnumDefinitions: allEnums.Count > 0 ? allEnums : null);
+                EnumDefinitions: allEnums.Count > 0 ? allEnums : null,
+                TypeImports: allTypeImports.Count > 0 ? allTypeImports : null);
         }
 
         return null;

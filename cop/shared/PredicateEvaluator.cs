@@ -444,30 +444,6 @@ public class PredicateEvaluator
                 $"Flags member '{name}' is ambiguous — defined in: {string.Join(", ", flagsOwners)}. " +
                 $"Use qualified syntax: {flagsOwners[0]}.{name}");
 
-        // Enum constant resolution (e.g., Class → "Class", Method → "Method")
-        var enumValue = _registry.TryResolveEnumConstant(name);
-        if (enumValue is not null) return enumValue;
-
-        // Check for ambiguous enum constant (defined in multiple enum types)
-        var enumOwners = _registry.GetEnumMemberOwners(name);
-        if (enumOwners is not null && enumOwners.Count > 1)
-            throw new InvalidOperationException(
-                $"Enum member '{name}' is ambiguous — defined in: {string.Join(", ", enumOwners)}. " +
-                $"Use qualified syntax: {enumOwners[0]}.{name}");
-
-        // Provider namespace resolution (e.g., "http" → ProviderNamespaceRef for http.Get/Post/Send)
-        if (_registry.IsProviderFunctionNamespace(name))
-            return new ProviderNamespaceRef(name);
-
-        // Global collection fallback: if the identifier is a registered global collection,
-        // return its items. This enables predicate bodies to reference collections
-        // (e.g., snippetFences:any(pred)) even when _resolvedCollections is not populated.
-        if (_registry.IsGlobalCollection(name))
-        {
-            var globalItems = _registry.GetGlobalCollectionItems(name);
-            if (globalItems is not null) return globalItems;
-        }
-
         // Bool property resolution: if the identifier matches a bool property on the item,
         // return its value. This enables filter chains like Lines:isComment where
         // isComment is a provider-registered boolean property on the Line type.
@@ -490,7 +466,8 @@ public class PredicateEvaluator
         // Language filter fallback: if the item has a File.Language property,
         // check if the identifier matches the language. This enables filter chains
         // like Types:csharp:client where "csharp" matches File.Language == "csharp".
-        if (itemTypeName is not null)
+        // Must come BEFORE enum constants — Language enum members (csharp, python, etc.)
+        // would resolve as truthy strings and shadow this filter.
         if (itemTypeName is not null)
         {
             var fileDesc = _registry.GetType(itemTypeName)?.GetProperty("File");
@@ -512,6 +489,30 @@ public class PredicateEvaluator
                     }
                 }
             }
+        }
+
+        // Enum constant resolution (e.g., Class → "Class", Method → "Method")
+        var enumValue = _registry.TryResolveEnumConstant(name);
+        if (enumValue is not null) return enumValue;
+
+        // Check for ambiguous enum constant (defined in multiple enum types)
+        var enumOwners = _registry.GetEnumMemberOwners(name);
+        if (enumOwners is not null && enumOwners.Count > 1)
+            throw new InvalidOperationException(
+                $"Enum member '{name}' is ambiguous — defined in: {string.Join(", ", enumOwners)}. " +
+                $"Use qualified syntax: {enumOwners[0]}.{name}");
+
+        // Provider namespace resolution (e.g., "http" → ProviderNamespaceRef for http.Get/Post/Send)
+        if (_registry.IsProviderFunctionNamespace(name))
+            return new ProviderNamespaceRef(name);
+
+        // Global collection fallback: if the identifier is a registered global collection,
+        // return its items. This enables predicate bodies to reference collections
+        // (e.g., snippetFences:any(pred)) even when _resolvedCollections is not populated.
+        if (_registry.IsGlobalCollection(name))
+        {
+            var globalItems = _registry.GetGlobalCollectionItems(name);
+            if (globalItems is not null) return globalItems;
         }
 
         throw new InvalidOperationException($"Unknown identifier '{name}'");

@@ -46,6 +46,7 @@ public class ScriptParser
         var typeDefinitions = new List<TypeDefinition>();
         var flagsDefinitions = new List<FlagsDefinition>();
         var enumDefinitions = new List<EnumDefinition>();
+        var typeImports = new List<TypeImportDeclaration>();
         var collectionDeclarations = new List<CollectionDeclaration>();
         var letDeclarations = new List<LetDeclaration>();
         var predicates = new List<PredicateDefinition>();
@@ -98,9 +99,15 @@ public class ScriptParser
                     flagsDefinitions.Add(ParseFlagsDefinition(isExported: true, docComment: doc));
                 else if (Current.Kind == TokenKind.EnumKeyword)
                     enumDefinitions.Add(ParseEnumDefinition(isExported: true, docComment: doc));
+                else if (Current.Kind == TokenKind.Identifier)
+                {
+                    // export <Identifier> — type import (promotes flags/enum members to global scope)
+                    var name = Advance();
+                    typeImports.Add(new TypeImportDeclaration(name.Value, name.Line, IsExported: true, DocComment: doc));
+                }
                 else
                     throw new ParseException(
-                        "Expected type, collection, let, command, predicate, flags, or enum after 'export'",
+                        "Expected type, collection, let, command, predicate, flags, enum, or identifier after 'export'",
                         _filePath, Current.Line);
             }
             else if (Current.Kind == TokenKind.TypeKeyword)
@@ -115,9 +122,11 @@ public class ScriptParser
             }
             else if (Current.Kind == TokenKind.ImportKeyword)
             {
-                throw new ParseException(
-                    "Import statements must appear before type definitions, predicates, and command statements",
-                    _filePath, Current.Line);
+                // import <Identifier> in the body — type import (promotes flags/enum members)
+                Advance(); // consume 'import'
+                var name = Expect(TokenKind.Identifier);
+                typeImports.Add(new TypeImportDeclaration(name.Value, name.Line, IsExported: false, DocComment: pendingDocComment));
+                pendingDocComment = null;
             }
             else if (Current.Kind == TokenKind.CommandKeyword)
             {
@@ -209,7 +218,7 @@ public class ScriptParser
             }
         }
 
-        return new ScriptFile(_filePath, imports, typeDefinitions, collectionDeclarations, letDeclarations, predicates, functions, commands, runInvocations, feedPaths.Count > 0 ? feedPaths : null, flagsDefinitions.Count > 0 ? flagsDefinitions : null, enumDefinitions.Count > 0 ? enumDefinitions : null);
+        return new ScriptFile(_filePath, imports, typeDefinitions, collectionDeclarations, letDeclarations, predicates, functions, commands, runInvocations, feedPaths.Count > 0 ? feedPaths : null, flagsDefinitions.Count > 0 ? flagsDefinitions : null, enumDefinitions.Count > 0 ? enumDefinitions : null, typeImports.Count > 0 ? typeImports : null);
     }
 
     private string CollectDocComment()

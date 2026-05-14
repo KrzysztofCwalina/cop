@@ -39,3 +39,13 @@ public record EnumDefinition(
     int Line,
     bool IsExported = false,
     string? DocComment = null);
+
+/// <summary>
+/// A type import declaration: import Modifier (local) or export Modifier (exported).
+/// Promotes all members of a flags or enum type to global scope as bare identifiers.
+/// </summary>
+public record TypeImportDeclaration(
+    string TypeName,
+    int Line,
+    bool IsExported = false,
+    string? DocComment = null);

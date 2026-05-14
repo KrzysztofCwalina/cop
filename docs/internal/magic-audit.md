@@ -8,9 +8,9 @@ This document catalogs every instance of "magic" behavior in the Cop runtime —
 
 | # | Name | File:Line | Description |
 |---|------|-----------|-------------|
-| 1 | `item` | PredicateEvaluator.cs:360 | Current iteration item in any predicate/filter |
-| 2 | Flags constants | PredicateEvaluator.cs:466 | All `flags` members are global identifiers (e.g., `Public`, `Static`) |
-| 3 | Enum constants | PredicateEvaluator.cs:477 | All `enum` members are global identifiers (e.g., `Class`, `Interface`) |
+| 1 | `item` | PredicateEvaluator.cs:360 | Current iteration item in any predicate/filter. Language keyword. |
+| 2 | Flags constants | PredicateEvaluator.cs:437 | `flags` members resolve as global identifiers (e.g., `Public`, `Static`). Declared via `flags` keyword in `.cop` packages. **No longer auto-promoted** — requires explicit `export Modifier` (in package, promotes + exports to importers) or `import Modifier` (in file body, promotes locally). |
+| 3 | Enum constants | PredicateEvaluator.cs:448 | `enum` members resolve as global identifiers (e.g., `Class`, `Interface`). Same mechanism as flags. **No longer auto-promoted** — requires explicit `export TypeKind` or `import TypeKind` to make members available as bare names. |
 
 ---
 
@@ -102,8 +102,8 @@ Implicit identifier resolution in `EvalIdentifier` that allows bare names to act
 
 | # | What | File:Line | Behavior |
 |---|------|-----------|----------|
-| 1 | Language name as filter | PredicateEvaluator.cs:515-540 | Any bare identifier matching `File.Language` becomes a boolean filter (e.g., `Types:csharp`) |
-| 2 | Bool property fallback | PredicateEvaluator.cs:573 | Bare identifier matching a bool property on the item's type returns its value (e.g., `Lines:isComment`) |
+| 1 | Language name as filter | PredicateEvaluator.cs:490-515 | Any bare identifier matching `File.Language` becomes a boolean filter (e.g., `Types:csharp`). Checked before enum constants to avoid shadowing by `Language` enum members. |
+| 2 | Bool property fallback | PredicateEvaluator.cs:474-488 | Bare identifier matching a bool property on the item's type returns its value (e.g., `Lines:isComment`) |
 
 ---
 

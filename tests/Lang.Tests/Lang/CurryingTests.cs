@@ -71,6 +71,10 @@ foreach csharp.Types:add('hello', ' world') => '{item}'
         var codeFile = TestInterpreter.CodePackage;
         if (codeFile.FlagsDefinitions != null)
             registry.LoadFlagsDefinitions(codeFile.FlagsDefinitions);
+        if (codeFile.EnumDefinitions != null)
+            registry.LoadEnumDefinitions(codeFile.EnumDefinitions);
+        if (codeFile.TypeImports != null)
+            registry.LoadTypeImports(codeFile.TypeImports);
         registry.AppendNamespacedCollection("csharp", "Types", [
             new DataObject("Type", new Dictionary<string, object?> { ["Name"] = "Foo" })
         ]);
@@ -100,6 +104,10 @@ foreach csharp.Types:partial('second') => '{item}'
         var codeFile = TestInterpreter.CodePackage;
         if (codeFile.FlagsDefinitions != null)
             registry.LoadFlagsDefinitions(codeFile.FlagsDefinitions);
+        if (codeFile.EnumDefinitions != null)
+            registry.LoadEnumDefinitions(codeFile.EnumDefinitions);
+        if (codeFile.TypeImports != null)
+            registry.LoadTypeImports(codeFile.TypeImports);
         registry.AppendNamespacedCollection("csharp", "Types", [
             new DataObject("Type", new Dictionary<string, object?> { ["Name"] = "Foo" })
         ]);

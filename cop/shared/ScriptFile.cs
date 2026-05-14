@@ -12,4 +12,5 @@ public record ScriptFile(
     List<RunInvocation>? RunInvocations = null,
     List<string>? FeedPaths = null,
     List<FlagsDefinition>? FlagsDefinitions = null,
-    List<EnumDefinition>? EnumDefinitions = null);
+    List<EnumDefinition>? EnumDefinitions = null,
+    List<TypeImportDeclaration>? TypeImports = null);

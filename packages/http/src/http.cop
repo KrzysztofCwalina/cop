@@ -8,7 +8,9 @@ export let Requests : [Request] = source('http')
 export let RESPONSES : [Response] = sink('http')
 
 export enum HttpMethod = GET | POST | PUT | DELETE | PATCH | HEAD | OPTIONS
+export HttpMethod
 export enum ContentType = 'application/json' | 'text/plain' | 'text/html' | 'application/xml' | 'multipart/form-data' | 'application/octet-stream'
+export ContentType
 
 # Response type produced by helper functions
 export type Response = {

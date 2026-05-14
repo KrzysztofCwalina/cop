@@ -52,6 +52,10 @@ internal static class TestInterpreter
         var codeFile = CodePackage;
         if (codeFile.FlagsDefinitions != null)
             registry.LoadFlagsDefinitions(codeFile.FlagsDefinitions);
+        if (codeFile.EnumDefinitions != null)
+            registry.LoadEnumDefinitions(codeFile.EnumDefinitions);
+        if (codeFile.TypeImports != null)
+            registry.LoadTypeImports(codeFile.TypeImports);
         registry.RegisterProgramType();
         return new ScriptInterpreter(registry);
     }

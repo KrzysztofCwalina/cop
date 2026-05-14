@@ -788,6 +788,12 @@ public static class Engine
                 errors.AddRange(enumErrors);
             }
 
+            if (packageFile.TypeImports is not null)
+            {
+                var typeImportErrors = typeRegistry.LoadTypeImports(packageFile.TypeImports);
+                errors.AddRange(typeImportErrors);
+            }
+
             foreach (var coll in packageFile.CollectionDeclarations)
                 typeRegistry.RegisterCollection(coll);
 
@@ -821,6 +827,12 @@ public static class Engine
             {
                 var enumErrors = typeRegistry.LoadEnumDefinitions(sf.EnumDefinitions);
                 errors.AddRange(enumErrors);
+            }
+
+            if (sf.TypeImports is not null)
+            {
+                var typeImportErrors = typeRegistry.LoadTypeImports(sf.TypeImports);
+                errors.AddRange(typeImportErrors);
             }
 
             foreach (var coll in sf.CollectionDeclarations)

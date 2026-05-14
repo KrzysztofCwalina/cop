@@ -20,6 +20,10 @@ public class PredicateEvaluatorTests
         var codeFile = TestInterpreter.CodePackage;
         if (codeFile.FlagsDefinitions != null)
             registry.LoadFlagsDefinitions(codeFile.FlagsDefinitions);
+        if (codeFile.EnumDefinitions != null)
+            registry.LoadEnumDefinitions(codeFile.EnumDefinitions);
+        if (codeFile.TypeImports != null)
+            registry.LoadTypeImports(codeFile.TypeImports);
 
         var allPredicates = new Dictionary<string, List<PredicateDefinition>>();
         foreach (var pred in codeFile.Predicates)
@@ -49,6 +53,10 @@ public class PredicateEvaluatorTests
         var codeFile = TestInterpreter.CodePackage;
         if (codeFile.FlagsDefinitions != null)
             registry.LoadFlagsDefinitions(codeFile.FlagsDefinitions);
+        if (codeFile.EnumDefinitions != null)
+            registry.LoadEnumDefinitions(codeFile.EnumDefinitions);
+        if (codeFile.TypeImports != null)
+            registry.LoadTypeImports(codeFile.TypeImports);
         return registry;
     }
 

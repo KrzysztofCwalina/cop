@@ -38,6 +38,7 @@ public class EnumTests
             ["Class", "Struct", "Interface"], 1);
         var errors = registry.LoadEnumDefinitions([enumDef]);
         Assert.That(errors, Is.Empty);
+        registry.LoadTypeImports([new TypeImportDeclaration("TypeKind", 1)]);
         Assert.That(registry.TryResolveEnumConstant("Class"), Is.EqualTo("Class"));
         Assert.That(registry.TryResolveEnumConstant("Struct"), Is.EqualTo("Struct"));
         Assert.That(registry.TryResolveEnumConstant("Interface"), Is.EqualTo("Interface"));
@@ -64,6 +65,10 @@ public class EnumTests
         registry.LoadEnumDefinitions([kind1]);
         var errors = registry.LoadEnumDefinitions([kind2]);
         Assert.That(errors, Has.Count.EqualTo(0), "Overlapping members should not produce load errors");
+        registry.LoadTypeImports([
+            new TypeImportDeclaration("TypeKind", 1),
+            new TypeImportDeclaration("ApiKind", 2)
+        ]);
 
         // Bare lookup should return null (ambiguous)
         Assert.That(registry.TryResolveEnumConstant("Class"), Is.Null);
@@ -91,7 +96,9 @@ public class EnumTests
         var flagsDef = new FlagsDefinition("Modifier", ["Public", "Private"], 1);
         registry.LoadFlagsDefinitions([flagsDef]);
         var enumDef = new EnumDefinition("Visibility", ["Public", "Hidden"], 2);
-        var errors = registry.LoadEnumDefinitions([enumDef]);
+        registry.LoadEnumDefinitions([enumDef]);
+        registry.LoadTypeImports([new TypeImportDeclaration("Modifier", 1)]);
+        var errors = registry.LoadTypeImports([new TypeImportDeclaration("Visibility", 2)]);
         Assert.That(errors, Has.Count.EqualTo(1));
         Assert.That(errors[0], Does.Contain("Public"));
     }
@@ -113,6 +120,7 @@ public class EnumTests
         var enumDef = new EnumDefinition("TypeKind",
             ["Class", "Struct", "Interface"], 1);
         registry.LoadEnumDefinitions([enumDef]);
+        registry.LoadTypeImports([new TypeImportDeclaration("TypeKind", 1)]);
 
         // Register a type with a Kind property
         var typeDesc = new TypeDescriptor("MyType");
@@ -149,6 +157,7 @@ public class EnumTests
         var registry = new TypeRegistry();
         var enumDef = new EnumDefinition("TypeKind", ["Class", "Struct"], 1);
         registry.LoadEnumDefinitions([enumDef]);
+        registry.LoadTypeImports([new TypeImportDeclaration("TypeKind", 1)]);
 
         var typeDesc = new TypeDescriptor("MyType");
         typeDesc.Properties["Kind"] = new PropertyDescriptor("Kind", "string", false, false)
@@ -177,6 +186,7 @@ public class EnumTests
         var enumDef = new EnumDefinition("StatementKind",
             ["call", "declaration", "import"], 1);
         registry.LoadEnumDefinitions([enumDef]);
+        registry.LoadTypeImports([new TypeImportDeclaration("StatementKind", 1)]);
 
         var typeDesc = new TypeDescriptor("Statement");
         typeDesc.Properties["Kind"] = new PropertyDescriptor("Kind", "string", false, false)
@@ -212,6 +222,7 @@ public class EnumTests
         var registry = new TypeRegistry();
         var enumDef = new EnumDefinition("TypeKind", ["Class", "Struct"], 1);
         registry.LoadEnumDefinitions([enumDef]);
+        registry.LoadTypeImports([new TypeImportDeclaration("TypeKind", 1)]);
 
         var typeDesc = new TypeDescriptor("MyType");
         typeDesc.Properties["Kind"] = new PropertyDescriptor("Kind", "string", false, false)
@@ -261,6 +272,7 @@ public class EnumTests
             ["application/json", "text/plain", "text/html"], 1);
         var errors = registry.LoadEnumDefinitions([enumDef]);
         Assert.That(errors, Is.Empty);
+        registry.LoadTypeImports([new TypeImportDeclaration("ContentType", 1)]);
         Assert.That(registry.TryResolveEnumConstant("application/json"), Is.EqualTo("application/json"));
         Assert.That(registry.IsEnumType("ContentType"), Is.True);
         Assert.That(registry.GetEnumType("ContentType")!.Members, Has.Count.EqualTo(3));
