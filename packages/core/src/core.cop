@@ -81,6 +81,11 @@ export type Error = {
 ## Example: error('connection timeout')
 export function error(string) : Error = intrinsic
 
+## Returns true if the current item is an Error value.
+## Works as a bare predicate or as a filter: items:isError
+## Example: predicate handleError(Data:isError) => PRINT('{item.Message}')
+export predicate isError(Data) => item.Type:equals('Error')
+
 ## Terminates execution immediately with a fatal diagnostic.
 ## Use for programmer assertions — situations that should never occur.
 ## Can be used standalone: FAIL('invariant violated')

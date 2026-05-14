@@ -23,6 +23,11 @@ public class ErrorModelTests
         Dictionary<string, List<PredicateDefinition>>? predicates = null)
     {
         var allPredicates = predicates ?? new Dictionary<string, List<PredicateDefinition>>();
+        // Register isError predicate (declared in core.cop, no longer hardcoded)
+        var isErrorSource = "predicate isError(Data) => item.Type:equals('Error')";
+        var isErrorFile = ScriptParser.Parse(isErrorSource, "core.cop");
+        allPredicates["isError"] = [isErrorFile.Predicates[0]];
+
         var errorFunc = new FunctionDefinition("error", "string", "Error", [], [], 0, IsIntrinsic: true);
         var functions = new Dictionary<string, List<FunctionDefinition>>
         {
@@ -161,7 +166,7 @@ public class ErrorModelTests
         {
             ["test"] = [file.Predicates[0]]
         };
-        var evaluator = new PredicateEvaluator(predicates, "test.cop", CreateTestRegistry());
+        var evaluator = CreateEvaluator(predicates);
         var errItem = new ErrorValue("oops");
         var (result, _) = evaluator.EvaluateAsBool(file.Predicates[0].Body, errItem, "Type");
         Assert.That(result, Is.True);
@@ -176,7 +181,7 @@ public class ErrorModelTests
         {
             ["test"] = [file.Predicates[0]]
         };
-        var evaluator = new PredicateEvaluator(predicates, "test.cop", CreateTestRegistry());
+        var evaluator = CreateEvaluator(predicates);
         var (result, _) = evaluator.EvaluateAsBool(file.Predicates[0].Body, MakeType(), "Type");
         Assert.That(result, Is.False);
     }
@@ -191,7 +196,7 @@ public class ErrorModelTests
         {
             ["test"] = [file.Predicates[0]]
         };
-        var evaluator = new PredicateEvaluator(predicates, "test.cop", CreateTestRegistry());
+        var evaluator = CreateEvaluator(predicates);
         // When called on an error value, isError returns true
         var err = new ErrorValue("db timeout");
         var (result, _) = evaluator.EvaluateAsBool(file.Predicates[0].Body, err, "Type");
@@ -210,7 +215,7 @@ public class ErrorModelTests
         {
             ["test"] = [file.Predicates[0]]
         };
-        var evaluator = new PredicateEvaluator(predicates, "test.cop", CreateTestRegistry());
+        var evaluator = CreateEvaluator(predicates);
         var err = new ErrorValue("db timeout");
         var (result, _) = evaluator.EvaluateAsBool(file.Predicates[0].Body, err, "Type");
         Assert.That(result, Is.True);

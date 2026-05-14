@@ -360,9 +360,6 @@ public class PredicateEvaluator
         if (name == "item") return item;
         if (name == "null") return null;
 
-        // Built-in isError predicate (when used as bare identifier in filter/predicate position)
-        if (name == "isError") return ErrorValue.IsError(item);
-
         if (_predicates.TryGetValue(name, out var group))
         {
             var pred = ResolvePredicate(group, item, paramType, ctx);
@@ -771,7 +768,14 @@ public class PredicateEvaluator
             // Schema enforcement: if the type has declared properties, validate member access
             ValidateDataObjectSchema(ao, member);
 
-            return ao.GetField(member);
+            var fieldValue = ao.GetField(member);
+            if (fieldValue is not null) return fieldValue;
+
+            // Built-in fallback: expose runtime type name as "Type" property.
+            // Only when the object has no real "Type" field (avoids shadowing provider data).
+            if (member == "Type") return ao.TypeName;
+
+            return null;
         }
 
         // Collection properties (Count, First, Last, Single) — built-in, no registry
@@ -885,8 +889,14 @@ public class PredicateEvaluator
             return task.GetAwaiter().GetResult();
         }
 
-        // Built-in isError predicate — works on any value
-        if (predicate == "isError") return ErrorValue.IsError(target);
+        // User-defined predicates — check early so they work on any target type
+        // (including strings, numbers) without hitting type-specific "Unknown predicate" throws.
+        if (_predicates.TryGetValue(predicate, out var predGroup))
+        {
+            var pred = ResolvePredicate(predGroup, target, paramType, ctx);
+            if (pred is not null)
+                return ToBool(Eval(pred.Body, target, pred.ParameterType, ctx));
+        }
 
         // Map/DataObject operations
         if (target is DataObject so)
@@ -994,14 +1004,6 @@ public class PredicateEvaluator
         var methodResult = _registry.TryEvaluateMethod(target, predicate, evalArgs);
         if (methodResult is not null)
             return methodResult;
-
-        // User-defined predicates called on an object (e.g., Type:isPublic)
-        if (_predicates.TryGetValue(predicate, out var predGroup))
-        {
-            var pred = ResolvePredicate(predGroup, target, paramType, ctx);
-            if (pred is null) return false;
-            return ToBool(Eval(pred.Body, target, pred.ParameterType, ctx));
-        }
 
         throw new InvalidOperationException($"Cannot call predicate '{predicate}' on {target.GetType().Name}");
     }
