@@ -810,6 +810,7 @@ public class PredicateEvaluator
                 case "First": return list.Count > 0 ? list[0] : null;
                 case "Last": return list.Count > 0 ? list[list.Count - 1] : null;
                 case "Single": return list.Count == 1 ? list[0] : null;
+                case "Rest":
                 case "Tail": return list.Count > 1 ? list.Cast<object>().Skip(1).ToList() : new List<object>();
                 default:
                     // Flatten: list.Property → SelectMany across all items
@@ -1093,6 +1094,7 @@ public class PredicateEvaluator
                 return count;
             }
             case "Where":
+            case "where":
             {
                 var predExpr = args[0];
                 var result = new List<object>();
@@ -1120,6 +1122,7 @@ public class PredicateEvaluator
                 return collection.Count == 0;
             }
             case "First":
+            case "first":
             {
                 if (args.Count > 0)
                 {
@@ -1139,6 +1142,7 @@ public class PredicateEvaluator
                 return collection.Count > 0 ? collection[0] : null;
             }
             case "Last":
+            case "last":
             {
                 if (args.Count > 0)
                 {
@@ -1159,6 +1163,7 @@ public class PredicateEvaluator
                 return collection.Count > 0 ? collection[collection.Count - 1] : null;
             }
             case "Single":
+            case "single":
             {
                 if (args.Count > 0)
                 {
@@ -1187,11 +1192,13 @@ public class PredicateEvaluator
                 return collection.Count == 1 ? collection[0] : null;
             }
             case "ElementAt":
+            case "elementAt":
             {
                 var index = ToInt(Eval(args[0], item, paramType, ctx));
                 return index >= 0 && index < collection.Count ? collection[index] : null;
             }
             case "Select":
+            case "select":
             {
                 // Project each item via a field/expression. Preserves value types.
                 var fieldExpr = args[0];
@@ -1207,6 +1214,7 @@ public class PredicateEvaluator
                 return result;
             }
             case "OrderBy":
+            case "orderBy":
             {
                 var fieldExpr = args[0];
                 var sorted = collection.Cast<object>().Where(x => x is not null).ToList();
@@ -1221,6 +1229,7 @@ public class PredicateEvaluator
                 return sorted;
             }
             case "OrderByDescending":
+            case "orderByDescending":
             {
                 var fieldExpr = args[0];
                 var sorted = collection.Cast<object>().Where(x => x is not null).ToList();
@@ -1235,6 +1244,7 @@ public class PredicateEvaluator
                 return sorted;
             }
             case "Sum":
+            case "sum":
             {
                 var fieldExpr = args[0];
                 double sum = 0;
@@ -1247,6 +1257,7 @@ public class PredicateEvaluator
                 return (int)sum == sum ? (object)(int)sum : sum;
             }
             case "Min":
+            case "min":
             {
                 var fieldExpr = args[0];
                 double? min = null;
@@ -1260,6 +1271,7 @@ public class PredicateEvaluator
                 return min is null ? 0 : ((int)min.Value == min.Value ? (object)(int)min.Value : min.Value);
             }
             case "Max":
+            case "max":
             {
                 var fieldExpr = args[0];
                 double? max = null;
@@ -1273,6 +1285,7 @@ public class PredicateEvaluator
                 return max is null ? 0 : ((int)max.Value == max.Value ? (object)(int)max.Value : max.Value);
             }
             case "Average":
+            case "average":
             {
                 var fieldExpr = args[0];
                 double sum = 0;
@@ -1287,6 +1300,7 @@ public class PredicateEvaluator
                 return count > 0 ? sum / count : 0.0;
             }
             case "Distinct":
+            case "distinct":
             {
                 if (args.Count > 0)
                 {
@@ -1320,6 +1334,7 @@ public class PredicateEvaluator
                 }
             }
             case "GroupBy":
+            case "groupBy":
             {
                 var fieldExpr = args[0];
                 var groups = new Dictionary<string, List<object>>(StringComparer.Ordinal);
@@ -1371,6 +1386,7 @@ public class PredicateEvaluator
                 return false;
             }
             case "Reduce":
+            case "reduce":
             {
                 // Reduce(operator, itemExpr, separator?, seed?)
                 // operator is passed as a string literal ('+')
@@ -1415,6 +1431,46 @@ public class PredicateEvaluator
                 }
 
                 throw new InvalidOperationException($"Unsupported Reduce operator: '{op}'");
+            }
+            case "push":
+            {
+                // Immutable append: returns new list with item at end
+                var value = Eval(args[0], item, paramType, ctx);
+                var result = new List<object>(collection.Cast<object>());
+                if (value is not null) result.Add(value);
+                return result;
+            }
+            case "prepend":
+            {
+                // Immutable prepend: returns new list with item at front
+                var value = Eval(args[0], item, paramType, ctx);
+                var result = new List<object>();
+                if (value is not null) result.Add(value);
+                result.AddRange(collection.Cast<object>());
+                return result;
+            }
+            case "pop":
+            {
+                // Immutable pop: returns new list without last element
+                var result = collection.Cast<object>().ToList();
+                if (result.Count > 0) result.RemoveAt(result.Count - 1);
+                return result;
+            }
+            case "concat":
+            {
+                // Immutable concat: returns new list combining both
+                var other = Eval(args[0], item, paramType, ctx);
+                var result = new List<object>(collection.Cast<object>());
+                if (other is IList otherList)
+                {
+                    foreach (var el in otherList)
+                        if (el is not null) result.Add(el);
+                }
+                else if (other is not null)
+                {
+                    result.Add(other);
+                }
+                return result;
             }
             default:
             {
