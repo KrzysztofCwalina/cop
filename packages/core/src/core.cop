@@ -83,11 +83,32 @@ export function error(message : string) : Error = intrinsic
 
 ## Terminates execution immediately with a fatal diagnostic.
 ## Use for programmer assertions — situations that should never occur.
-## Can be used as a command action (foreach Items => FAIL('msg'))
-## or in expressions (predicate test(T) => FAIL('invariant violated')).
-export function FAIL(message : string) : string = intrinsic
+## Can be used standalone: FAIL('invariant violated')
+## Or in pipeline: foreach Items:badCondition => FAIL('{item.Name} is invalid')
+export command FAIL(message) = intrinsic
 
 ## Glob-matches a file path against a pattern.
 ## Supports **, *, ? wildcards. Returns true if the path matches.
 ## Example: pathMatches(Statement.File.Path, '**/Tests/**')
 export function pathMatches(path : string, pattern : string) : bool = intrinsic
+
+## Prints a message to the output.
+## Used standalone: PRINT('hello {Name}')
+## Used in pipeline: foreach Types => PRINT('{item.Name}')
+## The template supports {Property} interpolation and {@style} formatting.
+export command PRINT(message) = intrinsic
+
+## Saves content to a file at the specified path.
+## Used in pipeline: foreach Types:isPublic => SAVE('api.txt', '{item.Name}')
+## Creates or overwrites the file with the rendered template output.
+export command SAVE(path, template) = intrinsic
+
+## Outputs a diagnostic message to the debug log (--diag flag).
+## Same template semantics as PRINT but only visible when diagnostics are enabled.
+## Used for troubleshooting: DEBUG('{Types.Count} types loaded')
+export command DEBUG(message) = intrinsic
+
+## Asserts that a collection is non-empty. Fails the test run if empty.
+## Used in tests: ASSERT(Types:isPublic, 'should have public types')
+## Reports pass/fail with the description and item count.
+export command ASSERT(items, description) = intrinsic

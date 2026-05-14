@@ -18,7 +18,8 @@ public record CommandBlock(
     Expression? OutputExpression = null,
     SinkTarget? Sink = null,
     string? PathOverride = null,
-    bool IsAsync = false);
+    bool IsAsync = false,
+    bool IsIntrinsic = false);
 
 /// <summary>
 /// Represents the target sink in a chained pipeline: foreach Source => Transform => Sink

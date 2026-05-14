@@ -1634,13 +1634,6 @@ const packages = {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L82"
       },
       {
-        "name": "FAIL",
-        "params": "message: string",
-        "returns": "string",
-        "desc": "Terminates execution immediately with a fatal diagnostic.\nUse for programmer assertions — situations that should never occur.\nCan be used as a command action (foreach Items => FAIL('msg'))\nor in expressions (predicate test(T) => FAIL('invariant violated')).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L88"
-      },
-      {
         "name": "pathMatches",
         "params": "path: string, pattern: string",
         "returns": "bool",
@@ -1649,7 +1642,38 @@ const packages = {
       }
     ],
     "checks": [],
-    "commands": []
+    "commands": [
+      {
+        "name": "FAIL",
+        "params": "message",
+        "desc": "Terminates execution immediately with a fatal diagnostic.\nUse for programmer assertions — situations that should never occur.\nCan be used standalone: FAIL('invariant violated')\nOr in pipeline: foreach Items:badCondition => FAIL('{item.Name} is invalid')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L88"
+      },
+      {
+        "name": "PRINT",
+        "params": "message",
+        "desc": "Prints a message to the output.\nUsed standalone: PRINT('hello {Name}')\nUsed in pipeline: foreach Types => PRINT('{item.Name}')\nThe template supports {Property} interpolation and {@style} formatting.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L99"
+      },
+      {
+        "name": "SAVE",
+        "params": "path, template",
+        "desc": "Saves content to a file at the specified path.\nUsed in pipeline: foreach Types:isPublic => SAVE('api.txt', '{item.Name}')\nCreates or overwrites the file with the rendered template output.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L104"
+      },
+      {
+        "name": "DEBUG",
+        "params": "message",
+        "desc": "Outputs a diagnostic message to the debug log (--diag flag).\nSame template semantics as PRINT but only visible when diagnostics are enabled.\nUsed for troubleshooting: DEBUG('{Types.Count} types loaded')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L109"
+      },
+      {
+        "name": "ASSERT",
+        "params": "items, description",
+        "desc": "Asserts that a collection is non-empty. Fails the test run if empty.\nUsed in tests: ASSERT(Types:isPublic, 'should have public types')\nReports pass/fail with the description and item count.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L114"
+      }
+    ]
   },
   "csharp": {
     "label": "csharp",

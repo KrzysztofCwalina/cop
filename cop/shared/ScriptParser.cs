@@ -702,6 +702,15 @@ public class ScriptParser
         }
 
         Expect(TokenKind.Equals);
+
+        // Intrinsic command: command PRINT(message) = intrinsic
+        if (Current.Kind == TokenKind.IntrinsicKeyword)
+        {
+            Advance();
+            return new CommandBlock(name.Value, "", null, [], line, docComment,
+                IsCommand: true, IsExported: isExported, Parameters: parameters, IsIntrinsic: true);
+        }
+
         var block = ParseCommandAtom(name.Value, docComment, line);
         return block with { Parameters = parameters, IsExported = isExported };
     }
