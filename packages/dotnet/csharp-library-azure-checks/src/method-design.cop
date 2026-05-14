@@ -16,7 +16,7 @@ export let service-method-needs-cancellation = Clients:hasMethodMissingCancellat
     :toWarning('{item.Name} must accept CancellationToken or RequestContext')
 
 predicate hasBannedReturnType(Method) => Method:isPublic
-    && Method.ReturnType != null
+    && Method.ReturnType != nic
     && (Method.ReturnType.Name == 'HttpResponseMessage'
         || Method.ReturnType.Name == 'HttpRequestMessage'
         || Method.ReturnType.Name == 'HttpClient')

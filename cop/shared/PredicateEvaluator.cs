@@ -364,7 +364,6 @@ public class PredicateEvaluator
     {
         if (name == paramType) return item;
         if (name == "item") return item;
-        if (name == "null") return null;
 
         if (_predicates.TryGetValue(name, out var group))
         {

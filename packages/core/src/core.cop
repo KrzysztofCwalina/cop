@@ -137,8 +137,8 @@ export command ASSERT(items, description) = intrinsic
 ## The built-in ordered collection type.
 ## Declared as [T] in property types (e.g., Types : [Type]).
 ## Immutable — all operations return new collections without modifying the original.
-## Properties: Count (int), First (item or null), Last (item or null),
-## Rest (collection without first element), Single (item if exactly one, or null).
+## Properties: Count (int), First (item or nic), Last (item or nic),
+## Rest (collection without first element), Single (item if exactly one, or nic).
 export type Collection = {
     Count : int,
     First : Data,
@@ -197,15 +197,15 @@ export function containsAny(Collection) : bool = intrinsic
 ## Example: errors:empty
 export function empty(Collection) : bool = intrinsic
 
-## First item matching a condition, or null.
+## First item matching a condition, or nic.
 ## Example: Types:first(isPublic)
 export function first(Collection) : Data = intrinsic
 
-## Last item matching a condition, or null.
+## Last item matching a condition, or nic.
 ## Example: Types:last(isPublic)
 export function last(Collection) : Data = intrinsic
 
-## The single item matching a condition, or null if zero or multiple match.
+## The single item matching a condition, or nic if zero or multiple match.
 ## Example: Types:single(isEntryPoint)
 export function single(Collection) : Data = intrinsic
 

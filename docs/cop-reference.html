@@ -1578,7 +1578,7 @@ const packages = {
         ]
       },
       "Collection": {
-        "desc": "The built-in ordered collection type.\nDeclared as [T] in property types (e.g., Types : [Type]).\nImmutable — all operations return new collections without modifying the original.\nProperties: Count (int), First (item or null), Last (item or null),\nRest (collection without first element), Single (item if exactly one, or null).",
+        "desc": "The built-in ordered collection type.\nDeclared as [T] in property types (e.g., Types : [Type]).\nImmutable — all operations return new collections without modifying the original.\nProperties: Count (int), First (item or nic), Last (item or nic),\nRest (collection without first element), Single (item if exactly one, or nic).",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L142",
         "props": [
           {
@@ -1790,21 +1790,21 @@ const packages = {
         "name": "first",
         "params": "Collection",
         "returns": "Data",
-        "desc": "First item matching a condition, or null.\nExample: Types:first(isPublic)",
+        "desc": "First item matching a condition, or nic.\nExample: Types:first(isPublic)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L202"
       },
       {
         "name": "last",
         "params": "Collection",
         "returns": "Data",
-        "desc": "Last item matching a condition, or null.\nExample: Types:last(isPublic)",
+        "desc": "Last item matching a condition, or nic.\nExample: Types:last(isPublic)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L206"
       },
       {
         "name": "single",
         "params": "Collection",
         "returns": "Data",
-        "desc": "The single item matching a condition, or null if zero or multiple match.\nExample: Types:single(isEntryPoint)",
+        "desc": "The single item matching a condition, or nic if zero or multiple match.\nExample: Types:single(isEntryPoint)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L210"
       },
       {

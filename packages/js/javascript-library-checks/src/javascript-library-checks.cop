@@ -54,7 +54,7 @@ export let standardized-verbs = Clients:hasBannedVerb
     :toError('{item.Name} uses a banned method verb prefix — use get, list, create, upsert, update, replace, delete, add, set, or remove')
 
 ## Methods returning a subclient must be named get*Client
-predicate isReturningClient(Method) => isPublicMethod && Method.ReturnType != null
+predicate isReturningClient(Method) => isPublicMethod && Method.ReturnType != nic
     && Method.ReturnType.Name:endsWith('Client')
 predicate hasSubclientBadName(Method) => isReturningClient
     && !Method.Name:startsWith('get')
@@ -64,9 +64,9 @@ export let subclient-naming = Clients:hasSubclientBadName
 
 ## Async client methods must support cancellation (AbortSignal or options)
 predicate isOptionsParam(Parameter) => Parameter.Name == 'options'
-    || Parameter.Type != null && Parameter.Type.Name:endsWith('Options')
+    || Parameter.Type != nic && Parameter.Type.Name:endsWith('Options')
 predicate isAsyncPublicMethod(Method) => Method:isAsync && isPublicMethod
-predicate hasAbortSignal(Parameter) => Parameter.Type != null
+predicate hasAbortSignal(Parameter) => Parameter.Type != nic
     && (Parameter.Type.Name:contains('AbortSignal') || Parameter.Type.Name:endsWith('Options'))
 predicate isAsyncMissingCancellation(Method) => isAsyncPublicMethod
     && Method.Parameters.Count > 0
@@ -78,7 +78,7 @@ export let support-cancellation = Clients:hasMissingCancellation
 
 ## list methods should return PagedAsyncIterableIterator
 predicate isListMethod(Method) => isPublicMethod && Method.Name:startsWith('list')
-predicate hasPagingBadReturn(Method) => isListMethod && Method.ReturnType != null
+predicate hasPagingBadReturn(Method) => isListMethod && Method.ReturnType != nic
     && !Method.ReturnType.Name:contains('Paged')
     && !Method.ReturnType.Name:contains('PagedAsyncIterableIterator')
 predicate hasPagingBadReturn(Type) => Type.Methods:any(hasPagingBadReturn)
@@ -86,7 +86,7 @@ export let pagination-list-return = Clients:hasPagingBadReturn
     :toWarning('{item.Name} list method should return PagedAsyncIterableIterator')
 
 ## LRO methods should be prefixed with begin
-predicate hasPollerReturn(Method) => isPublicMethod && Method.ReturnType != null
+predicate hasPollerReturn(Method) => isPublicMethod && Method.ReturnType != nic
     && (Method.ReturnType.Name:contains('Poller')
         || Method.ReturnType.Name:contains('PollerLike'))
 predicate hasLroBadName(Method) => hasPollerReturn && !Method.Name:startsWith('begin')

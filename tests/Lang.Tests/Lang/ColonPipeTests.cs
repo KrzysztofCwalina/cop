@@ -141,9 +141,9 @@ public class ColonPipeTests
         var predicates = new Dictionary<string, List<PredicateDefinition>>();
         var evaluator = new PredicateEvaluator(predicates, "test.cop", registry, functions: functions);
 
-        // null:process → should return null, not apply function to outer item
+        // nic:process → should return null, not apply function to outer item
         var expr = new CallExpr(
-            new IdentifierExpr("null"),
+            new NicExpr(),
             "process",
             []);
 
@@ -194,9 +194,9 @@ public class ColonPipeTests
         };
         var evaluator = new PredicateEvaluator(predicates, "test.cop", registry, functions: functions);
 
-        // null:text → should return null (target is null, function not called)
+        // nic:text → should return null (target is null, function not called)
         var expr = new CallExpr(
-            new IdentifierExpr("null"),
+            new NicExpr(),
             "text",
             []);
 

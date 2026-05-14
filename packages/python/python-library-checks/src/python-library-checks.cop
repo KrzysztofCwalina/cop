@@ -6,7 +6,7 @@ import code-analysis
 ## Library API Design
 
 # Parameter type detection
-predicate isUntypedParam(Parameter) => Parameter.Type == null
+predicate isUntypedParam(Parameter) => Parameter.Type == nic
     && !Parameter.Variadic && !Parameter.Kwargs
 
 predicate isMissingParamTypes(Method) => Method:isPublic
@@ -20,7 +20,7 @@ export let untyped-public-params = Types:hasUntypedParams
 
 # Return type detection
 predicate isMissingReturnType(Method) => Method:isPublic
-    && Method.ReturnType == null
+    && Method.ReturnType == nic
 
 predicate hasMissingReturnTypes(Type) => Type.Methods:any(isMissingReturnType)
 
@@ -97,7 +97,7 @@ export let async-method-missing-kwargs = Clients:hasMethodMissingKwargs
     :toWarning('{item.Name} has an async method without **kwargs')
 
 # LRO naming: methods returning LROPoller should be prefixed with begin_
-predicate isLroMethod(Method) => isPublicMethod && Method.ReturnType != null
+predicate isLroMethod(Method) => isPublicMethod && Method.ReturnType != nic
     && (Method.ReturnType.Name:contains('LROPoller') || Method.ReturnType.Name:contains('Poller'))
 predicate hasLroBadName(Method) => isLroMethod && !Method.Name:startsWith('begin_')
 
@@ -108,7 +108,7 @@ export let lro-naming = Clients:hasLroBadName
     :toWarning('{item.Name} has an LRO method not prefixed with begin_')
 
 # Paging: methods returning paging types should be prefixed with list_
-predicate isPagingMethod(Method) => isPublicMethod && Method.ReturnType != null
+predicate isPagingMethod(Method) => isPublicMethod && Method.ReturnType != nic
     && (Method.ReturnType.Name:contains('ItemPaged') || Method.ReturnType.Name:contains('Pager')
         || Method.ReturnType.Name:contains('AsyncItemPaged'))
 predicate hasPagingBadName(Method) => isPagingMethod && !Method.Name:startsWith('list_')

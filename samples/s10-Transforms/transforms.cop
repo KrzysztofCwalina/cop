@@ -7,7 +7,7 @@ import code
 let PublicMethods = Code.Types.Where(Type.Methods:any(Method:isPublic))
 
 # .First / .Last / .Single — access specific list elements
-predicate hasConstructor(Type) => Type.Constructors.First != null
+predicate hasConstructor(Type) => Type.Constructors.First != nic
 
 # .Select(template) — project each item into a string value
 # .text(template) — format each item with template, join into one string

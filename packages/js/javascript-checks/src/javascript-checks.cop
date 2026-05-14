@@ -49,7 +49,7 @@ export let javascript-correctness-checks = console-calls + alert-calls + eval-ca
 ## Inspired by @typescript-eslint/await-thenable.
 predicate isAwaitOfNonThenable(Statement) =>
     Statement.Kind == 'await'
-    && Statement.MemberName == null
+    && Statement.MemberName == nic
     && (Statement.Expression:matches('^\d')
         || Statement.Expression:matches('^[\'"`]')
         || Statement.Expression:equals('true')

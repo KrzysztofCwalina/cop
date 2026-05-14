@@ -69,7 +69,7 @@ export let no-public-async-in-sync = Statements:isAsyncCallInSyncMethod
     :toWarning('Do not call {item.MemberName} from sync method')
 
 # AZC0020: Async calls/awaits should propagate CancellationToken or RequestContext
-predicate isInMethodWithCancellation(Statement) => Statement.Method != null
+predicate isInMethodWithCancellation(Statement) => Statement.Method != nic
     && Statement.Method.Parameters:any(isCancellation)
 predicate isReferringToToken(Argument) => Argument:contains('cancellationToken')
     || Argument:contains('cancellation') || Argument:contains('context')

@@ -44,7 +44,7 @@ export let awaits-using-default = Statements:isAwaitUsingDefault
 export predicate hasSyncAndAsyncVariants(Method) => Method.Parameters:any(hasAsyncBoolParam)
 
 # Statement is in a dual-mode method (has async bool parameter)
-export predicate isInDualModeMethod(Statement) => Statement.Method != null
+export predicate isInDualModeMethod(Statement) => Statement.Method != nic
     && Statement.Method:hasSyncAndAsyncVariants
 
 # Statement has an ancestor if-statement whose condition references 'async'

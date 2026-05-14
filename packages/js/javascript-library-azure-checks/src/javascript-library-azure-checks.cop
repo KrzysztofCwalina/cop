@@ -6,7 +6,7 @@ import code-analysis
 ## Azure client constructors must accept a TokenCredential parameter
 predicate isConstructorMethod(Method) => Method.Name == 'constructor'
 predicate hasCredentialParam(Parameter) => Parameter.Name:contains('credential')
-    || (Parameter.Type != null && Parameter.Type.Name:contains('Credential'))
+    || (Parameter.Type != nic && Parameter.Type.Name:contains('Credential'))
 predicate isCtorWithCredential(Method) => isConstructorMethod
     && Method.Parameters:any(hasCredentialParam)
 predicate isMissingCredential(Type) => isClient
@@ -19,7 +19,7 @@ export let client-needs-credential = Clients:isMissingCredential
 predicate hasTooShortName(Type) => isClient && Type.Name.Length < 8
 
 # Async methods parameter conventions
-predicate isUsingInterfaceParam(Parameter) => Parameter.Type != null
+predicate isUsingInterfaceParam(Parameter) => Parameter.Type != nic
     && !Parameter.Type.Name:startsWith('class ')
     && (Parameter.Type.Name:endsWith('Options')
         || Parameter.Type.Name:endsWith('Settings')
@@ -39,7 +39,7 @@ predicate isAzureCoreImport(Import) => Import:contains('@azure/core')
 
 ## Client methods must only throw Error, TypeError, RangeError, or RestError
 predicate isThrowingCustomError(Statement) => Statement.Kind == 'throw'
-    && Statement.TypeName != null
+    && Statement.TypeName != nic
     && Statement.TypeName != 'Error'
     && Statement.TypeName != 'TypeError'
     && Statement.TypeName != 'RangeError'

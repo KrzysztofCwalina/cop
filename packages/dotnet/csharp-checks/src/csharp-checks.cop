@@ -43,10 +43,10 @@ export predicate isSyncBlockingCall(Statement) => Statement.Kind == 'call'
     && (Statement.MemberName == 'Wait' || Statement.MemberName == 'GetResult')
 
 # Statement is inside an async method
-export predicate isInAsyncMethod(Statement) => Statement.Method != null && Statement.Method.Modifiers:isSet(Async)
+export predicate isInAsyncMethod(Statement) => Statement.Method != nic && Statement.Method.Modifiers:isSet(Async)
 
 # Statement is inside a non-async method
-export predicate isInSyncMethod(Statement) => Statement.Method != null && Statement.Method.Modifiers:isClear(Async)
+export predicate isInSyncMethod(Statement) => Statement.Method != nic && Statement.Method.Modifiers:isClear(Async)
 
 ## Use Task.Delay instead of blocking Thread.Sleep
 export let thread-sleep-calls = Statements:isThreadSleep
@@ -98,7 +98,7 @@ export let swallowed-exceptions = Statements:isSwallowingBaseException
 # Banned API: Uri.ToString() — prefer Uri.AbsoluteUri for consistent output
 predicate isUriToString(Statement) => Statement.Kind == 'call'
     && Statement.MemberName == 'ToString'
-    && Statement.TypeName != null && Statement.TypeName:matches('[Uu]ri')
+    && Statement.TypeName != nic && Statement.TypeName:matches('[Uu]ri')
 
 ## Banned API: Uri.ToString() — use Uri.AbsoluteUri for consistent output
 export let uri-tostring = Statements:isUriToString
@@ -135,7 +135,7 @@ export let uninstantiated-internal = Types:isInternalNonAbstract
 # CA2000: IDisposable not in using statement
 predicate isUsingStatement(Statement) => Statement.Kind == 'using'
 predicate isNewCallNotInUsing(Statement) => Statement.Kind == 'call'
-    && Statement.Expression != null && Statement.Expression:matches('new\s+')
+    && Statement.Expression != nic && Statement.Expression:matches('new\s+')
     && !Statement.Ancestors:any(isUsingStatement)
 
 ## CA2000: Dispose objects before losing scope (heuristic)
@@ -396,7 +396,7 @@ export let bool-property-naming = Types:hasBadBoolProperty
     :toInfo('FDG Naming: {item.Name} has a bool property that may need affirmative naming (Is/Has/Can/Should)')
 
 # Namespace should have at least two segments (Company.Product)
-predicate hasShortNamespace(Type) => Type.File.Namespace != null && !Type.File.Namespace:contains('.')
+predicate hasShortNamespace(Type) => Type.File.Namespace != nic && !Type.File.Namespace:contains('.')
 
 ## FDG: Namespace should have at least two segments
 export let namespace-segments = Types:hasShortNamespace
@@ -573,7 +573,7 @@ export let no-banned-throws = Statements:isThrowingBannedException
 
 # Methods with Try* prefix should return bool
 predicate isBadTryMethod(Method) => Method:isPublic && Method.Name:startsWith('Try')
-    && Method.ReturnType != null && Method.ReturnType.Name != 'bool'
+    && Method.ReturnType != nic && Method.ReturnType.Name != 'bool'
 predicate hasBadTryMethod(Type) => Type.Methods:any(isBadTryMethod)
 
 ## FDG: Try* methods should return bool

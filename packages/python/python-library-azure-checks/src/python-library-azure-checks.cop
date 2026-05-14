@@ -39,7 +39,7 @@ export let type-pascal-case = Types:isNotPascalCase
 # Delete operations should return None
 predicate isDeleteMethod(Method) => Method:isPublic && (Method.Name:startsWith('delete')
     || Method.Name:startsWith('begin_delete'))
-predicate isDeleteReturningValue(Method) => isDeleteMethod && Method.ReturnType != null
+predicate isDeleteReturningValue(Method) => isDeleteMethod && Method.ReturnType != nic
     && Method.ReturnType.Name != 'None' && !Method.ReturnType.Name:contains('LROPoller')
     && !Method.ReturnType.Name:contains('Poller')
 

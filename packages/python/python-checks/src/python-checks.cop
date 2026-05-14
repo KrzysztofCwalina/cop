@@ -13,7 +13,7 @@ export let print-calls = Statements:isPrintCall
     :toWarning('Avoid print() — use logging instead')
 
 # Do not use bare except — catch a specific exception type
-predicate isBareExcept(Statement) => Statement.ErrorHandler == true && Statement.TypeName == null
+predicate isBareExcept(Statement) => Statement.ErrorHandler == true && Statement.TypeName == nic
 
 ## Do not use bare except — catch a specific exception type
 export let bare-except-clauses = Statements:isBareExcept
