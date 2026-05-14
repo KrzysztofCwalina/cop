@@ -43,7 +43,7 @@ public class FilesystemTests
         File.WriteAllText(Path.Combine(_tempDir, "src", "file.txt"), "hello");
 
         var registry = CreateRegistryAndScan(_tempDir);
-        var folders = registry.GetGlobalCollectionItems("Folders");
+        var folders = registry.GetGlobalCollectionItems("files.Folders");
         var acc = registry.GetAccessors("Folder")!;
 
         Assert.That(folders, Is.Not.Null);
@@ -67,7 +67,7 @@ public class FilesystemTests
         File.WriteAllText(Path.Combine(_tempDir, "docs", "readme.md"), "# Hi");
 
         var registry = CreateRegistryAndScan(_tempDir);
-        var diskFiles = registry.GetGlobalCollectionItems("DiskFiles");
+        var diskFiles = registry.GetGlobalCollectionItems("files.DiskFiles");
         var acc = registry.GetAccessors("DiskFile")!;
 
         Assert.That(diskFiles, Is.Not.Null);
@@ -90,7 +90,7 @@ public class FilesystemTests
         Directory.CreateDirectory(Path.Combine(_tempDir, "a", "b", "c"));
 
         var registry = CreateRegistryAndScan(_tempDir);
-        var folders = registry.GetGlobalCollectionItems("Folders")!;
+        var folders = registry.GetGlobalCollectionItems("files.Folders")!;
         var acc = registry.GetAccessors("Folder")!;
 
         Assert.That(acc["Depth"](folders.Single(f => (string)acc["Name"](f)! == "a")), Is.EqualTo(1));
@@ -105,8 +105,8 @@ public class FilesystemTests
         File.WriteAllText(Path.Combine(_tempDir, "parent", "child", "file.cs"), "");
 
         var registry = CreateRegistryAndScan(_tempDir);
-        var folders = registry.GetGlobalCollectionItems("Folders")!;
-        var files = registry.GetGlobalCollectionItems("DiskFiles")!;
+        var folders = registry.GetGlobalCollectionItems("files.Folders")!;
+        var files = registry.GetGlobalCollectionItems("files.DiskFiles")!;
         var fAcc = registry.GetAccessors("Folder")!;
         var dAcc = registry.GetAccessors("DiskFile")!;
 
@@ -130,7 +130,7 @@ public class FilesystemTests
         // Write a .cop program that flags empty folders
         var copSource = """
             predicate isEmpty(Folder) => Folder.Empty == true
-            foreach Folders:isEmpty => 'WARNING: Empty folder: {item.Path}'
+            foreach filesystem.Folders:isEmpty => 'WARNING: Empty folder: {item.Path}'
             """;
         File.WriteAllText(Path.Combine(scriptsDir, "no-empty-folders.cop"), copSource);
 
@@ -160,7 +160,7 @@ public class FilesystemTests
         // Write a .cop program using a derived collection
         var copSource = """
             predicate isEmpty(Folder) => Folder.Empty == true
-            let EmptyFolders = Folders:isEmpty
+            let EmptyFolders = filesystem.Folders:isEmpty
             foreach EmptyFolders => 'Empty: {item.Path}'
             """;
         File.WriteAllText(Path.Combine(scriptsDir, "test.cop"), copSource);

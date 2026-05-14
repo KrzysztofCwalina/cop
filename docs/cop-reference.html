@@ -148,14 +148,18 @@ const categories = [
   {
     "name": "Core",
     "packages": [
-      "code",
-      "code-analysis",
-      "code-layering",
       "core",
       "files",
-      "filesystem",
       "json",
       "markdown"
+    ]
+  },
+  {
+    "name": "Code",
+    "packages": [
+      "code",
+      "code-analysis",
+      "code-layering"
     ]
   },
   {
@@ -173,6 +177,7 @@ const categories = [
   {
     "name": "Python",
     "packages": [
+      "python",
       "python-checks",
       "python-library-azure-checks",
       "python-library-checks",
@@ -183,6 +188,7 @@ const categories = [
   {
     "name": "JavaScript",
     "packages": [
+      "javascript",
       "javascript-checks",
       "javascript-library-azure-checks",
       "javascript-library-checks",
@@ -2772,25 +2778,25 @@ const packages = {
         "name": "recentlyModified",
         "appliesTo": "Folder",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L36"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L38"
       },
       {
         "name": "recentlyModified",
         "appliesTo": "DiskFile",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L37"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L39"
       },
       {
         "name": "stale",
         "appliesTo": "Folder",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L38"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L40"
       },
       {
         "name": "stale",
         "appliesTo": "DiskFile",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L39"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L41"
       }
     ],
     "functions": [],
@@ -2798,7 +2804,7 @@ const packages = {
       {
         "name": "empty-folders",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L42"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L44"
       }
     ],
     "exports": [
@@ -2807,152 +2813,18 @@ const packages = {
         "type": "data('filesystem')",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L33"
-      }
-    ],
-    "commands": []
-  },
-  "filesystem": {
-    "label": "filesystem",
-    "overview": "Type definitions for filesystem structural and temporal analysis",
-    "samples": [],
-    "collections": [],
-    "types": {
-      "Folder": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/filesystem/src/filesystem.cop#L7",
-        "props": [
-          {
-            "name": "Path",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "Name",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "Empty",
-            "type": "bool",
-            "desc": ""
-          },
-          {
-            "name": "FileCount",
-            "type": "int",
-            "desc": ""
-          },
-          {
-            "name": "SubfolderCount",
-            "type": "int",
-            "desc": ""
-          },
-          {
-            "name": "Depth",
-            "type": "int",
-            "desc": ""
-          },
-          {
-            "name": "MinutesSinceModified",
-            "type": "int",
-            "desc": ""
-          }
-        ]
-      },
-      "DiskFile": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/filesystem/src/filesystem.cop#L17",
-        "props": [
-          {
-            "name": "Path",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "Name",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "Extension",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "Size",
-            "type": "int",
-            "desc": ""
-          },
-          {
-            "name": "Folder",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "Depth",
-            "type": "int",
-            "desc": ""
-          },
-          {
-            "name": "MinutesSinceModified",
-            "type": "int",
-            "desc": ""
-          }
-        ]
-      },
-      "Filesystem": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/filesystem/src/filesystem.cop#L27",
-        "props": [
-          {
-            "name": "Folders",
-            "type": "[Folder]",
-            "desc": ""
-          },
-          {
-            "name": "Files",
-            "type": "[DiskFile]",
-            "desc": ""
-          }
-        ]
-      }
-    },
-    "predicates": [
-      {
-        "name": "recentlyModified",
-        "appliesTo": "Folder",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/filesystem/src/filesystem.cop#L36"
       },
       {
-        "name": "recentlyModified",
-        "appliesTo": "DiskFile",
+        "name": "Folders",
+        "type": "[Folder]",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/filesystem/src/filesystem.cop#L37"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L34"
       },
       {
-        "name": "stale",
-        "appliesTo": "Folder",
+        "name": "DiskFiles",
+        "type": "[DiskFil]",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/filesystem/src/filesystem.cop#L38"
-      },
-      {
-        "name": "stale",
-        "appliesTo": "DiskFile",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/filesystem/src/filesystem.cop#L39"
-      }
-    ],
-    "functions": [],
-    "checks": [
-      {
-        "name": "empty-folders",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/filesystem/src/filesystem.cop#L42"
-      }
-    ],
-    "exports": [
-      {
-        "name": "Disk",
-        "type": "data('filesystem')",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/filesystem/src/filesystem.cop#L33"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L35"
       }
     ],
     "commands": []
@@ -2975,6 +2847,61 @@ const packages = {
     "predicates": [],
     "functions": [],
     "checks": [],
+    "commands": []
+  },
+  "javascript": {
+    "label": "javascript",
+    "overview": "",
+    "samples": [],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [],
+    "checks": [],
+    "exports": [
+      {
+        "name": "Types",
+        "type": "[Typ]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L6"
+      },
+      {
+        "name": "Statements",
+        "type": "[Statement]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L7"
+      },
+      {
+        "name": "Lines",
+        "type": "[Lin]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L8"
+      },
+      {
+        "name": "Calls",
+        "type": "[Call]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L9"
+      },
+      {
+        "name": "Files",
+        "type": "[Fil]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L10"
+      },
+      {
+        "name": "Regions",
+        "type": "[Region]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L11"
+      },
+      {
+        "name": "Projects",
+        "type": "[Project]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L12"
+      }
+    ],
     "commands": []
   },
   "javascript-checks": {
@@ -3593,6 +3520,61 @@ const packages = {
     ],
     "commands": []
   },
+  "python": {
+    "label": "python",
+    "overview": "",
+    "samples": [],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [],
+    "checks": [],
+    "exports": [
+      {
+        "name": "Types",
+        "type": "[Typ]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L6"
+      },
+      {
+        "name": "Statements",
+        "type": "[Statement]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L7"
+      },
+      {
+        "name": "Lines",
+        "type": "[Lin]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L8"
+      },
+      {
+        "name": "Calls",
+        "type": "[Call]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L9"
+      },
+      {
+        "name": "Files",
+        "type": "[Fil]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L10"
+      },
+      {
+        "name": "Regions",
+        "type": "[Region]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L11"
+      },
+      {
+        "name": "Projects",
+        "type": "[Project]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L12"
+      }
+    ],
+    "commands": []
+  },
   "python-checks": {
     "label": "python-checks",
     "overview": "Python correctness, style, idiom, quality, and documentation checks for coding agents",
@@ -3610,186 +3592,142 @@ const packages = {
       {
         "name": "print-calls",
         "desc": "Avoid print() — use logging instead",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L20"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L12"
       },
       {
         "name": "bare-except-clauses",
         "desc": "Do not use bare except — catch a specific exception type",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L27"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L19"
       },
       {
         "name": "silenced-exceptions",
         "desc": "Do not silence Exception — reraise or catch a specific type",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L38"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L30"
       },
       {
         "name": "no-six-import",
         "desc": "Do not import the six package — Python 2 is no longer supported",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L45"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L37"
       },
       {
         "name": "no-legacy-typing",
         "desc": "Do not use legacy type comments — use Python 3.9+ type annotations",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L52"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L44"
       },
       {
         "name": "no-eval",
         "desc": "Do not use eval() — it is a security risk",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L59"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L51"
       },
       {
         "name": "python-correctness-checks",
         "desc": "Combined correctness checks",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L63"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L55"
       },
       {
         "name": "class-name-casing",
         "desc": "Class names should use PascalCase (CapWords convention)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L73"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L65"
       },
       {
         "name": "function-name-casing",
         "desc": "Function and method names should use snake_case",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L83"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L75"
       },
       {
         "name": "import-wildcard",
         "desc": "Avoid wildcard imports — import specific names instead",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L90"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L82"
       },
       {
         "name": "mutable-default-arg",
         "desc": "Do not use mutable default arguments — use None and assign inside the function",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L104"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L96"
       },
       {
         "name": "trailing-whitespace",
         "desc": "Lines should not have trailing whitespace",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L111"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L103"
       },
       {
         "name": "mixed-indentation",
         "desc": "Use spaces for indentation, not tabs",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L118"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L110"
       },
       {
         "name": "python-style-checks",
         "desc": "Combined style checks",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L122"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L114"
       },
       {
         "name": "none-comparison",
         "desc": "Use 'is None' or 'is not None' instead of '== None' / '!= None'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L130"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L122"
       },
       {
         "name": "type-comparison",
         "desc": "Use isinstance() instead of type() comparison",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L138"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L130"
       },
       {
         "name": "old-style-format",
         "desc": "Prefer f-strings over %-style string formatting",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L146"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L138"
       },
       {
         "name": "range-len-pattern",
         "desc": "Use enumerate() instead of range(len(...))",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L153"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L145"
       },
       {
         "name": "global-statement",
         "desc": "Avoid the global statement — pass values as parameters or use a class",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L160"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L152"
       },
       {
         "name": "python-idiom-checks",
         "desc": "Combined idiom checks",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L164"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L156"
       },
       {
         "name": "too-many-params",
         "desc": "Functions should not have more than 5 parameters — consider using a config object or **kwargs",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L176"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L168"
       },
       {
         "name": "empty-except-body",
         "desc": "Do not use empty except blocks — handle or log the exception",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L184"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L176"
       },
       {
         "name": "broad-exception-raise",
         "desc": "Raise specific exception types instead of generic Exception",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L192"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L184"
       },
       {
         "name": "python-quality-checks",
         "desc": "Combined quality checks",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L196"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L188"
       },
       {
         "name": "missing-class-docstring",
         "desc": "Public classes should have a docstring",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L207"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L199"
       },
       {
         "name": "missing-function-docstring",
         "desc": "Public functions and methods should have a docstring",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L218"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L210"
       },
       {
         "name": "python-doc-checks",
         "desc": "Combined documentation checks",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L222"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L214"
       },
       {
         "name": "python-checks",
         "desc": "All Python checks combined",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L225"
-      }
-    ],
-    "exports": [
-      {
-        "name": "Types",
-        "type": "[Typ]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L6"
-      },
-      {
-        "name": "Statements",
-        "type": "[Statement]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L7"
-      },
-      {
-        "name": "Lines",
-        "type": "[Lin]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L8"
-      },
-      {
-        "name": "Calls",
-        "type": "[Call]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L9"
-      },
-      {
-        "name": "Files",
-        "type": "[Fil]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L10"
-      },
-      {
-        "name": "Regions",
-        "type": "[Region]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L11"
-      },
-      {
-        "name": "Projects",
-        "type": "[Project]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L12"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L217"
       }
     ],
     "commands": []
@@ -4586,35 +4524,55 @@ const packages = {
         "name": "isGet",
         "appliesTo": "HttpOperation",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L51"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L56"
       },
       {
         "name": "isPut",
         "appliesTo": "HttpOperation",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L52"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L57"
       },
       {
         "name": "isPost",
         "appliesTo": "HttpOperation",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L53"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L58"
       },
       {
         "name": "isPatch",
         "appliesTo": "HttpOperation",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L54"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L59"
       },
       {
         "name": "isDelete",
         "appliesTo": "HttpOperation",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L55"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L60"
       }
     ],
     "functions": [],
     "checks": [],
+    "exports": [
+      {
+        "name": "tsp",
+        "type": "data('typespec-http')",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L51"
+      },
+      {
+        "name": "Operations",
+        "type": "[Operation]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L52"
+      },
+      {
+        "name": "Services",
+        "type": "[Servic]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L53"
+      }
+    ],
     "commands": []
   }
 };

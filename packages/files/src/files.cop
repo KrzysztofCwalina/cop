@@ -31,6 +31,8 @@ export type Filesystem = {
 
 # Provides filesystem data via the built-in filesystem provider
 export let Disk : Filesystem = data('filesystem')
+export let Folders = Disk.Folders
+export let DiskFiles = Disk.Files
 
 # Convenience predicates
 export predicate recentlyModified(Folder) => Folder.MinutesSinceModified < 10

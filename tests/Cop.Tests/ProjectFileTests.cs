@@ -46,6 +46,8 @@ public class RunProjectTests
                     Files : [DiskFile]
                 }
                 export let Disk = data('filesystem')
+                export let Folders = Disk.Folders
+                export let DiskFiles = Disk.Files
                 export predicate isEmpty(Folder) => Folder.Empty == true
                 command empty-folders = foreach Folders:isEmpty => 'Empty folder: {item.Path}'
                 """);
@@ -120,6 +122,7 @@ public class RunProjectTests
         var csharpSrc = Path.Combine(_feedDir, "csharp-checks", "src");
         Directory.CreateDirectory(csharpSrc);
         File.WriteAllText(Path.Combine(csharpSrc, "checks.cop"), """
+            import files
             command TEST-RULE = foreach Folders:isEmpty => 'Test diagnostic'
             """);
 

@@ -400,21 +400,9 @@ public class TypeRegistry
             return new CollectionResolution.NotFound();
         }
 
-        // Bare name: search all namespaces
-        var matches = new List<(string Namespace, List<object> Items)>();
-        foreach (var (ns, nsDict) in _nsCollections)
-        {
-            if (nsDict.TryGetValue(name, out var nsItems))
-                matches.Add((ns, nsItems));
-        }
-
-        return matches.Count switch
-        {
-            0 => new CollectionResolution.NotFound(),
-            1 => new CollectionResolution.Found(matches[0].Items),
-            _ => new CollectionResolution.Ambiguous(
-                matches.Select(m => m.Namespace).Order().ToList(), name)
-        };
+        // No bare-name fallback — collections must be qualified (csharp.Types)
+        // or explicitly exported via `export let Types = ...` in the provider package.
+        return new CollectionResolution.NotFound();
     }
 
     /// <summary>
@@ -435,7 +423,7 @@ public class TypeRegistry
     }
 
     /// <summary>
-    /// Returns true if the named collection exists (flat or namespaced, bare or qualified).
+    /// Returns true if the named collection exists (flat or namespaced qualified).
     /// </summary>
     public bool IsGlobalCollection(string name)
     {
@@ -450,30 +438,18 @@ public class TypeRegistry
             return _nsCollections.TryGetValue(ns, out var nsDict) && nsDict.ContainsKey(collName);
         }
 
-        foreach (var nsDict in _nsCollections.Values)
-        {
-            if (nsDict.ContainsKey(name))
-                return true;
-        }
+        // No bare-name fallback — must be qualified or in flat globals
         return false;
     }
 
     /// <summary>
     /// Resolves a bare collection name to its provider namespace.
-    /// Returns null if not found or ambiguous.
+    /// Returns null — bare-name resolution is no longer supported.
+    /// Collections must be qualified (csharp.Types) or explicitly exported.
     /// </summary>
     public string? ResolveCollectionNamespace(string collectionName)
     {
-        string? found = null;
-        foreach (var (ns, nsDict) in _nsCollections)
-        {
-            if (nsDict.ContainsKey(collectionName))
-            {
-                if (found is not null) return null; // ambiguous
-                found = ns;
-            }
-        }
-        return found;
+        return null;
     }
 
     /// <summary>

@@ -47,6 +47,11 @@ export type HttpService = {
     Auth : string?
 }
 
+# Explicit collection exports
+export let tsp = data('typespec-http')
+export let Operations = tsp.Operations
+export let Services = tsp.Services
+
 # Common HTTP predicates
 export predicate isGet(HttpOperation) => HttpOperation.Verb == get
 export predicate isPut(HttpOperation) => HttpOperation.Verb == put
