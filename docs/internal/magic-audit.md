@@ -50,10 +50,9 @@ Syntax-level behavior that's not available to `.cop` declarations.
 | # | What | File:Line | Behavior |
 |---|------|-----------|----------|
 | 1 | Action keyword recognition | ScriptParser.cs:610 | ALL-UPPERCASE identifiers followed by `(` are parsed as action invocations |
-| 2 | `ASSERT_EMPTY` | ScriptParser.cs:907 | Variant of ASSERT that checks collection IS empty — not declared in core.cop |
-| 3 | Implicit output | ScriptParser.cs:154-177 | Bare string/expression at top level → output command |
-| 4 | `export` keyword scope | ScriptParser.cs:77-105 | Only works before type/collection/let/command/predicate/function/flags/enum |
-| 5 | `Load(...)`, `Parse(...)` | ScriptParser.cs:529-586 | Recognized as special file parser bindings |
+| 2 | Implicit output | ScriptParser.cs:154-177 | Bare string/expression at top level → output command |
+| 3 | `export` keyword scope | ScriptParser.cs:77-105 | Only works before type/collection/let/command/predicate/function/flags/enum |
+| 4 | `Load(...)`, `Parse(...)` | ScriptParser.cs:529-586 | Recognized as special file parser bindings |
 
 ---
 
