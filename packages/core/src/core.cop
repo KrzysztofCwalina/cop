@@ -128,6 +128,11 @@ export command DEBUG(message) = intrinsic
 ## Reports pass/fail with the description and item count.
 export command ASSERT(items, description) = intrinsic
 
+## Asserts that a collection IS empty. Fails the test run if non-empty.
+## Used in tests: ASSERT_EMPTY(Types:isObsolete, 'no obsolete types allowed')
+## Reports pass/fail with the description and item count.
+export command ASSERT_EMPTY(items, description) = intrinsic
+
 # Collection Type
 # The built-in collection type. All [T] properties are Collection instances.
 # Properties are accessed with dot notation: items.Count, items.First
