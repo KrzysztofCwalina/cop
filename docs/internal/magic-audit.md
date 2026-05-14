@@ -4,40 +4,7 @@ This document catalogs every instance of "magic" behavior in the Cop runtime —
 
 ---
 
-## Category 1: Truly Magic Functions
-
-"Magic" = no cop type declaration OR semantics not clearly defined in a `.cop` file.
-
-Functions declared in `core.cop` with proper types (`data`, `source`, `sink`, `read`, `error`, `text`, `FAIL`, `pathMatches`) are **not magic** — they are intrinsics with clear cop declarations and are omitted from this table.
-
-**No remaining magic functions.** All previously magic functions have been either:
-- Declared as intrinsics in `core.cop` (`FAIL`, `pathMatches`)
-- Replaced by existing predicates (`Matches` → use `:matches(pattern)` colon predicate)
-- Removed as deprecated (`Code`, `Path`, `Text`)
-
----
-
-## Category 2: Bare-Name Collection Auto-Resolution — ✅ ELIMINATED
-
-Bare-name collection fallback has been removed from TypeRegistry. Collections must now be accessed via:
-- Qualified names: `namespace.Collection` (e.g., `filesystem.Folders`)
-- Explicit `export let` declarations in provider packages (e.g., `export let Folders = Disk.Folders`)
-
-All provider packages (csharp, python, javascript, files, typespec-http) now have explicit `export let` exports for their collections.
-
-### Explicit exports per package
-
-| Package | Provider | Exports |
-|---------|----------|---------|
-| `csharp` | `data('csharp')` | Types, Statements, Lines, Calls, Files, Regions, Projects |
-| `python` | `data('python')` | Types, Statements, Lines, Calls, Files, Regions, Projects |
-| `javascript` | `data('javascript')` | Types, Statements, Lines, Calls, Files, Regions, Projects |
-| `files` | `data('filesystem')` | Disk, Folders, DiskFiles |
-| `typespec-http` | `data('typespec-http')` | Operations, Services |
-
----
-
-## Category 3: Implicit Identifiers (always available without import)
+## Implicit Identifiers (always available without import)
 
 | # | Name | File:Line | Description |
 |---|------|-----------|-------------|
@@ -52,7 +19,7 @@ All provider packages (csharp, python, javascript, files, typespec-http) now hav
 
 ---
 
-## Category 4: Built-in Collection/String Members
+## Built-in Collection/String Members
 
 Hardcoded member access, resolved before type registry lookup.
 
@@ -64,7 +31,7 @@ Hardcoded member access, resolved before type registry lookup.
 
 ---
 
-## Category 5: Built-in Collection Query Operators
+## Built-in Collection Query Operators
 
 All defined in PredicateEvaluator.cs:1038-1434. These are collection method calls (dot or colon syntax):
 
@@ -78,7 +45,7 @@ All defined in PredicateEvaluator.cs:1038-1434. These are collection method call
 
 ---
 
-## Category 6: Built-in String/Object Predicates
+## Built-in String/Object Predicates
 
 Hardcoded predicate dispatch on values. All in PredicateEvaluator.cs:951-1006.
 
@@ -101,7 +68,7 @@ Hardcoded predicate dispatch on values. All in PredicateEvaluator.cs:951-1006.
 
 ---
 
-## Category 7: Auto-Execution / Injected Behavior
+## Auto-Execution / Injected Behavior
 
 | # | What | File:Line | Behavior |
 |---|------|-----------|----------|
@@ -115,7 +82,7 @@ Hardcoded predicate dispatch on values. All in PredicateEvaluator.cs:951-1006.
 
 ---
 
-## Category 8: Provider Auto-Registration
+## Provider Auto-Registration
 
 How providers make their collections/types/functions available without `.cop` declarations.
 
@@ -130,7 +97,7 @@ How providers make their collections/types/functions available without `.cop` de
 
 ---
 
-## Category 9: Language Filter & Bool Property Fallback
+## Language Filter & Bool Property Fallback
 
 Implicit identifier resolution in `EvalIdentifier` that allows bare names to act as filters.
 
@@ -141,7 +108,7 @@ Implicit identifier resolution in `EvalIdentifier` that allows bare names to act
 
 ---
 
-## Category 10: Parser Magic
+## Parser Magic
 
 Syntax-level behavior that's not available to `.cop` declarations.
 
@@ -157,7 +124,7 @@ Syntax-level behavior that's not available to `.cop` declarations.
 
 ---
 
-## Category 11: Import Resolution (no export filtering)
+## Import Resolution (no export filtering)
 
 | # | What | File:Line | Behavior |
 |---|------|-----------|----------|
@@ -168,7 +135,7 @@ Syntax-level behavior that's not available to `.cop` declarations.
 
 ---
 
-## Category 12: CLI Implicit Behavior
+## CLI Implicit Behavior
 
 | # | What | File:Line | Behavior |
 |---|------|-----------|----------|
@@ -179,18 +146,6 @@ Syntax-level behavior that's not available to `.cop` declarations.
 
 ---
 
-## Summary: How Does a Symbol Become Available?
-
-Collections are now available through explicit mechanisms only:
-
-1. **Provider loaded** → `ProviderLoader.QueryAndRegister` registers results in `_nsCollections[ns][collectionName]` (Category 8, #1)
-2. **Qualified access** → `namespace.Collection` (e.g., `filesystem.Folders`) resolves directly
-3. **Explicit exports** → Provider packages declare `export let Folders = data('filesystem').Folders` — importers get `Folders` through the import
-
-**Example (s18-Provider):** Provider registers `_nsCollections["sample"]["Widgets"]` → package declares `export let Widgets = data('sample').Widgets` → user imports the package and writes `foreach Widgets`.
-
----
-
 ## Recommendations
 
 Remaining magic to consider eliminating:
@@ -198,4 +153,4 @@ Remaining magic to consider eliminating:
 1. **Enforce export filtering on imports** — only `export`-marked symbols should be available to importers (not just commands)
 2. **Streaming source/sink bare-name fallback** — still present in TypeRegistry for streaming sources and sinks
 
-Language-level features (Categories 4-6, 9-10) are appropriate to keep as built-in — they define the language itself and are documented in the language reference.
+Language-level features (Collection/String Members, Query Operators, Predicates, Language Filters) are appropriate to keep as built-in — they define the language itself and are documented in the language reference.
