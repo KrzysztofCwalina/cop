@@ -22,11 +22,11 @@ cop/runtime/        Runtime engine (namespace Cop.Providers). Engine orchestrato
                     source parsers (C#, Python, JavaScript), provider loading
                     and registration.
 
-cop/shared/         Core library (namespace Cop.Core). DataProvider base class,
+cop/shared/         Core library (namespace Cop.Core). ObjectProvider base class,
                     DataObject binary format, package models, feed manager,
                     dependency resolver, restore engine, checksum/lock file manager.
 
-providers/          Data providers. Each extends DataProvider and supplies typed
+providers/          Data providers. Each extends ObjectProvider and supplies typed
                     collections to the language runtime.
   filesystem-provider/  Folders, DiskFiles — built-in, uses DataObject[] format (package name: files)
   code-provider/        Types, Methods, Statements, Files — built-in, uses CLR objects
@@ -78,7 +78,7 @@ Source model types (e.g., `MethodDeclaration`, `StatementInfo`) live in `cop/run
 
 | Class | File | Role |
 |---|---|---|
-| **DataProvider** | `cop/shared/DataProvider.cs` | Base class for all data providers. Defines schema, format negotiation, query API |
+| **ObjectProvider** | `cop/shared/ObjectProvider.cs` | Base class for all data providers. Defines schema, format negotiation, query API |
 | **DataObject** | `cop/shared/DataObject.cs` | 192-byte blittable struct — 24 × 8-byte slots for compact binary records |
 | **DataTable** | `cop/shared/DataObject.cs` | Wraps `DataObject[]` + UTF-8 string heap + type name |
 | **DataObjectView** | `cop/shared/DataObject.cs` | Lightweight evaluator bridge — references a record without boxing the 192-byte struct |
@@ -101,7 +101,7 @@ This is a critical architectural rule:
 - **`cop/language/`** implements **only general-purpose language features**: keywords (`predicate`, `function`, `let`, `type`), the parser, evaluator, interpreter, and type system. No domain-specific concepts.
 - **Domain-specific concepts** — the `Violation` type, `CHECK` command, `error`/`warning`/`info` functions, severity levels, analysis rules — belong **exclusively in `.cop` files** inside `packages/`. They must never be added to C# code.
 - **`cop/runtime/`** provides **general-purpose data providers** that supply collections to `.cop` packages via `runtime::` declarations (e.g., `runtime::Filesystem`, `runtime::Code`). Data providers are not domain-specific — they provide raw data that packages query and analyze.
-- **`providers/`** contains all provider implementations. Each provider extends `DataProvider` (defined in `cop/shared/`). Built-in providers use the fast `DataObject[]` binary format with a flat UTF-8 string heap — no CLR string allocations per record. External providers can use JSON or the same binary format.
+- **`providers/`** contains all provider implementations. Each provider extends `ObjectProvider` (defined in `cop/shared/`). Built-in providers use the fast `DataObject[]` binary format with a flat UTF-8 string heap — no CLR string allocations per record. External providers can use JSON or the same binary format.
 
 When adding a new capability, ask: *"Is this a language feature or a domain concept?"* Only language features go in C#.
 

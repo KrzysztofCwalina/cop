@@ -8,9 +8,9 @@ namespace Cop.Providers;
 /// C# source code provider. Scans and parses .cs files using Roslyn.
 /// Also provides assembly loading capability for Load('assembly.dll').
 /// </summary>
-public class CSharpProvider : DataProvider, ICapabilityProvider
+public class CSharpProvider : ObjectProvider, ICapabilityProvider
 {
-    public override DataFormat SupportedFormats => DataFormat.ObjectCollections;
+    public override ObjectFormat SupportedFormats => ObjectFormat.ObjectCollections;
 
     public override ReadOnlyMemory<byte> GetSchema() => CodeSchema.GetJson();
 

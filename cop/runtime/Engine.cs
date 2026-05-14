@@ -11,18 +11,18 @@ namespace Cop.Providers;
 public static class Engine
 {
     // Built-in providers — all accessed uniformly via RegisterSchema + QueryAndRegister
-    private static readonly DataProvider[] _rawProviders =
+    private static readonly ObjectProvider[] _rawProviders =
     [
         new FilesystemProvider(),
         new CodeSchemaProvider(),
         new Markdown.MarkdownProvider(),
     ];
 
-    private record BuiltinProvider(string Name, DataProvider Instance, ProviderSchema Schema, HashSet<string> CollectionNames);
+    private record BuiltinProvider(string Name, ObjectProvider Instance, ProviderSchema Schema, HashSet<string> CollectionNames);
 
     private static readonly BuiltinProvider[] _builtinProviders = _rawProviders.Select(ToBuiltin).ToArray();
 
-    private static BuiltinProvider ToBuiltin(DataProvider provider)
+    private static BuiltinProvider ToBuiltin(ObjectProvider provider)
     {
         var schema = ProviderSchema.FromJson(provider.GetSchema());
         var collNames = new HashSet<string>(schema.Collections.Select(c => c.Name), StringComparer.Ordinal);
@@ -348,7 +348,7 @@ public static class Engine
         if (fatalErrors.Count > 0)
             throw new InvalidOperationException($"Fatal errors: {string.Join("; ", fatalErrors)}");
 
-        // Load external providers (registers DataProvider collections, SourceProvider streams, and SinkProvider sinks)
+        // Load external providers (registers ObjectProvider collections, SourceProvider streams, and SinkProvider sinks)
         LoadExternalProviders(typeRegistry, providerPackages, scriptsDir, parseErrors, fatalErrors, ExcludedDirectoryNames, diagLog: diagLog);
         diagLog?.Invoke($"[diag] Streaming: {providerPackages.Count} provider packages, {fatalErrors.Count} fatal errors, streaming sources: {string.Join(", ", typeRegistry.GetStreamingSourceNames())}");
         if (fatalErrors.Count > 0)

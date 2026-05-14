@@ -5,7 +5,7 @@ using Cop.Lang;
 namespace Cop.Providers;
 
 /// <summary>
-/// Deserializes UTF-8 JSON from a <see cref="DataProvider.Query"/> response
+/// Deserializes UTF-8 JSON from a <see cref="ObjectProvider.Query"/> response
 /// into DataObject instances using the provider's type schema.
 /// Also provides direct array deserialization for Parse('file.json', [Type]).
 /// </summary>

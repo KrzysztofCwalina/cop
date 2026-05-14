@@ -8,9 +8,9 @@ namespace Cop.Providers;
 /// exposing their structure (types, predicates, functions, imports) through
 /// the shared code analysis collections (Types, Statements, Lines, Files).
 /// </summary>
-public class CopProvider : DataProvider
+public class CopProvider : ObjectProvider
 {
-    public override DataFormat SupportedFormats => DataFormat.ObjectCollections;
+    public override ObjectFormat SupportedFormats => ObjectFormat.ObjectCollections;
 
     public override ReadOnlyMemory<byte> GetSchema() => CodeSchema.GetJson();
 

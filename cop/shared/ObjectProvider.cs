@@ -8,7 +8,7 @@ namespace Cop.Core;
 /// New formats can be added without breaking existing providers.
 /// </summary>
 [Flags]
-public enum DataFormat
+public enum ObjectFormat
 {
     Json = 1,
     // Binary = 2,   // e.g. MessagePack
@@ -17,7 +17,7 @@ public enum DataFormat
 }
 
 /// <summary>
-/// Abstract base class for extensible Cop data providers.
+/// Abstract base class for extensible Cop object providers.
 /// Provider DLLs contain a subclass of this and are loaded dynamically by the engine.
 ///
 /// Two main methods:
@@ -28,7 +28,7 @@ public enum DataFormat
 ///   QueryData() — returns a DataStore (in-memory database) for built-in providers.
 ///                 Providers that support this set SupportedFormats to include InMemoryDatabase.
 /// </summary>
-public abstract class DataProvider
+public abstract class ObjectProvider
 {
     /// <summary>
     /// Human-readable provider name, used in diagnostics.
@@ -45,7 +45,7 @@ public abstract class DataProvider
     /// Discovers what query formats the provider supports.
     /// The engine checks this before calling <see cref="Query"/> or <see cref="QueryData"/>.
     /// </summary>
-    public virtual DataFormat SupportedFormats => DataFormat.Json;
+    public virtual ObjectFormat SupportedFormats => ObjectFormat.Json;
 
     /// <summary>
     /// Returns the provider schema as UTF-8 JSON.
@@ -63,7 +63,7 @@ public abstract class DataProvider
 
     /// <summary>
     /// Queries for collection data as UTF-8 JSON.
-    /// Only callable if <see cref="SupportedFormats"/> includes <see cref="DataFormat.Json"/>.
+    /// Only callable if <see cref="SupportedFormats"/> includes <see cref="ObjectFormat.Json"/>.
     /// </summary>
     public virtual byte[] Query(ProviderQuery query)
         => throw new NotSupportedException("This provider does not support JSON queries.");
@@ -71,7 +71,7 @@ public abstract class DataProvider
     /// <summary>
     /// Queries for collection data as a <see cref="DataStore"/> — an in-memory database
     /// of stride-based <see cref="DataTable"/> records with a shared UTF-8 string heap.
-    /// Only callable if <see cref="SupportedFormats"/> includes <see cref="DataFormat.InMemoryDatabase"/>.
+    /// Only callable if <see cref="SupportedFormats"/> includes <see cref="ObjectFormat.InMemoryDatabase"/>.
     /// This is the fast in-proc path — no serialization overhead.
     /// </summary>
     public virtual DataStore QueryData(ProviderQuery query)
@@ -80,7 +80,7 @@ public abstract class DataProvider
     /// <summary>
     /// Queries for collection data as CLR object lists.
     /// Used by providers with hierarchical CLR data that can't be flattened into DataStore.
-    /// Only callable if <see cref="SupportedFormats"/> includes <see cref="DataFormat.ObjectCollections"/>.
+    /// Only callable if <see cref="SupportedFormats"/> includes <see cref="ObjectFormat.ObjectCollections"/>.
     /// Returns a dictionary mapping collection names to lists of CLR objects.
     /// </summary>
     public virtual Dictionary<string, List<object>>? QueryCollections(ProviderQuery query)
@@ -173,7 +173,7 @@ public class ProviderQuery
 }
 
 /// <summary>
-/// Deserialized schema returned by <see cref="DataProvider.GetSchema"/>.
+/// Deserialized schema returned by <see cref="ObjectProvider.GetSchema"/>.
 /// Describes the types and collections a provider exposes.
 /// </summary>
 public class ProviderSchema

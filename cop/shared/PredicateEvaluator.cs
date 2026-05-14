@@ -139,9 +139,9 @@ public class PredicateEvaluator
             throw new FailException(message ?? "FAIL", _filePath, 0);
         }
 
-        // Built-in data(providerName) — returns a dynamic DataObject for any provider
-        if (fc.Name == "data")
-            return EvalDataFunction(fc.Args, item, paramType, ctx);
+        // Built-in object(providerName) — returns a dynamic DataObject for any provider
+        if (fc.Name == "object")
+            return EvalObjectFunction(fc.Args, item, paramType, ctx);
 
         // Built-in source(providerName) — returns a streaming source handle
         if (fc.Name == "source")
@@ -2028,19 +2028,19 @@ public class PredicateEvaluator
     }
 
     /// <summary>
-    /// Evaluates the built-in data(providerName) function.
+    /// Evaluates the built-in object(providerName) function.
     /// Returns a DataObject with a lazy field resolver for any provider.
     /// </summary>
-    private object EvalDataFunction(List<Expression> args, object item, string paramType, EvaluationContext ctx)
+    private object EvalObjectFunction(List<Expression> args, object item, string paramType, EvaluationContext ctx)
     {
         if (args.Count != 1)
-            throw new InvalidOperationException("data() requires exactly 1 argument: data('providerName')");
+            throw new InvalidOperationException("object() requires exactly 1 argument: object('providerName')");
 
         var nameVal = Eval(args[0], item, paramType, ctx);
         var providerName = nameVal?.ToString()
-            ?? throw new InvalidOperationException("data() argument must be a string");
+            ?? throw new InvalidOperationException("object() argument must be a string");
 
-        return CreateCodeObject([providerName], path: null, typeName: "Data");
+        return CreateCodeObject([providerName], path: null, typeName: "Object");
     }
 
     /// <summary>

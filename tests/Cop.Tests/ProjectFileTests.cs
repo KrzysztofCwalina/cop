@@ -45,7 +45,7 @@ public class RunProjectTests
                     Folders : [Folder],
                     Files : [DiskFile]
                 }
-                export let Disk = data('filesystem')
+                export let Disk = object('filesystem')
                 export let Folders = Disk.Folders
                 export let DiskFiles = Disk.Files
                 export predicate isEmpty(Folder) => Folder.Empty == true

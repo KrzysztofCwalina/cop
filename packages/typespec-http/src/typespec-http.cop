@@ -51,7 +51,7 @@ export type HttpService = {
 }
 
 # Explicit collection exports
-export let tsp = data('typespec-http')
+export let tsp = object('typespec-http')
 export let Operations = tsp.Operations
 export let Services = tsp.Services
 

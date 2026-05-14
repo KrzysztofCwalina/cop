@@ -12,9 +12,9 @@ namespace SampleProvider;
 ///   foreach Widgets   # Widgets is explicitly exported by the sample package
 ///       '{Widget.Name} ({Widget.Category})'
 /// </summary>
-public class SampleProvider : DataProvider
+public class SampleProvider : ObjectProvider
 {
-    public override DataFormat SupportedFormats => DataFormat.ObjectCollections;
+    public override ObjectFormat SupportedFormats => ObjectFormat.ObjectCollections;
 
     public override ReadOnlyMemory<byte> GetSchema()
     {

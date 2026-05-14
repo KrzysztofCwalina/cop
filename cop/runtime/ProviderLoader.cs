@@ -8,7 +8,7 @@ namespace Cop.Providers;
 
 /// <summary>
 /// Loads provider assemblies in an isolated <see cref="AssemblyLoadContext"/>,
-/// discovers and instantiates <see cref="DataProvider"/> subclasses,
+/// discovers and instantiates <see cref="ObjectProvider"/> subclasses,
 /// and wires them into the Cop type system.
 /// </summary>
 public static class ProviderLoader
@@ -16,7 +16,7 @@ public static class ProviderLoader
     /// <summary>
     /// Represents a loaded and ready-to-query provider instance with its schema.
     /// </summary>
-    public record LoadedProvider(DataProvider Instance, ProviderSchema Schema, string PackageName);
+    public record LoadedProvider(ObjectProvider Instance, ProviderSchema Schema, string PackageName);
 
     /// <summary>
     /// Represents a loaded streaming source provider.
@@ -31,7 +31,7 @@ public static class ProviderLoader
     /// <summary>
     /// Loads a provider assembly from a package directory.
     /// Validates trust, loads the DLL, instantiates the provider, and calls GetSchema().
-    /// Discovers DataProvider, SourceProvider, and SinkProvider subclasses.
+    /// Discovers ObjectProvider, SourceProvider, and SinkProvider subclasses.
     /// </summary>
     public static LoadedProvider? Load(string packageDir, PackageMetadata metadata, List<string> errors)
     {
@@ -91,25 +91,25 @@ public static class ProviderLoader
                 }
             }
 
-            // If source/sink providers were found and no DataProvider entry, that's fine
+            // If source/sink providers were found and no ObjectProvider entry, that's fine
             var providerType = assembly.GetType(metadata.ProviderEntry);
             if (providerType is null)
             {
                 if (sourceProviders.Count > 0 || sinkProviders.Count > 0)
-                    return null; // pure source/sink package — no DataProvider needed
+                    return null; // pure source/sink package — no ObjectProvider needed
                 errors.Add($"Provider entry type '{metadata.ProviderEntry}' not found in assembly '{dllPath}'.");
                 return null;
             }
 
-            if (!typeof(DataProvider).IsAssignableFrom(providerType))
+            if (!typeof(ObjectProvider).IsAssignableFrom(providerType))
             {
                 if (sourceProviders.Count > 0 || sinkProviders.Count > 0)
-                    return null; // entry type is a SourceProvider/SinkProvider, not DataProvider
-                errors.Add($"Provider entry type '{metadata.ProviderEntry}' does not extend DataProvider.");
+                    return null; // entry type is a SourceProvider/SinkProvider, not ObjectProvider
+                errors.Add($"Provider entry type '{metadata.ProviderEntry}' does not extend ObjectProvider.");
                 return null;
             }
 
-            var dataInstance = (DataProvider)Activator.CreateInstance(providerType)!;
+            var dataInstance = (ObjectProvider)Activator.CreateInstance(providerType)!;
             var dataSchema = ProviderSchema.FromJson(dataInstance.GetSchema());
             return new LoadedProvider(dataInstance, dataSchema, metadata.Name);
         }
@@ -122,15 +122,15 @@ public static class ProviderLoader
 
     /// <summary>
     /// Registers a provider's schema, type accessors, and runtime bindings into the type registry.
-    /// Works for both built-in and external DataProvider instances (sync collections only).
+    /// Works for both built-in and external ObjectProvider instances (sync collections only).
     /// </summary>
-    public static ProviderSchema RegisterSchema(DataProvider instance, TypeRegistry registry)
+    public static ProviderSchema RegisterSchema(ObjectProvider instance, TypeRegistry registry)
     {
         var schema = ProviderSchema.FromJson(instance.GetSchema());
         registry.RegisterProviderSchema(schema);
 
-        if (instance.SupportedFormats.HasFlag(DataFormat.InMemoryDatabase) ||
-            instance.SupportedFormats.HasFlag(DataFormat.ObjectCollections))
+        if (instance.SupportedFormats.HasFlag(ObjectFormat.InMemoryDatabase) ||
+            instance.SupportedFormats.HasFlag(ObjectFormat.ObjectCollections))
         {
             registry.RegisterDataTableAccessors(schema);
 
@@ -161,7 +161,7 @@ public static class ProviderLoader
                 }
             }
         }
-        else if (instance.SupportedFormats.HasFlag(DataFormat.Json))
+        else if (instance.SupportedFormats.HasFlag(ObjectFormat.Json))
         {
             JsonCollectionDeserializer.RegisterDataObjectAccessors(registry, schema);
         }
@@ -222,11 +222,11 @@ public static class ProviderLoader
     /// When CollectionFilters are specified, items are filtered before registration
     /// using compiled filter predicates for efficient pushdown.
     /// </summary>
-    public static void QueryAndRegister(DataProvider instance, ProviderSchema schema, string ns, TypeRegistry registry, ProviderQuery query, List<string>? errors = null)
+    public static void QueryAndRegister(ObjectProvider instance, ProviderSchema schema, string ns, TypeRegistry registry, ProviderQuery query, List<string>? errors = null)
     {
         try
         {
-            if (instance.SupportedFormats.HasFlag(DataFormat.ObjectCollections))
+            if (instance.SupportedFormats.HasFlag(ObjectFormat.ObjectCollections))
             {
                 var collections = instance.QueryCollections(query);
                 if (collections != null)
@@ -238,7 +238,7 @@ public static class ProviderLoader
                     }
                 }
             }
-            else if (instance.SupportedFormats.HasFlag(DataFormat.InMemoryDatabase))
+            else if (instance.SupportedFormats.HasFlag(ObjectFormat.InMemoryDatabase))
             {
                 var store = instance.QueryData(query);
 
@@ -257,7 +257,7 @@ public static class ProviderLoader
                     registry.AppendNamespacedCollection(ns, collName, filtered);
                 }
             }
-            else if (instance.SupportedFormats.HasFlag(DataFormat.Json))
+            else if (instance.SupportedFormats.HasFlag(ObjectFormat.Json))
             {
                 var resultJson = instance.Query(query);
                 var collections = JsonCollectionDeserializer.Deserialize(resultJson, schema);
@@ -312,7 +312,7 @@ public static class ProviderLoader
     /// Providers implement <see cref="ICapabilityProvider"/> to register additional capabilities.
     /// Also registers built-in file parsers (e.g., JSON).
     /// </summary>
-    public static void InitializeCapabilities(DataProvider instance, TypeRegistry registry, string rootPath)
+    public static void InitializeCapabilities(ObjectProvider instance, TypeRegistry registry, string rootPath)
     {
         if (instance is ICapabilityProvider cap)
             cap.RegisterCapabilities(registry, rootPath);
@@ -355,12 +355,12 @@ public static class ProviderLoader
 /// <summary>
 /// Isolated assembly load context for provider DLLs.
 /// Shares the host assembly (cop.exe) with the default context
-/// to avoid type identity splits for DataProvider, SourceFile, etc.
+/// to avoid type identity splits for ObjectProvider, SourceFile, etc.
 /// </summary>
 internal class ProviderLoadContext : AssemblyLoadContext
 {
     private readonly AssemblyDependencyResolver _resolver;
-    private static readonly string HostAssemblyName = typeof(DataProvider).Assembly.GetName().Name!;
+    private static readonly string HostAssemblyName = typeof(ObjectProvider).Assembly.GetName().Name!;
 
     public ProviderLoadContext(string pluginPath) : base(isCollectible: false)
     {
@@ -370,7 +370,7 @@ internal class ProviderLoadContext : AssemblyLoadContext
     protected override Assembly? Load(AssemblyName assemblyName)
     {
         // Share the host assembly with the default context so provider types
-        // (DataProvider, SourceFile, etc.) have the same identity in both contexts
+        // (ObjectProvider, SourceFile, etc.) have the same identity in both contexts
         if (assemblyName.Name == HostAssemblyName)
             return null; // falls back to default context
 

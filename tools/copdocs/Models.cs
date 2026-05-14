@@ -133,6 +133,10 @@ public class FunctionEntry
     [JsonPropertyName("returns")]
     public string Returns { get; set; } = "";
 
+    [JsonPropertyName("appliesTo")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? AppliesTo { get; set; }
+
     [JsonPropertyName("desc")]
     public string Desc { get; set; } = "";
 

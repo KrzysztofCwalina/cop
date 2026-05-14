@@ -1,7 +1,7 @@
 # Python source language provider
 import code
 
-let cb : Codebase = data('python')
+let cb : Codebase = object('python')
 
 export let Types = cb.Types
 export let Statements = cb.Statements

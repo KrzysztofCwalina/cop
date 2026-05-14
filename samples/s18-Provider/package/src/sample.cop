@@ -5,7 +5,7 @@ type SampleData = {
     Widgets : [Widget]
 }
 
-let db : SampleData = data('sample')
+let db : SampleData = object('sample')
 export let Widgets = db.Widgets
 
 type Widget = {

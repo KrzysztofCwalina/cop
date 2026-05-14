@@ -1,7 +1,7 @@
 namespace Cop.Core;
 
 /// <summary>
-/// An in-memory database returned by providers via <see cref="DataProvider.QueryData"/>.
+/// An in-memory database returned by providers via <see cref="ObjectProvider.QueryData"/>.
 /// Contains named <see cref="DataTable"/> instances (one per collection) that all
 /// share a single UTF-8 <see cref="StringHeap"/>.
 /// </summary>

@@ -8,7 +8,7 @@ A minimal template demonstrating how to write a **streaming** Cop provider with 
 s19-ProviderStreaming/
 ├── streaming-provider.csproj   # Provider C# project
 ├── src/
-│   └── TickerProvider.cs       # Streaming DataProvider implementation
+│   └── TickerProvider.cs       # Streaming ObjectProvider implementation
 └── package/                    # Cop package (ready to distribute)
     ├── ticker.md               # Package metadata
     ├── src/

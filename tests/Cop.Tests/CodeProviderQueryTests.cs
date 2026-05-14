@@ -23,7 +23,7 @@ public class CodeProviderQueryTests
             Types:
             [
                 new TypeDeclaration("HttpProvider", TypeKind.Class, Modifier.Public | Modifier.Sealed,
-                    ["DataProvider"], [], [], [], [], [], 10) { HasDocComment = true },
+                    ["ObjectProvider"], [], [], [], [], [], 10) { HasDocComment = true },
                 new TypeDeclaration("IHttpClient", TypeKind.Interface, Modifier.Public,
                     [], [], [], [], [], [], 50) { HasDocComment = false },
             ],

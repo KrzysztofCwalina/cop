@@ -1137,7 +1137,7 @@ public class CheckFileParserTests
     [Test]
     public void Parse_TypedLetBinding()
     {
-        var source = "let db : MySchema = data('sample')";
+        var source = "let db : MySchema = object('sample')";
         var file = ScriptParser.Parse(source, "test.cop");
         Assert.That(file.LetDeclarations, Has.Count.EqualTo(1));
         var decl = file.LetDeclarations[0];
@@ -1149,7 +1149,7 @@ public class CheckFileParserTests
     [Test]
     public void Parse_UntypedLetBinding_HasNoAnnotation()
     {
-        var source = "let db = data('sample')";
+        var source = "let db = object('sample')";
         var file = ScriptParser.Parse(source, "test.cop");
         Assert.That(file.LetDeclarations, Has.Count.EqualTo(1));
         Assert.That(file.LetDeclarations[0].TypeAnnotation, Is.Null);

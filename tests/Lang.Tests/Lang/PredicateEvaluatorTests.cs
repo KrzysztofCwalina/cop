@@ -1521,16 +1521,16 @@ public class PredicateEvaluatorTests
     [Test]
     public void TypeAnnotation_OverridesDataObjectTypeName()
     {
-        // Simulates: let db : MySchema = data('sample') where data returns DataObject("Data")
+        // Simulates: let db : MySchema = object('sample') where object returns DataObject("Object")
         var registry = new TypeRegistry();
         registry.LoadTypeDefinitions([
-            new TypeDefinition("Data", null, [], 1),
+            new TypeDefinition("Object", null, [], 1),
             new TypeDefinition("MySchema", null,
                 [new PropertyDefinition("Items", "Item", false, true, 1)], 1)
         ]);
 
-        // Create a DataObject("Data") and put it in a let declaration with TypeAnnotation
-        var obj = new DataObject("Data");
+        // Create a DataObject("Object") and put it in a let declaration with TypeAnnotation
+        var obj = new DataObject("Object");
         obj.WithFieldResolver(name => new List<object> { "item1" });
 
         // Use a literal expression wrapping the DataObject for the let value

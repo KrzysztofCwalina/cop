@@ -8,9 +8,9 @@ namespace Cop.Providers;
 /// Uses the fast Objects path — stride-based DataTable records with a shared UTF-8 string heap.
 /// No per-record CLR objects or CLR strings allocated for the permanent data.
 /// </summary>
-public class FilesystemProvider : DataProvider
+public class FilesystemProvider : ObjectProvider
 {
-    public override DataFormat SupportedFormats => DataFormat.InMemoryDatabase;
+    public override ObjectFormat SupportedFormats => ObjectFormat.InMemoryDatabase;
 
 
     public override ReadOnlyMemory<byte> GetSchema()

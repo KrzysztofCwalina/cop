@@ -8,9 +8,9 @@ namespace Cop.Providers.Markdown;
 /// Provider for markdown document analysis (Headings, Links, Sections, FenceBlocks).
 /// Scans .md files, parses them, and returns flat CLR object collections.
 /// </summary>
-public class MarkdownProvider : DataProvider
+public class MarkdownProvider : ObjectProvider
 {
-    public override DataFormat SupportedFormats => DataFormat.ObjectCollections;
+    public override ObjectFormat SupportedFormats => ObjectFormat.ObjectCollections;
 
     public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
 

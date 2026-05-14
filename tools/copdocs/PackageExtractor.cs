@@ -119,11 +119,15 @@ public class PackageExtractor
         foreach (var fd in sf.Functions.Where(f => f.IsExported))
         {
             var parts = new List<string>();
+            string? appliesTo = null;
             // Show InputType only when it's a standalone positional type (e.g., Statement),
             // not when it duplicates the first named parameter's type (e.g., data(name: string))
             if (!string.IsNullOrEmpty(fd.InputType)
                 && !(fd.Parameters.Count > 0 && fd.Parameters[0].TypeName == fd.InputType))
+            {
                 parts.Add(fd.InputType);
+                appliesTo = fd.InputType;
+            }
             parts.AddRange(fd.Parameters.Select(p => $"{p.Name}: {p.TypeName}"));
             var paramStr = string.Join(", ", parts);
             entry.Functions.Add(new FunctionEntry
@@ -131,6 +135,7 @@ public class PackageExtractor
                 Name = fd.Name,
                 Params = paramStr,
                 Returns = fd.ReturnType,
+                AppliesTo = appliesTo,
                 Desc = fd.DocComment ?? "",
                 SourceUrl = MakeSourceUrl(copFile, fd.Line)
             });

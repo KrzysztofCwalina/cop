@@ -8,9 +8,9 @@ namespace Cop.Providers;
 /// so that Parse('file.json', [Type]) works in .cop files.
 /// Must be imported with: import json
 /// </summary>
-public class JsonProvider : DataProvider, ICapabilityProvider
+public class JsonProvider : ObjectProvider, ICapabilityProvider
 {
-    public override DataFormat SupportedFormats => DataFormat.ObjectCollections;
+    public override ObjectFormat SupportedFormats => ObjectFormat.ObjectCollections;
 
     public override ReadOnlyMemory<byte> GetSchema() => new ProviderSchema().ToJson();
 

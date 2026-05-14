@@ -8,7 +8,7 @@ Provider packages are **true plugins**: you can build and distribute a provider 
 
 A provider consists of two parts:
 
-1. **A .NET class library** (DLL) containing a C# class that extends `DataProvider`
+1. **A .NET class library** (DLL) containing a C# class that extends `ObjectProvider`
 2. **A Cop package** (directory) with metadata, `.cop` type definitions, and the provider DLL
 
 At runtime, the Cop engine discovers your package, loads the DLL, calls your provider to get schema and data, and makes the data available to `.cop` programs via `import`.
@@ -48,7 +48,7 @@ Description and usage documentation for your package.
 
 Key fields:
 - **`provider: clr`** — tells the engine this package includes a .NET provider DLL
-- **`providerEntry:`** — the fully-qualified class name of your `DataProvider` subclass
+- **`providerEntry:`** — the fully-qualified class name of your `ObjectProvider` subclass
 
 ### Cop Type Definitions (`src/*.cop`)
 
@@ -58,7 +58,7 @@ Define types, predicates, and checks in `.cop` files. These define the user-faci
 ## My Provider Package
 ## Provides collections for analyzing widgets.
 
-let db = data('my-provider')
+let db = object('my-provider')
 export let Widgets = db.Widgets
 
 type Widget = {
@@ -75,7 +75,7 @@ predicate isHeavy(Widget) = Widget.Weight:gt(100)
 
 Place your compiled DLL and its `deps.json` file in `lib/`. Any third-party dependencies should also go here — the engine loads them automatically via the deps manifest.
 
-## Implementing a DataProvider
+## Implementing an ObjectProvider
 
 ### Minimal Provider
 
@@ -86,10 +86,10 @@ using Cop.Core;
 
 namespace MyNamespace;
 
-public class MyProvider : DataProvider
+public class MyProvider : ObjectProvider
 {
     // Use ObjectCollections for CLR object data
-    public override DataFormat SupportedFormats => DataFormat.ObjectCollections;
+    public override ObjectFormat SupportedFormats => ObjectFormat.ObjectCollections;
 
     // Return the schema describing your types and collections
     public override ReadOnlyMemory<byte> GetSchema()
@@ -169,7 +169,7 @@ Providers choose a data format via `SupportedFormats`:
 | `InMemoryDatabase` | `QueryData()` | High-performance binary format with stride-based `DataTable` records and shared UTF-8 string heap. Best for large datasets. |
 | `Json` | `Query()` | Return raw UTF-8 JSON bytes. Useful when data is already in JSON format. |
 
-For streaming (push-like) providers, use `SourceProvider` instead of `DataProvider` — see the Streaming Providers section below.
+For streaming (push-like) providers, use `SourceProvider` instead of `ObjectProvider` — see the Streaming Providers section below.
 
 For most providers, **`ObjectCollections`** is the recommended format. It's the simplest to implement and performs well for typical dataset sizes.
 
@@ -364,9 +364,9 @@ using Cop.Providers.SourceParsers;
 
 namespace MyNamespace;
 
-public class HaskellProvider : DataProvider
+public class HaskellProvider : ObjectProvider
 {
-    public override DataFormat SupportedFormats => DataFormat.ObjectCollections;
+    public override ObjectFormat SupportedFormats => ObjectFormat.ObjectCollections;
 
     public override ReadOnlyMemory<byte> GetSchema() => CodeSchema.GetJson();
 
@@ -403,7 +403,7 @@ The code model includes:
 Collections are named `Code.Types`, `Code.Methods`, `Code.Statements`, `Code.Lines`, `Code.Files`, etc. Language packages expose these via explicit exports:
 
 ```cop
-let cb : Codebase = data('haskell')
+let cb : Codebase = object('haskell')
 export let Types = cb.Types
 export let Methods = cb.Methods
 export let Lines = cb.Lines
@@ -421,7 +421,7 @@ export let Files = cb.Files
 ```cop
 import my-provider
 
-foreach Widgets   # Widgets is exported by the package via: export let Widgets = data('my-provider').Widgets
+foreach Widgets   # Widgets is exported by the package via: export let Widgets = object('my-provider').Widgets
     '{Widget.Name} ({Widget.Category}): {Widget.Weight}'
 ```
 
@@ -489,7 +489,7 @@ your-packages/
 
 ## Streaming Providers (Source & Sink)
 
-For push-like providers that yield items indefinitely (e.g., HTTP servers, message queues, timers), use the separate `SourceProvider` and `SinkProvider` base classes instead of `DataProvider`.
+For push-like providers that yield items indefinitely (e.g., HTTP servers, message queues, timers), use the separate `SourceProvider` and `SinkProvider` base classes instead of `ObjectProvider`.
 
 ### SourceProvider
 
@@ -558,7 +558,7 @@ The engine discovers all `SourceProvider` and `SinkProvider` subclasses in the p
 
 | Namespace | Contains |
 |-----------|----------|
-| `Cop.Core` | `DataProvider`, `SourceProvider`, `SinkProvider`, `ProviderSchema`, `ProviderQuery`, `RuntimeBindings`, `DataFormat` |
+| `Cop.Core` | `ObjectProvider`, `SourceProvider`, `SinkProvider`, `ProviderSchema`, `ProviderQuery`, `RuntimeBindings`, `ObjectFormat` |
 | `Cop.Providers.SourceModel` | `SourceFile`, `TypeDeclaration`, `MethodDeclaration`, `ISourceParser` |
 | `Cop.Providers.SourceParsers` | `CodeCollectionBuilder`, `CodeSchema`, `CodeBindings`, `TextFileParser` |
 

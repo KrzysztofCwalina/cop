@@ -3,14 +3,14 @@ using Cop.Core;
 namespace TypeSpecProvider;
 
 /// <summary>
-/// DataProvider for HTTP protocol graph derived from TypeSpec.
+/// ObjectProvider for HTTP protocol graph derived from TypeSpec.
 /// Transforms raw TypeSpec AST through HTTP decorator interpretation.
 /// Exposes HttpOperations, HttpServices with resolved verbs, paths, parameters.
 /// Uses stride-based DataTables with shared UTF-8 string heap.
 /// </summary>
-public class TypeSpecHttpProvider : DataProvider
+public class TypeSpecHttpProvider : ObjectProvider
 {
-    public override DataFormat SupportedFormats => DataFormat.InMemoryDatabase;
+    public override ObjectFormat SupportedFormats => ObjectFormat.InMemoryDatabase;
 
     public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
 

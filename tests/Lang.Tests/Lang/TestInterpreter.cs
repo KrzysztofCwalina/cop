@@ -34,7 +34,7 @@ internal static class TestInterpreter
 
     /// <summary>
     /// Creates a configured interpreter with documents pre-registered as namespaced collections.
-    /// This makes data('csharp').Types etc. resolvable in tests.
+    /// This makes object('csharp').Types etc. resolvable in tests.
     /// </summary>
     public static (ScriptInterpreter Interpreter, List<Document> Documents) CreateWithDocuments(params string[] filePaths)
     {
@@ -63,7 +63,7 @@ internal static class TestInterpreter
     /// <summary>
     /// Registers document collection data into namespaced collections in the TypeRegistry.
     /// Mimics what ProviderLoader.QueryAndRegister does in production — makes
-    /// data('python').Types etc. resolvable in tests.
+    /// object('python').Types etc. resolvable in tests.
     /// </summary>
     public static void RegisterDocumentsAsNamespaced(TypeRegistry registry, List<Document> documents)
     {

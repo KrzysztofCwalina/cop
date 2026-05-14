@@ -515,18 +515,18 @@ The runtime's only "magic" is currying the default arg at `import` time. Everyth
 
 ### Provider Accessor Functions
 
-Provider packages expose their collections through the `data()` intrinsic function. It returns a **dynamic accessor object** — property access on the returned object becomes a query to the provider:
+Provider packages expose their collections through the `object()` intrinsic function. It returns a **dynamic accessor object** — property access on the returned object becomes a query to the provider:
 
 ```cop
 import code
 import core
 
-# data() — works for any provider (code or non-code)
-let db = data('sample')
+# object() — works for any provider (code or non-code)
+let db = object('sample')
 export let Widgets = db.Widgets     # queries 'sample' for its 'Widgets' collection
 
 # Use a type annotation to enforce schema on code providers
-let cb : Codebase = data('csharp')
+let cb : Codebase = object('csharp')
 export let Types = cb.Types         # queries 'csharp' for its 'Types' collection
 ```
 
@@ -535,7 +535,7 @@ export let Types = cb.Types         # queries 'csharp' for its 'Types' collectio
 ```cop
 type SampleData = { Widgets : [Widget], Orders : [Order] }
 
-let db : SampleData = data('sample')   # only Widgets and Orders are accessible
+let db : SampleData = object('sample')   # only Widgets and Orders are accessible
 db.Widgets     # ✓ valid
 db.Unknown     # ✗ error: 'Unknown' is not defined on type 'SampleData'
 ```
@@ -625,10 +625,10 @@ namespace core
 # Any property access generates a query to the provider.
 # With no type annotation, all property access is allowed (runtime failure on missing).
 # With a type annotation, only declared properties are accessible (static enforcement).
-type Data = {}
+type Object = {}
 
 # Returns a dynamic accessor for a named data provider.
-function data(name : string) : Data = intrinsic
+function object(name : string) : Object = intrinsic
 
 # Source represents an async streaming collection source.
 # Type annotation declares item type: let Requests : [Request] = source('http')
@@ -729,7 +729,7 @@ type Codebase = {
 }
 ```
 
-Because `Codebase` declares its properties, any typed binding like `let cb : Codebase = data('csharp')` gets full schema enforcement — accessing `cb.Types` works, but `cb.Unknown` is a compile-time error. The untyped `let cb = data('csharp')` is also valid and allows dynamic access.
+Because `Codebase` declares its properties, any typed binding like `let cb : Codebase = object('csharp')` gets full schema enforcement — accessing `cb.Types` works, but `cb.Unknown` is a compile-time error. The untyped `let cb = object('csharp')` is also valid and allows dynamic access.
 
 ---
 

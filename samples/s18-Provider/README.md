@@ -8,7 +8,7 @@ A minimal template demonstrating how to write a Cop data provider as a standalon
 s18-Provider/
 ├── sample-provider.csproj   # Provider C# project
 ├── src/
-│   └── SampleProvider.cs    # DataProvider implementation
+│   └── SampleProvider.cs    # ObjectProvider implementation
 └── package/                 # Cop package (ready to distribute)
     ├── sample.md            # Package metadata
     ├── src/

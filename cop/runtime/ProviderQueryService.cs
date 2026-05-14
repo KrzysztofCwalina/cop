@@ -13,7 +13,7 @@ public class ProviderQueryService : IProviderQueryService
     private readonly record struct CacheKey(string ProviderName, string CollectionName, string AbsolutePath);
 
     private readonly Dictionary<CacheKey, List<object>> _cache = new();
-    private readonly Dictionary<string, (DataProvider Instance, ProviderSchema Schema)> _providers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (ObjectProvider Instance, ProviderSchema Schema)> _providers = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _invocationDirectory;
     private readonly IReadOnlySet<string>? _excludedDirectories;
     private readonly List<string> _warnings = [];
@@ -31,7 +31,7 @@ public class ProviderQueryService : IProviderQueryService
     /// <summary>
     /// Registers a provider so it can be queried by name at evaluation time.
     /// </summary>
-    public void RegisterProvider(string name, DataProvider instance, ProviderSchema schema)
+    public void RegisterProvider(string name, ObjectProvider instance, ProviderSchema schema)
     {
         _providers[name] = (instance, schema);
     }
@@ -83,7 +83,7 @@ public class ProviderQueryService : IProviderQueryService
         {
             var (instance, schema) = provider;
 
-            if (instance.SupportedFormats.HasFlag(DataFormat.ObjectCollections))
+            if (instance.SupportedFormats.HasFlag(ObjectFormat.ObjectCollections))
             {
                 var collections = instance.QueryCollections(query);
                 if (collections != null && collections.TryGetValue(collectionName, out var items))
@@ -92,7 +92,7 @@ public class ProviderQueryService : IProviderQueryService
                     return items;
                 }
             }
-            else if (instance.SupportedFormats.HasFlag(DataFormat.InMemoryDatabase))
+            else if (instance.SupportedFormats.HasFlag(ObjectFormat.InMemoryDatabase))
             {
                 var store = instance.QueryData(query);
                 if (store.Tables.TryGetValue(collectionName, out var table))
@@ -104,7 +104,7 @@ public class ProviderQueryService : IProviderQueryService
                     return views;
                 }
             }
-            else if (instance.SupportedFormats.HasFlag(DataFormat.Json))
+            else if (instance.SupportedFormats.HasFlag(ObjectFormat.Json))
             {
                 var json = instance.Query(query);
                 // JSON deserialization for path-scoped queries would require TypeRegistry wiring.

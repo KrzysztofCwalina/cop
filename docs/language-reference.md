@@ -334,11 +334,11 @@ Path-scoped collections query the provider against the given path instead of the
 **Typed binding** — associates a type annotation with a let value for schema enforcement:
 
 ```ruby
-let db : SampleData = data('sample')
-let cb : Codebase = data('csharp')
+let db : SampleData = object('sample')
+let cb : Codebase = object('csharp')
 ```
 
-The type annotation (`: TypeName`) tells the runtime to enforce the type's declared properties on the bound value. This is used with `data()` to turn a dynamic accessor into a schema-checked one. See [Provider Accessors](#provider-accessors-data) for details.
+The type annotation (`: TypeName`) tells the runtime to enforce the type's declared properties on the bound value. This is used with `object()` to turn a dynamic accessor into a schema-checked one. See [Provider Accessors](#provider-accessors-object) for details.
 
 ### Pipe Operators
 
@@ -889,7 +889,7 @@ Types.Select(item.Methods.Count > 0 ? item.Name | 'empty')
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `data(name)` | string → Data | Returns a dynamic accessor for the named provider |
+| `object(name)` | string → Object | Returns a dynamic accessor for the named provider |
 | `source(name)` | string → Source | Returns an async streaming source handle |
 | `sink(name)` | string → Sink | Returns an async sink handle |
 | `Text(expr)` | any → string | Converts a value to its textual representation. Also: `expr:Text` |
@@ -901,27 +901,27 @@ Types.Select(item.Methods.Count > 0 ? item.Name | 'empty')
 
 `Path` uses glob patterns: `*` matches within a segment, `**` matches across segments, `?` matches one character.
 
-#### Provider Accessors: `data()`
+#### Provider Accessors: `object()`
 
-`data(name)` is the **intrinsic function** that returns a dynamic accessor object for any provider. Properties on the returned object generate queries to the named provider.
+`object(name)` is the **intrinsic function** that returns a dynamic accessor object for any provider. Properties on the returned object generate queries to the named provider.
 
 ```ruby
 import core
 import code
 
-# data() — access any provider's collections
-let db = data('sample')
+# object() — access any provider's collections
+let db = object('sample')
 export let Widgets = db.Widgets       # queries 'sample' provider for Widgets
 
 # Use with code providers too — type annotation enforces schema
-let cb : Codebase = data('csharp')
+let cb : Codebase = object('csharp')
 export let Types = cb.Types           # queries 'csharp' provider for Types
 export let Statements = cb.Statements
 ```
 
 **Dynamic vs. Typed access:**
 
-Without a type annotation, `data()` returns a fully dynamic object (similar to C# `dynamic`). Any property access is allowed — it becomes a query to the provider at runtime. If the provider doesn't have that collection, it fails.
+Without a type annotation, `object()` returns a fully dynamic object (similar to C# `dynamic`). Any property access is allowed — it becomes a query to the provider at runtime. If the provider doesn't have that collection, it fails.
 
 With a type annotation on the let binding, the accessor is **schema-enforced** — only declared properties are accessible:
 
@@ -933,7 +933,7 @@ type SampleData = {
 }
 
 # Typed binding — only Widgets and Orders are accessible
-let db : SampleData = data('sample')
+let db : SampleData = object('sample')
 export let Widgets = db.Widgets     # ✓ allowed
 export let Orders = db.Orders       # ✓ allowed
 # db.Unknown                        # ✗ error: 'Unknown' is not defined on type 'SampleData'
@@ -958,7 +958,7 @@ export let RESPONSES : [Response] = sink('http')
 async foreach Requests => handle => RESPONSES
 ```
 
-Like `data()`, the typed annotation provides documentation and schema enforcement — it declares the item type flowing through the stream or into the sink. Without an annotation, items are untyped.
+Like `object()`, the typed annotation provides documentation and schema enforcement — it declares the item type flowing through the stream or into the sink. Without an annotation, items are untyped.
 
 ## Commands
 

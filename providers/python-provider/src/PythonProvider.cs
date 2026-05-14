@@ -6,9 +6,9 @@ namespace Cop.Providers;
 /// <summary>
 /// Python source code provider. Scans and parses .py files.
 /// </summary>
-public class PythonProvider : DataProvider
+public class PythonProvider : ObjectProvider
 {
-    public override DataFormat SupportedFormats => DataFormat.ObjectCollections;
+    public override ObjectFormat SupportedFormats => ObjectFormat.ObjectCollections;
 
     public override ReadOnlyMemory<byte> GetSchema() => CodeSchema.GetJson();
 

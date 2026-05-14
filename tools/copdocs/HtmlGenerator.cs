@@ -229,8 +229,9 @@ function buildTree() {
       pkgNode.className = 'tree-node';
 
       const hasTypes = pkg.types && Object.keys(pkg.types).length > 0;
-      const hasPreds = pkg.predicates && pkg.predicates.length > 0;
-      const hasFuncs = pkg.functions && pkg.functions.length > 0;
+      const hasPreds = pkg.predicates && pkg.predicates.filter(p => !hasTypePage(p)).length > 0;
+      const hasFuncs = pkg.functions && pkg.functions.filter(f => !hasTypePage(f)).length > 0;
+      const hasFuncsOrPreds = hasFuncs || hasPreds;
       const hasChecks = pkg.checks && pkg.checks.length > 0;
       const hasCmds = pkg.commands && pkg.commands.length > 0;
       const hasEnums = pkg.enums && pkg.enums.length > 0;
@@ -288,27 +289,17 @@ function buildTree() {
         childrenDiv.appendChild(secNode);
       }
 
-      if (hasFuncs) {
+      if (hasFuncsOrPreds) {
+        const fnCount = pkg.functions ? pkg.functions.filter(f => !hasTypePage(f)).length : 0;
+        const predCount = pkg.predicates ? pkg.predicates.filter(p => !hasTypePage(p)).length : 0;
+        const totalCount = fnCount + predCount;
         const secNode = document.createElement('div');
         secNode.className = 'tree-node';
         secNode.innerHTML = `
           <div class="tree-label" data-pkg="${pkgId}" data-view="functions">
             <span class="tree-toggle" style="visibility:hidden"></span>
             <span class="section-tag tag-function">F</span>
-            <span>Functions (${pkg.functions.length})</span>
-          </div>
-        `;
-        childrenDiv.appendChild(secNode);
-      }
-
-      if (hasPreds) {
-        const secNode = document.createElement('div');
-        secNode.className = 'tree-node';
-        secNode.innerHTML = `
-          <div class="tree-label" data-pkg="${pkgId}" data-view="predicates">
-            <span class="tree-toggle" style="visibility:hidden"></span>
-            <span class="section-tag tag-predicate">P</span>
-            <span>Predicates (${pkg.predicates.length})</span>
+            <span>Functions (${totalCount})</span>
           </div>
         `;
         childrenDiv.appendChild(secNode);
@@ -362,7 +353,7 @@ function buildTree() {
     } else if (view) {
       document.querySelectorAll('.tree-label.active').forEach(el => el.classList.remove('active'));
       label.classList.add('active');
-      if (view === 'predicates') renderPredicates(pkg);
+      if (view === 'predicates') renderFunctions(pkg);
       else if (view === 'functions') renderFunctions(pkg);
       else if (view === 'checks') renderChecks(pkg);
       else if (view === 'commands') renderCommands(pkg);
@@ -407,6 +398,7 @@ function renderPackageOverview(pkgId) {
   const typeCount = pkg.types ? Object.keys(pkg.types).length : 0;
   const predCount = pkg.predicates ? pkg.predicates.length : 0;
   const funcCount = pkg.functions ? pkg.functions.length : 0;
+  const combinedFuncCount = predCount + funcCount;
   const checkCount = pkg.checks ? pkg.checks.length : 0;
   const cmdCount = pkg.commands ? pkg.commands.length : 0;
   const enumCount = pkg.enums ? pkg.enums.length : 0;
@@ -414,8 +406,7 @@ function renderPackageOverview(pkgId) {
   html += `<div class="pkg-exports">`;
   if (typeCount > 0) html += `<a onclick="navToSection('${pkgId}','types-header')"><span class="section-tag tag-type">T</span> <span class="count">${typeCount}</span> types</a>`;
   if (enumCount > 0) html += `<a onclick="navToSection('${pkgId}','types-header')"><span class="section-tag tag-enum">◇</span> <span class="count">${enumCount}</span> enums</a>`;
-  if (predCount > 0) html += `<a onclick="navToSection('${pkgId}','predicates')"><span class="section-tag tag-predicate">P</span> <span class="count">${predCount}</span> predicates</a>`;
-  if (funcCount > 0) html += `<a onclick="navToSection('${pkgId}','functions')"><span class="section-tag tag-function">F</span> <span class="count">${funcCount}</span> functions</a>`;
+  if (combinedFuncCount > 0) html += `<a onclick="navToSection('${pkgId}','functions')"><span class="section-tag tag-function">F</span> <span class="count">${combinedFuncCount}</span> functions</a>`;
   if (checkCount > 0) html += `<a onclick="navToSection('${pkgId}','checks')"><span class="section-tag tag-check">C</span> <span class="count">${checkCount}</span> checks</a>`;
   if (cmdCount > 0) html += `<a onclick="navToSection('${pkgId}','commands')"><span class="section-tag tag-command">!</span> <span class="count">${cmdCount}</span> commands</a>`;
   html += `</div>`;
@@ -510,6 +501,42 @@ function renderType(pkgId, typeName) {
     }
   }
 
+  // Collect functions that apply to this type from all packages
+  const applicableFunctions = [];
+  for (const [fPkgId, fPkg] of Object.entries(packages)) {
+    if (!fPkg.functions) continue;
+    for (const fn of fPkg.functions) {
+      if (fn.appliesTo === typeName) {
+        applicableFunctions.push({ ...fn, fromPkg: fPkgId });
+      }
+    }
+  }
+
+  if (applicableFunctions.length > 0) {
+    html += `<h2>Functions</h2>`;
+    for (const fn of applicableFunctions.sort((a,b) => a.name.localeCompare(b.name))) {
+      const key = `${fn.fromPkg}.fn.${fn.name}.${(fn.params||'').replace(/[, ]/g, '_')}`;
+      const hasComment = comments[key] ? 'has-comment' : '';
+      const fromLabel = fn.fromPkg !== pkgId ? ` <span style="color:#8b949e; font-size:11px;">(${fn.fromPkg})</span>` : '';
+      const remainingParams = fn.params.includes(',') ? fn.params.substring(fn.params.indexOf(',') + 1).trim() : '';
+      const paramsHtml = remainingParams ? formatParamsWithLinks(pkgId, remainingParams) : '';
+      const returnsHtml = fn.returns ? ` → ${formatTypeLink(pkgId, fn.returns)}` : '';
+      html += `
+        <div class="comment-wrapper">
+          <div class="fn-block">
+            <div class="fn-signature">
+              <span class="item-name">${fn.name}(${paramsHtml})${returnsHtml}${fromLabel}</span>
+              ${sourceLink(fn.sourceUrl)}
+              <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
+            </div>
+            <div class="fn-desc">${escapeHtml(fn.desc)}</div>
+          </div>
+          <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
+        </div>
+      `;
+    }
+  }
+
   content.innerHTML = html;
   wireUpComments(content);
   wireUpTypeLinks(content);
@@ -554,7 +581,20 @@ function renderPredicates(pkgId) {
 }
 
 function renderFunctions(pkgId) {
-  renderCallables(pkgId, packages[pkgId].functions, 'Functions', 'fn');
+  const pkg = packages[pkgId];
+  const standaloneFns = (pkg.functions || []).filter(f => !hasTypePage(f));
+
+  // Convert standalone predicates to function-like entries
+  const standalonePreds = (pkg.predicates || []).filter(p => !hasTypePage(p)).map(p => ({
+    name: p.name,
+    params: p.appliesTo + (p.params ? ', ' + p.params : ''),
+    returns: 'bool',
+    desc: p.desc || '',
+    sourceUrl: p.sourceUrl
+  }));
+
+  const allItems = [...standaloneFns, ...standalonePreds];
+  renderCallables(pkgId, allItems, 'Functions', 'fn');
 }
 
 function renderCallables(pkgId, items, sectionTitle, keyPrefix) {
@@ -839,6 +879,15 @@ function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// Returns true if the function has a type page (i.e., appliesTo matches a defined type in some package)
+function hasTypePage(fn) {
+  if (!fn.appliesTo) return false;
+  for (const p of Object.values(packages)) {
+    if (p.types && p.types[fn.appliesTo]) return true;
+  }
+  return false;
+}
+
 function sourceLink(url) {
   if (!url) return '';
   return `<a href="${url}" target="_blank" class="source-link" title="View source">📄</a>`;
@@ -895,7 +944,7 @@ function navigateToHash() {
     renderPackageOverview(pkgId);
     if (pkgLabel) pkgLabel.classList.add('active');
   } else if (['predicates','functions','checks','commands','enums'].includes(target)) {
-    if (target === 'predicates') renderPredicates(pkgId);
+    if (target === 'predicates') renderFunctions(pkgId);
     else if (target === 'functions') renderFunctions(pkgId);
     else if (target === 'checks') renderChecks(pkgId);
     else if (target === 'commands') renderCommands(pkgId);

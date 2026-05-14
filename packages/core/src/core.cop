@@ -2,18 +2,17 @@
 # Defines fundamental types for provider access.
 # Usage: import core
 
-## A dynamic data accessor (similar to C# dynamic).
-## Any property access on Data generates a query to the provider.
+## A dynamic object accessor (similar to C# dynamic).
+## Any property access on Object generates a query to the provider.
 ## Use a typed let binding to enforce a schema:
-##   let db : MySchema = data('provider')
+##   let db : MySchema = object('provider')
 ## Without a type annotation, any property is allowed (fails at runtime if provider lacks it).
 ## With a type annotation, only declared properties are accessible (compile-time enforcement).
-export type Data = {}
 
-## Returns a dynamic Data accessor for the named provider.
+## Returns a dynamic Object accessor for the named provider.
 ## Properties on the returned object query the provider's collections.
-## Example: data('sample').Widgets returns the Widgets collection.
-export function data(name : string) : Data = intrinsic
+## Example: object('sample').Widgets returns the Widgets collection.
+export function object(name : string) : Object = intrinsic
 
 ## An async streaming collection source.
 ## Use a typed annotation to declare the item type produced by the stream:
@@ -55,7 +54,7 @@ export function text(bytes) : string = intrinsic
 ## Items is the collection of data to format, Template is the {Property} interpolation pattern,
 ## and Separator is the string used to join results (defaults to newline).
 export type Formattable = {
-    Items : [Data]
+    Items : [Object]
     Template : string
     Separator : string
 }
@@ -83,8 +82,8 @@ export function error(string) : Error = intrinsic
 
 ## Returns true if the current item is an Error value.
 ## Works as a bare predicate or as a filter: items:isError
-## Example: predicate handleError(Data:isError) => PRINT('{item.Message}')
-export predicate isError(Data) => item.Type:equals('Error')
+## Example: predicate handleError(Object:isError) => PRINT('{item.Message}')
+export predicate isError(Object) => item.Type:equals('Error')
 
 ## Terminates execution immediately with a fatal diagnostic.
 ## Use for programmer assertions — situations that should never occur.
@@ -141,10 +140,10 @@ export command ASSERT(items, description) = intrinsic
 ## Rest (collection without first element), Single (item if exactly one, or nic).
 export type Collection = {
     Count : int,
-    First : Data,
-    Last : Data,
+    First : Object,
+    Last : Object,
     Rest : Collection,
-    Single : Data
+    Single : Object
 }
 
 ## A deferred query over a collection (like C# IQueryable).
@@ -153,8 +152,8 @@ export type Collection = {
 ## Providers may optimize by pushing the full query expression down.
 export type Query = {
     Count : int,
-    First : Data,
-    Last : Data
+    First : Object,
+    Last : Object
 }
 
 # Collection query functions (intrinsic)
@@ -199,19 +198,19 @@ export function empty(Collection) : bool = intrinsic
 
 ## First item matching a condition, or nic.
 ## Example: Types:first(isPublic)
-export function first(Collection) : Data = intrinsic
+export function first(Collection) : Object = intrinsic
 
 ## Last item matching a condition, or nic.
 ## Example: Types:last(isPublic)
-export function last(Collection) : Data = intrinsic
+export function last(Collection) : Object = intrinsic
 
 ## The single item matching a condition, or nic if zero or multiple match.
 ## Example: Types:single(isEntryPoint)
-export function single(Collection) : Data = intrinsic
+export function single(Collection) : Object = intrinsic
 
 ## Item at a specific zero-based index.
 ## Example: items:elementAt(3)
-export function elementAt(Collection) : Data = intrinsic
+export function elementAt(Collection) : Object = intrinsic
 
 ## Sorts ascending by a key expression.
 ## Example: Types:orderBy(item.Name)
@@ -247,7 +246,7 @@ export function average(Collection) : int = intrinsic
 
 ## Reduces a collection to a single value using an accumulator expression.
 ## Example: numbers:reduce(acc + item)
-export function reduce(Collection) : Data = intrinsic
+export function reduce(Collection) : Object = intrinsic
 
 # Immutable collection operations
 # All return new collections — the original is never modified.

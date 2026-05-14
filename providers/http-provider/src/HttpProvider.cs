@@ -217,9 +217,9 @@ public class HttpSink : SinkProvider
 /// HTTP data provider for outbound HTTP client functions (Get, Post, Send).
 /// This is a sync data provider that exposes helper functions, not collections.
 /// </summary>
-public class HttpProvider : DataProvider
+public class HttpProvider : ObjectProvider
 {
-    public override DataFormat SupportedFormats => DataFormat.Json;
+    public override ObjectFormat SupportedFormats => ObjectFormat.Json;
 
     public override ReadOnlyMemory<byte> GetSchema()
     {

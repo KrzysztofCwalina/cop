@@ -6,9 +6,9 @@ namespace Cop.Providers;
 /// <summary>
 /// JavaScript/TypeScript source code provider. Scans and parses .js and .ts files.
 /// </summary>
-public class JavaScriptProvider : DataProvider
+public class JavaScriptProvider : ObjectProvider
 {
-    public override DataFormat SupportedFormats => DataFormat.ObjectCollections;
+    public override ObjectFormat SupportedFormats => ObjectFormat.ObjectCollections;
 
     public override ReadOnlyMemory<byte> GetSchema() => CodeSchema.GetJson();
 

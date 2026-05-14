@@ -3,14 +3,14 @@ using Cop.Core;
 namespace TypeSpecProvider;
 
 /// <summary>
-/// DataProvider for raw TypeSpec type graph.
+/// ObjectProvider for raw TypeSpec type graph.
 /// Exposes Models, Operations, Interfaces, Enums, Unions, Scalars, Namespaces
 /// as stride-based DataTables with shared UTF-8 string heap.
 /// Supports RequestedCollections pruning and FilterEvaluator pushdown.
 /// </summary>
-public class TypeSpecRawProvider : DataProvider
+public class TypeSpecRawProvider : ObjectProvider
 {
-    public override DataFormat SupportedFormats => DataFormat.InMemoryDatabase;
+    public override ObjectFormat SupportedFormats => ObjectFormat.InMemoryDatabase;
 
     public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
 

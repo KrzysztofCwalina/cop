@@ -1,7 +1,7 @@
 # C# source language provider
 import code
 
-let cb : Codebase = data('csharp')
+let cb : Codebase = object('csharp')
 
 export let Types = cb.Types
 export let Statements = cb.Statements
