@@ -4,59 +4,6 @@ This document catalogs every instance of "magic" behavior in the Cop runtime —
 
 ---
 
-## Built-in Collection/String Members
-
-Hardcoded member access, resolved before type registry lookup.
-Now declared as properties of the `Collection` type in `core.cop`.
-
-| # | Target Type | Members | File:Line |
-|---|-------------|---------|-----------|
-| 1 | `IList` (any collection) | `Count`, `First`, `Last`, `Single`, `Rest`/`Tail` + flatten on unknown member | PredicateEvaluator.cs:824-850 |
-| 2 | `string` | `Length`, `Lower`, `Upper`, `Normalized`, `Words` | PredicateEvaluator.cs:854-865 |
-| 3 | Typed object | `Keys`, `Values`, `Count` (map-like access) | PredicateEvaluator.cs:875-882 |
-
----
-
-## Built-in Collection Query Operators
-
-All defined in PredicateEvaluator.cs:1038-1490. These are collection method calls (dot or colon syntax).
-Now declared as `function ... = intrinsic` in `core.cop` and visible in reference.html.
-Both PascalCase (legacy) and camelCase (canonical) are supported.
-
-- **Filtering:** `where` / `Where`
-- **Quantifiers:** `any`, `none`, `all`, `count`, `contains`, `containsAny`, `empty`
-- **Element access:** `first` / `First`, `last` / `Last`, `single` / `Single`, `elementAt` / `ElementAt`
-- **Projection:** `select` / `Select`
-- **Ordering:** `orderBy` / `OrderBy`, `orderByDescending` / `OrderByDescending`
-- **Aggregation:** `sum` / `Sum`, `min` / `Min`, `max` / `Max`, `average` / `Average`, `reduce` / `Reduce`
-- **Grouping:** `distinct` / `Distinct`, `groupBy` / `GroupBy`
-- **Immutable ops:** `push`, `prepend`, `pop`, `concat`
-
----
-
-## Built-in String/Object Predicates
-
-Hardcoded predicate dispatch on values. All in PredicateEvaluator.cs:951-1006.
-
-**String predicates:**
-- `equals` / `eq`, `notEquals` / `ne`
-- `startsWith` / `sw`, `endsWith` / `ew`
-- `contains` / `ct`, `containsAny` / `ca`
-- `matches` / `rx`, `sameAs` / `sm`
-- `Trim`, `Replace`
-- `in`, `empty`
-
-**Numeric predicates:**
-- `equals` / `eq`, `notEquals` / `ne`
-- `greaterThan` / `gt`, `lessThan` / `lt`
-- `greaterOrEqual` / `ge`, `lessOrEqual` / `le`
-- `isSet`, `isClear`
-
-**Object predicates:**
-- `Get`, `containsKey`
-
----
-
 ## Auto-Execution / Injected Behavior
 
 | # | What | File:Line | Behavior |
