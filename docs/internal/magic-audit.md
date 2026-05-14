@@ -9,8 +9,6 @@ This document catalogs every instance of "magic" behavior in the Cop runtime —
 | # | Name | File:Line | Description |
 |---|------|-----------|-------------|
 | 1 | `item` | PredicateEvaluator.cs:360 | Current iteration item in any predicate/filter. Language keyword. |
-| 2 | Flags constants | PredicateEvaluator.cs:437 | `flags` members resolve as global identifiers (e.g., `Public`, `Static`). Declared via `flags` keyword in `.cop` packages. **No longer auto-promoted** — requires explicit `export Modifier` (in package, promotes + exports to importers) or `import Modifier` (in file body, promotes locally). |
-| 3 | Enum constants | PredicateEvaluator.cs:448 | `enum` members resolve as global identifiers (e.g., `Class`, `Interface`). Same mechanism as flags. **No longer auto-promoted** — requires explicit `export TypeKind` or `import TypeKind` to make members available as bare names. |
 
 ---
 
