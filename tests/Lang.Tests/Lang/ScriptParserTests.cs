@@ -493,7 +493,6 @@ public class CheckFileParserTests
             "..", "..", "..", "..", "..", "packages", "code", "src", "code.cop"));
         var file = ScriptParser.Parse(source, "code.cop");
         Assert.That(file.TypeDefinitions.Count, Is.GreaterThanOrEqualTo(8));
-        Assert.That(file.LetDeclarations.Count, Is.GreaterThanOrEqualTo(1));
 
         // Object is a core primitive, not defined in code.cop
         Assert.That(file.TypeDefinitions.Any(t => t.Name == "Object"), Is.False);
@@ -1131,5 +1130,39 @@ public class CheckFileParserTests
         Assert.That(inner.Target, Is.TypeOf<MemberAccessExpr>());
         var ma = (MemberAccessExpr)inner.Target;
         Assert.That(ma.Member, Is.EqualTo("Method"));
+    }
+
+    [Test]
+    public void Parse_TypedLetBinding()
+    {
+        var source = "let db : MySchema = data('sample')";
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.LetDeclarations, Has.Count.EqualTo(1));
+        var decl = file.LetDeclarations[0];
+        Assert.That(decl.Name, Is.EqualTo("db"));
+        Assert.That(decl.TypeAnnotation, Is.EqualTo("MySchema"));
+        Assert.That(decl.IsValueBinding, Is.True);
+    }
+
+    [Test]
+    public void Parse_UntypedLetBinding_HasNoAnnotation()
+    {
+        var source = "let db = data('sample')";
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.LetDeclarations, Has.Count.EqualTo(1));
+        Assert.That(file.LetDeclarations[0].TypeAnnotation, Is.Null);
+    }
+
+    [Test]
+    public void Parse_IntrinsicFunction()
+    {
+        var source = "export function data(name : string) : Data = intrinsic";
+        var file = ScriptParser.Parse(source, "test.cop");
+        Assert.That(file.Functions, Has.Count.EqualTo(1));
+        var func = file.Functions[0];
+        Assert.That(func.Name, Is.EqualTo("data"));
+        Assert.That(func.IsIntrinsic, Is.True);
+        Assert.That(func.ReturnType, Is.EqualTo("Data"));
+        Assert.That(func.IsExported, Is.True);
     }
 }

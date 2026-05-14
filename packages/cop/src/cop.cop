@@ -1,0 +1,14 @@
+# Cop Language Analysis Package v1.0
+# Provides structural analysis of .cop source files through
+# the standard code analysis collections (Types, Statements, Lines, Files).
+#
+# Usage: import cop
+# Then use cop.Types, cop.Lines, cop.Files, etc.
+
+import code
+
+let cb : Codebase = data('cop')
+export let Types = cb.Types
+export let Statements = cb.Statements
+export let Lines = cb.Lines
+export let Files = cb.Files

@@ -19,11 +19,35 @@ public static class ProviderLoader
     public record LoadedProvider(DataProvider Instance, ProviderSchema Schema, string PackageName);
 
     /// <summary>
+    /// Represents a loaded streaming source provider.
+    /// </summary>
+    public record LoadedSourceProvider(SourceProvider Instance, ProviderSchema Schema, string PackageName);
+
+    /// <summary>
+    /// Represents a loaded sink provider.
+    /// </summary>
+    public record LoadedSinkProvider(SinkProvider Instance, string PackageName);
+
+    /// <summary>
     /// Loads a provider assembly from a package directory.
     /// Validates trust, loads the DLL, instantiates the provider, and calls GetSchema().
+    /// Discovers DataProvider, SourceProvider, and SinkProvider subclasses.
     /// </summary>
     public static LoadedProvider? Load(string packageDir, PackageMetadata metadata, List<string> errors)
     {
+        return Load(packageDir, metadata, errors, out _, out _);
+    }
+
+    /// <summary>
+    /// Loads a provider assembly from a package directory.
+    /// Also outputs any SourceProvider and SinkProvider instances found.
+    /// </summary>
+    public static LoadedProvider? Load(string packageDir, PackageMetadata metadata, List<string> errors,
+        out List<LoadedSourceProvider> sourceProviders, out List<LoadedSinkProvider> sinkProviders)
+    {
+        sourceProviders = [];
+        sinkProviders = [];
+
         if (!metadata.IsClrProvider)
             return null;
 
@@ -46,26 +70,48 @@ public static class ProviderLoader
             // Load in isolated context
             var alc = new ProviderLoadContext(dllPath);
             var assembly = alc.LoadFromAssemblyPath(dllPath);
-            var providerType = assembly.GetType(metadata.ProviderEntry);
 
+            // Discover SourceProvider subclasses
+            foreach (var type in assembly.GetExportedTypes())
+            {
+                if (type.IsAbstract) continue;
+                if (typeof(SourceProvider).IsAssignableFrom(type))
+                {
+                    var instance = (SourceProvider)Activator.CreateInstance(type)!;
+                    var schema = ProviderSchema.FromJson(instance.GetSchema());
+                    sourceProviders.Add(new LoadedSourceProvider(instance, schema, metadata.Name));
+                }
+                else if (typeof(SinkProvider).IsAssignableFrom(type) &&
+                         !typeof(ConsoleWriteLineSink).IsAssignableFrom(type) &&
+                         !typeof(FileWriteSink).IsAssignableFrom(type) &&
+                         !typeof(ListAppendSink).IsAssignableFrom(type))
+                {
+                    var instance = (SinkProvider)Activator.CreateInstance(type)!;
+                    sinkProviders.Add(new LoadedSinkProvider(instance, metadata.Name));
+                }
+            }
+
+            // If source/sink providers were found and no DataProvider entry, that's fine
+            var providerType = assembly.GetType(metadata.ProviderEntry);
             if (providerType is null)
             {
+                if (sourceProviders.Count > 0 || sinkProviders.Count > 0)
+                    return null; // pure source/sink package — no DataProvider needed
                 errors.Add($"Provider entry type '{metadata.ProviderEntry}' not found in assembly '{dllPath}'.");
                 return null;
             }
 
             if (!typeof(DataProvider).IsAssignableFrom(providerType))
             {
+                if (sourceProviders.Count > 0 || sinkProviders.Count > 0)
+                    return null; // entry type is a SourceProvider/SinkProvider, not DataProvider
                 errors.Add($"Provider entry type '{metadata.ProviderEntry}' does not extend DataProvider.");
                 return null;
             }
 
-            var instance = (DataProvider)Activator.CreateInstance(providerType)!;
-
-            // Get schema
-            var schema = ProviderSchema.FromJson(instance.GetSchema());
-
-            return new LoadedProvider(instance, schema, metadata.Name);
+            var dataInstance = (DataProvider)Activator.CreateInstance(providerType)!;
+            var dataSchema = ProviderSchema.FromJson(dataInstance.GetSchema());
+            return new LoadedProvider(dataInstance, dataSchema, metadata.Name);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -76,7 +122,7 @@ public static class ProviderLoader
 
     /// <summary>
     /// Registers a provider's schema, type accessors, and runtime bindings into the type registry.
-    /// Works for both built-in and external providers.
+    /// Works for both built-in and external DataProvider instances (sync collections only).
     /// </summary>
     public static ProviderSchema RegisterSchema(DataProvider instance, TypeRegistry registry)
     {
@@ -115,16 +161,22 @@ public static class ProviderLoader
                 }
             }
         }
-        else if (instance.SupportedFormats.HasFlag(DataFormat.AsyncStream))
-        {
-            // Streaming providers use DataObject accessors (same as JSON)
-            JsonCollectionDeserializer.RegisterDataObjectAccessors(registry, schema);
-        }
         else if (instance.SupportedFormats.HasFlag(DataFormat.Json))
         {
             JsonCollectionDeserializer.RegisterDataObjectAccessors(registry, schema);
         }
 
+        return schema;
+    }
+
+    /// <summary>
+    /// Registers a SourceProvider's schema (types use DataObject accessors).
+    /// </summary>
+    public static ProviderSchema RegisterSchema(SourceProvider instance, TypeRegistry registry)
+    {
+        var schema = ProviderSchema.FromJson(instance.GetSchema());
+        registry.RegisterProviderSchema(schema);
+        JsonCollectionDeserializer.RegisterDataObjectAccessors(registry, schema);
         return schema;
     }
 
@@ -137,6 +189,34 @@ public static class ProviderLoader
         => QueryAndRegister(provider.Instance, provider.Schema, provider.PackageName, registry, new ProviderQuery { RootPath = rootPath, ExcludedDirectories = excludedDirectories }, errors);
 
     /// <summary>
+    /// Registers a SourceProvider as a streaming source in the registry.
+    /// </summary>
+    public static void RegisterSourceProvider(SourceProvider instance, ProviderSchema schema, string ns, TypeRegistry registry)
+    {
+        foreach (var coll in schema.Collections)
+        {
+            var qualifiedName = $"{ns}.{coll.Name}";
+            registry.RegisterStreamingSource(qualifiedName, instance);
+        }
+
+        // Register provider functions if any
+        var providerFunctions = instance.GetProviderFunctions();
+        if (providerFunctions is not null)
+        {
+            foreach (var (funcName, func) in providerFunctions)
+                registry.RegisterProviderFunction(ns, funcName, func);
+        }
+    }
+
+    /// <summary>
+    /// Registers a SinkProvider in the registry under the given namespace.
+    /// </summary>
+    public static void RegisterSinkProvider(SinkProvider instance, string ns, TypeRegistry registry)
+    {
+        registry.RegisterSink(ns, instance);
+    }
+
+    /// <summary>
     /// Queries a provider with the given query and registers the resulting collections.
     /// Collections are registered under the provider's namespace for proper scoping.
     /// When CollectionFilters are specified, items are filtered before registration
@@ -146,20 +226,7 @@ public static class ProviderLoader
     {
         try
         {
-            if (instance.SupportedFormats.HasFlag(DataFormat.AsyncStream))
-            {
-                // Streaming providers don't eagerly query — register streaming sources and sinks
-                foreach (var coll in schema.Collections)
-                {
-                    var qualifiedName = $"{ns}.{coll.Name}";
-                    registry.RegisterStreamingSource(qualifiedName, new ProviderStreamingSource(instance, coll.Name));
-                }
-                var sinks = instance.GetSinks();
-                if (sinks != null)
-                    foreach (var sink in sinks)
-                        registry.RegisterSink(ns, sink);
-            }
-            else if (instance.SupportedFormats.HasFlag(DataFormat.ObjectCollections))
+            if (instance.SupportedFormats.HasFlag(DataFormat.ObjectCollections))
             {
                 var collections = instance.QueryCollections(query);
                 if (collections != null)
@@ -286,36 +353,14 @@ public static class ProviderLoader
 }
 
 /// <summary>
-/// Generic adapter that wraps a DataProvider's QueryStream as an IStreamingCollectionSource.
-/// Used by the engine to register streaming collections from external AsyncStream providers.
-/// </summary>
-internal class ProviderStreamingSource : IStreamingCollectionSource
-{
-    private readonly DataProvider _provider;
-
-    public ProviderStreamingSource(DataProvider provider, string collectionName)
-    {
-        _provider = provider;
-        CollectionName = collectionName;
-    }
-
-    public string CollectionName { get; }
-
-    public IAsyncEnumerable<object> QueryStream(CancellationToken cancellationToken = default)
-    {
-        return _provider.QueryStream(new ProviderQuery(), cancellationToken);
-    }
-}
-
-/// <summary>
 /// Isolated assembly load context for provider DLLs.
-/// Shares Cop.Core and the shared code model assembly with the default context
+/// Shares the host assembly (cop.exe) with the default context
 /// to avoid type identity splits for DataProvider, SourceFile, etc.
 /// </summary>
 internal class ProviderLoadContext : AssemblyLoadContext
 {
     private readonly AssemblyDependencyResolver _resolver;
-    private static readonly string? SharedCodeAssemblyName = typeof(CodeSchemaProvider).Assembly.GetName().Name;
+    private static readonly string HostAssemblyName = typeof(DataProvider).Assembly.GetName().Name!;
 
     public ProviderLoadContext(string pluginPath) : base(isCollectible: false)
     {
@@ -324,8 +369,9 @@ internal class ProviderLoadContext : AssemblyLoadContext
 
     protected override Assembly? Load(AssemblyName assemblyName)
     {
-        // Share Cop.Core and the code models assembly with the default context
-        if (assemblyName.Name == "Cop.Core" || assemblyName.Name == SharedCodeAssemblyName)
+        // Share the host assembly with the default context so provider types
+        // (DataProvider, SourceFile, etc.) have the same identity in both contexts
+        if (assemblyName.Name == HostAssemblyName)
             return null; // falls back to default context
 
         var assemblyPath = _resolver.ResolveAssemblyToPath(assemblyName);

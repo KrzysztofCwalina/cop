@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\cop\shared\Cop.Core.csproj" /><ProjectReference Include="..\..\cop\runtime\runtime.csproj" />
+    <ProjectReference Include="..\..\cop\cli\cop.csproj" />
     <ProjectReference Include="..\..\providers\typespec-provider\typespec-provider.csproj" />
   </ItemGroup>
 

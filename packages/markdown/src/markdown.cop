@@ -47,8 +47,8 @@ export type MarkdownContent = {
     FenceBlocks : [FenceBlock]
 }
 
-# Built-in value — implementation is provided by the runtime engine
-export let Markdown = runtime::MarkdownContent
+# Provides markdown content via the built-in markdown provider
+export let Markdown : MarkdownContent = data('markdown')
 
 # Violation overloads for markdown types
 export function toError(FenceBlock, message: string) => Violation {

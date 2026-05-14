@@ -71,6 +71,9 @@ public class PackageExtractor
         // Extract checks from let declarations
         ExtractChecks(allLets, entry);
 
+        // Extract collection exports (non-check exported lets that provide data)
+        ExtractCollectionExports(allLets, entry);
+
         // Load samples
         LoadSamples(packageDir, entry);
 
@@ -115,7 +118,14 @@ public class PackageExtractor
     {
         foreach (var fd in sf.Functions.Where(f => f.IsExported))
         {
-            var paramStr = string.Join(", ", fd.Parameters.Select(p => $"{p.Name}: {p.TypeName}"));
+            var parts = new List<string>();
+            // Show InputType only when it's a standalone positional type (e.g., Statement),
+            // not when it duplicates the first named parameter's type (e.g., data(name: string))
+            if (!string.IsNullOrEmpty(fd.InputType)
+                && !(fd.Parameters.Count > 0 && fd.Parameters[0].TypeName == fd.InputType))
+                parts.Add(fd.InputType);
+            parts.AddRange(fd.Parameters.Select(p => $"{p.Name}: {p.TypeName}"));
+            var paramStr = string.Join(", ", parts);
             entry.Functions.Add(new FunctionEntry
             {
                 Name = fd.Name,
@@ -183,7 +193,7 @@ public class PackageExtractor
     private void ExtractChecks(List<(LetDeclaration Let, string FilePath)> allLets, PackageEntry entry)
     {
         var lets = allLets.Select(l => l.Let).ToList();
-        foreach (var (let, filePath) in allLets.Where(l => l.Let.IsExported && !l.Let.IsRuntime))
+        foreach (var (let, filePath) in allLets.Where(l => l.Let.IsExported))
         {
             if (IsViolationCollection(let, lets))
             {
@@ -231,6 +241,61 @@ public class PackageExtractor
                 return true;
         }
         return false;
+    }
+
+    private void ExtractCollectionExports(List<(LetDeclaration Let, string FilePath)> allLets, PackageEntry entry)
+    {
+        var lets = allLets.Select(l => l.Let).ToList();
+        foreach (var (let, filePath) in allLets.Where(l => l.Let.IsExported))
+        {
+            // Skip checks (already extracted)
+            if (IsViolationCollection(let, lets)) continue;
+
+            // Skip collection unions that aggregate checks (e.g., python-checks = a + b + c)
+            if (let.IsCollectionUnion) continue;
+
+            // Collection-forwarding let: export let Types = cb.Types
+            if (!let.IsValueBinding && let.Filters.Count == 0 && let.BaseCollection.Contains('.'))
+            {
+                entry.Exports ??= [];
+                entry.Exports.Add(new CollectionExportEntry
+                {
+                    Name = let.Name,
+                    Type = InferCollectionType(let.Name),
+                    Desc = let.DocComment ?? "",
+                    SourceUrl = MakeSourceUrl(filePath, let.Line)
+                });
+                continue;
+            }
+
+            // Intrinsic call: export let Disk = data('filesystem'), source('http'), sink('http')
+            if (let.IsValueBinding && let.ValueExpression is CallExpr call
+                && call.Name is "data" or "source" or "sink")
+            {
+                var providerArg = call.Args.Count > 0 && call.Args[0] is LiteralExpr s && s.Value is string sv ? sv : "?";
+                entry.Exports ??= [];
+                entry.Exports.Add(new CollectionExportEntry
+                {
+                    Name = let.Name,
+                    Type = $"{call.Name}('{providerArg}')",
+                    Desc = let.DocComment ?? "",
+                    SourceUrl = MakeSourceUrl(filePath, let.Line)
+                });
+                continue;
+            }
+        }
+    }
+
+    private static string InferCollectionType(string name)
+    {
+        // Singularize common collection names: Types→[Type], Statements→[Statement], etc.
+        if (name.EndsWith("ies"))
+            return $"[{name[..^3]}y]";
+        if (name.EndsWith("es") && !name.EndsWith("ses"))
+            return $"[{name[..^2]}]";
+        if (name.EndsWith("s") && !name.EndsWith("ss"))
+            return $"[{name[..^1]}]";
+        return $"[{name}]";
     }
 
     private static void LoadSamples(string packageDir, PackageEntry entry)
@@ -311,6 +376,7 @@ public class PackageExtractor
         if (normalized.Contains("/js/")) return "JavaScript";
 
         var dirName = Path.GetFileName(packageDir);
+        if (dirName == "cop") return "Cop";
         if (dirName.StartsWith("typespec")) return "TypeSpec";
         if (dirName == "http") return "Misc";
 

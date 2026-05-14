@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\cop\shared\Cop.Core.csproj" />
+    <ProjectReference Include="..\..\cop\cli\cop.csproj" />
   </ItemGroup>
 
 </Project>

@@ -11,13 +11,13 @@ public record LetDeclaration(
     List<Expression> Filters,
     int Line,
     bool IsExported = false,
-    bool IsRuntime = false,
     Expression? ValueExpression = null,
     Expression? Exclusions = null,
     Expression? SourceExpression = null,
     string? PathOverride = null,
     string? DocComment = null,
-    string? PackageName = null)
+    string? PackageName = null,
+    string? TypeAnnotation = null)
 {
     public bool IsValueBinding => ValueExpression is not null;
 

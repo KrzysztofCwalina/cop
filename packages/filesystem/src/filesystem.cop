@@ -29,8 +29,8 @@ export type Filesystem = {
     Files : [DiskFile]
 }
 
-# Built-in value — implementation is provided by the runtime engine
-export let Disk = runtime::Filesystem
+# Provides filesystem data via the built-in filesystem provider
+export let Disk : Filesystem = data('filesystem')
 
 # Convenience predicates
 export predicate recentlyModified(Folder) => Folder.MinutesSinceModified < 10

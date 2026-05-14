@@ -105,7 +105,6 @@ public class CopSourceParser : ISourceParser
         {
             var keywords = new List<string> { "let" };
             if (let.IsExported) keywords.Add("export");
-            if (let.IsRuntime) keywords.Add("runtime");
             statements.Add(new StatementInfo("declaration", keywords,
                 null, let.Name, [], let.Line, false));
         }

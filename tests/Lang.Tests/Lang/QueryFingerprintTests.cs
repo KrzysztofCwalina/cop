@@ -105,10 +105,10 @@ public class QueryFingerprintTests
         var filters = new List<Expression>
         {
             new IdentifierExpr("Public"),
-            new CallExpr(null, "Text", [new LiteralExpr("template")])
+            new CallExpr(null, "text", [new LiteralExpr("template")])
         };
         var result = QueryFingerprint.Compute("Types", filters, null);
-        Assert.That(result, Is.EqualTo("Types:Public.Text('template')"));
+        Assert.That(result, Is.EqualTo("Types:Public.text('template')"));
     }
 
     [Test]

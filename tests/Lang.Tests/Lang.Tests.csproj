@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\cop\runtime\runtime.csproj" />
+    <ProjectReference Include="..\..\cop\cli\cop.csproj" />
     <ProjectReference Include="..\..\providers\csharp-provider\csharp-provider.csproj" />
     <ProjectReference Include="..\..\providers\python-provider\python-provider.csproj" />
     <ProjectReference Include="..\..\providers\javascript-provider\javascript-provider.csproj" />
@@ -24,6 +24,7 @@
     <Content Include="Samples\**\*" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="ReferenceTests\Programs\**\*.cop" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\packages\code\src\code.cop" Link="Samples\code.cop" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\packages\core\src\core.cop" Link="Samples\core.cop" CopyToOutputDirectory="PreserveNewest" />
     <Compile Remove="Samples\**\*.cs" />
   </ItemGroup>
 

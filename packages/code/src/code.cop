@@ -230,8 +230,3 @@ export type Codebase = {
     Regions : [Region],
     Projects : [Project]
 }
-
-# Aggregates code data from all imported providers (e.g. csharp, python).
-# Access collections like Code.Types, Code.Statements, Code.Calls.
-# Use Code([providers], path?) to scope to specific providers or a subdirectory.
-export let Code = runtime::Codebase

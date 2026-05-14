@@ -13,7 +13,7 @@ public static class QueryFingerprint
 {
     private static readonly HashSet<string> BarrierFunctions = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Select", "Text"
+        "Select", "text"
     };
 
     /// <summary>

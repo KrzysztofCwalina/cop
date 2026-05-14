@@ -11,6 +11,32 @@ public class TextAndListTests
     private static TypeDeclaration MakeType(string name = "Foo") =>
         new(name, TypeKind.Class, Modifier.Public, [], [], [], [], [], [], 1);
 
+    private static readonly Lazy<ScriptFile> _coreCop = new(() =>
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "packages", "core", "src", "core.cop");
+        if (!File.Exists(path))
+            path = Path.Combine(AppContext.BaseDirectory, "Samples", "core.cop");
+        return ScriptParser.Parse(File.ReadAllText(path), "core.cop");
+    });
+
+    private static (TypeRegistry Registry, Dictionary<string, List<FunctionDefinition>> Functions) CreateTestRegistryWithFunctions()
+    {
+        var registry = new TypeRegistry();
+        ProviderLoader.RegisterSchema(new CodeSchemaProvider(), registry);
+        var coreFile = _coreCop.Value;
+        var functions = new Dictionary<string, List<FunctionDefinition>>();
+        foreach (var func in coreFile.Functions)
+        {
+            if (!functions.TryGetValue(func.Name, out var list))
+            {
+                list = [];
+                functions[func.Name] = list;
+            }
+            list.Add(func);
+        }
+        return (registry, functions);
+    }
+
     private static TypeRegistry CreateTestRegistry()
     {
         var registry = new TypeRegistry();
@@ -21,13 +47,14 @@ public class TextAndListTests
     [Test]
     public void Text_String_ReturnsIdentity()
     {
-        var source = """predicate test(Type) => Text(Type.Name) == 'Foo' """;
+        var source = """predicate test(Type) => text(Type.Name) == 'Foo' """;
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
             ["test"] = [file.Predicates[0]]
         };
-        var evaluator = new PredicateEvaluator(predicates, "test.cs", CreateTestRegistry());
+        var (registry, functions) = CreateTestRegistryWithFunctions();
+        var evaluator = new PredicateEvaluator(predicates, "test.cs", registry, functions: functions);
         var (result, _) = evaluator.EvaluateAsBool(file.Predicates[0].Body, MakeType(), "Type");
         Assert.That(result, Is.True);
     }
@@ -35,13 +62,14 @@ public class TextAndListTests
     [Test]
     public void Text_Int_ReturnsStringRepresentation()
     {
-        var source = """predicate test(Type) => Text(Type.Line) == '1' """;
+        var source = """predicate test(Type) => text(Type.Line) == '1' """;
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
             ["test"] = [file.Predicates[0]]
         };
-        var evaluator = new PredicateEvaluator(predicates, "test.cs", CreateTestRegistry());
+        var (registry, functions) = CreateTestRegistryWithFunctions();
+        var evaluator = new PredicateEvaluator(predicates, "test.cs", registry, functions: functions);
         var (result, _) = evaluator.EvaluateAsBool(file.Predicates[0].Body, MakeType(), "Type");
         Assert.That(result, Is.True);
     }
@@ -49,13 +77,14 @@ public class TextAndListTests
     [Test]
     public void Text_Bool_ReturnsLowercaseString()
     {
-        var source = """predicate test(Type) => Text(Type.Documented) == 'true' """;
+        var source = """predicate test(Type) => text(Type.Documented) == 'true' """;
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
             ["test"] = [file.Predicates[0]]
         };
-        var evaluator = new PredicateEvaluator(predicates, "test.cs", CreateTestRegistry());
+        var (registry, functions) = CreateTestRegistryWithFunctions();
+        var evaluator = new PredicateEvaluator(predicates, "test.cs", registry, functions: functions);
         var type = new TypeDeclaration("Foo", TypeKind.Class, Modifier.Public, [], [], [], [], [], [], 1) { HasDocComment = true };
         var (result, _) = evaluator.EvaluateAsBool(file.Predicates[0].Body, type, "Type");
         Assert.That(result, Is.True);

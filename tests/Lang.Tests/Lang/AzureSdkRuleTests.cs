@@ -36,9 +36,10 @@ public class AzureSdkRuleTests
         }
 
         // Collect exported let collections from this package's own files only
+        // Only include lets with filters (action-lets that produce Violations), not raw collection proxies
         var ownExportedLets = packageFiles
             .SelectMany(sf => sf.LetDeclarations)
-            .Where(l => l.IsExported && !l.IsValueBinding && !l.IsRuntime)
+            .Where(l => l.IsExported && !l.IsValueBinding && l.Filters.Count > 0)
             .Select(l => l.Name)
             .ToList();
 
@@ -52,7 +53,11 @@ public class AzureSdkRuleTests
                 if (!resolved.Add(imp)) continue;
                 var errors = new List<string>();
                 var pkg = importResolver.Resolve(imp, errors);
-                if (pkg != null) imported.Add(pkg);
+                if (pkg != null)
+                {
+                    StampPackageName(pkg, imp);
+                    imported.Add(pkg);
+                }
             }
 
         // Order: code package first (base types + isX predicates), then imports, then package files
@@ -68,9 +73,20 @@ public class AzureSdkRuleTests
             scriptFiles.Add(ScriptParser.Parse(wrapperSource, "test-runner.cop"));
         }
 
-        var interpreter = TestInterpreter.Create();
+        var interpreter = TestInterpreter.Create(out var registry);
         var documents = TestInterpreter.ParseSourceFiles(sourceFiles);
+        TestInterpreter.RegisterDocumentsAsNamespaced(registry, documents);
         return interpreter.Run(scriptFiles, documents).Outputs;
+    }
+
+    private static void StampPackageName(ScriptFile packageFile, string packageName)
+    {
+        for (int i = 0; i < packageFile.Predicates.Count; i++)
+            packageFile.Predicates[i] = packageFile.Predicates[i] with { PackageName = packageName };
+        for (int i = 0; i < packageFile.Functions.Count; i++)
+            packageFile.Functions[i] = packageFile.Functions[i] with { PackageName = packageName };
+        for (int i = 0; i < packageFile.LetDeclarations.Count; i++)
+            packageFile.LetDeclarations[i] = packageFile.LetDeclarations[i] with { PackageName = packageName };
     }
 
     // ── Azure checks: Good client should produce no diagnostics for service types ──
@@ -612,7 +628,7 @@ public class AzureSdkRuleTests
         // Collect exported let names for RUN CHECK(name) wrapper
         var inlineScript = ScriptParser.Parse(inlineCop, "temp.cop");
         var exportedLets = inlineScript.LetDeclarations
-            .Where(l => l.IsExported && !l.IsValueBinding && !l.IsRuntime)
+            .Where(l => l.IsExported && !l.IsValueBinding)
             .Select(l => l.Name)
             .ToList();
 

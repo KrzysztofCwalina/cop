@@ -18,12 +18,35 @@ internal static class TestInterpreter
         return ScriptParser.Parse(File.ReadAllText(path), "code.cop");
     });
 
+    private static readonly Lazy<ScriptFile> _coreCop = new(() =>
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Samples", "core.cop");
+        return ScriptParser.Parse(File.ReadAllText(path), "core.cop");
+    });
+
     /// <summary>The parsed code.cop package (flags definitions + isX predicates).</summary>
     public static ScriptFile CodePackage => _codeCop.Value;
 
-    public static ScriptInterpreter Create()
+    /// <summary>The parsed core.cop package (intrinsic function declarations).</summary>
+    public static ScriptFile CorePackage => _coreCop.Value;
+
+    public static ScriptInterpreter Create() => Create(out _);
+
+    /// <summary>
+    /// Creates a configured interpreter with documents pre-registered as namespaced collections.
+    /// This makes data('csharp').Types etc. resolvable in tests.
+    /// </summary>
+    public static (ScriptInterpreter Interpreter, List<Document> Documents) CreateWithDocuments(params string[] filePaths)
     {
-        var registry = new TypeRegistry();
+        var interp = Create(out var registry);
+        var docs = ParseSourceFiles(filePaths);
+        RegisterDocumentsAsNamespaced(registry, docs);
+        return (interp, docs);
+    }
+
+    public static ScriptInterpreter Create(out TypeRegistry registry)
+    {
+        registry = new TypeRegistry();
         ProviderLoader.RegisterSchema(new CodeSchemaProvider(), registry);
         ProviderLoader.RegisterSchema(new MarkdownProvider(), registry);
         var codeFile = CodePackage;
@@ -31,6 +54,35 @@ internal static class TestInterpreter
             registry.LoadFlagsDefinitions(codeFile.FlagsDefinitions);
         registry.RegisterProgramType();
         return new ScriptInterpreter(registry);
+    }
+
+    /// <summary>
+    /// Registers document collection data into namespaced collections in the TypeRegistry.
+    /// Mimics what ProviderLoader.QueryAndRegister does in production — makes
+    /// data('python').Types etc. resolvable in tests.
+    /// </summary>
+    public static void RegisterDocumentsAsNamespaced(TypeRegistry registry, List<Document> documents)
+    {
+        foreach (var collName in registry.GetDocumentCollectionNames())
+        {
+            // Group items by document language
+            var byLanguage = new Dictionary<string, List<object>>();
+            foreach (var doc in documents)
+            {
+                var items = registry.GetCollectionItems(collName, doc);
+                if (items is null || items.Count == 0) continue;
+                if (!byLanguage.TryGetValue(doc.Language, out var langItems))
+                {
+                    langItems = new List<object>();
+                    byLanguage[doc.Language] = langItems;
+                }
+                langItems.AddRange(items);
+            }
+            foreach (var (lang, items) in byLanguage)
+            {
+                registry.AppendNamespacedCollection(lang, collName, items);
+            }
+        }
     }
 
     public static List<Document> ParseSourceFiles(params string[] filePaths)

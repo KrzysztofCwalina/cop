@@ -513,6 +513,56 @@ import csharp-checks
 
 The runtime's only "magic" is currying the default arg at `import` time. Everything after that is regular function application, field lowering, and record construction.
 
+### Provider Accessor Functions
+
+Provider packages expose their collections through the `data()` intrinsic function. It returns a **dynamic accessor object** — property access on the returned object becomes a query to the provider:
+
+```cop
+import code
+import core
+
+# data() — works for any provider (code or non-code)
+let db = data('sample')
+export let Widgets = db.Widgets     # queries 'sample' for its 'Widgets' collection
+
+# Use a type annotation to enforce schema on code providers
+let cb : Codebase = data('csharp')
+export let Types = cb.Types         # queries 'csharp' for its 'Types' collection
+```
+
+**Dynamic vs. Typed binding:** By default, the accessor is dynamic — any property name is forwarded to the provider. Adding a type annotation turns it into a schema-enforced accessor:
+
+```cop
+type SampleData = { Widgets : [Widget], Orders : [Order] }
+
+let db : SampleData = data('sample')   # only Widgets and Orders are accessible
+db.Widgets     # ✓ valid
+db.Unknown     # ✗ error: 'Unknown' is not defined on type 'SampleData'
+```
+
+This pattern eliminates all "magic" collection names — every symbol is explicitly declared in `.cop` source and visible in documentation.
+
+### Streaming Provider Functions
+
+For **async streaming providers** (infinite or long-lived data sources), the `source()` and `sink()` intrinsics provide handles:
+
+```cop
+import core
+
+# source() — returns a Source handle (async stream of items)
+# Type annotation declares the item type produced by the stream
+export let Ticks : [Tick] = source('ticker')
+
+# sink() — returns a Sink handle (output target accepting items)
+# Type annotation declares the item type the sink accepts
+export let Acks : [Ack] = sink('ticker')
+
+# Used in async foreach pipelines:
+async foreach Ticks => transform => Acks
+```
+
+`Source` and `Sink` are the cop-level representations of `SourceProvider` and `SinkProvider` — provider-agnostic abstractions that any async provider can implement. The type annotation (`: [Request]` or `: [Response]`) provides documentation and schema information about what flows through the pipeline.
+
 
 
 ---
@@ -568,6 +618,31 @@ let pyTypes = python.Type   # similarly for python
 ```cop
 # Defined in the built-in 'core' package (implicit import):
 namespace core
+
+# --- Provider Accessors ---
+
+# Data is a dynamic type — like C# 'dynamic'.
+# Any property access generates a query to the provider.
+# With no type annotation, all property access is allowed (runtime failure on missing).
+# With a type annotation, only declared properties are accessible (static enforcement).
+type Data = {}
+
+# Returns a dynamic accessor for a named data provider.
+function data(name : string) : Data = intrinsic
+
+# Source represents an async streaming collection source.
+# Type annotation declares item type: let Requests : [Request] = source('http')
+type Source = {}
+
+# Sink represents an async data sink (output target in streaming pipelines).
+# Type annotation declares accepted item type: let RESPONSES : [Response] = sink('http')
+type Sink = {}
+
+# Returns a Source handle for the named streaming provider.
+function source(name : string) : Source = intrinsic
+
+# Returns a Sink handle for the named streaming provider.
+function sink(name : string) : Sink = intrinsic
 
 # --- Scalars ---
 
@@ -635,6 +710,26 @@ type Predicate<T> = {
 ```
 
 The `core` package is implicitly imported — its types are always available without qualification. This is the ONLY implicit import. The invariant: **if you can call it, its type is defined in metadata.**
+
+The `code` package extends this with the `Codebase` schema type:
+
+```cop
+# Defined in the 'code' package:
+namespace code
+
+type Codebase = {
+    Types : [Type]
+    Members : [Member]
+    Statements : [Statement]
+    Lines : [Line]
+    Calls : [Call]
+    Files : [File]
+    Regions : [Region]
+    Projects : [Project]
+}
+```
+
+Because `Codebase` declares its properties, any typed binding like `let cb : Codebase = data('csharp')` gets full schema enforcement — accessing `cb.Types` works, but `cb.Unknown` is a compile-time error. The untyped `let cb = data('csharp')` is also valid and allows dynamic access.
 
 ---
 

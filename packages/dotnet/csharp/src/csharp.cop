@@ -1,1 +1,12 @@
 # C# source language provider
+import code
+
+let cb : Codebase = data('csharp')
+
+export let Types = cb.Types
+export let Statements = cb.Statements
+export let Lines = cb.Lines
+export let Calls = cb.Calls
+export let Files = cb.Files
+export let Regions = cb.Regions
+export let Projects = cb.Projects

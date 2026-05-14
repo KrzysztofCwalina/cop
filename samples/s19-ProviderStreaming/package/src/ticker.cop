@@ -1,0 +1,24 @@
+# Ticker Package — Streaming provider sample
+# Demonstrates the source() and sink() intrinsic pattern with typed bindings.
+# Import with: import ticker
+
+import core
+
+## A timer event emitted by the ticker streaming source.
+export type Tick = {
+    Sequence : int,
+    Timestamp : string,
+    Message : string
+}
+
+## An acknowledgment sent to the ticker sink after processing.
+export type Ack = {
+    Sequence : int,
+    Status : string
+}
+
+## The async stream of Tick events produced by the ticker provider.
+export let Ticks : [Tick] = source('ticker')
+
+## The sink that accepts Ack items after pipeline processing.
+export let Acks : [Ack] = sink('ticker')

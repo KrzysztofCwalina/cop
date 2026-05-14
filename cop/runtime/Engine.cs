@@ -28,7 +28,7 @@ public static class Engine
         var collNames = new HashSet<string>(schema.Collections.Select(c => c.Name), StringComparer.Ordinal);
         var name = provider switch
         {
-            FilesystemProvider => "files",
+            FilesystemProvider => "filesystem",
             CodeSchemaProvider => "code",
             Markdown.MarkdownProvider => "markdown",
             _ => provider.ToString() ?? provider.GetType().Name
@@ -348,7 +348,7 @@ public static class Engine
         if (fatalErrors.Count > 0)
             throw new InvalidOperationException($"Fatal errors: {string.Join("; ", fatalErrors)}");
 
-        // Load external providers (registers streaming sources and sinks for AsyncStream providers)
+        // Load external providers (registers DataProvider collections, SourceProvider streams, and SinkProvider sinks)
         LoadExternalProviders(typeRegistry, providerPackages, scriptsDir, parseErrors, fatalErrors, ExcludedDirectoryNames, diagLog: diagLog);
         diagLog?.Invoke($"[diag] Streaming: {providerPackages.Count} provider packages, {fatalErrors.Count} fatal errors, streaming sources: {string.Join(", ", typeRegistry.GetStreamingSourceNames())}");
         if (fatalErrors.Count > 0)
@@ -576,7 +576,7 @@ public static class Engine
             .Where(c => c.IsCommand && c.CommandRef == null)
             .Select(c => c.Name).ToHashSet(StringComparer.Ordinal);
         var allLets = scriptFiles.SelectMany(sf => sf.LetDeclarations)
-            .Where(l => (!l.IsValueBinding || l.IsCollectionUnion) && !l.IsRuntime)
+            .Where(l => !l.IsValueBinding || l.IsCollectionUnion)
             .Select(l => l.Name).ToHashSet(StringComparer.Ordinal);
         bool hasCheckCommand = allCommands.Contains("CHECK");
 
@@ -632,7 +632,7 @@ public static class Engine
             var explicitFiles = scriptFiles.Take(explicitScriptFileCount);
             var allLetDecls = explicitFiles.SelectMany(sf => sf.LetDeclarations).ToList();
             var letNames = allLetDecls
-                .Where(l => l.IsExported && !l.IsRuntime && IsViolationCollection(l, allLetDecls))
+                .Where(l => l.IsExported && IsViolationCollection(l, allLetDecls))
                 .Select(l => l.Name).ToList();
 
             // Exclude union collections whose constituents are all already in the set.
@@ -832,15 +832,6 @@ public static class Engine
         // Register built-in sinks
         typeRegistry.RegisterSink("console", ConsoleWriteLineSink.Instance);
         typeRegistry.RegisterSink("file", new FileWriteSink());
-
-        // Register provider-supplied sinks
-        foreach (var bp in _builtinProviders)
-        {
-            var sinks = bp.Instance.GetSinks();
-            if (sinks != null)
-                foreach (var sink in sinks)
-                    typeRegistry.RegisterSink(bp.Name, sink);
-        }
 
         return typeRegistry;
     }
@@ -1042,9 +1033,9 @@ public static class Engine
             var itemTypeDesc = typeRegistry.GetType(itemTypeName);
             var (hints, _) = FilterHintExtractor.Extract(allCmdFilters, itemTypeDesc, predicateNames, predicateDefs, allowPartial: true);
 
-            // Merge: if same collection from multiple command blocks, AND the filters
+            // Merge: if same collection from multiple sources, OR the filters (any item needed by ANY query)
             if (collectionFilters.TryGetValue(bareCollection, out var existing) && existing is not null && hints is not null)
-                collectionFilters[bareCollection] = FilterExpression.And(existing, hints);
+                collectionFilters[bareCollection] = FilterExpression.Or(existing, hints);
             else
                 collectionFilters[bareCollection] = hints ?? existing;
         }
@@ -1069,7 +1060,7 @@ public static class Engine
             var (hints, _) = FilterHintExtractor.Extract(filters, itemTypeDesc, predicateNames, predicateDefs, allowPartial: true);
 
             if (collectionFilters.TryGetValue(bareCollection, out var existing) && existing is not null && hints is not null)
-                collectionFilters[bareCollection] = FilterExpression.And(existing, hints);
+                collectionFilters[bareCollection] = FilterExpression.Or(existing, hints);
             else
                 collectionFilters[bareCollection] = hints ?? existing;
         }
@@ -1110,7 +1101,19 @@ public static class Engine
     {
         foreach (var (dir, meta) in providerPackages)
         {
-            var loaded = ProviderLoader.Load(dir, meta, fatalErrors);
+            var loaded = ProviderLoader.Load(dir, meta, fatalErrors, out var sourceProviders, out var sinkProviders);
+
+            // Register source providers
+            foreach (var sp in sourceProviders)
+            {
+                var spSchema = ProviderLoader.RegisterSchema(sp.Instance, typeRegistry);
+                ProviderLoader.RegisterSourceProvider(sp.Instance, spSchema, sp.PackageName, typeRegistry);
+            }
+
+            // Register sink providers
+            foreach (var sk in sinkProviders)
+                ProviderLoader.RegisterSinkProvider(sk.Instance, sk.PackageName, typeRegistry);
+
             if (loaded is null) continue;
 
             // Register schema, types, accessors, and bindings
@@ -1138,7 +1141,19 @@ public static class Engine
         var result = new List<(ProviderLoader.LoadedProvider, ProviderSchema)>();
         foreach (var (dir, meta) in providerPackages)
         {
-            var loaded = ProviderLoader.Load(dir, meta, fatalErrors);
+            var loaded = ProviderLoader.Load(dir, meta, fatalErrors, out var sourceProviders, out var sinkProviders);
+
+            // Register source providers
+            foreach (var sp in sourceProviders)
+            {
+                var spSchema = ProviderLoader.RegisterSchema(sp.Instance, typeRegistry);
+                ProviderLoader.RegisterSourceProvider(sp.Instance, spSchema, sp.PackageName, typeRegistry);
+            }
+
+            // Register sink providers
+            foreach (var sk in sinkProviders)
+                ProviderLoader.RegisterSinkProvider(sk.Instance, sk.PackageName, typeRegistry);
+
             if (loaded is null) continue;
 
             // Register schema, types, accessors, and bindings (no data query)

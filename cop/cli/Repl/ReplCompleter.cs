@@ -23,7 +23,7 @@ public class ReplCompleter
     private static readonly string[] BuiltinTransforms =
     [
         "Trim", "Replace", "Where", "First", "Last",
-        "Single", "ElementAt", "Select", "Text", "Count",
+        "Single", "ElementAt", "Select", "text", "Count",
         "OrderBy", "OrderByDescending", "Distinct", "GroupBy",
         "Sum", "Min", "Max", "Average", "Reduce",
         "Get", "File", "Path", "Matches", "error"

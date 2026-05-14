@@ -12,6 +12,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Lang.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="System.CommandLine" Version="2.0.0" />
     <PackageReference Include="YamlDotNet" Version="16.*" />
   </ItemGroup>
@@ -20,8 +24,13 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
+  <!-- Include source files from merged projects (Cop.Core, Runtime, Code Model, Built-in Providers) -->
   <ItemGroup>
-    <ProjectReference Include="..\shared\Cop.Core.csproj" /><ProjectReference Include="..\runtime\runtime.csproj" />
+    <Compile Include="..\shared\**\*.cs" Exclude="..\shared\bin\**;..\shared\obj\**" LinkBase="Core" />
+    <Compile Include="..\runtime\*.cs" LinkBase="Runtime" />
+    <Compile Include="..\..\providers\code\src\**\*.cs" LinkBase="CodeModel" />
+    <Compile Include="..\..\providers\filesystem-provider\src\**\*.cs" LinkBase="BuiltinProviders" />
+    <Compile Include="..\..\providers\markdown-provider\src\**\*.cs" LinkBase="BuiltinProviders" />
   </ItemGroup>
 
 </Project>

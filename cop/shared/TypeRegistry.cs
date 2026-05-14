@@ -33,8 +33,8 @@ public class TypeRegistry
     private readonly Dictionary<string, Dictionary<string, List<object>>> _nsCollections = new(StringComparer.Ordinal);
     private readonly Dictionary<(string, string), List<object>> _extractorCache = new();
     private readonly Dictionary<string, Func<string, string, List<object>>> _fileParsers = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, Dictionary<string, DataSink>> _nsSinks = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, IStreamingCollectionSource> _streamingSources = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Dictionary<string, SinkProvider>> _nsSinks = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, SourceProvider> _streamingSources = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Dictionary<string, Func<List<object?>, Task<object?>>>> _nsProviderFunctions = new(StringComparer.Ordinal);
     private Func<string, List<Document>>? _documentLoader;
 
@@ -484,7 +484,7 @@ public class TypeRegistry
     /// <summary>
     /// Registers a sink under a namespace (e.g., "http", "Send").
     /// </summary>
-    public void RegisterSink(string ns, DataSink sink)
+    public void RegisterSink(string ns, SinkProvider sink)
     {
         if (!_nsSinks.TryGetValue(ns, out var nsDict))
         {
@@ -499,7 +499,7 @@ public class TypeRegistry
     /// Qualified: "http.Send" → namespace "http", name "Send".
     /// Bare: "WriteLine" → searches all namespaces, returns null if ambiguous.
     /// </summary>
-    public DataSink? ResolveSink(string name)
+    public SinkProvider? ResolveSink(string name)
     {
         var dotIndex = name.IndexOf('.');
         if (dotIndex > 0)
@@ -512,7 +512,7 @@ public class TypeRegistry
         }
 
         // Bare name: search all namespaces
-        DataSink? found = null;
+        SinkProvider? found = null;
         foreach (var nsDict in _nsSinks.Values)
         {
             if (nsDict.TryGetValue(name, out var sink))
@@ -525,18 +525,26 @@ public class TypeRegistry
     }
 
     /// <summary>
-    /// Registers a streaming collection source under a qualified name (e.g., "http.Receive").
+    /// Returns all sinks registered under a namespace, or null if none found.
     /// </summary>
-    public void RegisterStreamingSource(string qualifiedName, IStreamingCollectionSource source)
+    public Dictionary<string, SinkProvider>? GetNamespaceSinks(string ns)
+    {
+        return _nsSinks.TryGetValue(ns, out var nsDict) ? nsDict : null;
+    }
+
+    /// <summary>
+    /// Registers a streaming source provider under a qualified name (e.g., "http.Requests").
+    /// </summary>
+    public void RegisterStreamingSource(string qualifiedName, SourceProvider source)
     {
         _streamingSources[qualifiedName] = source;
     }
 
     /// <summary>
-    /// Resolves a streaming collection source by qualified or bare name.
-    /// Returns null if not found or not a streaming source.
+    /// Resolves a streaming source provider by qualified or bare name.
+    /// Returns null if not found.
     /// </summary>
-    public IStreamingCollectionSource? ResolveStreamingSource(string name)
+    public SourceProvider? ResolveStreamingSource(string name)
     {
         if (_streamingSources.TryGetValue(name, out var source))
             return source;

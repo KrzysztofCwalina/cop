@@ -78,15 +78,25 @@ public class ColonPipeTests
     {
         var registry = new TypeRegistry();
         var predicates = new Dictionary<string, List<PredicateDefinition>>();
-        var evaluator = new PredicateEvaluator(predicates, "test.cop", registry);
+        var textInt = new FunctionDefinition(
+            "text", "int", "string", [], [], 1, false, IsIntrinsic: true);
+        var textBytes = new FunctionDefinition(
+            "text", "bytes", "string", [], [], 2, false, IsIntrinsic: true);
+        var textString = new FunctionDefinition(
+            "text", "string", "string", [], [], 3, false, BodyExpression: new IdentifierExpr("string"));
+        var functions = new Dictionary<string, List<FunctionDefinition>>
+        {
+            ["text"] = [textInt, textBytes, textString]
+        };
+        var evaluator = new PredicateEvaluator(predicates, "test.cop", registry, functions: functions);
 
         // Create a DataObject with a Body field containing bytes
         var response = new DataObject("Response");
         response.Set("Body", System.Text.Encoding.UTF8.GetBytes("Hello, World!"));
 
-        // response.Body:Text → should convert bytes to UTF-8 string
+        // response.Body:text → should convert bytes to UTF-8 string
         var bodyAccess = new MemberAccessExpr(new IdentifierExpr("item"), "Body");
-        var textPipe = new CallExpr(bodyAccess, "Text", []);
+        var textPipe = new CallExpr(bodyAccess, "text", []);
 
         var result = evaluator.EvaluateField(textPipe, response, "Response");
         Assert.That(result, Is.EqualTo("Hello, World!"));
@@ -97,12 +107,18 @@ public class ColonPipeTests
     {
         var registry = new TypeRegistry();
         var predicates = new Dictionary<string, List<PredicateDefinition>>();
-        var evaluator = new PredicateEvaluator(predicates, "test.cop", registry);
+        var textString = new FunctionDefinition(
+            "text", "string", "string", [], [], 1, false, BodyExpression: new IdentifierExpr("string"));
+        var functions = new Dictionary<string, List<FunctionDefinition>>
+        {
+            ["text"] = [textString]
+        };
+        var evaluator = new PredicateEvaluator(predicates, "test.cop", registry, functions: functions);
 
-        // "hello":Text → should return "hello" unchanged
+        // "hello":text → should return "hello" unchanged
         var expr = new CallExpr(
             new LiteralExpr("hello"),
-            "Text",
+            "text",
             []);
 
         var result = evaluator.EvaluateField(expr, "dummy", "string");
@@ -170,12 +186,18 @@ public class ColonPipeTests
     {
         var registry = new TypeRegistry();
         var predicates = new Dictionary<string, List<PredicateDefinition>>();
-        var evaluator = new PredicateEvaluator(predicates, "test.cop", registry);
+        var textString = new FunctionDefinition(
+            "text", "string", "string", [], [], 1, false, BodyExpression: new IdentifierExpr("string"));
+        var functions = new Dictionary<string, List<FunctionDefinition>>
+        {
+            ["text"] = [textString]
+        };
+        var evaluator = new PredicateEvaluator(predicates, "test.cop", registry, functions: functions);
 
-        // null:Text → should return null
+        // null:text → should return null (target is null, function not called)
         var expr = new CallExpr(
             new IdentifierExpr("null"),
-            "Text",
+            "text",
             []);
 
         var result = evaluator.EvaluateField(expr, "dummy", "string");

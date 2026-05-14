@@ -145,15 +145,46 @@ public class PredicateEvaluator
             throw new FailException(message ?? "FAIL", _filePath, 0);
         }
 
-        // Built-in Code() aggregator function
-        if (fc.Name == "Code")
-            return EvalCodeFunction(fc.Args, item, paramType, ctx);
+        // Built-in data(providerName) — returns a dynamic DataObject for any provider
+        if (fc.Name == "data")
+            return EvalDataFunction(fc.Args, item, paramType, ctx);
+
+        // Built-in source(providerName) — returns a streaming source handle
+        if (fc.Name == "source")
+            return EvalSourceFunction(fc.Args, item, paramType, ctx);
+
+        // Built-in sink(providerName) — returns a sink handle
+        if (fc.Name == "sink")
+            return EvalSinkFunction(fc.Args, item, paramType, ctx);
 
         // Check user-defined functions first
         if (_functions.TryGetValue(fc.Name, out var funcGroup))
         {
-            var func = ResolveFunction(funcGroup, paramType, item, ctx, callArgCount: fc.Args.Count);
-            return ApplyFunction(func, item, fc.Args, item, paramType, ctx);
+            // For direct calls with arguments where the function has no named parameters,
+            // the first arg IS the input item (e.g., text(myBool) → selects text(bool) overload).
+            // For functions WITH named parameters, all args bind to params (currying semantics).
+            if (fc.Args.Count > 0)
+            {
+                // Peek: does any overload in this group have 0 named params?
+                // If so, the first arg is the input item for type-based dispatch.
+                bool hasZeroParamOverload = funcGroup.Any(f => f.Parameters.Count == 0);
+                if (hasZeroParamOverload)
+                {
+                    var firstArg = Eval(fc.Args[0], item, paramType, ctx);
+                    var argType = InferValueType(firstArg) ?? paramType;
+                    var func = ResolveFunction(funcGroup, argType, firstArg, ctx, callArgCount: fc.Args.Count - 1);
+                    if (func.Parameters.Count == 0)
+                    {
+                        // The resolved overload takes no named params — first arg is the input
+                        var remainingArgs = fc.Args.Count > 1 ? fc.Args.GetRange(1, fc.Args.Count - 1) : new List<Expression>();
+                        return ApplyFunction(func, firstArg, remainingArgs, item, paramType, ctx);
+                    }
+                    // Resolved to an overload with named params — fall through to normal dispatch
+                }
+            }
+            // Default: resolve by pipeline type, all args are named params (supports currying)
+            var funcDefault = ResolveFunction(funcGroup, paramType, item, ctx, callArgCount: fc.Args.Count);
+            return ApplyFunction(funcDefault, item, fc.Args, item, paramType, ctx);
         }
 
         // Check if the name resolves to a CopClosure (curried function)
@@ -182,44 +213,6 @@ public class PredicateEvaluator
     /// Evaluates the built-in Code([providers], path?) function.
     /// Returns a DataObject with a lazy field resolver that queries providers on demand.
     /// </summary>
-    private object EvalCodeFunction(List<Expression> args, object item, string paramType, EvaluationContext ctx)
-    {
-        if (args.Count == 0 || args.Count > 2)
-            throw new InvalidOperationException("Code() requires 1-2 arguments: Code([providers], path?)");
-
-        // First arg must be a list of provider identifiers
-        var listArg = args[0] is ListLiteralExpr list
-            ? list
-            : throw new InvalidOperationException("Code() first argument must be a list of providers: Code([csharp, python])");
-
-        var providers = new string[list.Elements.Count];
-        var knownNamespaces = _registry.GetProviderNamespaces();
-
-        for (int i = 0; i < list.Elements.Count; i++)
-        {
-            var elem = list.Elements[i];
-            var name = elem is IdentifierExpr id
-                ? id.Name
-                : throw new InvalidOperationException($"Code() provider list must contain identifiers, got {elem.GetType().Name}");
-
-            if (!knownNamespaces.Contains(name, StringComparer.Ordinal))
-                throw new InvalidOperationException($"Provider '{name}' is not imported. Add 'import {name}' to your .cop file.");
-
-            providers[i] = name;
-        }
-
-        // Optional second arg: path string
-        string? path = null;
-        if (args.Count == 2)
-        {
-            var pathVal = Eval(args[1], item, paramType, ctx);
-            path = pathVal?.ToString()
-                ?? throw new InvalidOperationException("Code() path argument must be a string");
-        }
-
-        return CreateCodeObject(providers, path);
-    }
-
     private object? EvalTargetedCall(CallExpr mc, object item, string paramType, EvaluationContext ctx)
     {
         // Provider namespace function call (e.g., http.Post(...)) — check before user functions
@@ -295,17 +288,6 @@ public class PredicateEvaluator
             return ApplyClosure(closure, item, mc.Args, paramType, ctx);
         }
 
-        // Provider-scoped Code: namespace.Code('path') → DataObject with lazy resolver
-        if (mc.Name == "Code" && mc.Target is IdentifierExpr nsId)
-        {
-            var knownNamespaces = _registry.GetProviderNamespaces();
-            if (knownNamespaces.Contains(nsId.Name, StringComparer.Ordinal))
-            {
-                string? path = mc.Args.Count == 1 ? Eval(mc.Args[0], item, paramType, ctx)?.ToString() : null;
-                return CreateCodeObject([nsId.Name], path);
-            }
-        }
-
         // Path-scoped collection: namespace.Collection('path') → query provider
         if (_providerQueryService is not null
             && mc.Target is IdentifierExpr provId
@@ -316,19 +298,14 @@ public class PredicateEvaluator
             return _providerQueryService.Query(provId.Name, mc.Name, pathValue);
         }
 
-        // Built-in functions accessible via colon piping: x:Text => Text(x), x:File => File(x)
-        if (mc.Name is "Text" or "File" && mc.Args.Count == 0)
+        // Built-in functions accessible via colon piping: x:read => read(x)
+        if (mc.Name is "read" && mc.Args.Count == 0)
         {
             if (mc.Negated)
                 throw new InvalidOperationException($"Cannot negate function call '{mc.Name}' — functions produce values, not booleans");
             var target = Eval(mc.Target!, item, paramType, ctx);
             if (target is null) return null;
-            return mc.Name switch
-            {
-                "Text" => ConvertToText(target),
-                "File" => ReadFileSandboxed(target?.ToString() ?? ""),
-                _ => null
-            };
+            return ReadFileSandboxed(target?.ToString() ?? "");
         }
 
         var result = CallPredicate(Eval(mc.Target!, item, paramType, ctx), mc.Name, mc.Args, item, paramType, ctx);
@@ -344,12 +321,25 @@ public class PredicateEvaluator
         {
             var expr = decl.IsValueBinding ? decl.ValueExpression! : decl.SourceExpression!;
             // Let value expressions are context-independent (no item/paramType needed)
-            return Eval(expr, new object(), "", new EvaluationContext());
+            var result = Eval(expr, new object(), "", new EvaluationContext());
+            return ApplyTypeAnnotation(result, decl);
         }
         finally
         {
             _evaluatingLetValues.Remove(name);
         }
+    }
+
+    /// <summary>
+    /// If the let declaration has a type annotation and the value is a DataObject,
+    /// overrides the DataObject's TypeName to the declared type.
+    /// This enables schema enforcement on subsequent property access.
+    /// </summary>
+    private static object? ApplyTypeAnnotation(object? value, LetDeclaration decl)
+    {
+        if (decl.TypeAnnotation is not null && value is DataObject ao)
+            ao.TypeName = decl.TypeAnnotation;
+        return value;
     }
 
     private object? EvalMemberAccess(MemberAccessExpr ma, object item, string paramType, EvaluationContext ctx)
@@ -427,7 +417,8 @@ public class PredicateEvaluator
                 throw new InvalidOperationException($"Circular let value reference: '{name}'");
             try
             {
-                return Eval(letDecl.ValueExpression!, item, paramType, ctx);
+                var result = Eval(letDecl.ValueExpression!, item, paramType, ctx);
+                return ApplyTypeAnnotation(result, letDecl);
             }
             finally
             {
@@ -448,7 +439,8 @@ public class PredicateEvaluator
                     throw new InvalidOperationException($"Circular let value reference: '{name}'");
                 try
                 {
-                    return Eval(letDeclExpr.SourceExpression, item, paramType, ctx);
+                    var result = Eval(letDeclExpr.SourceExpression, item, paramType, ctx);
+                    return ApplyTypeAnnotation(result, letDeclExpr);
                 }
                 finally
                 {
@@ -795,13 +787,18 @@ public class PredicateEvaluator
         // DataObject: resolve fields by name, plus map properties
         if (target is DataObject ao)
         {
-            return member switch
+            // Built-in DataObject members (always allowed regardless of schema)
+            switch (member)
             {
-                "Keys" => ao.Fields.Keys.ToList<object>(),
-                "Values" => ao.Fields.Values.Where(v => v is not null).Cast<object>().ToList(),
-                "Count" => ao.Fields.Count,
-                _ => ao.GetField(member)
-            };
+                case "Keys": return ao.Fields.Keys.ToList<object>();
+                case "Values": return ao.Fields.Values.Where(v => v is not null).Cast<object>().ToList();
+                case "Count": return ao.Fields.Count;
+            }
+
+            // Schema enforcement: if the type has declared properties, validate member access
+            ValidateDataObjectSchema(ao, member);
+
+            return ao.GetField(member);
         }
 
         // Collection properties (Count, First, Last, Single) — built-in, no registry
@@ -872,6 +869,28 @@ public class PredicateEvaluator
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Validates that a member access on a DataObject is allowed by the type's schema.
+    /// Types with no declared properties (like 'Data') are dynamic — any access is allowed.
+    /// Types with declared properties enforce that the member exists in the schema.
+    /// </summary>
+    private void ValidateDataObjectSchema(DataObject ao, string member)
+    {
+        var typeDesc = _registry.GetType(ao.TypeName);
+        if (typeDesc is null) return; // unknown type → allow dynamic access
+
+        var properties = typeDesc.GetAllProperties().ToList();
+        if (properties.Count == 0) return; // empty type = dynamic (e.g., Data = {})
+
+        // Type has declared properties — enforce schema
+        if (!properties.Any(p => string.Equals(p.Name, member, StringComparison.OrdinalIgnoreCase)))
+        {
+            var available = string.Join(", ", properties.Select(p => p.Name));
+            throw new InvalidOperationException(
+                $"Property '{member}' is not defined on type '{ao.TypeName}'. Available properties: {available}");
+        }
     }
 
     private object? CallPredicate(object? target, string predicate, List<Expression> args,
@@ -1398,7 +1417,24 @@ public class PredicateEvaluator
                 throw new InvalidOperationException($"Unsupported Reduce operator: '{op}'");
             }
             default:
+            {
+                // User-defined predicate as filter: collection:predName → filter items
+                if (_predicates.TryGetValue(predicate, out var predGroup))
+                {
+                    var result = new List<object>();
+                    foreach (var collItem in collection)
+                    {
+                        if (collItem is null) continue;
+                        string itemType = InferItemType(new IdentifierExpr(predicate), collItem);
+                        var pred = ResolvePredicate(predGroup, collItem, itemType, ctx);
+                        if (pred is null) continue;
+                        var (pass, _) = EvaluateAsBool(pred.Body, collItem, pred.ParameterType);
+                        if (pass) result.Add(collItem);
+                    }
+                    return result;
+                }
                 throw new InvalidOperationException($"Unknown collection predicate '{predicate}'");
+            }
         }
     }
 
@@ -1425,30 +1461,10 @@ public class PredicateEvaluator
     {
         switch (name)
         {
-            case "Text":
-            {
-                var value = Eval(args[0], item, paramType, ctx);
-                return ConvertToText(value);
-            }
-            case "File":
+            case "read":
             {
                 var path = Eval(args[0], item, paramType, ctx)?.ToString() ?? "";
                 return ReadFileSandboxed(path);
-            }
-            case "Path":
-            {
-                var pattern = Eval(args[0], item, paramType, ctx)?.ToString() ?? "";
-                return GlobMatch(_filePath, pattern);
-            }
-            case "Matches":
-            {
-                string text = item switch
-                {
-                    string s => s,
-                    _ => _registry.ConvertToText(item)
-                };
-                var pattern = Eval(args[0], item, paramType, ctx)?.ToString() ?? "";
-                return Regex.IsMatch(text, pattern, RegexOptions.None, TimeSpan.FromSeconds(1));
             }
             default:
                 throw new InvalidOperationException($"Unknown function '{name}'");
@@ -1537,17 +1553,30 @@ public class PredicateEvaluator
         _ => _registry.InferTypeName(value)
     };
 
-    private static string ConvertToText(object? value) => value switch
+    /// <summary>
+    /// Dispatches intrinsic function calls declared with '= intrinsic' in .cop files.
+    /// </summary>
+    private object? CallIntrinsicFunction(string name, object? inputItem, Dictionary<string, object?> paramBindings)
     {
-        null => "null",
-        string s => s,
-        bool b => b ? "true" : "false",
-        int i => i.ToString(),
-        byte by => by.ToString(),
-        byte[] bytes => System.Text.Encoding.UTF8.GetString(bytes),
-        IList list => $"[{string.Join(", ", list.Cast<object>().Select(ConvertToText))}]",
-        _ => value.ToString() ?? ""
-    };
+        return name switch
+        {
+            "text" => inputItem switch
+            {
+                int i => i.ToString(),
+                long l => l.ToString(),
+                byte b => b.ToString(),
+                byte[] bytes => System.Text.Encoding.UTF8.GetString(bytes),
+                _ => throw new InvalidOperationException($"No intrinsic text() overload for type '{inputItem?.GetType().Name ?? "null"}'")
+            },
+            "read" => ReadFileSandboxed(inputItem?.ToString() ?? ""),
+            "error" => new ErrorValue(paramBindings.TryGetValue("message", out var msg)
+                ? msg?.ToString() : inputItem?.ToString()),
+            "pathMatches" => GlobMatch(
+                paramBindings.TryGetValue("path", out var pm) ? pm?.ToString() ?? "" : "",
+                paramBindings.TryGetValue("pattern", out var pp) ? pp?.ToString() ?? "" : ""),
+            _ => throw new InvalidOperationException($"Unknown intrinsic function: '{name}'")
+        };
+    }
 
     private const int MaxFileSize = 10 * 1024 * 1024; // 10 MB
 
@@ -1600,6 +1629,12 @@ public class PredicateEvaluator
             if (argValue is string strVal && strVal.Contains('{'))
                 argValue = ResolveStringTemplate(strVal, inputItem, inputType);
             paramBindings[func.Parameters[i].Name] = argValue;
+        }
+
+        // Intrinsic function: dispatch to built-in C# implementation
+        if (func.IsIntrinsic)
+        {
+            return CallIntrinsicFunction(func.Name, inputItem, paramBindings);
         }
 
         // Expression-body function: evaluate the body expression and return directly
@@ -1728,6 +1763,7 @@ public class PredicateEvaluator
         {
             for (int i = 1; i < path.Length; i++)
             {
+                if (target is null) return $"{{{string.Join(".", path)}}}";
                 var typeName = _registry.InferTypeName(target);
                 if (typeName is not null)
                 {
@@ -1765,6 +1801,20 @@ public class PredicateEvaluator
             return false;
         // It's a closure if the function call name maps to a known function
         return _functions.ContainsKey(fc.Name);
+    }
+
+    /// <summary>
+    /// Evaluates a let declaration's value expression and returns the result.
+    /// Used to resolve let bindings that may hold intrinsic objects (streaming sources, sinks, etc.).
+    /// </summary>
+    public object? EvaluateLetValue(LetDeclaration letDecl)
+    {
+        if (!letDecl.IsValueBinding || letDecl.ValueExpression is null)
+            return null;
+
+        var ctx = new EvaluationContext();
+        var dummy = new object();
+        return Eval(letDecl.ValueExpression, dummy, "item", ctx);
     }
 
     /// <summary>
@@ -1880,7 +1930,27 @@ public class PredicateEvaluator
             }
             var match = group.FirstOrDefault(f => f.InputType == inputType && f.Constraint is null);
             if (match != null) return match;
+
+            // When all arguments are provided explicitly (callArgCount matches parameter count),
+            // the function doesn't depend on the pipeline item type — dispatch by param count.
+            if (callArgCount is not null)
+            {
+                var paramCountMatch = group.FirstOrDefault(f => f.Parameters.Count == callArgCount.Value && f.Constraint is null);
+                if (paramCountMatch != null) return paramCountMatch;
+            }
         }
+
+        // Strict: if all overloads have type-specific input types that differ from the
+        // requested type, throw a clear error. This prevents calling text(Widget) when
+        // only text(string), text(bool), text(int), text(bytes) exist.
+        if (inputType != null && group.All(f => f.InputType != null && f.InputType != inputType))
+        {
+            var availableTypes = string.Join(", ", group.Select(f => f.InputType).Distinct());
+            var funcName = group[0].Name;
+            throw new InvalidOperationException(
+                $"No overload of '{funcName}' accepts type '{inputType}'. Available overloads: {funcName}({availableTypes})");
+        }
+
         // Last resort: first unconstrained, then first overall
         return group.FirstOrDefault(f => f.Constraint is null) ?? group[0];
     }
@@ -1889,12 +1959,12 @@ public class PredicateEvaluator
     /// Creates a DataObject representing a Code([providers], path?) result.
     /// The object has a lazy field resolver that queries providers on demand and memoizes results.
     /// </summary>
-    private DataObject CreateCodeObject(string[] providers, string? path)
+    private DataObject CreateCodeObject(string[] providers, string? path, string typeName = "Codebase")
     {
         var registry = _registry;
         var queryService = _providerQueryService;
 
-        var obj = new DataObject("Code");
+        var obj = new DataObject(typeName);
         obj.WithFieldResolver(collectionName =>
         {
             var results = new List<object>();
@@ -1916,5 +1986,71 @@ public class PredicateEvaluator
             return results;
         });
         return obj;
+    }
+
+    /// <summary>
+    /// Evaluates the built-in data(providerName) function.
+    /// Returns a DataObject with a lazy field resolver for any provider.
+    /// </summary>
+    private object EvalDataFunction(List<Expression> args, object item, string paramType, EvaluationContext ctx)
+    {
+        if (args.Count != 1)
+            throw new InvalidOperationException("data() requires exactly 1 argument: data('providerName')");
+
+        var nameVal = Eval(args[0], item, paramType, ctx);
+        var providerName = nameVal?.ToString()
+            ?? throw new InvalidOperationException("data() argument must be a string");
+
+        return CreateCodeObject([providerName], path: null, typeName: "Data");
+    }
+
+    /// <summary>
+    /// Evaluates the built-in source(providerName) function.
+    /// Returns the streaming source handle registered under the provider's namespace.
+    /// </summary>
+    private object EvalSourceFunction(List<Expression> args, object item, string paramType, EvaluationContext ctx)
+    {
+        if (args.Count != 1)
+            throw new InvalidOperationException("source() requires exactly 1 argument: source('providerName')");
+
+        var nameVal = Eval(args[0], item, paramType, ctx);
+        var providerName = nameVal?.ToString()
+            ?? throw new InvalidOperationException("source() argument must be a string");
+
+        // Find the first streaming source registered under this provider namespace
+        var qualifiedNames = _registry.GetStreamingSourceNames();
+        var prefix = providerName + ".";
+        foreach (var name in qualifiedNames)
+        {
+            if (name.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                var source = _registry.ResolveStreamingSource(name);
+                if (source is not null)
+                    return source;
+            }
+        }
+
+        throw new InvalidOperationException($"No streaming source found for provider '{providerName}'. Ensure the provider package is imported.");
+    }
+
+    /// <summary>
+    /// Evaluates the built-in sink(providerName) function.
+    /// Returns the sink handle registered under the provider's namespace.
+    /// </summary>
+    private object EvalSinkFunction(List<Expression> args, object item, string paramType, EvaluationContext ctx)
+    {
+        if (args.Count != 1)
+            throw new InvalidOperationException("sink() requires exactly 1 argument: sink('providerName')");
+
+        var nameVal = Eval(args[0], item, paramType, ctx);
+        var providerName = nameVal?.ToString()
+            ?? throw new InvalidOperationException("sink() argument must be a string");
+
+        // Find the first sink registered under this provider namespace
+        var sinks = _registry.GetNamespaceSinks(providerName);
+        if (sinks is not null && sinks.Count > 0)
+            return sinks.Values.First();
+
+        throw new InvalidOperationException($"No sink found for provider '{providerName}'. Ensure the provider package is imported.");
     }
 }

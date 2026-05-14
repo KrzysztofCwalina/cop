@@ -33,7 +33,7 @@ export let method-snake-case = Clients:hasNonSnakeCaseMethod
 predicate isNotPascalCase(Type) => Type.Name:matches('^[a-z]')
 
 ## Type names must use PascalCase
-export let type-pascal-case = Code.Types:python:isNotPascalCase
+export let type-pascal-case = Types:isNotPascalCase
     :toWarning('{item.Name} should use PascalCase for type names')
 
 # Delete operations should return None
@@ -54,14 +54,14 @@ predicate isUsingRaiseWithTraceback(Statement) => Statement.Kind == 'call'
     && Statement.MemberName == 'raise_with_traceback'
 
 ## Do not use raise_with_traceback; use raise ... from syntax
-export let no-raise-with-traceback = Code.Statements:python:isUsingRaiseWithTraceback
+export let no-raise-with-traceback = Statements:isUsingRaiseWithTraceback
     :toError('Use raise ... from instead of raise_with_traceback')
 
 # Legacy typing: type comments instead of annotations
 predicate hasLegacyTypeComment(Line) => Line.Text:matches('#\\s*type:')
 
 ## Do not use legacy type comments; use Python 3.9+ type hints
-export let no-legacy-typing = Code.Lines:python:hasLegacyTypeComment
+export let no-legacy-typing = Lines:hasLegacyTypeComment
     :toWarning('Do not use type comments — use Python 3.9+ type annotations instead')
 
 # asyncio import when azure.core transport sleep should be used
@@ -69,7 +69,7 @@ predicate isImportingAsyncio(Statement) => Statement.Kind == 'call'
     && Statement.TypeName == 'asyncio' && Statement.MemberName == 'sleep'
 
 ## Do not use asyncio.sleep; use transport sleep from azure.core
-export let no-asyncio-sleep = Code.Statements:python:isImportingAsyncio
+export let no-asyncio-sleep = Statements:isImportingAsyncio
     :toWarning('Use azure.core pipeline transport sleep instead of asyncio.sleep')
 
 # Logging exceptions at non-debug levels
@@ -80,7 +80,7 @@ predicate isLoggingExceptionNotDebug(Statement) => Statement.Kind == 'call'
     && Statement.Arguments:contains('exc_info')
 
 ## Do not log exceptions at non-debug levels (may reveal sensitive info)
-export let no-log-exceptions-above-debug = Code.Statements:python:isLoggingExceptionNotDebug
+export let no-log-exceptions-above-debug = Statements:isLoggingExceptionNotDebug
     :toWarning('Do not log exceptions at levels above debug — may reveal sensitive information')
 
 # Missing tracing decorator

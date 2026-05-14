@@ -492,6 +492,17 @@ public class ScriptParser
         }
 
         Expect(TokenKind.RParen);
+
+        // Check for intrinsic function: function name(params) : ReturnType = intrinsic
+        if (Current.Kind == TokenKind.Colon)
+        {
+            Advance(); // consume ':'
+            var returnType = Expect(TokenKind.Identifier).Value;
+            Expect(TokenKind.Equals);
+            Expect(TokenKind.IntrinsicKeyword);
+            return new FunctionDefinition(name.Value, inputType, returnType, parameters, [], line, isExported, Constraint: constraint, DocComment: docComment, IsIntrinsic: true);
+        }
+
         Expect(TokenKind.Arrow); // =>
 
         // Determine if this is a record-body or expression-body function
@@ -531,51 +542,45 @@ public class ScriptParser
         int line = Current.Line;
         Expect(TokenKind.LetKeyword);
         var name = Expect(TokenKind.Identifier);
-        Expect(TokenKind.Equals);
-        // Handle runtime:: prefix (e.g., let Code = runtime::Codebase)
-        bool isRuntime = false;
-        if (Current.Kind == TokenKind.Identifier && Current.Value == "runtime" &&
-            _pos + 1 < _tokens.Count && _tokens[_pos + 1].Kind == TokenKind.DoubleColon)
+
+        // Optional type annotation: let name : Type = ...
+        string? typeAnnotation = null;
+        if (Current.Kind == TokenKind.Colon)
         {
-            Advance(); // consume 'runtime'
-            Advance(); // consume '::'
-            isRuntime = true;
+            Advance(); // consume ':'
+            typeAnnotation = Expect(TokenKind.Identifier).Value;
         }
+
+        Expect(TokenKind.Equals);
 
         // Value binding: let Name = [literal, literal, ...]
         if (Current.Kind == TokenKind.LBracket)
         {
             var listExpr = ParseListLiteral();
-            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: listExpr, DocComment: docComment);
+            return new LetDeclaration(name.Value, "", [], line, isExported, ValueExpression: listExpr, DocComment: docComment, TypeAnnotation: typeAnnotation);
         }
 
         // Value binding: let Name = { Field = expr, ... }
         if (Current.Kind == TokenKind.LBrace)
         {
             var objExpr = ParseObjectLiteral(null);
-            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: objExpr, DocComment: docComment);
+            return new LetDeclaration(name.Value, "", [], line, isExported, ValueExpression: objExpr, DocComment: docComment, TypeAnnotation: typeAnnotation);
         }
 
         // Parse the RHS as an expression (handles colon chains via ParsePostfix)
         var expr = ParseExpression();
 
         // Handle Load('path') and Parse('file', [Type]) as value bindings
-        if (expr is CallExpr { Target: null } call && call.Name is "Load" or "Parse" or "Code")
+        if (expr is CallExpr { Target: null } call && call.Name is "Load" or "Parse")
         {
-            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: call, DocComment: docComment);
-        }
-
-        // Handle namespace.Code('path') — provider-scoped Code (e.g., csharp.Code('path'))
-        if (expr is CallExpr { Target: not null, Name: "Code" } nsCode && nsCode.Target is IdentifierExpr)
-        {
-            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: nsCode, DocComment: docComment);
+            return new LetDeclaration(name.Value, "", [], line, isExported, ValueExpression: call, DocComment: docComment, TypeAnnotation: typeAnnotation);
         }
 
         // Collection union with + operator: let x = a + b + c
         if (expr is BinaryExpr && FlattenUnionOperands(expr) is { } unionElements)
         {
             var unionExpr = new CollectionUnionExpr(unionElements);
-            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: unionExpr, DocComment: docComment);
+            return new LetDeclaration(name.Value, "", [], line, isExported, ValueExpression: unionExpr, DocComment: docComment, TypeAnnotation: typeAnnotation);
         }
 
         // Try to decompose as a collection expression (base:filter1:filter2).
@@ -586,12 +591,12 @@ public class ScriptParser
         try
         {
             var (baseCollection, filters, exclusions, pathOverride) = DecomposeCollectionExpression(expr);
-            return new LetDeclaration(name.Value, baseCollection, filters, line, isExported, isRuntime, Exclusions: exclusions, SourceExpression: expr, PathOverride: pathOverride, DocComment: docComment);
+            return new LetDeclaration(name.Value, baseCollection, filters, line, isExported, Exclusions: exclusions, SourceExpression: expr, PathOverride: pathOverride, DocComment: docComment, TypeAnnotation: typeAnnotation);
         }
         catch (InvalidOperationException)
         {
             // Not a collection expression — store as a value binding
-            return new LetDeclaration(name.Value, "", [], line, isExported, isRuntime, ValueExpression: expr, DocComment: docComment);
+            return new LetDeclaration(name.Value, "", [], line, isExported, ValueExpression: expr, DocComment: docComment, TypeAnnotation: typeAnnotation);
         }
     }
 
@@ -648,11 +653,11 @@ public class ScriptParser
         // foreach after = means this is a let-command
         if (i < _tokens.Count && _tokens[i].Kind == TokenKind.ForeachKeyword) return true;
         // Check for identifier followed by ( — this is an action invocation
-        // But Load(), Parse(), Code() are value bindings, not command actions
+        // But Load(), Parse() are value bindings, not command actions
         // Also, lowercase function names are value bindings (currying/partial application)
         if (i >= _tokens.Count || _tokens[i].Kind != TokenKind.Identifier) return false;
         var name = _tokens[i].Value;
-        if (name is "Load" or "Parse" or "Code") return false;
+        if (name is "Load" or "Parse") return false;
         // Lowercase-starting names are function calls (value bindings), not commands
         if (name.Length > 0 && char.IsLower(name[0])) return false;
         i++;

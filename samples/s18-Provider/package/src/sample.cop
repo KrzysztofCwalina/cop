@@ -1,0 +1,19 @@
+## Sample Provider Package
+## Reads .widget files and exposes a Widgets collection.
+
+type SampleData = {
+    Widgets : [Widget]
+}
+
+let db : SampleData = data('sample')
+export let Widgets = db.Widgets
+
+type Widget = {
+    Name : string,
+    Category : string,
+    Size : int,
+    FilePath : string
+}
+
+predicate isLarge(Widget) = Widget.Size:gt(100)
+predicate isUncategorized(Widget) = Widget.Category:eq('uncategorized')

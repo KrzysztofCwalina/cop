@@ -1,8 +1,93 @@
-# Cop Language Analysis Package v1.0
-# Provides structural analysis of .cop source files through
-# the standard code analysis collections (Types, Statements, Lines, Files).
-#
+# Core Runtime Types
+# Defines fundamental types for provider access.
 # Usage: import core
-# Then use core.Types, core.Lines, core.Files, etc.
 
-import code
+## A dynamic data accessor (similar to C# dynamic).
+## Any property access on Data generates a query to the provider.
+## Use a typed let binding to enforce a schema:
+##   let db : MySchema = data('provider')
+## Without a type annotation, any property is allowed (fails at runtime if provider lacks it).
+## With a type annotation, only declared properties are accessible (compile-time enforcement).
+export type Data = {}
+
+## Returns a dynamic Data accessor for the named provider.
+## Properties on the returned object query the provider's collections.
+## Example: data('sample').Widgets returns the Widgets collection.
+export function data(name : string) : Data = intrinsic
+
+## An async streaming collection source.
+## Use a typed annotation to declare the item type produced by the stream:
+##   export let Requests : [Request] = source('http')
+## Without annotation, stream items are untyped.
+export type Source = {}
+
+## An async data sink — output target in streaming pipelines.
+## Use a typed annotation to declare the item type the sink accepts:
+##   export let RESPONSES : [Response] = sink('http')
+## Without annotation, the sink accepts any item.
+export type Sink = {}
+
+## Returns a Source handle for the named streaming provider.
+## The stream produces items asynchronously (e.g., incoming HTTP requests).
+export function source(name : string) : Source = intrinsic
+
+## Returns a Sink handle for the named streaming provider.
+## The sink consumes items produced by the pipeline (e.g., HTTP responses).
+export function sink(name : string) : Sink = intrinsic
+
+## Reads the content of a file at the given path (sandboxed to project root).
+## Returns the file content as a string.
+export function read(path : string) : string = intrinsic
+
+## Converts a string to text (identity — returns string as-is).
+export function text(string) => string
+
+## Converts a bool to text: true => 'true', false => 'false'.
+export function text(bool) => bool ? 'true' | 'false'
+
+## Converts an integer to its decimal text representation.
+export function text(int) : string = intrinsic
+
+## Decodes a byte array as UTF-8 text.
+export function text(bytes) : string = intrinsic
+
+## A template bound to data, ready to be resolved into a string.
+## Items is the collection of data to format, Template is the {Property} interpolation pattern,
+## and Separator is the string used to join results (defaults to newline).
+export type Formattable = {
+    Items : [Data]
+    Template : string
+    Separator : string
+}
+
+## Converts a Formattable to text by resolving the Template against each item
+## in Items using {Property} interpolation, then joining results with Separator.
+## When used in a pipeline: collection.text('{Item.Name}') creates a Formattable
+## from the pipeline collection and resolves it into a single joined string.
+export function text(Formattable) : string = intrinsic
+
+## Represents an operational error flowing through a pipeline.
+## Errors are not code bugs (use FAIL for those). They represent external failures
+## that code cannot prevent: network timeouts, I/O failures, malformed input.
+## Use isError predicate to detect errors in pipeline items.
+export type Error = {
+    Message : string
+    SourceFile : string
+    SourceLine : int
+    Source : string
+}
+
+## Creates an Error value with the given message.
+## The error flows through the pipeline as data (does not terminate execution).
+export function error(message : string) : Error = intrinsic
+
+## Terminates execution immediately with a fatal diagnostic.
+## Use for programmer assertions — situations that should never occur.
+## Can be used as a command action (foreach Items => FAIL('msg'))
+## or in expressions (predicate test(T) => FAIL('invariant violated')).
+export function FAIL(message : string) : string = intrinsic
+
+## Glob-matches a file path against a pattern.
+## Supports **, *, ? wildcards. Returns true if the path matches.
+## Example: pathMatches(Statement.File.Path, '**/Tests/**')
+export function pathMatches(path : string, pattern : string) : bool = intrinsic

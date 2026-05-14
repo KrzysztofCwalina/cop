@@ -1,36 +1,26 @@
 ---
 name: core
 version: 1.0.0
-title: Cop Language Analysis
-description: Structural analysis of .cop source files — types, predicates, functions, imports
+title: Core Runtime Types
+description: Fundamental types for provider access — Data, and language samples
 authors: cop-team
-tags: cop, language, analysis
-dependencies: [code]
-provider: clr
-providerEntry: Cop.Providers.CopProvider
+tags: core, runtime, types
 ---
 
-# Cop Language Analysis
+# Core
 
-Provides structural analysis of `.cop` source files through the standard code analysis collections.
+Defines fundamental runtime types used by all provider packages.
 
-## Collections
+## Types
 
-All standard code collections are available, filtered to `.cop` files:
-
-- **Types** — `type` and `flags` definitions
-- **Statements** — predicates, functions, let bindings, imports, commands
-- **Lines** — raw text lines
-- **Files** — .cop source files with imports and structure
+- **Data** — Dynamic provider accessor returned by `data(providerName)`. Properties correspond to the provider's declared collections.
 
 ## Usage
 
 ```cop
 import core
 
-# List all exported type definitions in .cop files
-foreach core.Types:isPublic => '{item.Name} ({item.File.Path})'
-
-# Find predicates
-foreach core.Statements:declaration => '{item.MemberName}'
+let db = data('my-provider')
+let items = db.MyCollection
 ```
+

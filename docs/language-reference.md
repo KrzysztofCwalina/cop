@@ -308,6 +308,15 @@ let localFiles = files.DiskFiles('src/lib/')
 
 Path-scoped collections query the provider against the given path instead of the default root (CWD or `-t`). The path is resolved relative to the process working directory. Results are cached by `(provider, collection, absolutePath)` so repeated references with the same path are efficient. Each collection is parameterized individually — `csharp-checks.Types('../sdk/')` does not affect `csharp-checks.Statements`.
 
+**Typed binding** — associates a type annotation with a let value for schema enforcement:
+
+```ruby
+let db : SampleData = data('sample')
+let cb : Codebase = data('csharp')
+```
+
+The type annotation (`: TypeName`) tells the runtime to enforce the type's declared properties on the bound value. This is used with `data()` to turn a dynamic accessor into a schema-checked one. See [Provider Accessors](#provider-accessors-data) for details.
+
 ### Pipe Operators
 
 Providers expose globals that return typed lists (e.g., `Types`, `Requests`). The pipe operator (`=>`) dequeues items from a source, transforms them, and enqueues results into a sink:
@@ -857,14 +866,76 @@ Types.Select(item.Methods.Count > 0 ? item.Name | 'empty')
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
+| `data(name)` | string → Data | Returns a dynamic accessor for the named provider |
+| `source(name)` | string → Source | Returns an async streaming source handle |
+| `sink(name)` | string → Sink | Returns an async sink handle |
 | `Text(expr)` | any → string | Converts a value to its textual representation. Also: `expr:Text` |
-| `File(path)` | string → [byte] | Reads a file and returns its bytes (sandboxed, 10MB max). Also: `path:File` |
+| `read(path)` | string → string | Reads a file and returns its content (sandboxed, 10MB max). Also: `path:read` |
 | `Path(pattern)` | string → bool | Tests if the current file path matches a glob pattern |
 | `Matches(pattern)` | string → bool | Tests if the current item text matches a regex |
 
-`Text` and `File` can be called via colon pipe: `response.Body:Text` is equivalent to `Text(response.Body)`.
+`Text` and `read` can be called via colon pipe: `response.Body:Text` is equivalent to `Text(response.Body)`.
 
 `Path` uses glob patterns: `*` matches within a segment, `**` matches across segments, `?` matches one character.
+
+#### Provider Accessors: `data()`
+
+`data(name)` is the **intrinsic function** that returns a dynamic accessor object for any provider. Properties on the returned object generate queries to the named provider.
+
+```ruby
+import core
+import code
+
+# data() — access any provider's collections
+let db = data('sample')
+export let Widgets = db.Widgets       # queries 'sample' provider for Widgets
+
+# Use with code providers too — type annotation enforces schema
+let cb : Codebase = data('csharp')
+export let Types = cb.Types           # queries 'csharp' provider for Types
+export let Statements = cb.Statements
+```
+
+**Dynamic vs. Typed access:**
+
+Without a type annotation, `data()` returns a fully dynamic object (similar to C# `dynamic`). Any property access is allowed — it becomes a query to the provider at runtime. If the provider doesn't have that collection, it fails.
+
+With a type annotation on the let binding, the accessor is **schema-enforced** — only declared properties are accessible:
+
+```ruby
+# Define the schema for this provider
+type SampleData = {
+    Widgets : [Widget]
+    Orders : [Order]
+}
+
+# Typed binding — only Widgets and Orders are accessible
+let db : SampleData = data('sample')
+export let Widgets = db.Widgets     # ✓ allowed
+export let Orders = db.Orders       # ✓ allowed
+# db.Unknown                        # ✗ error: 'Unknown' is not defined on type 'SampleData'
+```
+
+This gives provider package authors the ability to document and enforce their schema while still using the same dynamic query mechanism under the hood. The `Codebase` type in the `code` package is an example of a typed schema — it declares all standard code collections (Types, Statements, Lines, etc.).
+
+#### Streaming Accessors: `source()` and `sink()`
+
+`source(name)` and `sink(name)` are intrinsic functions for **async streaming providers**. They return `Source` and `Sink` handles used in `async foreach` pipelines.
+
+```ruby
+import core
+
+# Type annotation declares what items the source produces
+export let Requests : [Request] = source('http')
+
+# Type annotation declares what items the sink accepts
+export let RESPONSES : [Response] = sink('http')
+
+# Usage in a streaming pipeline:
+async foreach Requests => handle => RESPONSES
+```
+
+Like `data()`, the typed annotation provides documentation and schema enforcement — it declares the item type flowing through the stream or into the sink. Without an annotation, items are untyped.
 
 ## Commands
 

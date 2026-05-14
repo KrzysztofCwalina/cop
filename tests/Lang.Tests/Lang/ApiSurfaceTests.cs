@@ -262,7 +262,7 @@ export command check = foreach baseline => '{{item.Signature}}'
         Assert.That(ex!.Message, Does.Contain("sub-collections"));
     }
 
-    // ── .Text() filter and save() ──
+    // ── .text() filter and save() ──
 
     [Test]
     public void TextFilter_FlattensCollectionToJoinedString()
@@ -271,7 +271,7 @@ export command check = foreach baseline => '{{item.Signature}}'
         var cop = $@"
 let baseline = Load('{assemblyPath}')
 predicate anyApi(Api) => Api.Kind != ''
-let apiText = baseline.Api:anyApi.Text('{{item.Signature}}')
+let apiText = baseline.Api:anyApi.text('{{item.Signature}}')
 export command print-text = foreach apiText => '{{item}}'
 ";
 
@@ -286,12 +286,12 @@ export command print-text = foreach apiText => '{{item}}'
         var documents = new List<Document>();
         var result = interpreter.Run([script], documents, commandName: "print-text");
 
-        // .Text() should produce exactly one output (the joined string)
-        Assert.That(result.Outputs.Count, Is.EqualTo(1), "Expected single output from .Text() flattened collection");
+        // .text() should produce exactly one output (the joined string)
+        Assert.That(result.Outputs.Count, Is.EqualTo(1), "Expected single output from .text() flattened collection");
         var text = result.Outputs[0].Message;
         Assert.That(text, Does.Contain("class"));
         // Verify it contains multiple lines (newline-separated)
-        Assert.That(text.Split('\n').Length, Is.GreaterThan(1), "Expected multiple lines in .Text() output");
+        Assert.That(text.Split('\n').Length, Is.GreaterThan(1), "Expected multiple lines in .text() output");
     }
 
     [Test]
@@ -301,7 +301,7 @@ export command print-text = foreach apiText => '{{item}}'
         var cop = $@"
 let baseline = Load('{assemblyPath}')
 predicate anyApi(Api) => Api.Kind != ''
-let apiText = baseline.Api:anyApi.Text('{{item.Signature}}')
+let apiText = baseline.Api:anyApi.text('{{item.Signature}}')
 export command save-api = SAVE('api-surface.txt', apiText)
 ";
 

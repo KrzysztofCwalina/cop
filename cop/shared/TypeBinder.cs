@@ -328,7 +328,7 @@ public class TypeBinder
 
             if (funcName is "toError" or "toWarning" or "toInfo")
                 currentType = "Violation";
-            else if (funcName is "Select" or "Text")
+            else if (funcName is "Select" or "text")
                 currentType = "string";
             else if (funcName != null)
             {

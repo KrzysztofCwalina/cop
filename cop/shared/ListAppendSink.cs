@@ -3,12 +3,12 @@ using System.Collections;
 namespace Cop.Core;
 
 /// <summary>
-/// A DataSink adapter that enqueues (appends) items to a target list.
+/// A SinkProvider adapter that enqueues (appends) items to a target list.
 /// Thread-safe: uses locking for concurrent enqueue operations.
 /// Used as fallback when pipe target resolves to a let-binding or
-/// collection declaration rather than a registered provider DataSink.
+/// collection declaration rather than a registered provider SinkProvider.
 /// </summary>
-public class ListAppendSink : DataSink
+public class ListAppendSink : SinkProvider
 {
     private readonly IList _target;
     private readonly object _lock = new();

@@ -23,6 +23,7 @@ public enum TokenKind
     FeedKeyword,
     FlagsKeyword,
     EnumKeyword,
+    IntrinsicKeyword,
     DoubleColon,
     Colon,
     AndAnd,
@@ -380,6 +381,7 @@ public class Tokenizer
             "feed" => TokenKind.FeedKeyword,
             "flags" => TokenKind.FlagsKeyword,
             "enum" => TokenKind.EnumKeyword,
+            "intrinsic" => TokenKind.IntrinsicKeyword,
 
             _ => TokenKind.Identifier
         };

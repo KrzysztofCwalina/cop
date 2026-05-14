@@ -6,7 +6,7 @@ namespace Cop.Lang;
 /// </summary>
 public class DataObject
 {
-    public string TypeName { get; }
+    public string TypeName { get; internal set; }
     private readonly Dictionary<string, object?> _fields;
 
     /// <summary>

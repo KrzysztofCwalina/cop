@@ -18,4 +18,5 @@ public record FunctionDefinition(
     Expression? BodyExpression = null,
     Expression? Constraint = null,
     string? DocComment = null,
-    string? PackageName = null);
+    string? PackageName = null,
+    bool IsIntrinsic = false);

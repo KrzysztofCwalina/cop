@@ -389,12 +389,25 @@ public class ScriptInterpreter
         // Execute action-lets: let bindings whose filters produce command objects
         // (Violations from toWarning, strings from toOutput, SaveActions from toSave, assertions from assert)
         {
-            // Collect let names already consumed by explicit commands (avoid double execution during transition)
+            // Collect let names already consumed by explicit commands or RUN invocations (avoid double execution)
             var consumedLets = new HashSet<string>(StringComparer.Ordinal);
             foreach (var sf in scriptFiles)
+            {
                 foreach (var c in sf.Commands)
                     if (c.Collection != null)
                         consumedLets.Add(c.Collection);
+                if (sf.RunInvocations is not null)
+                    foreach (var run in sf.RunInvocations)
+                        foreach (var arg in run.Arguments)
+                        {
+                            try
+                            {
+                                var (collection, _, _, _) = ScriptParser.DecomposeCollectionExpression(arg);
+                                consumedLets.Add(collection);
+                            }
+                            catch { }
+                        }
+            }
 
             foreach (var (name, letDecl) in letDeclarations)
             {
@@ -486,19 +499,6 @@ public class ScriptInterpreter
                 catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
                 {
                     _diagLog?.Invoke($"[trace] action-let '{name}' failed: {ex.Message}");
-
-                    // If the base collection derives from a runtime:: binding (Code aggregator),
-                    // surface a clear error — Code with no providers is never valid.
-                    var dotIdx = letDecl.BaseCollection.IndexOf('.');
-                    if (dotIdx > 0)
-                    {
-                        var parentName = letDecl.BaseCollection[..dotIdx];
-                        if (letDeclarations.TryGetValue(parentName, out var parentLet) && parentLet.IsRuntime)
-                        {
-                            errors.Add($"Error: {letDecl.BaseCollection} has no data — no language provider is imported. " +
-                                       $"Add 'import csharp' (or another language provider) to your .cop file.");
-                        }
-                    }
                 }
             }
         }
@@ -570,19 +570,44 @@ public class ScriptInterpreter
         if (cmd.Collection is null)
             throw new InvalidOperationException("Streaming command must have a collection.");
 
-        var streamingSource = _typeRegistry.ResolveStreamingSource(cmd.Collection)
-            ?? throw new InvalidOperationException($"'{cmd.Collection}' is not a streaming collection.");
-
-        var sink = cmd.Sink is not null
-            ? ResolveSink(cmd.Sink)
-            : ConsoleWriteLineSink.Instance;
-
         // Build predicate/function/let dictionaries from script files (with conflict detection)
         var symbolErrors = new List<string>();
         var (predicateGroups, functionGroups, letDeclarations) = BuildSymbolTables(scriptFiles, symbolErrors);
         // Streaming mode: log symbol conflicts but don't block execution
         foreach (var err in symbolErrors)
             _diagLog?.Invoke($"[diag] {err}");
+
+        // Resolve streaming source: first try direct registry lookup, then let bindings
+        var streamingSource = _typeRegistry.ResolveStreamingSource(cmd.Collection);
+        if (streamingSource is null && letDeclarations.TryGetValue(cmd.Collection, out var letDecl))
+        {
+            // Evaluate the let binding — it may be source('providerName')
+            var evaluator = CreateEvaluator(predicateGroups, "", letDeclarations, functionGroups);
+            var letValue = evaluator.EvaluateLetValue(letDecl);
+            if (letValue is SourceProvider letSource)
+                streamingSource = letSource;
+        }
+        if (streamingSource is null)
+            throw new InvalidOperationException($"'{cmd.Collection}' is not a streaming collection.");
+
+        // Resolve sink: first try direct registry lookup, then let bindings
+        SinkProvider sink;
+        if (cmd.Sink is not null)
+        {
+            var resolvedSink = _typeRegistry.ResolveSink(cmd.Sink.Name);
+            if (resolvedSink is null && letDeclarations.TryGetValue(cmd.Sink.Name, out var sinkLetDecl))
+            {
+                var evaluator = CreateEvaluator(predicateGroups, "", letDeclarations, functionGroups);
+                var sinkValue = evaluator.EvaluateLetValue(sinkLetDecl);
+                if (sinkValue is SinkProvider dataSink)
+                    resolvedSink = dataSink;
+            }
+            sink = resolvedSink ?? ResolveSink(cmd.Sink);
+        }
+        else
+        {
+            sink = ConsoleWriteLineSink.Instance;
+        }
 
         string itemType = ResolveItemType(cmd.Collection, predicateGroups, letDeclarations, functionGroups);
         string finalItemType = ResolveItemTypeAfterFilters(itemType, cmd.Filters, functionGroups);
@@ -595,7 +620,7 @@ public class ScriptInterpreter
                 var semaphore = new SemaphoreSlim(Environment.ProcessorCount * 2);
                 var activeTasks = new List<Task>();
 
-                await foreach (var item in streamingSource.QueryStream(cancellationToken))
+                await foreach (var item in streamingSource.QueryStream(new ProviderQuery(), cancellationToken))
                 {
                     if (cancellationToken.IsCancellationRequested) break;
 
@@ -634,7 +659,7 @@ public class ScriptInterpreter
             else
             {
                 // Sync mode: process items sequentially
-                await foreach (var item in streamingSource.QueryStream(cancellationToken))
+                await foreach (var item in streamingSource.QueryStream(new ProviderQuery(), cancellationToken))
                 {
                     if (cancellationToken.IsCancellationRequested) break;
                     await ProcessStreamItem(item, itemType, finalItemType, cmd, predicateGroups, letDeclarations, functionGroups, sink);
@@ -669,7 +694,7 @@ public class ScriptInterpreter
         Dictionary<string, List<PredicateDefinition>> predicateGroups,
         Dictionary<string, LetDeclaration> letDeclarations,
         Dictionary<string, List<FunctionDefinition>> functionGroups,
-        DataSink sink)
+        SinkProvider sink)
     {
         var evaluator = new PredicateEvaluator(predicateGroups, "", _typeRegistry, letDeclarations, functionGroups);
 
@@ -1457,11 +1482,12 @@ public class ScriptInterpreter
             if (letDecl.Filters.Any(f =>
                 (f is CallExpr fc && IsActionFilter(fc.Name)))) continue;
 
-            // Only pre-resolve "leaf" lets whose base is a direct global collection.
-            // Lets whose base is another let may depend on cross-collection predicates
+            // Only pre-resolve "leaf" lets whose base is a direct global collection
+            // or a value-binding let (e.g., export let Types = cb.Types).
+            // Lets whose base is another non-value let may depend on cross-collection predicates
             // that the bootstrap evaluator cannot properly evaluate (it lacks _resolvedCollections).
             var resolvedBase = ResolveDottedCollection(letDecl.BaseCollection, letDeclarations);
-            if (letDeclarations.ContainsKey(resolvedBase)) continue;
+            if (letDeclarations.TryGetValue(resolvedBase, out var baseLet) && !baseLet.IsValueBinding) continue;
 
             try
             {
@@ -1730,8 +1756,8 @@ public class ScriptInterpreter
                     continue;
                 }
             }
-            // Handle :text() — format each item with a template, join into a single string
-            else if (funcName == "Text")
+            // Handle .text() — format each item with a template, join into a single string
+            else if (funcName == "text")
             {
                 var templateArgs = GetFilterArgs(filter);
                 if (templateArgs.Count > 0 && templateArgs[0] is LiteralExpr litExpr && litExpr.Value is string template)
@@ -1748,7 +1774,7 @@ public class ScriptInterpreter
                             return ResolveTemplate(template, ctx).ToPlainText();
                         })
                         .ToList();
-                    _diagLog?.Invoke($"[trace] filter: .Text -> {lines.Count} items -> 1 string");
+                    _diagLog?.Invoke($"[trace] filter: .text -> {lines.Count} items -> 1 string");
                     current = [(object)string.Join(Environment.NewLine, lines)];
                     currentType = "string";
                     continue;
@@ -2298,7 +2324,7 @@ public class ScriptInterpreter
         foreach (var filter in filters)
         {
             var funcName = GetFunctionNameFromFilter(filter);
-            if (funcName is "Select" or "Text")
+            if (funcName is "Select" or "text")
                 currentType = "string";
             else if (funcName != null && functionGroups != null && functionGroups.TryGetValue(funcName, out var group))
                 currentType = group[0].ReturnType;
@@ -2641,7 +2667,7 @@ public class ScriptInterpreter
         activeStack.Remove(cmd.CommandRef);
     }
 
-    private DataSink ResolveSink(SinkTarget target, Dictionary<string, IList>? resolvedCollections = null)
+    private SinkProvider ResolveSink(SinkTarget target, Dictionary<string, IList>? resolvedCollections = null)
     {
         var sink = _typeRegistry.ResolveSink(target.Name);
         if (sink is null && resolvedCollections is not null)
@@ -2805,7 +2831,8 @@ public class ScriptInterpreter
         if (parentExpr is null) return null;
 
         // Evaluate parent.member through the evaluator's member access dispatch
-        var memberExpr = new MemberAccessExpr(parentExpr, memberName);
+        // Use IdentifierExpr(parentName) so the let binding's type annotation is applied
+        var memberExpr = new MemberAccessExpr(new IdentifierExpr(parentName), memberName);
         try
         {
             var memberResult = evaluator.EvaluateField(memberExpr, null!, "");

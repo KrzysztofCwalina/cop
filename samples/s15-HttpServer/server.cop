@@ -15,7 +15,7 @@ function complete(string) =>
     })
 
 function handle(Request:Uri:equals('/chat')) =>
-    Request.Body:Text:complete.Body:Text:ok
+    Request.Body:text:complete.Body:text:ok
 
 function handle(Request:Uri:equals('/hello')) => ok('{"message": "Hello, World!"}')
 function handle(Request:Uri:equals('/health')) => ok

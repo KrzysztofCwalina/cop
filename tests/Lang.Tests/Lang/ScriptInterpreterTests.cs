@@ -80,7 +80,7 @@ public class CheckInterpreterTests
 
         var interpreter = TestInterpreter.Create();
 
-        var outputs = interpreter.Run([TestInterpreter.CodePackage, ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
+        var outputs = interpreter.Run([TestInterpreter.CorePackage, TestInterpreter.CodePackage, ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
 
         Assert.That(outputs.Any(d => d.Message.Contains("var")), Is.True, "Should detect var usage");
         Assert.That(outputs.Any(d => d.Message.Contains("Thread.Sleep")), Is.True, "Should detect Thread.Sleep");
@@ -94,7 +94,7 @@ public class CheckInterpreterTests
 
         var interpreter = TestInterpreter.Create();
 
-        var outputs = interpreter.Run([TestInterpreter.CodePackage, ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
+        var outputs = interpreter.Run([TestInterpreter.CorePackage, TestInterpreter.CodePackage, ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
 
         // BadClient has two catch(Exception) blocks: one with throw; (rethrow) and one without
         var swallowOutputs = outputs.Where(d => d.Message.Contains("Do not swallow")).ToList();
@@ -305,15 +305,16 @@ public class CheckInterpreterTests
         // BadClient.cs has two var usages: 'var x' and 'var result'
         // Statement.Source = "{File.Path}:{MemberName}", so Source = "BadClient.cs:x" and "BadClient.cs:result"
         var source = @"
+import csharp
 import code-analysis
 
 let Accepted = ['BadClient.cs:x']
 
-command NO-VAR = foreach Statements:csharp:isVarDeclaration:toError('Do not use \'var\' for {item.MemberName}') - Accepted => '{item.Message}'";
+command NO-VAR = foreach Statements:isVarDeclaration:toError('Do not use \'var\' for {item.MemberName}') - Accepted => '{item.Message}'";
         var allFiles = ParseWithImports(source);
 
-        var interpreter = TestInterpreter.Create();
-        var outputs = interpreter.Run(allFiles, TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
+        var (interpreter, docs) = TestInterpreter.CreateWithDocuments(SamplePath("BadClient.cs"));
+        var outputs = interpreter.Run(allFiles, docs).Outputs;
 
         // Should NOT contain the excluded item 'x'
         Assert.That(outputs.Any(d => d.Message.Contains("'var' for x")), Is.False,
@@ -327,15 +328,16 @@ command NO-VAR = foreach Statements:csharp:isVarDeclaration:toError('Do not use 
     public void SetSubtraction_KeepsNonMatchingItems()
     {
         var source = @"
+import csharp
 import code-analysis
 
 let Accepted = ['BadClient.cs:nonExistentMember']
 
-command NO-VAR = foreach Statements:csharp:isVarDeclaration:toError('Do not use \'var\' for {item.MemberName}') - Accepted => '{item.Message}'";
+command NO-VAR = foreach Statements:isVarDeclaration:toError('Do not use \'var\' for {item.MemberName}') - Accepted => '{item.Message}'";
         var allFiles = ParseWithImports(source);
 
-        var interpreter = TestInterpreter.Create();
-        var outputs = interpreter.Run(allFiles, TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
+        var (interpreter, docs) = TestInterpreter.CreateWithDocuments(SamplePath("BadClient.cs"));
+        var outputs = interpreter.Run(allFiles, docs).Outputs;
 
         // Both var violations should remain (none were accepted)
         Assert.That(outputs.Count(d => d.Message.Contains("'var' for")), Is.EqualTo(2),
@@ -346,15 +348,16 @@ command NO-VAR = foreach Statements:csharp:isVarDeclaration:toError('Do not use 
     public void SetSubtraction_EmptyAcceptedListKeepsAll()
     {
         var source = @"
+import csharp
 import code-analysis
 
 let Accepted = []
 
-command NO-VAR = foreach Statements:csharp:isVarDeclaration:toError('Do not use \'var\' for {item.MemberName}') - Accepted => '{item.Message}'";
+command NO-VAR = foreach Statements:isVarDeclaration:toError('Do not use \'var\' for {item.MemberName}') - Accepted => '{item.Message}'";
         var allFiles = ParseWithImports(source);
 
-        var interpreter = TestInterpreter.Create();
-        var outputs = interpreter.Run(allFiles, TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
+        var (interpreter, docs) = TestInterpreter.CreateWithDocuments(SamplePath("BadClient.cs"));
+        var outputs = interpreter.Run(allFiles, docs).Outputs;
 
         // Empty accepted list should not filter anything
         Assert.That(outputs.Count(d => d.Message.Contains("'var' for")), Is.EqualTo(2),
@@ -366,13 +369,14 @@ command NO-VAR = foreach Statements:csharp:isVarDeclaration:toError('Do not use 
     {
         // Test inline list literal (not a let-bound variable)
         var source = @"
+import csharp
 import code-analysis
 
-command NO-VAR = foreach Statements:csharp:isVarDeclaration:toError('Do not use \'var\' for {item.MemberName}') - ['BadClient.cs:x' 'BadClient.cs:result'] => '{item.Message}'";
+command NO-VAR = foreach Statements:isVarDeclaration:toError('Do not use \'var\' for {item.MemberName}') - ['BadClient.cs:x' 'BadClient.cs:result'] => '{item.Message}'";
         var allFiles = ParseWithImports(source);
 
-        var interpreter = TestInterpreter.Create();
-        var outputs = interpreter.Run(allFiles, TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
+        var (interpreter, docs) = TestInterpreter.CreateWithDocuments(SamplePath("BadClient.cs"));
+        var outputs = interpreter.Run(allFiles, docs).Outputs;
 
         // Both items excluded — no var violations should remain
         Assert.That(outputs.Where(d => d.Message.Contains("'var' for")).ToList(), Is.Empty,
@@ -383,17 +387,18 @@ command NO-VAR = foreach Statements:csharp:isVarDeclaration:toError('Do not use 
     public void Run_ParameterizedCommand_BasicExecution()
     {
         var source = @"
+import csharp
 import code-analysis
 
 export command CHECK(violations) = foreach violations => '{item.Message}'
 
-export let var-usage = Statements:csharp:isVarDeclaration:toError('Do not use var for {item.MemberName}')
+export let var-usage = Statements:isVarDeclaration:toError('Do not use var for {item.MemberName}')
 
 RUN CHECK(var-usage)
 ";
         var allFiles = ParseWithImports(source);
-        var interpreter = TestInterpreter.Create();
-        var outputs = interpreter.Run(allFiles, TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
+        var (interpreter, docs) = TestInterpreter.CreateWithDocuments(SamplePath("BadClient.cs"));
+        var outputs = interpreter.Run(allFiles, docs).Outputs;
 
         Assert.That(outputs.Any(d => d.Message.Contains("Do not use var")), Is.True,
             "RUN CHECK(var-usage) should produce output for var violations");
@@ -403,18 +408,19 @@ RUN CHECK(var-usage)
     public void Run_ParameterizedCommand_WithExclusions()
     {
         var source = @"
+import csharp
 import code-analysis
 
 export command CHECK(violations) = foreach violations => '{item.Message}'
 
-export let var-usage = Statements:csharp:isVarDeclaration:toError('Do not use var for {item.MemberName}')
+export let var-usage = Statements:isVarDeclaration:toError('Do not use var for {item.MemberName}')
 
 let Accepted = ['BadClient.cs:x' 'BadClient.cs:result']
 RUN CHECK(var-usage - Accepted)
 ";
         var allFiles = ParseWithImports(source);
-        var interpreter = TestInterpreter.Create();
-        var outputs = interpreter.Run(allFiles, TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
+        var (interpreter, docs) = TestInterpreter.CreateWithDocuments(SamplePath("BadClient.cs"));
+        var outputs = interpreter.Run(allFiles, docs).Outputs;
 
         Assert.That(outputs.Where(d => d.Message.Contains("Do not use var")).ToList(), Is.Empty,
             "RUN CHECK(var-usage - Accepted) should exclude all var violations");
@@ -442,17 +448,18 @@ RUN GREET()
     public void ParameterizedCommand_AutoExecutes_WithoutRun()
     {
         var source = @"
+import csharp
 import code-analysis
 
 export command CHECK(violations) = foreach violations => '{item.Message}'
 
-export let var-usage = Statements:csharp:isVarDeclaration:toError('Do not use var for {item.MemberName}')
+export let var-usage = Statements:isVarDeclaration:toError('Do not use var for {item.MemberName}')
 
 CHECK(var-usage)
 ";
         var allFiles = ParseWithImports(source);
-        var interpreter = TestInterpreter.Create();
-        var outputs = interpreter.Run(allFiles, TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
+        var (interpreter, docs) = TestInterpreter.CreateWithDocuments(SamplePath("BadClient.cs"));
+        var outputs = interpreter.Run(allFiles, docs).Outputs;
 
         Assert.That(outputs.Any(d => d.Message.Contains("Do not use var")), Is.True,
             "CHECK(var-usage) should auto-execute without RUN keyword");
@@ -462,18 +469,19 @@ CHECK(var-usage)
     public void ParameterizedCommand_AutoExecutes_WithFilters()
     {
         var source = @"
+import csharp
 import code-analysis
 
 export command CHECK(violations) = foreach violations => '{item.Message}'
 
-export let var-usage = Statements:csharp:isVarDeclaration:toError('Do not use var for {item.MemberName}')
+export let var-usage = Statements:isVarDeclaration:toError('Do not use var for {item.MemberName}')
 
 let Accepted = ['BadClient.cs:x' 'BadClient.cs:result']
 CHECK(var-usage - Accepted)
 ";
         var allFiles = ParseWithImports(source);
-        var interpreter = TestInterpreter.Create();
-        var outputs = interpreter.Run(allFiles, TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
+        var (interpreter, docs) = TestInterpreter.CreateWithDocuments(SamplePath("BadClient.cs"));
+        var outputs = interpreter.Run(allFiles, docs).Outputs;
 
         Assert.That(outputs.Where(d => d.Message.Contains("Do not use var")).ToList(), Is.Empty,
             "CHECK(var-usage - Accepted) should auto-execute and exclude accepted violations");
@@ -483,22 +491,23 @@ CHECK(var-usage - Accepted)
     public void CommandFilter_RunsOnlyMatchingChecks()
     {
         var source = @"
+import csharp
 import code-analysis
 
 export command CHECK(violations) = foreach violations => '{item.Message}'
 
-export let var-usage = Statements:csharp:isVarDeclaration:toError('Do not use var')
-export let dynamic-usage = Statements:csharp:isDynamicDeclaration:toError('Do not use dynamic')
+export let var-usage = Statements:isVarDeclaration:toError('Do not use var')
+export let dynamic-usage = Statements:isDynamicDeclaration:toError('Do not use dynamic')
 
 CHECK(var-usage)
 CHECK(dynamic-usage)
 ";
         var allFiles = ParseWithImports(source);
-        var interpreter = TestInterpreter.Create();
+        var (interpreter, docs) = TestInterpreter.CreateWithDocuments(SamplePath("BadClient.cs"));
 
         // Run with filter — only var-usage
         var filter = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "var-usage" };
-        var outputs = interpreter.Run(allFiles, TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs")),
+        var outputs = interpreter.Run(allFiles, docs,
             commandFilter: filter).Outputs;
 
         Assert.That(outputs.Any(d => d.Message.Contains("Do not use var")), Is.True,
@@ -511,49 +520,51 @@ CHECK(dynamic-usage)
     public void DottedCollection_CodeStatements_Works()
     {
         var source = @"
-import code
+import csharp
 
 predicate usesVar([Statement]) => Statement.Keywords:contains('var')
-let StatementsUsingVar = Code.Statements:usesVar
+let StatementsUsingVar = Statements:usesVar
 foreach StatementsUsingVar => 'uses var at {item.Line}'
 ";
         var allFiles = ParseWithImports(source);
-        var interpreter = TestInterpreter.Create();
-        var outputs = interpreter.Run(allFiles, TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
+        var (interpreter, docs) = TestInterpreter.CreateWithDocuments(SamplePath("BadClient.cs"));
+        var outputs = interpreter.Run(allFiles, docs).Outputs;
 
         Assert.That(outputs.Any(d => d.Message.Contains("uses var")), Is.True,
-            "Code.Statements:usesVar should resolve through the Code runtime binding");
+            "Statements:usesVar should resolve through the csharp package binding");
     }
 
     [Test]
     public void DottedCollection_InLetDeclaration_Works()
     {
         var source = @"
+import csharp
 import code-analysis
 
-export let var-usage = Code.Statements:csharp:isVarDeclaration:toError('Do not use var')
+export let var-usage = Statements:isVarDeclaration:toError('Do not use var')
 CHECK(var-usage)
 ";
         var allFiles = ParseWithImports(source);
-        var interpreter = TestInterpreter.Create();
-        var outputs = interpreter.Run(allFiles, TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
+        var (interpreter, docs) = TestInterpreter.CreateWithDocuments(SamplePath("BadClient.cs"));
+        var outputs = interpreter.Run(allFiles, docs).Outputs;
 
         Assert.That(outputs.Any(d => d.Message.Contains("Do not use var")), Is.True,
-            "Code.Statements in let declaration should work with full filter chain");
+            "Statements in let declaration should work with full filter chain");
     }
 
     [Test]
     public void CHECK_Output_HasAutoAnnotation_ForSeverity()
     {
         var source = @"
+import csharp
 import code-analysis
 
-export let var-usage = Code.Statements:csharp:isVarDeclaration:toError('Do not use var')
+export let var-usage = Statements:isVarDeclaration:toError('Do not use var')
 CHECK(var-usage)
 ";
         var allFiles = ParseWithImports(source);
-        var interpreter = TestInterpreter.Create();
-        var outputs = interpreter.Run(allFiles, TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
+        var (interpreter, docs) = TestInterpreter.CreateWithDocuments(SamplePath("BadClient.cs"));
+        var outputs = interpreter.Run(allFiles, docs).Outputs;
 
         Assert.That(outputs.Count, Is.GreaterThan(0), "Should produce at least one violation");
 
@@ -589,8 +600,10 @@ CHECK(var-usage)
         var csharpDir = ImportResolver.FindPackageDir(apmRoot, "csharp-checks")
             ?? Path.Combine(apmRoot, "csharp-checks");
         var csharpFile = Path.Combine(csharpDir, "src", "csharp-checks.cop");
+        var csharpChecksParsed = ScriptParser.Parse(File.ReadAllText(csharpFile), csharpFile);
+        StampPackageName(csharpChecksParsed, "csharp-checks");
         var allFiles = new List<ScriptFile> { TestInterpreter.CodePackage, scriptFile };
-        allFiles.Add(ScriptParser.Parse(File.ReadAllText(csharpFile), csharpFile));
+        allFiles.Add(csharpChecksParsed);
 
         // Resolve all imports from all files
         var importResolver = new ImportResolver(apmRoot);
@@ -602,10 +615,24 @@ CHECK(var-usage)
                 if (!resolved.Add(imp)) continue;
                 var errors = new List<string>();
                 var pkg = importResolver.Resolve(imp, errors);
-                if (pkg != null) imported.Add(pkg);
+                if (pkg != null)
+                {
+                    StampPackageName(pkg, imp);
+                    imported.Add(pkg);
+                }
             }
         allFiles.AddRange(imported);
         return allFiles;
+    }
+
+    private static void StampPackageName(ScriptFile packageFile, string packageName)
+    {
+        for (int i = 0; i < packageFile.Predicates.Count; i++)
+            packageFile.Predicates[i] = packageFile.Predicates[i] with { PackageName = packageName };
+        for (int i = 0; i < packageFile.Functions.Count; i++)
+            packageFile.Functions[i] = packageFile.Functions[i] with { PackageName = packageName };
+        for (int i = 0; i < packageFile.LetDeclarations.Count; i++)
+            packageFile.LetDeclarations[i] = packageFile.LetDeclarations[i] with { PackageName = packageName };
     }
 
     // ── Collection Union Tests ──

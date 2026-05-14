@@ -15,7 +15,7 @@ predicate isSwallowingBaseException(Statement) => Statement.Kind == 'catch'
     && Statement.TypeName == 'Exception' && !Statement.Rethrows
 
 ## Disallow implicit typing with var — use explicit types
-foreach Statements:csharp:isVarDeclaration:!Path('**/Tests/**') => '{error:@red} Do not use \'var\' for {item.MemberName}'
+foreach Statements:csharp:isVarDeclaration:!pathMatches(item.File.Path, '**/Tests/**') => '{error:@red} Do not use \'var\' for {item.MemberName}'
 
 ## Disallow dynamic typing
 foreach Statements:csharp:isDynamicDeclaration => '{error:@red} Do not use \'dynamic\''
@@ -24,7 +24,7 @@ foreach Statements:csharp:isDynamicDeclaration => '{error:@red} Do not use \'dyn
 foreach Statements:csharp:isThreadSleep => '{error:@red} Use Task.Delay instead of Thread.Sleep'
 
 ## Avoid Console output in library code
-foreach Statements:csharp:isConsoleCall:!Path('**/Tests/**') => '{warning:@yellow} Don\'t use Console.{item.MemberName} in library code'
+foreach Statements:csharp:isConsoleCall:!pathMatches(item.File.Path, '**/Tests/**') => '{warning:@yellow} Don\'t use Console.{item.MemberName} in library code'
 
 ## Catch specific exception types instead of bare Exception
 foreach Statements:csharp:isBareExceptionCatch => '{warning:@yellow} Catch a specific exception type instead of Exception'

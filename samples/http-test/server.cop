@@ -1,5 +1,0 @@
-import http
-
-function handle(Request) => ok({ path: Request.Uri })
-
-async foreach Receive => handle => Send

@@ -4,5 +4,5 @@ import csharp-library-checks
 export command api-listing = foreach Code.Api:csharp:publicApi => '{item.ApiAsText}'
 
 # Save API surface to a file
-let apiText = Code.Api:csharp:publicApi.Text('{item.ApiAsText}')
+let apiText = Code.Api:csharp:publicApi.text('{item.ApiAsText}')
 export command save-api = save('api-surface.txt', apiText)

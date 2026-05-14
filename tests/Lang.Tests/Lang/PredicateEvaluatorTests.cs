@@ -1438,4 +1438,111 @@ public class PredicateEvaluatorTests
     }
 
     #endregion
+
+    #region Schema enforcement on DataObject
+
+    [Test]
+    public void GetMember_DynamicDataObject_AllowsAnyField()
+    {
+        // DataObject with TypeName="Data" (empty type) should allow any field access
+        var registry = new TypeRegistry();
+        registry.LoadTypeDefinitions([new TypeDefinition("Data", null, [], 1)]);
+        var eval = new PredicateEvaluator([], "test.cs", registry);
+
+        var obj = new DataObject("Data");
+        obj.WithFieldResolver(name => new List<object> { $"resolved-{name}" });
+
+        var memberExpr = new MemberAccessExpr(new LiteralExpr(obj), "Anything");
+        var result = eval.EvaluateField(memberExpr, null!, "");
+        Assert.That(result, Is.Not.Null);
+    }
+
+    [Test]
+    public void GetMember_TypedDataObject_AllowsDeclaredField()
+    {
+        // DataObject with a typed schema should allow declared properties
+        var registry = new TypeRegistry();
+        registry.LoadTypeDefinitions([new TypeDefinition("MySchema", null,
+            [new PropertyDefinition("Widgets", "Widget", false, true, 1)], 1)]);
+        var eval = new PredicateEvaluator([], "test.cs", registry);
+
+        var obj = new DataObject("MySchema");
+        obj.WithFieldResolver(name => new List<object> { "widget1" });
+
+        var memberExpr = new MemberAccessExpr(new LiteralExpr(obj), "Widgets");
+        var result = eval.EvaluateField(memberExpr, null!, "");
+        Assert.That(result, Is.Not.Null);
+    }
+
+    [Test]
+    public void GetMember_TypedDataObject_RejectsUndeclaredField()
+    {
+        // DataObject with a typed schema should reject undeclared properties
+        var registry = new TypeRegistry();
+        registry.LoadTypeDefinitions([new TypeDefinition("MySchema", null,
+            [new PropertyDefinition("Widgets", "Widget", false, true, 1)], 1)]);
+        var eval = new PredicateEvaluator([], "test.cs", registry);
+
+        var obj = new DataObject("MySchema");
+        obj.WithFieldResolver(name => new List<object> { "data" });
+
+        var memberExpr = new MemberAccessExpr(new LiteralExpr(obj), "Unknown");
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            eval.EvaluateField(memberExpr, null!, ""));
+        Assert.That(ex!.Message, Does.Contain("'Unknown'"));
+        Assert.That(ex.Message, Does.Contain("MySchema"));
+    }
+
+    [Test]
+    public void GetMember_TypedDataObject_AllowsBuiltInMembers()
+    {
+        // Keys, Values, Count should always work regardless of schema
+        var registry = new TypeRegistry();
+        registry.LoadTypeDefinitions([new TypeDefinition("StrictType", null,
+            [new PropertyDefinition("OnlyThis", "string", false, false, 1)], 1)]);
+        var eval = new PredicateEvaluator([], "test.cs", registry);
+
+        var obj = new DataObject("StrictType");
+        obj.Set("OnlyThis", "value");
+
+        var keysExpr = new MemberAccessExpr(new LiteralExpr(obj), "Keys");
+        var result = eval.EvaluateField(keysExpr, null!, "");
+        Assert.That(result, Is.InstanceOf<IList>());
+    }
+
+    [Test]
+    public void TypeAnnotation_OverridesDataObjectTypeName()
+    {
+        // Simulates: let db : MySchema = data('sample') where data returns DataObject("Data")
+        var registry = new TypeRegistry();
+        registry.LoadTypeDefinitions([
+            new TypeDefinition("Data", null, [], 1),
+            new TypeDefinition("MySchema", null,
+                [new PropertyDefinition("Items", "Item", false, true, 1)], 1)
+        ]);
+
+        // Create a DataObject("Data") and put it in a let declaration with TypeAnnotation
+        var obj = new DataObject("Data");
+        obj.WithFieldResolver(name => new List<object> { "item1" });
+
+        // Use a literal expression wrapping the DataObject for the let value
+        var letDecl = new LetDeclaration("db", "", [], 1, ValueExpression: new LiteralExpr(obj), TypeAnnotation: "MySchema");
+        var letDecls = new Dictionary<string, LetDeclaration> { ["db"] = letDecl };
+
+        var eval = new PredicateEvaluator([], "test.cs", registry, letDeclarations: letDecls);
+
+        // Access db.Items — should work (Items is in MySchema)
+        var expr = new MemberAccessExpr(new IdentifierExpr("db"), "Items");
+        var result = eval.EvaluateField(expr, null!, "");
+        Assert.That(result, Is.Not.Null);
+
+        // Access db.Unknown — should fail (not in MySchema)
+        var badExpr = new MemberAccessExpr(new IdentifierExpr("db"), "Unknown");
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            eval.EvaluateField(badExpr, null!, ""));
+        Assert.That(ex!.Message, Does.Contain("'Unknown'"));
+        Assert.That(ex.Message, Does.Contain("MySchema"));
+    }
+
+    #endregion
 }

@@ -2,7 +2,7 @@
 #
 # Design principle: Every data provider must have a corresponding .cop package
 # that defines 'export type' metadata for the types it registers, and
-# 'export let = runtime::' globals for aggregate entry points.
+# explicit 'export let' bindings using data()/source()/sink() intrinsics.
 #
 # If this check fails, add the item to the tracked list below AND to docs/review-app.html.
 #
@@ -44,46 +44,28 @@ export let untracked-providers = csharp.Types:untrackedProvider
     :toWarning('Provider {item.Name} in {item.File.Path} needs a .cop package with type metadata')
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Part 2: Runtime Globals
+# Part 2: Provider Intrinsics
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Use Code([core], 'packages/') to scan .cop files in packages/ directory
-let pkg-code = Code([core], 'packages/')
+# Use data('core') to access cop code provider for packages/ directory
+let pkg-code = data('core')
 
-# All runtime-backed globals (export let X = runtime::Y) must be tracked here.
-let tracked-globals = [
-    'Code'
-    'Disk'
-    'Markdown'
-]
-
-predicate isRuntimeGlobal(Statement) =>
-    Statement.Kind:equals('declaration')
-    && Statement.Keywords:contains('runtime')
-    && Statement.Keywords:contains('export')
-
-predicate isUntrackedGlobal(Statement) =>
-    isRuntimeGlobal && !Statement.MemberName:in(tracked-globals)
-
-export let untracked-globals = pkg-code.Statements:isUntrackedGlobal
-    :toWarning('Runtime global "{item.MemberName}" in {item.File.Path} is not tracked — add here and to docs/review-app.html')
-
-# Streaming providers (those with DataFormat.AsyncStream) expose globals and sinks
-# via C# code (GetSchema). Track the DataSink classes here to ensure they are documented.
+# Streaming providers expose SourceProvider/SinkProvider subclasses.
+# Track SinkProvider classes here to ensure they are documented.
 let tracked-streaming-globals = [
     'Receive'
     'Send'
 ]
 
-# DataSink subclasses in the providers/ directory
+# SinkProvider subclasses in the providers/ directory
 predicate isSinkClass(Type) =>
     Type.File.Path:contains('providers/')
-    && Type.BaseType:equals('DataSink')
+    && Type.BaseType:equals('SinkProvider')
 
 predicate untrackedSink(Type) => isSinkClass && !Type.Name:contains('Send')
 
 export let untracked-sinks = csharp.Types:untrackedSink
-    :toWarning('DataSink "{item.Name}" in {item.File.Path} is not documented — add to docs/review-app.html')
+    :toWarning('SinkProvider "{item.Name}" in {item.File.Path} is not documented — add to docs/review-app.html')
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Part 3: Exported Types
