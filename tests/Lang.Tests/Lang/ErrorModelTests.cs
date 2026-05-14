@@ -23,7 +23,7 @@ public class ErrorModelTests
         Dictionary<string, List<PredicateDefinition>>? predicates = null)
     {
         var allPredicates = predicates ?? new Dictionary<string, List<PredicateDefinition>>();
-        var errorFunc = new FunctionDefinition("error", "Data", "Error", [], [], 0, IsIntrinsic: true);
+        var errorFunc = new FunctionDefinition("error", "string", "Error", [], [], 0, IsIntrinsic: true);
         var functions = new Dictionary<string, List<FunctionDefinition>>
         {
             ["error"] = [errorFunc]

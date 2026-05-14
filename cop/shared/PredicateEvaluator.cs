@@ -1598,7 +1598,9 @@ public class PredicateEvaluator
                 _ => throw new InvalidOperationException($"No intrinsic text() overload for type '{inputItem?.GetType().Name ?? "null"}'")
             },
             "read" => ReadFileSandboxed(inputItem?.ToString() ?? ""),
-            "error" => new ErrorValue(inputItem?.ToString()),
+            "error" => inputItem is string msg
+                ? new ErrorValue(msg)
+                : new ErrorValue(inputItem?.ToString()),
             "pathMatches" => GlobMatch(
                 paramBindings.TryGetValue("path", out var pm) ? pm?.ToString() ?? "" : "",
                 paramBindings.TryGetValue("pattern", out var pp) ? pp?.ToString() ?? "" : ""),
