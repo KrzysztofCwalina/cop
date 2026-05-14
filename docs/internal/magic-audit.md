@@ -14,11 +14,6 @@ This document catalogs every instance of "magic" behavior in the Cop runtime —
 | 4 | Flags constants | PredicateEvaluator.cs:466 | All `flags` members are global identifiers (e.g., `Public`, `Static`) |
 | 5 | Enum constants | PredicateEvaluator.cs:477 | All `enum` members are global identifiers (e.g., `Class`, `Interface`) |
 
-`error` is now a regular intrinsic function declared in `core.cop` — requires `import core` (auto-imported).
-`empty` is now handled through the collection method dispatcher and bool property fallback (no special magic).
-`isError` is now a regular predicate declared in `core.cop`: `predicate isError(Data) => item.Type:equals('Error')`.
-Uses the built-in `Type` property on DataObject (returns `DataObject.TypeName` as fallback when no real `Type` field exists).
-
 ---
 
 ## Built-in Collection/String Members
@@ -125,8 +120,6 @@ Syntax-level behavior that's not available to `.cop` declarations.
 | 3 | Implicit output | ScriptParser.cs:154-177 | Bare string/expression at top level → output command |
 | 4 | `export` keyword scope | ScriptParser.cs:77-105 | Only works before type/collection/let/command/predicate/function/flags/enum |
 | 5 | `Load(...)`, `Parse(...)` | ScriptParser.cs:529-586 | Recognized as special file parser bindings |
-
-`PRINT`, `SAVE`, `DEBUG`, and `ASSERT` are now declared as `command = intrinsic` in `core.cop` and appear in reference.html.
 
 ---
 
