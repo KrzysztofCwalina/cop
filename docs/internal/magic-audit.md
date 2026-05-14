@@ -6,9 +6,7 @@ This document catalogs every instance of "magic" behavior in the Cop runtime —
 
 ## Implicit Identifiers (always available without import)
 
-| # | Name | File:Line | Description |
-|---|------|-----------|-------------|
-| 1 | `item` | PredicateEvaluator.cs:360 | Current iteration item in any predicate/filter. Language keyword. |
+None remaining — all former implicit identifiers have been made explicit or are language keywords (`item` is a keyword like `predicate` or `function`).
 
 ---
 
