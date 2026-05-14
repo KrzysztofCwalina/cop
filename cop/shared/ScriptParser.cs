@@ -405,12 +405,28 @@ public class ScriptParser
     //     Field1 = expr,
     //     Field2 = expr
     // }
+    // function name() : ReturnType = intrinsic   (parameterless)
     private FunctionDefinition ParseFunctionDefinition(bool isExported = false, string? docComment = null)
     {
         int line = Current.Line;
         Expect(TokenKind.FunctionKeyword);
         var name = Expect(TokenKind.Identifier);
         Expect(TokenKind.LParen);
+
+        // Parameterless function: function name() : ReturnType = intrinsic
+        if (Current.Kind == TokenKind.RParen)
+        {
+            Advance(); // consume ')'
+            if (Current.Kind == TokenKind.Colon)
+            {
+                Advance(); // consume ':'
+                var returnType = Expect(TokenKind.Identifier).Value;
+                Expect(TokenKind.Equals);
+                Expect(TokenKind.IntrinsicKeyword);
+                return new FunctionDefinition(name.Value, "", returnType, [], [], line, isExported, DocComment: docComment, IsIntrinsic: true);
+            }
+            throw new InvalidOperationException($"({line}): Parameterless function must be intrinsic: function {name.Value}() : Type = intrinsic");
+        }
 
         // First parameter: either just a type name (InputType) or name:type
         var firstIdent = Expect(TokenKind.Identifier).Value;

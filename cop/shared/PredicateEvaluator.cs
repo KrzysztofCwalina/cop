@@ -25,6 +25,7 @@ public class PredicateEvaluator
     private readonly Dictionary<string, IList>? _resolvedCollections;
     private readonly IProviderQueryService? _providerQueryService;
     private readonly HashSet<string> _evaluatingLetValues = [];
+    private ProgramInfo? _program;
 
     // Package-qualified stores for disambiguation (packageName → symbolName → definitions)
     private readonly Dictionary<string, Dictionary<string, List<PredicateDefinition>>>? _packagePredicates;
@@ -54,6 +55,11 @@ public class PredicateEvaluator
         _packageFunctions = packageFunctions;
         _packageLets = packageLets;
     }
+
+    /// <summary>
+    /// Sets the program context for the program() intrinsic function.
+    /// </summary>
+    public void SetProgram(ProgramInfo program) => _program = program;
 
     public (bool result, EvaluationContext context) EvaluateAsBool(
         Expression expr, object item, string paramType)
@@ -1606,6 +1612,7 @@ public class PredicateEvaluator
             "pathMatches" => GlobMatch(
                 paramBindings.TryGetValue("path", out var pm) ? pm?.ToString() ?? "" : "",
                 paramBindings.TryGetValue("pattern", out var pp) ? pp?.ToString() ?? "" : ""),
+            "program" => _program ?? throw new InvalidOperationException("program() is not available in this context"),
             _ => throw new InvalidOperationException($"Unknown intrinsic function: '{name}'")
         };
     }

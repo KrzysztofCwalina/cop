@@ -11,6 +11,7 @@ public class ScriptInterpreter
     private readonly TimeSpan _timeout;
     private Dictionary<string, IList>? _globalResolvedSelects;
     private Dictionary<string, List<Document>>? _loadDocuments;
+    private ProgramInfo? _program;
 
     // Per-document cache for resolved let bindings — shared across all commands
     private readonly Dictionary<string, Dictionary<string, IList>> _documentLetCache = new();
@@ -56,9 +57,11 @@ public class ScriptInterpreter
         Dictionary<string, List<FunctionDefinition>>? functionGroups = null,
         Dictionary<string, IList>? resolvedCollections = null)
     {
-        return new PredicateEvaluator(predicateGroups, filePath, _typeRegistry,
+        var evaluator = new PredicateEvaluator(predicateGroups, filePath, _typeRegistry,
             letDeclarations, functionGroups, resolvedCollections, _providerQueryService,
             packagePredicates: _packagePredicates, packageFunctions: _packageFunctions, packageLets: _packageLets);
+        if (_program is not null) evaluator.SetProgram(_program);
+        return evaluator;
     }
 
     // Package-qualified symbol stores for disambiguation (populated by BuildSymbolTables)
@@ -254,6 +257,7 @@ public class ScriptInterpreter
 
         // Create Program built-in
         var program = new ProgramInfo(new List<string>(programArgs ?? []));
+        _program = program;
 
         // Build symbol tables with conflict detection
         var errors = new List<string>();

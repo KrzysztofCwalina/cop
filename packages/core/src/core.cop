@@ -92,6 +92,17 @@ export predicate isError(Data) => item.Type:equals('Error')
 ## Or in pipeline: foreach Items:badCondition => FAIL('{item.Name} is invalid')
 export command FAIL(message) = intrinsic
 
+## Represents the running program's context.
+## Provides access to command-line arguments passed to the cop invocation.
+export type Program = {
+    Args : [string]
+}
+
+## Returns the current program context.
+## Provides access to command-line arguments passed to the cop invocation.
+## Example: predicate verbose(Program) => program().Args:contains('/v')
+export function program() : Program = intrinsic
+
 ## Glob-matches a file path against a pattern.
 ## Supports **, *, ? wildcards. Returns true if the path matches.
 ## Example: pathMatches(Statement.File.Path, '**/Tests/**')

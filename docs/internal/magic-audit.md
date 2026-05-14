@@ -10,9 +10,8 @@ This document catalogs every instance of "magic" behavior in the Cop runtime —
 |---|------|-----------|-------------|
 | 1 | `item` | PredicateEvaluator.cs:360 | Current iteration item in any predicate/filter |
 | 2 | `null` | PredicateEvaluator.cs:361 | Null literal |
-| 3 | `Program` | ScriptInterpreter.cs:251 | Built-in ProgramInfo from CLI args |
-| 4 | Flags constants | PredicateEvaluator.cs:466 | All `flags` members are global identifiers (e.g., `Public`, `Static`) |
-| 5 | Enum constants | PredicateEvaluator.cs:477 | All `enum` members are global identifiers (e.g., `Class`, `Interface`) |
+| 3 | Flags constants | PredicateEvaluator.cs:466 | All `flags` members are global identifiers (e.g., `Public`, `Static`) |
+| 4 | Enum constants | PredicateEvaluator.cs:477 | All `enum` members are global identifiers (e.g., `Class`, `Interface`) |
 
 ---
 
