@@ -447,15 +447,11 @@ public class PredicateEvaluator
         // Bool property resolution: if the identifier matches a bool property on the item,
         // return its value. This enables filter chains like Lines:isComment where
         // isComment is a provider-registered boolean property on the Line type.
-        // Also tries PascalCase (e.g., "empty" → "Empty") since Cop properties are PascalCase.
         var itemTypeName = _registry.InferTypeName(item);
         if (itemTypeName is not null)
         {
             var typeDesc = _registry.GetType(itemTypeName);
             var propDesc = typeDesc?.GetProperty(name);
-            // Try PascalCase variant if exact match fails (camelCase predicate → PascalCase property)
-            if (propDesc is null && name.Length > 0 && char.IsLower(name[0]))
-                propDesc = typeDesc?.GetProperty(char.ToUpperInvariant(name[0]) + name[1..]);
             if (propDesc?.Accessor is not null)
             {
                 var val = propDesc.Accessor(item);

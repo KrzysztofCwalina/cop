@@ -33,14 +33,6 @@ How providers make their collections/types/functions available without `.cop` de
 
 ---
 
-## Bool Property Fallback
-
-Implicit identifier resolution in `EvalIdentifier` that allows bare names to act as filters.
-
-| # | What | File:Line | Behavior |
-|---|------|-----------|----------|
-| 1 | Bool property fallback | PredicateEvaluator.cs:474-488 | Bare identifier matching a bool property on the item's type returns its value (e.g., `Lines:isComment`) |
-
 ---
 
 ## Parser Magic
