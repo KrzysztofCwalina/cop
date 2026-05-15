@@ -37,11 +37,7 @@ How providers make their collections/types/functions available without `.cop` de
 
 ## Parser Magic
 
-Syntax-level behavior that's not available to `.cop` declarations.
-
-| # | What | File:Line | Behavior |
-|---|------|-----------|----------|
-| 1 | Implicit output | ScriptParser.cs:154-177 | Bare string/expression at top level → output command |
+No remaining parser magic. All syntax is standard language grammar.
 
 ---
 
