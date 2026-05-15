@@ -2668,16 +2668,16 @@ public class ScriptInterpreter
     }
 
     private static bool IsSaveAction(string? actionName) =>
-        string.Equals(actionName, "SAVE", StringComparison.Ordinal);
+        string.Equals(actionName, "SAVE", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsDebugAction(string? actionName) =>
-        string.Equals(actionName, "DEBUG", StringComparison.Ordinal);
+        string.Equals(actionName, "DEBUG", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsAssertAction(string? actionName) =>
-        string.Equals(actionName, "ASSERT", StringComparison.Ordinal);
+        string.Equals(actionName, "ASSERT", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsFailAction(string? actionName) =>
-        string.Equals(actionName, "FAIL", StringComparison.Ordinal);
+        string.Equals(actionName, "FAIL", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Execute an ASSERT command: evaluate a boolean condition expression and record pass/fail.

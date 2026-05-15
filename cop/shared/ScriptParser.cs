@@ -628,14 +628,19 @@ public class ScriptParser
         }
     }
 
-    // Check if the current token is an identifier followed by '(' — action invocation
+    // Known intrinsic command names that can be invoked at statement position
+    private static readonly HashSet<string> IntrinsicCommands = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CHECK", "SAVE", "DEBUG", "ASSERT", "FAIL", "PRINT", "ERROR", "WARNING", "INFO"
+    };
+
+    // Check if the current token is a known command name followed by '(' — action invocation
     private bool IsActionInvocation()
     {
         if (_pos + 1 >= _tokens.Count || _tokens[_pos + 1].Kind != TokenKind.LParen)
             return false;
-        // Only treat as action invocation if the identifier is ALL-UPPERCASE (SAVE, DEBUG, ASSERT, etc.)
         var name = _tokens[_pos].Value;
-        return name.Length > 0 && name.All(c => char.IsUpper(c) || c == '_');
+        return IntrinsicCommands.Contains(name);
     }
 
     /// <summary>
@@ -680,12 +685,10 @@ public class ScriptParser
         i++;
         // foreach after = means this is a let-command
         if (i < _tokens.Count && _tokens[i].Kind == TokenKind.ForeachKeyword) return true;
-        // Check for identifier followed by ( — this is an action invocation
-        // Lowercase function names are value bindings (currying/partial application)
+        // Check for known command name followed by ( — this is an action invocation
         if (i >= _tokens.Count || _tokens[i].Kind != TokenKind.Identifier) return false;
         var name = _tokens[i].Value;
-        // Lowercase-starting names are function calls (value bindings), not commands
-        if (name.Length > 0 && char.IsLower(name[0])) return false;
+        if (!IntrinsicCommands.Contains(name)) return false;
         i++;
         return i < _tokens.Count && _tokens[i].Kind == TokenKind.LParen;
     }
@@ -930,7 +933,10 @@ public class ScriptParser
     private bool IsSpecialAction()
     {
         var value = Current.Value;
-        return value is "SAVE" or "DEBUG" or "ASSERT" or "PRINT";
+        return value.Equals("SAVE", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("DEBUG", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("ASSERT", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("PRINT", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -968,7 +974,7 @@ public class ScriptParser
     private CommandBlock ParseActionInvocation(string? docComment)
     {
         int line = Current.Line;
-        string actionName = Expect(TokenKind.Identifier).Value;
+        string actionName = Expect(TokenKind.Identifier).Value.ToUpperInvariant();
         Expect(TokenKind.LParen);
 
         string? collection = null;

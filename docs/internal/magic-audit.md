@@ -41,7 +41,7 @@ Syntax-level behavior that's not available to `.cop` declarations.
 
 | # | What | File:Line | Behavior |
 |---|------|-----------|----------|
-| 1 | Action keyword recognition | ScriptParser.cs:610 | ALL-UPPERCASE identifiers followed by `(` are parsed as action invocations |
+| 1 | Action keyword recognition | ScriptParser.cs:637-645 | Known intrinsic command names (CHECK, SAVE, DEBUG, ASSERT, FAIL, PRINT, ERROR, WARNING, INFO) followed by `(` are parsed as action invocations (case-insensitive) |
 | 2 | Implicit output | ScriptParser.cs:154-177 | Bare string/expression at top level → output command |
 | 3 | `export` keyword scope | ScriptParser.cs:77-105 | Only works before type/collection/let/command/predicate/function/flags/enum |
 
