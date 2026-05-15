@@ -2085,7 +2085,15 @@ const packages = {
     "collections": [],
     "types": {},
     "predicates": [],
-    "functions": [],
+    "functions": [
+      {
+        "name": "Load",
+        "params": "path: string",
+        "returns": "Codebase",
+        "desc": "Loads a .NET assembly and returns its code model.\nThe path is relative to the project root.\nThe returned Codebase has Types, Api, Members, Lines, etc.\nExample: csharp.Load('lib/MyLib.dll')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L18"
+      }
+    ],
     "checks": [],
     "exports": [
       {
@@ -3629,7 +3637,15 @@ const packages = {
     "collections": [],
     "types": {},
     "predicates": [],
-    "functions": [],
+    "functions": [
+      {
+        "name": "Parse",
+        "params": "path: string, typeName: string",
+        "returns": "Collection",
+        "desc": "Parses a JSON file into a typed collection.\nThe path is relative to the project root.\nThe typeName must match a type declared in the current script.\nExample: json.Parse('settings.json', 'Config') returns [Config]",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/json/src/json.cop#L9"
+      }
+    ],
     "checks": [],
     "commands": []
   },

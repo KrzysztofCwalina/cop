@@ -32,6 +32,15 @@ public class ScriptParser
         return Advance();
     }
 
+    private Token ExpectAny(TokenKind kind1, TokenKind kind2)
+    {
+        if (Current.Kind != kind1 && Current.Kind != kind2)
+            throw new ParseException(
+                $"Expected {kind1} or {kind2} but got {Current.Kind} '{Current.Value}'",
+                _filePath, Current.Line);
+        return Advance();
+    }
+
     private Token Advance()
     {
         var token = Current;
@@ -422,7 +431,7 @@ public class ScriptParser
         var name = Expect(TokenKind.Identifier);
         Expect(TokenKind.LParen);
 
-        // Parameterless function: function name() : ReturnType = intrinsic
+        // Parameterless function: function name() : ReturnType = intrinsic|provider
         if (Current.Kind == TokenKind.RParen)
         {
             Advance(); // consume ')'
@@ -431,7 +440,7 @@ public class ScriptParser
                 Advance(); // consume ':'
                 var returnType = Expect(TokenKind.Identifier).Value;
                 Expect(TokenKind.Equals);
-                Expect(TokenKind.IntrinsicKeyword);
+                ExpectAny(TokenKind.IntrinsicKeyword, TokenKind.ProviderKeyword);
                 return new FunctionDefinition(name.Value, "", returnType, [], [], line, isExported, DocComment: docComment, IsIntrinsic: true);
             }
             throw new InvalidOperationException($"({line}): Parameterless function must be intrinsic: function {name.Value}() : Type = intrinsic");
@@ -518,13 +527,13 @@ public class ScriptParser
 
         Expect(TokenKind.RParen);
 
-        // Check for intrinsic function: function name(params) : ReturnType = intrinsic
+        // Check for intrinsic/provider function: function name(params) : ReturnType = intrinsic|provider
         if (Current.Kind == TokenKind.Colon)
         {
             Advance(); // consume ':'
             var returnType = Expect(TokenKind.Identifier).Value;
             Expect(TokenKind.Equals);
-            Expect(TokenKind.IntrinsicKeyword);
+            ExpectAny(TokenKind.IntrinsicKeyword, TokenKind.ProviderKeyword);
             return new FunctionDefinition(name.Value, inputType, returnType, parameters, [], line, isExported, Constraint: constraint, DocComment: docComment, IsIntrinsic: true);
         }
 
@@ -720,8 +729,8 @@ public class ScriptParser
 
         Expect(TokenKind.Equals);
 
-        // Intrinsic command: command PRINT(message) = intrinsic
-        if (Current.Kind == TokenKind.IntrinsicKeyword)
+        // Intrinsic/provider command: command PRINT(message) = intrinsic|provider
+        if (Current.Kind == TokenKind.IntrinsicKeyword || Current.Kind == TokenKind.ProviderKeyword)
         {
             Advance();
             return new CommandBlock(name.Value, "", null, [], line, docComment,
