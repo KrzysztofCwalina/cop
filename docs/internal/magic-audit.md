@@ -41,7 +41,7 @@ Syntax-level behavior that's not available to `.cop` declarations.
 
 | # | What | File:Line | Behavior |
 |---|------|-----------|----------|
-| 1 | Action keyword recognition | ScriptParser.cs:637-645 | Known intrinsic command names (CHECK, SAVE, DEBUG, ASSERT, FAIL, PRINT, ERROR, WARNING, INFO) followed by `(` are parsed as action invocations (case-insensitive) |
+| 1 | ~~Action keyword recognition~~ | ~~ScriptParser.cs~~ | **REMOVED** — Commands are now regular functions. All `identifier(...)` parsed uniformly as CallExpr. |
 | 2 | Implicit output | ScriptParser.cs:154-177 | Bare string/expression at top level → output command |
 | 3 | `export` keyword scope | ScriptParser.cs:77-105 | Only works before type/collection/let/command/predicate/function/flags/enum |
 
@@ -66,6 +66,17 @@ Syntax-level behavior that's not available to `.cop` declarations.
 | 2 | Feed path discovery | RunCommand.cs:384-403 | Walks up directories for `packages/` dirs + always adds `~/.cop/packages` |
 | 3 | Package mode detection | RunCommand.cs:230-239 | When no local `.cop` files exist, switches to package mode |
 | 4 | Remote URL execution | RunCommand.cs:308-377 | `http://` args download and execute as temp files |
+
+---
+
+## Recently Eliminated Magic
+
+| What | Commit | Description |
+|------|--------|-------------|
+| Action keyword recognition | 030dc4d | Commands (PRINT, SAVE, etc.) are now regular intrinsic functions resolved by name like any other symbol. No parser heuristics. |
+| ActionName-based dispatch | 030dc4d | Interpreter no longer branches on action names. Side effects happen inside `CallIntrinsicFunction` via sink delegates. |
+| ALL-CAPS parsing heuristic | 34861aa | Removed `ToUpperInvariant()` normalization and `IntrinsicCommands` HashSet. |
+| Bool property fallback | 84262d8 | Removed camelCase→PascalCase mapping from predicate evaluator. |
 
 ---
 
