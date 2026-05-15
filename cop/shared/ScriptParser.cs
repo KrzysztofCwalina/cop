@@ -178,11 +178,6 @@ public class ScriptParser
                     null, [], line, pendingDocComment));
                 pendingDocComment = null;
             }
-            else if (Current.Kind == TokenKind.Identifier && IsActionInvocation())
-            {
-                commands.Add(ParseActionInvocation(pendingDocComment));
-                pendingDocComment = null;
-            }
             else if (Current.Kind == TokenKind.Identifier
                 || Current.Kind == TokenKind.IntLiteral
                 || Current.Kind == TokenKind.NumberLiteral
@@ -537,6 +532,16 @@ public class ScriptParser
             return new FunctionDefinition(name.Value, inputType, returnType, parameters, [], line, isExported, Constraint: constraint, DocComment: docComment, IsIntrinsic: true);
         }
 
+        // Intrinsic/provider function with no return type: function name(params) = intrinsic|provider
+        if (Current.Kind == TokenKind.Equals
+            && _pos + 1 < _tokens.Count
+            && (_tokens[_pos + 1].Kind == TokenKind.IntrinsicKeyword || _tokens[_pos + 1].Kind == TokenKind.ProviderKeyword))
+        {
+            Advance(); // consume '='
+            ExpectAny(TokenKind.IntrinsicKeyword, TokenKind.ProviderKeyword);
+            return new FunctionDefinition(name.Value, inputType, "", parameters, [], line, isExported, Constraint: constraint, DocComment: docComment, IsIntrinsic: true);
+        }
+
         Expect(TokenKind.Arrow); // =>
 
         // Determine if this is a record-body or expression-body function
@@ -628,21 +633,6 @@ public class ScriptParser
         }
     }
 
-    // Known intrinsic command names that can be invoked at statement position
-    private static readonly HashSet<string> IntrinsicCommands = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "CHECK", "SAVE", "DEBUG", "ASSERT", "FAIL", "PRINT", "ERROR", "WARNING", "INFO"
-    };
-
-    // Check if the current token is a known command name followed by '(' — action invocation
-    private bool IsActionInvocation()
-    {
-        if (_pos + 1 >= _tokens.Count || _tokens[_pos + 1].Kind != TokenKind.LParen)
-            return false;
-        var name = _tokens[_pos].Value;
-        return IntrinsicCommands.Contains(name);
-    }
-
     /// <summary>
     /// Flattens a + b + c BinaryExpr tree into [a, b, c] operands for collection union.
     /// Returns null if any operator is not '+'.
@@ -673,7 +663,8 @@ public class ScriptParser
         return elements.Count >= 2 ? elements : null;
     }
 
-    // Peek ahead to check if this is a let-command: let <name> = <identifier>(...) or let <name> = foreach ...
+    // Peek ahead to check if this is a let-command: let <name> = foreach ...
+    // All other let forms are let-declarations (value bindings).
     private bool IsLetCommand()
     {
         int i = _pos;
@@ -684,13 +675,7 @@ public class ScriptParser
         if (i >= _tokens.Count || _tokens[i].Kind != TokenKind.Equals) return false;
         i++;
         // foreach after = means this is a let-command
-        if (i < _tokens.Count && _tokens[i].Kind == TokenKind.ForeachKeyword) return true;
-        // Check for known command name followed by ( — this is an action invocation
-        if (i >= _tokens.Count || _tokens[i].Kind != TokenKind.Identifier) return false;
-        var name = _tokens[i].Value;
-        if (!IntrinsicCommands.Contains(name)) return false;
-        i++;
-        return i < _tokens.Count && _tokens[i].Kind == TokenKind.LParen;
+        return i < _tokens.Count && _tokens[i].Kind == TokenKind.ForeachKeyword;
     }
 
     private CommandBlock ParseLetCommandFromLet(string? docComment)
@@ -699,11 +684,7 @@ public class ScriptParser
         Expect(TokenKind.LetKeyword);
         var name = Expect(TokenKind.Identifier);
         Expect(TokenKind.Equals);
-        CommandBlock block;
-        if (Current.Kind == TokenKind.ForeachKeyword)
-            block = ParseForeachBlock(docComment);
-        else
-            block = ParseActionInvocation(docComment);
+        var block = ParseForeachBlock(docComment);
         return block with { Name = name.Value, IsCommand = true };
     }
 
@@ -785,17 +766,23 @@ public class ScriptParser
             var template = Advance().Value;
             block = new CommandBlock(commandName, template, null, [], line, docComment, IsCommand: true);
         }
-        else if (Current.Kind == TokenKind.Identifier && IsActionInvocation())
-        {
-            block = ParseActionInvocation(docComment);
-            block = block with { Name = commandName, IsCommand = true };
-        }
         else
         {
-            // Command reference: identifier
-            var refName = Expect(TokenKind.Identifier).Value;
-            block = new CommandBlock(commandName, "",
-                null, [], line, docComment, IsCommand: true, CommandRef: refName);
+            // Expression or command reference
+            // Try to parse as an expression first (handles function calls, collections, etc.)
+            var expr = ParseExpression();
+            if (expr is IdentifierExpr id)
+            {
+                // Simple identifier = command reference
+                block = new CommandBlock(commandName, "",
+                    null, [], line, docComment, IsCommand: true, CommandRef: id.Name);
+            }
+            else
+            {
+                // Full expression (function call, collection, etc.)
+                block = new CommandBlock(commandName, "",
+                    null, [], line, docComment, IsCommand: true, OutputExpression: expr);
+            }
         }
 
         if (prefixGuard is not null)
@@ -840,39 +827,9 @@ public class ScriptParser
             string name = DeriveRuleId(collection, filters);
             block = new CommandBlock(name, template, collection, filters, line, docComment, Exclusions: exclusions, PathOverride: pathOverride);
         }
-        else if (Current.Kind == TokenKind.Identifier && IsSpecialAction() && IsActionInvocation())
-        {
-            // Explicit action: foreach X => SAVE('path', 'template') or DEBUG('msg')
-            block = ParseActionInvocation(docComment);
-            string name = DeriveRuleId(collection, filters);
-            block = block with
-            {
-                Name = name,
-                Collection = collection,
-                Filters = filters,
-                Line = line,
-                Exclusions = exclusions,
-                PathOverride = pathOverride
-            };
-        }
-        else if (Current.Kind == TokenKind.Identifier && IsActionInvocation())
-        {
-            // Backward compatibility: treat any other action invocation (e.g., PRINT) as implicit output
-            block = ParseActionInvocation(docComment);
-            string name = DeriveRuleId(collection, filters);
-            block = block with
-            {
-                Name = name,
-                Collection = collection,
-                Filters = filters,
-                Line = line,
-                Exclusions = exclusions,
-                PathOverride = pathOverride
-            };
-        }
         else
         {
-            // Expression-based output: foreach X => expr
+            // Expression-based output: foreach X => expr (including function calls like print(...))
             var outputExpr = ParseExpression();
             string name = DeriveRuleId(collection, filters);
             block = new CommandBlock(name, "", collection, filters, line, docComment,
@@ -927,19 +884,6 @@ public class ScriptParser
     }
 
     /// <summary>
-    /// Returns true if the current identifier is a special action keyword (SAVE, DEBUG, ASSERT).
-    /// These are the only actions that retain explicit invocation syntax.
-    /// </summary>
-    private bool IsSpecialAction()
-    {
-        var value = Current.Value;
-        return value.Equals("SAVE", StringComparison.OrdinalIgnoreCase)
-            || value.Equals("DEBUG", StringComparison.OrdinalIgnoreCase)
-            || value.Equals("ASSERT", StringComparison.OrdinalIgnoreCase)
-            || value.Equals("PRINT", StringComparison.OrdinalIgnoreCase);
-    }
-
-    /// <summary>
     /// Parse a bare expression at top level as an implicit output statement.
     /// The expression is parsed and decomposed: if it resolves to a collection,
     /// the command iterates it; otherwise it evaluates once as a scalar.
@@ -966,73 +910,6 @@ public class ScriptParser
             return new CommandBlock($"output_{line}", "",
                 null, [], line, docComment, OutputExpression: expr);
         }
-    }
-
-    // Generic action invocation: <identifier>(<args>)
-    // Arguments are comma-separated string literals and/or collection expressions.
-    // One string arg → message template. Two string args → first is output path, second is message.
-    private CommandBlock ParseActionInvocation(string? docComment)
-    {
-        int line = Current.Line;
-        string actionName = Expect(TokenKind.Identifier).Value.ToUpperInvariant();
-        Expect(TokenKind.LParen);
-
-        string? collection = null;
-        var filters = new List<Expression>();
-        var stringArgs = new List<string>();
-        Expression? exclusions = null;
-        string? pathOverride = null;
-        Expression? conditionExpr = null;
-        bool isAssert = actionName == "ASSERT";
-
-        // Parse comma-separated arguments (strings and collection expressions)
-        while (Current.Kind != TokenKind.RParen && Current.Kind != TokenKind.Eof)
-        {
-            if (Current.Kind == TokenKind.StringLiteral)
-            {
-                stringArgs.Add(Advance().Value);
-            }
-            else
-            {
-                var expr = ParseExpression();
-                if (isAssert)
-                {
-                    // ASSERT takes a boolean expression as its first argument
-                    conditionExpr = expr;
-                }
-                else
-                {
-                    (collection, filters, exclusions, pathOverride) = DecomposeCollectionExpression(expr);
-                }
-            }
-
-            if (Current.Kind == TokenKind.Comma)
-                Advance();
-        }
-
-        Expect(TokenKind.RParen);
-
-        // Assign string args: 1 string = message, 2+ strings = path + message
-        string messageTemplate = "";
-        string? outputPath = null;
-
-        if (stringArgs.Count == 1)
-        {
-            messageTemplate = stringArgs[0];
-        }
-        else if (stringArgs.Count >= 2)
-        {
-            outputPath = stringArgs[0];
-            messageTemplate = stringArgs[1];
-        }
-
-        string name = collection is not null
-            ? DeriveRuleId(collection, filters)
-            : $"action_{line}";
-
-        return new CommandBlock(name, messageTemplate,
-            collection, filters, line, docComment, ActionName: actionName, OutputPath: outputPath,
-            Exclusions: exclusions, PathOverride: pathOverride, OutputExpression: conditionExpr);
     }
 
     // Parse: RUN <commandName>(<arg1>, <arg2>, ...)

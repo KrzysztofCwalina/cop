@@ -16,4 +16,4 @@ predicate missingOptions(Type) => Type:!hasOptions
 let Clients = Code.Types:client
 let NeedsOptions = Clients:missingOptions
 
-foreach NeedsOptions => PRINT('{item.Name} needs an Options constructor parameter')
+foreach NeedsOptions => print('{item.Name} needs an Options constructor parameter')

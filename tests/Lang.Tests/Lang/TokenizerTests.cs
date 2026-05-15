@@ -22,7 +22,7 @@ public class TokenizerTests
     [Test]
     public void Tokenize_PrintHeader()
     {
-        var tokens = new Tokenizer("foreach Statements:isVar => PRINT('msg')").Tokenize();
+        var tokens = new Tokenizer("foreach Statements:isVar => print('msg')").Tokenize();
         Assert.That(tokens[0].Kind, Is.EqualTo(TokenKind.ForeachKeyword));
         Assert.That(tokens[0].Value, Is.EqualTo("foreach"));
         Assert.That(tokens[1].Kind, Is.EqualTo(TokenKind.Identifier));
@@ -32,7 +32,7 @@ public class TokenizerTests
         Assert.That(tokens[3].Value, Is.EqualTo("isVar"));
         Assert.That(tokens[4].Kind, Is.EqualTo(TokenKind.Arrow));
         Assert.That(tokens[5].Kind, Is.EqualTo(TokenKind.Identifier));
-        Assert.That(tokens[5].Value, Is.EqualTo("PRINT"));
+        Assert.That(tokens[5].Value, Is.EqualTo("print"));
         Assert.That(tokens[6].Kind, Is.EqualTo(TokenKind.LParen));
         Assert.That(tokens[7].Kind, Is.EqualTo(TokenKind.StringLiteral));
         Assert.That(tokens[8].Kind, Is.EqualTo(TokenKind.RParen));
@@ -71,13 +71,13 @@ public class TokenizerTests
     [Test]
     public void Tokenize_Keywords()
     {
-        var tokens = new Tokenizer("csharp python PRINT true false").Tokenize();
+        var tokens = new Tokenizer("csharp python print true false").Tokenize();
         Assert.That(tokens[0].Kind, Is.EqualTo(TokenKind.Identifier));
         Assert.That(tokens[0].Value, Is.EqualTo("csharp"));
         Assert.That(tokens[1].Kind, Is.EqualTo(TokenKind.Identifier));
         Assert.That(tokens[1].Value, Is.EqualTo("python"));
         Assert.That(tokens[2].Kind, Is.EqualTo(TokenKind.Identifier));
-        Assert.That(tokens[2].Value, Is.EqualTo("PRINT"));
+        Assert.That(tokens[2].Value, Is.EqualTo("print"));
         Assert.That(tokens[3].Kind, Is.EqualTo(TokenKind.True));
         Assert.That(tokens[4].Kind, Is.EqualTo(TokenKind.False));
     }
@@ -95,7 +95,7 @@ public class TokenizerTests
     [Test]
     public void Tokenize_UppercaseActionsAreIdentifiers()
     {
-        var tokens = new Tokenizer("ERROR WARNING INFO PRINT SAVE").Tokenize();
+        var tokens = new Tokenizer("ERROR WARNING INFO print save").Tokenize();
         Assert.That(tokens[0].Kind, Is.EqualTo(TokenKind.Identifier));
         Assert.That(tokens[0].Value, Is.EqualTo("ERROR"));
         Assert.That(tokens[1].Kind, Is.EqualTo(TokenKind.Identifier));
@@ -103,9 +103,9 @@ public class TokenizerTests
         Assert.That(tokens[2].Kind, Is.EqualTo(TokenKind.Identifier));
         Assert.That(tokens[2].Value, Is.EqualTo("INFO"));
         Assert.That(tokens[3].Kind, Is.EqualTo(TokenKind.Identifier));
-        Assert.That(tokens[3].Value, Is.EqualTo("PRINT"));
+        Assert.That(tokens[3].Value, Is.EqualTo("print"));
         Assert.That(tokens[4].Kind, Is.EqualTo(TokenKind.Identifier));
-        Assert.That(tokens[4].Value, Is.EqualTo("SAVE"));
+        Assert.That(tokens[4].Value, Is.EqualTo("save"));
     }
 
     [Test]
@@ -153,24 +153,24 @@ public class TokenizerTests
     [Test]
     public void Tokenize_DocComment()
     {
-        var tokens = new Tokenizer("## This is a doc comment\nPRINT").Tokenize();
+        var tokens = new Tokenizer("## This is a doc comment\nprint").Tokenize();
         Assert.That(tokens[0].Kind, Is.EqualTo(TokenKind.DocComment));
         Assert.That(tokens[0].Value, Is.EqualTo("This is a doc comment"));
         Assert.That(tokens[0].Line, Is.EqualTo(1));
         Assert.That(tokens[1].Kind, Is.EqualTo(TokenKind.Identifier));
-        Assert.That(tokens[1].Value, Is.EqualTo("PRINT"));
+        Assert.That(tokens[1].Value, Is.EqualTo("print"));
     }
 
     [Test]
     public void Tokenize_MultipleDocComments()
     {
-        var tokens = new Tokenizer("## Line one\n## Line two\nPRINT").Tokenize();
+        var tokens = new Tokenizer("## Line one\n## Line two\nprint").Tokenize();
         Assert.That(tokens[0].Kind, Is.EqualTo(TokenKind.DocComment));
         Assert.That(tokens[0].Value, Is.EqualTo("Line one"));
         Assert.That(tokens[1].Kind, Is.EqualTo(TokenKind.DocComment));
         Assert.That(tokens[1].Value, Is.EqualTo("Line two"));
         Assert.That(tokens[2].Kind, Is.EqualTo(TokenKind.Identifier));
-        Assert.That(tokens[2].Value, Is.EqualTo("PRINT"));
+        Assert.That(tokens[2].Value, Is.EqualTo("print"));
     }
 
     [Test]

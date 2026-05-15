@@ -899,8 +899,9 @@ public class TypeRegistry
     /// <summary>
     /// Infers the cop type name from a CLR object using registered CLR type mappings.
     /// </summary>
-    internal string? InferTypeName(object value)
+    internal string? InferTypeName(object? value)
     {
+        if (value is null) return null;
         if (value is DataObject ao)
             return ao.TypeName;
         if (value is RecordView v)

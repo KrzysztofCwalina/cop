@@ -672,15 +672,12 @@ export let api-compat = api-removed + api-added
         var exportPolicy = @"
 import csharp-library-checks
 import code-analysis
-export command api-export = SAVE('api-baseline.txt', '{item.Signature}', Code.Api:isCSharp:isPublicApi)
+export command api-export = foreach Code.Api:isCSharp:isPublicApi => '{item.Signature}'
 ";
         var result = RunInlineCop(exportPolicy,
             [SamplePath("GoodClient.cs")], commandName: "api-export");
 
-        var fileOutput = result.FileOutputs.FirstOrDefault();
-        Assert.That(fileOutput, Is.Not.Null, "Should produce file output from api-export");
-
-        var lines = fileOutput!.Content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var lines = result.Outputs.Select(o => o.Message).ToArray();
 
         Assert.That(lines.Any(l => l.StartsWith("class GoodClient")),
             Is.True, $"Should have GoodClient class entry. Lines:\n{string.Join("\n", lines)}");

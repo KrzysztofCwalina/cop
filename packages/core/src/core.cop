@@ -66,7 +66,7 @@ export type Formattable = {
 export function text(Formattable) : string = intrinsic
 
 ## Represents an operational error flowing through a pipeline.
-## Errors are not code bugs (use FAIL for those). They represent external failures
+## Errors are not code bugs (use fail() for those). They represent external failures
 ## that code cannot prevent: network timeouts, I/O failures, malformed input.
 ## Use isError predicate to detect errors in pipeline items.
 export type Error = {
@@ -82,14 +82,14 @@ export function error(string) : Error = intrinsic
 
 ## Returns true if the current item is an Error value.
 ## Works as a bare predicate or as a filter: items:isError
-## Example: predicate handleError(Object:isError) => PRINT('{item.Message}')
+## Example: predicate handleError(Object:isError) => print('{item.Message}')
 export predicate isError(Object) => item.Type:equals('Error')
 
 ## Terminates execution immediately with a fatal diagnostic.
 ## Use for programmer assertions — situations that should never occur.
-## Can be used standalone: FAIL('invariant violated')
-## Or in pipeline: foreach Items:badCondition => FAIL('{item.Name} is invalid')
-export command FAIL(message) = intrinsic
+## Can be used standalone: fail('invariant violated')
+## Or in pipeline: foreach Items:badCondition => fail('{item.Name} is invalid')
+export function fail(message : string) = intrinsic
 
 ## Represents the running program's context.
 ## Provides access to command-line arguments passed to the cop invocation.
@@ -108,25 +108,25 @@ export function program() : Program = intrinsic
 export function pathMatches(path : string, pattern : string) : bool = intrinsic
 
 ## Prints a message to the output.
-## Used standalone: PRINT('hello {Name}')
-## Used in pipeline: foreach Types => PRINT('{item.Name}')
+## Used standalone: print('hello {Name}')
+## Used in pipeline: foreach Types => print('{item.Name}')
 ## The template supports {Property} interpolation and {@style} formatting.
-export command PRINT(message) = intrinsic
+export function print(message : string) : string = intrinsic
 
 ## Saves content to a file at the specified path.
-## Used in pipeline: foreach Types:isPublic => SAVE('api.txt', '{item.Name}')
-## Creates or overwrites the file with the rendered template output.
-export command SAVE(path, template) = intrinsic
+## Used in pipeline: foreach Types:isPublic => save('api.txt', '{item.Name}')
+## Creates or appends to the file with the rendered template output.
+export function save(path : string, content : string) = intrinsic
 
 ## Outputs a diagnostic message to the debug log (--diag flag).
-## Same template semantics as PRINT but only visible when diagnostics are enabled.
-## Used for troubleshooting: DEBUG('{Types.Count} types loaded')
-export command DEBUG(message) = intrinsic
+## Same template semantics as print but only visible when diagnostics are enabled.
+## Used for troubleshooting: debug('{Types.Count} types loaded')
+export function debug(message : string) = intrinsic
 
 ## Asserts that a condition is true. Fails the test run if false.
-## Used in tests: ASSERT(Types:isPublic.Count > 0, 'should have public types')
+## Used in tests: assert(Types:isPublic.Count > 0, 'should have public types')
 ## Reports pass/fail with the description.
-export command ASSERT(condition, description) = intrinsic
+export function assert(condition : bool, description : string) = intrinsic
 
 # Collection Type
 # The built-in collection type. All [T] properties are Collection instances.
@@ -148,7 +148,7 @@ export type Collection = {
 
 ## A deferred query over a collection (like C# IQueryable).
 ## Chaining where/orderBy/select builds an expression tree without materializing.
-## The query executes when consumed by foreach, Count, PRINT, or assigned to a Collection.
+## The query executes when consumed by foreach, Count, print, or assigned to a Collection.
 ## Providers may optimize by pushing the full query expression down.
 export type Query = {
     Count : int,

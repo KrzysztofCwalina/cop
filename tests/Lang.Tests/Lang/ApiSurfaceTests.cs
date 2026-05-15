@@ -190,7 +190,8 @@ public class ApiSurfaceTests
         var cop = $@"
 let baseline = csharp.Load('{assemblyPath}')
 predicate anyApi(Api) => Api.Kind != ''
-export command api-list = SAVE('api.txt', '{{item.Signature}}', baseline.Api:anyApi)
+let apiText = baseline.Api:anyApi.text('{{item.Signature}}')
+export command api-list = save('api.txt', apiText)
 ";
 
         var registry = new TypeRegistry();
@@ -202,7 +203,7 @@ export command api-list = SAVE('api.txt', '{{item.Signature}}', baseline.Api:any
 
         var script = ScriptParser.Parse(cop, "test.cop");
         var documents = new List<Document>();
-        var result = interpreter.Run([script], documents, commandName: "api-list");
+        var result = interpreter.Run([script, TestInterpreter.CorePackage], documents, commandName: "api-list");
 
         Assert.That(result.FileOutputs.Count, Is.GreaterThan(0), "Expected file outputs");
         var apiFile = result.FileOutputs.First(f => f.Path == "api.txt");
@@ -218,7 +219,8 @@ export command api-list = SAVE('api.txt', '{{item.Signature}}', baseline.Api:any
         var assemblyPath = typeof(ApiSurfaceTests).Assembly.Location.Replace("\\", "\\\\");
         var cop = $@"
 let baseline = csharp.Load('{assemblyPath}')
-export command types = SAVE('types.txt', '{{item.Name}}', baseline.Types)
+let typesText = baseline.Types.text('{{item.Name}}')
+export command types = save('types.txt', typesText)
 ";
 
         var registry = new TypeRegistry();
@@ -230,7 +232,7 @@ export command types = SAVE('types.txt', '{{item.Name}}', baseline.Types)
 
         var script = ScriptParser.Parse(cop, "test.cop");
         var documents = new List<Document>();
-        var result = interpreter.Run([script], documents, commandName: "types");
+        var result = interpreter.Run([script, TestInterpreter.CorePackage], documents, commandName: "types");
 
         Assert.That(result.FileOutputs.Count, Is.GreaterThan(0), "Expected file outputs");
         var typesFile = result.FileOutputs.First(f => f.Path == "types.txt");
@@ -246,7 +248,8 @@ export command types = SAVE('types.txt', '{{item.Name}}', baseline.Types)
         // Bare csharp.Load returns a DataObject — access sub-collections via .Types, .Api
         var cop = $@"
 let baseline = csharp.Load('{assemblyPath}')
-export command check = SAVE('types.txt', '{{item.Name}}', baseline.Types)
+let typesText = baseline.Types.text('{{item.Name}}')
+export command check = save('types.txt', typesText)
 ";
 
         var registry = new TypeRegistry();
@@ -258,7 +261,7 @@ export command check = SAVE('types.txt', '{{item.Name}}', baseline.Types)
 
         var script = ScriptParser.Parse(cop, "test.cop");
         var documents = new List<Document>();
-        var result = interpreter.Run([script], documents, commandName: "check");
+        var result = interpreter.Run([script, TestInterpreter.CorePackage], documents, commandName: "check");
         Assert.That(result.FileOutputs.Count, Is.GreaterThan(0));
     }
 
@@ -302,7 +305,7 @@ export command print-text = foreach apiText => '{{item}}'
 let baseline = csharp.Load('{assemblyPath}')
 predicate anyApi(Api) => Api.Kind != ''
 let apiText = baseline.Api:anyApi.text('{{item.Signature}}')
-export command save-api = SAVE('api-surface.txt', apiText)
+export command save-api = save('api-surface.txt', apiText)
 ";
 
         var registry = new TypeRegistry();
@@ -314,7 +317,7 @@ export command save-api = SAVE('api-surface.txt', apiText)
 
         var script = ScriptParser.Parse(cop, "test.cop");
         var documents = new List<Document>();
-        var result = interpreter.Run([script], documents, commandName: "save-api");
+        var result = interpreter.Run([script, TestInterpreter.CorePackage], documents, commandName: "save-api");
 
         Assert.That(result.FileOutputs.Count, Is.GreaterThan(0), "Expected file output from save()");
         var apiFile = result.FileOutputs.First(f => f.Path == "api-surface.txt");

@@ -35,6 +35,12 @@ public class ScriptInterpreter
 
     private readonly Action<string>? _diagLog;
 
+    // Sinks for intrinsic functions — set per-Run, used by CreateEvaluator
+    private Action<string>? _printSink;
+    private Action<string, string>? _saveSink;
+    private Action<string>? _debugSink;
+    private Action<bool, string>? _assertSink;
+
     public ScriptInterpreter(
         TypeRegistry typeRegistry,
         int maxOutputsPerCommand = 1000,
@@ -58,7 +64,8 @@ public class ScriptInterpreter
     {
         var evaluator = new PredicateEvaluator(predicateGroups, filePath, _typeRegistry,
             letDeclarations, functionGroups, resolvedCollections, _providerQueryService,
-            packagePredicates: _packagePredicates, packageFunctions: _packageFunctions, packageLets: _packageLets);
+            packagePredicates: _packagePredicates, packageFunctions: _packageFunctions, packageLets: _packageLets,
+            printSink: _printSink, saveSink: _saveSink, debugSink: _debugSink, assertSink: _assertSink);
         if (_program is not null) evaluator.SetProgram(_program);
         return evaluator;
     }
@@ -254,6 +261,16 @@ public class ScriptInterpreter
         var fileOutputs = new Dictionary<string, List<string>>();
         var allAsserts = new List<AssertResult>();
 
+        // Wire up intrinsic function sinks for this run
+        _printSink = message => allOutputs.Add(new PrintOutput(new RichString(new[] { new TextSpan(message) })));
+        _saveSink = (path, content) =>
+        {
+            if (!fileOutputs.TryGetValue(path, out var lines)) { lines = []; fileOutputs[path] = lines; }
+            lines.Add(content);
+        };
+        _debugSink = _diagLog is not null ? message => _diagLog($"[debug] {message}") : null;
+        _assertSink = (condition, description) => allAsserts.Add(new AssertResult(description, condition, condition ? "" : $"assert failed: {description}", 0));
+
         // Create Program built-in
         var program = new ProgramInfo(new List<string>(programArgs ?? []));
         _program = program;
@@ -294,7 +311,7 @@ public class ScriptInterpreter
             if (assertMode)
             {
                 // Test mode: run ONLY assert commands
-                commandsToRun = ScriptFile.Commands.Where(c => IsAssertAction(c.ActionName));
+                commandsToRun = ScriptFile.Commands.Where(c => IsCallTo(c, "assert"));
             }
             else if (commandName != null)
             {
@@ -304,14 +321,16 @@ public class ScriptInterpreter
             else if (commandFilter != null)
             {
                 // Run only commands whose name matches the filter (supports auto-derived names)
+                // Also include parameterized command invocations (e.g., CHECK(var-usage))
+                // whose argument name matches the filter
                 commandsToRun = ScriptFile.Commands.Where(c =>
-                    !IsSaveAction(c.ActionName) && !IsAssertAction(c.ActionName) &&
-                    commandFilter.Contains(c.Name));
+                    !IsCallTo(c, "save") && !IsCallTo(c, "assert") &&
+                    (commandFilter.Contains(c.Name) || MatchesCommandFilter(c, commandFilter, allCommands)));
             }
             else
             {
-                // Run all commands but skip SAVE and ASSERT actions (require explicit invocation)
-                commandsToRun = ScriptFile.Commands.Where(c => !IsSaveAction(c.ActionName) && !IsAssertAction(c.ActionName));
+                // Run all commands but skip save and assert (require explicit invocation)
+                commandsToRun = ScriptFile.Commands.Where(c => !IsCallTo(c, "save") && !IsCallTo(c, "assert"));
             }
 
             // Expand command references into concrete blocks
@@ -327,16 +346,40 @@ public class ScriptInterpreter
                 if (cmd.Parameters is { Count: > 0 })
                     continue;
 
-                // If ActionName matches a parameterized command, resolve as invocation
+                // If OutputExpression is a function call that matches a parameterized command, resolve as invocation
                 // e.g., CHECK(console-calls:notTest) -> bind console-calls:notTest to CHECK's parameter
-                if (cmd.ActionName != null
-                    && allCommands.TryGetValue(cmd.ActionName, out var targetCmds)
+                string? callTarget = cmd.OutputExpression is CallExpr callExpr ? callExpr.Name : cmd.ActionName;
+                if (callTarget != null
+                    && allCommands.TryGetValue(callTarget, out var targetCmds)
                     && targetCmds.Count > 0
                     && targetCmds[0].Parameters is { Count: > 0 })
                 {
                     var target = targetCmds[0];
                     var tempLets = new Dictionary<string, LetDeclaration>(letDeclarations);
-                    if (cmd.Collection != null && target.Parameters.Count > 0)
+
+                    // Bind arguments from the CallExpr
+                    if (cmd.OutputExpression is CallExpr ce && ce.Args.Count > 0)
+                    {
+                        for (int i = 0; i < Math.Min(target.Parameters.Count, ce.Args.Count); i++)
+                        {
+                            var paramName = target.Parameters[i];
+                            var argExpr = ce.Args[i];
+                            try
+                            {
+                                var (collection, filters, exclusions, pathOverride) = ScriptParser.DecomposeCollectionExpression(argExpr);
+                                tempLets[paramName] = new LetDeclaration(paramName, collection, filters, cmd.Line)
+                                {
+                                    Exclusions = exclusions
+                                };
+                            }
+                            catch (InvalidOperationException)
+                            {
+                                // Not a collection expression — store as value binding
+                                tempLets[paramName] = new LetDeclaration(paramName, "", [], cmd.Line, ValueExpression: argExpr);
+                            }
+                        }
+                    }
+                    else if (cmd.Collection != null && target.Parameters.Count > 0)
                     {
                         tempLets[target.Parameters[0]] = new LetDeclaration(
                             target.Parameters[0], cmd.Collection, cmd.Filters, cmd.Line)
@@ -402,8 +445,27 @@ public class ScriptInterpreter
             foreach (var sf in scriptFiles)
             {
                 foreach (var c in sf.Commands)
+                {
                     if (c.Collection != null)
                         consumedLets.Add(c.Collection);
+                    // Also track collections consumed via CallExpr-based command invocations
+                    // e.g., CHECK(var-usage - Accepted) → "var-usage" is consumed
+                    if (c.OutputExpression is CallExpr callExpr
+                        && allCommands.TryGetValue(callExpr.Name, out var cmdList)
+                        && cmdList.Count > 0
+                        && cmdList[0].Parameters is { Count: > 0 })
+                    {
+                        foreach (var arg in callExpr.Args)
+                        {
+                            try
+                            {
+                                var (col, _, _, _) = ScriptParser.DecomposeCollectionExpression(arg);
+                                consumedLets.Add(col);
+                            }
+                            catch { }
+                        }
+                    }
+                }
                 if (sf.RunInvocations is not null)
                     foreach (var run in sf.RunInvocations)
                         foreach (var arg in run.Arguments)
@@ -796,52 +858,34 @@ public class ScriptInterpreter
                 return;
         }
 
-        // DEBUG action: skip entirely if diagLog is not active
-        if (IsDebugAction(cmd.ActionName) && _diagLog is null)
-            return;
-
-        // FAIL action: terminate execution immediately with diagnostic
-        if (IsFailAction(cmd.ActionName))
-        {
-            var message = !string.IsNullOrEmpty(cmd.MessageTemplate) ? cmd.MessageTemplate : "FAIL";
-            // If it has a collection, this is a foreach FAIL — resolve items to confirm non-empty
-            if (cmd.Collection is not null)
-            {
-                var evaluator = CreateEvaluator(predicateGroups, "", letDeclarations, functionGroups);
-                var items = ResolveGlobalCollection(cmd.Collection, evaluator, predicateGroups, letDeclarations, functionGroups);
-                items = ApplyFilters(items, ResolveItemType(cmd.Collection, predicateGroups, letDeclarations, functionGroups), cmd.Filters, evaluator, functionGroups);
-                if (items.Count > 0)
-                {
-                    // Resolve template with first matching item for context
-                    var ctx = new EvaluationContext();
-                    var firstItem = items[0];
-                    ctx.Capture("item", firstItem);
-                    if (firstItem is DataObject ao)
-                        CaptureAlanObjectFields(ctx, ao);
-                    var resolved = ResolveTemplate(message, ctx).ToPlainText();
-                    throw new FailException(resolved, null, cmd.Line);
-                }
-                return; // No items matched — FAIL not triggered
-            }
-            throw new FailException(message, null, cmd.Line);
-        }
-
-        // ASSERT: evaluate boolean condition, record result
-        if (IsAssertAction(cmd.ActionName) && cmd.Collection is not null)
-        {
-            ExecuteAssert(cmd, documents, predicateGroups, letDeclarations, functionGroups, allAsserts);
-            return;
-        }
-
         // Bare command — no collection, execute once
         if (cmd.Collection is null)
         {
             RichString richMessage;
-            if (cmd.OutputExpression is not null && string.IsNullOrEmpty(cmd.MessageTemplate))
+            if (cmd.OutputExpression is CallExpr { Target: null } printCall
+                && printCall.Name is "print"
+                && printCall.Args.Count >= 1
+                && printCall.Args[0] is LiteralExpr { Value: string template })
+            {
+                // print('template') — resolve template with let bindings
+                EvaluationContext ctx = new();
+                var evaluator = CreateEvaluator(predicateGroups, "", letDeclarations, functionGroups);
+                CaptureLetValues(ctx, evaluator, letDeclarations, null!, "");
+                foreach (var (aggName, aggCount) in aggregateCounts)
+                    ctx.Capture(aggName, aggCount);
+                richMessage = ResolveTemplate(template, ctx);
+            }
+            else if (cmd.OutputExpression is not null && string.IsNullOrEmpty(cmd.MessageTemplate))
             {
                 // Expression-based output: evaluate the expression directly
-                var evaluator = CreateEvaluator(predicateGroups, "", letDeclarations, functionGroups);
+                // Pre-resolve collection lets so identifiers like 'apiText' (which use .text() transforms) are available
+                var resolvedCollections = ResolveGlobalCollectionLetBindings(letDeclarations, predicateGroups, functionGroups);
+                var evaluator = CreateEvaluator(predicateGroups, "", letDeclarations, functionGroups, resolvedCollections);
                 var value = evaluator.EvaluateField(cmd.OutputExpression, null!, "");
+
+                // Null return = side-effecting intrinsic (print/save/debug/assert) already handled output
+                if (value is null)
+                    return;
 
                 // If value is a list, iterate and output each item separately
                 if (value is IList listValue)
@@ -872,18 +916,7 @@ public class ScriptInterpreter
                 richMessage = new RichString(new[] { new TextSpan("") });
             }
 
-            if (IsDebugAction(cmd.ActionName))
-            {
-                _diagLog!.Invoke($"[debug] {richMessage.ToPlainText()}");
-            }
-            else if (IsSaveAction(cmd.ActionName) && cmd.OutputPath is not null)
-            {
-                WriteSaveOutput(cmd, richMessage, null, fileOutputs);
-            }
-            else
-            {
-                allOutputs.Add(new PrintOutput(richMessage));
-            }
+            allOutputs.Add(new PrintOutput(richMessage));
             return;
         }
 
@@ -932,7 +965,7 @@ public class ScriptInterpreter
             if (cmd.Exclusions != null)
                 items = ApplyExclusions(items, finalItemType, cmd.Exclusions, evaluator, letDeclarations);
 
-            _diagLog?.Invoke($"[trace] foreach: {cmd.Name ?? cmd.ActionName ?? "command"} iterating {items.Count} items");
+            _diagLog?.Invoke($"[trace] foreach: {cmd.Name ?? "command"} iterating {items.Count} items");
 
             foreach (var item in items)
             {
@@ -964,9 +997,18 @@ public class ScriptInterpreter
                 CaptureLetValues(finalCtx, evaluator, letDeclarations, item, finalItemType);
 
                 RichString richMessage;
-                if (cmd.OutputExpression is not null && string.IsNullOrEmpty(cmd.MessageTemplate))
+                if (cmd.OutputExpression is CallExpr { Target: null } iterPrintCall
+                    && iterPrintCall.Name is "print"
+                    && iterPrintCall.Args.Count >= 1
+                    && iterPrintCall.Args[0] is LiteralExpr { Value: string iterTemplate })
+                {
+                    // print('template') in foreach - resolve template per-item
+                    richMessage = ResolveTemplate(iterTemplate, finalCtx);
+                }
+                else if (cmd.OutputExpression is not null && string.IsNullOrEmpty(cmd.MessageTemplate))
                 {
                     var value = evaluator.EvaluateField(cmd.OutputExpression, item, finalItemType);
+                    if (value is null) { count++; continue; } // intrinsic handled output
                     richMessage = new RichString(new[] { new TextSpan(ConvertToText(value)) });
                 }
                 else if (string.IsNullOrEmpty(cmd.MessageTemplate))
@@ -979,15 +1021,7 @@ public class ScriptInterpreter
                     richMessage = ResolveTemplate(cmd.MessageTemplate, finalCtx);
                 }
 
-                if (IsDebugAction(cmd.ActionName))
-                {
-                    _diagLog!.Invoke($"[debug] {richMessage.ToPlainText()}");
-                }
-                else if (IsSaveAction(cmd.ActionName))
-                {
-                    WriteSaveOutput(cmd, richMessage, item, fileOutputs);
-                }
-                else if (cmd.Sink is not null)
+                if (cmd.Sink is not null)
                 {
                     var sink = ResolveSink(cmd.Sink, _globalResolvedSelects);
                     sink.WriteAsync(item, richMessage.ToPlainText()).GetAwaiter().GetResult();
@@ -1089,9 +1123,18 @@ public class ScriptInterpreter
                 CaptureLetValues(finalCtx, evaluator, letDeclarations, item, finalItemType);
 
                 RichString richMessage;
-                if (cmd.OutputExpression is not null && string.IsNullOrEmpty(cmd.MessageTemplate))
+                if (cmd.OutputExpression is CallExpr { Target: null } iterPrintCall
+                    && iterPrintCall.Name is "print"
+                    && iterPrintCall.Args.Count >= 1
+                    && iterPrintCall.Args[0] is LiteralExpr { Value: string iterTemplate })
+                {
+                    // print('template') in foreach - resolve template per-item
+                    richMessage = ResolveTemplate(iterTemplate, finalCtx);
+                }
+                else if (cmd.OutputExpression is not null && string.IsNullOrEmpty(cmd.MessageTemplate))
                 {
                     var value = evaluator.EvaluateField(cmd.OutputExpression, item, finalItemType);
+                    if (value is null) { count++; continue; } // intrinsic handled output
                     richMessage = new RichString(new[] { new TextSpan(ConvertToText(value)) });
                 }
                 else if (string.IsNullOrEmpty(cmd.MessageTemplate))
@@ -1103,15 +1146,7 @@ public class ScriptInterpreter
                 {
                     richMessage = ResolveTemplate(cmd.MessageTemplate, finalCtx);
                 }
-                if (IsDebugAction(cmd.ActionName))
-                {
-                    _diagLog!.Invoke($"[debug] {richMessage.ToPlainText()}");
-                }
-                else if (IsSaveAction(cmd.ActionName))
-                {
-                    WriteSaveOutput(cmd, richMessage, item, fileOutputs);
-                }
-                else if (cmd.Sink is not null)
+                if (cmd.Sink is not null)
                 {
                     var sink = ResolveSink(cmd.Sink, resolvedCollections);
                     sink.WriteAsync(item, richMessage.ToPlainText()).GetAwaiter().GetResult();
@@ -2667,17 +2702,27 @@ public class ScriptInterpreter
         return sink;
     }
 
-    private static bool IsSaveAction(string? actionName) =>
-        string.Equals(actionName, "SAVE", StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// Check if a command block involves a specific function call (by OutputExpression).
+    /// Used to identify commands like assert(...), save(...) etc. for filtering.
+    /// </summary>
+    private static bool IsCallTo(CommandBlock cmd, string functionName)
+    {
+        return cmd.OutputExpression is CallExpr call && call.Name == functionName;
+    }
 
-    private static bool IsDebugAction(string? actionName) =>
-        string.Equals(actionName, "DEBUG", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsAssertAction(string? actionName) =>
-        string.Equals(actionName, "ASSERT", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsFailAction(string? actionName) =>
-        string.Equals(actionName, "FAIL", StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// Checks if a command is a parameterized command invocation (e.g., CHECK(var-usage))
+    /// whose argument name matches the commandFilter.
+    /// </summary>
+    private static bool MatchesCommandFilter(CommandBlock cmd, HashSet<string> filter, Dictionary<string, List<CommandBlock>> allCommands)
+    {
+        if (cmd.OutputExpression is not CallExpr call) return false;
+        if (!allCommands.TryGetValue(call.Name, out var targets)) return false;
+        if (targets.Count == 0 || targets[0].Parameters is not { Count: > 0 }) return false;
+        // Check if any argument identifier matches the filter
+        return call.Args.Any(a => a is IdentifierExpr id && filter.Contains(id.Name));
+    }
 
     /// <summary>
     /// Execute an ASSERT command: evaluate a boolean condition expression and record pass/fail.

@@ -1,8 +1,8 @@
 import python-library-checks
 
-# Print API surface
+# print API surface
 export command api-listing = foreach Code.Api:isPython:isPublicApi => '{item.Signature}'
 
-# Save API surface to a file
+# save API surface to a file
 let apiText = Code.Api:isPython:isPublicApi.text('{item.Signature}')
 export command save-api = save('api-surface.txt', apiText)

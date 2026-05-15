@@ -3,4 +3,4 @@ let y = 3
 let sum = x + y
 let product = x * y
 
-PRINT 'Sum: {sum}, Product: {product}'
+print('Sum: {sum}, Product: {product}')

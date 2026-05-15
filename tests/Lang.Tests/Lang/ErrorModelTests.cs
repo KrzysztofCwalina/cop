@@ -221,12 +221,12 @@ public class ErrorModelTests
         Assert.That(result, Is.True);
     }
 
-    // --- FAIL in expression position ---
+    // --- fail in expression position ---
 
     [Test]
     public void Eval_FAIL_ThrowsFailException()
     {
-        var source = "predicate test(Type) => FAIL('bug detected')";
+        var source = "predicate test(Type) => fail('bug detected')";
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>
         {
@@ -311,9 +311,9 @@ public class ErrorModelTests
     [Test]
     public void Interpreter_FAIL_InExpression_TerminatesExecution()
     {
-        // FAIL in expression position should terminate execution
+        // fail in expression position should terminate execution
         var source = @"
-predicate test(Type) => FAIL('should not happen')
+predicate test(Type) => fail('should not happen')
 ";
         var file = ScriptParser.Parse(source, "test.cop");
         var predicates = new Dictionary<string, List<PredicateDefinition>>

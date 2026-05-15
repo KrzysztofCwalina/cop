@@ -782,7 +782,7 @@ CHECK(var-usage)
     [Test]
     public void Run_Print_BasicString()
     {
-        var source = "PRINT('hello world')";
+        var source = "print('hello world')";
         var scriptFile = ScriptParser.Parse(source, "test.cop");
         var interpreter = TestInterpreter.Create();
         var result = interpreter.Run([scriptFile], []);
@@ -794,7 +794,7 @@ CHECK(var-usage)
     public void Run_Print_StyledTemplate()
     {
         // {text with spaces@style} → AnnotatedLiteralSegment (styled literal)
-        var source = "PRINT('{Error found@red}')";
+        var source = "print('{Error found@red}')";
         var scriptFile = ScriptParser.Parse(source, "test.cop");
         var interpreter = TestInterpreter.Create();
         var result = interpreter.Run([scriptFile], []);
@@ -809,7 +809,7 @@ CHECK(var-usage)
     {
         var source =
             "let name = 'World'\n" +
-            "PRINT('Hello {name}')";
+            "print('Hello {name}')";
         var scriptFile = ScriptParser.Parse(source, "test.cop");
         var interpreter = TestInterpreter.Create();
         var result = interpreter.Run([scriptFile], []);

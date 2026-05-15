@@ -1,8 +1,8 @@
 import csharp-library-checks
 
-# Print API surface as C# stubs
+# print API surface as C# stubs
 export command api-listing = foreach Code.Api:isCSharp:publicApi => '{item.ApiAsText}'
 
-# Save API surface to a file
+# save API surface to a file
 let apiText = Code.Api:isCSharp:publicApi.text('{item.ApiAsText}')
 export command save-api = save('api-surface.txt', apiText)

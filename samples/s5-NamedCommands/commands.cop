@@ -15,6 +15,6 @@ let public-python-types = python.Types:isPublic
 let public-types = public-csharp-types + public-python-types
 let clients = public-types:isClient
 
-command LIST-CSHARP-TYPES = foreach csharp.Types => PRINT('{item.Name}')
-command LIST-PUBLIC-TYPES = foreach public-types => PRINT('{item.Name}')
-command CLIENTS = foreach clients => PRINT('{item.Name}')
+command LIST-CSHARP-TYPES = foreach csharp.Types => print('{item.Name}')
+command LIST-PUBLIC-TYPES = foreach public-types => print('{item.Name}')
+command CLIENTS = foreach clients => print('{item.Name}')

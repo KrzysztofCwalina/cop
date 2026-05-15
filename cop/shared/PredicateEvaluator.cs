@@ -27,6 +27,12 @@ public class PredicateEvaluator
     private readonly HashSet<string> _evaluatingLetValues = [];
     private ProgramInfo? _program;
 
+    // Output sinks for intrinsic functions (print, save, debug, assert, fail)
+    private readonly Action<string>? _printSink;
+    private readonly Action<string, string>? _saveSink;
+    private readonly Action<string>? _debugSink;
+    private readonly Action<bool, string>? _assertSink;
+
     // Package-qualified stores for disambiguation (packageName → symbolName → definitions)
     private readonly Dictionary<string, Dictionary<string, List<PredicateDefinition>>>? _packagePredicates;
     private readonly Dictionary<string, Dictionary<string, List<FunctionDefinition>>>? _packageFunctions;
@@ -42,7 +48,11 @@ public class PredicateEvaluator
         IProviderQueryService? providerQueryService = null,
         Dictionary<string, Dictionary<string, List<PredicateDefinition>>>? packagePredicates = null,
         Dictionary<string, Dictionary<string, List<FunctionDefinition>>>? packageFunctions = null,
-        Dictionary<string, Dictionary<string, LetDeclaration>>? packageLets = null)
+        Dictionary<string, Dictionary<string, LetDeclaration>>? packageLets = null,
+        Action<string>? printSink = null,
+        Action<string, string>? saveSink = null,
+        Action<string>? debugSink = null,
+        Action<bool, string>? assertSink = null)
     {
         _predicates = predicates;
         _filePath = filePath;
@@ -54,6 +64,10 @@ public class PredicateEvaluator
         _packagePredicates = packagePredicates;
         _packageFunctions = packageFunctions;
         _packageLets = packageLets;
+        _printSink = printSink;
+        _saveSink = saveSink;
+        _debugSink = debugSink;
+        _assertSink = assertSink;
     }
 
     /// <summary>
@@ -127,8 +141,8 @@ public class PredicateEvaluator
 
     private object? EvalStandaloneCall(CallExpr fc, object item, string paramType, EvaluationContext ctx)
     {
-        // Built-in FAIL('message') — terminates execution immediately
-        if (fc.Name == "FAIL")
+        // Built-in fail('message') — terminates execution immediately
+        if (fc.Name is "fail" or "FAIL")
         {
             string? message = null;
             if (fc.Args.Count > 0)
@@ -137,6 +151,36 @@ public class PredicateEvaluator
                 message = msgValue is string s ? s : msgValue?.ToString();
             }
             throw new FailException(message ?? "FAIL", _filePath, 0);
+        }
+
+        // Built-in print/save/debug/assert — delegate to sinks when available
+        if (fc.Name is "print" or "save" or "debug" or "assert")
+        {
+            var evalArgs = fc.Args.Select(a => Eval(a, item, paramType, ctx)).ToList();
+            switch (fc.Name)
+            {
+                case "print":
+                    _printSink?.Invoke(evalArgs.Count > 0 ? evalArgs[0]?.ToString() ?? "" : "");
+                    return null;
+                case "save":
+                    var savePath = evalArgs.Count > 0 ? evalArgs[0]?.ToString() ?? "" : "";
+                    var saveContentObj = evalArgs.Count > 1 ? evalArgs[1] : null;
+                    string saveContent;
+                    if (saveContentObj is IList saveList)
+                        saveContent = string.Join(Environment.NewLine, saveList.Cast<object>().Select(x => x?.ToString() ?? ""));
+                    else
+                        saveContent = saveContentObj?.ToString() ?? "";
+                    _saveSink?.Invoke(savePath, saveContent);
+                    return null;
+                case "debug":
+                    _debugSink?.Invoke(evalArgs.Count > 0 ? evalArgs[0]?.ToString() ?? "" : "");
+                    return null;
+                case "assert":
+                    var condition = evalArgs.Count > 0 && evalArgs[0] is true;
+                    var desc = evalArgs.Count > 1 ? evalArgs[1]?.ToString() ?? "" : "";
+                    _assertSink?.Invoke(condition, desc);
+                    return null;
+            }
         }
 
         // Built-in object(providerName) — returns a dynamic DataObject for any provider
@@ -1581,8 +1625,53 @@ public class PredicateEvaluator
                 paramBindings.TryGetValue("path", out var pm) ? pm?.ToString() ?? "" : "",
                 paramBindings.TryGetValue("pattern", out var pp) ? pp?.ToString() ?? "" : ""),
             "program" => _program ?? throw new InvalidOperationException("program() is not available in this context"),
+            "print" => CallPrint(paramBindings),
+            "save" => CallSave(paramBindings),
+            "debug" => CallDebug(paramBindings),
+            "assert" => CallAssert(paramBindings),
+            "fail" => throw new FailException(
+                paramBindings.TryGetValue("message", out var fm) ? fm?.ToString() ?? "FAIL" : "FAIL"),
             _ => throw new InvalidOperationException($"Unknown intrinsic function: '{name}'")
         };
+    }
+
+    private object? CallPrint(Dictionary<string, object?> paramBindings)
+    {
+        var message = paramBindings.TryGetValue("message", out var m) ? m?.ToString() ?? "" : "";
+        _printSink?.Invoke(message);
+        return null;
+    }
+
+    private object? CallSave(Dictionary<string, object?> paramBindings)
+    {
+        var path = paramBindings.TryGetValue("path", out var p) ? p?.ToString() ?? "" : "";
+        var contentObj = paramBindings.TryGetValue("content", out var c) ? c : null;
+        string content;
+        if (contentObj is IList list)
+            content = string.Join(Environment.NewLine, list.Cast<object>().Select(x => x?.ToString() ?? ""));
+        else
+            content = contentObj?.ToString() ?? "";
+        if (_saveSink is null)
+            throw new InvalidOperationException("save() is not available in this context");
+        _saveSink.Invoke(path, content);
+        return null;
+    }
+
+    private object? CallDebug(Dictionary<string, object?> paramBindings)
+    {
+        var message = paramBindings.TryGetValue("message", out var m) ? m?.ToString() ?? "" : "";
+        _debugSink?.Invoke(message);
+        return null;
+    }
+
+    private object? CallAssert(Dictionary<string, object?> paramBindings)
+    {
+        var condition = paramBindings.TryGetValue("condition", out var c) && c is true;
+        var description = paramBindings.TryGetValue("description", out var d) ? d?.ToString() ?? "" : "";
+        if (_assertSink is null)
+            throw new InvalidOperationException("assert() is not available in this context");
+        _assertSink.Invoke(condition, description);
+        return null;
     }
 
     private const int MaxFileSize = 10 * 1024 * 1024; // 10 MB

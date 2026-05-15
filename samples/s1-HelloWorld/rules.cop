@@ -9,5 +9,5 @@ predicate usesVar(Statement) => Statement.Keywords:contains('var')
 # Filter all statements through the predicate
 let StatementsUsingVar = Code.Statements:usesVar
 
-# Print an error for each matching statement, with file path and line number
-foreach StatementsUsingVar => PRINT('ERROR: {item.File.Path}:{item.Line} uses \'var\'')
+# print an error for each matching statement, with file path and line number
+foreach StatementsUsingVar => print('ERROR: {item.File.Path}:{item.Line} uses \'var\'')
