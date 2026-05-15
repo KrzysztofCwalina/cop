@@ -22,18 +22,6 @@ public record LetDeclaration(
     public bool IsValueBinding => ValueExpression is not null;
 
     /// <summary>
-    /// True when this let is a Load('path') external document load.
-    /// Treated as a collection (not a value binding) at runtime.
-    /// </summary>
-    public bool IsExternalLoad => ValueExpression is CallExpr { Target: null, Name: "Load" };
-
-    /// <summary>
-    /// True when this let is a Parse('file.json', [Type]) JSON/CSV file parse.
-    /// Returns a flat typed collection at runtime (unlike Load which returns Documents).
-    /// </summary>
-    public bool IsFileParse => ValueExpression is CallExpr { Target: null, Name: "Parse" };
-
-    /// <summary>
     /// True when this let is a union of other collections: let Name = a + b + c
     /// </summary>
     public bool IsCollectionUnion => ValueExpression is CollectionUnionExpr;

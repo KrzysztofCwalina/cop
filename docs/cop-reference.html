@@ -3623,7 +3623,7 @@ const packages = {
     "samples": [
       {
         "title": "Load and query json data",
-        "code": "import json\n\ntype Config = { name: string, enabled: bool }\n\nlet configs = Parse('settings.json', [Config])\n\nforeach configs:enabled\n    => '{item.name} is active'"
+        "code": "import json\n\ntype Config = { name: string, enabled: bool }\n\nlet configs = json.Parse('settings.json', 'Config')\n\nforeach configs:enabled\n    => '{item.name} is active'"
       }
     ],
     "collections": [],

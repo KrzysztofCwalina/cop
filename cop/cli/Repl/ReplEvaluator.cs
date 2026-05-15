@@ -181,7 +181,7 @@ public class ReplEvaluator
         EnsureProviders();
 
         // For value bindings that are simple lists, display the list
-        if (letDecl.IsValueBinding && !letDecl.IsCollectionUnion && !letDecl.IsExternalLoad && !letDecl.IsFileParse)
+        if (letDecl.IsValueBinding && !letDecl.IsCollectionUnion)
         {
             var snippet = $"foreach {input} => '{{item}}'";
             return EvaluateSnippet(snippet);

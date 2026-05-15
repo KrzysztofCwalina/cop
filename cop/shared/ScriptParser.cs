@@ -595,12 +595,6 @@ public class ScriptParser
         // Parse the RHS as an expression (handles colon chains via ParsePostfix)
         var expr = ParseExpression();
 
-        // Handle Load('path') and Parse('file', [Type]) as value bindings
-        if (expr is CallExpr { Target: null } call && call.Name is "Load" or "Parse")
-        {
-            return new LetDeclaration(name.Value, "", [], line, isExported, ValueExpression: call, DocComment: docComment, TypeAnnotation: typeAnnotation);
-        }
-
         // Collection union with + operator: let x = a + b + c
         if (expr is BinaryExpr && FlattenUnionOperands(expr) is { } unionElements)
         {
@@ -678,11 +672,9 @@ public class ScriptParser
         // foreach after = means this is a let-command
         if (i < _tokens.Count && _tokens[i].Kind == TokenKind.ForeachKeyword) return true;
         // Check for identifier followed by ( — this is an action invocation
-        // But Load(), Parse() are value bindings, not command actions
-        // Also, lowercase function names are value bindings (currying/partial application)
+        // Lowercase function names are value bindings (currying/partial application)
         if (i >= _tokens.Count || _tokens[i].Kind != TokenKind.Identifier) return false;
         var name = _tokens[i].Value;
-        if (name is "Load" or "Parse") return false;
         // Lowercase-starting names are function calls (value bindings), not commands
         if (name.Length > 0 && char.IsLower(name[0])) return false;
         i++;

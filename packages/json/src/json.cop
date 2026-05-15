@@ -1,8 +1,8 @@
 # Cop JSON Package v1.0
-# Provides Parse() for JSON files.
+# Provides json.Parse() for loading and querying JSON files.
 # Import with: import json
 #
 # Usage:
 #   import json
 #   type MyRecord = { field : string, count : int }
-#   let Records = Parse('data.json', [MyRecord])
+#   let Records = json.Parse('data.json', 'MyRecord')

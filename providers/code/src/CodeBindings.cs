@@ -201,7 +201,7 @@ public static class CodeBindings
         };
     }
 
-    internal static Dictionary<string, Func<object, List<object>>> BuildExtractors()
+    public static Dictionary<string, Func<object, List<object>>> BuildExtractors()
     {
         return new()
         {

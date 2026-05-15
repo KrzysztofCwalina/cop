@@ -169,25 +169,26 @@ public class ApiSurfaceTests
         Assert.That(testClass.Name, Does.Contain("."));
     }
 
-    // ── Load() parser integration ──
+    // ── Load() parser integration (now uses csharp.Load provider function) ──
 
     [Test]
-    public void Load_ParsesCorrectly()
+    public void Load_ParsesAsLetDeclaration()
     {
-        var cop = "let baseline = Load('test.dll')";
+        // After removing magic, csharp.Load('test.dll') is parsed as a let declaration
+        // (parser treats it as path-parameterized collection, runtime resolves as function call)
+        var cop = "let baseline = csharp.Load('test.dll')";
         var script = ScriptParser.Parse(cop, "test.cop");
         var letDecl = script.LetDeclarations.First(l => l.Name == "baseline");
-        Assert.That(letDecl.IsExternalLoad, Is.True);
-        Assert.That(letDecl.IsValueBinding, Is.True);
+        Assert.That(letDecl, Is.Not.Null);
+        Assert.That(letDecl.SourceExpression, Is.Not.Null);
     }
 
     [Test]
     public void Load_InterpreterResolvesCollection()
     {
         var assemblyPath = typeof(ApiSurfaceTests).Assembly.Location.Replace("\\", "\\\\");
-        // Use SAVE with dll.Api sub-collection — Load() returns documents, not flat ApiEntry
         var cop = $@"
-let baseline = Load('{assemblyPath}')
+let baseline = csharp.Load('{assemblyPath}')
 predicate anyApi(Api) => Api.Kind != ''
 export command api-list = SAVE('api.txt', '{{item.Signature}}', baseline.Api:anyApi)
 ";
@@ -196,7 +197,7 @@ export command api-list = SAVE('api.txt', '{{item.Signature}}', baseline.Api:any
         ProviderLoader.RegisterSchema(new CodeSchemaProvider(), registry);
         registry.RegisterProgramType();
 
-        registry.RegisterDocumentLoader(CreateTestDocumentLoader());
+        RegisterCSharpLoadFunction(registry);
         var interpreter = new ScriptInterpreter(registry);
 
         var script = ScriptParser.Parse(cop, "test.cop");
@@ -215,9 +216,8 @@ export command api-list = SAVE('api.txt', '{{item.Signature}}', baseline.Api:any
     public void Load_TypesSubCollection()
     {
         var assemblyPath = typeof(ApiSurfaceTests).Assembly.Location.Replace("\\", "\\\\");
-        // Access dll.Types — same extractor as source Types
         var cop = $@"
-let baseline = Load('{assemblyPath}')
+let baseline = csharp.Load('{assemblyPath}')
 export command types = SAVE('types.txt', '{{item.Name}}', baseline.Types)
 ";
 
@@ -225,7 +225,7 @@ export command types = SAVE('types.txt', '{{item.Name}}', baseline.Types)
         ProviderLoader.RegisterSchema(new CodeSchemaProvider(), registry);
         registry.RegisterProgramType();
 
-        registry.RegisterDocumentLoader(CreateTestDocumentLoader());
+        RegisterCSharpLoadFunction(registry);
         var interpreter = new ScriptInterpreter(registry);
 
         var script = ScriptParser.Parse(cop, "test.cop");
@@ -240,26 +240,26 @@ export command types = SAVE('types.txt', '{{item.Name}}', baseline.Types)
     }
 
     [Test]
-    public void Load_BareReferenceThrowsHelpfulError()
+    public void Load_BareReferenceUsedAsExpression()
     {
         var assemblyPath = typeof(ApiSurfaceTests).Assembly.Location.Replace("\\", "\\\\");
+        // Bare csharp.Load returns a DataObject — access sub-collections via .Types, .Api
         var cop = $@"
-let baseline = Load('{assemblyPath}')
-export command check = foreach baseline => '{{item.Signature}}'
+let baseline = csharp.Load('{assemblyPath}')
+export command check = SAVE('types.txt', '{{item.Name}}', baseline.Types)
 ";
 
         var registry = new TypeRegistry();
         ProviderLoader.RegisterSchema(new CodeSchemaProvider(), registry);
         registry.RegisterProgramType();
 
-        registry.RegisterDocumentLoader(CreateTestDocumentLoader());
+        RegisterCSharpLoadFunction(registry);
         var interpreter = new ScriptInterpreter(registry);
 
         var script = ScriptParser.Parse(cop, "test.cop");
         var documents = new List<Document>();
-        var ex = Assert.Throws<InvalidOperationException>(
-            () => interpreter.Run([script], documents, commandName: "check"));
-        Assert.That(ex!.Message, Does.Contain("sub-collections"));
+        var result = interpreter.Run([script], documents, commandName: "check");
+        Assert.That(result.FileOutputs.Count, Is.GreaterThan(0));
     }
 
     // ── .text() filter and save() ──
@@ -269,7 +269,7 @@ export command check = foreach baseline => '{{item.Signature}}'
     {
         var assemblyPath = typeof(ApiSurfaceTests).Assembly.Location.Replace("\\", "\\\\");
         var cop = $@"
-let baseline = Load('{assemblyPath}')
+let baseline = csharp.Load('{assemblyPath}')
 predicate anyApi(Api) => Api.Kind != ''
 let apiText = baseline.Api:anyApi.text('{{item.Signature}}')
 export command print-text = foreach apiText => '{{item}}'
@@ -279,7 +279,7 @@ export command print-text = foreach apiText => '{{item}}'
         ProviderLoader.RegisterSchema(new CodeSchemaProvider(), registry);
         registry.RegisterProgramType();
 
-        registry.RegisterDocumentLoader(CreateTestDocumentLoader());
+        RegisterCSharpLoadFunction(registry);
         var interpreter = new ScriptInterpreter(registry);
 
         var script = ScriptParser.Parse(cop, "test.cop");
@@ -299,7 +299,7 @@ export command print-text = foreach apiText => '{{item}}'
     {
         var assemblyPath = typeof(ApiSurfaceTests).Assembly.Location.Replace("\\", "\\\\");
         var cop = $@"
-let baseline = Load('{assemblyPath}')
+let baseline = csharp.Load('{assemblyPath}')
 predicate anyApi(Api) => Api.Kind != ''
 let apiText = baseline.Api:anyApi.text('{{item.Signature}}')
 export command save-api = SAVE('api-surface.txt', apiText)
@@ -309,7 +309,7 @@ export command save-api = SAVE('api-surface.txt', apiText)
         ProviderLoader.RegisterSchema(new CodeSchemaProvider(), registry);
         registry.RegisterProgramType();
 
-        registry.RegisterDocumentLoader(CreateTestDocumentLoader());
+        RegisterCSharpLoadFunction(registry);
         var interpreter = new ScriptInterpreter(registry);
 
         var script = ScriptParser.Parse(cop, "test.cop");
@@ -334,19 +334,24 @@ export command save-api = SAVE('api-surface.txt', apiText)
     private static ParameterDeclaration Param(string name, string type) =>
         new(name, TR(type), false, false, false, 0);
 
-    private static Func<string, List<Document>> CreateTestDocumentLoader()
+    private static void RegisterCSharpLoadFunction(TypeRegistry registry)
     {
-        return (string path) =>
+        var extractors = CodeBindings.BuildExtractors();
+        registry.RegisterProviderFunction("csharp", "Load", args =>
         {
+            var path = args[0]?.ToString()!;
             var sourceFile = AssemblyApiReader.ReadAssembly(path);
-
-            // Stamp TypeDeclaration.File references (same as Engine.CreateDocumentLoader)
             for (int i = 0; i < sourceFile.Types.Count; i++)
-            {
                 sourceFile.Types[i] = sourceFile.Types[i] with { File = sourceFile };
-            }
 
-            return [new Document(path, sourceFile.Language, sourceFile)];
-        };
+            var obj = new DataObject("Codebase");
+            obj.WithFieldResolver(fieldName =>
+            {
+                if (extractors.TryGetValue(fieldName, out var extractor))
+                    return extractor(sourceFile);
+                return null;
+            });
+            return Task.FromResult<object?>(obj);
+        });
     }
 }

@@ -52,7 +52,6 @@ Syntax-level behavior that's not available to `.cop` declarations.
 | 1 | Action keyword recognition | ScriptParser.cs:610 | ALL-UPPERCASE identifiers followed by `(` are parsed as action invocations |
 | 2 | Implicit output | ScriptParser.cs:154-177 | Bare string/expression at top level → output command |
 | 3 | `export` keyword scope | ScriptParser.cs:77-105 | Only works before type/collection/let/command/predicate/function/flags/enum |
-| 4 | `Load(...)`, `Parse(...)` | ScriptParser.cs:529-586 | Recognized as special file parser bindings |
 
 ---
 
