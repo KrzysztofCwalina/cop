@@ -33,22 +33,11 @@ How providers make their collections/types/functions available without `.cop` de
 
 ---
 
----
-
-## Parser Magic
-
-No remaining parser magic. All syntax is standard language grammar.
-
----
-
-## Import Resolution (no export filtering)
+## Import Resolution
 
 | # | What | File:Line | Behavior |
 |---|------|-----------|----------|
-| 1 | ALL symbols imported | ImportResolver.cs:61-97 | types, collections, lets, functions, predicates are ALL accumulated from imported packages — only commands check `IsExported` |
-| 2 | Package discovery by convention | ImportResolver.cs:103-140 | Directories with `{name}.md`, `src/`, or `types/` are treated as packages |
-
-**Impact:** When you `import foo`, you get ALL of foo's types, predicates, functions, and lets — not just the ones marked `export`. Export filtering only applies to commands.
+| 1 | Package discovery by convention | ImportResolver.cs:103-140 | Directories with `{name}.md`, `src/`, or `types/` are treated as packages |
 
 ---
 
@@ -61,24 +50,4 @@ No remaining parser magic. All syntax is standard language grammar.
 | 3 | Package mode detection | RunCommand.cs:230-239 | When no local `.cop` files exist, switches to package mode |
 | 4 | Remote URL execution | RunCommand.cs:308-377 | `http://` args download and execute as temp files |
 
----
 
-## Recently Eliminated Magic
-
-| What | Commit | Description |
-|------|--------|-------------|
-| Action keyword recognition | 030dc4d | Commands (PRINT, SAVE, etc.) are now regular intrinsic functions resolved by name like any other symbol. No parser heuristics. |
-| ActionName-based dispatch | 030dc4d | Interpreter no longer branches on action names. Side effects happen inside `CallIntrinsicFunction` via sink delegates. |
-| ALL-CAPS parsing heuristic | 34861aa | Removed `ToUpperInvariant()` normalization and `IntrinsicCommands` HashSet. |
-| Bool property fallback | 84262d8 | Removed camelCase→PascalCase mapping from predicate evaluator. |
-
----
-
-## Recommendations
-
-Remaining magic to consider eliminating:
-
-1. **Enforce export filtering on imports** — only `export`-marked symbols should be available to importers (not just commands)
-2. **Streaming source/sink bare-name fallback** — still present in TypeRegistry for streaming sources and sinks
-
-Language-level features (Collection/String Members, Query Operators, Predicates, Language Filters) are appropriate to keep as built-in — they define the language itself and are documented in the language reference.
