@@ -41,9 +41,8 @@ Syntax-level behavior that's not available to `.cop` declarations.
 
 | # | What | File:Line | Behavior |
 |---|------|-----------|----------|
-| 1 | ~~Action keyword recognition~~ | ~~ScriptParser.cs~~ | **REMOVED** — Commands are now regular functions. All `identifier(...)` parsed uniformly as CallExpr. |
-| 2 | Implicit output | ScriptParser.cs:154-177 | Bare string/expression at top level → output command |
-| 3 | `export` keyword scope | ScriptParser.cs:77-105 | Only works before type/collection/let/command/predicate/function/flags/enum |
+| 1 | Implicit output | ScriptParser.cs:154-177 | Bare string/expression at top level → output command |
+| 2 | `export` keyword scope | ScriptParser.cs:77-105 | Only works before type/collection/let/command/predicate/function/flags/enum |
 
 ---
 
