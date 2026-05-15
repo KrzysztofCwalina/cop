@@ -87,17 +87,29 @@ public class ImportResolver
 
             if (hasErrors) return null;
 
+            // Only exported symbols are visible to importers
+            var exportedTypes = allTypes.Where(t => t.IsExported).ToList();
+            var exportedCollections = allCollections.Where(c => c.IsExported).ToList();
+            var exportedPredicates = allPredicates.Where(p => p.IsExported).ToList();
+            var exportedFunctions = allFunctions.Where(f => f.IsExported).ToList();
+            var exportedCommands = allCommands.Where(c => c.IsExported).ToList();
+            var exportedFlags = allFlags.Where(f => f.IsExported).ToList();
+            var exportedEnums = allEnums.Where(e => e.IsExported).ToList();
+
+            // Exported lets + transitive non-exported let dependencies
+            var exportedLets = IncludeLetDependencies(allLets);
+
             return new ScriptFile(
                 copDir,
                 allImports,
-                allTypes,
-                allCollections,
-                allLets,
-                allPredicates,
-                allFunctions,
-                allCommands.Where(c => c.IsExported).ToList(),
-                FlagsDefinitions: allFlags.Count > 0 ? allFlags : null,
-                EnumDefinitions: allEnums.Count > 0 ? allEnums : null,
+                exportedTypes,
+                exportedCollections,
+                exportedLets,
+                exportedPredicates,
+                exportedFunctions,
+                exportedCommands,
+                FlagsDefinitions: exportedFlags.Count > 0 ? exportedFlags : null,
+                EnumDefinitions: exportedEnums.Count > 0 ? exportedEnums : null,
                 TypeImports: allTypeImports.Count > 0 ? allTypeImports : null);
         }
 
@@ -105,8 +117,48 @@ public class ImportResolver
     }
 
     /// <summary>
+    /// Returns exported lets plus any non-exported lets that are transitive dependencies
+    /// of exported lets (referenced in their BaseCollection chain).
+    /// E.g., `export let Statements = cb.Statements` needs non-exported `let cb = object('csharp')`.
+    /// </summary>
+    private static List<LetDeclaration> IncludeLetDependencies(List<LetDeclaration> allLets)
+    {
+        var exported = allLets.Where(l => l.IsExported).ToList();
+        var nonExported = allLets.Where(l => !l.IsExported).ToDictionary(l => l.Name);
+        var included = new HashSet<string>(exported.Select(l => l.Name));
+
+        foreach (var let in exported)
+            IncludeDeps(let, nonExported, included);
+
+        // Add any non-exported lets that were pulled in as dependencies
+        var result = new List<LetDeclaration>(exported);
+        foreach (var kvp in nonExported)
+        {
+            if (included.Contains(kvp.Key))
+                result.Add(kvp.Value);
+        }
+        return result;
+    }
+
+    private static void IncludeDeps(LetDeclaration let, Dictionary<string, LetDeclaration> nonExported, HashSet<string> included)
+    {
+        var baseCol = let.BaseCollection;
+        if (string.IsNullOrEmpty(baseCol)) return;
+
+        // Extract the name before the first dot (e.g., "cb" from "cb.Statements")
+        var dotIdx = baseCol.IndexOf('.');
+        var refName = dotIdx > 0 ? baseCol[..dotIdx] : baseCol;
+
+        if (!included.Contains(refName) && nonExported.TryGetValue(refName, out var dep))
+        {
+            included.Add(refName);
+            IncludeDeps(dep, nonExported, included);
+        }
+    }
+
+    /// <summary>
     /// Finds a package directory by name, searching recursively through group folders.
-    /// A directory is a package if it contains {dirName}.md. Non-package directories are group folders.
+    /// A directory is a package if it contains cop.json. Non-package directories are group folders.
     /// </summary>
     public static string? FindPackageDir(string feedPath, string packageName)
     {
@@ -132,15 +184,10 @@ public class ImportResolver
     }
 
     /// <summary>
-    /// Returns true if a directory is a package (contains {dirName}.md, src/, or types/).
+    /// Returns true if a directory is a package (contains cop.json).
     /// </summary>
     private static bool IsPackageDir(string dirPath)
     {
-        var dirName = Path.GetFileName(dirPath);
-        if (string.IsNullOrEmpty(dirName)) return false;
-        if (File.Exists(Path.Combine(dirPath, $"{dirName}.md"))) return true;
-        if (Directory.Exists(Path.Combine(dirPath, "src"))) return true;
-        if (Directory.Exists(Path.Combine(dirPath, "types"))) return true;
-        return false;
+        return File.Exists(Path.Combine(dirPath, PackageMetadata.MetadataFileName));
     }
 }

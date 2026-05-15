@@ -30,7 +30,7 @@ public class TypeRegistry
     private readonly Dictionary<Type, string> _clrTypeMappings = new();
     private readonly Dictionary<string, Func<Document, List<object>>> _collectionExtractors = new();
     private readonly Dictionary<string, List<object>> _globalCollections = new();
-    private readonly Dictionary<string, Dictionary<string, List<object>>> _nsCollections = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Dictionary<string, List<object>>> _nsCollections = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<(string, string), List<object>> _extractorCache = new();
     private readonly Dictionary<string, Func<string, string, List<object>>> _fileParsers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Dictionary<string, SinkProvider>> _nsSinks = new(StringComparer.Ordinal);
