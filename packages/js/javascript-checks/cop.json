@@ -1,0 +1,16 @@
+{
+  "name": "javascript-checks",
+  "version": "1.0.0",
+  "description": "JavaScript and TypeScript coding conventions, correctness checks, and async/await rules for coding agents",
+  "title": "JavaScript/TypeScript Checks",
+  "authors": "cop-team",
+  "tags": [
+    "javascript",
+    "typescript",
+    "coding-standards",
+    "async"
+  ],
+  "language": "JavaScript",
+  "provider": "clr",
+  "providerEntry": "Cop.Providers.JavaScriptProvider"
+}

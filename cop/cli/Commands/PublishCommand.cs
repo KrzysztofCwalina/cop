@@ -47,7 +47,7 @@ public static class PublishCommand
             return 1;
         }
 
-        var metadataFile = Path.Combine(packagePath, $"{name}.md");
+        var metadataFile = Path.Combine(packagePath, PackageMetadata.MetadataFileName);
 
         // Step 2: Metadata file exists
         if (!File.Exists(metadataFile))
@@ -61,7 +61,7 @@ public static class PublishCommand
         try
         {
             string content = File.ReadAllText(metadataFile);
-            metadata = PackageMetadata.ParseFromMarkdown(content);
+            metadata = PackageMetadata.ParseFromJson(content);
         }
         catch (Exception ex)
         {

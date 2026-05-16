@@ -1,0 +1,15 @@
+{
+  "name": "csharp-library-checks",
+  "version": "1.0.0",
+  "description": "Library API design patterns and client SDK conventions including retry, pagination, dual-mode async, and long-running operations",
+  "title": "C# Library and Client Library Development",
+  "authors": "cop-team",
+  "tags": [
+    "csharp",
+    "sdk",
+    "client",
+    "library",
+    "api-design"
+  ],
+  "language": "C#"
+}

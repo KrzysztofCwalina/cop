@@ -15,7 +15,7 @@ public class LocalPackageSource
 {
     /// <summary>
     /// Lists all packages (subdirectories) in the given local directory.
-    /// Recursively searches group folders (directories without a {dirName}.md metadata file).
+    /// Recursively searches group folders (directories without cop.json).
     /// </summary>
     public List<string> ListPackages(string directoryPath)
     {
@@ -77,8 +77,16 @@ public class LocalPackageSource
         if (packageDir is null)
             throw new PackageNotFoundException($"Package '{packageName}' not found under '{feedDirectory}'");
 
-        var metadataPath = Path.Combine(packageDir, $"{packageName}.md");
+        // Prefer cop.json
+        var jsonPath = Path.Combine(packageDir, PackageMetadata.MetadataFileName);
+        if (File.Exists(jsonPath))
+        {
+            var json = await File.ReadAllTextAsync(jsonPath, ct);
+            return PackageMetadata.ParseFromJson(json);
+        }
 
+        // Legacy fallback: {name}.md
+        var metadataPath = Path.Combine(packageDir, $"{packageName}.md");
         if (!File.Exists(metadataPath))
             throw new PackageNotFoundException($"Metadata file not found: {metadataPath}");
 
@@ -116,7 +124,7 @@ public class LocalPackageSource
 
     /// <summary>
     /// Finds a package directory by name, searching recursively through group folders.
-    /// A directory is a package if it contains {dirName}.md. Non-package directories are group folders.
+    /// A directory is a package if it contains cop.json. Non-package directories are group folders.
     /// </summary>
     public static string? FindPackagePath(string feedDirectory, string packageName)
     {
@@ -141,15 +149,10 @@ public class LocalPackageSource
     }
 
     /// <summary>
-    /// Returns true if a directory is a package (contains {dirName}.md, src/, or types/).
+    /// Returns true if a directory is a package (contains cop.json).
     /// </summary>
     public static bool IsPackageDir(string dirPath)
     {
-        var dirName = Path.GetFileName(dirPath);
-        if (string.IsNullOrEmpty(dirName)) return false;
-        if (File.Exists(Path.Combine(dirPath, $"{dirName}.md"))) return true;
-        if (Directory.Exists(Path.Combine(dirPath, "src"))) return true;
-        if (Directory.Exists(Path.Combine(dirPath, "types"))) return true;
-        return false;
+        return File.Exists(Path.Combine(dirPath, PackageMetadata.MetadataFileName));
     }
 }

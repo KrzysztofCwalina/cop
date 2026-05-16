@@ -1,0 +1,13 @@
+{
+  "name": "csharp",
+  "version": "1.0.0",
+  "description": "C# source code parser and analyzer",
+  "title": "C# Source Language Provider",
+  "authors": "cop-team",
+  "tags": [
+    "csharp",
+    "dotnet"
+  ],
+  "provider": "clr",
+  "providerEntry": "Cop.Providers.CSharpProvider"
+}

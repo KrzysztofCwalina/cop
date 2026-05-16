@@ -1,0 +1,14 @@
+{
+  "name": "typespec",
+  "version": "1.0.0",
+  "description": "Types and collections for TypeSpec API specification analysis",
+  "title": "TypeSpec Analysis",
+  "authors": "cop-team",
+  "tags": [
+    "typespec",
+    "api",
+    "analysis"
+  ],
+  "provider": "clr",
+  "providerEntry": "TypeSpecProvider.TypeSpecRawProvider"
+}

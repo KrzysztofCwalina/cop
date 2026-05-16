@@ -739,23 +739,25 @@ Packages are reusable libraries of types, predicates, functions, and commands. E
 
 ### Defining a Package
 
-A package is a directory with a `package.cop` manifest and source files:
+A package is a directory with a `cop.json` manifest and source files:
 
 ```
 packages/
   validation/
-    package.cop
+    cop.json
     src/
       types.cop
       predicates.cop
       rules.cop
 ```
 
-**package.cop** — metadata:
-```cop
-name = 'validation'
-version = '1.0.0'
-description = 'Common validation types and predicates'
+**cop.json** — metadata:
+```json
+{
+  "name": "validation",
+  "version": "1.0.0",
+  "description": "Common validation types and predicates"
+}
 ```
 
 **src/types.cop** — define and export types (in the package namespace):

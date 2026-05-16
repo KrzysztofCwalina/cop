@@ -1,0 +1,15 @@
+{
+  "name": "csharp-lister",
+  "version": "1.0.0",
+  "description": "API surface tracking, export, and diff for .NET libraries",
+  "title": "C# API Surface Analysis",
+  "authors": "cop-team",
+  "tags": [
+    "csharp",
+    "api",
+    "surface",
+    "diff",
+    "breaking-changes"
+  ],
+  "language": "C#"
+}

@@ -1,0 +1,15 @@
+{
+  "name": "typespec-http",
+  "version": "1.0.0",
+  "description": "HTTP protocol graph derived from TypeSpec API specifications",
+  "title": "TypeSpec HTTP Protocol Analysis",
+  "authors": "cop-team",
+  "tags": [
+    "typespec",
+    "http",
+    "api",
+    "analysis"
+  ],
+  "provider": "clr",
+  "providerEntry": "TypeSpecProvider.TypeSpecHttpProvider"
+}

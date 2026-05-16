@@ -1,0 +1,14 @@
+{
+  "name": "http",
+  "version": "1.0.0",
+  "description": "HTTP server provider for building web APIs with cop pipelines",
+  "title": "HTTP Server Provider",
+  "authors": "cop-team",
+  "tags": [
+    "http",
+    "server",
+    "api"
+  ],
+  "provider": "clr",
+  "providerEntry": "Cop.Providers.Http.HttpProvider"
+}

@@ -1,0 +1,19 @@
+{
+  "name": "csharp-checks",
+  "version": "1.0.0",
+  "description": "C# correctness, StyleCop style, and Framework Design Guidelines checks for coding agents",
+  "title": "C# Checks",
+  "authors": "cop-team",
+  "tags": [
+    "csharp",
+    "dotnet",
+    "coding-standards",
+    "stylecop",
+    "fdg",
+    "naming",
+    "design"
+  ],
+  "language": "C#",
+  "provider": "clr",
+  "providerEntry": "Cop.Providers.CSharpProvider"
+}

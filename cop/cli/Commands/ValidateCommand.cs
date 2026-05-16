@@ -52,7 +52,7 @@ public static class ValidateCommand
             return 1;
         }
 
-        var metadataFile = Path.Combine(packagePath, $"{name}.md");
+        var metadataFile = Path.Combine(packagePath, PackageMetadata.MetadataFileName);
 
         // Step 2: Metadata file exists
         results.Add(new ValidationResult(
@@ -62,13 +62,13 @@ public static class ValidateCommand
 
         PackageMetadata? metadata = null;
 
-        // Step 3: Metadata YAML front-matter parses successfully
+        // Step 3: Metadata JSON parses successfully
         if (File.Exists(metadataFile))
         {
             try
             {
                 string content = File.ReadAllText(metadataFile);
-                metadata = PackageMetadata.ParseFromMarkdown(content);
+                metadata = PackageMetadata.ParseFromJson(content);
                 results.Add(new ValidationResult("Metadata parses successfully", true));
             }
             catch (Exception ex)

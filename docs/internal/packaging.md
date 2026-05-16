@@ -8,12 +8,9 @@ This document describes how packaging works in cop: what a package is, how to cr
 
 **`.cop` file** — A text file written in the Cop language. It can define types, predicates, functions, checks, and commands.
 
-**Package** — A directory on disk that contains `.cop` source files and an optional manifest. A directory is recognized as a package if it contains at least one of:
-- A subdirectory named `src/` (containing `.cop` files)
-- A subdirectory named `types/` (containing `.cop` files)
-- A markdown file named `{directoryName}.md` (e.g., a directory called `code/` containing `code.md`)
+**Package** — A directory on disk that contains `.cop` source files and a `cop.json` manifest. A directory is recognized as a package if it contains a `cop.json` file.
 
-**Manifest** — A markdown file at the root of a package directory, named `{packageName}.md`. It contains YAML front-matter with metadata (name, version, description, etc.) followed by documentation in markdown.
+**Manifest** — A JSON file named `cop.json` at the root of a package directory. It contains metadata (name, version, description, dependencies, etc.).
 
 **Group folder** — A directory that is *not* itself a package but contains other packages as subdirectories. For example, the `dotnet/` directory under `packages/` is a group folder containing packages like `csharp-checks/`, `csharp-library-checks/`, etc.
 
@@ -39,7 +36,8 @@ A fully scaffolded package (created by `cop package new`) includes:
 
 ```
 my-checks/
-  my-checks.md        # manifest with metadata
+  cop.json            # package manifest (metadata)
+  README.md           # documentation
   instructions/       # natural-language instructions
   skills/             # reusable skills
   checks/             # check definitions
@@ -50,25 +48,21 @@ When a package is **imported**, cop reads all `.cop` files from the `types/` sub
 
 ### Manifest Format
 
-The manifest is a markdown file with YAML front-matter. Example (`code-analysis/code-analysis.md`):
+The manifest is a JSON file named `cop.json`. Example:
 
-```markdown
----
-name: code-analysis
-version: 1.0.0
-title: Code Analysis Package
-description: Types and functions for structured code analysis results
-authors: Krzysztof Cwalina
-tags: code, analysis
-dependencies: []
----
-
-# code-analysis
-
-Provides types and functions for producing structured analysis results.
+```json
+{
+  "name": "code-analysis",
+  "version": "1.0.0",
+  "title": "Code Analysis Package",
+  "description": "Types and functions for structured code analysis results",
+  "authors": "Krzysztof Cwalina",
+  "tags": ["code", "analysis"],
+  "dependencies": []
+}
 ```
 
-Front-matter fields:
+Fields:
 
 | Field | Required | Description |
 |-------|----------|-------------|
@@ -77,7 +71,7 @@ Front-matter fields:
 | `title` | Yes | Human-readable title. |
 | `description` | Yes | Short description (max 1000 chars). |
 | `authors` | Yes | Author name(s). |
-| `tags` | No | Comma-separated tags for search. |
+| `tags` | No | Array of string tags for search/discoverability. |
 | `language` | No | Primary programming language (e.g., `csharp`, `python`). |
 | `provider` | No | Set to `clr` if the package contains a .NET data provider assembly. |
 | `providerEntry` | No | Fully-qualified class name of the data provider (required when `provider` is `clr`). |
@@ -236,14 +230,14 @@ After auto-restore on a fresh machine, `~/.cop/packages/` contains:
 ```
 ~/.cop/packages/
   code-analysis/        ← imported by foo.cop
+    cop.json
     src/code-analysis.cop
-    code-analysis.md
   code/                 ← imported by code-analysis
+    cop.json
     src/code.cop
-    code.md
   files/                ← imported by code-analysis
+    cop.json
     src/files.cop
-    files.md
 ```
 
 ---

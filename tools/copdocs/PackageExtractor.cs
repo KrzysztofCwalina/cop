@@ -324,7 +324,23 @@ public class PackageExtractor
 
     private static PackageManifest ReadManifest(string packageDir, string dirName)
     {
-        // Look for <dirname>.md with YAML frontmatter
+        // Prefer cop.json
+        var jsonFile = Path.Combine(packageDir, Cop.Core.PackageMetadata.MetadataFileName);
+        if (File.Exists(jsonFile))
+        {
+            try
+            {
+                var metadata = Cop.Core.PackageMetadata.ParseFromJsonFile(jsonFile);
+                return new PackageManifest(
+                    metadata.Name,
+                    metadata.Description,
+                    metadata.Language,
+                    metadata.Tags.Count > 0 ? metadata.Tags : null);
+            }
+            catch { /* fall through to legacy */ }
+        }
+
+        // Legacy fallback: <dirname>.md with YAML frontmatter
         var mdFile = Path.Combine(packageDir, $"{dirName}.md");
         if (!File.Exists(mdFile))
         {

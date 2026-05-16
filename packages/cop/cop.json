@@ -1,0 +1,17 @@
+{
+  "name": "cop",
+  "version": "1.0.0",
+  "description": "Structural analysis of .cop source files \u2014 types, predicates, functions, imports",
+  "title": "Cop Language Analysis",
+  "authors": "cop-team",
+  "tags": [
+    "cop",
+    "language",
+    "analysis"
+  ],
+  "provider": "clr",
+  "providerEntry": "Cop.Providers.CopProvider",
+  "dependencies": [
+    "code"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "python-lister",
+  "version": "1.0.0",
+  "description": "API surface tracking, export, and diff for Python libraries",
+  "title": "Python API Surface Analysis",
+  "authors": "cop-team",
+  "tags": [
+    "python",
+    "api",
+    "surface",
+    "diff",
+    "breaking-changes"
+  ],
+  "language": "Python"
+}

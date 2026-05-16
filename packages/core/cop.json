@@ -1,0 +1,12 @@
+{
+  "name": "core",
+  "version": "1.0.0",
+  "description": "Fundamental types for provider access \u2014 Data, and language samples",
+  "title": "Core Runtime Types",
+  "authors": "cop-team",
+  "tags": [
+    "core",
+    "runtime",
+    "types"
+  ]
+}

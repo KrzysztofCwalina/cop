@@ -1,3 +1,5 @@
+using Cop.Core;
+
 namespace Cop.Lang;
 
 /// <summary>

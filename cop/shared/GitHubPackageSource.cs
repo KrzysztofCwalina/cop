@@ -45,7 +45,7 @@ public class GitHubPackageSource
     }
 
     /// <summary>
-    /// Fetches package metadata from the package's markdown file.
+    /// Fetches package metadata from the package's cop.json file.
     /// Searches recursively through group folders if not found at the top level.
     /// </summary>
     public async Task<PackageMetadata> GetPackageMetadataAsync(
@@ -62,27 +62,49 @@ public class GitHubPackageSource
         var url = BuildContentsUrl(
             packageRef.Owner,
             packageRef.Repo,
-            $"{packagePath}/{packageRef.PackageName}.md",
+            $"{packagePath}/{PackageMetadata.MetadataFileName}",
             packageRef.Version);
 
         try
         {
             var response = await _httpClient.GetAsync(url, ct);
-            response.EnsureSuccessStatusCode();
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync(ct);
+                var contentDto = JsonSerializer.Deserialize<GitHubContentResponse>(
+                    json,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-            var json = await response.Content.ReadAsStringAsync(ct);
-            var contentDto = JsonSerializer.Deserialize<GitHubContentResponse>(
-                json,
+                if (contentDto?.Content != null)
+                {
+                    var decodedContent = DecodeBase64(contentDto.Content);
+                    return PackageMetadata.ParseFromJson(decodedContent);
+                }
+            }
+
+            // Fallback to legacy {name}.md
+            var legacyUrl = BuildContentsUrl(
+                packageRef.Owner,
+                packageRef.Repo,
+                $"{packagePath}/{packageRef.PackageName}.md",
+                packageRef.Version);
+
+            var legacyResponse = await _httpClient.GetAsync(legacyUrl, ct);
+            legacyResponse.EnsureSuccessStatusCode();
+
+            var legacyJson = await legacyResponse.Content.ReadAsStringAsync(ct);
+            var legacyDto = JsonSerializer.Deserialize<GitHubContentResponse>(
+                legacyJson,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-            if (contentDto?.Content == null)
+            if (legacyDto?.Content == null)
             {
                 throw new PackageNotFoundException(
                     $"Failed to decode package metadata for '{packageRef.PackageName}'");
             }
 
-            var decodedContent = DecodeBase64(contentDto.Content);
-            return PackageMetadata.ParseFromMarkdown(decodedContent);
+            var decodedLegacy = DecodeBase64(legacyDto.Content);
+            return PackageMetadata.ParseFromMarkdown(decodedLegacy);
         }
         catch (PackageNotFoundException)
         {
@@ -126,7 +148,7 @@ public class GitHubPackageSource
 
     /// <summary>
     /// Lists all packages in the packages folder, recursing into group folders.
-    /// A directory is a package if it contains {dirName}.md. Otherwise it's a group folder.
+    /// A directory is a package if it contains cop.json. Otherwise it's a group folder.
     /// </summary>
     public async Task<List<string>> ListPackagesAsync(
         string owner,
@@ -162,10 +184,9 @@ public class GitHubPackageSource
             {
                 if (dir.Name.StartsWith('.')) continue;
 
-                // Check if this directory has a matching .md file alongside it
-                // (not reliable — .md is inside the package dir). Instead, list its contents.
-                // A directory is a package if it contains {name}.md among its children.
+                // A directory is a package if it contains cop.json among its children.
                 var isPackage = await IsGitHubPackageAsync(owner, repo, dir.Path, dir.Name, ct);
+                if (isPackage)
                 if (isPackage)
                 {
                     packages.Add(dir.Name);
@@ -188,9 +209,15 @@ public class GitHubPackageSource
     {
         try
         {
-            var metadataUrl = $"{GitHubApiBaseUrl}/repos/{owner}/{repo}/contents/{dirPath}/{dirName}.md";
+            // Check for cop.json first
+            var metadataUrl = $"{GitHubApiBaseUrl}/repos/{owner}/{repo}/contents/{dirPath}/{PackageMetadata.MetadataFileName}";
             var response = await _httpClient.GetAsync(metadataUrl, ct);
-            return response.IsSuccessStatusCode;
+            if (response.IsSuccessStatusCode) return true;
+
+            // Fallback: check for legacy {name}.md
+            var legacyUrl = $"{GitHubApiBaseUrl}/repos/{owner}/{repo}/contents/{dirPath}/{dirName}.md";
+            var legacyResponse = await _httpClient.GetAsync(legacyUrl, ct);
+            return legacyResponse.IsSuccessStatusCode;
         }
         catch
         {
@@ -206,12 +233,21 @@ public class GitHubPackageSource
     private async Task<string?> FindPackagePathAsync(
         string owner, string repo, string packageName, string? version, CancellationToken ct)
     {
-        // Try direct path first
+        // Try direct path with cop.json first
         var directPath = $"packages/{packageName}";
-        var directUrl = BuildContentsUrl(owner, repo, $"{directPath}/{packageName}.md", version);
+        var directUrl = BuildContentsUrl(owner, repo, $"{directPath}/{PackageMetadata.MetadataFileName}", version);
         try
         {
             var response = await _httpClient.GetAsync(directUrl, ct);
+            if (response.IsSuccessStatusCode) return directPath;
+        }
+        catch { /* fall through */ }
+
+        // Try direct path with legacy {name}.md
+        var legacyDirectUrl = BuildContentsUrl(owner, repo, $"{directPath}/{packageName}.md", version);
+        try
+        {
+            var response = await _httpClient.GetAsync(legacyDirectUrl, ct);
             if (response.IsSuccessStatusCode) return directPath;
         }
         catch { /* fall through to group search */ }
@@ -231,13 +267,22 @@ public class GitHubPackageSource
 
             foreach (var item in items.Where(i => i.Type == "dir" && !i.Name.StartsWith('.')))
             {
-                // Try nested path: packages/{group}/{packageName}
+                // Try nested path: packages/{group}/{packageName}/cop.json
                 var nestedPath = $"packages/{item.Name}/{packageName}";
-                var nestedUrl = BuildContentsUrl(owner, repo, $"{nestedPath}/{packageName}.md", version);
+                var nestedUrl = BuildContentsUrl(owner, repo, $"{nestedPath}/{PackageMetadata.MetadataFileName}", version);
                 try
                 {
                     var nestedResponse = await _httpClient.GetAsync(nestedUrl, ct);
                     if (nestedResponse.IsSuccessStatusCode) return nestedPath;
+                }
+                catch { /* continue */ }
+
+                // Fallback: try legacy {name}.md
+                var nestedLegacyUrl = BuildContentsUrl(owner, repo, $"{nestedPath}/{packageName}.md", version);
+                try
+                {
+                    var nestedLegacyResponse = await _httpClient.GetAsync(nestedLegacyUrl, ct);
+                    if (nestedLegacyResponse.IsSuccessStatusCode) return nestedPath;
                 }
                 catch { continue; }
             }

@@ -1,0 +1,8 @@
+{
+  "name": "code-analysis",
+  "version": "1.0.0",
+  "description": "Types and functions for producing structured code analysis results",
+  "title": "Code Analysis",
+  "authors": "cop-team",
+  "tags": ["analysis", "violations"]
+}

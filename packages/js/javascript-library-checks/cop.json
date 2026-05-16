@@ -1,0 +1,16 @@
+{
+  "name": "javascript-library-checks",
+  "version": "1.0.0",
+  "description": "Library API design and client SDK patterns for JavaScript/TypeScript including exports, naming, method signatures, cancellation, and API design",
+  "title": "JavaScript/TypeScript Library and Client Library Development",
+  "authors": "cop-team",
+  "tags": [
+    "javascript",
+    "typescript",
+    "sdk",
+    "client",
+    "library",
+    "api-design"
+  ],
+  "language": "JavaScript"
+}

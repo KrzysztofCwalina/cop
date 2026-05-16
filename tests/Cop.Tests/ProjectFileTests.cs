@@ -19,8 +19,14 @@ public class RunProjectTests
 
         // Create a feed with the files package (self-contained inline version for test isolation)
         _feedDir = Path.Combine(_tempDir, "feed");
-        var pkgSrc = Path.Combine(_feedDir, "files", "src");
+        var pkgDir = Path.Combine(_feedDir, "files");
+        var pkgSrc = Path.Combine(pkgDir, "src");
         Directory.CreateDirectory(pkgSrc);
+
+        // Package metadata
+        File.WriteAllText(Path.Combine(pkgDir, "cop.json"), """
+            {"name":"files","version":"1.0.0","title":"Files","description":"Test files package","authors":"test"}
+            """);
 
         File.WriteAllText(Path.Combine(pkgSrc, "files.cop"), """
                 export type Folder = {
@@ -119,8 +125,12 @@ public class RunProjectTests
     public void RunProject_MultiplePackages_BothRulesWork()
     {
         // Create feed with both files and a csharp-like package
-        var csharpSrc = Path.Combine(_feedDir, "csharp-checks", "src");
+        var csharpDir = Path.Combine(_feedDir, "csharp-checks");
+        var csharpSrc = Path.Combine(csharpDir, "src");
         Directory.CreateDirectory(csharpSrc);
+        File.WriteAllText(Path.Combine(csharpDir, "cop.json"), """
+            {"name":"csharp-checks","version":"1.0.0","title":"C# Checks","description":"Test","authors":"test"}
+            """);
         File.WriteAllText(Path.Combine(csharpSrc, "checks.cop"), """
             import files
             command TEST-RULE = foreach Folders:isEmpty => 'Test diagnostic'

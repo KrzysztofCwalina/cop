@@ -1,0 +1,12 @@
+{
+  "name": "files",
+  "version": "1.0.0",
+  "description": "Type definitions for filesystem structural and temporal analysis",
+  "title": "Files",
+  "authors": "cop-team",
+  "tags": [
+    "types",
+    "filesystem",
+    "analysis"
+  ]
+}

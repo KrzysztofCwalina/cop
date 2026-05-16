@@ -133,8 +133,9 @@ public class RestoreEngine
         {
             try
             {
-                // Skip metadata file
-                if (relativePath.Equals($"{package.PackageName}.md", StringComparison.OrdinalIgnoreCase))
+                // Skip metadata files
+                if (relativePath.Equals(PackageMetadata.MetadataFileName, StringComparison.OrdinalIgnoreCase)
+                    || relativePath.Equals($"{package.PackageName}.md", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }

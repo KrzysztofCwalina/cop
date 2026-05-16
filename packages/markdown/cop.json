@@ -1,0 +1,8 @@
+{
+  "name": "markdown",
+  "version": "1.0.0",
+  "description": "Types for analyzing markdown documents: headings, links, sections, and fenced code blocks",
+  "title": "Markdown",
+  "authors": "cop-team",
+  "tags": ["markdown", "types"]
+}

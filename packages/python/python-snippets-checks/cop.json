@@ -1,0 +1,14 @@
+{
+  "name": "python-snippets-checks",
+  "version": "1.0.0",
+  "description": "Validates that Python code snippets in # [START/END] blocks match markdown documentation references",
+  "title": "Python Snippet Validation",
+  "authors": "cop-team",
+  "tags": [
+    "python",
+    "snippets",
+    "documentation",
+    "markdown"
+  ],
+  "language": "Python"
+}

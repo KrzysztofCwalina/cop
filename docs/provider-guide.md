@@ -17,7 +17,7 @@ At runtime, the Cop engine discovers your package, loads the DLL, calls your pro
 
 ```
 my-provider/
-├── my-provider.md          # Package metadata (YAML front-matter)
+├── cop.json                # Package metadata (JSON)
 ├── src/
 │   └── my-provider.cop     # Cop type definitions and predicates
 └── lib/
@@ -25,30 +25,26 @@ my-provider/
     └── my-provider.deps.json
 ```
 
-### Package Metadata (`my-provider.md`)
+### Package Metadata (`cop.json`)
 
-The metadata file uses YAML front-matter to declare the package:
+The metadata file declares the package as JSON:
 
-```yaml
----
-name: my-provider
-version: 1.0.0
-title: My Data Provider
-description: Provides X, Y, Z collections for analysis
-authors: your-name
-tags: relevant, tags
-provider: clr
-providerEntry: MyNamespace.MyProvider
----
-
-# My Data Provider
-
-Description and usage documentation for your package.
+```json
+{
+  "name": "my-provider",
+  "version": "1.0.0",
+  "title": "My Data Provider",
+  "description": "Provides X, Y, Z collections for analysis",
+  "authors": "your-name",
+  "tags": ["relevant", "tags"],
+  "provider": "clr",
+  "providerEntry": "MyNamespace.MyProvider"
+}
 ```
 
 Key fields:
-- **`provider: clr`** — tells the engine this package includes a .NET provider DLL
-- **`providerEntry:`** — the fully-qualified class name of your `ObjectProvider` subclass
+- **`"provider": "clr"`** — tells the engine this package includes a .NET provider DLL
+- **`"providerEntry"`** — the fully-qualified class name of your `ObjectProvider` subclass
 
 ### Cop Type Definitions (`src/*.cop`)
 

@@ -33,21 +33,12 @@ How providers make their collections/types/functions available without `.cop` de
 
 ---
 
-## Import Resolution
-
-| # | What | File:Line | Behavior |
-|---|------|-----------|----------|
-| 1 | Package discovery by convention | ImportResolver.cs:103-140 | Directories with `{name}.md`, `src/`, or `types/` are treated as packages |
-
----
-
 ## CLI Implicit Behavior
 
 | # | What | File:Line | Behavior |
 |---|------|-----------|----------|
-| 1 | Auto-restore imports | RunCommand.cs:241-242 | Missing packages auto-downloaded from GitHub feeds |
-| 2 | Feed path discovery | RunCommand.cs:384-403 | Walks up directories for `packages/` dirs + always adds `~/.cop/packages` |
-| 3 | Package mode detection | RunCommand.cs:230-239 | When no local `.cop` files exist, switches to package mode |
-| 4 | Remote URL execution | RunCommand.cs:308-377 | `http://` args download and execute as temp files |
+| 1 | Feed path discovery | RunCommand.cs:384-403 | Walks up directories for `packages/` dirs + always adds `~/.cop/packages` |
+| 2 | Package mode detection | RunCommand.cs:230-239 | When no local `.cop` files exist, switches to package mode |
+| 3 | Remote URL execution | RunCommand.cs:308-377 | `http://` args download and execute as temp files |
 
-
+---

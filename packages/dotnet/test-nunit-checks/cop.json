@@ -1,0 +1,13 @@
+{
+  "name": "test-nunit-checks",
+  "version": "1.0.0",
+  "description": "NUnit-specific testing patterns and analyzer references",
+  "title": "NUnit Testing",
+  "authors": "cop-team",
+  "tags": [
+    "testing",
+    "nunit",
+    "unit-tests"
+  ],
+  "language": "C#"
+}

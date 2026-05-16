@@ -1,0 +1,14 @@
+{
+  "name": "csharp-snippets-checks",
+  "version": "1.0.0",
+  "description": "Validates that C# code snippets in #region blocks match markdown documentation references",
+  "title": "C# Snippet Validation",
+  "authors": "cop-team",
+  "tags": [
+    "csharp",
+    "snippets",
+    "documentation",
+    "markdown"
+  ],
+  "language": "C#"
+}

@@ -1,0 +1,12 @@
+{
+  "name": "code",
+  "version": "1.0.0",
+  "description": "Core type definitions for source code structural analysis",
+  "title": "Code Analysis Types",
+  "authors": "cop-team",
+  "tags": [
+    "types",
+    "code",
+    "analysis"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "json",
+  "version": "1.0.0",
+  "description": "Parse JSON files into typed collections using user-defined type schemas",
+  "title": "JSON File Parsing",
+  "authors": "cop-team",
+  "tags": [
+    "json",
+    "parsing",
+    "data"
+  ],
+  "provider": "clr",
+  "providerEntry": "Cop.Providers.JsonProvider"
+}

@@ -177,7 +177,6 @@ const categories = [
   {
     "name": "Python",
     "packages": [
-      "python",
       "python-checks",
       "python-library-azure-checks",
       "python-library-checks",
@@ -188,7 +187,6 @@ const categories = [
   {
     "name": "JavaScript",
     "packages": [
-      "javascript",
       "javascript-checks",
       "javascript-library-azure-checks",
       "javascript-library-checks",
@@ -1270,7 +1268,7 @@ const packages = {
   },
   "code-analysis": {
     "label": "code-analysis",
-    "overview": "",
+    "overview": "Types and functions for producing structured code analysis results",
     "samples": [
       {
         "title": "Create a simple check",
@@ -1602,15 +1600,15 @@ const packages = {
     "samples": [
       {
         "title": "Hello world",
-        "code": "PRINT 'Hello, World!'"
+        "code": "print('Hello, World!')"
       },
       {
         "title": "String and collection operations",
-        "code": "let names = ['Alice' 'Bob' 'Charlie' 'Diana']\nlet count = names.Count\nlet first = names.First\n\nPRINT '{count} people, first is {first}'\n\nforeach names => 'Hello, {item}!'"
+        "code": "let names = ['Alice' 'Bob' 'Charlie' 'Diana']\nlet count = names.Count\nlet first = names.First\n\nprint('{count} people, first is {first}')\n\nforeach names => 'Hello, {item}!'"
       },
       {
         "title": "Variables and arithmetic",
-        "code": "let x = 10\nlet y = 3\nlet sum = x + y\nlet product = x * y\n\nPRINT 'Sum: {sum}, Product: {product}'"
+        "code": "let x = 10\nlet y = 3\nlet sum = x + y\nlet product = x * y\n\nprint('Sum: {sum}, Product: {product}')"
       }
     ],
     "collections": [],
@@ -1647,7 +1645,7 @@ const packages = {
         ]
       },
       "Error": {
-        "desc": "Represents an operational error flowing through a pipeline.\nErrors are not code bugs (use FAIL for those). They represent external failures\nthat code cannot prevent: network timeouts, I/O failures, malformed input.\nUse isError predicate to detect errors in pipeline items.",
+        "desc": "Represents an operational error flowing through a pipeline.\nErrors are not code bugs (use fail() for those). They represent external failures\nthat code cannot prevent: network timeouts, I/O failures, malformed input.\nUse isError predicate to detect errors in pipeline items.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L72",
         "props": [
           {
@@ -1715,7 +1713,7 @@ const packages = {
         ]
       },
       "Query": {
-        "desc": "A deferred query over a collection (like C# IQueryable).\nChaining where/orderBy/select builds an expression tree without materializing.\nThe query executes when consumed by foreach, Count, PRINT, or assigned to a Collection.\nProviders may optimize by pushing the full query expression down.",
+        "desc": "A deferred query over a collection (like C# IQueryable).\nChaining where/orderBy/select builds an expression tree without materializing.\nThe query executes when consumed by foreach, Count, print, or assigned to a Collection.\nProviders may optimize by pushing the full query expression down.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L153",
         "props": [
           {
@@ -1740,7 +1738,7 @@ const packages = {
       {
         "name": "isError",
         "appliesTo": "Object",
-        "desc": "Returns true if the current item is an Error value.\nWorks as a bare predicate or as a filter: items:isError\nExample: predicate handleError(Object:isError) => PRINT('{item.Message}')",
+        "desc": "Returns true if the current item is an Error value.\nWorks as a bare predicate or as a filter: items:isError\nExample: predicate handleError(Object:isError) => print('{item.Message}')",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L86"
       }
     ],
@@ -1822,6 +1820,13 @@ const packages = {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L81"
       },
       {
+        "name": "fail",
+        "params": "message: string",
+        "returns": "",
+        "desc": "Terminates execution immediately with a fatal diagnostic.\nUse for programmer assertions — situations that should never occur.\nCan be used standalone: fail('invariant violated')\nOr in pipeline: foreach Items:badCondition => fail('{item.Name} is invalid')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L92"
+      },
+      {
         "name": "program",
         "params": "",
         "returns": "Program",
@@ -1834,6 +1839,34 @@ const packages = {
         "returns": "bool",
         "desc": "Glob-matches a file path against a pattern.\nSupports **, *, ? wildcards. Returns true if the path matches.\nExample: pathMatches(Statement.File.Path, '**/Tests/**')",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L108"
+      },
+      {
+        "name": "print",
+        "params": "message: string",
+        "returns": "string",
+        "desc": "Prints a message to the output.\nUsed standalone: print('hello {Name}')\nUsed in pipeline: foreach Types => print('{item.Name}')\nThe template supports {Property} interpolation and {@style} formatting.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L114"
+      },
+      {
+        "name": "save",
+        "params": "path: string, content: string",
+        "returns": "",
+        "desc": "Saves content to a file at the specified path.\nUsed in pipeline: foreach Types:isPublic => save('api.txt', '{item.Name}')\nCreates or appends to the file with the rendered template output.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L119"
+      },
+      {
+        "name": "debug",
+        "params": "message: string",
+        "returns": "",
+        "desc": "Outputs a diagnostic message to the debug log (--diag flag).\nSame template semantics as print but only visible when diagnostics are enabled.\nUsed for troubleshooting: debug('{Types.Count} types loaded')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L124"
+      },
+      {
+        "name": "assert",
+        "params": "condition: bool, description: string",
+        "returns": "",
+        "desc": "Asserts that a condition is true. Fails the test run if false.\nUsed in tests: assert(Types:isPublic.Count > 0, 'should have public types')\nReports pass/fail with the description.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L129"
       },
       {
         "name": "where",
@@ -2042,41 +2075,327 @@ const packages = {
         "appliesTo": "Collection",
         "desc": "Returns a new collection combining both collections.\nExample: let merged = listA:concat(listB)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L268"
+      },
+      {
+        "name": "object",
+        "params": "name: string",
+        "returns": "Object",
+        "desc": "Returns a dynamic Object accessor for the named provider.\nProperties on the returned object query the provider's collections.\nExample: object('sample').Widgets returns the Widgets collection.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L8"
+      },
+      {
+        "name": "source",
+        "params": "name: string",
+        "returns": "Source",
+        "desc": "Returns a Source handle for the named streaming provider.\nThe stream produces items asynchronously (e.g., incoming HTTP requests).",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L12"
+      },
+      {
+        "name": "sink",
+        "params": "name: string",
+        "returns": "Sink",
+        "desc": "Returns a Sink handle for the named streaming provider.\nThe sink consumes items produced by the pipeline (e.g., HTTP responses).",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L16"
+      },
+      {
+        "name": "read",
+        "params": "path: string",
+        "returns": "string",
+        "desc": "Reads the content of a file at the given path (sandboxed to project root).\nReturns the file content as a string.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L20"
+      },
+      {
+        "name": "text",
+        "params": "int",
+        "returns": "string",
+        "appliesTo": "int",
+        "desc": "Converts an integer to its decimal text representation.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L23"
+      },
+      {
+        "name": "text",
+        "params": "bytes",
+        "returns": "string",
+        "appliesTo": "bytes",
+        "desc": "Decodes a byte array as UTF-8 text.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L26"
+      },
+      {
+        "name": "text",
+        "params": "Formattable",
+        "returns": "string",
+        "appliesTo": "Formattable",
+        "desc": "Converts a Formattable to text by resolving the Template against each item\nin Items using {Property} interpolation, then joining results with Separator.\nWhen used in a pipeline: collection.text('{Item.Name}') creates a Formattable\nfrom the pipeline collection and resolves it into a single joined string.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L32"
+      },
+      {
+        "name": "error",
+        "params": "string",
+        "returns": "Error",
+        "appliesTo": "string",
+        "desc": "Creates an Error value with the given message string.\nExample: error('connection timeout')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L36"
+      },
+      {
+        "name": "fail",
+        "params": "message: string",
+        "returns": "",
+        "desc": "Terminates execution immediately with a fatal diagnostic.\nUse for programmer assertions — situations that should never occur.\nCan be used standalone: fail('invariant violated')\nOr in pipeline: foreach Items:badCondition => fail('{item.Name} is invalid')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L42"
+      },
+      {
+        "name": "program",
+        "params": "",
+        "returns": "Program",
+        "desc": "Returns the current program context.\nProvides access to command-line arguments passed to the cop invocation.\nExample: predicate verbose(Program) => program().Args:contains('/v')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L47"
+      },
+      {
+        "name": "pathMatches",
+        "params": "path: string, pattern: string",
+        "returns": "bool",
+        "desc": "Glob-matches a file path against a pattern.\nSupports **, *, ? wildcards. Returns true if the path matches.\nExample: pathMatches(Statement.File.Path, '**/Tests/**')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L52"
+      },
+      {
+        "name": "print",
+        "params": "message: string",
+        "returns": "string",
+        "desc": "Prints a message to the output.\nUsed standalone: print('hello {Name}')\nUsed in pipeline: foreach Types => print('{item.Name}')\nThe template supports {Property} interpolation and {@style} formatting.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L58"
+      },
+      {
+        "name": "save",
+        "params": "path: string, content: string",
+        "returns": "",
+        "desc": "Saves content to a file at the specified path.\nUsed in pipeline: foreach Types:isPublic => save('api.txt', '{item.Name}')\nCreates or appends to the file with the rendered template output.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L63"
+      },
+      {
+        "name": "debug",
+        "params": "message: string",
+        "returns": "",
+        "desc": "Outputs a diagnostic message to the debug log (--diag flag).\nSame template semantics as print but only visible when diagnostics are enabled.\nUsed for troubleshooting: debug('{Types.Count} types loaded')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L68"
+      },
+      {
+        "name": "assert",
+        "params": "condition: bool, description: string",
+        "returns": "",
+        "desc": "Asserts that a condition is true. Fails the test run if false.\nUsed in tests: assert(Types:isPublic.Count > 0, 'should have public types')\nReports pass/fail with the description.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L73"
+      },
+      {
+        "name": "where",
+        "params": "Collection",
+        "returns": "Collection",
+        "appliesTo": "Collection",
+        "desc": "Filters items matching a condition. Returns a new collection.\nExample: Types:where(isPublic)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L81"
+      },
+      {
+        "name": "select",
+        "params": "Collection",
+        "returns": "Collection",
+        "appliesTo": "Collection",
+        "desc": "Projects each item through a transformation. Returns a new collection.\nExample: Types:select(item.Name)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L85"
+      },
+      {
+        "name": "any",
+        "params": "Collection",
+        "returns": "bool",
+        "appliesTo": "Collection",
+        "desc": "Returns true if any item matches a condition.\nExample: Types:any(isAbstract)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L89"
+      },
+      {
+        "name": "all",
+        "params": "Collection",
+        "returns": "bool",
+        "appliesTo": "Collection",
+        "desc": "Returns true if all items match a condition.\nExample: Types:all(isPublic)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L93"
+      },
+      {
+        "name": "none",
+        "params": "Collection",
+        "returns": "bool",
+        "appliesTo": "Collection",
+        "desc": "Returns true if no item matches a condition.\nExample: Types:none(isObsolete)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L97"
+      },
+      {
+        "name": "count",
+        "params": "Collection",
+        "returns": "int",
+        "appliesTo": "Collection",
+        "desc": "Counts items matching a condition.\nExample: Types:count(isPublic)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L101"
+      },
+      {
+        "name": "contains",
+        "params": "Collection",
+        "returns": "bool",
+        "appliesTo": "Collection",
+        "desc": "Returns true if collection contains a value (case-insensitive string match).\nExample: names:contains('Foo')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L105"
+      },
+      {
+        "name": "containsAny",
+        "params": "Collection",
+        "returns": "bool",
+        "appliesTo": "Collection",
+        "desc": "Returns true if collection contains any of the given values.\nExample: tags:containsAny('api', 'public')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L109"
+      },
+      {
+        "name": "empty",
+        "params": "Collection",
+        "returns": "bool",
+        "appliesTo": "Collection",
+        "desc": "Returns true if the collection is empty (Count == 0).\nExample: errors:empty",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L113"
+      },
+      {
+        "name": "first",
+        "params": "Collection",
+        "returns": "Object",
+        "appliesTo": "Collection",
+        "desc": "First item matching a condition, or nic.\nExample: Types:first(isPublic)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L117"
+      },
+      {
+        "name": "last",
+        "params": "Collection",
+        "returns": "Object",
+        "appliesTo": "Collection",
+        "desc": "Last item matching a condition, or nic.\nExample: Types:last(isPublic)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L121"
+      },
+      {
+        "name": "single",
+        "params": "Collection",
+        "returns": "Object",
+        "appliesTo": "Collection",
+        "desc": "The single item matching a condition, or nic if zero or multiple match.\nExample: Types:single(isEntryPoint)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L125"
+      },
+      {
+        "name": "elementAt",
+        "params": "Collection",
+        "returns": "Object",
+        "appliesTo": "Collection",
+        "desc": "Item at a specific zero-based index.\nExample: items:elementAt(3)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L129"
+      },
+      {
+        "name": "orderBy",
+        "params": "Collection",
+        "returns": "Collection",
+        "appliesTo": "Collection",
+        "desc": "Sorts ascending by a key expression.\nExample: Types:orderBy(item.Name)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L133"
+      },
+      {
+        "name": "orderByDescending",
+        "params": "Collection",
+        "returns": "Collection",
+        "appliesTo": "Collection",
+        "desc": "Sorts descending by a key expression.\nExample: Types:orderByDescending(item.Count)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L137"
+      },
+      {
+        "name": "distinct",
+        "params": "Collection",
+        "returns": "Collection",
+        "appliesTo": "Collection",
+        "desc": "Removes duplicate items (by string representation).\nExample: names:distinct",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L141"
+      },
+      {
+        "name": "groupBy",
+        "params": "Collection",
+        "returns": "Collection",
+        "appliesTo": "Collection",
+        "desc": "Groups items by a key expression. Returns collection of groups.\nExample: Types:groupBy(item.Namespace)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L145"
+      },
+      {
+        "name": "sum",
+        "params": "Collection",
+        "returns": "int",
+        "appliesTo": "Collection",
+        "desc": "Sums a numeric property across all items.\nExample: files:sum(item.Size)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L149"
+      },
+      {
+        "name": "min",
+        "params": "Collection",
+        "returns": "int",
+        "appliesTo": "Collection",
+        "desc": "Minimum value of a numeric property.\nExample: files:min(item.Size)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L153"
+      },
+      {
+        "name": "max",
+        "params": "Collection",
+        "returns": "int",
+        "appliesTo": "Collection",
+        "desc": "Maximum value of a numeric property.\nExample: files:max(item.Size)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L157"
+      },
+      {
+        "name": "average",
+        "params": "Collection",
+        "returns": "int",
+        "appliesTo": "Collection",
+        "desc": "Average value of a numeric property.\nExample: files:average(item.Size)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L161"
+      },
+      {
+        "name": "reduce",
+        "params": "Collection",
+        "returns": "Object",
+        "appliesTo": "Collection",
+        "desc": "Reduces a collection to a single value using an accumulator expression.\nExample: numbers:reduce(acc + item)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L165"
+      },
+      {
+        "name": "push",
+        "params": "Collection",
+        "returns": "Collection",
+        "appliesTo": "Collection",
+        "desc": "Returns a new collection with the item appended at the end.\nExample: let updated = items:push(newItem)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L172"
+      },
+      {
+        "name": "prepend",
+        "params": "Collection",
+        "returns": "Collection",
+        "appliesTo": "Collection",
+        "desc": "Returns a new collection with the item prepended at the front.\nExample: let updated = items:prepend(newItem)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L176"
+      },
+      {
+        "name": "pop",
+        "params": "Collection",
+        "returns": "Collection",
+        "appliesTo": "Collection",
+        "desc": "Returns a new collection without the last element.\nExample: let shorter = items:pop",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L180"
+      },
+      {
+        "name": "concat",
+        "params": "Collection",
+        "returns": "Collection",
+        "appliesTo": "Collection",
+        "desc": "Returns a new collection combining both collections.\nExample: let merged = listA:concat(listB)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L184"
       }
     ],
     "checks": [],
-    "commands": [
-      {
-        "name": "FAIL",
-        "params": "message",
-        "desc": "Terminates execution immediately with a fatal diagnostic.\nUse for programmer assertions — situations that should never occur.\nCan be used standalone: FAIL('invariant violated')\nOr in pipeline: foreach Items:badCondition => FAIL('{item.Name} is invalid')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L92"
-      },
-      {
-        "name": "PRINT",
-        "params": "message",
-        "desc": "Prints a message to the output.\nUsed standalone: PRINT('hello {Name}')\nUsed in pipeline: foreach Types => PRINT('{item.Name}')\nThe template supports {Property} interpolation and {@style} formatting.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L114"
-      },
-      {
-        "name": "SAVE",
-        "params": "path, template",
-        "desc": "Saves content to a file at the specified path.\nUsed in pipeline: foreach Types:isPublic => SAVE('api.txt', '{item.Name}')\nCreates or overwrites the file with the rendered template output.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L119"
-      },
-      {
-        "name": "DEBUG",
-        "params": "message",
-        "desc": "Outputs a diagnostic message to the debug log (--diag flag).\nSame template semantics as PRINT but only visible when diagnostics are enabled.\nUsed for troubleshooting: DEBUG('{Types.Count} types loaded')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L124"
-      },
-      {
-        "name": "ASSERT",
-        "params": "condition, description",
-        "desc": "Asserts that a condition is true. Fails the test run if false.\nUsed in tests: ASSERT(Types:isPublic.Count > 0, 'should have public types')\nReports pass/fail with the description.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L129"
-      }
-    ]
+    "commands": []
   },
   "csharp": {
     "label": "csharp",
@@ -3030,7 +3349,7 @@ const packages = {
       },
       {
         "title": "Api listing",
-        "code": "import csharp-library-checks\n\n# Print API surface as C# stubs\nexport command api-listing = foreach Code.Api:isCSharp:publicApi => '{item.ApiAsText}'\n\n# Save API surface to a file\nlet apiText = Code.Api:isCSharp:publicApi.text('{item.ApiAsText}')\nexport command save-api = save('api-surface.txt', apiText)"
+        "code": "import csharp-library-checks\n\n# print API surface as C# stubs\nexport command api-listing = foreach Code.Api:isCSharp:publicApi => '{item.ApiAsText}'\n\n# save API surface to a file\nlet apiText = Code.Api:isCSharp:publicApi.text('{item.ApiAsText}')\nexport command save-api = save('api-surface.txt', apiText)"
       }
     ],
     "collections": [],
@@ -3247,61 +3566,6 @@ const packages = {
     "predicates": [],
     "functions": [],
     "checks": [],
-    "commands": []
-  },
-  "javascript": {
-    "label": "javascript",
-    "overview": "",
-    "samples": [],
-    "collections": [],
-    "types": {},
-    "predicates": [],
-    "functions": [],
-    "checks": [],
-    "exports": [
-      {
-        "name": "Types",
-        "type": "[Typ]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L6"
-      },
-      {
-        "name": "Statements",
-        "type": "[Statement]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L7"
-      },
-      {
-        "name": "Lines",
-        "type": "[Lin]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L8"
-      },
-      {
-        "name": "Calls",
-        "type": "[Call]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L9"
-      },
-      {
-        "name": "Files",
-        "type": "[Fil]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L10"
-      },
-      {
-        "name": "Regions",
-        "type": "[Region]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L11"
-      },
-      {
-        "name": "Projects",
-        "type": "[Project]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L12"
-      }
-    ],
     "commands": []
   },
   "javascript-checks": {
@@ -3578,7 +3842,7 @@ const packages = {
       },
       {
         "title": "Api listing",
-        "code": "import javascript-library-checks\n\n# Print API surface\nexport command api-listing = foreach Code.Api:isJavaScript:isPublicApi => '{item.Signature}'\n\n# Save API surface to a file\nlet apiText = Code.Api:isJavaScript:isPublicApi.text('{item.Signature}')\nexport command save-api = save('api-surface.txt', apiText)"
+        "code": "import javascript-library-checks\n\n# print API surface\nexport command api-listing = foreach Code.Api:isJavaScript:isPublicApi => '{item.Signature}'\n\n# save API surface to a file\nlet apiText = Code.Api:isJavaScript:isPublicApi.text('{item.Signature}')\nexport command save-api = save('api-surface.txt', apiText)"
       }
     ],
     "collections": [],
@@ -3651,7 +3915,7 @@ const packages = {
   },
   "markdown": {
     "label": "markdown",
-    "overview": "",
+    "overview": "Types for analyzing markdown documents: headings, links, sections, and fenced code blocks",
     "samples": [
       {
         "title": "Check for broken links",
@@ -3931,61 +4195,6 @@ const packages = {
       }
     ],
     "checks": [],
-    "commands": []
-  },
-  "python": {
-    "label": "python",
-    "overview": "",
-    "samples": [],
-    "collections": [],
-    "types": {},
-    "predicates": [],
-    "functions": [],
-    "checks": [],
-    "exports": [
-      {
-        "name": "Types",
-        "type": "[Typ]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L6"
-      },
-      {
-        "name": "Statements",
-        "type": "[Statement]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L7"
-      },
-      {
-        "name": "Lines",
-        "type": "[Lin]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L8"
-      },
-      {
-        "name": "Calls",
-        "type": "[Call]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L9"
-      },
-      {
-        "name": "Files",
-        "type": "[Fil]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L10"
-      },
-      {
-        "name": "Regions",
-        "type": "[Region]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L11"
-      },
-      {
-        "name": "Projects",
-        "type": "[Project]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L12"
-      }
-    ],
     "commands": []
   },
   "python-checks": {
@@ -4409,7 +4618,7 @@ const packages = {
       },
       {
         "title": "Api listing",
-        "code": "import python-library-checks\n\n# Print API surface\nexport command api-listing = foreach Code.Api:isPython:isPublicApi => '{item.Signature}'\n\n# Save API surface to a file\nlet apiText = Code.Api:isPython:isPublicApi.text('{item.Signature}')\nexport command save-api = save('api-surface.txt', apiText)"
+        "code": "import python-library-checks\n\n# print API surface\nexport command api-listing = foreach Code.Api:isPython:isPublicApi => '{item.Signature}'\n\n# save API surface to a file\nlet apiText = Code.Api:isPython:isPublicApi.text('{item.Signature}')\nexport command save-api = save('api-surface.txt', apiText)"
       }
     ],
     "collections": [],

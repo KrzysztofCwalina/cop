@@ -109,7 +109,7 @@ When adding a new capability, ask: *"Is this a language feature or a domain conc
 
 Packages are directories (not zips) under `packages/` in GitHub repositories. Each package contains:
 
-- **metadata** — `.md` file with YAML frontmatter (name, version, dependencies)
+- **metadata** — `cop.json` file (name, version, dependencies)
 - **instructions/** — Markdown guidance for coding agents
 - **skills/** — Agent skill definitions
 - **rules/** — `.cop` rule files evaluated by the language runtime
@@ -152,4 +152,4 @@ This publishes self-contained single-file EXEs into `install/<rid>/` subfolders.
 - **Style:** keep code simple — prefer straightforward code over abstractions
 - **`.cop` files:** single-quoted strings, `{Prop}` template interpolation, `{text@style}` for styled output, `feed` and `import` for package management
 - **Packages:** directories (not zips) under `packages/` in GitHub repos
-- **Markdown:** used for instructions, documentation, and package metadata (YAML frontmatter)
+- **JSON:** used for package metadata (`cop.json`)

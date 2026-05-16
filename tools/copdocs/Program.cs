@@ -218,13 +218,8 @@ static bool IsPackageDir(string dir)
     // Skip hidden/special directories
     if (dirName.StartsWith(".")) return false;
 
-    // A package has src/*.cop files or a manifest <dirname>.md
-    var srcDir = Path.Combine(dir, "src");
-    if (Directory.Exists(srcDir) && Directory.GetFiles(srcDir, "*.cop").Length > 0)
-        return true;
-
-    var manifestPath = Path.Combine(dir, $"{dirName}.md");
-    return File.Exists(manifestPath);
+    // A package has cop.json
+    return File.Exists(Path.Combine(dir, Cop.Core.PackageMetadata.MetadataFileName));
 }
 
 static void MergeOverrides(PackageEntry target, PackageEntry overrideEntry)

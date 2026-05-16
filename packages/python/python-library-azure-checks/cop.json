@@ -1,0 +1,16 @@
+{
+  "name": "python-library-azure-checks",
+  "version": "1.0.0",
+  "description": "Azure SDK patterns for Python client library development with credential support and pipeline conventions",
+  "title": "Python Azure Client Library Development",
+  "authors": "cop-team",
+  "tags": [
+    "python",
+    "sdk",
+    "client",
+    "azure",
+    "library",
+    "credential"
+  ],
+  "language": "Python"
+}

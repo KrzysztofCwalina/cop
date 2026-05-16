@@ -56,25 +56,26 @@ public static class NewCommand
             Directory.CreateDirectory(Path.Combine(packageDir, "checks"));
             Directory.CreateDirectory(Path.Combine(packageDir, "tests"));
 
-            // Create metadata file with YAML front-matter template
-            string metadataContent = $"""
----
-name: {name}
-version: 1.0.0
-title: {name} Package
-description: TODO - Add description
-authors: TODO - Add author
-tags: 
-dependencies: []
----
+            // Create cop.json metadata file
+            var metadata = new Cop.Core.PackageMetadata
+            {
+                Name = name,
+                Version = "1.0.0",
+                Title = $"{name} Package",
+                Description = "TODO - Add description",
+                Authors = "TODO - Add author"
+            };
+            string metadataPath = Path.Combine(packageDir, Cop.Core.PackageMetadata.MetadataFileName);
+            File.WriteAllText(metadataPath, metadata.ToJson());
 
+            // Create README.md
+            string readmeContent = $"""
 # {name}
 
 TODO - Add package description.
 """;
-
-            string metadataPath = Path.Combine(packageDir, $"{name}.md");
-            File.WriteAllText(metadataPath, metadataContent);
+            string readmePath = Path.Combine(packageDir, "README.md");
+            File.WriteAllText(readmePath, readmeContent);
 
             Console.WriteLine($"Successfully created package '{name}' at {packageDir}");
         }

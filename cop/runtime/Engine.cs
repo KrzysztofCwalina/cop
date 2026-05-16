@@ -885,16 +885,11 @@ public static class Engine
         var packageDir = Path.GetDirectoryName(copDirPath);
         if (packageDir is null) return;
 
-        var metadataFile = Path.Combine(packageDir, $"{packageName}.md");
-        if (!File.Exists(metadataFile)) return;
-
-        // Only parse files with YAML front-matter (provider metadata requires it)
-        var content = File.ReadAllText(metadataFile);
-        if (!content.StartsWith("---")) return;
+        var metadata = PackageMetadata.TryLoadFromDirectory(packageDir);
+        if (metadata is null) return;
 
         try
         {
-            var metadata = PackageMetadata.ParseFromMarkdown(content);
             if (metadata.IsClrProvider)
                 providerPackages.Add((packageDir, metadata));
         }
