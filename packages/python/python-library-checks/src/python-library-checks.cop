@@ -28,8 +28,8 @@ predicate hasMissingReturnTypes(Type) => Type.Methods:any(isMissingReturnType)
 export let missing-return-types = Types:hasMissingReturnTypes
     :toWarning('{item.Name} has public methods without return type annotations')
 
-## Combined library checks
-export let python-library-checks = untyped-public-params + missing-return-types
+## Combined typing checks
+export let python-library-typing-checks = untyped-public-params + missing-return-types
 
 ## Client Library Design
 
@@ -150,7 +150,7 @@ export let name-too-long = Types:hasNameTooLong
     :toWarning('{item.Name} exceeds 40 characters — use a shorter name')
 
 ## All Python library checks combined
-export let python-library-checks = python-library-checks + async-client-bad-name + client-missing-kwargs + no-connection-string-in-ctor + no-static-methods + too-many-positional-params + async-method-missing-kwargs + lro-naming + paging-naming + name-too-long
+export let python-library-checks = python-library-typing-checks + async-client-bad-name + client-missing-kwargs + no-connection-string-in-ctor + no-static-methods + too-many-positional-params + async-method-missing-kwargs + lro-naming + paging-naming + name-too-long
 
 ## Public API Surface Predicates
 
@@ -181,3 +181,5 @@ export function toApiLine(Api) => ApiLine {
     File = item.File.Path,
     Line = item.Line
 }
+
+command main = CHECK(python-library-checks)

@@ -9,6 +9,7 @@ public record CommandBlock(
     string? DocComment = null,
     bool IsCommand = false,
     bool IsExported = false,
+    bool IsTest = false,
     string? ActionName = null,
     string? OutputPath = null,
     Expression? Guard = null,

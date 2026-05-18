@@ -35,10 +35,10 @@ Add the platform subfolder to your PATH, or invoke directly:
 
 ```bash
 # Windows
-install\win-x64\cop.exe run checks.cop
+install\win-x64\cop.exe checks.cop
 
 # Linux / macOS
-install/linux-x64/cop run checks.cop
+install/linux-x64/cop checks.cop
 ```
 
 ## VS Code Extension

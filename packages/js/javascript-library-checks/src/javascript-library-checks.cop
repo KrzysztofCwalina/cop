@@ -28,7 +28,7 @@ export let no-window-reference = Code.Lines:isJavaScript:hasWindowReference
     :toError('Do not use window — use self for cross-platform compatibility')
 
 ## Combined library design checks
-export let javascript-library-checks = no-default-exports + no-external-promises + no-const-enums + no-window-reference
+export let javascript-library-design-checks = no-default-exports + no-external-promises + no-const-enums + no-window-reference
 
 ## Client Library Design Rules
 
@@ -98,7 +98,7 @@ export let lro-begin-prefix = Clients:hasLroBadName
 export let javascript-client-checks = standardized-verbs + support-cancellation + subclient-naming + lro-begin-prefix + pagination-list-return
 
 ## All JavaScript library and client library checks combined
-export let javascript-library-checks = javascript-library-checks + javascript-client-checks
+export let javascript-library-checks = javascript-library-design-checks + javascript-client-checks
 
 ## Public API Surface Predicates
 
@@ -129,3 +129,5 @@ export function toApiLine(Api) => ApiLine {
     File = item.File.Path,
     Line = item.Line
 }
+
+command main = CHECK(javascript-library-checks)

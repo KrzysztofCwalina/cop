@@ -13,19 +13,19 @@ predicate isCall(Statement) => Statement.Kind == 'call'
 predicate isDecl(Statement) => Statement.Kind == 'declaration'
 
 # ── Existence ──
-command test-stmts-exist = assert(csharp.Statements.Count > 0, 'should have statements')
-command test-has-var = assert(csharp.Statements:isVar.Count > 0, 'should find var declarations')
-command test-has-dynamic = assert(csharp.Statements:isDynamic.Count > 0, 'should find dynamic')
-command test-has-console = assert(csharp.Statements:isConsole.Count > 0, 'should find Console calls')
-command test-has-sleep = assert(csharp.Statements:isSleep.Count > 0, 'should find Thread.Sleep')
-command test-has-calls = assert(csharp.Statements:isCall.Count > 0, 'should have call statements')
-command test-has-decls = assert(csharp.Statements:isDecl.Count > 0, 'should have declarations')
+test stmts-exist = assert(csharp.Statements.Count > 0, 'should have statements')
+test has-var = assert(csharp.Statements:isVar.Count > 0, 'should find var declarations')
+test has-dynamic = assert(csharp.Statements:isDynamic.Count > 0, 'should find dynamic')
+test has-console = assert(csharp.Statements:isConsole.Count > 0, 'should find Console calls')
+test has-sleep = assert(csharp.Statements:isSleep.Count > 0, 'should find Thread.Sleep')
+test has-calls = assert(csharp.Statements:isCall.Count > 0, 'should have call statements')
+test has-decls = assert(csharp.Statements:isDecl.Count > 0, 'should have declarations')
 
 # ── Negated ──
-command test-not-all-var = assert(csharp.Statements:!isVar.Count > 0, 'some statements are not var')
+test not-all-var = assert(csharp.Statements:!isVar.Count > 0, 'some statements are not var')
 
 # ── Files ──
-command test-has-cs-files = assert(csharp.Files.Count > 0, 'should have C# files')
+test has-cs-files = assert(csharp.Files.Count > 0, 'should have C# files')
 
 # ── Impossible intersection ──
-command test-no-console-var = assert(csharp.Statements:isConsole:isVar.Count == 0, 'nothing is both console and var')
+test no-console-var = assert(csharp.Statements:isConsole:isVar.Count == 0, 'nothing is both console and var')

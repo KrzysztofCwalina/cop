@@ -185,10 +185,10 @@ cop package restore my-checks.cop
 3. Run your program (imports resolve from the local `.cop/packages/` directory):
 
 ```bash
-cop run my-checks.cop
+cop my-checks.cop
 ```
 
-The `cop package restore` command reads `feed` and `import` declarations, downloads the referenced packages from GitHub, resolves transitive dependencies, and places files under `.cop/` in your project root (e.g., `.cop/packages/`, `.cop/checks/`). After restore, `cop run` resolves imports entirely from local directories — no network access is required at runtime.
+The `cop package restore` command reads `feed` and `import` declarations, downloads the referenced packages from GitHub, resolves transitive dependencies, and places files under `.cop/` in your project root (e.g., `.cop/packages/`, `.cop/checks/`). After restore, `cop` resolves imports entirely from local directories — no network access is required at runtime.
 
 > **Tip:** Commit the restored `.cop/` directory to version control so CI/CD pipelines and teammates don't need to run `cop package restore` separately.
 
@@ -968,12 +968,17 @@ Commands produce side effects — output to the console, files, or test results.
 foreach List:filter1:filter2 => 'template expression'
 ```
 
-Commands are **named** using `command`, which makes them invocable by name with `cop run <name>`:
+Commands are **named** using `command`, which makes them invocable by name with `cop <name>`:
 
-```ruby
+```cop
 command list-types = foreach Types => '{item.Name}'
-command export-names = foreach Types:isCSharp:client => SAVE('names.txt', '{item.Name}')
-command test-has-types = ASSERT(csharp.Types)
+command export-names = foreach Types:isCSharp:client => save('names.txt', '{item.Name}')
+```
+
+Tests are declared with the `test` keyword:
+
+```cop
+test has-types = assert(csharp.Types.Count > 0)
 ```
 
 #### Command Composition
@@ -986,7 +991,7 @@ command FILE-COUNT = PRINT('{Code.Files.Count} files')
 command STATISTICS = TYPE-COUNT & FILE-COUNT
 ```
 
-Running `cop run STATISTICS` executes both commands in order.
+Running `cop STATISTICS` executes both commands in order.
 
 #### Conditional Commands
 
@@ -1110,30 +1115,31 @@ foreach Clients:isCSharp:!isSealed => SAVE('report.txt', '{item.Name}: not seale
 | `'path'` | yes | Relative file path for output |
 | `'...'` | yes | Template string with `{Expr}` interpolation |
 
-SAVE commands only run when explicitly invoked (e.g., `cop run export-names`), never during normal check runs. File paths must be relative and within the codebase directory. The file is overwritten on each run.
+SAVE commands only run when explicitly invoked (e.g., `cop export-names`), never during normal check runs. File paths must be relative and within the codebase directory. The file is overwritten on each run.
 
-### ASSERT
+### test
 
-Tests that a collection is non-empty. Run with `cop test`.
+Declares a test assertion. Run with `cop test`.
 
-```ruby
-command test-has-types = ASSERT(csharp.Types.Count > 0)
-command test-public = ASSERT(csharp.Types:isPublic.Count > 0, 'expected public types')
+```cop
+test has-types = assert(csharp.Types.Count > 0)
+test public = assert(csharp.Types:isPublic.Count > 0, 'expected public types')
 ```
 
 | Part | Required | Description |
 |---|---|---|
+| `<name>` | yes | Test identifier (shown in output) |
 | `condition` | yes | A boolean expression to evaluate |
-| `'message'` | no | Custom failure message (defaults to command name) |
+| `'message'` | no | Custom failure message (defaults to test name) |
 
 Passes when the condition is true. Fails when false. Commonly used with `.Count > 0` (non-empty) or `.Count == 0` (empty):
 
-```ruby
-command test-no-var = ASSERT(csharp.Statements:isVar.Count == 0)
-command test-clean = ASSERT(violations.Count == 0, 'should have no violations')
+```cop
+test no-var = assert(csharp.Statements:isVar.Count == 0)
+test clean = assert(violations.Count == 0, 'should have no violations')
 ```
 
-ASSERT commands only run via `cop test`, never during `cop run`. See [Testing with Agent Cop](testing-with-cop.md) for details.
+ASSERT commands only run via `cop test`, never during normal execution. See [Testing with Agent Cop](testing-with-cop.md) for details.
 
 ### DEBUG
 
@@ -1148,7 +1154,7 @@ Use `DEBUG` for printf-style troubleshooting of your `.cop` rules. Output is pre
 
 Run with diagnostics enabled:
 ```bash
-cop run -d          # shows [trace] and [debug] output
+cop -d          # shows [trace] and [debug] output
 cop test -d         # shows [trace] and [debug] output during tests
 ```
 
@@ -1310,6 +1316,6 @@ More packages are listed in the [Getting Started](../README.md#available-package
 
 - [Getting Started](../README.md) — walkthrough with practical examples
 - [CLI Reference](cli-reference.md) — all commands and options for `cop.exe`
-- [Static Analysis](static-analysis-with-cop.md) — writing and organizing checks
+- [Static Analysis](static-analysis.md) — writing and organizing checks
 - [Testing](testing-with-cop.md) — writing and running tests with ASSERT
 - [Code Package Reference](packages/code.md) — Type, Statement, File, etc.

@@ -85,10 +85,6 @@ public static class Engine
         {
             var availableCommands = scriptFiles
                 .SelectMany(f => f.Commands.Where(c => c.IsCommand).Select(c => c.Name))
-                .Concat(scriptFiles.SelectMany(f => f.LetDeclarations
-                    .Where(l => l.Filters.Count > 0 && l.Filters[^1] is CallExpr fc &&
-                        (fc.Name is "toError" or "toWarning" or "toInfo" or "toOutput" or "toSave" or "assert" or "assertEmpty"))
-                    .Select(l => l.Name)))
                 .Distinct()
                 .ToList();
 
@@ -463,17 +459,8 @@ public static class Engine
                 var packageDir = ImportResolver.FindPackageDir(feedFull, packageName);
                 if (packageDir is null) continue;
 
-                string? copDir = null;
-                foreach (var subdir in new[] { "src", "types" })
-                {
-                    var candidate = Path.Combine(packageDir, subdir);
-                    if (Directory.Exists(candidate))
-                    {
-                        copDir = candidate;
-                        break;
-                    }
-                }
-                if (copDir is null) continue;
+                var copDir = Path.Combine(packageDir, "src");
+                if (!Directory.Exists(copDir)) continue;
 
                 var copFiles = Directory.GetFiles(copDir, "*.cop");
                 Array.Sort(copFiles, StringComparer.Ordinal);
@@ -505,10 +492,6 @@ public static class Engine
         if (scriptFiles.Count == 0)
             return new EngineResult([], parseErrors, ["No .cop files found in packages"]);
 
-        // Track how many script files belong to the explicitly specified packages
-        // (before transitive imports are appended by CreateTypeRegistry)
-        int explicitScriptFileCount = scriptFiles.Count;
-
         // Create type registry using feed paths for import resolution
         // Pre-register directly-loaded packages to prevent re-resolution via transitive imports
         var providerPackages = new List<(string Dir, PackageMetadata Meta)>();
@@ -521,7 +504,7 @@ public static class Engine
             {
                 var packageDir = ImportResolver.FindPackageDir(Path.GetFullPath(feed), packageName);
                 if (packageDir is null) continue;
-                var copDir = Directory.Exists(Path.Combine(packageDir, "src")) ? Path.Combine(packageDir, "src") : Path.Combine(packageDir, "types");
+                var copDir = Path.Combine(packageDir, "src");
                 if (Directory.Exists(copDir))
                     DetectProviderPackage(copDir, packageName, feedPaths, providerPackages, parseErrors);
                 break;
@@ -555,176 +538,59 @@ public static class Engine
         // Documents are empty — all collections are now global
         List<Document> documents = [];
 
-        // Run each command, or all non-SAVE if no rules specified
-        var allOutputs = new List<PrintOutput>();
-        var allFileOutputs = new List<FileOutput>();
-
         // Register built-in providers with query service for path-scoped queries
         foreach (var bp in _builtinProviders)
             queryService.RegisterProvider(bp.Name, bp.Instance, bp.Schema);
 
         var interpreter = new ScriptInterpreter(typeRegistry, maxOutputsPerCommand: 100_000, providerQueryService: queryService);
 
-        // Inject built-in CHECK command so packages don't need to define it
-        const string builtinCheckDef = "command CHECK(violations) = foreach violations => '{item.File@dim}({item.Line@dim}): {item.Severity@auto}: {item.Message}'";
-        var builtinCheckFile = ScriptParser.Parse(builtinCheckDef, "<builtin-check>");
-        scriptFiles.Add(builtinCheckFile);
+        // Determine which commands to run:
+        // - If -c <commands> specified: run those named commands
+        // - Otherwise: run the 'main' command
+        var commandsToRun = rules.Count > 0 ? rules : ["main"];
 
-        // Check if any specified rules are let collections (not commands).
-        // If so, synthesize RUN CHECK(name) invocations for them.
+        // Verify that the requested commands exist
         var allCommands = scriptFiles.SelectMany(sf => sf.Commands)
             .Where(c => c.IsCommand && c.CommandRef == null)
             .Select(c => c.Name).ToHashSet(StringComparer.Ordinal);
-        var allLets = scriptFiles.SelectMany(sf => sf.LetDeclarations)
-            .Where(l => !l.IsValueBinding || l.IsCollectionUnion)
-            .Select(l => l.Name).ToHashSet(StringComparer.Ordinal);
-        bool hasCheckCommand = allCommands.Contains("CHECK");
 
-        if (rules.Count > 0)
+        if (rules.Count == 0 && !allCommands.Contains("main"))
         {
-            // Split rules into actual commands vs let collections
-            var commandRules = rules.Where(r => allCommands.Contains(r)).ToList();
-            var letRules = rules.Where(r => !allCommands.Contains(r) && allLets.Contains(r)).ToList();
-
-            try
-            {
-                // Run actual commands directly
-                var allWarnings = new List<string>();
-                foreach (var rule in commandRules)
-                {
-                    var result = interpreter.Run(scriptFiles, documents, rule, programArgs);
-                    allOutputs.AddRange(result.Outputs);
-                    if (result.FileOutputs is not null)
-                        allFileOutputs.AddRange(result.FileOutputs);
-                    allWarnings.AddRange(result.Warnings);
-                }
-
-                // For let collections, synthesize RUN CHECK(name) if check command exists
-                if (letRules.Count > 0 && hasCheckCommand)
-                {
-                    var runStatements = string.Join("\n", letRules.Select(name => $"RUN CHECK({name})"));
-                    var wrapperFile = ScriptParser.Parse(runStatements, "<project>");
-                    scriptFiles.Add(wrapperFile);
-                    var result = interpreter.Run(scriptFiles, documents, null, programArgs);
-                    allOutputs.AddRange(result.Outputs);
-                    if (result.FileOutputs is not null)
-                        allFileOutputs.AddRange(result.FileOutputs);
-                    allWarnings.AddRange(result.Warnings);
-                }
-
-                // Promote runtime errors from warnings to fatal errors
-                var ruleFatalErrors = allWarnings.Where(w => w.StartsWith("Error:", StringComparison.Ordinal)).ToList();
-                if (ruleFatalErrors.Count > 0)
-                    return new EngineResult(allOutputs, parseErrors, ruleFatalErrors, rules[0], allFileOutputs);
-            }
-            catch (AmbiguousCollectionException ex)
-            {
-                return new EngineResult(allOutputs, parseErrors, [$"Error: {ex.Message}"], rules[0], allFileOutputs);
-            }
-
-            return new EngineResult(allOutputs, parseErrors, [], rules[0], allFileOutputs);
-        }
-        else
-        {
-            // No rules specified: synthesize RUN CHECK(name) for exported lets
-            // that produce Violation items (detected by toError/toWarning/toInfo in filter chain).
-            // Only considers EXPLICITLY specified packages (not transitive imports).
-            var explicitFiles = scriptFiles.Take(explicitScriptFileCount);
-            var allLetDecls = explicitFiles.SelectMany(sf => sf.LetDeclarations).ToList();
-            var letNames = allLetDecls
-                .Where(l => l.IsExported && IsViolationCollection(l, allLetDecls))
-                .Select(l => l.Name).ToList();
-
-            // Exclude union collections whose constituents are all already in the set.
-            // This prevents duplicate output when individual checks AND their union are both exported.
-            var letNameSet = new HashSet<string>(letNames);
-            letNames.RemoveAll(name =>
-            {
-                var decl = allLetDecls.FirstOrDefault(l => l.Name == name);
-                if (decl is null || !decl.IsCollectionUnion || decl.ValueExpression is not CollectionUnionExpr union)
-                    return false;
-                return union.Elements.All(e => e is IdentifierExpr id && letNameSet.Contains(id.Name));
-            });
-
-            if (letNames.Count > 0 && hasCheckCommand)
-            {
-                var runStatements = string.Join("\n", letNames.Select(name => $"RUN CHECK({name})"));
-                var wrapperFile = ScriptParser.Parse(runStatements, "<project>");
-                scriptFiles.Add(wrapperFile);
-            }
-
-            try
-            {
-                var result = interpreter.Run(scriptFiles, documents, null, programArgs);
-
-                // Promote runtime errors (e.g., missing Code providers) from warnings to fatal errors
-                var globalFatalErrors = result.Warnings.Where(w => w.StartsWith("Error:", StringComparison.Ordinal)).ToList();
-                var remainingWarnings = globalFatalErrors.Count > 0
-                    ? result.Warnings.Where(w => !w.StartsWith("Error:", StringComparison.Ordinal)).ToList()
-                    : result.Warnings;
-
-                return new EngineResult(result.Outputs, parseErrors, globalFatalErrors, null, result.FileOutputs, remainingWarnings);
-            }
-            catch (AmbiguousCollectionException ex)
-            {
-                return new EngineResult([], parseErrors, [$"Error: {ex.Message}"]);
-            }
-            catch (Exception ex)
-            {
-                return new EngineResult([], parseErrors, [$"Error: {ex.Message}"]);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Determines if a let declaration produces Violation items.
-    /// A collection is a Violation collection if:
-    /// 1. Its filter chain ends with toError/toWarning/toInfo, OR
-    /// 2. It's a union whose constituents are Violation collections.
-    /// </summary>
-    private static bool IsViolationCollection(LetDeclaration let, List<LetDeclaration> allLets)
-    {
-        // Direct filter-based collection: check if filters end with a severity function
-        if (!let.IsValueBinding && !let.IsCollectionUnion)
-        {
-            return let.Filters.Count > 0 && HasViolationFilter(let.Filters);
+            return new EngineResult([], parseErrors,
+                ["Error: Package has no 'main' command. Add: command main = <command-to-run>"]);
         }
 
-        // Union collection: check if any constituent is a Violation collection
-        if (let.IsCollectionUnion && let.ValueExpression is CollectionUnionExpr union)
+        try
         {
-            foreach (var element in union.Elements)
+            var allOutputs = new List<PrintOutput>();
+            var allFileOutputs = new List<FileOutput>();
+            var allWarnings = new List<string>();
+
+            foreach (var command in commandsToRun)
             {
-                if (element is IdentifierExpr id)
-                {
-                    var constituent = allLets.FirstOrDefault(l => l.Name == id.Name);
-                    if (constituent != null && IsViolationCollection(constituent, allLets))
-                        return true;
-                }
+                var result = interpreter.Run(scriptFiles, documents, command, programArgs);
+                allOutputs.AddRange(result.Outputs);
+                if (result.FileOutputs is not null)
+                    allFileOutputs.AddRange(result.FileOutputs);
+                allWarnings.AddRange(result.Warnings);
             }
-            return false;
+
+            // Promote runtime errors from warnings to fatal errors
+            var fatalRunErrors = allWarnings.Where(w => w.StartsWith("Error:", StringComparison.Ordinal)).ToList();
+            if (fatalRunErrors.Count > 0)
+                return new EngineResult(allOutputs, parseErrors, fatalRunErrors, commandsToRun[0], allFileOutputs);
+
+            return new EngineResult(allOutputs, parseErrors, [], commandsToRun.Count == 1 ? commandsToRun[0] : null, allFileOutputs,
+                allWarnings.Where(w => !w.StartsWith("Error:", StringComparison.Ordinal)).ToList());
         }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Checks if a filter chain contains a toError/toWarning/toInfo call,
-    /// indicating the collection produces Violation items.
-    /// </summary>
-    private static bool HasViolationFilter(List<Expression> filters)
-    {
-        foreach (var filter in filters)
+        catch (AmbiguousCollectionException ex)
         {
-            var name = filter switch
-            {
-                CallExpr c => c.Name,
-                _ => null
-            };
-            if (name is "toError" or "toWarning" or "toInfo")
-                return true;
+            return new EngineResult([], parseErrors, [$"Error: {ex.Message}"]);
         }
-        return false;
+        catch (Exception ex)
+        {
+            return new EngineResult([], parseErrors, [$"Error: {ex.Message}"]);
+        }
     }
 
     /// <summary>
@@ -974,27 +840,7 @@ public static class Engine
             foreach (var let in sf.LetDeclarations)
                 letDeclarations[let.Name] = let;
 
-        // Also include action-lets as collection sources (they auto-execute like commands)
-        var actionLetCollections = new List<(string Collection, List<Expression> Filters)>();
-        foreach (var sf in scriptFiles)
-        {
-            foreach (var let in sf.LetDeclarations)
-            {
-                if (let.Filters.Count == 0) continue;
-                var lastFilter = let.Filters[^1];
-                string? funcName = lastFilter is CallExpr fc ? fc.Name
-                    : lastFilter is IdentifierExpr ie ? ie.Name : null;
-                if (funcName is "toError" or "toWarning" or "toInfo" or "toOutput" or "toSave" or "assert" or "assertEmpty")
-                {
-                    // If a specific commandName was requested, only include matching action-lets
-                    if (commandName is not null && !string.Equals(let.Name, commandName, StringComparison.Ordinal))
-                        continue;
-                    actionLetCollections.Add((let.BaseCollection, new List<Expression>(let.Filters)));
-                }
-            }
-        }
-
-        if (commands.Count == 0 && actionLetCollections.Count == 0) return null;
+        if (commands.Count == 0) return null;
 
         // Collect predicate names and definitions for filter inlining
         var predicateNames = new HashSet<string>(StringComparer.Ordinal);
@@ -1041,31 +887,6 @@ public static class Engine
             var (hints, _) = FilterHintExtractor.Extract(allCmdFilters, itemTypeDesc, predicateNames, predicateDefs, allowPartial: true);
 
             // Merge: if same collection from multiple sources, OR the filters (any item needed by ANY query)
-            if (collectionFilters.TryGetValue(bareCollection, out var existing) && existing is not null && hints is not null)
-                collectionFilters[bareCollection] = FilterExpression.Or(existing, hints);
-            else
-                collectionFilters[bareCollection] = hints ?? existing;
-        }
-
-        // Process action-lets the same way
-        foreach (var (collection, filters) in actionLetCollections)
-        {
-            var baseCollection = ResolveBaseCollection(collection, letDeclarations, filters);
-            var bareCollection = baseCollection;
-            var dotIdx = baseCollection.IndexOf('.');
-            if (dotIdx > 0)
-                bareCollection = baseCollection[(dotIdx + 1)..];
-
-            var itemTypeName = typeRegistry.GetCollectionItemType(baseCollection);
-            if (itemTypeName is null)
-            {
-                collectionFilters.TryAdd(bareCollection, null);
-                continue;
-            }
-
-            var itemTypeDesc = typeRegistry.GetType(itemTypeName);
-            var (hints, _) = FilterHintExtractor.Extract(filters, itemTypeDesc, predicateNames, predicateDefs, allowPartial: true);
-
             if (collectionFilters.TryGetValue(bareCollection, out var existing) && existing is not null && hints is not null)
                 collectionFilters[bareCollection] = FilterExpression.Or(existing, hints);
             else

@@ -35,14 +35,6 @@ public class AzureSdkRuleTests
             packageFiles.Add(ScriptParser.Parse(source, file));
         }
 
-        // Collect exported let collections from this package's own files only
-        // Only include lets with filters (action-lets that produce Violations), not raw collection proxies
-        var ownExportedLets = packageFiles
-            .SelectMany(sf => sf.LetDeclarations)
-            .Where(l => l.IsExported && !l.IsValueBinding && l.Filters.Count > 0)
-            .Select(l => l.Name)
-            .ToList();
-
         // Resolve imports (e.g., csharp-library-azure imports csharp-library)
         var importResolver = new ImportResolver(apmRoot);
         var resolved = new HashSet<string>();
@@ -65,18 +57,11 @@ public class AzureSdkRuleTests
         scriptFiles.AddRange(imported);
         scriptFiles.AddRange(packageFiles);
 
-        // Generate RUN CHECK(name) for each of this package's own exported let collections
-        if (ownExportedLets.Count > 0)
-        {
-            var runStatements = string.Join("\n", ownExportedLets.Select(name => $"RUN CHECK({name})"));
-            var wrapperSource = $"import code-analysis\n{runStatements}";
-            scriptFiles.Add(ScriptParser.Parse(wrapperSource, "test-runner.cop"));
-        }
-
+        // Run the package's 'main' command (which calls CHECK on the master collection)
         var interpreter = TestInterpreter.Create(out var registry);
         var documents = TestInterpreter.ParseSourceFiles(sourceFiles);
         TestInterpreter.RegisterDocumentsAsNamespaced(registry, documents);
-        return interpreter.Run(scriptFiles, documents).Outputs;
+        return interpreter.Run(scriptFiles, documents, "main").Outputs;
     }
 
     private static void StampPackageName(ScriptFile packageFile, string packageName)

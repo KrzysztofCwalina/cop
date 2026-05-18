@@ -56,3 +56,5 @@ export let no-console-logging = Clients.Methods.Statements:isUsingConsoleLog
 
 ## All Azure-specific JavaScript client library checks combined
 export let javascript-library-azure-checks = client-needs-credential + copyright-header + error-handling + no-console-logging
+
+command main = CHECK(javascript-library-azure-checks)

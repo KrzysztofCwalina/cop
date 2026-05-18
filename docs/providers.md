@@ -421,7 +421,7 @@ foreach Widgets   # Widgets is exported by the package via: export let Widgets =
     '{Widget.Name} ({Widget.Category}): {Widget.Weight}'
 ```
 
-4. Run: `cop run test.cop -t /path/to/test/data`
+4. Run: `cop test.cop -t /path/to/test/data`
 
 ### Unit Testing
 

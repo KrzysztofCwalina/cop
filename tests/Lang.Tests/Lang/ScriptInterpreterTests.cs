@@ -315,7 +315,7 @@ command NO-VAR = foreach Statements:isVarDeclaration:toError('Do not use \'var\'
         var allFiles = ParseWithImports(source);
 
         var (interpreter, docs) = TestInterpreter.CreateWithDocuments(SamplePath("BadClient.cs"));
-        var outputs = interpreter.Run(allFiles, docs).Outputs;
+        var outputs = interpreter.Run(allFiles, docs, "NO-VAR").Outputs;
 
         // Should NOT contain the excluded item 'x'
         Assert.That(outputs.Any(d => d.Message.Contains("'var' for x")), Is.False,
@@ -338,7 +338,7 @@ command NO-VAR = foreach Statements:isVarDeclaration:toError('Do not use \'var\'
         var allFiles = ParseWithImports(source);
 
         var (interpreter, docs) = TestInterpreter.CreateWithDocuments(SamplePath("BadClient.cs"));
-        var outputs = interpreter.Run(allFiles, docs).Outputs;
+        var outputs = interpreter.Run(allFiles, docs, "NO-VAR").Outputs;
 
         // Both var violations should remain (none were accepted)
         Assert.That(outputs.Count(d => d.Message.Contains("'var' for")), Is.EqualTo(2),
@@ -358,7 +358,7 @@ command NO-VAR = foreach Statements:isVarDeclaration:toError('Do not use \'var\'
         var allFiles = ParseWithImports(source);
 
         var (interpreter, docs) = TestInterpreter.CreateWithDocuments(SamplePath("BadClient.cs"));
-        var outputs = interpreter.Run(allFiles, docs).Outputs;
+        var outputs = interpreter.Run(allFiles, docs, "NO-VAR").Outputs;
 
         // Empty accepted list should not filter anything
         Assert.That(outputs.Count(d => d.Message.Contains("'var' for")), Is.EqualTo(2),
@@ -377,7 +377,7 @@ command NO-VAR = foreach Statements:isVarDeclaration:toError('Do not use \'var\'
         var allFiles = ParseWithImports(source);
 
         var (interpreter, docs) = TestInterpreter.CreateWithDocuments(SamplePath("BadClient.cs"));
-        var outputs = interpreter.Run(allFiles, docs).Outputs;
+        var outputs = interpreter.Run(allFiles, docs, "NO-VAR").Outputs;
 
         // Both items excluded — no var violations should remain
         Assert.That(outputs.Where(d => d.Message.Contains("'var' for")).ToList(), Is.Empty,

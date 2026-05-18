@@ -222,7 +222,11 @@ public class ScriptInterpreter
                     {
                         errors.Add($"Ambiguous let binding '{let.Name}' defined in packages '{existing.PackageName}' and '{let.PackageName}'. Use '{existing.PackageName}.{let.Name}' or '{let.PackageName}.{let.Name}' to disambiguate.");
                     }
-                    // else: same package redefinition — last one wins (within same package)
+                    else
+                    {
+                        // Same package redefinition — last one wins (progressive refinement)
+                        letDeclarations[let.Name] = let;
+                    }
                 }
                 else
                 {
@@ -310,8 +314,8 @@ public class ScriptInterpreter
             IEnumerable<CommandBlock> commandsToRun;
             if (assertMode)
             {
-                // Test mode: run ONLY assert commands
-                commandsToRun = ScriptFile.Commands.Where(c => IsCallTo(c, "assert"));
+                // Test mode: run ONLY test commands
+                commandsToRun = ScriptFile.Commands.Where(c => c.IsTest);
             }
             else if (commandName != null)
             {
@@ -324,13 +328,13 @@ public class ScriptInterpreter
                 // Also include parameterized command invocations (e.g., CHECK(var-usage))
                 // whose argument name matches the filter
                 commandsToRun = ScriptFile.Commands.Where(c =>
-                    !IsCallTo(c, "save") && !IsCallTo(c, "assert") &&
+                    !IsCallTo(c, "save") && !c.IsTest &&
                     (commandFilter.Contains(c.Name) || MatchesCommandFilter(c, commandFilter, allCommands)));
             }
             else
             {
-                // Run all commands but skip save and assert (require explicit invocation)
-                commandsToRun = ScriptFile.Commands.Where(c => !IsCallTo(c, "save") && !IsCallTo(c, "assert"));
+                // Run all commands but skip save and test (require explicit invocation)
+                commandsToRun = ScriptFile.Commands.Where(c => !IsCallTo(c, "save") && !c.IsTest);
             }
 
             // Expand command references into concrete blocks
@@ -433,142 +437,6 @@ public class ScriptInterpreter
                 else
                 {
                     ExecuteCommand(cmdTemplate, documents, predicateGroups, letDeclarations, functionGroups, program, allCommands, allOutputs, fileOutputs, aggregateCounts, allAsserts);
-                }
-            }
-        }
-
-        // Execute action-lets: let bindings whose filters produce command objects
-        // (Violations from toWarning, strings from toOutput, SaveActions from toSave, assertions from assert)
-        {
-            // Collect let names already consumed by explicit commands or RUN invocations (avoid double execution)
-            var consumedLets = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var sf in scriptFiles)
-            {
-                foreach (var c in sf.Commands)
-                {
-                    if (c.Collection != null)
-                        consumedLets.Add(c.Collection);
-                    // Also track collections consumed via CallExpr-based command invocations
-                    // e.g., CHECK(var-usage - Accepted) → "var-usage" is consumed
-                    if (c.OutputExpression is CallExpr callExpr
-                        && allCommands.TryGetValue(callExpr.Name, out var cmdList)
-                        && cmdList.Count > 0
-                        && cmdList[0].Parameters is { Count: > 0 })
-                    {
-                        foreach (var arg in callExpr.Args)
-                        {
-                            try
-                            {
-                                var (col, _, _, _) = ScriptParser.DecomposeCollectionExpression(arg);
-                                consumedLets.Add(col);
-                            }
-                            catch { }
-                        }
-                    }
-                }
-                if (sf.RunInvocations is not null)
-                    foreach (var run in sf.RunInvocations)
-                        foreach (var arg in run.Arguments)
-                        {
-                            try
-                            {
-                                var (collection, _, _, _) = ScriptParser.DecomposeCollectionExpression(arg);
-                                consumedLets.Add(collection);
-                            }
-                            catch { }
-                        }
-            }
-
-            foreach (var (name, letDecl) in letDeclarations)
-            {
-                if (letDecl.IsValueBinding || letDecl.IsCollectionUnion) continue;
-                if (letDecl.Filters.Count == 0) continue;
-
-                // Only auto-execute LOCAL action-lets (not from imported packages)
-                if (letDecl.PackageName != null) continue;
-
-                // Find terminal action filter
-                var terminalFilter = letDecl.Filters[^1];
-                if (terminalFilter is not CallExpr terminalCall || !IsActionFilter(terminalCall.Name)) continue;
-
-                // Skip if already consumed by an explicit command
-                if (consumedLets.Contains(name)) continue;
-
-                // Respect commandName/commandFilter selection
-                if (commandName != null && !string.Equals(name, commandName, StringComparison.Ordinal)) continue;
-                if (commandFilter != null && !commandFilter.Contains(name)) continue;
-
-                // assertMode: only run assert action-lets; normal mode: skip asserts
-                bool isAssert = terminalCall.Name is "assert" or "assertEmpty";
-                if (assertMode && !isAssert) continue;
-                if (!assertMode && isAssert) continue;
-
-                // Skip toSave in default mode (requires explicit invocation, like SAVE commands)
-                if (!assertMode && commandName == null && commandFilter == null && terminalCall.Name == "toSave") continue;
-
-                try
-                {
-                    // Resolve the collection with ALL filters applied (action filter produces command objects)
-                    var evaluator = CreateEvaluator(predicateGroups, "", letDeclarations, functionGroups);
-                    var items = ResolveGlobalCollection(letDecl.BaseCollection, evaluator, predicateGroups, letDeclarations, functionGroups);
-                    var itemType = ResolveItemType(letDecl.BaseCollection, predicateGroups, letDeclarations, functionGroups);
-                    items = ApplyFilters(items, itemType, letDecl.Filters, evaluator, functionGroups);
-
-                    if (letDecl.Exclusions != null)
-                    {
-                        var finalType = ResolveItemTypeAfterFilters(itemType, letDecl.Filters, functionGroups);
-                        items = ApplyExclusions(items, finalType, letDecl.Exclusions, evaluator, letDeclarations);
-                    }
-
-                    // Execute based on action type
-                    if (terminalCall.Name is "toWarning" or "toError" or "toInfo")
-                    {
-                        // Items are Violations — format with check template
-                        foreach (var item in items)
-                        {
-                            var ctx = new EvaluationContext();
-                            ctx.Capture("Violation", item);
-                            ctx.Capture("item", item);
-                            if (item is DataObject ao)
-                                CaptureAlanObjectFields(ctx, ao);
-                            var richMessage = ResolveTemplate(CheckOutputTemplate, ctx);
-                            allOutputs.Add(new PrintOutput(richMessage));
-                        }
-                    }
-                    else if (terminalCall.Name == "toOutput")
-                    {
-                        // Items are formatted strings from ApplyFilters native handling
-                        foreach (var item in items)
-                            allOutputs.Add(new PrintOutput(new RichString(new[] { new TextSpan(item?.ToString() ?? "") })));
-                    }
-                    else if (terminalCall.Name == "toSave")
-                    {
-                        // Items are SaveAction DataObjects with Path/Content
-                        foreach (var item in items)
-                        {
-                            if (item is DataObject sa)
-                            {
-                                var path = sa.GetField("Path")?.ToString() ?? "";
-                                var content = sa.GetField("Content")?.ToString() ?? "";
-                                if (!fileOutputs.TryGetValue(path, out var lines)) { lines = []; fileOutputs[path] = lines; }
-                                lines.Add(content);
-                            }
-                        }
-                    }
-                    else if (terminalCall.Name == "assert")
-                    {
-                        var msg = GetAssertMessage(terminalCall) ?? name;
-                        allAsserts.Add(new AssertResult(name, items.Count > 0, msg, items.Count));
-                    }
-                    else if (terminalCall.Name == "assertEmpty")
-                    {
-                        var msg = GetAssertMessage(terminalCall) ?? name;
-                        allAsserts.Add(new AssertResult(name, items.Count == 0, msg, items.Count));
-                    }
-                }
-                catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
-                {
-                    _diagLog?.Invoke($"[trace] action-let '{name}' failed: {ex.Message}");
                 }
             }
         }
@@ -1456,9 +1324,9 @@ public class ScriptInterpreter
         {
             // Skip value bindings and collection unions — handled elsewhere
             if (letDecl.IsValueBinding || letDecl.IsCollectionUnion) continue;
-            // Skip check-level lets (those with actions like :toWarning) — they are commands, not data
+            // Skip lets with type-transforming functions (e.g., :toError produces Violation) — not data collections
             if (letDecl.Filters.Any(f =>
-                (f is CallExpr fc && IsActionFilter(fc.Name)))) continue;
+                f is CallExpr fc && IsTypeTransformFunction(fc.Name, functionGroups))) continue;
 
             try
             {
@@ -1478,19 +1346,13 @@ public class ScriptInterpreter
         return resolved;
     }
 
-    private static bool IsActionFilter(string name) =>
-        name is "toError" or "toWarning" or "toInfo" or "toOutput" or "toSave" or "assert" or "assertEmpty";
-
     /// <summary>
-    /// Output template for Violation objects (check results).
+    /// Determines if a function transforms items to a different output type (not a predicate/filter).
+    /// Used to skip pre-resolution of lets that produce transformed output (e.g., Violations)
+    /// since they are not useful as data collections.
     /// </summary>
-    private const string CheckOutputTemplate = "{item.File@dim}({item.Line@dim}): {item.Severity@auto}: {item.Message}";
-
-    /// <summary>
-    /// Extract assertion message from an assert/assertEmpty filter call.
-    /// </summary>
-    private static string? GetAssertMessage(CallExpr call) =>
-        call.Args.Count > 0 && call.Args[0] is LiteralExpr lit ? lit.Value?.ToString() : null;
+    private static bool IsTypeTransformFunction(string name, Dictionary<string, List<FunctionDefinition>> functionGroups) =>
+        functionGroups.TryGetValue(name, out var overloads) && overloads.Count > 0 && overloads[0].ReturnType != "";
 
     /// <summary>
     /// Pre-resolve non-action collection let bindings for global commands.
@@ -1509,7 +1371,7 @@ public class ScriptInterpreter
         {
             if (letDecl.IsValueBinding || letDecl.IsCollectionUnion) continue;
             if (letDecl.Filters.Any(f =>
-                (f is CallExpr fc && IsActionFilter(fc.Name)))) continue;
+                f is CallExpr fc && IsTypeTransformFunction(fc.Name, functionGroups))) continue;
 
             // Only pre-resolve "leaf" lets whose base is a direct global collection
             // or a value-binding let (e.g., export let Types = cb.Types).

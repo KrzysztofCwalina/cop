@@ -145,7 +145,7 @@ Given a feed path and a package name, cop searches as follows:
 
 ---
 
-## What Happens When You Run `cop run foo.cop`
+## What Happens When You Run `cop foo.cop`
 
 Here is the complete sequence, step by step, starting from a fresh machine where only `cop.exe` is installed.
 
@@ -163,7 +163,7 @@ foreach Code.Types
     '{Type.Name} has {Type.Methods.count} methods'
 ```
 
-The user runs: `cop run foo.cop`
+The user runs: `cop foo.cop`
 
 ---
 
@@ -351,7 +351,7 @@ This queries all configured GitHub feeds (via the GitHub API), lists package dir
 
 ## Restoring Packages Explicitly
 
-While `cop run` auto-restores missing imports, you can also restore packages explicitly:
+While `cop` auto-restores missing imports, you can also restore packages explicitly:
 
 ```
 cop package restore foo.cop
@@ -405,7 +405,7 @@ Package versions follow semantic versioning (`X.Y.Z`). Versions are tracked thro
 - When restoring with a specific version, cop looks for the corresponding git tag
 - When no version is specified, cop fetches the latest version by listing all tags matching `{packageName}/*` and selecting the highest semver
 
-Auto-restore (during `cop run`) does not use versions — it downloads the latest files from the default branch.
+Auto-restore (during `cop`) does not use versions — it downloads the latest files from the default branch.
 
 ---
 

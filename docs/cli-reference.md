@@ -1,23 +1,26 @@
 # CLI Reference
 
-Complete reference for `cop.exe` commands and options.
+Complete reference for `cop.exe`.
 
 ```bash
-cop <command> [options]
+cop <program> [options]
 ```
 
-Global options:
+Options:
 
 | Option | Description |
 |--------|-------------|
-| `-h` | Show help and usage information |
+| `-t <dir>` | Target directory |
+| `-c <commands>` | Filter to specific commands (comma-separated) |
+| `-f <format>` | Output format: `text` (default) or `json` |
+| `-d` | Diagnostic mode (timing, traces, debug output to stderr) |
+| `-cql` | Transpile to CodeQL instead of running |
+| `-h` | Show help |
 | `-v` | Show version |
 
 > **Note:** Agent Cop uses short flags only — there are no long-form `--help` or `--version` equivalents.
 
 ## Exit Codes
-
-All commands use a consistent set of exit codes:
 
 | Code | Meaning |
 |------|---------|
@@ -28,105 +31,90 @@ All commands use a consistent set of exit codes:
 Use exit codes in CI pipelines:
 
 ```bash
-cop run checks.cop || exit 1
+cop checks.cop || exit 1
 ```
 
-## cop (REPL)
+## cop \<program\>
 
-Start an interactive REPL session. Loads `.cop` files from the current directory.
+Run a program. The argument can be a `.cop` file, a URL, a local command name, or a package name from a feed.
 
 ```bash
-cop
+cop <program> [-t <target>] [-c <commands>] [-f text|json] [-d] [-cql]
 ```
 
-See [Working with the REPL](working-with-repl.md) for a full walkthrough.
+### Resolution order
 
-## cop run
-
-Run `.cop` programs. This is the primary command for executing checks, queries, and transformations.
-
-```bash
-cop run [<command>] [<args>] [-t <target>] [-c <commands>] [-f text|json] [-d] [-cql]
-```
-
-| Argument / Option | Description |
-|-------------------|-------------|
-| `<command>` | Command name, `.cop` file path, or HTTPS URL to run. When omitted, all `.cop` files in the current directory are loaded. |
-| `<args>` | Extra arguments passed to the program |
-| `-t <target>` | Target directory, file, or comma-separated file list. Overrides the root path that providers scan. Defaults to the current directory. |
-| `-f <format>` | Output format: `text` (default) or `json` |
-| `-c <commands>` | Comma-separated list of commands to run. By default, all unnamed statements run; named commands only run when invoked by name or with `-c`. |
-| `-d` | Enable diagnostic mode: print timing, collection counts, filter traces (`[trace]`), and `DEBUG` action output (`[debug]`) to stderr |
-| `-cql` | Transpile `.cop` checks to CodeQL `.ql` query files instead of running them. Output is written to a `codeql/` subdirectory next to the source `.cop` file. Only Code provider collections (`Code.Types`, `Code.Statements`, `Code.Calls`) are supported. |
-
-### Discovery behavior
-
-When no `<command>` argument is given, cop discovers and loads all `.cop` files in the current directory. Unnamed statements (bare expressions, `CHECK`, `foreach`) always execute. Named commands (`command my-check = ...`) only execute when invoked by name or listed in `-c`.
-
-When a `.cop` file path is given, cop loads scripts from that file's directory.
-
-When an HTTPS URL is given, cop downloads the remote `.cop` file, executes it against the current directory (or `-t` target), and resolves imports from locally available packages.
+1. If the argument ends in `.cop` → run that local file
+2. If the argument is an HTTPS URL → download and run
+3. If local `.cop` files define a command with that name → run that command
+4. Otherwise → treat as a package name, auto-restore from feed, and run
 
 ### Examples
 
 Run all `.cop` files in the current directory:
 
 ```bash
-cop run
+cop
 ```
 
 Run a specific file:
 
 ```bash
-cop run checks.cop
+cop checks.cop
 ```
 
-Run a named command:
+Run a package from a feed:
 
 ```bash
-cop run my-check
+cop csharp-checks
+```
+
+Run multiple packages:
+
+```bash
+cop csharp-checks csharp-library-checks
+```
+
+Run a named command defined in local `.cop` files:
+
+```bash
+cop my-command
 ```
 
 Run multiple named commands:
 
 ```bash
-cop run -c lint,format
+cop -c lint,format
 ```
 
 Target a specific directory:
 
 ```bash
-cop run checks.cop -t src/
+cop checks.cop -t src/
 ```
 
 Target specific files:
 
 ```bash
-cop run checks.cop -t Program.cs,Startup.cs
+cop checks.cop -t Program.cs,Startup.cs
 ```
 
 Run a remote `.cop` file from a URL:
 
 ```bash
-cop run https://raw.githubusercontent.com/owner/repo/main/checks.cop
-```
-
-Run a remote file against a specific target:
-
-```bash
-cop run https://raw.githubusercontent.com/owner/repo/main/checks.cop -t src/
+cop https://raw.githubusercontent.com/owner/repo/main/checks.cop
 ```
 
 Output as JSON:
 
 ```bash
-cop run checks.cop -f json
+cop checks.cop -f json
 ```
 
-Show diagnostics (timing, collection counts, filter traces, and DEBUG output):
+Show diagnostics:
 
 ```bash
-cop run checks.cop -d
+cop checks.cop -d
 ```
 
 ### CodeQL generation (`-cql`)
@@ -134,7 +122,7 @@ cop run checks.cop -d
 Generate standalone CodeQL `.ql` query files from cop checks. This transpiles your `.cop` predicates and filter chains into equivalent CodeQL `from`/`where`/`select` queries. Generated files are written to a `codeql/` subdirectory next to the source `.cop` file.
 
 ```bash
-cop run checks.cop -cql
+cop checks.cop -cql
 ```
 
 Only Code provider collections are supported (`Code.Types`, `Code.Statements`, `Code.Calls`). If a predicate uses constructs that cannot be fully expressed in CodeQL, the transpiler reports an error and produces no output for that check.
@@ -149,7 +137,7 @@ predicate isGodClass(Type) => Type.Name:endsWith('Manager') && Modifiers:isSet(P
 export let god-classes = Code.Types:isCSharp:isGodClass:toWarning('Avoid God classes')
 ```
 
-Running `cop run my-checks.cop -cql` generates `codeql/god_classes.ql`:
+Running `cop my-checks.cop -cql` generates `codeql/god_classes.ql`:
 
 ```ql
 /**
@@ -182,59 +170,11 @@ select t, "Avoid God classes"
 | Language filter `:isCSharp` | `import csharp` |
 | `toError` / `toWarning` | `@problem.severity error` / `warning` |
 
-**Limitations:** Cross-provider checks (e.g., checks referencing both `Code.Types` and markdown documentation) cannot be expressed in CodeQL and will produce an error. CodeQL operates only on source code graphs — cop's multi-provider capability is a superset.
-
-## cop check
-
-Run pre-built analysis checks from packages against your code. This is the fastest way to run checks without writing `.cop` files. See the [All Checks Catalog](checks.md) for a complete list of available checks across all packages.
-
-```bash
-cop check <packages>... [-t <target>] [-c <rules>] [-f text|json] [-d]
-```
-
-| Argument / Option | Description |
-|-------------------|-------------|
-| `<packages>` | One or more package names to run (e.g., `csharp-style`, `csharp-library`) |
-| `-t <target>` | Target directory to analyze. Defaults to the current directory. |
-| `-c <rules>` | Comma-separated list of specific rules to run. When omitted, all exported checks in the package run. |
-| `-f <format>` | Output format: `text` (default) or `json` |
-| `-d` | Enable diagnostic mode |
-
-### How it works
-
-`cop check` loads the specified package's `.cop` files, resolves their imports, runs all providers against the target directory, and executes the `CHECK` command on all exported violation collections.
-
-Packages are discovered from `packages/` directories in the project tree and from the user's restored package cache (`~/.cop/packages/`).
-
-### Examples
-
-Run C# checks on the current directory:
-
-```bash
-cop check csharp-checks
-```
-
-Run multiple packages:
-
-```bash
-cop check csharp-checks csharp-library-checks
-```
-
-Target a specific directory:
-
-```bash
-cop check csharp-checks -t src/
-```
-
-Run only specific rules from a package:
-
-```bash
-cop check csharp-checks -c interface-prefix,type-name-casing
-```
+**Limitations:** Cross-provider checks (e.g., checks referencing both `Code.Types` and markdown documentation) cannot be expressed in CodeQL and will produce an error.
 
 ## cop test
 
-Run `ASSERT` commands in `.cop` files and report pass/fail results.
+Run `test` declarations in `.cop` files and report pass/fail results.
 
 ```bash
 cop test [<file>] [-d]
@@ -355,12 +295,59 @@ Unlock all locked files:
 cop unlock
 ```
 
+## cop syntax
+
+Validate `.cop` file syntax without executing.
+
+```bash
+cop syntax <path>
+```
+
+| Argument | Description |
+|----------|-------------|
+| `<path>` | `.cop` file or directory to validate |
+
+```bash
+cop syntax checks.cop
+cop syntax src/
+```
+
+## cop repl
+
+Launch an interactive REPL session. Loads `.cop` files from the current directory.
+
+```bash
+cop repl
+```
+
+See [Working with the REPL](working-with-repl.md) for a full walkthrough.
+
 ## cop package
 
-Manage cop packages — restore dependencies, scaffold new packages, validate, publish, and search.
+Manage cop packages — browse, restore, scaffold, validate, publish, and search.
 
 ```bash
 cop package <subcommand>
+```
+
+### cop package list
+
+Browse all available packages across configured feeds.
+
+```bash
+cop package list
+```
+
+### cop package commands
+
+Show the commands (checks, queries, etc.) exported by a package.
+
+```bash
+cop package commands <package>
+```
+
+```bash
+cop package commands csharp-checks
 ```
 
 ### cop package restore

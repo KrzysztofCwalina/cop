@@ -43,7 +43,7 @@ async foreach Ticks => handle => Acks
 Run with:
 
 ```bash
-cop run test.cop
+cop test.cop
 ```
 
 The ticker emits a Tick event every second. The pipeline transforms each Tick into an Ack and sends it to the sink. Press Ctrl+C to stop.

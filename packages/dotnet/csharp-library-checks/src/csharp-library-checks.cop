@@ -100,8 +100,8 @@ export predicate isPassingAsyncParamAsArg(Statement) => Statement.Kind == 'call'
 export let async-param-misuse = Statements:isPassingAsyncParamAsArg
     :toWarning('Do not pass async parameter as argument — use if/else branching instead')
 
-## Combined library checks
-export let csharp-library-checks = public-async-bool-params + async-missing-bool-param + awaits-using-default + unconditional-await-in-dual-mode + unconditional-sync-in-dual-mode + wrong-async-arg-value + wrong-sync-arg-value + async-param-misuse
+## Combined async/sync library checks
+export let csharp-library-async-checks = public-async-bool-params + async-missing-bool-param + awaits-using-default + unconditional-await-in-dual-mode + unconditional-sync-in-dual-mode + wrong-async-arg-value + wrong-sync-arg-value + async-param-misuse
 
 ## Client Library Design
 
@@ -175,7 +175,7 @@ predicate isRequestContent(Parameter) => Parameter.Type == 'RequestContent' || P
 predicate hasRequestContent(Method) => Method.Parameters:any(isRequestContent)
 
 ## All client library checks combined
-export let csharp-library-checks = csharp-library-checks + client-needs-options-ctor + client-sealed-or-abstract + async-needs-cancellation-token + client-methods-virtual + async-needs-sync-counterpart
+export let csharp-library-checks = csharp-library-async-checks + client-needs-options-ctor + client-sealed-or-abstract + async-needs-cancellation-token + client-methods-virtual + async-needs-sync-counterpart
 
 ## Public API Surface Predicates
 
@@ -208,3 +208,5 @@ export function toApiLine(Api) => ApiLine {
     File = item.File.Path,
     Line = item.Line
 }
+
+command main = CHECK(csharp-library-checks)

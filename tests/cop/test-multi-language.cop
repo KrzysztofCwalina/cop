@@ -6,34 +6,34 @@ import python
 import javascript
 
 # ── Namespace resolution ──
-command test-cs-types = assert(csharp.Types.Count > 0, 'csharp.Types via namespace')
-command test-py-types = assert(python.Types.Count > 0, 'python.Types via namespace')
-command test-js-types = assert(javascript.Types.Count > 0, 'javascript.Types via namespace')
-command test-cs-stmts = assert(csharp.Statements.Count > 0, 'csharp.Statements via namespace')
-command test-py-stmts = assert(python.Statements.Count > 0, 'python.Statements via namespace')
-command test-js-stmts = assert(javascript.Statements.Count > 0, 'javascript.Statements via namespace')
+test cs-types = assert(csharp.Types.Count > 0, 'csharp.Types via namespace')
+test py-types = assert(python.Types.Count > 0, 'python.Types via namespace')
+test js-types = assert(javascript.Types.Count > 0, 'javascript.Types via namespace')
+test cs-stmts = assert(csharp.Statements.Count > 0, 'csharp.Statements via namespace')
+test py-stmts = assert(python.Statements.Count > 0, 'python.Statements via namespace')
+test js-stmts = assert(javascript.Statements.Count > 0, 'javascript.Statements via namespace')
 
 # ── Python-specific ──
-command test-py-print = assert(python.Statements:printCall.Count > 0, 'should find print() in calculator.py')
+test py-print = assert(python.Statements:printCall.Count > 0, 'should find print() in calculator.py')
 
 # ── JavaScript-specific ──
-command test-js-console = assert(javascript.Statements:consoleCall.Count > 0, 'should find console.log in app.js')
-command test-js-eval = assert(javascript.Statements:evalCall.Count > 0, 'should find eval() in app.js')
-command test-js-alert = assert(javascript.Statements:alertCall.Count > 0, 'should find alert() in app.js')
+test js-console = assert(javascript.Statements:consoleCall.Count > 0, 'should find console.log in app.js')
+test js-eval = assert(javascript.Statements:evalCall.Count > 0, 'should find eval() in app.js')
+test js-alert = assert(javascript.Statements:alertCall.Count > 0, 'should find alert() in app.js')
 
 # ── Union: two languages ──
 let cs-py-types = csharp.Types + python.Types
-command test-union-two = assert(cs-py-types.Count > 0, 'union of csharp + python types')
+test union-two = assert(cs-py-types.Count > 0, 'union of csharp + python types')
 
 # ── Union: three languages ──
 let all-types = csharp.Types + python.Types + javascript.Types
-command test-union-three = assert(all-types.Count > 0, 'union of all three language types')
+test union-three = assert(all-types.Count > 0, 'union of all three language types')
 
 # ── Union: filtered branches ──
 let public-cs = csharp.Types:isPublic
 let public-all = public-cs + python.Types
-command test-union-filtered = assert(public-all.Count > 0, 'union with filtered branch')
+test union-filtered = assert(public-all.Count > 0, 'union with filtered branch')
 
 # ── Filesystem ──
-command test-has-files = assert(DiskFiles.Count > 0, 'should have files')
-command test-has-folders = assert(Folders.Count > 0, 'should have folders')
+test has-files = assert(DiskFiles.Count > 0, 'should have files')
+test has-folders = assert(Folders.Count > 0, 'should have folders')

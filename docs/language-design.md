@@ -302,7 +302,7 @@ The casing convention reflects the semantic role and corresponding operator:
 
 - **`camelCase`** — predicates (boolean, per-item, used with `:`): `isPublic`, `startsWith`, `any`, `none`
 - **`PascalCase`** — transforms & properties (value-returning, used with `.`): `Where`, `Select`, `Count`, `Text`
-- **`UPPERCASE`** — commands (side effects): `FAIL`, `PRINT`, `SAVE`, `ASSERT`
+- **`UPPERCASE`** — commands (side effects): `CHECK`, `PRINT`, `SAVE`
 
 ---
 

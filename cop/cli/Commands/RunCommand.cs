@@ -227,17 +227,6 @@ public static class RunCommand
 
         Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(ColorDiagLine(msg)) : null;
 
-        // Package mode: if no local .cop files and command looks like a package name, run as packages
-        var localCopFiles = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
-        if (localCopFiles.Length == 0 && command != null && !command.EndsWith(".cop", StringComparison.OrdinalIgnoreCase))
-        {
-            // Treat command + programArgs as package names
-            var packages = new List<string> { command };
-            if (programArgs is { Length: > 0 })
-                packages.AddRange(programArgs.TakeWhile(a => !a.StartsWith('-') && !a.StartsWith('/')));
-            return ExecutePackages(packages.ToArray(), rootPath, commandFilter, format, diag);
-        }
-
         // Auto-restore missing imports before execution
         AutoRestoreImports(scriptsDir, diagLog);
 
@@ -564,7 +553,7 @@ public static class RunCommand
             return;
         }
 
-        string? githubToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+        string? githubToken = ResolveGitHubToken();
         using var httpClient = new HttpClient();
         var source2 = new GitHubPackageSource(httpClient, githubToken);
 
@@ -690,7 +679,7 @@ public static class RunCommand
     /// Downloads missing packages from configured GitHub feeds into the cache directory.
     /// Recursively resolves imports from downloaded .cop files.
     /// </summary>
-    private static async Task<bool> AutoRestorePackagesAsync(List<string> packageNames, string cachePath)
+    public static async Task<bool> AutoRestorePackagesAsync(List<string> packageNames, string cachePath)
     {
         var feedManager = new FeedManager();
         var feeds = feedManager.GetFeeds();
@@ -705,7 +694,7 @@ public static class RunCommand
             return false;
         }
 
-        string? githubToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+        string? githubToken = ResolveGitHubToken();
         using var httpClient = new HttpClient();
         var source = new GitHubPackageSource(httpClient, githubToken);
 
@@ -786,5 +775,33 @@ public static class RunCommand
         }
 
         return true;
+    }
+
+    internal static string? ResolveGitHubToken()
+    {
+        var token = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+        if (!string.IsNullOrWhiteSpace(token)) return token;
+
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo("gh", "auth token")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var proc = System.Diagnostics.Process.Start(psi);
+            if (proc != null)
+            {
+                var output = proc.StandardOutput.ReadToEnd().Trim();
+                proc.WaitForExit(5000);
+                if (proc.ExitCode == 0 && !string.IsNullOrEmpty(output))
+                    return output;
+            }
+        }
+        catch { }
+
+        return null;
     }
 }

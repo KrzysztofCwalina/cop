@@ -100,6 +100,10 @@ public class ScriptParser
                 }
                 else if (Current.Kind == TokenKind.CommandKeyword)
                     commands.AddRange(ParseLetCommandChain(doc, isExported: true));
+                else if (Current.Kind == TokenKind.Identifier && Current.Value == "test"
+                    && _pos + 2 < _tokens.Count && _tokens[_pos + 1].Kind == TokenKind.Identifier
+                    && _tokens[_pos + 2].Kind == TokenKind.Equals)
+                    commands.AddRange(ParseLetCommandChain(doc, isExported: true, isTest: true));
                 else if (Current.Kind == TokenKind.PredicateKeyword)
                     predicates.Add(ParsePredicateDefinition(isExported: true, docComment: doc));
                 else if (Current.Kind == TokenKind.FunctionKeyword)
@@ -140,6 +144,13 @@ public class ScriptParser
             else if (Current.Kind == TokenKind.CommandKeyword)
             {
                 commands.AddRange(ParseLetCommandChain(pendingDocComment));
+                pendingDocComment = null;
+            }
+            else if (Current.Kind == TokenKind.Identifier && Current.Value == "test"
+                && _pos + 2 < _tokens.Count && _tokens[_pos + 1].Kind == TokenKind.Identifier
+                && _tokens[_pos + 2].Kind == TokenKind.Equals)
+            {
+                commands.AddRange(ParseLetCommandChain(pendingDocComment, isTest: true));
                 pendingDocComment = null;
             }
             else if (Current.Kind == TokenKind.LetKeyword)
@@ -690,10 +701,13 @@ public class ScriptParser
 
     // Parse: command <name>[(<params>)] = <action>(...) | <command-ref>
     // Each element can optionally have :guard after it
-    private CommandBlock ParseLetCommand(string? docComment, bool isExported = false)
+    private CommandBlock ParseLetCommand(string? docComment, bool isExported = false, bool isTest = false)
     {
         int line = Current.Line;
-        Expect(TokenKind.CommandKeyword);
+        if (isTest && Current.Kind == TokenKind.Identifier && Current.Value == "test")
+            Advance(); // consume 'test'
+        else
+            Expect(TokenKind.CommandKeyword);
         var name = Expect(TokenKind.Identifier);
 
         // Optional parameter list: command CHECK(violations) = ...
@@ -718,11 +732,11 @@ public class ScriptParser
         {
             Advance();
             return new CommandBlock(name.Value, "", null, [], line, docComment,
-                IsCommand: true, IsExported: isExported, Parameters: parameters, IsIntrinsic: true);
+                IsCommand: true, IsExported: isExported, IsTest: isTest, Parameters: parameters, IsIntrinsic: true);
         }
 
         var block = ParseCommandAtom(name.Value, docComment, line);
-        return block with { Parameters = parameters, IsExported = isExported };
+        return block with { Parameters = parameters, IsExported = isExported, IsTest = isTest };
     }
 
     // Parse a single command atom: foreach..., 'template', <identifier>(...), or a command reference
@@ -792,9 +806,9 @@ public class ScriptParser
     }
 
     // Parse additional &-chained elements after ParseLetCommand
-    private List<CommandBlock> ParseLetCommandChain(string? docComment, bool isExported = false)
+    private List<CommandBlock> ParseLetCommandChain(string? docComment, bool isExported = false, bool isTest = false)
     {
-        var first = ParseLetCommand(docComment, isExported);
+        var first = ParseLetCommand(docComment, isExported, isTest);
         var commands = new List<CommandBlock> { first };
 
         while (Current.Kind == TokenKind.Ampersand)

@@ -46,7 +46,7 @@ CHECK(unsealed-clients)
 Run it:
 
 ```bash
-cop run checks.cop
+cop checks.cop
 ```
 
 Output:
@@ -63,10 +63,9 @@ Exit code 1 if violations found, 0 if clean — suitable for CI. Agents see thes
 Agent Cop ships with pre-built check packages for common rules. No `.cop` files needed:
 
 ```bash
-cop check csharp-style            # naming, formatting, documentation
-cop check csharp-library          # library design conventions
-cop check csharp-style csharp-library   # run multiple packages
-cop check csharp-style -t src/    # analyze a specific directory
+cop csharp-checks                         # naming, formatting, documentation
+cop csharp-checks csharp-library-checks   # run multiple packages
+cop csharp-checks -t src/                 # analyze a specific directory
 ```
 
 ## Source Code Analysis
@@ -238,7 +237,7 @@ Use `SAVE` to write results to a file instead of the console:
 command export-types = foreach Code.Types:csharp => SAVE('types.txt', '{item.Name}')
 ```
 
-Run it explicitly: `cop run export-types`.
+Run it explicitly: `cop export-types`.
 
 ## Excluding Files
 
@@ -361,10 +360,10 @@ command count-files = PRINT('{Code.Files.Count} source files')
 ```
 
 ```bash
-cop run list-types              # run just that command
-cop run -c list-types,count-files  # run multiple commands
-cop run -f json                 # all output as JSON
-cop run -t src/                 # scan only the src/ directory
+cop list-types              # run just that command
+cop -c list-types,count-files  # run multiple commands
+cop -f json                 # all output as JSON
+cop -t src/                 # scan only the src/ directory
 ```
 
 Unnamed statements (bare `foreach`) always run. Named commands only run when invoked by name or with `-c`.
@@ -411,10 +410,10 @@ Cop's exit codes make it easy to integrate into CI pipelines:
     unzip cop.zip && chmod +x cop && mv cop /usr/local/bin/
 
 - name: Run style checks
-  run: cop check csharp-style
+  run: cop csharp-checks
 
 - name: Run custom checks
-  run: cop run
+  run: cop
 
 - name: Run tests
   run: cop test
@@ -431,6 +430,6 @@ Cop's exit codes make it easy to integrate into CI pipelines:
 - Read [Why Agent Cop](why-agent-cop.md) for the product strategy and rationale
 - Read the [Language Reference](docs/language-reference.md) for the full specification DSL syntax
 - Read the [CLI Reference](docs/cli-reference.md) for all commands and options
-- Read [Static Analysis with Cop](docs/static-analysis-with-cop.md) for writing source code checks
+- Read [Static Analysis with Cop](docs/static-analysis.md) for writing source code checks
 - Read [Testing with Cop](docs/testing-with-cop.md) for writing and running tests
 - Browse the [Package Reference](https://krzysztofcwalina.github.io/cop/cop-reference.html) for examples of check definitions

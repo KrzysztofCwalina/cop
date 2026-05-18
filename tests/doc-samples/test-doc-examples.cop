@@ -1,6 +1,6 @@
 # Doc Example Tests
 # Verifies that key examples from README.md, language-reference.md,
-# and static-analysis-with-cop.md work correctly.
+# and static-analysis.md work correctly.
 # Run with: cop test tests/doc-samples/
 
 import csharp
@@ -13,24 +13,24 @@ import code
 predicate longMethod(Method) => Method.Statements.Count > 50
 predicate hasLongMethod(Type) => Type.Methods:any(longMethod)
 
-command test-cs-types = assert(csharp.Types.Count > 0, 'should find C# types')
-command test-py-types = assert(python.Types.Count > 0, 'should find Python types')
-command test-js-types = assert(javascript.Types.Count > 0, 'should find JS types')
-command test-long-method-no-crash = assert(csharp.Types:hasLongMethod.Count == 0)
+test cs-types = assert(csharp.Types.Count > 0, 'should find C# types')
+test py-types = assert(python.Types.Count > 0, 'should find Python types')
+test js-types = assert(javascript.Types.Count > 0, 'should find JS types')
+test long-method-no-crash = assert(csharp.Types:hasLongMethod.Count == 0)
 
 # --- README: Writing Checks ---
 
 predicate client(Type) => Type.Name:endsWith('Client')
 let CsClients = csharp.Types:client
 
-command test-client-found = assert(csharp.Types:client.Count > 0)
-command test-clients = assert(CsClients.Count > 0)
+test client-found = assert(csharp.Types:client.Count > 0)
+test clients = assert(CsClients.Count > 0)
 
 # Predicate composition
 predicate optionsType(Parameter) => Parameter.Type.Name:endsWith('Options')
 predicate hasOptions(Constructor) => Constructor.Parameters:any(optionsType)
 predicate missingOptions(Type) => Type.Constructors:none(hasOptions)
-command test-composition = assert(CsClients:missingOptions.Count > 0)
+test composition = assert(CsClients:missingOptions.Count > 0)
 
 # --- Language Reference: String Predicates ---
 
@@ -38,60 +38,60 @@ predicate startsWithBlob(Type) => Type.Name:startsWith('Blob')
 predicate containsClient(Type) => Type.Name:contains('Client')
 predicate matchesPattern(Type) => Type.Name:matches('^Blob')
 
-command test-starts-with = assert(csharp.Types:startsWithBlob.Count > 0)
-command test-contains = assert(csharp.Types:containsClient.Count > 0)
-command test-matches = assert(csharp.Types:matchesPattern.Count > 0)
+test starts-with = assert(csharp.Types:startsWithBlob.Count > 0)
+test contains = assert(csharp.Types:containsClient.Count > 0)
+test matches = assert(csharp.Types:matchesPattern.Count > 0)
 
 # Short aliases (documented in language-reference.md alias table)
 predicate swBlob(Type) => Type.Name:startsWith('Blob')
 predicate ewClient(Type) => Type.Name:endsWith('Client')
-command test-sw-alias = assert(csharp.Types:swBlob.Count > 0)
-command test-ew-alias = assert(csharp.Types:ewClient.Count > 0)
+test sw-alias = assert(csharp.Types:swBlob.Count > 0)
+test ew-alias = assert(csharp.Types:ewClient.Count > 0)
 
 # Convention-insensitive (sameAs)
 predicate isBlobClient(Type) => Type.Name:sameAs('blob_client')
-command test-same-as = assert(csharp.Types:isBlobClient.Count > 0)
+test same-as = assert(csharp.Types:isBlobClient.Count > 0)
 
 # --- Language Reference: Collection Operations ---
 
 # Negation using isPublic from code package
-command test-negation = assert(csharp.Types:!isPublic.Count > 0)
+test negation = assert(csharp.Types:!isPublic.Count > 0)
 
 # any on sub-collection using isPublic(Method)
 predicate hasPublicCtors(Type) => Type.Constructors:any(isPublic)
-command test-any-subcollection = assert(csharp.Types:hasPublicCtors.Count > 0)
+test any-subcollection = assert(csharp.Types:hasPublicCtors.Count > 0)
 
 # empty predicate
 predicate noCtors(Type) => Type.Constructors:empty
-command test-empty-predicate = assert(csharp.Types:noCtors.Count > 0)
+test empty-predicate = assert(csharp.Types:noCtors.Count > 0)
 
 # Collection concatenation
 let all-types = csharp.Types + python.Types + javascript.Types
-command test-union = assert(all-types.Count > 0)
+test union = assert(all-types.Count > 0)
 
 # Select transform
 let typeNames = csharp.Types.Select(item.Name)
-command test-select = assert(typeNames.Count > 0)
+test select = assert(typeNames.Count > 0)
 
 # Constrained predicates using isSealed from code package
-command test-sealed = assert(csharp.Types:isSealed.Count > 0)
+test sealed = assert(csharp.Types:isSealed.Count > 0)
 
 # --- Static Analysis: Cross-Language ---
 
 predicate swallowsException(Statement) => Statement.ErrorHandler == true
     && Statement.Generic == true && !Statement.Rethrows
-command test-swallows = assert(python.Statements:swallowsException.Count > 0)
+test swallows = assert(python.Statements:swallowsException.Count > 0)
 
 predicate consoleOutput(Statement) => Statement.Kind == 'call'
     && (Statement.TypeName == 'Console'
         || Statement.TypeName == 'console'
         || Statement.MemberName == 'print')
-command test-console = assert(python.Statements:consoleOutput.Count > 0)
+test console = assert(python.Statements:consoleOutput.Count > 0)
 
 predicate isCall(Statement) => Statement.Kind == 'call'
-command test-cs-calls = assert(csharp.Statements:isCall.Count > 0)
-command test-py-calls = assert(python.Statements:isCall.Count > 0)
-command test-js-calls = assert(javascript.Statements:isCall.Count > 0)
+test cs-calls = assert(csharp.Statements:isCall.Count > 0)
+test py-calls = assert(python.Statements:isCall.Count > 0)
+test js-calls = assert(javascript.Statements:isCall.Count > 0)
 
 predicate anyErrorHandler(Statement) => Statement.ErrorHandler == true
-command test-error-handlers = assert(python.Statements:anyErrorHandler.Count > 0)
+test error-handlers = assert(python.Statements:anyErrorHandler.Count > 0)

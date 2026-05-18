@@ -113,7 +113,7 @@ Enum members resolve to plain strings at runtime (`TypeDefinition.cs:32-41`). Th
 > ✅ **Resolved**: The naming is actually consistent — it follows a convention aligned with operator semantics:
 > - `camelCase` = predicates (boolean, per-item, used with `:`) — `startsWith`, `any`, `none`, `isSet`
 > - `PascalCase` = transforms & properties (value-returning, used with `.`) — `Where`, `Select`, `Count`, `Text`
-> - `UPPERCASE` = commands (side effects) — `FAIL`, `PRINT`, `SAVE`, `ASSERT`
+> - `UPPERCASE` = commands (side effects) — `CHECK`, `PRINT`, `SAVE`
 >
 > This convention is now explicitly documented in both the language reference and language design docs.
 

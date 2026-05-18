@@ -68,3 +68,5 @@ export let typescript-checks = await-thenable
 
 ## All JavaScript/TypeScript checks combined
 export let javascript-checks = javascript-correctness-checks + typescript-checks
+
+command main = CHECK(javascript-checks)

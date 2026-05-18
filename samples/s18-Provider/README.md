@@ -37,7 +37,7 @@ echo "name=Bar\ncategory=ui\nsize=200" > testdata/bar.widget
 2. Copy (or symlink) the `package/` directory to your cop packages location, then run:
 
 ```bash
-cop run test.cop -t testdata
+cop test.cop -t testdata
 ```
 
 Where `test.cop` contains:

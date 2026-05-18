@@ -27,17 +27,8 @@ public class ImportResolver
             var packageDir = FindPackageDir(feedPath, packageName);
             if (packageDir is null) continue;
 
-            string? copDir = null;
-            foreach (var subdir in new[] { "types", "src" })
-            {
-                var candidate = Path.Combine(packageDir, subdir);
-                if (Directory.Exists(candidate))
-                {
-                    copDir = candidate;
-                    break;
-                }
-            }
-            if (copDir is null) continue;
+            var copDir = Path.Combine(packageDir, "src");
+            if (!Directory.Exists(copDir)) continue;
 
             var copFiles = Directory.GetFiles(copDir, "*.cop");
             Array.Sort(copFiles, StringComparer.Ordinal); // deterministic order across platforms

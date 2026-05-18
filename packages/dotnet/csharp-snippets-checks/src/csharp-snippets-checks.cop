@@ -58,3 +58,5 @@ export let snippet-stale-content = snippetFences:hasSource:!isContentMatchingSou
 
 ## All snippet checks combined
 export let csharp-snippets-checks = snippet-missing-docs + snippet-orphaned-ref + snippet-duplicate-name + snippet-stale-content
+
+command main = CHECK(csharp-snippets-checks)
