@@ -3,4 +3,4 @@
 
 import csharp-checks
 predicate manyMethods(Type) => Type.Methods.Count > 100
-foreach csharp.Types:manyMethods => '{item.Name}'
+command main = foreach csharp.Types:manyMethods => '{item.Name}'

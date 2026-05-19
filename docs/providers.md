@@ -38,13 +38,15 @@ The metadata file declares the package as JSON:
   "authors": "your-name",
   "tags": ["relevant", "tags"],
   "provider": "clr",
-  "providerEntry": "MyNamespace.MyProvider"
+  "providerEntry": "MyNamespace.MyProvider",
+  "providerAssembly": "my-provider.dll"
 }
 ```
 
 Key fields:
 - **`"provider": "clr"`** — tells the engine this package includes a .NET provider DLL
 - **`"providerEntry"`** — the fully-qualified class name of your `ObjectProvider` subclass
+- **`"providerAssembly"`** — the DLL filename (required when `lib/` contains multiple DLLs)
 
 ### Cop Type Definitions (`src/*.cop`)
 

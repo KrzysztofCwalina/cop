@@ -37,41 +37,18 @@ public class AnsiRendererTests
     }
 
     [Test]
-    public void Render_AutoColor_ErrorMapsToRed()
+    public void Render_AutoColor_NonColorText_NoAnsiCodes()
     {
+        // "error" is not a color name — auto should not apply any color
         var spans = new[] { new TextSpan("error", RichString.ParseAnnotation("auto")) };
         var rich = new RichString(spans);
-        Assert.That(AnsiRenderer.Render(rich), Is.EqualTo($"{Red}error{Reset}"));
-    }
-
-    [Test]
-    public void Render_AutoColor_WarningMapsToYellow()
-    {
-        var spans = new[] { new TextSpan("warning", RichString.ParseAnnotation("auto")) };
-        var rich = new RichString(spans);
-        Assert.That(AnsiRenderer.Render(rich), Is.EqualTo($"{Yellow}warning{Reset}"));
-    }
-
-    [Test]
-    public void Render_AutoColor_InfoMapsToCyan()
-    {
-        var spans = new[] { new TextSpan("info", RichString.ParseAnnotation("auto")) };
-        var rich = new RichString(spans);
-        Assert.That(AnsiRenderer.Render(rich), Is.EqualTo($"{Cyan}info{Reset}"));
-    }
-
-    [Test]
-    public void Render_AutoColor_CaseInsensitive()
-    {
-        var spans = new[] { new TextSpan("ERROR", RichString.ParseAnnotation("auto")) };
-        var rich = new RichString(spans);
-        Assert.That(AnsiRenderer.Render(rich), Is.EqualTo($"{Red}ERROR{Reset}"));
+        Assert.That(AnsiRenderer.Render(rich), Is.EqualTo("error"));
     }
 
     [Test]
     public void Render_AutoColor_NamedColor_UsesDirectLookup()
     {
-        // "red" is both a named color and would match auto — auto should find it via ColorCodes
+        // "red" is a named color — auto finds it via ColorCodes
         var spans = new[] { new TextSpan("red", RichString.ParseAnnotation("auto")) };
         var rich = new RichString(spans);
         Assert.That(AnsiRenderer.Render(rich), Is.EqualTo($"{Red}red{Reset}"));
@@ -88,11 +65,11 @@ public class AnsiRendererTests
     [Test]
     public void Render_AutoColor_WithWeightAnnotation()
     {
-        // auto + bold combined
+        // auto + bold combined — "red" is a color name so auto applies red
         var annotations = new Dictionary<string, string> { ["color"] = "auto", ["weight"] = "bold" };
-        var spans = new[] { new TextSpan("error", annotations) };
+        var spans = new[] { new TextSpan("red", annotations) };
         var rich = new RichString(spans);
-        Assert.That(AnsiRenderer.Render(rich), Is.EqualTo($"{Red}{Bold}error{Reset}"));
+        Assert.That(AnsiRenderer.Render(rich), Is.EqualTo($"{Red}{Bold}red{Reset}"));
     }
 
     [Test]
@@ -106,19 +83,19 @@ public class AnsiRendererTests
     [Test]
     public void Render_MixedSpans_CheckLikeOutput()
     {
-        // Simulates: file.cs(10): error: message
+        // Simulates: file.cs(10): error: message — severity not colored (not a color name)
         var spans = new TextSpan[]
         {
             new("src/file.cs", RichString.ParseAnnotation("dim")),
             new("("),
             new("10", RichString.ParseAnnotation("dim")),
             new("): "),
-            new("error", RichString.ParseAnnotation("auto")),
+            new("error"),
             new(": something went wrong"),
         };
         var rich = new RichString(spans);
         var rendered = AnsiRenderer.Render(rich);
         Assert.That(rendered, Is.EqualTo(
-            $"{Dim}src/file.cs{Reset}({Dim}10{Reset}): {Red}error{Reset}: something went wrong"));
+            $"{Dim}src/file.cs{Reset}({Dim}10{Reset}): error: something went wrong"));
     }
 }

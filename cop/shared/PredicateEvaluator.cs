@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Cop.Lang;
@@ -160,7 +161,11 @@ public class PredicateEvaluator
             switch (fc.Name)
             {
                 case "print":
-                    _printSink?.Invoke(evalArgs.Count > 0 ? evalArgs[0]?.ToString() ?? "" : "");
+                    var printText = evalArgs.Count > 0 ? evalArgs[0]?.ToString() ?? "" : "";
+                    // Resolve template interpolation {name} from current context
+                    if (printText.Contains('{'))
+                        printText = ResolveTemplateText(printText, item, paramType, ctx);
+                    _printSink?.Invoke(printText);
                     return null;
                 case "save":
                     var savePath = evalArgs.Count > 0 ? evalArgs[0]?.ToString() ?? "" : "";
@@ -402,6 +407,36 @@ public class PredicateEvaluator
         }
 
         return GetMember(Eval(ma.Target, item, paramType, ctx), ma.Member);
+    }
+
+    /// <summary>
+    /// Resolves template interpolation in a string (e.g., "Hello {name}").
+    /// ExpressionSegments are resolved from context/let-bindings.
+    /// AnnotatedLiteralSegments ({text@style}) are preserved for rich output handling.
+    /// </summary>
+    private string ResolveTemplateText(string template, object item, string paramType, EvaluationContext ctx)
+    {
+        var segments = TemplateParser.Parse(template);
+        if (segments.Count == 1 && segments[0] is LiteralSegment) return template;
+        var sb = new StringBuilder();
+        foreach (var seg in segments)
+        {
+            if (seg is LiteralSegment lit)
+                sb.Append(lit.Text);
+            else if (seg is AnnotatedLiteralSegment ann)
+                sb.Append('{').Append(ann.Text).Append('@').Append(ann.Annotation).Append('}');
+            else if (seg is ExpressionSegment expr)
+            {
+                var value = EvalIdentifier(expr.PropertyPath[0], item, paramType, ctx);
+                for (int i = 1; i < expr.PropertyPath.Length && value != null; i++)
+                    value = GetMember(value, expr.PropertyPath[i]);
+                if (expr.Annotation != null)
+                    sb.Append('{').Append(value?.ToString() ?? "").Append('@').Append(expr.Annotation).Append('}');
+                else
+                    sb.Append(value?.ToString() ?? "");
+            }
+        }
+        return sb.ToString();
     }
 
     private object? EvalIdentifier(string name, object item, string paramType, EvaluationContext ctx)

@@ -2,4 +2,4 @@
 # @expect no-output
 
 import code
-foreach Types:isCSharp:isPublic => '{item.Name}'
+command main = foreach Types:isCSharp:isPublic => '{item.Name}'

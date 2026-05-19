@@ -110,7 +110,7 @@ public class ConditionalExprTests
         // code.cop already defines: predicate isSealed(Type) => Type.Modifiers:isSet(Sealed)
         // Use it directly — no need to redefine.
         var file = ScriptParser.Parse(
-            "foreach Types:isCSharp:isSealed => '{item.Name}'", "test.cop");
+            "command main = foreach Types:isCSharp:isSealed => '{item.Name}'", "test.cop");
         var interpreter = TestInterpreter.Create();
         var docs = TestInterpreter.ParseSourceFiles(SamplePath("GoodClient.cs"));
         var result = interpreter.Run([TestInterpreter.CodePackage, file], docs);
@@ -125,7 +125,7 @@ public class ConditionalExprTests
         // true ? isSealed | false  →  always evaluates isSealed
         var file = ScriptParser.Parse(@"
 predicate alwaysCheckSealed(Type) => true ? isSealed | false
-foreach Types:isCSharp:alwaysCheckSealed => '{item.Name}'
+command main = foreach Types:isCSharp:alwaysCheckSealed => '{item.Name}'
 ", "test.cop");
 
         var interpreter = TestInterpreter.Create();
@@ -144,7 +144,7 @@ foreach Types:isCSharp:alwaysCheckSealed => '{item.Name}'
         // false ? true | isPublic  →  always evaluates isPublic
         var file = ScriptParser.Parse(@"
 predicate checkPublicViaFalse(Type) => false ? false | isPublic
-foreach Types:isCSharp:checkPublicViaFalse => '{item.Name}'
+command main = foreach Types:isCSharp:checkPublicViaFalse => '{item.Name}'
 ", "test.cop");
 
         var interpreter = TestInterpreter.Create();
@@ -163,7 +163,7 @@ foreach Types:isCSharp:checkPublicViaFalse => '{item.Name}'
         // For GoodClient (sealed, not abstract): outer=false → inner: sealed=true → true
         var file = ScriptParser.Parse(@"
 predicate sealedNotAbstract(Type) => isAbstract ? false | isSealed ? true | false
-foreach Types:isCSharp:sealedNotAbstract => '{item.Name}'
+command main = foreach Types:isCSharp:sealedNotAbstract => '{item.Name}'
 ", "test.cop");
 
         var interpreter = TestInterpreter.Create();
@@ -223,7 +223,7 @@ foreach Types:isCSharp:sealedNotAbstract => '{item.Name}'
         var file = ScriptParser.Parse(
             "let label = 'hello'\n" +
             "predicate test(Type) => label ? 'hello' => 'matched' | _ => 'nope'\n" +
-            "foreach Code.Types:test => '{item.Name}'\n", "test.cop");
+            "command main = foreach Code.Types:test => '{item.Name}'\n", "test.cop");
         var interpreter = TestInterpreter.Create();
         var outputs = interpreter.Run(
             [TestInterpreter.CodePackage, file],
@@ -238,7 +238,7 @@ foreach Types:isCSharp:sealedNotAbstract => '{item.Name}'
         var file = ScriptParser.Parse(
             "let label = 'unknown'\n" +
             "predicate test(Type) => label ? 'hello' => false | _ => true\n" +
-            "foreach Code.Types:test => '{item.Name}'\n", "test.cop");
+            "command main = foreach Code.Types:test => '{item.Name}'\n", "test.cop");
         var interpreter = TestInterpreter.Create();
         var outputs = interpreter.Run(
             [TestInterpreter.CodePackage, file],
@@ -253,7 +253,7 @@ foreach Types:isCSharp:sealedNotAbstract => '{item.Name}'
         var file = ScriptParser.Parse(
             "let label = 'xyz'\n" +
             "predicate test(Type) => label ? 'a' => true | 'b' => true\n" +
-            "foreach Code.Types:test => '{item.Name}'\n", "test.cop");
+            "command main = foreach Code.Types:test => '{item.Name}'\n", "test.cop");
         var interpreter = TestInterpreter.Create();
         var outputs = interpreter.Run(
             [TestInterpreter.CodePackage, file],
@@ -268,7 +268,7 @@ foreach Types:isCSharp:sealedNotAbstract => '{item.Name}'
         var file = ScriptParser.Parse(
             "let label = 'HELLO'\n" +
             "predicate test(Type) => label ? 'hello' => true | _ => false\n" +
-            "foreach Code.Types:test => '{item.Name}'\n", "test.cop");
+            "command main = foreach Code.Types:test => '{item.Name}'\n", "test.cop");
         var interpreter = TestInterpreter.Create();
         var outputs = interpreter.Run(
             [TestInterpreter.CodePackage, file],
@@ -282,7 +282,7 @@ foreach Types:isCSharp:sealedNotAbstract => '{item.Name}'
     {
         var file = ScriptParser.Parse(
             "predicate test(Type) => Type.Methods.Count ? 0 => false | _ => true\n" +
-            "foreach Code.Types:test => '{item.Name}'\n", "test.cop");
+            "command main = foreach Code.Types:test => '{item.Name}'\n", "test.cop");
         var interpreter = TestInterpreter.Create();
         var outputs = interpreter.Run(
             [TestInterpreter.CodePackage, file],

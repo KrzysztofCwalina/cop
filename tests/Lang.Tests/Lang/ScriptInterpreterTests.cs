@@ -180,11 +180,12 @@ public class CheckInterpreterTests
     }
 
     [Test]
-    public void Run_NoCommandName_RunsAll()
+    public void Run_NoCommandName_RunsOnlyMainCommand()
     {
         var source = """
-            let list-types = foreach Types => '{item.Name}'
-            foreach Types => 'unnamed'
+            command other = foreach Types => 'from-other'
+            command main = foreach Types => 'from-main'
+            foreach Types => 'bare-block'
             """;
         var ScriptFile = ScriptParser.Parse(source, "test.cop");
 
@@ -192,8 +193,9 @@ public class CheckInterpreterTests
 
         var outputs = interpreter.Run([ScriptFile], TestInterpreter.ParseSourceFiles(SamplePath("BadClient.cs"))).Outputs;
 
-        Assert.That(outputs.Any(d => d.Message == "unnamed"), Is.True, "Unnamed command SHOULD run");
-        Assert.That(outputs.Any(d => d.Message != "unnamed"), Is.True, "Named command SHOULD also run");
+        Assert.That(outputs.Any(d => d.Message == "from-main"), Is.True, "main command SHOULD run");
+        Assert.That(outputs.All(d => d.Message != "from-other"), Is.True, "Non-main named commands should NOT run");
+        Assert.That(outputs.All(d => d.Message != "bare-block"), Is.True, "Bare blocks should NOT run");
     }
 
     [Test]
@@ -224,7 +226,7 @@ public class CheckInterpreterTests
                 Line = Statement.Line
             }
             let VarErrors = Statements:isVar:error('Do not use var')
-            foreach VarErrors => '{item.Severity}:{item.Line} {item.Message}'
+            command main = foreach VarErrors => '{item.Severity}:{item.Line} {item.Message}'
             """;
         var ScriptFile = ScriptParser.Parse(source, "test.cop");
 
@@ -254,7 +256,7 @@ public class CheckInterpreterTests
                 Severity = 'warning',
                 Message = message
             }
-            foreach Statements:isVar:warning('Avoid var usage') => '{item.Severity}: {item.Message}'
+            command main = foreach Statements:isVar:warning('Avoid var usage') => '{item.Severity}: {item.Message}'
             """;
         var ScriptFile = ScriptParser.Parse(source, "test.cop");
 
@@ -281,7 +283,7 @@ public class CheckInterpreterTests
                 Severity = 'error',
                 Message = message
             }
-            foreach Statements:isVar:error('Var used for {item.MemberName}') => '{item.Message}'
+            command main = foreach Statements:isVar:error('Var used for {item.MemberName}') => '{item.Message}'
             """;
         var ScriptFile = ScriptParser.Parse(source, "test.cop");
 
@@ -456,7 +458,7 @@ export command CHECK(violations) = foreach violations => '{item.Message}'
 
 export let var-usage = Statements:isVarDeclaration:toError('Do not use var for {item.MemberName}')
 
-CHECK(var-usage)
+command main = CHECK(var-usage)
 ";
         var allFiles = ParseWithImports(source);
         var (interpreter, docs) = TestInterpreter.CreateWithDocuments(SamplePath("BadClient.cs"));
@@ -478,7 +480,7 @@ export command CHECK(violations) = foreach violations => '{item.Message}'
 export let var-usage = Statements:isVarDeclaration:toError('Do not use var for {item.MemberName}')
 
 let Accepted = ['BadClient.cs:x' 'BadClient.cs:result']
-CHECK(var-usage - Accepted)
+command main = CHECK(var-usage - Accepted)
 ";
         var allFiles = ParseWithImports(source);
         var (interpreter, docs) = TestInterpreter.CreateWithDocuments(SamplePath("BadClient.cs"));
@@ -525,7 +527,7 @@ import csharp
 
 predicate usesVar([Statement]) => Statement.Keywords:contains('var')
 let StatementsUsingVar = Statements:usesVar
-foreach StatementsUsingVar => 'uses var at {item.Line}'
+command main = foreach StatementsUsingVar => 'uses var at {item.Line}'
 ";
         var allFiles = ParseWithImports(source);
         var (interpreter, docs) = TestInterpreter.CreateWithDocuments(SamplePath("BadClient.cs"));
@@ -543,7 +545,7 @@ import csharp
 import code-analysis
 
 export let var-usage = Statements:isVarDeclaration:toError('Do not use var')
-CHECK(var-usage)
+command main = CHECK(var-usage)
 ";
         var allFiles = ParseWithImports(source);
         var (interpreter, docs) = TestInterpreter.CreateWithDocuments(SamplePath("BadClient.cs"));
@@ -554,14 +556,14 @@ CHECK(var-usage)
     }
 
     [Test]
-    public void CHECK_Output_HasAutoAnnotation_ForSeverity()
+    public void CHECK_Output_HasDimAnnotation_ForFilePath()
     {
         var source = @"
 import csharp
 import code-analysis
 
 export let var-usage = Statements:isVarDeclaration:toError('Do not use var')
-CHECK(var-usage)
+command main = CHECK(var-usage)
 ";
         var allFiles = ParseWithImports(source);
         var (interpreter, docs) = TestInterpreter.CreateWithDocuments(SamplePath("BadClient.cs"));
@@ -570,16 +572,9 @@ CHECK(var-usage)
         Assert.That(outputs.Count, Is.GreaterThan(0), "Should produce at least one violation");
 
         var first = outputs[0];
-        // Verify the RichString has an "auto"-annotated span for severity
-        var severitySpan = first.Content.Spans.FirstOrDefault(s =>
-            s.HasAnnotations && s.Annotations!.ContainsKey("color")
-            && s.Annotations["color"] == "auto");
-        Assert.That(severitySpan, Is.Not.Null, "Severity span should have color=auto annotation");
-        Assert.That(severitySpan!.Text, Is.EqualTo("error"), "Severity text should be 'error'");
-
-        // Verify AnsiRenderer produces red for the severity
-        var rendered = AnsiRenderer.Render(first.Content);
-        Assert.That(rendered, Does.Contain("\x1b[31m"), "Rendered output should contain red ANSI code for 'error'");
+        // Verify severity text is present (no color annotation)
+        var plainText = first.Content.ToPlainText();
+        Assert.That(plainText, Does.Contain("error"), "Output should contain severity text 'error'");
 
         // Verify dim annotation on file path
         var dimSpan = first.Content.Spans.FirstOrDefault(s =>
@@ -679,7 +674,7 @@ CHECK(var-usage)
             let typeNames = Code.Types.Select(item.Name)
             predicate isInList(Type) => Type.Name:in(typeNames)
             let listed = Code.Types:isInList
-            command CHECK = foreach listed => '{item.Name} is in the list'
+            command main = foreach listed => '{item.Name} is in the list'
             """;
         var scriptFile = ScriptParser.Parse(source, "test.cop");
         var interpreter = TestInterpreter.Create();
@@ -698,7 +693,7 @@ CHECK(var-usage)
         var copSource =
             "let typeNames = Code.Types.Select(item.Name)\n" +
             "let count = typeNames.Count\n" +
-            "foreach Code.Types => '{count} types found'\n";
+            "command main = foreach Code.Types => '{count} types found'\n";
         var scriptFile = ScriptParser.Parse(copSource, "let-test.cop");
         var interpreter = TestInterpreter.Create();
 
@@ -720,7 +715,7 @@ CHECK(var-usage)
         // let name = 'hello' should be evaluable in templates
         var copSource =
             "let greeting = 'hello world'\n" +
-            "foreach Code.Types => '{greeting}'\n";
+            "command main = foreach Code.Types => '{greeting}'\n";
         var scriptFile = ScriptParser.Parse(copSource, "let-literal-test.cop");
         var interpreter = TestInterpreter.Create();
 
@@ -735,7 +730,7 @@ CHECK(var-usage)
     [Test]
     public void Run_BareNumberExpression_ProducesOutput()
     {
-        var source = "42";
+        var source = "command main = 42";
         var scriptFile = ScriptParser.Parse(source, "test.cop");
         var interpreter = TestInterpreter.Create();
         var result = interpreter.Run([scriptFile], []);
@@ -747,7 +742,7 @@ CHECK(var-usage)
     public void Run_BareNumberExpression_WithCommandFilter_ProducesOutput()
     {
         // Simulates REPL flow: parse snippet, rename commands, run with commandFilter
-        var snippet = ScriptParser.Parse("1", "<repl>");
+        var snippet = ScriptParser.Parse("command main = 1", "<repl>");
         var userFile = ScriptParser.Parse("let x = [1 2 3]\nx", "main.cop");
 
         // Rename snippet commands (like REPL does)
@@ -772,7 +767,7 @@ CHECK(var-usage)
     [Test]
     public void Run_BareListExpression_ProducesOutput()
     {
-        var source = "let x = [1 2 3]\nx";
+        var source = "let x = [1 2 3]\ncommand main = foreach x => '{item}'";
         var scriptFile = ScriptParser.Parse(source, "test.cop");
         var interpreter = TestInterpreter.Create();
         var result = interpreter.Run([scriptFile], []);
@@ -782,7 +777,7 @@ CHECK(var-usage)
     [Test]
     public void Run_Print_BasicString()
     {
-        var source = "print('hello world')";
+        var source = "command main = print('hello world')";
         var scriptFile = ScriptParser.Parse(source, "test.cop");
         var interpreter = TestInterpreter.Create();
         var result = interpreter.Run([scriptFile], []);
@@ -794,7 +789,7 @@ CHECK(var-usage)
     public void Run_Print_StyledTemplate()
     {
         // {text with spaces@style} → AnnotatedLiteralSegment (styled literal)
-        var source = "print('{Error found@red}')";
+        var source = "command main = print('{Error found@red}')";
         var scriptFile = ScriptParser.Parse(source, "test.cop");
         var interpreter = TestInterpreter.Create();
         var result = interpreter.Run([scriptFile], []);
@@ -809,7 +804,7 @@ CHECK(var-usage)
     {
         var source =
             "let name = 'World'\n" +
-            "print('Hello {name}')";
+            "command main = print('Hello {name}')";
         var scriptFile = ScriptParser.Parse(source, "test.cop");
         var interpreter = TestInterpreter.Create();
         var result = interpreter.Run([scriptFile], []);

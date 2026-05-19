@@ -182,8 +182,9 @@ public class RestoreEngine
                         await File.WriteAllBytesAsync(targetPath, content);
                     }
                 }
-                // Analyzers: checks/analyzers/*.dll → .cop/analyzers/{filename}
-                else if (relativePath.StartsWith("checks/analyzers/", StringComparison.OrdinalIgnoreCase) &&
+                // Analyzers: src/analyzers/*.dll or checks/analyzers/*.dll → .cop/analyzers/{filename}
+                else if ((relativePath.StartsWith("src/analyzers/", StringComparison.OrdinalIgnoreCase) ||
+                          relativePath.StartsWith("checks/analyzers/", StringComparison.OrdinalIgnoreCase)) &&
                          relativePath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                 {
                     var analyzersDir = Path.Combine(repoRoot, ".cop", "analyzers");
@@ -192,15 +193,17 @@ public class RestoreEngine
                     targetPath = Path.Combine(analyzersDir, fileName);
                     await File.WriteAllBytesAsync(targetPath, content);
                 }
-                // NuGet analyzers: checks/nuget-analyzers.yaml
-                else if (relativePath.Equals("checks/nuget-analyzers.yaml", StringComparison.OrdinalIgnoreCase))
+                // NuGet analyzers: src/nuget-analyzers.yaml or checks/nuget-analyzers.yaml
+                else if (relativePath.Equals("src/nuget-analyzers.yaml", StringComparison.OrdinalIgnoreCase) ||
+                         relativePath.Equals("checks/nuget-analyzers.yaml", StringComparison.OrdinalIgnoreCase))
                 {
                     var yamlContent = Encoding.UTF8.GetString(content);
                     ParseNuGetAnalyzersYaml(yamlContent, nugetAnalyzers);
                     continue; // Don't place this file
                 }
-                // Rules: checks/rules.yaml → .cop/rules/{packageName}.rules.yaml
-                else if (relativePath.Equals("checks/rules.yaml", StringComparison.OrdinalIgnoreCase))
+                // Rules: src/rules.yaml or checks/rules.yaml → .cop/rules/{packageName}.rules.yaml
+                else if (relativePath.Equals("src/rules.yaml", StringComparison.OrdinalIgnoreCase) ||
+                         relativePath.Equals("checks/rules.yaml", StringComparison.OrdinalIgnoreCase))
                 {
                     var rulesDir = Path.Combine(repoRoot, ".cop", "rules");
                     Directory.CreateDirectory(rulesDir);
@@ -211,7 +214,7 @@ public class RestoreEngine
                     var rulesContent = Encoding.UTF8.GetString(content);
                     ParseRulesYaml(rulesContent, diagnosticRules);
                 }
-                // Check files: checks/*.cop → .cop/checks/{packageName}.{filename}
+                // Check files: checks/*.cop → .cop/checks/{packageName}.{filename} (legacy)
                 else if (relativePath.StartsWith("checks/", StringComparison.OrdinalIgnoreCase) &&
                          relativePath.EndsWith(".cop", StringComparison.OrdinalIgnoreCase))
                 {

@@ -9,5 +9,6 @@
     "dotnet"
   ],
   "provider": "clr",
-  "providerEntry": "Cop.Providers.CSharpProvider"
+  "providerEntry": "Cop.Providers.CSharpProvider",
+  "providerAssembly": "csharp-provider.dll"
 }

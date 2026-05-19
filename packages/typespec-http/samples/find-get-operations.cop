@@ -1,4 +1,4 @@
 import typespec-http
 
-foreach HttpOperations:isGet
+command main = foreach HttpOperations:isGet
     => '{item.Path} — {item.OperationId}'

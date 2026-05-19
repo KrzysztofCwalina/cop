@@ -96,6 +96,16 @@ public class PackageMetadata
     public string ProviderEntry { get; set; } = string.Empty;
 
     /// <summary>
+    /// Filename of the provider DLL (e.g., "csharp-provider.dll").
+    /// Required when the package's lib/ directory contains multiple DLLs
+    /// (provider + its dependencies). When omitted and only one DLL exists,
+    /// that DLL is used automatically.
+    /// </summary>
+    [YamlMember(Alias = "providerAssembly")]
+    [JsonPropertyName("providerAssembly")]
+    public string ProviderAssembly { get; set; } = string.Empty;
+
+    /// <summary>
     /// Returns true if this package contains a CLR provider assembly.
     /// </summary>
     [JsonIgnore]

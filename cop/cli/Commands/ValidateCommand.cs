@@ -141,11 +141,11 @@ public static class ValidateCommand
             Directory.Exists(skillsPath)
         ));
 
-        // Step 9: checks/ directory exists
-        var checksPath = Path.Combine(packagePath, "checks");
+        // Step 9: src/ directory exists
+        var srcPath = Path.Combine(packagePath, "src");
         results.Add(new ValidationResult(
-            "checks/ directory exists",
-            Directory.Exists(checksPath)
+            "src/ directory exists",
+            Directory.Exists(srcPath)
         ));
 
         // Step 10: tests/ directory exists

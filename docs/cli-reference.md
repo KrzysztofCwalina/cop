@@ -340,7 +340,7 @@ cop package list
 
 ### cop package commands
 
-Show the commands (checks, queries, etc.) exported by a package.
+Show the commands and exports of a package.
 
 ```bash
 cop package commands <package>

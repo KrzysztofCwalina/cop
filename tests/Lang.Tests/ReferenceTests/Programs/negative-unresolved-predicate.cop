@@ -2,4 +2,4 @@
 # @expect no-output
 
 import csharp-checks
-foreach csharp.Types:doesNotExist => '{item.Name}'
+command main = foreach csharp.Types:doesNotExist => '{item.Name}'

@@ -53,7 +53,7 @@ public static class NewCommand
             // Create subdirectories
             Directory.CreateDirectory(Path.Combine(packageDir, "instructions"));
             Directory.CreateDirectory(Path.Combine(packageDir, "skills"));
-            Directory.CreateDirectory(Path.Combine(packageDir, "checks"));
+            Directory.CreateDirectory(Path.Combine(packageDir, "src"));
             Directory.CreateDirectory(Path.Combine(packageDir, "tests"));
 
             // Create cop.json metadata file

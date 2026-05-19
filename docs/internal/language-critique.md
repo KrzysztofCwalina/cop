@@ -247,7 +247,7 @@ No consistent convention is enforced.
 Styled templates are powerful but visually noisy:
 
 ```cop
-'{item.File@dim}({item.Line@dim}): {item.Severity@auto}: {item.Message}'
+'{item.File@dim}({item.Line@dim}): {item.Severity}: {item.Message}'
 ```
 
 For long messages with many styled segments, this becomes hard to read and edit.

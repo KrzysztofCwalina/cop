@@ -16,10 +16,6 @@ public static class AnsiRenderer
         ["cyan"] = "\x1b[36m",
         ["white"] = "\x1b[37m",
         ["gray"] = "\x1b[90m",
-        // Semantic aliases — usable in @style annotations (e.g., {text@warning-bold})
-        ["error"] = "\x1b[31m",     // red
-        ["warning"] = "\x1b[33m",   // yellow
-        ["info"] = "\x1b[36m",      // cyan
     };
 
     private static readonly Dictionary<string, string> WeightCodes = new(StringComparer.OrdinalIgnoreCase)
@@ -31,22 +27,12 @@ public static class AnsiRenderer
         ["strikethrough"] = "\x1b[9m",
     };
 
-    // Semantic aliases used only by the "auto" color annotation.
-    // Maps common text values to ANSI color codes without polluting the main ColorCodes table.
-    private static readonly Dictionary<string, string> AutoColorAliases = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["error"] = "\x1b[31m",     // red
-        ["warning"] = "\x1b[33m",   // yellow
-        ["info"] = "\x1b[36m",      // cyan
-    };
-
     private const string Reset = "\x1b[0m";
 
     /// <summary>
     /// Renders a RichString to a terminal string with ANSI color codes.
     /// Returns plain text if no spans have annotations.
-    /// When a span has color="auto", the span's text value is used as the color lookup key,
-    /// checking both named colors and semantic aliases (error→red, warning→yellow, info→cyan).
+    /// When a span has color="auto", the span's text value is used as the color lookup key.
     /// </summary>
     public static string Render(RichString richString)
     {
@@ -69,8 +55,7 @@ public static class AnsiRenderer
                 if (string.Equals(color, "auto", StringComparison.OrdinalIgnoreCase))
                 {
                     // Use the text value itself as the color key
-                    if (!ColorCodes.TryGetValue(span.Text, out cc))
-                        AutoColorAliases.TryGetValue(span.Text, out cc);
+                    ColorCodes.TryGetValue(span.Text, out cc);
                 }
                 else
                 {

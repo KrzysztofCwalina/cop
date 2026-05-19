@@ -82,7 +82,7 @@ public class PlusOperatorTests
         // Use + in a predicate comparison: (1 + 2) == 3
         var file = ScriptParser.Parse(@"
 predicate addCheck(Type) => (1 + 2) == 3
-foreach Types:addCheck => '{item.Name}'
+command main = foreach Types:addCheck => '{item.Name}'
 ", "test.cop");
         var interpreter = TestInterpreter.Create();
         var docs = TestInterpreter.ParseSourceFiles(SamplePath("GoodClient.cs"));
@@ -95,7 +95,7 @@ foreach Types:addCheck => '{item.Name}'
     {
         var file = ScriptParser.Parse(@"
 predicate concatCheck(Type) => ('hello' + ' world') == 'hello world'
-foreach Types:concatCheck => '{item.Name}'
+command main = foreach Types:concatCheck => '{item.Name}'
 ", "test.cop");
         var interpreter = TestInterpreter.Create();
         var docs = TestInterpreter.ParseSourceFiles(SamplePath("GoodClient.cs"));
@@ -108,7 +108,7 @@ foreach Types:concatCheck => '{item.Name}'
     {
         var file = ScriptParser.Parse(@"
 predicate listCheck(Type) => ([1 2] + [3 4]).Count == 4
-foreach Types:listCheck => '{item.Name}'
+command main = foreach Types:listCheck => '{item.Name}'
 ", "test.cop");
         var interpreter = TestInterpreter.Create();
         var docs = TestInterpreter.ParseSourceFiles(SamplePath("GoodClient.cs"));
@@ -121,7 +121,7 @@ foreach Types:listCheck => '{item.Name}'
     {
         var file = ScriptParser.Parse(@"
 predicate appendCheck(Type) => ([1 2] + 3).Count == 3
-foreach Types:appendCheck => '{item.Name}'
+command main = foreach Types:appendCheck => '{item.Name}'
 ", "test.cop");
         var interpreter = TestInterpreter.Create();
         var docs = TestInterpreter.ParseSourceFiles(SamplePath("GoodClient.cs"));
@@ -134,7 +134,7 @@ foreach Types:appendCheck => '{item.Name}'
     {
         var file = ScriptParser.Parse(@"
 predicate subCheck(Type) => (10 - 3) == 7
-foreach Types:subCheck => '{item.Name}'
+command main = foreach Types:subCheck => '{item.Name}'
 ", "test.cop");
         var interpreter = TestInterpreter.Create();
         var docs = TestInterpreter.ParseSourceFiles(SamplePath("GoodClient.cs"));
@@ -148,7 +148,7 @@ foreach Types:subCheck => '{item.Name}'
         // Both expressions should yield different counts
         var file = ScriptParser.Parse(@"
 predicate mutationCheck(Type) => [1 2].Count == 2 && ([1 2] + [3]).Count == 3
-foreach Types:mutationCheck => '{item.Name}'
+command main = foreach Types:mutationCheck => '{item.Name}'
 ", "test.cop");
         var interpreter = TestInterpreter.Create();
         var docs = TestInterpreter.ParseSourceFiles(SamplePath("GoodClient.cs"));

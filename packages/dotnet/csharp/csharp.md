@@ -7,6 +7,7 @@ authors: cop-team
 tags: csharp, dotnet
 provider: clr
 providerEntry: Cop.Providers.CSharpProvider
+providerAssembly: csharp-provider.dll
 ---
 # C# Source Language Provider
 Parses C# source code files and provides Types, Statements, and Lines collections.

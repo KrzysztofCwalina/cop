@@ -58,7 +58,7 @@ public static class ProviderLoader
         }
 
         // Find the provider DLL
-        var dllPath = FindProviderDll(packageDir, metadata.Name);
+        var dllPath = FindProviderDll(packageDir, metadata);
         if (dllPath is null)
         {
             errors.Add($"Provider assembly not found for package '{metadata.Name}'. Expected a .dll in '{Path.Combine(packageDir, "lib")}'.");
@@ -320,9 +320,9 @@ public static class ProviderLoader
 
     /// <summary>
     /// Finds the provider DLL in the package's lib/ directory.
-    /// Prefers a DLL matching the package name or containing "provider".
+    /// Uses the providerAssembly manifest field if specified, otherwise expects a single DLL.
     /// </summary>
-    private static string? FindProviderDll(string packageDir, string packageName)
+    private static string? FindProviderDll(string packageDir, PackageMetadata metadata)
     {
         var libDir = Path.Combine(packageDir, "lib");
         if (!Directory.Exists(libDir))
@@ -343,12 +343,19 @@ public static class ProviderLoader
         if (dlls.Length == 1)
             return dlls[0];
 
-        // When multiple DLLs exist, prefer one matching the package name or containing "provider"
-        var match = dlls.FirstOrDefault(d => Path.GetFileNameWithoutExtension(d)
-            .Equals($"{packageName}-provider", StringComparison.OrdinalIgnoreCase));
-        match ??= dlls.FirstOrDefault(d => Path.GetFileNameWithoutExtension(d)
-            .Contains("provider", StringComparison.OrdinalIgnoreCase));
-        return match ?? dlls[0];
+        // Use providerAssembly from manifest to select the correct DLL
+        if (!string.IsNullOrEmpty(metadata.ProviderAssembly))
+        {
+            var match = dlls.FirstOrDefault(d => Path.GetFileName(d)
+                .Equals(metadata.ProviderAssembly, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+                return match;
+        }
+
+        // Fallback: prefer DLL matching the package name
+        var nameMatch = dlls.FirstOrDefault(d => Path.GetFileNameWithoutExtension(d)
+            .Equals(metadata.Name, StringComparison.OrdinalIgnoreCase));
+        return nameMatch ?? dlls[0];
     }
 }
 

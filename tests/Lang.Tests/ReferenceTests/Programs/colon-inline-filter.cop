@@ -3,4 +3,4 @@
 
 import csharp-checks
 predicate nameStartsGood(Type) => Type.Name:startsWith('Good')
-foreach csharp.Types:nameStartsGood => '{item.Name}'
+command main = foreach csharp.Types:nameStartsGood => '{item.Name}'

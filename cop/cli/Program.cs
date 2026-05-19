@@ -20,10 +20,10 @@ var knownVerbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     "test", "syntax", "lock", "unlock", "help", "package", "repl"
 };
 
-// Bare invocation (no arguments): look for local .cop config or show getting-started
+// Bare invocation (no arguments): look for local .cop files to run or show getting-started
 if (args.Length == 0)
 {
-    return CheckCommand.ExecuteFromConfig();
+    return ExecuteDefault();
 }
 
 // Intercept help flags before System.CommandLine to show clean single-section help
@@ -182,4 +182,64 @@ static bool IsLocalCommand(string name, string[] copFiles)
         catch { }
     }
     return false;
+}
+
+/// <summary>
+/// Bare invocation: run local .cop files if present, or show getting-started message.
+/// </summary>
+static int ExecuteDefault()
+{
+    var cwd = Directory.GetCurrentDirectory();
+    var copFiles = Directory.GetFiles(cwd, "*.cop", SearchOption.TopDirectoryOnly);
+
+    if (copFiles.Length == 0)
+    {
+        Console.WriteLine("cop — a general-purpose scripting language");
+        Console.WriteLine();
+        Console.WriteLine("Usage:");
+        Console.WriteLine("  cop <program>          Run a package or .cop file");
+        Console.WriteLine("  cop run [<command>]    Run .cop programs");
+        Console.WriteLine("  cop package list       Browse available packages");
+        Console.WriteLine("  cop repl              Launch interactive REPL");
+        Console.WriteLine();
+        Console.WriteLine("Getting started:");
+        Console.WriteLine("  1. Run a package:  cop <package-name>");
+        Console.WriteLine("  2. Customize:      Create a .cop file with 'import <package>'");
+        Console.WriteLine("                     then just run 'cop' with no arguments");
+        Console.WriteLine();
+        Console.WriteLine("  cop -h for more options");
+        return 0;
+    }
+
+    // Parse .cop files to understand what they contain
+    var imports = new List<string>();
+    bool hasOwnLogic = false;
+
+    foreach (var file in copFiles)
+    {
+        try
+        {
+            var source = File.ReadAllText(file);
+            var sf = Cop.Lang.ScriptParser.Parse(source, file);
+            imports.AddRange(sf.Imports);
+
+            if (sf.Commands.Count > 0 || sf.LetDeclarations.Count > 0 || sf.Predicates.Count > 0)
+                hasOwnLogic = true;
+        }
+        catch { /* skip unparseable files */ }
+    }
+
+    if (hasOwnLogic)
+    {
+        // Local .cop files define their own logic — run as a program
+        return RunCommand.Execute(null);
+    }
+
+    if (imports.Count > 0)
+    {
+        // Config-only: just imports — run those packages
+        return RunCommand.ExecutePackages(imports.ToArray(), cwd, null, "text", false);
+    }
+
+    return 0;
 }

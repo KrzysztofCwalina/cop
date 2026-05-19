@@ -4,5 +4,5 @@ type Config = { name: string, enabled: bool }
 
 let configs = json.Parse('settings.json', 'Config')
 
-foreach configs:enabled
+command main = foreach configs:enabled
     => '{item.name} is active'

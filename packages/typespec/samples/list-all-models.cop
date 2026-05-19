@@ -1,4 +1,4 @@
 import typespec
 
-foreach Models
+command main = foreach Models
     => '{TspModel.Name} ({TspModel.Properties.Count} props)'

@@ -93,8 +93,8 @@ public static class ListCommand
             }
         }
 
-        // Collect exported lets, categorize as checks vs groups
-        var checks = new List<(string Name, string? Doc)>();
+        // Collect exported lets and commands
+        var lets = new List<(string Name, string? Doc)>();
         var groups = new List<(string Name, string? Doc, int Count)>();
         var commands = new List<(string Name, string? Doc, List<string>? Params)>();
 
@@ -108,9 +108,9 @@ public static class ListCommand
             {
                 groups.Add((let.Name, let.DocComment, union.Elements.Count));
             }
-            else if (IsViolationLet(let))
+            else if (!let.IsValueBinding)
             {
-                checks.Add((let.Name, let.DocComment));
+                lets.Add((let.Name, let.DocComment));
             }
         }
 
@@ -124,9 +124,9 @@ public static class ListCommand
         }
 
         // Print results
-        if (checks.Count == 0 && groups.Count == 0 && commands.Count == 0)
+        if (lets.Count == 0 && groups.Count == 0 && commands.Count == 0)
         {
-            Console.WriteLine($"{packageName} — no exported checks or commands found.");
+            Console.WriteLine($"{packageName} — no exported lets or commands found.");
             return 0;
         }
 
@@ -138,10 +138,10 @@ public static class ListCommand
             Console.WriteLine(packageName);
         Console.WriteLine();
 
-        if (checks.Count > 0)
+        if (lets.Count > 0)
         {
-            Console.WriteLine("Checks:");
-            foreach (var (name, doc) in checks)
+            Console.WriteLine("Lets:");
+            foreach (var (name, doc) in lets)
             {
                 if (!string.IsNullOrEmpty(doc))
                     Console.WriteLine($"  {name,-36} {doc}");
@@ -178,15 +178,6 @@ public static class ListCommand
         }
 
         return 0;
-    }
-
-    private static bool IsViolationLet(LetDeclaration let)
-    {
-        if (let.IsValueBinding || let.IsCollectionUnion) return false;
-        if (let.Filters.Count == 0) return false;
-
-        var terminal = let.Filters[^1];
-        return terminal is CallExpr call && call.Name is "toError" or "toWarning" or "toInfo";
     }
 
     private static string? GetPackageDescription(List<ScriptFile> scriptFiles, string packageName)

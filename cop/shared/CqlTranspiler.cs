@@ -62,6 +62,7 @@ public class CqlTranspiler
     private readonly ScriptFile _mainFile;
     private readonly List<ScriptFile> _importedFiles;
     private readonly Dictionary<string, List<PredicateDefinition>> _allPredicates;
+    private readonly Dictionary<string, List<FunctionDefinition>> _allFunctions;
     private readonly List<string> _errors = new();
 
     public CqlTranspiler(ScriptFile mainFile, List<ScriptFile> importedFiles)
@@ -81,6 +82,21 @@ public class CqlTranspiler
                     _allPredicates[pred.Name] = list;
                 }
                 list.Add(pred);
+            }
+        }
+
+        // Build lookup of all functions (local + imported)
+        _allFunctions = new Dictionary<string, List<FunctionDefinition>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var file in importedFiles.Append(mainFile))
+        {
+            foreach (var func in file.Functions)
+            {
+                if (!_allFunctions.TryGetValue(func.Name, out var list))
+                {
+                    list = new List<FunctionDefinition>();
+                    _allFunctions[func.Name] = list;
+                }
+                list.Add(func);
             }
         }
     }
@@ -206,18 +222,33 @@ public class CqlTranspiler
                 continue;
             }
 
-            // toError/toWarning/toInfo function → extract severity and message
-            if (filter is CallExpr { Target: null } fc && fc.Name is "toError" or "toWarning" or "toInfo")
+            // Function call with a return type → terminal transform (not a CodeQL predicate)
+            // Also skip standalone calls that aren't known predicates — they're likely
+            // transforms from imported packages not available at transpile time.
+            if (filter is CallExpr { Target: null } fc)
             {
-                severity = fc.Name switch
+                if (_allFunctions.TryGetValue(fc.Name, out var funcOverloads)
+                    && funcOverloads.Count > 0
+                    && !string.IsNullOrEmpty(funcOverloads[0].ReturnType))
                 {
-                    "toError" => "error",
-                    "toWarning" => "warning",
-                    "toInfo" => "recommendation",
-                    _ => null
-                };
-                if (fc.Args.Count > 0 && fc.Args[0] is LiteralExpr msgLit && msgLit.Value is string msgStr)
-                    message = msgStr;
+                    // Known function with return type — extract severity if available
+                    if (funcOverloads[0].FieldMappings.TryGetValue("Severity", out var sevExpr)
+                        && sevExpr is LiteralExpr sevLit && sevLit.Value is string sevStr)
+                        severity = sevStr;
+                    if (fc.Args.Count > 0 && fc.Args[0] is LiteralExpr msgLit && msgLit.Value is string msgStr)
+                        message = msgStr;
+                }
+                else if (!_allPredicates.ContainsKey(fc.Name))
+                {
+                    // Unknown standalone call that isn't a predicate — treat as transform
+                    if (fc.Args.Count > 0 && fc.Args[0] is LiteralExpr unknownMsgLit && unknownMsgLit.Value is string unknownMsg)
+                        message = unknownMsg;
+                }
+                else
+                {
+                    // Known predicate — include in filter chain
+                    predicateFilters.Add(filter);
+                }
                 continue;
             }
 
@@ -530,11 +561,10 @@ public class CqlTranspiler
             case BinaryExpr bin:
                 return TryTranspileBinary(bin, cqlVar, collName);
 
-            // Standalone CallExpr in filter chain (e.g., toError/toWarning)
+            // Standalone CallExpr in filter chain — transforms are handled at the let level
             case CallExpr fc:
-                // toError/toWarning/toInfo are handled at the let level, skip here
-                if (fc.Name is "toError" or "toWarning" or "toInfo")
-                    return null; // already extracted
+                // Known predicates would have a Target (e.g., Name:startsWith), but standalone
+                // calls without target that aren't known predicates are transforms — skip them
                 return null;
 
             // Negation of complex expression

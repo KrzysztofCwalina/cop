@@ -3,4 +3,4 @@
 
 import csharp-checks
 predicate isAbstractGood(Type) => isAbstract && Type.Name:startsWith('Good')
-foreach csharp.Types:isAbstractGood => '{item.Name}'
+command main = foreach csharp.Types:isAbstractGood => '{item.Name}'

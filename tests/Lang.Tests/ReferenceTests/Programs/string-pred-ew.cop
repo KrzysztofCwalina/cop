@@ -3,4 +3,4 @@
 
 import csharp-checks
 predicate nameEndsClient(Type) => Type.Name:endsWith('Client')
-foreach csharp.Types:nameEndsClient => '{item.Name}'
+command main = foreach csharp.Types:nameEndsClient => '{item.Name}'

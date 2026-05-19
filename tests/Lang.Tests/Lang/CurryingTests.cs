@@ -63,7 +63,7 @@ public class CurryingTests
 import code
 
 function add(Type, a: String, b: String) => '{a}{b}'
-foreach csharp.Types:add('hello', ' world') => '{item}'
+command main = foreach csharp.Types:add('hello', ' world') => '{item}'
 ", "test.cop");
 
         var registry = new TypeRegistry();
@@ -96,7 +96,7 @@ import code
 
 function combine(Type, a: String, b: String) => '{a}-{b}'
 let partial = combine('first')
-foreach csharp.Types:partial('second') => '{item}'
+command main = foreach csharp.Types:partial('second') => '{item}'
 ", "test.cop");
 
         var registry = new TypeRegistry();

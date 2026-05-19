@@ -100,7 +100,7 @@ public class ScriptParser
                 }
                 else if (Current.Kind == TokenKind.CommandKeyword)
                     commands.AddRange(ParseLetCommandChain(doc, isExported: true));
-                else if (Current.Kind == TokenKind.Identifier && Current.Value == "test"
+                else if (Current.Kind == TokenKind.TestKeyword
                     && _pos + 2 < _tokens.Count && _tokens[_pos + 1].Kind == TokenKind.Identifier
                     && _tokens[_pos + 2].Kind == TokenKind.Equals)
                     commands.AddRange(ParseLetCommandChain(doc, isExported: true, isTest: true));
@@ -146,7 +146,7 @@ public class ScriptParser
                 commands.AddRange(ParseLetCommandChain(pendingDocComment));
                 pendingDocComment = null;
             }
-            else if (Current.Kind == TokenKind.Identifier && Current.Value == "test"
+            else if (Current.Kind == TokenKind.TestKeyword
                 && _pos + 2 < _tokens.Count && _tokens[_pos + 1].Kind == TokenKind.Identifier
                 && _tokens[_pos + 2].Kind == TokenKind.Equals)
             {
@@ -173,7 +173,7 @@ public class ScriptParser
                 commands.Add(ParseForeachBlock(pendingDocComment));
                 pendingDocComment = null;
             }
-            else if (Current.Kind == TokenKind.Identifier && Current.Value == "async" && _pos + 1 < _tokens.Count && _tokens[_pos + 1].Kind == TokenKind.ForeachKeyword)
+            else if (Current.Kind == TokenKind.AsyncKeyword && _pos + 1 < _tokens.Count && _tokens[_pos + 1].Kind == TokenKind.ForeachKeyword)
             {
                 Advance(); // consume 'async'
                 var cmd = ParseForeachBlock(pendingDocComment);
@@ -259,7 +259,7 @@ public class ScriptParser
     {
         int line = Current.Line;
         Expect(TokenKind.TypeKeyword);
-        var name = Expect(TokenKind.Identifier);
+        var name = ExpectName();
         Expect(TokenKind.Equals);
 
         string? baseType = null;
@@ -323,6 +323,17 @@ public class ScriptParser
             return Advance();
         throw new ParseException(
             $"Expected identifier but got {Current.Kind} '{Current.Value}'",
+            _filePath, Current.Line);
+    }
+
+    // Accept identifier or keyword as a user-defined name (predicate, function, variable, type).
+    // Keywords like 'test' are valid names in non-keyword positions.
+    private Token ExpectName()
+    {
+        if (Current.Kind == TokenKind.Identifier || Current.Kind.ToString().EndsWith("Keyword"))
+            return Advance();
+        throw new ParseException(
+            $"Expected name but got {Current.Kind} '{Current.Value}'",
             _filePath, Current.Line);
     }
 
@@ -397,7 +408,7 @@ public class ScriptParser
     {
         int line = Current.Line;
         Expect(TokenKind.PredicateKeyword); // 'predicate' keyword is required
-        var name = Expect(TokenKind.Identifier);
+        var name = ExpectName();
         Expect(TokenKind.LParen);
         // Support both (Type) and ([Type]) syntax
         bool hasBrackets = Current.Kind == TokenKind.LBracket;
@@ -434,7 +445,7 @@ public class ScriptParser
     {
         int line = Current.Line;
         Expect(TokenKind.FunctionKeyword);
-        var name = Expect(TokenKind.Identifier);
+        var name = ExpectName();
         Expect(TokenKind.LParen);
 
         // Parameterless function: function name() : ReturnType = intrinsic|provider
@@ -481,12 +492,12 @@ public class ScriptParser
                 // Emit MemberAccessExpr(IdentifierExpr("item"), "Path") as the chain base
                 Expression chainExpr = new MemberAccessExpr(new IdentifierExpr("item"), constraintIdent.Value);
                 while (Current.Kind == TokenKind.Colon && _pos + 1 < _tokens.Count
-                    && (_tokens[_pos + 1].Kind == TokenKind.Identifier || _tokens[_pos + 1].Kind == TokenKind.Not))
+                    && (_tokens[_pos + 1].Kind == TokenKind.Identifier || _tokens[_pos + 1].Kind.ToString().EndsWith("Keyword") || _tokens[_pos + 1].Kind == TokenKind.Not))
                 {
                     Advance(); // consume ':'
                     bool neg = Current.Kind == TokenKind.Not;
                     if (neg) Advance();
-                    var predName = Expect(TokenKind.Identifier);
+                    var predName = ExpectName();
                     if (Current.Kind == TokenKind.LParen)
                     {
                         Advance();
@@ -591,7 +602,7 @@ public class ScriptParser
     {
         int line = Current.Line;
         Expect(TokenKind.LetKeyword);
-        var name = Expect(TokenKind.Identifier);
+        var name = ExpectName();
 
         // Optional type annotation: let name : Type = ...
         string? typeAnnotation = null;
@@ -704,11 +715,11 @@ public class ScriptParser
     private CommandBlock ParseLetCommand(string? docComment, bool isExported = false, bool isTest = false)
     {
         int line = Current.Line;
-        if (isTest && Current.Kind == TokenKind.Identifier && Current.Value == "test")
+        if (isTest && Current.Kind == TokenKind.TestKeyword)
             Advance(); // consume 'test'
         else
             Expect(TokenKind.CommandKeyword);
-        var name = Expect(TokenKind.Identifier);
+        var name = ExpectName();
 
         // Optional parameter list: command CHECK(violations) = ...
         List<string>? parameters = null;
@@ -768,7 +779,7 @@ public class ScriptParser
             block = ParseForeachBlock(docComment);
             block = block with { Name = commandName, IsCommand = true };
         }
-        else if (Current.Kind == TokenKind.Identifier && Current.Value == "async" && _pos + 1 < _tokens.Count && _tokens[_pos + 1].Kind == TokenKind.ForeachKeyword)
+        else if (Current.Kind == TokenKind.AsyncKeyword && _pos + 1 < _tokens.Count && _tokens[_pos + 1].Kind == TokenKind.ForeachKeyword)
         {
             Advance(); // consume 'async'
             block = ParseForeachBlock(docComment);
@@ -1232,6 +1243,7 @@ public class ScriptParser
             }
             else if (Current.Kind == TokenKind.Colon && _pos + 1 < _tokens.Count
                 && (_tokens[_pos + 1].Kind == TokenKind.Identifier
+                    || _tokens[_pos + 1].Kind.ToString().EndsWith("Keyword")
                     || _tokens[_pos + 1].Kind == TokenKind.Not))
             {
                 Advance(); // consume ':'
@@ -1241,7 +1253,7 @@ public class ScriptParser
                     negated = true;
                     Advance();
                 }
-                var predName = Expect(TokenKind.Identifier);
+                var predName = ExpectName();
                 if (Current.Kind == TokenKind.LParen)
                 {
                     Advance();

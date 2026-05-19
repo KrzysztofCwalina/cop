@@ -4,4 +4,4 @@
 
 import csharp-checks
 predicate notSealed(Type) => isSealed ? false | true
-foreach csharp.Types:notSealed => '{item.Name}'
+command main = foreach csharp.Types:notSealed => '{item.Name}'

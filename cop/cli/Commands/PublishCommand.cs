@@ -101,7 +101,7 @@ public static class PublishCommand
         }
 
         // Step 7: Required directories exist
-        var requiredDirs = new[] { "instructions", "skills", "checks", "tests" };
+        var requiredDirs = new[] { "instructions", "skills", "src", "tests" };
         foreach (var dir in requiredDirs)
         {
             var dirPath = Path.Combine(packagePath, dir);

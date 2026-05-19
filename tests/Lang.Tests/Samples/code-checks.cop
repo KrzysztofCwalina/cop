@@ -15,19 +15,26 @@ predicate isSwallowingBaseException(Statement) => Statement.Kind == 'catch'
     && Statement.TypeName == 'Exception' && !Statement.Rethrows
 
 ## Disallow implicit typing with var — use explicit types
-foreach Statements:isCSharp:isVarDeclaration:!pathMatches(item.File.Path, '**/Tests/**') => '{error:@red} Do not use \'var\' for {item.MemberName}'
+command varDeclarationRule = foreach Statements:isCSharp:isVarDeclaration:!pathMatches(item.File.Path, '**/Tests/**') => '{error:@red} Do not use \'var\' for {item.MemberName}'
 
 ## Disallow dynamic typing
-foreach Statements:isCSharp:isDynamicDeclaration => '{error:@red} Do not use \'dynamic\''
+command dynamicDeclarationRule = foreach Statements:isCSharp:isDynamicDeclaration => '{error:@red} Do not use \'dynamic\''
 
 ## Use Task.Delay instead of blocking Thread.Sleep
-foreach Statements:isCSharp:isThreadSleep => '{error:@red} Use Task.Delay instead of Thread.Sleep'
+command threadSleepRule = foreach Statements:isCSharp:isThreadSleep => '{error:@red} Use Task.Delay instead of Thread.Sleep'
 
 ## Avoid Console output in library code
-foreach Statements:isCSharp:isConsoleCall:!pathMatches(item.File.Path, '**/Tests/**') => '{warning:@yellow} Don\'t use Console.{item.MemberName} in library code'
+command consoleCallRule = foreach Statements:isCSharp:isConsoleCall:!pathMatches(item.File.Path, '**/Tests/**') => '{warning:@yellow} Don\'t use Console.{item.MemberName} in library code'
 
 ## Catch specific exception types instead of bare Exception
-foreach Statements:isCSharp:isBareExceptionCatch => '{warning:@yellow} Catch a specific exception type instead of Exception'
+command bareExceptionCatchRule = foreach Statements:isCSharp:isBareExceptionCatch => '{warning:@yellow} Catch a specific exception type instead of Exception'
 
 ## Do not swallow base exceptions
-foreach Statements:isCSharp:isSwallowingBaseException => '{warning:@yellow} Do not swallow Exception'
+command swallowingExceptionRule = foreach Statements:isCSharp:isSwallowingBaseException => '{warning:@yellow} Do not swallow Exception'
+
+RUN varDeclarationRule()
+RUN dynamicDeclarationRule()
+RUN threadSleepRule()
+RUN consoleCallRule()
+RUN bareExceptionCatchRule()
+RUN swallowingExceptionRule()

@@ -2,4 +2,4 @@
 # @expect output-contains: methods
 
 import csharp-checks
-foreach csharp.Types:isPublic => '{item.Name} has {item.Methods.Count} methods'
+command main = foreach csharp.Types:isPublic => '{item.Name} has {item.Methods.Count} methods'

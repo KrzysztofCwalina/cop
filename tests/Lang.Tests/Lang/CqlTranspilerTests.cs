@@ -9,6 +9,34 @@ public class CqlTranspilerTests
     private static ScriptFile ParseCop(string source, string path = "test.cop")
         => ScriptParser.Parse(source, path);
 
+    // Minimal code-analysis import providing toError/toWarning/toInfo function definitions
+    private static readonly ScriptFile CodeAnalysisImport = ParseCop("""
+        export function toError(Statement, message: string) => Violation {
+            Severity = 'error',
+            Message = message
+        }
+        export function toWarning(Statement, message: string) => Violation {
+            Severity = 'warning',
+            Message = message
+        }
+        export function toInfo(Statement, message: string) => Violation {
+            Severity = 'info',
+            Message = message
+        }
+        export function toError(Type, message: string) => Violation {
+            Severity = 'error',
+            Message = message
+        }
+        export function toWarning(Type, message: string) => Violation {
+            Severity = 'warning',
+            Message = message
+        }
+        export function toInfo(Type, message: string) => Violation {
+            Severity = 'info',
+            Message = message
+        }
+        """, "code-analysis.cop");
+
     // --- String escaping ---
 
     [Test]
@@ -43,7 +71,7 @@ public class CqlTranspilerTests
                 :toError('Do not use Sleep')
             """;
         var sf = ParseCop(source);
-        var transpiler = new CqlTranspiler(sf, []);
+        var transpiler = new CqlTranspiler(sf, [CodeAnalysisImport]);
         var result = transpiler.Transpile();
 
         Assert.That(result.HasErrors, Is.False, string.Join("\n", result.Errors));
@@ -66,7 +94,7 @@ public class CqlTranspilerTests
                 :toWarning('Type is public')
             """;
         var sf = ParseCop(source);
-        var transpiler = new CqlTranspiler(sf, []);
+        var transpiler = new CqlTranspiler(sf, [CodeAnalysisImport]);
         var result = transpiler.Transpile();
 
         Assert.That(result.HasErrors, Is.False, string.Join("\n", result.Errors));
@@ -87,7 +115,7 @@ public class CqlTranspilerTests
                 :toInfo('Starts with I')
             """;
         var sf = ParseCop(source);
-        var transpiler = new CqlTranspiler(sf, []);
+        var transpiler = new CqlTranspiler(sf, [CodeAnalysisImport]);
         var result = transpiler.Transpile();
 
         Assert.That(result.HasErrors, Is.False, string.Join("\n", result.Errors));
@@ -107,7 +135,7 @@ public class CqlTranspilerTests
                 :toError('found a file')
             """;
         var sf = ParseCop(source);
-        var transpiler = new CqlTranspiler(sf, []);
+        var transpiler = new CqlTranspiler(sf, [CodeAnalysisImport]);
         var result = transpiler.Transpile();
 
         Assert.That(result.HasErrors, Is.True);
@@ -122,7 +150,7 @@ public class CqlTranspilerTests
             predicate isPublic(Type) => Type.Modifiers:isSet(Public)
             """;
         var sf = ParseCop(source);
-        var transpiler = new CqlTranspiler(sf, []);
+        var transpiler = new CqlTranspiler(sf, [CodeAnalysisImport]);
         var result = transpiler.Transpile();
 
         Assert.That(result.HasErrors, Is.False);
@@ -140,7 +168,7 @@ public class CqlTranspilerTests
                 :toWarning('Python type')
             """;
         var sf = ParseCop(source);
-        var transpiler = new CqlTranspiler(sf, []);
+        var transpiler = new CqlTranspiler(sf, [CodeAnalysisImport]);
         var result = transpiler.Transpile();
 
         Assert.That(result.HasErrors, Is.False, string.Join("\n", result.Errors));
@@ -160,7 +188,7 @@ public class CqlTranspilerTests
                 :toWarning('Not sealed')
             """;
         var sf = ParseCop(source);
-        var transpiler = new CqlTranspiler(sf, []);
+        var transpiler = new CqlTranspiler(sf, [CodeAnalysisImport]);
         var result = transpiler.Transpile();
 
         Assert.That(result.HasErrors, Is.False, string.Join("\n", result.Errors));
@@ -182,7 +210,7 @@ public class CqlTranspilerTests
                 :toError('Use Task.Delay')
             """;
         var sf = ParseCop(source);
-        var transpiler = new CqlTranspiler(sf, []);
+        var transpiler = new CqlTranspiler(sf, [CodeAnalysisImport]);
         var result = transpiler.Transpile();
 
         Assert.That(result.HasErrors, Is.False, string.Join("\n", result.Errors));
@@ -205,7 +233,7 @@ public class CqlTranspilerTests
                 :toWarning('Public type')
             """;
         var sf = ParseCop(source);
-        var transpiler = new CqlTranspiler(sf, []);
+        var transpiler = new CqlTranspiler(sf, [CodeAnalysisImport]);
         var result = transpiler.Transpile();
 
         Assert.That(result.HasErrors, Is.False, string.Join("\n", result.Errors));
@@ -229,7 +257,7 @@ public class CqlTranspilerTests
                 :toWarning('Call found')
             """;
         var sf = ParseCop(source);
-        var transpiler = new CqlTranspiler(sf, []);
+        var transpiler = new CqlTranspiler(sf, [CodeAnalysisImport]);
         var result = transpiler.Transpile();
 
         Assert.That(result.HasErrors, Is.False, string.Join("\n", result.Errors));
@@ -249,7 +277,7 @@ public class CqlTranspilerTests
                 :toWarning('Implements IDisposable')
             """;
         var sf = ParseCop(source);
-        var transpiler = new CqlTranspiler(sf, []);
+        var transpiler = new CqlTranspiler(sf, [CodeAnalysisImport]);
         var result = transpiler.Transpile();
 
         Assert.That(result.HasErrors, Is.False, string.Join("\n", result.Errors));
@@ -269,7 +297,7 @@ public class CqlTranspilerTests
                 :toWarning('Call found')
             """;
         var sf = ParseCop(source);
-        var transpiler = new CqlTranspiler(sf, []);
+        var transpiler = new CqlTranspiler(sf, [CodeAnalysisImport]);
         var result = transpiler.Transpile();
 
         Assert.That(result.HasErrors, Is.False, string.Join("\n", result.Errors));

@@ -1,3 +1,3 @@
 import code
 
-foreach Types:isPublic => '{Type.Name} ({Type.Kind})'
+command main = foreach Types:isPublic => '{Type.Name} ({Type.Kind})'

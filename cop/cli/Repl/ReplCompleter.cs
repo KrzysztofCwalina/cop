@@ -10,23 +10,23 @@ public class ReplCompleter
 {
     private readonly ReplEvaluator _evaluator;
 
-    // Built-in predicate names
+    // Built-in predicate names (general-purpose intrinsics)
     private static readonly string[] BuiltinPredicates =
     [
         "equals", "notEquals", "startsWith", "endsWith", "contains", "containsAny",
         "matches", "sameAs", "empty", "in", "greaterThan", "lessThan",
         "greaterOrEqual", "lessOrEqual", "isSet", "isClear", "count",
-        "any", "none", "all", "isError", "containsKey"
+        "any", "none", "all", "containsKey"
     ];
 
-    // Built-in transforms
+    // Built-in transforms (general-purpose collection/string operations)
     private static readonly string[] BuiltinTransforms =
     [
         "Trim", "Replace", "Where", "First", "Last",
         "Single", "ElementAt", "Select", "text", "Count",
         "OrderBy", "OrderByDescending", "Distinct", "GroupBy",
         "Sum", "Min", "Max", "Average", "Reduce",
-        "Get", "File", "Path", "Matches", "error"
+        "Get", "File", "Path", "Matches"
     ];
 
     // Built-in properties

@@ -326,15 +326,11 @@ public class TypeBinder
                 _ => null
             };
 
-            if (funcName is "toError" or "toWarning" or "toInfo")
-                currentType = "Violation";
-            else if (funcName is "Select" or "text")
-                currentType = "string";
-            else if (funcName != null)
+            if (funcName != null)
             {
                 // Look up function return type from registered functions
                 var functions = file.Functions.Where(f => f.Name == funcName).ToList();
-                if (functions.Count > 0)
+                if (functions.Count > 0 && !string.IsNullOrEmpty(functions[0].ReturnType))
                     currentType = functions[0].ReturnType;
             }
         }

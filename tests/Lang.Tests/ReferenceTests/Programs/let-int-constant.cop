@@ -4,4 +4,4 @@
 import csharp-checks
 let threshold = 999
 predicate overThreshold(Type) => Type.Methods.Count > threshold
-foreach csharp.Types:overThreshold => '{item.Name}'
+command main = foreach csharp.Types:overThreshold => '{item.Name}'

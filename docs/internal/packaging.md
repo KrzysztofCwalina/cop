@@ -75,6 +75,7 @@ Fields:
 | `language` | No | Primary programming language (e.g., `csharp`, `python`). |
 | `provider` | No | Set to `clr` if the package contains a .NET data provider assembly. |
 | `providerEntry` | No | Fully-qualified class name of the data provider (required when `provider` is `clr`). |
+| `providerAssembly` | No | Filename of the provider DLL (e.g., `csharp-provider.dll`). Required when `lib/` contains multiple DLLs. |
 | `dependencies` | No | List of fully-qualified package references (e.g., `github.com/org/repo/other-pkg: 1.0.0`). |
 
 ---

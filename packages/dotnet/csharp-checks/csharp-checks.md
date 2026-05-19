@@ -9,6 +9,7 @@ language: C#
 dependencies: []
 provider: clr
 providerEntry: Cop.Providers.CSharpProvider
+providerAssembly: csharp-provider.dll
 ---
 
 # C# Checks

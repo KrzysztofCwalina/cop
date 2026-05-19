@@ -227,7 +227,7 @@ foreach Code.Types:csharp:!isSealed => PRINT('{error:@red} {item.Name} should be
 foreach Code.Lines:python:todoComment => PRINT('{info:@cyan} {item.File.Path}:{item.Number} {item.Text}')
 ```
 
-Available styles: `@red`, `@yellow`, `@green`, `@cyan`, `@dim`, `@bold`, `@auto` (auto-colors by severity keyword).
+Available styles: `@red`, `@yellow`, `@green`, `@cyan`, `@dim`, `@bold`, `@auto` (uses the text value itself as a color name lookup).
 
 ### Saving Output to Files
 

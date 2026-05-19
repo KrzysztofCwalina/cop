@@ -3,4 +3,4 @@
 
 import csharp-checks
 predicate noMatch(Type) => Type.Name:equals('NonExistent')
-foreach csharp.Types:noMatch => '{item.Name}'
+command main = foreach csharp.Types:noMatch => '{item.Name}'

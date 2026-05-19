@@ -266,7 +266,7 @@ public class ScriptInterpreter
         var allAsserts = new List<AssertResult>();
 
         // Wire up intrinsic function sinks for this run
-        _printSink = message => allOutputs.Add(new PrintOutput(new RichString(new[] { new TextSpan(message) })));
+        _printSink = message => allOutputs.Add(new PrintOutput(ResolveTemplate(message, new EvaluationContext())));
         _saveSink = (path, content) =>
         {
             if (!fileOutputs.TryGetValue(path, out var lines)) { lines = []; fileOutputs[path] = lines; }
@@ -324,17 +324,15 @@ public class ScriptInterpreter
             }
             else if (commandFilter != null)
             {
-                // Run only commands whose name matches the filter (supports auto-derived names)
-                // Also include parameterized command invocations (e.g., CHECK(var-usage))
-                // whose argument name matches the filter
+                // Run only commands whose name matches the filter
                 commandsToRun = ScriptFile.Commands.Where(c =>
-                    !IsCallTo(c, "save") && !c.IsTest &&
+                    !c.IsTest &&
                     (commandFilter.Contains(c.Name) || MatchesCommandFilter(c, commandFilter, allCommands)));
             }
             else
             {
-                // Run all commands but skip save and test (require explicit invocation)
-                commandsToRun = ScriptFile.Commands.Where(c => !IsCallTo(c, "save") && !c.IsTest);
+                // Run only the 'main' command
+                commandsToRun = ScriptFile.Commands.Where(c => c.IsCommand && c.Name == "main");
             }
 
             // Expand command references into concrete blocks
@@ -643,10 +641,11 @@ public class ScriptInterpreter
 
         var filteredItem = items[0];
 
-        // Error dispatch: try to resolve transform function for "Error" type
+        // Error dispatch: try to resolve transform function for error type
         if (ErrorValue.IsError(filteredItem))
         {
-            // Check if the transform function has an overload for "Error" type
+            var errorTypeName = ((DataObject)filteredItem).TypeName;
+            // Check if the transform function has an overload for the error type
             string? transformName = cmd.OutputExpression switch
             {
                 IdentifierExpr id => id.Name,
@@ -655,10 +654,10 @@ public class ScriptInterpreter
 
             if (transformName is not null
                 && functionGroups.TryGetValue(transformName, out var errorFuncGroup)
-                && errorFuncGroup.Any(f => string.Equals(f.InputType, "Error", StringComparison.OrdinalIgnoreCase)))
+                && errorFuncGroup.Any(f => string.Equals(f.InputType, errorTypeName, StringComparison.OrdinalIgnoreCase)))
             {
                 // Call the Error overload — user-defined error handler
-                var errorResult = evaluator.EvaluateField(cmd.OutputExpression, filteredItem, "Error");
+                var errorResult = evaluator.EvaluateField(cmd.OutputExpression, filteredItem, errorTypeName);
                 if (errorResult is null) return; // null = swallow error (drop from pipeline)
                 await sink.WriteAsync(filteredItem, errorResult);
             }
@@ -730,20 +729,7 @@ public class ScriptInterpreter
         if (cmd.Collection is null)
         {
             RichString richMessage;
-            if (cmd.OutputExpression is CallExpr { Target: null } printCall
-                && printCall.Name is "print"
-                && printCall.Args.Count >= 1
-                && printCall.Args[0] is LiteralExpr { Value: string template })
-            {
-                // print('template') — resolve template with let bindings
-                EvaluationContext ctx = new();
-                var evaluator = CreateEvaluator(predicateGroups, "", letDeclarations, functionGroups);
-                CaptureLetValues(ctx, evaluator, letDeclarations, null!, "");
-                foreach (var (aggName, aggCount) in aggregateCounts)
-                    ctx.Capture(aggName, aggCount);
-                richMessage = ResolveTemplate(template, ctx);
-            }
-            else if (cmd.OutputExpression is not null && string.IsNullOrEmpty(cmd.MessageTemplate))
+            if (cmd.OutputExpression is not null && string.IsNullOrEmpty(cmd.MessageTemplate))
             {
                 // Expression-based output: evaluate the expression directly
                 // Pre-resolve collection lets so identifiers like 'apiText' (which use .text() transforms) are available
@@ -865,15 +851,7 @@ public class ScriptInterpreter
                 CaptureLetValues(finalCtx, evaluator, letDeclarations, item, finalItemType);
 
                 RichString richMessage;
-                if (cmd.OutputExpression is CallExpr { Target: null } iterPrintCall
-                    && iterPrintCall.Name is "print"
-                    && iterPrintCall.Args.Count >= 1
-                    && iterPrintCall.Args[0] is LiteralExpr { Value: string iterTemplate })
-                {
-                    // print('template') in foreach - resolve template per-item
-                    richMessage = ResolveTemplate(iterTemplate, finalCtx);
-                }
-                else if (cmd.OutputExpression is not null && string.IsNullOrEmpty(cmd.MessageTemplate))
+                if (cmd.OutputExpression is not null && string.IsNullOrEmpty(cmd.MessageTemplate))
                 {
                     var value = evaluator.EvaluateField(cmd.OutputExpression, item, finalItemType);
                     if (value is null) { count++; continue; } // intrinsic handled output
@@ -991,15 +969,7 @@ public class ScriptInterpreter
                 CaptureLetValues(finalCtx, evaluator, letDeclarations, item, finalItemType);
 
                 RichString richMessage;
-                if (cmd.OutputExpression is CallExpr { Target: null } iterPrintCall
-                    && iterPrintCall.Name is "print"
-                    && iterPrintCall.Args.Count >= 1
-                    && iterPrintCall.Args[0] is LiteralExpr { Value: string iterTemplate })
-                {
-                    // print('template') in foreach - resolve template per-item
-                    richMessage = ResolveTemplate(iterTemplate, finalCtx);
-                }
-                else if (cmd.OutputExpression is not null && string.IsNullOrEmpty(cmd.MessageTemplate))
+                if (cmd.OutputExpression is not null && string.IsNullOrEmpty(cmd.MessageTemplate))
                 {
                     var value = evaluator.EvaluateField(cmd.OutputExpression, item, finalItemType);
                     if (value is null) { count++; continue; } // intrinsic handled output
@@ -2568,11 +2538,6 @@ public class ScriptInterpreter
     /// Check if a command block involves a specific function call (by OutputExpression).
     /// Used to identify commands like assert(...), save(...) etc. for filtering.
     /// </summary>
-    private static bool IsCallTo(CommandBlock cmd, string functionName)
-    {
-        return cmd.OutputExpression is CallExpr call && call.Name == functionName;
-    }
-
     /// <summary>
     /// Checks if a command is a parameterized command invocation (e.g., CHECK(var-usage))
     /// whose argument name matches the commandFilter.

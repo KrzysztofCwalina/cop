@@ -1,6 +1,6 @@
 import python-library-checks
 
-foreach Clients
+command main = foreach Clients
     => '{Type.Name}'
 
 CHECK python-client-checks
