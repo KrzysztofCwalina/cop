@@ -1,0 +1,34 @@
+# Numeric Collection Functions
+# Aggregate functions that operate on collections of int or number values.
+
+## Sums a numeric property across all items.
+## Example: files:sum(item.Size)
+export function sum(items: [int], projection: expression) : int => intrinsic
+
+## Sums a numeric property across all items.
+## Example: measurements:sum(item.Value)
+export function sum(items: [number], projection: expression) : number => intrinsic
+
+## Minimum value of a numeric property.
+## Example: files:min(item.Size)
+export function min(items: [int], projection: expression) : int => intrinsic
+
+## Minimum value of a numeric property.
+## Example: measurements:min(item.Value)
+export function min(items: [number], projection: expression) : number => intrinsic
+
+## Maximum value of a numeric property.
+## Example: files:max(item.Size)
+export function max(items: [int], projection: expression) : int => intrinsic
+
+## Maximum value of a numeric property.
+## Example: measurements:max(item.Value)
+export function max(items: [number], projection: expression) : number => intrinsic
+
+## Average value of a numeric property.
+## Example: files:average(item.Size)
+export function average(items: [int], projection: expression) : number => intrinsic
+
+## Average value of a numeric property.
+## Example: measurements:average(item.Value)
+export function average(items: [number], projection: expression) : number => intrinsic

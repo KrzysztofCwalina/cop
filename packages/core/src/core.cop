@@ -14,25 +14,17 @@
 ## Example: object('sample').Widgets returns the Widgets collection.
 export function object(name : string) : Object = intrinsic
 
-## An async streaming collection source.
+## Returns an async streaming collection from the named provider.
 ## Use a typed annotation to declare the item type produced by the stream:
 ##   export let Requests : [Request] = source('http')
-## Without annotation, stream items are untyped.
-export type Source = {}
+## Without annotation, stream items are untyped objects.
+export function source(name : string) : [object] = intrinsic
 
-## An async data sink — output target in streaming pipelines.
-## Use a typed annotation to declare the item type the sink accepts:
+## Returns an async output collection for the named streaming provider.
+## Items pushed into the sink are delivered to the provider's output channel.
 ##   export let RESPONSES : [Response] = sink('http')
 ## Without annotation, the sink accepts any item.
-export type Sink = {}
-
-## Returns a Source handle for the named streaming provider.
-## The stream produces items asynchronously (e.g., incoming HTTP requests).
-export function source(name : string) : Source = intrinsic
-
-## Returns a Sink handle for the named streaming provider.
-## The sink consumes items produced by the pipeline (e.g., HTTP responses).
-export function sink(name : string) : Sink = intrinsic
+export function sink(name : string) : [object] = intrinsic
 
 ## Reads the content of a file at the given path (sandboxed to project root).
 ## Returns the file content as a string.

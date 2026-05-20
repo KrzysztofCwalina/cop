@@ -39,14 +39,19 @@ public static class ProviderLoader
     }
 
     /// <summary>
-    /// Loads a provider assembly from a package directory.
-    /// Also outputs any SourceProvider and SinkProvider instances found.
+    /// Loads a provider from a package directory.
+    /// Handles CLR providers (in-process DLL) and process providers (Node.js, Python via stdin/stdout).
+    /// Also outputs any SourceProvider and SinkProvider instances found (CLR only).
     /// </summary>
     public static LoadedProvider? Load(string packageDir, PackageMetadata metadata, List<string> errors,
         out List<LoadedSourceProvider> sourceProviders, out List<LoadedSinkProvider> sinkProviders)
     {
         sourceProviders = [];
         sinkProviders = [];
+
+        // Handle out-of-process providers (Node.js, Python)
+        if (metadata.IsNodeProvider || metadata.IsPythonProvider)
+            return LoadProcessProvider(packageDir, metadata, errors);
 
         if (!metadata.IsClrProvider)
             return null;
@@ -316,6 +321,43 @@ public static class ProviderLoader
     {
         if (instance is ICapabilityProvider cap)
             cap.RegisterCapabilities(registry, rootPath);
+    }
+
+    /// <summary>
+    /// Loads a process-based provider (Node.js or Python).
+    /// Creates a ProcessObjectProvider that communicates via stdin/stdout.
+    /// </summary>
+    private static LoadedProvider? LoadProcessProvider(string packageDir, PackageMetadata metadata, List<string> errors)
+    {
+        if (string.IsNullOrEmpty(metadata.ProviderEntry))
+        {
+            errors.Add($"Package '{metadata.Name}' has provider:{metadata.Provider} but no providerEntry specified.");
+            return null;
+        }
+
+        var runtime = metadata.IsNodeProvider ? "node" : "python";
+        var entryScript = metadata.ProviderEntry;
+
+        // Verify the entry script exists
+        var scriptPath = Path.Combine(packageDir, entryScript);
+        if (!File.Exists(scriptPath))
+        {
+            errors.Add($"Provider entry script not found for package '{metadata.Name}': '{scriptPath}'");
+            return null;
+        }
+
+        try
+        {
+            var instance = new ProcessObjectProvider(runtime, entryScript, packageDir);
+            var schemaBytes = instance.GetSchema();
+            var schema = ProviderSchema.FromJson(schemaBytes);
+            return new LoadedProvider(instance, schema, metadata.Name);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            errors.Add($"Failed to load {runtime} provider '{metadata.Name}': {ex.Message}");
+            return null;
+        }
     }
 
     /// <summary>

@@ -1,0 +1,137 @@
+# Core Primitive Types and Functions
+# Defines fundamental types, primitives, and utility intrinsics.
+# Usage: import core
+
+# Primitive Types (intrinsic)
+# These types are built into the runtime. Declaring them here ensures
+# every identifier in the system is visible in .cop source files.
+
+## The dynamic base type. Any property access on object is resolved at runtime.
+## All items in untyped collections are object. Used as the return type for
+## provider() and as element type for generic collections.
+export type object = {}
+
+## A UTF-8 text value.
+export type string = {}
+
+## A 64-bit signed integer.
+export type int = {}
+
+## A 64-bit floating-point number.
+export type number = {}
+
+## A boolean value (true or false).
+export type bool = {}
+
+## A single unsigned byte (0–255).
+export type byte = {}
+
+## An array of bytes. Used for binary data (e.g., HTTP request/response bodies).
+export type bytes = {}
+
+## A deferred expression passed to collection methods.
+## Evaluated per-item in the collection (has access to 'item' and 'acc').
+## Used for predicates, projections, and accumulators in where, select, reduce, etc.
+export type expression = {}
+
+# Special Values (intrinsic)
+# nic — the null/absent value. Represents "no value" in optional fields and failed lookups.
+# item — the implicit iteration variable in predicates, foreach, and collection pipelines.
+
+## Loads a data provider by name and returns access to its collections.
+## Example: provider('http').Requests returns the Requests collection.
+export function provider(name : string) : object => intrinsic
+
+## Reads the content of a file at the given path (sandboxed to project root).
+## Returns the file content as a string.
+export function read(path : string) : string => intrinsic
+
+## Converts a string to text (identity — returns string as-is).
+export function text(value: string) => value
+
+## Converts a bool to text: true => 'true', false => 'false'.
+export function text(value: bool) => value ? 'true' | 'false'
+
+## Converts an integer to its decimal text representation.
+export function text(value: int) : string => intrinsic
+
+## Decodes a byte array as UTF-8 text.
+export function text(data: bytes) : string => intrinsic
+
+## A template bound to data, ready to be resolved into a string.
+## Items is the collection of data to format, Template is the {Property} interpolation pattern,
+## and Separator is the string used to join results (defaults to newline).
+export type Formattable = {
+    Items : [object]
+    Template : string
+    Separator : string
+}
+
+## Converts a Formattable to text by resolving the Template against each item
+## in Items using {Property} interpolation, then joining results with Separator.
+## When used in a pipeline: collection.text('{Item.Name}') creates a Formattable
+## from the pipeline collection and resolves it into a single joined string.
+export function text(input: Formattable) : string => intrinsic
+
+## Represents an operational error flowing through a pipeline.
+## Errors are not code bugs (use fail() for those). They represent external failures
+## that code cannot prevent: network timeouts, I/O failures, malformed input.
+## Use isError predicate to detect errors in pipeline items.
+export type Error = {
+    Message : string
+    SourceFile : string
+    SourceLine : int
+    Source : string
+}
+
+## Creates an Error value with the given message string.
+## Example: error('connection timeout')
+export function error(message: string) : Error => intrinsic
+
+## Returns true if the current item is an Error value.
+## Works as a bare predicate or as a filter: items:isError
+## Example: predicate handleError(object:isError) => print('{item.Message}')
+export predicate isError(object) => item.Type:equals('Error')
+
+## Terminates execution immediately with a fatal diagnostic.
+## Use for programmer assertions — situations that should never occur.
+## Can be used standalone: fail('invariant violated')
+## Or in pipeline: foreach Items:badCondition => fail('{item.Name} is invalid')
+export function fail(message : string) => intrinsic
+
+## Represents the running program's context.
+## Provides access to command-line arguments passed to the cop invocation.
+export type Program = {
+    Args : [string]
+}
+
+## Returns the current program context.
+## Provides access to command-line arguments passed to the cop invocation.
+## Example: predicate verbose(Program) => program().Args:contains('/v')
+export function program() : Program => intrinsic
+
+## Glob-matches a file path against a pattern.
+## Supports **, *, ? wildcards. Returns true if the path matches.
+## Example: pathMatches(Statement.File.Path, '**/Tests/**')
+export function pathMatches(path : string, pattern : string) : bool => intrinsic
+
+## Prints a message to the output.
+## Used standalone: print('hello {Name}')
+## Used in pipeline: foreach Types => print('{item.Name}')
+## The template supports {Property} interpolation and {@style} formatting.
+export function print(message : string) : string => intrinsic
+
+## Saves content to a file at the specified path.
+## Used in pipeline: foreach Types:isPublic => save('api.txt', '{item.Name}')
+## Creates or appends to the file with the rendered template output.
+export function save(path : string, content : string) => intrinsic
+
+## Outputs a diagnostic message to the debug log (--diag flag).
+## Same template semantics as print but only visible when diagnostics are enabled.
+## Used for troubleshooting: debug('{Types.Count} types loaded')
+export function debug(message : string) => intrinsic
+
+## Asserts that a condition is true. Fails the test run if false.
+## Used in tests: assert(Types:isPublic.Count > 0, 'should have public types')
+## Reports pass/fail with the description.
+export function assert(condition : bool, description : string) => intrinsic

@@ -1,0 +1,16 @@
+{
+  "name": "eslint",
+  "version": "0.1.0",
+  "description": "Run ESLint on JavaScript/TypeScript projects and expose diagnostics as cop collections",
+  "title": "ESLint Data Provider",
+  "authors": "cop-team",
+  "tags": [
+    "eslint",
+    "javascript",
+    "typescript",
+    "linting",
+    "static-analysis"
+  ],
+  "provider": "node",
+  "providerEntry": "src/index.js"
+}

@@ -1,0 +1,15 @@
+{
+  "name": "@aspect/cop-provider-sdk",
+  "version": "0.1.0",
+  "description": "SDK for building Cop data providers in Node.js",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts"
+  ]
+}

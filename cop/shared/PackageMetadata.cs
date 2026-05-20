@@ -113,6 +113,27 @@ public class PackageMetadata
     public bool IsClrProvider => string.Equals(Provider, "clr", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
+    /// Returns true if this package contains a Node.js provider (out-of-process).
+    /// </summary>
+    [JsonIgnore]
+    [YamlIgnore]
+    public bool IsNodeProvider => string.Equals(Provider, "node", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Returns true if this package contains a Python provider (out-of-process).
+    /// </summary>
+    [JsonIgnore]
+    [YamlIgnore]
+    public bool IsPythonProvider => string.Equals(Provider, "python", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Returns true if this package contains any kind of provider (CLR, Node.js, or Python).
+    /// </summary>
+    [JsonIgnore]
+    [YamlIgnore]
+    public bool IsProvider => IsClrProvider || IsNodeProvider || IsPythonProvider;
+
+    /// <summary>
     /// List of dependencies. Each entry is a fully-qualified package path with optional version,
     /// e.g., "github.com/org/repo/test: 1.0.0" or "github.com/org/repo/test".
     /// Defaults to empty list.

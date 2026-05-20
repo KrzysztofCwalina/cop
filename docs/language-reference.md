@@ -121,13 +121,13 @@ A `.cop` file contains these kinds of declarations:
 | `flags` | Define a flags enum for bitwise operations |
 | `enum` | Define an extensible enum with named values |
 | `let` | Declare a named list (base or subset) |
-| `command name =` | Define a named command (implicit output, SAVE, or composition) |
+| `function NAME() = { ... }` | Define a named output function (implicit output, SAVE, or composition) |
 | `foreach` | Iterate over a collection sequentially |
 | `async foreach` | Iterate over a collection with parallel processing |
 | `predicate name(Param) =>` | Define a named predicate for subsetting |
 | `function name(Param) =>` | Define a named function (expression-body or record-body) |
-| `SAVE` | Command that writes to a file |
-| `DEBUG` | Command that writes to console only when `-d` flag is active |
+| `SAVE` | Output action that writes to a file |
+| `DEBUG` | Output action that writes to console only when `-d` flag is active |
 
 Declarations are **private to the current project** (folder of `.cop` files) unless prefixed with `export`.
 
@@ -139,7 +139,7 @@ Use `import` to bring types and lists from a package into scope:
 import code
 ```
 
-Package import statements must appear before predicates and commands.
+Package import statements must appear before predicates and UPPERCASE functions.
 
 #### Type Member Imports
 
@@ -199,12 +199,12 @@ The `cop package restore` command reads `feed` and `import` declarations, downlo
 ```ruby
 export predicate isClient(Type) => Type.Name:endsWith('Client')
 export let Clients = Code.Types:isClient
-export command list-clients = foreach Clients => '{item.Name}'
+export function LIST-CLIENTS() = { foreach Clients => '{item.Name}' }
 export type ClientInfo = { Name : string, Path : string }
 export function clientInfo(Type) => ClientInfo { Name = Type.Name, Path = Type.File.Path }
 ```
 
-Any declaration — `predicate`, `let`, `command`, `type`, `flags`, or `function` — can be exported.
+Any declaration — `predicate`, `let`, `type`, `flags`, or `function` — can be exported.
 
 #### Type Member Exports
 
@@ -346,10 +346,10 @@ Providers expose globals that return typed lists (e.g., `Types`, `Requests`). Th
 
 ```ruby
 # foreach = repeat { dequeue from source → transform → enqueue to sink }
-command serve = foreach Requests => handle => RESPONSES
+function SERVE() = { foreach Requests => handle => RESPONSES }
 
 # async foreach = process items concurrently (parallel)
-command serve = async foreach Requests => handle => RESPONSES
+function SERVE() = { async foreach Requests => handle => RESPONSES }
 ```
 
 Any global returning a list can serve as a source. Sinks are provider-registered targets (e.g., `Send`, `console`, `file`). The runtime handles thread-safe enqueue/dequeue. Use `async foreach` when items can be processed independently (e.g., HTTP requests).
@@ -524,7 +524,7 @@ Built-in names follow a consistent casing convention based on their role:
 |-----------|------|----------|---------|
 | `camelCase` | Predicates (return bool, applied per-item) | `:` | `startsWith`, `endsWith`, `any`, `none`, `isSet` |
 | `PascalCase` | Transforms & properties (return values) | `.` | `Where`, `Select`, `Count`, `Text`, `Trim` |
-| `UPPERCASE` | Commands (produce output/side effects) | — | `FAIL`, `PRINT`, `SAVE`, `ASSERT`, `DEBUG` |
+| `UPPERCASE` | Output functions and actions (produce side effects) | — | `FAIL`, `PRINT`, `SAVE`, `ASSERT`, `DEBUG` |
 
 User-defined predicates and functions should follow the same convention: `camelCase` for predicates, `PascalCase` for transforms and record-body functions.
 
@@ -960,19 +960,19 @@ async foreach Requests => handle => RESPONSES
 
 Like `object()`, the typed annotation provides documentation and schema enforcement — it declares the item type flowing through the stream or into the sink. Without an annotation, items are untyped.
 
-## Commands
+## Output Functions
 
-Commands produce side effects — output to the console, files, or test results. Use `foreach` to iterate over a collection:
+Output functions produce side effects — output to the console, files, or test results. Use `foreach` to iterate over a collection:
 
 ```
 foreach List:filter1:filter2 => 'template expression'
 ```
 
-Commands are **named** using `command`, which makes them invocable by name with `cop <name>`:
+Output functions are **named** with UPPERCASE `function` declarations, which makes them invocable by name with `cop <name>`:
 
 ```cop
-command list-types = foreach Types => '{item.Name}'
-command export-names = foreach Types:isCSharp:client => save('names.txt', '{item.Name}')
+function LIST-TYPES() = { foreach Types => '{item.Name}' }
+function EXPORT-NAMES() = { foreach Types:isCSharp:client => save('names.txt', '{item.Name}') }
 ```
 
 Tests are declared with the `test` keyword:
@@ -981,17 +981,17 @@ Tests are declared with the `test` keyword:
 test has-types = assert(csharp.Types.Count > 0)
 ```
 
-#### Command Composition
+#### Output Function Composition
 
-Chain multiple commands with `&` to compose a single named command:
+Chain multiple command expressions with `&` to compose a single named output function:
 
 ```ruby
-command TYPE-COUNT = PRINT('{Code.Types.Count} types')
-command FILE-COUNT = PRINT('{Code.Files.Count} files')
-command STATISTICS = TYPE-COUNT & FILE-COUNT
+function TYPE-COUNT() = { PRINT('{Code.Types.Count} types') }
+function FILE-COUNT() = { PRINT('{Code.Files.Count} files') }
+function STATISTICS() = { TYPE-COUNT & FILE-COUNT }
 ```
 
-Running `cop STATISTICS` executes both commands in order.
+Running `cop STATISTICS` executes both functions in order.
 
 #### Conditional Commands
 
@@ -999,13 +999,13 @@ Use `predicate? command` to conditionally execute a command — a degenerate ter
 
 ```ruby
 predicate showStats(Program) => Program.Args:contains('/s')
-command LIST-TYPES = foreach Types => '{item.Name}' & showStats? TYPE-COUNT
+function LIST-TYPES() = { foreach Types => '{item.Name}' & showStats? TYPE-COUNT }
 ```
 
 The `?` operator reads as: "if showStats is true, run TYPE-COUNT." For complex conditions, use parentheses:
 
 ```ruby
-command LIST-TYPES = foreach Types => '{item.Name}' & (hasCode && showStats)? TYPE-COUNT
+function LIST-TYPES() = { foreach Types => '{item.Name}' & (hasCode && showStats)? TYPE-COUNT }
 ```
 
 ### Implicit Output
@@ -1065,10 +1065,10 @@ Use `=> target` after the template to pipe output to a collection instead of the
 
 ```ruby
 # Pipe to a provider-backed collection (e.g., http response)
-command serve = foreach Requests => handle => RESPONSES
+function SERVE() = { foreach Requests => handle => RESPONSES }
 
 # Process items in parallel
-command serve = async foreach Requests => handle => RESPONSES
+function SERVE() = { async foreach Requests => handle => RESPONSES }
 
 # Pipe to a file
 foreach Types => SAVE('types.txt', '{item.Name}')
@@ -1115,7 +1115,7 @@ foreach Clients:isCSharp:!isSealed => SAVE('report.txt', '{item.Name}: not seale
 | `'path'` | yes | Relative file path for output |
 | `'...'` | yes | Template string with `{Expr}` interpolation |
 
-SAVE commands only run when explicitly invoked (e.g., `cop export-names`), never during normal check runs. File paths must be relative and within the codebase directory. The file is overwritten on each run.
+Functions that use `SAVE` only run when explicitly invoked (e.g., `cop EXPORT-NAMES`), never during normal check runs. File paths must be relative and within the codebase directory. The file is overwritten on each run.
 
 ### test
 
@@ -1139,7 +1139,7 @@ test no-var = assert(csharp.Statements:isVar.Count == 0)
 test clean = assert(violations.Count == 0, 'should have no violations')
 ```
 
-ASSERT commands only run via `cop test`, never during normal execution. See [Testing with Agent Cop](testing-with-cop.md) for details.
+Test assertions only run via `cop test`, never during normal execution. See [Testing with Agent Cop](testing-with-cop.md) for details.
 
 ### DEBUG
 
@@ -1165,7 +1165,7 @@ cop test -d         # shows [trace] and [debug] output during tests
 @'\bvar\b'           # verbatim string — backslashes are literal (for regex)
 ```
 
-Interpolated strings in commands use `{Expr}` placeholders:
+Interpolated strings in output functions use `{Expr}` placeholders:
 
 ```ruby
 foreach Clients:!isSealed => '{error:@red} {item.Name} should be sealed'
@@ -1255,7 +1255,7 @@ Sink behavior for errors:
 `FAIL` terminates execution immediately — use for situations that should never occur:
 
 ```ruby
-# Command position (with collection — triggers if any items match)
+# Output position (with collection — triggers if any items match)
 FAIL('types must be sealed') foreach Types:!isSealed
 
 # Expression position (terminates during evaluation)
@@ -1276,7 +1276,6 @@ Output: `FATAL: file(line): message`
 ```ruby
 # This is a single-line comment
 predicate client(Type) => Type.Name:endsWith('Client')  # also valid at end of line
-// Legacy comment syntax (also supported)
 ```
 
 ### Multi-line comment

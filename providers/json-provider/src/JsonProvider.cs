@@ -5,7 +5,7 @@ namespace Cop.Providers;
 
 /// <summary>
 /// Provider for JSON file parsing. Exposes json.Parse(path, typeName) function
-/// that parses JSON files into typed collections.
+/// that parses JSON files into typed objects or collections.
 /// Must be imported with: import json
 /// </summary>
 public class JsonProvider : ObjectProvider, ICapabilityProvider
@@ -18,7 +18,6 @@ public class JsonProvider : ObjectProvider, ICapabilityProvider
 
     public void RegisterCapabilities(TypeRegistry registry, string rootPath)
     {
-        // Register json.Parse(path, typeName) as a provider function
         registry.RegisterProviderFunction("json", "Parse", args =>
         {
             if (args.Count < 2)
@@ -34,24 +33,10 @@ public class JsonProvider : ObjectProvider, ICapabilityProvider
                 throw new InvalidOperationException($"json.Parse: file not found: {fullPath}");
 
             var schema = registry.ExportTypeAsSchema(typeName);
-            var items = JsonCollectionDeserializer.DeserializeArray(File.ReadAllBytes(fullPath), typeName, schema);
+            object result = JsonCollectionDeserializer.DeserializeAny(File.ReadAllBytes(fullPath), typeName, schema);
             JsonCollectionDeserializer.RegisterDataObjectAccessors(registry, schema);
 
-            // Return as a list (provider functions return object?)
-            return Task.FromResult<object?>(items);
-        });
-
-        // Keep file parser registration for backward compatibility during transition
-        registry.RegisterFileParser("json", (filePath, typeName) =>
-        {
-            var fullPath = Path.IsPathRooted(filePath) ? filePath : Path.Combine(rootPath, filePath);
-            if (!File.Exists(fullPath))
-                throw new InvalidOperationException($"Parse() file not found: {fullPath}");
-
-            var schema = registry.ExportTypeAsSchema(typeName);
-            var items = JsonCollectionDeserializer.DeserializeArray(File.ReadAllBytes(fullPath), typeName, schema);
-            JsonCollectionDeserializer.RegisterDataObjectAccessors(registry, schema);
-            return items;
+            return Task.FromResult<object?>(result);
         });
     }
 

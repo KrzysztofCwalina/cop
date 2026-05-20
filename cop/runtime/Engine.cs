@@ -545,7 +545,7 @@ public static class Engine
         var interpreter = new ScriptInterpreter(typeRegistry, maxOutputsPerCommand: 100_000, providerQueryService: queryService);
 
         // Determine which commands to run:
-        // - If -c <commands> specified: run those named commands
+        // - If -c <commands> specified: use as command filter (matches by name or argument)
         // - Otherwise: run the 'main' command
         var commandsToRun = rules.Count > 0 ? rules : ["main"];
 
@@ -566,9 +566,19 @@ public static class Engine
             var allFileOutputs = new List<FileOutput>();
             var allWarnings = new List<string>();
 
-            foreach (var command in commandsToRun)
+            if (rules.Count > 0)
             {
-                var result = interpreter.Run(scriptFiles, documents, command, programArgs);
+                // Use commandFilter mode: matches commands by name OR by argument to parameterized commands
+                var filterSet = new HashSet<string>(rules, StringComparer.Ordinal);
+                var result = interpreter.Run(scriptFiles, documents, commandFilter: filterSet, programArgs: programArgs);
+                allOutputs.AddRange(result.Outputs);
+                if (result.FileOutputs is not null)
+                    allFileOutputs.AddRange(result.FileOutputs);
+                allWarnings.AddRange(result.Warnings);
+            }
+            else
+            {
+                var result = interpreter.Run(scriptFiles, documents, "main", programArgs);
                 allOutputs.AddRange(result.Outputs);
                 if (result.FileOutputs is not null)
                     allFileOutputs.AddRange(result.FileOutputs);
@@ -756,7 +766,7 @@ public static class Engine
 
         try
         {
-            if (metadata.IsClrProvider)
+            if (metadata.IsProvider)
                 providerPackages.Add((packageDir, metadata));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)

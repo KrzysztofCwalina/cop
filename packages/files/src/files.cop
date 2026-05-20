@@ -35,6 +35,7 @@ export let Folders = Disk.Folders
 export let DiskFiles = Disk.Files
 
 # Convenience predicates
+export predicate empty(Folder) => Folder.Empty == true
 export predicate recentlyModified(Folder) => Folder.MinutesSinceModified < 10
 export predicate recentlyModified(DiskFile) => DiskFile.MinutesSinceModified < 10
 export predicate stale(Folder) => Folder.MinutesSinceModified > 1440
@@ -43,3 +44,5 @@ export predicate stale(DiskFile) => DiskFile.MinutesSinceModified > 1440
 # Violation collections
 export let empty-folders = Disk.Folders:empty
     :toError('Empty folder: {item.Path}')
+
+command main = CHECK(empty-folders)

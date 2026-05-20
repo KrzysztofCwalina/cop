@@ -1,0 +1,1450 @@
+namespace Cop.Lang.Parser;
+
+using Cop.Lang.Ast;
+
+/// <summary>
+/// Clean recursive-descent parser that produces AST nodes.
+/// Uses Pratt parsing (precedence climbing) for expressions.
+/// Has zero domain knowledge — operates purely on syntax.
+/// </summary>
+public class CopParser
+{
+    private readonly List<Token> _tokens;
+    private readonly string _filePath;
+    private int _pos;
+
+    public CopParser(List<Token> tokens, string filePath = "<unknown>")
+    {
+        _tokens = tokens;
+        _filePath = filePath;
+    }
+
+    public static ModuleNode Parse(string source, string filePath = "<unknown>")
+    {
+        var tokenizer = new Tokenizer(source, filePath);
+        var tokens = tokenizer.Tokenize();
+        var parser = new CopParser(tokens, filePath);
+        return parser.ParseModule();
+    }
+
+    // ========================================================================
+    // Module (top-level)
+    // ========================================================================
+
+    public ModuleNode ParseModule()
+    {
+        var declarations = new List<Declaration>();
+        while (!IsAtEnd())
+        {
+            var decl = ParseDeclaration();
+            if (decl is not null)
+                declarations.Add(decl);
+        }
+        return new ModuleNode(declarations, 1);
+    }
+
+    // ========================================================================
+    // Declarations
+    // ========================================================================
+
+    private Declaration? ParseDeclaration()
+    {
+        SkipDocComments(out var docComment);
+        if (IsAtEnd()) return null;
+
+        bool isExported = false;
+        int line = CurrentLine();
+
+        if (MatchKeyword("export"))
+        {
+            isExported = true;
+            SkipDocComments(out _); // export may be followed by doc comment
+        }
+
+        var token = Peek();
+
+        // type declaration
+        if (IsKeyword(token, "type"))
+            return ParseTypeDecl(isExported, docComment, line);
+
+        // enum declaration
+        if (IsKeyword(token, "enum"))
+            return ParseEnumDecl(isExported, docComment, line);
+
+        // flags declaration
+        if (IsKeyword(token, "flags"))
+            return ParseFlagsDecl(isExported, docComment, line);
+
+        // function declaration
+        if (IsKeyword(token, "function"))
+            return ParseFunctionDecl(isExported, docComment, line);
+
+        // predicate declaration (parsed as a function returning bool)
+        if (IsKeyword(token, "predicate"))
+            return ParsePredicateAsFunction(isExported, docComment, line);
+
+        // let declaration
+        if (IsKeyword(token, "let"))
+            return ParseLetDecl(isExported, docComment, line);
+
+        // command declaration
+        if (IsKeyword(token, "command"))
+            return ParseCommandDecl(isExported, docComment, line);
+
+        // import declaration
+        if (IsKeyword(token, "import"))
+            return ParseImportDecl(line);
+
+        // foreach (top-level command sugar)
+        if (IsKeyword(token, "foreach"))
+            return ParseForeachAsCommand(isExported, docComment, line);
+
+        // test declaration → parse as command with name
+        if (IsKeyword(token, "test"))
+            return ParseTestAsCommand(docComment, line);
+
+        // feed declaration → skip (runtime concern)
+        if (IsKeyword(token, "feed"))
+        {
+            SkipToEndOfLine();
+            return null;
+        }
+
+        // RUN declaration → skip (runtime concern)
+        if (IsKeyword(token, "RUN"))
+        {
+            SkipToEndOfLine();
+            return null;
+        }
+
+        // Bare expression at top level → expression statement in implicit "main"
+        // For now, skip unrecognized lines
+        SkipToEndOfLine();
+        return null;
+    }
+
+    private Declaration ParseImportDecl(int line)
+    {
+        Advance(); // consume 'import'
+        var name = ExpectIdentifier("module name");
+        return new ImportDecl(name, line);
+    }
+
+    private Declaration ParseTypeDecl(bool isExported, string? docComment, int line)
+    {
+        Advance(); // consume 'type'
+
+        // Handle generic collection type syntax: type [T] = { ... }
+        string name;
+        if (Check(TokenKind.LBracket))
+        {
+            Advance(); // consume '['
+            var inner = ExpectIdentifier("type parameter");
+            Expect(TokenKind.RBracket, "']'");
+            name = $"[{inner}]";
+        }
+        else
+        {
+            name = ExpectIdentifier("type name");
+        }
+
+        string? baseType = null;
+        if (Match(TokenKind.Colon))
+        {
+            baseType = ExpectIdentifier("base type name");
+        }
+
+        var properties = new List<PropertyDecl>();
+
+        // Handle brace-enclosed property block: type Name = { Prop : Type, ... }
+        if (Match(TokenKind.Equals))
+        {
+            if (Match(TokenKind.LBrace))
+            {
+                while (!IsAtEnd() && !Check(TokenKind.RBrace))
+                {
+                    SkipDocComments(out _);
+                    if (Check(TokenKind.RBrace)) break;
+                    var propLine = CurrentLine();
+                    var propName = ExpectIdentifier("property name");
+                    Expect(TokenKind.Colon, "':'");
+                    var typeRef = ParseTypeRef();
+                    bool isOptional = false;
+                    if (Match(TokenKind.QuestionMark))
+                        isOptional = true;
+                    Match(TokenKind.Comma); // optional trailing comma
+                    properties.Add(new PropertyDecl(propName, typeRef, isOptional, propLine));
+                }
+                Expect(TokenKind.RBrace, "'}'");
+                return new TypeDecl(name, baseType, properties, isExported, docComment, line);
+            }
+            // type Name = BaseType (alias) — treat base type as the value after =
+            baseType = ExpectIdentifier("base type name");
+            return new TypeDecl(name, baseType, properties, isExported, docComment, line);
+        }
+
+        // Properties follow on subsequent indented lines: Name : Type
+        while (!IsAtEnd() && !IsDeclarationStart())
+        {
+            SkipDocComments(out var propDoc);
+            if (IsAtEnd() || IsDeclarationStart()) break;
+
+            var propLine = CurrentLine();
+            var propToken = Peek();
+
+            // Property: Name : Type or Name : Type?
+            if (propToken.Kind == TokenKind.Identifier)
+            {
+                var propName = Advance().Value;
+                if (Match(TokenKind.Colon))
+                {
+                    var typeRef = ParseTypeRef();
+                    bool isOptional = false;
+                    if (Match(TokenKind.QuestionMark))
+                        isOptional = true;
+                    Match(TokenKind.Comma); // optional trailing comma
+                    properties.Add(new PropertyDecl(propName, typeRef, isOptional, propLine));
+                }
+                else
+                {
+                    // Not a property, put back and break
+                    _pos--;
+                    break;
+                }
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        return new TypeDecl(name, baseType, properties, isExported, docComment, line);
+    }
+
+    private Declaration ParseEnumDecl(bool isExported, string? docComment, int line)
+    {
+        Advance(); // consume 'enum'
+        var name = ExpectIdentifier("enum name");
+
+        TypeRef? memberType = null;
+        // Optional type annotation: enum Name : TypeKind = ...
+        if (Check(TokenKind.Colon))
+        {
+            Advance();
+            memberType = ParseTypeRef();
+        }
+
+        Expect(TokenKind.Equals, "'='");
+
+        var members = new List<string>();
+        members.Add(ExpectIdentifierOrString("enum member"));
+        while (Match(TokenKind.Pipe))
+        {
+            members.Add(ExpectIdentifierOrString("enum member"));
+        }
+
+        return new EnumDecl(name, memberType, members, isExported, docComment, line);
+    }
+
+    private Declaration ParseFlagsDecl(bool isExported, string? docComment, int line)
+    {
+        Advance(); // consume 'flags'
+        var name = ExpectIdentifier("flags name");
+
+        Expect(TokenKind.Equals, "'='");
+
+        var members = new List<string>();
+        members.Add(ExpectIdentifier("flags member"));
+        while (Match(TokenKind.Pipe))
+        {
+            members.Add(ExpectIdentifier("flags member"));
+        }
+
+        return new FlagsDecl(name, members, isExported, docComment, line);
+    }
+
+    private Declaration ParseFunctionDecl(bool isExported, string? docComment, int line)
+    {
+        Advance(); // consume 'function'
+        var name = ExpectIdentifier("function name");
+
+        // Parse parameters: (param1: Type1, param2: Type2)
+        var parameters = ParseParameterList();
+
+        // Optional return type: : ReturnType or => ReturnType
+        TypeRef? returnType = null;
+        if (Match(TokenKind.Colon) || Match(TokenKind.Arrow))
+        {
+            returnType = ParseTypeRef();
+        }
+
+        // Optional guard: : (expr) — parenthesized expression after return type
+        Expression? guard = null;
+        if (Check(TokenKind.Colon) && PeekNext().Kind == TokenKind.LParen)
+        {
+            Advance(); // consume ':'
+            guard = ParseExpression();
+        }
+
+        // Body: = expr | = intrinsic | = { block } | mapping body
+        FunctionBody body;
+        if (Match(TokenKind.Equals))
+        {
+            if (MatchKeyword("intrinsic"))
+            {
+                body = new IntrinsicBody();
+            }
+            else if (Check(TokenKind.LBrace) && IsCommandName(name))
+            {
+                // Block body (only for ALL-UPPERCASE function names)
+                body = ParseBlockBody();
+            }
+            else if (Check(TokenKind.LBrace) && !IsCommandName(name))
+            {
+                // For lowercase names, { } after = is an object literal expression
+                var expr = ParseExpression();
+                body = new ExpressionBody(expr);
+            }
+            else
+            {
+                var expr = ParseExpression();
+                body = new ExpressionBody(expr);
+            }
+        }
+        else if (Check(TokenKind.LBrace) && IsCommandName(name))
+        {
+            // Block body without = (alternate syntax): function MAIN() { ... }
+            body = ParseBlockBody();
+        }
+        else
+        {
+            // Mapping body (field assignments on subsequent lines)
+            body = ParseMappingBody();
+        }
+
+        return new FunctionDecl(name, parameters, returnType, body, isExported, guard, docComment, line);
+    }
+
+    private Declaration ParsePredicateAsFunction(bool isExported, string? docComment, int line)
+    {
+        Advance(); // consume 'predicate'
+        var name = ExpectIdentifier("predicate name");
+
+        // Parse parameters
+        var parameters = ParseParameterList();
+
+        // Predicates implicitly return bool, but may have narrowing type: predicate name(T) : NarrowedType
+        var returnType = new TypeRef("bool");
+        if (Match(TokenKind.Colon))
+        {
+            // Narrowing type annotation — record it as the return type
+            var narrowed = ParseTypeRef();
+            returnType = narrowed;
+        }
+
+        // Optional guard: : (expr) — parenthesized expression after type
+        Expression? guard = null;
+        if (Check(TokenKind.Colon) && PeekNext().Kind == TokenKind.LParen)
+        {
+            Advance(); // consume ':'
+            guard = ParseExpression();
+        }
+
+        // Body: = expr or => expr
+        FunctionBody body;
+        if (Match(TokenKind.Equals) || Match(TokenKind.Arrow))
+        {
+            if (MatchKeyword("intrinsic"))
+            {
+                body = new IntrinsicBody();
+            }
+            else
+            {
+                var expr = ParseExpression();
+                body = new ExpressionBody(expr);
+            }
+        }
+        else
+        {
+            // Constraint-style body (inline expression without =)
+            var expr = ParseExpression();
+            body = new ExpressionBody(expr);
+        }
+
+        return new FunctionDecl(name, parameters, returnType, body, isExported, guard, docComment, line);
+    }
+
+    private Declaration ParseLetDecl(bool isExported, string? docComment, int line)
+    {
+        Advance(); // consume 'let'
+        var name = ExpectIdentifier("binding name");
+
+        TypeRef? typeAnnotation = null;
+        if (Match(TokenKind.Colon))
+        {
+            typeAnnotation = ParseTypeRef();
+        }
+
+        Expect(TokenKind.Equals, "'='");
+        var value = ParseExpression();
+
+        return new LetDecl(name, typeAnnotation, value, isExported, docComment, line);
+    }
+
+    private Declaration ParseCommandDecl(bool isExported, string? docComment, int line)
+    {
+        Advance(); // consume 'command'
+        var name = ExpectIdentifier("command name");
+
+        // Uppercase the name — command is sugar for an uppercase block function
+        var upperName = name.ToUpperInvariant();
+
+        List<Parameter> parameters = new();
+        if (Check(TokenKind.LParen))
+        {
+            Advance();
+            if (!Check(TokenKind.RParen))
+            {
+                parameters.Add(new Parameter(ExpectIdentifier("parameter"), null));
+                while (Match(TokenKind.Comma))
+                    parameters.Add(new Parameter(ExpectIdentifier("parameter"), null));
+            }
+            Expect(TokenKind.RParen, "')'");
+        }
+
+        // Command body: = { statements } or = single-statement
+        FunctionBody body;
+        if (Match(TokenKind.Equals))
+        {
+            if (Check(TokenKind.LBrace))
+            {
+                body = ParseBlockBody();
+            }
+            else
+            {
+                // Single statement → wrap in block
+                var stmt = ParseStatement();
+                var stmts = stmt is not null ? new List<Statement> { stmt } : new List<Statement>();
+                body = new BlockBody(stmts);
+            }
+        }
+        else
+        {
+            body = new BlockBody(new List<Statement>());
+        }
+
+        return new FunctionDecl(upperName, parameters, null, body, isExported, null, docComment, line);
+    }
+
+    private Declaration ParseForeachAsCommand(bool isExported, string? docComment, int line)
+    {
+        // foreach at top-level is sugar for an uppercase command function
+        var stmt = ParseForEachStatement();
+        var body = new BlockBody(new List<Statement> { stmt });
+        return new FunctionDecl("__FOREACH__", new List<Parameter>(), null, body, isExported, null, docComment, line);
+    }
+
+    private Declaration ParseTestAsCommand(string? docComment, int line)
+    {
+        Advance(); // consume 'test'
+        var name = ExpectIdentifier("test name");
+
+        // Uppercase the name — test is sugar for an uppercase block function
+        var upperName = "TEST-" + name.ToUpperInvariant();
+
+        FunctionBody body;
+        if (Match(TokenKind.Equals))
+        {
+            if (Check(TokenKind.LBrace))
+            {
+                body = ParseBlockBody();
+            }
+            else
+            {
+                var stmt = ParseStatement();
+                var stmts = stmt is not null ? new List<Statement> { stmt } : new List<Statement>();
+                body = new BlockBody(stmts);
+            }
+        }
+        else
+        {
+            body = new BlockBody(new List<Statement>());
+        }
+
+        return new FunctionDecl(upperName, new List<Parameter>(), null, body, false, null, docComment, line);
+    }
+
+    // ========================================================================
+    // Statements
+    // ========================================================================
+
+    private Statement? ParseStatement()
+    {
+        if (IsAtEnd()) return null;
+
+        var token = Peek();
+
+        if (IsKeyword(token, "let"))
+            return ParseLetStatement();
+
+        if (IsKeyword(token, "foreach"))
+            return ParseForEachStatement();
+
+        // Expression statement (may include pipeline)
+        var expr = ParseExpression();
+        if (expr is null) return null;
+
+        // Check for pipeline: expr => expr => expr
+        if (Check(TokenKind.Arrow))
+        {
+            var stages = new List<PipelineStage>();
+            while (Match(TokenKind.Arrow))
+            {
+                var stageExpr = ParseExpression();
+                stages.Add(new PipelineStage(stageExpr, stageExpr.Line));
+            }
+            return new PipelineStatement(expr, stages, expr.Line);
+        }
+
+        return new ExpressionStatement(expr, expr.Line);
+    }
+
+    private LetStatement ParseLetStatement()
+    {
+        int line = CurrentLine();
+        Advance(); // consume 'let'
+        var name = ExpectIdentifier("binding name");
+
+        TypeRef? typeAnnotation = null;
+        if (Match(TokenKind.Colon))
+            typeAnnotation = ParseTypeRef();
+
+        Expect(TokenKind.Equals, "'='");
+        var value = ParseExpression();
+        return new LetStatement(name, typeAnnotation, value, line);
+    }
+
+    private ForEachStatement ParseForEachStatement()
+    {
+        int line = CurrentLine();
+        Advance(); // consume 'foreach'
+
+        // Collection expression (what we iterate over)
+        var collection = ParseExpression();
+
+        // Optional pipeline stages in the foreach
+        var body = new List<Statement>();
+        while (Match(TokenKind.Arrow))
+        {
+            var stageExpr = ParseExpression();
+            body.Add(new ExpressionStatement(stageExpr, stageExpr.Line));
+        }
+
+        return new ForEachStatement("__item__", collection, body, line);
+    }
+
+    // ========================================================================
+    // Expressions — Pratt / Precedence Climbing
+    // ========================================================================
+
+    public Expression ParseExpression() => ParseTernary();
+
+    private Expression ParseTernary()
+    {
+        var expr = ParseOr();
+
+        if (Match(TokenKind.QuestionMark))
+        {
+            int line = Previous().Line;
+            expr = ParseTernaryOrMatch(expr, line);
+        }
+
+        return expr;
+    }
+
+    private Expression ParseOr()
+    {
+        var left = ParseAnd();
+        while (Match(TokenKind.OrOr))
+        {
+            int line = Previous().Line;
+            var right = ParseAnd();
+            left = new BinaryExpr(left, BinaryOp.Or, right, line);
+        }
+        return left;
+    }
+
+    private Expression ParseAnd()
+    {
+        var left = ParseEquality();
+        while (Match(TokenKind.AndAnd))
+        {
+            int line = Previous().Line;
+            var right = ParseEquality();
+            left = new BinaryExpr(left, BinaryOp.And, right, line);
+        }
+        return left;
+    }
+
+    private Expression ParseEquality()
+    {
+        var left = ParseComparison();
+        while (true)
+        {
+            if (Match(TokenKind.EqualEqual))
+            {
+                int line = Previous().Line;
+                var right = ParseComparison();
+                left = new BinaryExpr(left, BinaryOp.Equal, right, line);
+            }
+            else if (Match(TokenKind.NotEqual))
+            {
+                int line = Previous().Line;
+                var right = ParseComparison();
+                left = new BinaryExpr(left, BinaryOp.NotEqual, right, line);
+            }
+            else break;
+        }
+        return left;
+    }
+
+    private Expression ParseComparison()
+    {
+        var left = ParseBitwiseOr();
+        while (true)
+        {
+            if (Match(TokenKind.GreaterThan))
+            {
+                int line = Previous().Line;
+                var right = ParseBitwiseOr();
+                left = new BinaryExpr(left, BinaryOp.GreaterThan, right, line);
+            }
+            else if (Match(TokenKind.LessThan))
+            {
+                int line = Previous().Line;
+                var right = ParseBitwiseOr();
+                left = new BinaryExpr(left, BinaryOp.LessThan, right, line);
+            }
+            else if (Match(TokenKind.GreaterEqual))
+            {
+                int line = Previous().Line;
+                var right = ParseBitwiseOr();
+                left = new BinaryExpr(left, BinaryOp.GreaterOrEqual, right, line);
+            }
+            else if (Match(TokenKind.LessEqual))
+            {
+                int line = Previous().Line;
+                var right = ParseBitwiseOr();
+                left = new BinaryExpr(left, BinaryOp.LessOrEqual, right, line);
+            }
+            else break;
+        }
+        return left;
+    }
+
+    private Expression ParseBitwiseOr()
+    {
+        var left = ParseBitwiseAnd();
+        while (Match(TokenKind.Pipe))
+        {
+            int line = Previous().Line;
+            var right = ParseBitwiseAnd();
+            left = new BinaryExpr(left, BinaryOp.BitwiseOr, right, line);
+        }
+        return left;
+    }
+
+    private Expression ParseBitwiseAnd()
+    {
+        var left = ParseAdditive();
+        while (Match(TokenKind.Ampersand))
+        {
+            int line = Previous().Line;
+            var right = ParseAdditive();
+            left = new BinaryExpr(left, BinaryOp.BitwiseAnd, right, line);
+        }
+        return left;
+    }
+
+    private Expression ParseAdditive()
+    {
+        var left = ParseMultiplicative();
+        while (true)
+        {
+            if (Match(TokenKind.Plus))
+            {
+                int line = Previous().Line;
+                var right = ParseMultiplicative();
+                left = new BinaryExpr(left, BinaryOp.Add, right, line);
+            }
+            else if (Match(TokenKind.Minus))
+            {
+                int line = Previous().Line;
+                var right = ParseMultiplicative();
+                left = new BinaryExpr(left, BinaryOp.Subtract, right, line);
+            }
+            else break;
+        }
+        return left;
+    }
+
+    private Expression ParseMultiplicative()
+    {
+        var left = ParseUnary();
+        while (true)
+        {
+            if (Match(TokenKind.Star))
+            {
+                int line = Previous().Line;
+                var right = ParseUnary();
+                left = new BinaryExpr(left, BinaryOp.Multiply, right, line);
+            }
+            else if (Match(TokenKind.Slash))
+            {
+                int line = Previous().Line;
+                var right = ParseUnary();
+                left = new BinaryExpr(left, BinaryOp.Divide, right, line);
+            }
+            else if (Match(TokenKind.Percent))
+            {
+                int line = Previous().Line;
+                var right = ParseUnary();
+                left = new BinaryExpr(left, BinaryOp.Modulo, right, line);
+            }
+            else break;
+        }
+        return left;
+    }
+
+    private Expression ParseUnary()
+    {
+        if (Match(TokenKind.Not))
+        {
+            int line = Previous().Line;
+            var operand = ParseUnary();
+            return new UnaryExpr(UnaryOp.Not, operand, line);
+        }
+        if (Match(TokenKind.Minus))
+        {
+            int line = Previous().Line;
+            var operand = ParseUnary();
+            return new UnaryExpr(UnaryOp.Negate, operand, line);
+        }
+        return ParsePostfix();
+    }
+
+    private Expression ParsePostfix()
+    {
+        var expr = ParsePrimary();
+
+        while (true)
+        {
+            if (Match(TokenKind.Dot))
+            {
+                int line = Previous().Line;
+                var member = ExpectIdentifier("member name");
+                expr = new MemberExpr(expr, member, line);
+
+                // Check for call: obj.method(args)
+                if (Check(TokenKind.LParen))
+                {
+                    var args = ParseArgList();
+                    expr = new CallExpr(expr, args, line);
+                }
+            }
+            else if (Check(TokenKind.Colon) && IsFilterColonFollowed() && IsFilterableExpression(expr))
+            {
+                Advance(); // consume ':'
+                // Filter syntax: expr:predicate or expr:!predicate
+                int line = Previous().Line;
+                bool negated = Match(TokenKind.Not);
+                var predicate = ParsePostfixPredicate();
+                expr = new FilterExpr(expr, predicate, negated, line);
+            }
+            else if (Check(TokenKind.LParen) && expr is IdentifierExpr or MemberExpr)
+            {
+                // Direct call: func(args)
+                int line = CurrentLine();
+                var args = ParseArgList();
+                expr = new CallExpr(expr, args, line);
+            }
+            else if (Match(TokenKind.LBracket))
+            {
+                // Index: expr[index]
+                int line = Previous().Line;
+                var index = ParseExpression();
+                Expect(TokenKind.RBracket, "']'");
+                expr = new IndexExpr(expr, index, line);
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        return expr;
+    }
+
+    private Expression ParsePostfixPredicate()
+    {
+        // After ':', parse a predicate reference which may be:
+        // - identifier: expr:myPredicate
+        // - identifier(args): expr:startsWith('foo')
+        // - member: expr:Type.Name
+        var ident = ExpectIdentifier("predicate name");
+        Expression pred = new IdentifierExpr(ident, CurrentLine());
+
+        // Dot-qualified: Type.Property
+        while (Match(TokenKind.Dot))
+        {
+            var member = ExpectIdentifier("member name");
+            pred = new MemberExpr(pred, member, CurrentLine());
+        }
+
+        // Call with args: pred(args)
+        if (Check(TokenKind.LParen))
+        {
+            var args = ParseArgList();
+            pred = new CallExpr(pred, args, CurrentLine());
+        }
+
+        return pred;
+    }
+
+    private Expression ParseTernaryOrMatch(Expression condition, int line)
+    {
+        // Check if this is a match expression: condition ? pattern => result | ...
+        // Or a simple ternary: condition ? thenExpr : elseExpr
+        //
+        // Use ParseOr (not ParseExpression) for then-branch to avoid consuming ':'
+        // as a filter. The ':' must stay for us to find the else-branch.
+
+        var firstExpr = ParseOr();
+
+        if (Match(TokenKind.Arrow))
+        {
+            // Match expression
+            var arms = new List<MatchArm>();
+            var firstResult = ParseExpression();
+            var firstPattern = ExprToPattern(firstExpr);
+            arms.Add(new MatchArm(firstPattern, firstResult, line));
+
+            while (Match(TokenKind.Pipe))
+            {
+                var patExpr = ParseExpression();
+                Expect(TokenKind.Arrow, "'=>'");
+                var result = ParseExpression();
+                arms.Add(new MatchArm(ExprToPattern(patExpr), result, CurrentLine()));
+            }
+
+            return new MatchExpr(condition, arms, line);
+        }
+
+        if (Match(TokenKind.Colon))
+        {
+            // Simple ternary
+            var elseExpr = ParseExpression();
+            return new ConditionalExpr(condition, firstExpr, elseExpr, line);
+        }
+
+        // Fallback: just ternary with implicit else
+        return new ConditionalExpr(condition, firstExpr, new LiteralExpr(null, line), line);
+    }
+
+    private Expression ParsePrimary()
+    {
+        int line = CurrentLine();
+        var token = Peek();
+
+        // String literal (may be interpolated)
+        if (token.Kind == TokenKind.StringLiteral)
+        {
+            Advance();
+            if (token.Value.Contains('{'))
+                return ParseInterpolatedString(token.Value, line);
+            return new LiteralExpr(token.Value, line);
+        }
+
+        // Integer literal
+        if (token.Kind == TokenKind.IntLiteral)
+        {
+            Advance();
+            return new LiteralExpr(int.Parse(token.Value), line);
+        }
+
+        // Number literal
+        if (token.Kind == TokenKind.NumberLiteral)
+        {
+            Advance();
+            return new LiteralExpr(double.Parse(token.Value, System.Globalization.CultureInfo.InvariantCulture), line);
+        }
+
+        // Boolean literals
+        if (token.Kind == TokenKind.True) { Advance(); return new LiteralExpr(true, line); }
+        if (token.Kind == TokenKind.False) { Advance(); return new LiteralExpr(false, line); }
+
+        // Null literal (nic)
+        if (token.Kind == TokenKind.Nic) { Advance(); return new LiteralExpr(null, line); }
+
+        // Parenthesized expression or lambda
+        if (token.Kind == TokenKind.LParen)
+        {
+            return ParseParenOrLambda();
+        }
+
+        // List literal
+        if (token.Kind == TokenKind.LBracket)
+        {
+            return ParseListLiteral();
+        }
+
+        // Object literal
+        if (token.Kind == TokenKind.LBrace)
+        {
+            return ParseObjectLiteral();
+        }
+
+        // Identifier (or any keyword used as identifier in expression position)
+        if (IsIdentifierLike(token))
+        {
+            Advance();
+            return new IdentifierExpr(token.Value, line);
+        }
+
+        throw new ParseException($"Unexpected token '{token.Value}' ({token.Kind})", _filePath, line);
+    }
+
+    private Expression ParseParenOrLambda()
+    {
+        int line = CurrentLine();
+        Advance(); // consume '('
+
+        // Empty parens: ()
+        if (Match(TokenKind.RParen))
+        {
+            // This could be a unit value or empty lambda params
+            if (Match(TokenKind.Arrow))
+            {
+                var body = ParseExpression();
+                return new LambdaExpr(new List<Parameter>(), body, line);
+            }
+            return new LiteralExpr(null, line);
+        }
+
+        // Try to detect lambda: (param, param) => body
+        // Save position for backtracking
+        int savedPos = _pos;
+        bool isLambda = TryParseLambdaParams(out var lambdaParams);
+
+        if (isLambda && Match(TokenKind.Arrow))
+        {
+            var body = ParseExpression();
+            return new LambdaExpr(lambdaParams!, body, line);
+        }
+
+        // Not a lambda, restore and parse as grouped expression
+        _pos = savedPos;
+        var expr = ParseExpression();
+        Expect(TokenKind.RParen, "')'");
+        return expr;
+    }
+
+    private bool TryParseLambdaParams(out List<Parameter>? parameters)
+    {
+        parameters = new List<Parameter>();
+        int saved = _pos;
+
+        try
+        {
+            var name = ExpectIdentifier("parameter");
+            TypeRef? type = null;
+            if (Match(TokenKind.Colon))
+                type = ParseTypeRef();
+            parameters.Add(new Parameter(name, type));
+
+            while (Match(TokenKind.Comma))
+            {
+                name = ExpectIdentifier("parameter");
+                type = null;
+                if (Match(TokenKind.Colon))
+                    type = ParseTypeRef();
+                parameters.Add(new Parameter(name, type));
+            }
+
+            if (!Match(TokenKind.RParen))
+            {
+                _pos = saved;
+                parameters = null;
+                return false;
+            }
+
+            return true;
+        }
+        catch
+        {
+            _pos = saved;
+            parameters = null;
+            return false;
+        }
+    }
+
+    private Expression ParseListLiteral()
+    {
+        int line = CurrentLine();
+        Advance(); // consume '['
+        var elements = new List<Expression>();
+
+        if (!Check(TokenKind.RBracket))
+        {
+            elements.Add(ParseExpression());
+            // Accept both comma-separated and space-separated elements
+            while (!Check(TokenKind.RBracket) && !IsAtEnd())
+            {
+                Match(TokenKind.Comma); // optional comma
+                if (Check(TokenKind.RBracket)) break;
+                elements.Add(ParseExpression());
+            }
+        }
+
+        Expect(TokenKind.RBracket, "']'");
+        return new ListExpr(elements, line);
+    }
+
+    private Expression ParseObjectLiteral()
+    {
+        int line = CurrentLine();
+        Advance(); // consume '{'
+        var fields = new List<FieldInit>();
+
+        if (!Check(TokenKind.RBrace))
+        {
+            ParseObjectField(fields, line);
+
+            while (Match(TokenKind.Comma) || (!Check(TokenKind.RBrace) && !IsAtEnd() && IsIdentifierLike(Peek())))
+            {
+                ParseObjectField(fields, CurrentLine());
+            }
+        }
+
+        Expect(TokenKind.RBrace, "'}'");
+        return new ObjectExpr(null, fields, line);
+    }
+
+    private void ParseObjectField(List<FieldInit> fields, int line)
+    {
+        if (Check(TokenKind.RBrace)) return;
+        var fieldName = ExpectIdentifier("field name");
+        // Accept both ':' and '=' as field separator
+        if (!Match(TokenKind.Colon) && !Match(TokenKind.Equals))
+            throw new ParseException($"Expected ':' or '=' after field name '{fieldName}'", _filePath, CurrentLine());
+        var fieldValue = ParseExpression();
+        fields.Add(new FieldInit(fieldName, fieldValue, line));
+    }
+
+    // ========================================================================
+    // Interpolated Strings
+    // ========================================================================
+
+    private Expression ParseInterpolatedString(string raw, int line)
+    {
+        // Parse '{expr}' and '{text@style}' interpolation patterns in a string.
+        // Returns InterpolatedStringExpr with TextPart and ExpressionPart segments.
+        var parts = new List<StringPart>();
+        int i = 0;
+
+        while (i < raw.Length)
+        {
+            if (raw[i] == '{')
+            {
+                int end = raw.IndexOf('}', i + 1);
+                if (end < 0)
+                {
+                    // Unmatched brace — treat rest as text
+                    parts.Add(new TextPart(raw[i..]));
+                    break;
+                }
+
+                var inner = raw[(i + 1)..end];
+
+                // Check for style syntax: {text@style} — treat whole thing as text with style marker
+                if (inner.Contains('@'))
+                {
+                    // For now, just render the text part (before @)
+                    var textPart = inner.Split('@')[0];
+                    // Parse the text part as an expression path
+                    var exprParts = ParseDottedPath(textPart, line);
+                    parts.Add(new ExpressionPart(exprParts));
+                }
+                else
+                {
+                    var expr = ParseDottedPath(inner, line);
+                    parts.Add(new ExpressionPart(expr));
+                }
+
+                i = end + 1;
+            }
+            else
+            {
+                int next = raw.IndexOf('{', i);
+                if (next < 0)
+                {
+                    parts.Add(new TextPart(raw[i..]));
+                    break;
+                }
+                if (next > i)
+                    parts.Add(new TextPart(raw[i..next]));
+                i = next;
+            }
+        }
+
+        return new InterpolatedStringExpr(parts, line);
+    }
+
+    private Expression ParseDottedPath(string path, int line)
+    {
+        // Parse "item.Name" or "x.y.z" into a MemberExpr chain
+        var segments = path.Split('.');
+        Expression expr = new IdentifierExpr(segments[0].Trim(), line);
+        for (int i = 1; i < segments.Length; i++)
+        {
+            var seg = segments[i].Trim();
+            if (seg.Length > 0)
+                expr = new MemberExpr(expr, seg, line);
+        }
+        return expr;
+    }
+
+    // ========================================================================
+    // Helpers
+    // ========================================================================
+
+    private List<Parameter> ParseParameterList()
+    {
+        var parameters = new List<Parameter>();
+        if (!Match(TokenKind.LParen)) return parameters;
+
+        if (!Check(TokenKind.RParen))
+        {
+            parameters.Add(ParseParameter());
+            while (Match(TokenKind.Comma))
+                parameters.Add(ParseParameter());
+        }
+        Expect(TokenKind.RParen, "')'");
+        return parameters;
+    }
+
+    private Parameter ParseParameter()
+    {
+        int line = CurrentLine();
+        var first = ExpectIdentifier("parameter name or type");
+
+        // Check if this is "name : Type" or "Type:constraint" or just "Type"
+        if (Match(TokenKind.Colon))
+        {
+            // Look at what follows to decide: is this "name : Type" or "Type:constraint"?
+            var nextToken = Peek();
+
+            // If next is an identifier and the token after THAT is ')', ',', or ':' (chained filter),
+            // and first starts with uppercase, this might be Type:constraint
+            if (char.IsUpper(first[0]) && IsIdentifierLike(nextToken))
+            {
+                // Peek further: if after the next ident we see '(' or ':' or ')' or ',' 
+                // without seeing '=' or '=>', it's a constraint chain, not name:Type
+                int savedPos = _pos;
+                Advance(); // consume the next ident
+                var afterIdent = Peek();
+                _pos = savedPos; // restore
+
+                if (afterIdent.Kind == TokenKind.LParen || afterIdent.Kind == TokenKind.Colon
+                    || afterIdent.Kind == TokenKind.RParen || afterIdent.Kind == TokenKind.Comma)
+                {
+                    // This is "Type:constraint" — skip the constraint chain
+                    SkipConstraintChain();
+                    return new Parameter(first.ToLower(), new TypeRef(first, false, line), line);
+                }
+            }
+
+            // Standard "name : Type" 
+            var type = ParseTypeRef();
+            return new Parameter(first, type, line);
+        }
+
+        // If it starts with uppercase, it's likely just a type name (anonymous param)
+        if (char.IsUpper(first[0]))
+        {
+            return new Parameter(first.ToLower(), new TypeRef(first, false, line), line);
+        }
+
+        // Otherwise it's an untyped parameter name
+        return new Parameter(first, null, line);
+    }
+
+    private void SkipConstraintChain()
+    {
+        // Skip tokens until we hit ')', ','  (end of this parameter)
+        while (!IsAtEnd() && !Check(TokenKind.RParen) && !Check(TokenKind.Comma))
+            Advance();
+    }
+
+    private TypeRef ParseTypeRef()
+    {
+        int line = CurrentLine();
+        // [Type] for collection types
+        if (Match(TokenKind.LBracket))
+        {
+            var innerName = ExpectIdentifier("type name");
+            Expect(TokenKind.RBracket, "']'");
+            return new TypeRef(innerName, true, line);
+        }
+        // { ... } anonymous record type — skip and return "object"
+        if (Check(TokenKind.LBrace))
+        {
+            SkipBalancedBraces();
+            return new TypeRef("object", false, line);
+        }
+        var name = ExpectIdentifier("type name");
+        return new TypeRef(name, false, line);
+    }
+
+    private void SkipBalancedBraces()
+    {
+        int depth = 0;
+        while (!IsAtEnd())
+        {
+            if (Check(TokenKind.LBrace)) depth++;
+            else if (Check(TokenKind.RBrace)) { depth--; Advance(); if (depth <= 0) return; continue; }
+            Advance();
+        }
+    }
+
+    private MappingBody ParseMappingBody()
+    {
+        var mappings = new List<FieldMapping>();
+        while (!IsAtEnd() && !IsDeclarationStart())
+        {
+            int line = CurrentLine();
+            var token = Peek();
+            if (!IsIdentifierLike(token)) break;
+
+            var fieldName = Advance().Value;
+            if (!Match(TokenKind.Equals))
+            {
+                _pos--;
+                break;
+            }
+            var value = ParseExpression();
+            mappings.Add(new FieldMapping(fieldName, value, line));
+        }
+        return new MappingBody(mappings);
+    }
+
+    private BlockBody ParseBlockBody()
+    {
+        Advance(); // consume '{'
+        var stmts = new List<Statement>();
+        while (!Check(TokenKind.RBrace) && !IsAtEnd())
+        {
+            var stmt = ParseStatement();
+            if (stmt is not null)
+                stmts.Add(stmt);
+            else
+                break;
+        }
+        Expect(TokenKind.RBrace, "'}'");
+        return new BlockBody(stmts);
+    }
+
+    /// <summary>
+    /// Returns true if the name follows ALL-UPPERCASE convention (command function).
+    /// All letter characters must be uppercase. Allows digits, hyphens, underscores.
+    /// </summary>
+    private static bool IsCommandName(string name)
+    {
+        foreach (char c in name)
+        {
+            if (char.IsLetter(c) && !char.IsUpper(c))
+                return false;
+        }
+        return name.Length > 0 && name.Any(char.IsLetter);
+    }
+
+    private List<Expression> ParseArgList()
+    {
+        var args = new List<Expression>();
+        Advance(); // consume '('
+        if (!Check(TokenKind.RParen))
+        {
+            args.Add(ParseExpression());
+            while (Match(TokenKind.Comma))
+                args.Add(ParseExpression());
+        }
+        Expect(TokenKind.RParen, "')'");
+        return args;
+    }
+
+    private Pattern ExprToPattern(Expression expr) => expr switch
+    {
+        LiteralExpr lit => lit.Value is null ? new WildcardPattern(lit.Line) : new LiteralPattern(lit.Value, lit.Line),
+        IdentifierExpr id when id.Name == "_" => new WildcardPattern(id.Line),
+        IdentifierExpr id => new IdentifierPattern(id.Name, id.Line),
+        _ => new LiteralPattern(expr, expr.Line) // fallback
+    };
+
+    /// <summary>
+    /// Checks if ':' is followed by an identifier or '!' (filter syntax),
+    /// as opposed to being used in ternary (cond ? then : else) or type annotations.
+    /// </summary>
+    private bool IsFilterColonFollowed()
+    {
+        if (!Check(TokenKind.Colon)) return false;
+        int next = _pos + 1;
+        if (next >= _tokens.Count) return false;
+        var nextToken = _tokens[next];
+        // Filter: followed by identifier or ! (negated filter)
+        return IsIdentifierLike(nextToken) || nextToken.Kind == TokenKind.Not;
+    }
+
+    /// <summary>
+    /// Returns true if the expression could be a collection that supports filter syntax.
+    /// Literals (numbers, strings, booleans) are never filterable — this disambiguates
+    /// filter colon from ternary else colon in expressions like `cond ? 1 : x`.
+    /// </summary>
+    private static bool IsFilterableExpression(Expression expr) => expr switch
+    {
+        LiteralExpr => false,
+        _ => true
+    };
+
+    // ========================================================================
+    // Token Navigation
+    // ========================================================================
+
+    private Token Peek() => _pos < _tokens.Count ? _tokens[_pos] : _tokens[^1];
+    private Token PeekNext() => _pos + 1 < _tokens.Count ? _tokens[_pos + 1] : _tokens[^1];
+    private Token Previous() => _tokens[_pos - 1];
+    private int CurrentLine() => Peek().Line;
+    private bool IsAtEnd() => Peek().Kind == TokenKind.Eof;
+
+    private Token Advance()
+    {
+        var token = Peek();
+        if (!IsAtEnd()) _pos++;
+        return token;
+    }
+
+    private bool Check(TokenKind kind) => !IsAtEnd() && Peek().Kind == kind;
+
+    private bool Match(TokenKind kind)
+    {
+        if (Check(kind)) { Advance(); return true; }
+        return false;
+    }
+
+    private bool MatchKeyword(string keyword)
+    {
+        var token = Peek();
+        if (IsKeyword(token, keyword)) { Advance(); return true; }
+        return false;
+    }
+
+    private Token Expect(TokenKind kind, string expected)
+    {
+        if (Check(kind)) return Advance();
+        throw new ParseException($"Expected {expected}, got '{Peek().Value}'", _filePath, CurrentLine());
+    }
+
+    private string ExpectIdentifier(string context)
+    {
+        var token = Peek();
+        if (IsIdentifierLike(token))
+        {
+            Advance();
+            return token.Value;
+        }
+        throw new ParseException($"Expected {context} (identifier), got '{token.Value}' ({token.Kind})", _filePath, CurrentLine());
+    }
+
+    private string ExpectIdentifierOrString(string context)
+    {
+        var token = Peek();
+        if (token.Kind == TokenKind.StringLiteral || token.Kind == TokenKind.IntLiteral
+            || token.Kind == TokenKind.NumberLiteral || IsIdentifierLike(token))
+        {
+            Advance();
+            return token.Value;
+        }
+        throw new ParseException($"Expected {context}, got '{token.Value}'", _filePath, CurrentLine());
+    }
+
+    /// <summary>
+    /// Determines if a token can be used as an identifier in expression position.
+    /// Domain-specific keywords are treated as plain identifiers by this parser.
+    /// </summary>
+    private static bool IsIdentifierLike(Token token) => token.Kind switch
+    {
+        TokenKind.Identifier => true,
+        // All domain-specific keywords are just identifiers to this parser
+        TokenKind.CollectionKeyword => true,
+        TokenKind.PredicateKeyword => true,
+        TokenKind.FunctionKeyword => true,
+        TokenKind.ForeachKeyword => true,
+        TokenKind.TestKeyword => true,
+        TokenKind.AsyncKeyword => true,
+        TokenKind.RunKeyword => true,
+        TokenKind.FeedKeyword => true,
+        TokenKind.FlagsKeyword => true,
+        TokenKind.EnumKeyword => true,
+        TokenKind.IntrinsicKeyword => true,
+        TokenKind.ProviderKeyword => true,
+        TokenKind.TypeKeyword => true,
+        TokenKind.ImportKeyword => true,
+        TokenKind.LetKeyword => true,
+        TokenKind.CommandKeyword => true,
+        TokenKind.ExportKeyword => true,
+        _ => false
+    };
+
+    private static bool IsKeyword(Token token, string keyword)
+    {
+        // Match both dedicated keyword tokens and identifiers with the keyword value
+        if (token.Value == keyword) return true;
+        return false;
+    }
+
+    private bool IsDeclarationStart()
+    {
+        var token = Peek();
+        return token.Kind == TokenKind.ExportKeyword
+            || IsKeyword(token, "type")
+            || IsKeyword(token, "enum")
+            || IsKeyword(token, "flags")
+            || IsKeyword(token, "function")
+            || IsKeyword(token, "predicate")
+            || IsKeyword(token, "let")
+            || IsKeyword(token, "command")
+            || IsKeyword(token, "import")
+
+            || IsKeyword(token, "foreach")
+            || IsKeyword(token, "test")
+            || IsKeyword(token, "feed")
+            || IsKeyword(token, "RUN");
+    }
+
+    private void SkipDocComments(out string? docComment)
+    {
+        docComment = null;
+        while (Check(TokenKind.DocComment))
+        {
+            var text = Advance().Value;
+            docComment = docComment is null ? text : $"{docComment}\n{text}";
+        }
+    }
+
+    private void SkipToEndOfLine()
+    {
+        // Advance past tokens until we reach a token on a different line or EOF
+        int line = CurrentLine();
+        while (!IsAtEnd() && Peek().Line == line)
+            Advance();
+    }
+}

@@ -1,0 +1,445 @@
+namespace Cop.Lang.Interpreter;
+
+using Cop.Lang.Ast;
+
+/// <summary>
+/// The Binder walks an AST module, builds scopes, resolves identifiers to symbols,
+/// and produces a BindingResult. It does NOT evaluate — only resolves names and
+/// reports diagnostics for unresolved or duplicate declarations.
+///
+/// Design: two-pass binding within a module.
+///   Pass 1: Register all top-level declarations (types, functions, lets, enums, commands)
+///           so that forward references work.
+///   Pass 2: Walk function/command bodies and expressions, resolving identifiers
+///           against the scope chain.
+/// </summary>
+public sealed class Binder
+{
+    private readonly string? _filePath;
+    private BindingResult _result = null!;
+    private Scope _currentScope = null!;
+
+    /// <summary>
+    /// Optional external symbols to pre-populate the global scope with
+    /// (intrinsics, runtime-provided functions, etc.).
+    /// </summary>
+    private readonly IReadOnlyList<Symbol> _externalSymbols;
+
+    public Binder(string? filePath = null, IReadOnlyList<Symbol>? externalSymbols = null)
+    {
+        _filePath = filePath;
+        _externalSymbols = externalSymbols ?? [];
+    }
+
+    /// <summary>
+    /// Bind a parsed module, producing a BindingResult with resolved symbols and diagnostics.
+    /// </summary>
+    public BindingResult Bind(ModuleNode module)
+    {
+        var globalScope = new Scope(label: "global");
+        _result = new BindingResult(module, globalScope);
+        _currentScope = globalScope;
+
+        // Pre-populate with external/intrinsic symbols
+        foreach (var ext in _externalSymbols)
+            globalScope.Declare(ext);
+
+        // Pass 1: register all top-level declarations
+        foreach (var decl in module.Declarations)
+            RegisterDeclaration(decl);
+
+        // Pass 2: bind bodies (resolve identifiers within function/command bodies)
+        foreach (var decl in module.Declarations)
+            BindDeclarationBody(decl);
+
+        return _result;
+    }
+
+    // ========================================================================
+    // Pass 1: Declaration Registration
+    // ========================================================================
+
+    private void RegisterDeclaration(Declaration decl)
+    {
+        switch (decl)
+        {
+            case TypeDecl td:
+                RegisterType(td);
+                break;
+            case EnumDecl ed:
+                RegisterEnum(ed);
+                break;
+            case FlagsDecl fd:
+                RegisterFlags(fd);
+                break;
+            case FunctionDecl funcDecl:
+                RegisterFunction(funcDecl);
+                break;
+            case LetDecl ld:
+                RegisterLet(ld);
+                break;
+            case CommandDecl cd:
+                RegisterCommand(cd);
+                break;
+            case ImportDecl:
+                // Imports are handled separately (module resolution)
+                break;
+        }
+    }
+
+    private void RegisterType(TypeDecl decl)
+    {
+        var properties = decl.Properties.Select(p =>
+            new PropertySymbol(p.Name, p.Type, p.IsOptional)).ToList();
+
+        var symbol = new TypeSymbol(decl.Name, decl.BaseType, properties)
+        {
+            IsExported = decl.IsExported,
+            DeclarationLine = decl.Line
+        };
+
+        if (!_currentScope.Declare(symbol))
+            ReportDuplicate(decl.Name, decl.Line);
+
+        _result.RecordResolution(decl, symbol);
+    }
+
+    private void RegisterEnum(EnumDecl decl)
+    {
+        var members = decl.Members.Select(m =>
+            new EnumMemberSymbol(m, decl.Name)).ToList();
+
+        var symbol = new EnumSymbol(decl.Name, decl.MemberType, members)
+        {
+            IsExported = decl.IsExported,
+            DeclarationLine = decl.Line
+        };
+
+        if (!_currentScope.Declare(symbol))
+            ReportDuplicate(decl.Name, decl.Line);
+
+        // Enum members are injected into module scope (Cop convention)
+        foreach (var member in members)
+            _currentScope.Declare(member);
+
+        _result.RecordResolution(decl, symbol);
+    }
+
+    private void RegisterFlags(FlagsDecl decl)
+    {
+        // Flags are treated as enums with bitwise semantics
+        var members = decl.Members.Select(m =>
+            new EnumMemberSymbol(m, decl.Name)).ToList();
+
+        var symbol = new EnumSymbol(decl.Name, null, members)
+        {
+            IsExported = decl.IsExported,
+            DeclarationLine = decl.Line
+        };
+
+        if (!_currentScope.Declare(symbol))
+            ReportDuplicate(decl.Name, decl.Line);
+
+        foreach (var member in members)
+            _currentScope.Declare(member);
+
+        _result.RecordResolution(decl, symbol);
+    }
+
+    private void RegisterFunction(FunctionDecl decl)
+    {
+        var parameters = decl.Params.Select((p, i) =>
+            new ParameterSymbol(p.Name, p.Type, i)).ToList();
+
+        var callableKind = decl.Body is BlockBody
+            ? CallableKind.Command
+            : decl.ReturnType?.Name == "bool" || decl.Guard is not null
+                ? CallableKind.Predicate
+                : CallableKind.Function;
+
+        var symbol = new FunctionSymbol(decl.Name, callableKind, parameters, decl.ReturnType)
+        {
+            NarrowingType = decl.Guard is not null ? decl.ReturnType : null,
+            Declaration = decl,
+            IsExported = decl.IsExported,
+            DeclarationLine = decl.Line
+        };
+
+        if (!_currentScope.Declare(symbol))
+        {
+            // Function overloading: Cop allows multiple predicates with same name (different guards)
+            // Only report as duplicate if it's not a function
+            var existing = _currentScope.ResolveLocal(decl.Name);
+            if (existing is not FunctionSymbol)
+                ReportDuplicate(decl.Name, decl.Line);
+        }
+
+        _result.RecordResolution(decl, symbol);
+    }
+
+    private void RegisterLet(LetDecl decl)
+    {
+        var symbol = new VariableSymbol(decl.Name, decl.TypeAnnotation, isReadOnly: true)
+        {
+            IsExported = decl.IsExported,
+            DeclarationLine = decl.Line
+        };
+
+        if (!_currentScope.Declare(symbol))
+            ReportDuplicate(decl.Name, decl.Line);
+
+        _result.RecordResolution(decl, symbol);
+    }
+
+    private void RegisterCommand(CommandDecl decl)
+    {
+        var parameters = (decl.Parameters ?? []).Select((p, i) =>
+            new ParameterSymbol(p, null, i)).ToList();
+
+        var symbol = new FunctionSymbol(decl.Name, CallableKind.Command, parameters)
+        {
+            IsExported = decl.IsExported,
+            DeclarationLine = decl.Line
+        };
+
+        if (!_currentScope.Declare(symbol))
+            ReportDuplicate(decl.Name, decl.Line);
+
+        _result.RecordResolution(decl, symbol);
+    }
+
+    // ========================================================================
+    // Pass 2: Body Binding (name resolution within expressions)
+    // ========================================================================
+
+    private void BindDeclarationBody(Declaration decl)
+    {
+        switch (decl)
+        {
+            case FunctionDecl funcDecl:
+                BindFunctionBody(funcDecl);
+                break;
+            case CommandDecl cmdDecl:
+                BindCommandBody(cmdDecl);
+                break;
+            case LetDecl letDecl:
+                BindExpression(letDecl.Value);
+                break;
+        }
+    }
+
+    private void BindFunctionBody(FunctionDecl decl)
+    {
+        var funcScope = _currentScope.CreateChild($"function:{decl.Name}");
+        _result.RecordScope(decl, funcScope);
+
+        // Add parameters to function scope
+        foreach (var param in decl.Params)
+        {
+            var paramSymbol = new ParameterSymbol(param.Name, param.Type, 0);
+            funcScope.Declare(paramSymbol);
+        }
+
+        var previousScope = _currentScope;
+        _currentScope = funcScope;
+
+        // Bind guard if present
+        if (decl.Guard is not null)
+            BindExpression(decl.Guard);
+
+        // Bind body
+        switch (decl.Body)
+        {
+            case ExpressionBody eb:
+                BindExpression(eb.Expr);
+                break;
+            case MappingBody mb:
+                foreach (var mapping in mb.Mappings)
+                    BindExpression(mapping.Value);
+                break;
+        }
+
+        _currentScope = previousScope;
+    }
+
+    private void BindCommandBody(CommandDecl decl)
+    {
+        var cmdScope = _currentScope.CreateChild($"command:{decl.Name}");
+        _result.RecordScope(decl, cmdScope);
+
+        // Add command parameters to scope
+        if (decl.Parameters is not null)
+        {
+            foreach (var param in decl.Parameters)
+            {
+                var paramSymbol = new ParameterSymbol(param, null, 0);
+                cmdScope.Declare(paramSymbol);
+            }
+        }
+
+        var previousScope = _currentScope;
+        _currentScope = cmdScope;
+
+        foreach (var stmt in decl.Body)
+            BindStatement(stmt);
+
+        _currentScope = previousScope;
+    }
+
+    // ========================================================================
+    // Statement Binding
+    // ========================================================================
+
+    private void BindStatement(Statement stmt)
+    {
+        switch (stmt)
+        {
+            case LetStatement ls:
+                BindExpression(ls.Value);
+                var varSymbol = new VariableSymbol(ls.Name, ls.TypeAnnotation, isReadOnly: true)
+                {
+                    DeclarationLine = ls.Line
+                };
+                _currentScope.Declare(varSymbol);
+                _result.RecordResolution(ls, varSymbol);
+                break;
+
+            case ForEachStatement fs:
+                BindExpression(fs.Collection);
+                var loopScope = _currentScope.CreateChild("foreach");
+                var iterVar = new VariableSymbol(fs.Variable, null, isReadOnly: true)
+                {
+                    DeclarationLine = fs.Line
+                };
+                loopScope.Declare(iterVar);
+                _result.RecordResolution(fs, iterVar);
+
+                var prev = _currentScope;
+                _currentScope = loopScope;
+                foreach (var s in fs.Body)
+                    BindStatement(s);
+                _currentScope = prev;
+                break;
+
+            case ExpressionStatement es:
+                BindExpression(es.Expr);
+                break;
+
+            case PipelineStatement ps:
+                BindExpression(ps.Source);
+                foreach (var stage in ps.Stages)
+                    BindExpression(stage.Expr);
+                break;
+        }
+    }
+
+    // ========================================================================
+    // Expression Binding
+    // ========================================================================
+
+    private void BindExpression(Expression expr)
+    {
+        switch (expr)
+        {
+            case IdentifierExpr id:
+                var symbol = _currentScope.Resolve(id.Name);
+                if (symbol is not null)
+                    _result.RecordResolution(id, symbol);
+                // Note: unresolved identifiers are NOT errors in Cop because
+                // they may be runtime-provided (dynamic provider fields, 
+                // external module exports, or short predicate names).
+                // The evaluator handles missing bindings at runtime.
+                break;
+
+            case LiteralExpr:
+                // No binding needed for literals
+                break;
+
+            case BinaryExpr be:
+                BindExpression(be.Left);
+                BindExpression(be.Right);
+                break;
+
+            case UnaryExpr ue:
+                BindExpression(ue.Operand);
+                break;
+
+            case CallExpr ce:
+                BindExpression(ce.Callee);
+                foreach (var arg in ce.Args)
+                    BindExpression(arg);
+                break;
+
+            case MemberExpr me:
+                BindExpression(me.Object);
+                // Member names are resolved dynamically (provider fields, type properties)
+                break;
+
+            case IndexExpr ie:
+                BindExpression(ie.Object);
+                BindExpression(ie.Index);
+                break;
+
+            case LambdaExpr le:
+                var lambdaScope = _currentScope.CreateChild("lambda");
+                foreach (var p in le.Params)
+                {
+                    var ps = new ParameterSymbol(p.Name, p.Type, 0);
+                    lambdaScope.Declare(ps);
+                }
+                var outer = _currentScope;
+                _currentScope = lambdaScope;
+                BindExpression(le.Body);
+                _currentScope = outer;
+                break;
+
+            case ConditionalExpr cond:
+                BindExpression(cond.Condition);
+                BindExpression(cond.Then);
+                BindExpression(cond.Else);
+                break;
+
+            case MatchExpr match:
+                BindExpression(match.Discriminant);
+                foreach (var arm in match.Arms)
+                    BindExpression(arm.Body);
+                break;
+
+            case ListExpr list:
+                foreach (var elem in list.Elements)
+                    BindExpression(elem);
+                break;
+
+            case ObjectExpr obj:
+                foreach (var field in obj.Fields)
+                    BindExpression(field.Value);
+                break;
+
+            case InterpolatedStringExpr interp:
+                foreach (var part in interp.Parts)
+                {
+                    if (part is ExpressionPart ep)
+                        BindExpression(ep.Expr);
+                }
+                break;
+
+            case FilterExpr filter:
+                BindExpression(filter.Collection);
+                BindExpression(filter.Predicate);
+                break;
+        }
+    }
+
+    // ========================================================================
+    // Diagnostics
+    // ========================================================================
+
+    private void ReportDuplicate(string name, int line)
+    {
+        _result.ReportDiagnostic(
+            DiagnosticSeverity.Warning,
+            $"Duplicate declaration '{name}'",
+            line,
+            _filePath);
+    }
+}

@@ -337,6 +337,22 @@ public class ScriptParser
             _filePath, Current.Line);
     }
 
+    /// <summary>
+    /// Parses a return type annotation: either a simple identifier (e.g., Object)
+    /// or a collection type (e.g., [object], [Request]).
+    /// </summary>
+    private string ParseReturnType()
+    {
+        if (Current.Kind == TokenKind.LBracket)
+        {
+            Advance(); // consume '['
+            var elementType = Expect(TokenKind.Identifier).Value;
+            Expect(TokenKind.RBracket);
+            return $"[{elementType}]";
+        }
+        return Expect(TokenKind.Identifier).Value;
+    }
+
     private List<PropertyDefinition> ParsePropertyBlock()
     {
         Expect(TokenKind.LBrace);
@@ -455,7 +471,7 @@ public class ScriptParser
             if (Current.Kind == TokenKind.Colon)
             {
                 Advance(); // consume ':'
-                var returnType = Expect(TokenKind.Identifier).Value;
+                var returnType = ParseReturnType();
                 Expect(TokenKind.Equals);
                 ExpectAny(TokenKind.IntrinsicKeyword, TokenKind.ProviderKeyword);
                 return new FunctionDefinition(name.Value, "", returnType, [], [], line, isExported, DocComment: docComment, IsIntrinsic: true);
@@ -548,7 +564,7 @@ public class ScriptParser
         if (Current.Kind == TokenKind.Colon)
         {
             Advance(); // consume ':'
-            var returnType = Expect(TokenKind.Identifier).Value;
+            var returnType = ParseReturnType();
             Expect(TokenKind.Equals);
             ExpectAny(TokenKind.IntrinsicKeyword, TokenKind.ProviderKeyword);
             return new FunctionDefinition(name.Value, inputType, returnType, parameters, [], line, isExported, Constraint: constraint, DocComment: docComment, IsIntrinsic: true);

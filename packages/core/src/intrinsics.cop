@@ -7,13 +7,13 @@
 ## Example: object('sample').Widgets returns the Widgets collection.
 export function object(name : string) : Object = intrinsic
 
-## Returns a Source handle for the named streaming provider.
+## Returns an async streaming collection from the named provider.
 ## The stream produces items asynchronously (e.g., incoming HTTP requests).
-export function source(name : string) : Source = intrinsic
+export function source(name : string) : [object] = intrinsic
 
-## Returns a Sink handle for the named streaming provider.
-## The sink consumes items produced by the pipeline (e.g., HTTP responses).
-export function sink(name : string) : Sink = intrinsic
+## Returns an async output collection for the named streaming provider.
+## Items pushed into the sink are delivered to the provider's output channel.
+export function sink(name : string) : [object] = intrinsic
 
 ## Reads the content of a file at the given path (sandboxed to project root).
 ## Returns the file content as a string.

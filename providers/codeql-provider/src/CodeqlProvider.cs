@@ -1,0 +1,272 @@
+using System.Text.Json;
+using Cop.Core;
+using Cop.Lang;
+
+namespace Cop.Providers;
+
+/// <summary>
+/// Provider that reads CodeQL SARIF analysis results and exposes them as cop collections.
+/// Supports loading SARIF files (the standard output format of `codeql database analyze`).
+/// Import with: import codeql
+/// </summary>
+public class CodeqlProvider : ObjectProvider, ICapabilityProvider
+{
+    public override ObjectFormat SupportedFormats => ObjectFormat.ObjectCollections;
+
+    public override ReadOnlyMemory<byte> GetSchema()
+    {
+        var schema = new ProviderSchema
+        {
+            Collections =
+            [
+                new ProviderCollectionSchema { Name = "Results", ItemType = "Result" },
+                new ProviderCollectionSchema { Name = "Rules", ItemType = "Rule" }
+            ],
+            Types =
+            [
+                new ProviderTypeSchema
+                {
+                    Name = "Result",
+                    Properties =
+                    [
+                        new ProviderPropertySchema { Name = "RuleId" },
+                        new ProviderPropertySchema { Name = "Message" },
+                        new ProviderPropertySchema { Name = "Severity" },
+                        new ProviderPropertySchema { Name = "FilePath" },
+                        new ProviderPropertySchema { Name = "StartLine", Type = "int" },
+                        new ProviderPropertySchema { Name = "EndLine", Type = "int" },
+                        new ProviderPropertySchema { Name = "StartColumn", Type = "int" },
+                        new ProviderPropertySchema { Name = "EndColumn", Type = "int" }
+                    ]
+                },
+                new ProviderTypeSchema
+                {
+                    Name = "Rule",
+                    Properties =
+                    [
+                        new ProviderPropertySchema { Name = "Id" },
+                        new ProviderPropertySchema { Name = "Name" },
+                        new ProviderPropertySchema { Name = "Description" },
+                        new ProviderPropertySchema { Name = "Severity" },
+                        new ProviderPropertySchema { Name = "Tags" },
+                        new ProviderPropertySchema { Name = "Precision" }
+                    ]
+                }
+            ]
+        };
+        return schema.ToJson();
+    }
+
+    public override Dictionary<string, List<object>>? QueryCollections(ProviderQuery query)
+    {
+        // Auto-discover SARIF files in the root path
+        var results = new List<object>();
+        var rules = new List<object>();
+
+        if (!string.IsNullOrEmpty(query.RootPath) && Directory.Exists(query.RootPath))
+        {
+            var sarifFiles = Directory.GetFiles(query.RootPath, "*.sarif", SearchOption.TopDirectoryOnly);
+            foreach (var file in sarifFiles)
+            {
+                LoadSarifFile(file, results, rules);
+            }
+        }
+
+        return new Dictionary<string, List<object>>
+        {
+            ["Results"] = results,
+            ["Rules"] = rules
+        };
+    }
+
+    public override RuntimeBindings? GetRuntimeBindings() => new()
+    {
+        ClrTypeMappings = new Dictionary<Type, string>
+        {
+            [typeof(CodeqlResult)] = "Result",
+            [typeof(CodeqlRule)] = "Rule"
+        },
+        Accessors = new Dictionary<string, Dictionary<string, Func<object, object?>>>
+        {
+            ["Result"] = new()
+            {
+                ["RuleId"] = o => ((CodeqlResult)o).RuleId,
+                ["Message"] = o => ((CodeqlResult)o).Message,
+                ["Severity"] = o => ((CodeqlResult)o).Severity,
+                ["FilePath"] = o => ((CodeqlResult)o).FilePath,
+                ["StartLine"] = o => ((CodeqlResult)o).StartLine,
+                ["EndLine"] = o => ((CodeqlResult)o).EndLine,
+                ["StartColumn"] = o => ((CodeqlResult)o).StartColumn,
+                ["EndColumn"] = o => ((CodeqlResult)o).EndColumn
+            },
+            ["Rule"] = new()
+            {
+                ["Id"] = o => ((CodeqlRule)o).Id,
+                ["Name"] = o => ((CodeqlRule)o).Name,
+                ["Description"] = o => ((CodeqlRule)o).Description,
+                ["Severity"] = o => ((CodeqlRule)o).Severity,
+                ["Tags"] = o => ((CodeqlRule)o).Tags,
+                ["Precision"] = o => ((CodeqlRule)o).Precision
+            }
+        }
+    };
+
+    public void RegisterCapabilities(TypeRegistry registry, string rootPath)
+    {
+        // Register codeql.Load(path) function for loading SARIF from a specific file
+        registry.RegisterProviderFunction("codeql", "Load", args =>
+        {
+            if (args.Count < 1)
+                throw new InvalidOperationException("codeql.Load requires 1 argument: codeql.Load('results.sarif')");
+
+            var filePath = args[0]?.ToString()
+                ?? throw new InvalidOperationException("codeql.Load: file path cannot be null");
+
+            var fullPath = Path.IsPathRooted(filePath) ? filePath : Path.Combine(rootPath, filePath);
+            if (!File.Exists(fullPath))
+                throw new InvalidOperationException($"codeql.Load: SARIF file not found: {fullPath}");
+
+            var results = new List<object>();
+            var rules = new List<object>();
+            LoadSarifFile(fullPath, results, rules);
+
+            return Task.FromResult<object?>(results);
+        });
+    }
+
+    private static void LoadSarifFile(string filePath, List<object> results, List<object> rules)
+    {
+        try
+        {
+            var json = File.ReadAllBytes(filePath);
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (!root.TryGetProperty("runs", out var runs))
+                return;
+
+            foreach (var run in runs.EnumerateArray())
+            {
+                // Extract rules from the tool driver
+                var ruleMap = new Dictionary<string, (string Severity, string Name, string Description, string Tags, string Precision)>();
+                if (run.TryGetProperty("tool", out var tool) &&
+                    tool.TryGetProperty("driver", out var driver) &&
+                    driver.TryGetProperty("rules", out var rulesArray))
+                {
+                    foreach (var rule in rulesArray.EnumerateArray())
+                    {
+                        var id = rule.GetProperty("id").GetString() ?? "";
+                        var name = rule.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+                        var desc = "";
+                        if (rule.TryGetProperty("shortDescription", out var sd) && sd.TryGetProperty("text", out var sdt))
+                            desc = sdt.GetString() ?? "";
+                        else if (rule.TryGetProperty("fullDescription", out var fd) && fd.TryGetProperty("text", out var fdt))
+                            desc = fdt.GetString() ?? "";
+
+                        var severity = "warning";
+                        var precision = "";
+                        if (rule.TryGetProperty("properties", out var props))
+                        {
+                            if (props.TryGetProperty("problem.severity", out var sev))
+                                severity = sev.GetString() ?? "warning";
+                            if (props.TryGetProperty("precision", out var prec))
+                                precision = prec.GetString() ?? "";
+                        }
+
+                        var tags = "";
+                        if (rule.TryGetProperty("properties", out var p2) && p2.TryGetProperty("tags", out var tagsArr))
+                        {
+                            var tagList = new List<string>();
+                            foreach (var t in tagsArr.EnumerateArray())
+                                tagList.Add(t.GetString() ?? "");
+                            tags = string.Join(", ", tagList);
+                        }
+
+                        ruleMap[id] = (severity, name, desc, tags, precision);
+                        rules.Add(new CodeqlRule(id, name, desc, severity, tags, precision));
+                    }
+                }
+
+                // Extract results
+                if (!run.TryGetProperty("results", out var resultsArray))
+                    continue;
+
+                foreach (var result in resultsArray.EnumerateArray())
+                {
+                    var ruleId = result.TryGetProperty("ruleId", out var rid) ? rid.GetString() ?? "" : "";
+                    var message = "";
+                    if (result.TryGetProperty("message", out var msg) && msg.TryGetProperty("text", out var msgText))
+                        message = msgText.GetString() ?? "";
+
+                    var severity = "warning";
+                    if (ruleMap.TryGetValue(ruleId, out var ruleInfo))
+                        severity = ruleInfo.Severity;
+                    if (result.TryGetProperty("level", out var lvl))
+                    {
+                        severity = lvl.GetString() switch
+                        {
+                            "error" => "error",
+                            "warning" => "warning",
+                            "note" => "note",
+                            "none" => "recommendation",
+                            _ => severity
+                        };
+                    }
+
+                    var filePath2 = "";
+                    int startLine = 0, endLine = 0, startCol = 0, endCol = 0;
+
+                    if (result.TryGetProperty("locations", out var locs))
+                    {
+                        foreach (var loc in locs.EnumerateArray())
+                        {
+                            if (loc.TryGetProperty("physicalLocation", out var physLoc))
+                            {
+                                if (physLoc.TryGetProperty("artifactLocation", out var artLoc) &&
+                                    artLoc.TryGetProperty("uri", out var uri))
+                                    filePath2 = uri.GetString() ?? "";
+
+                                if (physLoc.TryGetProperty("region", out var region))
+                                {
+                                    startLine = region.TryGetProperty("startLine", out var sl) ? sl.GetInt32() : 0;
+                                    endLine = region.TryGetProperty("endLine", out var el) ? el.GetInt32() : startLine;
+                                    startCol = region.TryGetProperty("startColumn", out var sc) ? sc.GetInt32() : 0;
+                                    endCol = region.TryGetProperty("endColumn", out var ec) ? ec.GetInt32() : 0;
+                                }
+                            }
+                            break; // only use first location
+                        }
+                    }
+
+                    results.Add(new CodeqlResult(ruleId, message, severity, filePath2, startLine, endLine, startCol, endCol));
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // Skip malformed SARIF files
+        }
+    }
+
+    public override string ToString() => "CodeqlProvider";
+}
+
+/// <summary>CodeQL analysis result (alert/finding from SARIF)</summary>
+public record CodeqlResult(
+    string RuleId,
+    string Message,
+    string Severity,
+    string FilePath,
+    int StartLine,
+    int EndLine,
+    int StartColumn,
+    int EndColumn);
+
+/// <summary>CodeQL rule definition from SARIF</summary>
+public record CodeqlRule(
+    string Id,
+    string Name,
+    string Description,
+    string Severity,
+    string Tags,
+    string Precision);

@@ -114,7 +114,7 @@ cop> 5!
 
 ### Running Commands
 
-Type a command name to run it. Commands are `foreach` blocks defined in your `.cop` file:
+Type an UPPERCASE function name to run it. These entry points are typically `foreach` blocks defined in your `.cop` file:
 
 ```
 cop> CHECK
@@ -142,7 +142,7 @@ Completions trigger automatically when you type `:` or `.` — no need to press 
 | `clear!` | `c!` | Clear the screen |
 | `reload!` | `r!` | Force reload `.cop` files from disk |
 | `src!` | `s!` | Print the full source of loaded `.cop` files with line numbers |
-| `list!` | `l!` | List available commands, let bindings, and collections |
+| `list!` | `l!` | List available entry-point functions, let bindings, and collections |
 | `help!` | `h!` | Show help |
 
 All built-in commands require the `!` suffix to distinguish them from cop identifiers. Files are auto-reloaded when changed — `reload!` is rarely needed.

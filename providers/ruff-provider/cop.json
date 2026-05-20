@@ -1,0 +1,15 @@
+{
+  "name": "ruff",
+  "version": "0.1.0",
+  "description": "Run Ruff on Python projects and expose diagnostics as cop collections",
+  "title": "Ruff Data Provider",
+  "authors": "cop-team",
+  "tags": [
+    "ruff",
+    "python",
+    "linting",
+    "static-analysis"
+  ],
+  "provider": "python",
+  "providerEntry": "src/main.py"
+}

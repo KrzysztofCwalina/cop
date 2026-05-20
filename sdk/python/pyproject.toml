@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cop-provider-sdk"
+version = "0.1.0"
+description = "SDK for building Cop data providers in Python"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+
+[project.urls]
+Homepage = "https://github.com/KrzysztofCwalina/cop"

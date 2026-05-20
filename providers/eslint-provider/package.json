@@ -1,0 +1,10 @@
+{
+  "name": "eslint-provider",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cop provider that runs ESLint and exposes diagnostics",
+  "main": "src/index.js",
+  "dependencies": {
+    "eslint": "^9.0.0"
+  }
+}

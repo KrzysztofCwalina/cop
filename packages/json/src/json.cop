@@ -2,8 +2,9 @@
 # Provides json.Parse() for loading and querying JSON files.
 # Import with: import json
 
-## Parses a JSON file into a typed collection.
+## Parses a JSON file into a typed object or collection.
 ## The path is relative to the project root.
 ## The typeName must match a type declared in the current script.
-## Example: json.Parse('settings.json', 'Config') returns [Config]
-export function Parse(path : string, typeName : string) : Collection = provider
+## If the JSON root is an array, returns a collection. If it is an object, returns a single typed instance.
+## Example: json.Parse('people.json', 'Person') returns [Person] or Person depending on the JSON shape.
+export function Parse(path : string, typeName : string) : object = provider

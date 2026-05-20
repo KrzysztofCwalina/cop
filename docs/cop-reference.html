@@ -159,7 +159,9 @@ const categories = [
     "packages": [
       "code",
       "code-analysis",
-      "code-layering"
+      "code-layering",
+      "codeql",
+      "codeql-export"
     ]
   },
   {
@@ -222,11 +224,11 @@ const packages = {
     "samples": [
       {
         "title": "Find long methods",
-        "code": "import code\n\npredicate isLong(Method) => Method.LineCount:greaterThan(50)\n\nforeach Types => '{Type.Name}':Methods:isLong\n    => '  {Method.Name} ({Method.LineCount} lines)'"
+        "code": "import code\n\npredicate isLong(Method) => Method.LineCount:greaterThan(50)\n\ncommand main = foreach Types => '{Type.Name}':Methods:isLong\n    => '  {Method.Name} ({Method.LineCount} lines)'"
       },
       {
         "title": "List all public classes",
-        "code": "import code\n\nforeach Types:isPublic => '{Type.Name} ({Type.Kind})'"
+        "code": "import code\n\ncommand main = foreach Types:isPublic => '{Type.Name} ({Type.Kind})'"
       }
     ],
     "collections": [],
@@ -1583,6 +1585,38 @@ const packages = {
     "checks": [],
     "commands": []
   },
+  "codeql": {
+    "label": "codeql",
+    "overview": "Query CodeQL analysis results (SARIF) as cop collections",
+    "samples": [
+      {
+        "title": "Query results",
+        "code": "# Sample: Query CodeQL SARIF results\n# Prerequisites: Run `codeql database analyze` with --format=sarif-latest first\nimport codeql\n\n# Load results from a SARIF file\nlet results = codeql.Load('results.sarif')\n\n# Filter to errors only\nlet errors = results:isError\n\n# Show all high-severity findings\ncommand main = errors"
+      }
+    ],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [],
+    "checks": [],
+    "commands": []
+  },
+  "codeql-export": {
+    "label": "codeql-export",
+    "overview": "Build and export CodeQL .ql query files programmatically from cop",
+    "samples": [
+      {
+        "title": "Generate query",
+        "code": "# Sample: Generate a CodeQL query that finds public abstract classes\nimport codeql-export\n\nlet publicAbstract = codeql-export.qlQuery(\n  'Find public abstract classes',\n  'Finds classes that are both public and abstract',\n  codeql-export.qlFrom('c', 'Class'),\n  codeql-export.qlAnd(\n    codeql-export.qlModifier('c', 'public'),\n    codeql-export.qlModifier('c', 'abstract')\n  ),\n  'c, \"Class \" + c.getName() + \" is public and abstract\"'\n)\n\ncommand main = save('codeql/public-abstract-classes.ql', publicAbstract)"
+      }
+    ],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [],
+    "checks": [],
+    "commands": []
+  },
   "cop": {
     "label": "cop",
     "overview": "Structural analysis of .cop source files — types, predicates, functions, imports",
@@ -1604,7 +1638,7 @@ const packages = {
       },
       {
         "title": "String and collection operations",
-        "code": "let names = ['Alice' 'Bob' 'Charlie' 'Diana']\nlet count = names.Count\nlet first = names.First\n\nprint('{count} people, first is {first}')\n\nforeach names => 'Hello, {item}!'"
+        "code": "let names = ['Alice' 'Bob' 'Charlie' 'Diana']\nlet count = names.Count\nlet first = names.First\n\nprint('{count} people, first is {first}')\n\ncommand main = foreach names => 'Hello, {item}!'"
       },
       {
         "title": "Variables and arithmetic",
@@ -1613,19 +1647,9 @@ const packages = {
     ],
     "collections": [],
     "types": {
-      "Source": {
-        "desc": "An async streaming collection source.\nUse a typed annotation to declare the item type produced by the stream:\n  export let Requests : [Request] = source('http')\nWithout annotation, stream items are untyped.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L21",
-        "props": []
-      },
-      "Sink": {
-        "desc": "An async data sink — output target in streaming pipelines.\nUse a typed annotation to declare the item type the sink accepts:\n  export let RESPONSES : [Response] = sink('http')\nWithout annotation, the sink accepts any item.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L27",
-        "props": []
-      },
       "Formattable": {
         "desc": "A template bound to data, ready to be resolved into a string.\nItems is the collection of data to format, Template is the {Property} interpolation pattern,\nand Separator is the string used to join results (defaults to newline).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L56",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L48",
         "props": [
           {
             "name": "Items",
@@ -1646,7 +1670,7 @@ const packages = {
       },
       "Error": {
         "desc": "Represents an operational error flowing through a pipeline.\nErrors are not code bugs (use fail() for those). They represent external failures\nthat code cannot prevent: network timeouts, I/O failures, malformed input.\nUse isError predicate to detect errors in pipeline items.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L72",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L64",
         "props": [
           {
             "name": "Message",
@@ -1672,7 +1696,7 @@ const packages = {
       },
       "Program": {
         "desc": "Represents the running program's context.\nProvides access to command-line arguments passed to the cop invocation.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L96",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L88",
         "props": [
           {
             "name": "Args",
@@ -1683,7 +1707,7 @@ const packages = {
       },
       "Collection": {
         "desc": "The built-in ordered collection type.\nDeclared as [T] in property types (e.g., Types : [Type]).\nImmutable — all operations return new collections without modifying the original.\nProperties: Count (int), First (item or nic), Last (item or nic),\nRest (collection without first element), Single (item if exactly one, or nic).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L141",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L133",
         "props": [
           {
             "name": "Count",
@@ -1714,7 +1738,7 @@ const packages = {
       },
       "Query": {
         "desc": "A deferred query over a collection (like C# IQueryable).\nChaining where/orderBy/select builds an expression tree without materializing.\nThe query executes when consumed by foreach, Count, print, or assigned to a Collection.\nProviders may optimize by pushing the full query expression down.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L153",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L145",
         "props": [
           {
             "name": "Count",
@@ -1739,7 +1763,7 @@ const packages = {
         "name": "isError",
         "appliesTo": "Object",
         "desc": "Returns true if the current item is an Error value.\nWorks as a bare predicate or as a filter: items:isError\nExample: predicate handleError(Object:isError) => print('{item.Message}')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L86"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L78"
       }
     ],
     "functions": [
@@ -1753,23 +1777,23 @@ const packages = {
       {
         "name": "source",
         "params": "name: string",
-        "returns": "Source",
-        "desc": "Returns a Source handle for the named streaming provider.\nThe stream produces items asynchronously (e.g., incoming HTTP requests).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L31"
+        "returns": "[object]",
+        "desc": "Returns an async streaming collection from the named provider.\nUse a typed annotation to declare the item type produced by the stream:\n  export let Requests : [Request] = source('http')\nWithout annotation, stream items are untyped objects.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L21"
       },
       {
         "name": "sink",
         "params": "name: string",
-        "returns": "Sink",
-        "desc": "Returns a Sink handle for the named streaming provider.\nThe sink consumes items produced by the pipeline (e.g., HTTP responses).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L35"
+        "returns": "[object]",
+        "desc": "Returns an async output collection for the named streaming provider.\nItems pushed into the sink are delivered to the provider's output channel.\n  export let RESPONSES : [Response] = sink('http')\nWithout annotation, the sink accepts any item.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L27"
       },
       {
         "name": "read",
         "params": "path: string",
         "returns": "string",
         "desc": "Reads the content of a file at the given path (sandboxed to project root).\nReturns the file content as a string.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L39"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L31"
       },
       {
         "name": "text",
@@ -1777,7 +1801,7 @@ const packages = {
         "returns": "",
         "appliesTo": "string",
         "desc": "Converts a string to text (identity — returns string as-is).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L42"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L34"
       },
       {
         "name": "text",
@@ -1785,7 +1809,7 @@ const packages = {
         "returns": "",
         "appliesTo": "bool",
         "desc": "Converts a bool to text: true => 'true', false => 'false'.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L45"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L37"
       },
       {
         "name": "text",
@@ -1793,7 +1817,7 @@ const packages = {
         "returns": "string",
         "appliesTo": "int",
         "desc": "Converts an integer to its decimal text representation.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L48"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L40"
       },
       {
         "name": "text",
@@ -1801,7 +1825,7 @@ const packages = {
         "returns": "string",
         "appliesTo": "bytes",
         "desc": "Decodes a byte array as UTF-8 text.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L51"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L43"
       },
       {
         "name": "text",
@@ -1809,7 +1833,7 @@ const packages = {
         "returns": "string",
         "appliesTo": "Formattable",
         "desc": "Converts a Formattable to text by resolving the Template against each item\nin Items using {Property} interpolation, then joining results with Separator.\nWhen used in a pipeline: collection.text('{Item.Name}') creates a Formattable\nfrom the pipeline collection and resolves it into a single joined string.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L66"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L58"
       },
       {
         "name": "error",
@@ -1817,56 +1841,56 @@ const packages = {
         "returns": "Error",
         "appliesTo": "string",
         "desc": "Creates an Error value with the given message string.\nExample: error('connection timeout')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L81"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L73"
       },
       {
         "name": "fail",
         "params": "message: string",
         "returns": "",
         "desc": "Terminates execution immediately with a fatal diagnostic.\nUse for programmer assertions — situations that should never occur.\nCan be used standalone: fail('invariant violated')\nOr in pipeline: foreach Items:badCondition => fail('{item.Name} is invalid')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L92"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L84"
       },
       {
         "name": "program",
         "params": "",
         "returns": "Program",
         "desc": "Returns the current program context.\nProvides access to command-line arguments passed to the cop invocation.\nExample: predicate verbose(Program) => program().Args:contains('/v')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L103"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L95"
       },
       {
         "name": "pathMatches",
         "params": "path: string, pattern: string",
         "returns": "bool",
         "desc": "Glob-matches a file path against a pattern.\nSupports **, *, ? wildcards. Returns true if the path matches.\nExample: pathMatches(Statement.File.Path, '**/Tests/**')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L108"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L100"
       },
       {
         "name": "print",
         "params": "message: string",
         "returns": "string",
         "desc": "Prints a message to the output.\nUsed standalone: print('hello {Name}')\nUsed in pipeline: foreach Types => print('{item.Name}')\nThe template supports {Property} interpolation and {@style} formatting.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L114"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L106"
       },
       {
         "name": "save",
         "params": "path: string, content: string",
         "returns": "",
         "desc": "Saves content to a file at the specified path.\nUsed in pipeline: foreach Types:isPublic => save('api.txt', '{item.Name}')\nCreates or appends to the file with the rendered template output.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L119"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L111"
       },
       {
         "name": "debug",
         "params": "message: string",
         "returns": "",
         "desc": "Outputs a diagnostic message to the debug log (--diag flag).\nSame template semantics as print but only visible when diagnostics are enabled.\nUsed for troubleshooting: debug('{Types.Count} types loaded')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L124"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L116"
       },
       {
         "name": "assert",
         "params": "condition: bool, description: string",
         "returns": "",
         "desc": "Asserts that a condition is true. Fails the test run if false.\nUsed in tests: assert(Types:isPublic.Count > 0, 'should have public types')\nReports pass/fail with the description.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L129"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L121"
       },
       {
         "name": "where",
@@ -1874,7 +1898,7 @@ const packages = {
         "returns": "Collection",
         "appliesTo": "Collection",
         "desc": "Filters items matching a condition. Returns a new collection.\nExample: Types:where(isPublic)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L165"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L157"
       },
       {
         "name": "select",
@@ -1882,7 +1906,7 @@ const packages = {
         "returns": "Collection",
         "appliesTo": "Collection",
         "desc": "Projects each item through a transformation. Returns a new collection.\nExample: Types:select(item.Name)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L169"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L161"
       },
       {
         "name": "any",
@@ -1890,7 +1914,7 @@ const packages = {
         "returns": "bool",
         "appliesTo": "Collection",
         "desc": "Returns true if any item matches a condition.\nExample: Types:any(isAbstract)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L173"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L165"
       },
       {
         "name": "all",
@@ -1898,7 +1922,7 @@ const packages = {
         "returns": "bool",
         "appliesTo": "Collection",
         "desc": "Returns true if all items match a condition.\nExample: Types:all(isPublic)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L177"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L169"
       },
       {
         "name": "none",
@@ -1906,7 +1930,7 @@ const packages = {
         "returns": "bool",
         "appliesTo": "Collection",
         "desc": "Returns true if no item matches a condition.\nExample: Types:none(isObsolete)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L181"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L173"
       },
       {
         "name": "count",
@@ -1914,7 +1938,7 @@ const packages = {
         "returns": "int",
         "appliesTo": "Collection",
         "desc": "Counts items matching a condition.\nExample: Types:count(isPublic)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L185"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L177"
       },
       {
         "name": "contains",
@@ -1922,7 +1946,7 @@ const packages = {
         "returns": "bool",
         "appliesTo": "Collection",
         "desc": "Returns true if collection contains a value (case-insensitive string match).\nExample: names:contains('Foo')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L189"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L181"
       },
       {
         "name": "containsAny",
@@ -1930,7 +1954,7 @@ const packages = {
         "returns": "bool",
         "appliesTo": "Collection",
         "desc": "Returns true if collection contains any of the given values.\nExample: tags:containsAny('api', 'public')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L193"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L185"
       },
       {
         "name": "empty",
@@ -1938,7 +1962,7 @@ const packages = {
         "returns": "bool",
         "appliesTo": "Collection",
         "desc": "Returns true if the collection is empty (Count == 0).\nExample: errors:empty",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L197"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L189"
       },
       {
         "name": "first",
@@ -1946,7 +1970,7 @@ const packages = {
         "returns": "Object",
         "appliesTo": "Collection",
         "desc": "First item matching a condition, or nic.\nExample: Types:first(isPublic)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L201"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L193"
       },
       {
         "name": "last",
@@ -1954,7 +1978,7 @@ const packages = {
         "returns": "Object",
         "appliesTo": "Collection",
         "desc": "Last item matching a condition, or nic.\nExample: Types:last(isPublic)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L205"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L197"
       },
       {
         "name": "single",
@@ -1962,7 +1986,7 @@ const packages = {
         "returns": "Object",
         "appliesTo": "Collection",
         "desc": "The single item matching a condition, or nic if zero or multiple match.\nExample: Types:single(isEntryPoint)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L209"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L201"
       },
       {
         "name": "elementAt",
@@ -1970,7 +1994,7 @@ const packages = {
         "returns": "Object",
         "appliesTo": "Collection",
         "desc": "Item at a specific zero-based index.\nExample: items:elementAt(3)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L213"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L205"
       },
       {
         "name": "orderBy",
@@ -1978,7 +2002,7 @@ const packages = {
         "returns": "Collection",
         "appliesTo": "Collection",
         "desc": "Sorts ascending by a key expression.\nExample: Types:orderBy(item.Name)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L217"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L209"
       },
       {
         "name": "orderByDescending",
@@ -1986,7 +2010,7 @@ const packages = {
         "returns": "Collection",
         "appliesTo": "Collection",
         "desc": "Sorts descending by a key expression.\nExample: Types:orderByDescending(item.Count)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L221"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L213"
       },
       {
         "name": "distinct",
@@ -1994,7 +2018,7 @@ const packages = {
         "returns": "Collection",
         "appliesTo": "Collection",
         "desc": "Removes duplicate items (by string representation).\nExample: names:distinct",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L225"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L217"
       },
       {
         "name": "groupBy",
@@ -2002,7 +2026,7 @@ const packages = {
         "returns": "Collection",
         "appliesTo": "Collection",
         "desc": "Groups items by a key expression. Returns collection of groups.\nExample: Types:groupBy(item.Namespace)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L229"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L221"
       },
       {
         "name": "sum",
@@ -2010,7 +2034,7 @@ const packages = {
         "returns": "int",
         "appliesTo": "Collection",
         "desc": "Sums a numeric property across all items.\nExample: files:sum(item.Size)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L233"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L225"
       },
       {
         "name": "min",
@@ -2018,7 +2042,7 @@ const packages = {
         "returns": "int",
         "appliesTo": "Collection",
         "desc": "Minimum value of a numeric property.\nExample: files:min(item.Size)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L237"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L229"
       },
       {
         "name": "max",
@@ -2026,7 +2050,7 @@ const packages = {
         "returns": "int",
         "appliesTo": "Collection",
         "desc": "Maximum value of a numeric property.\nExample: files:max(item.Size)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L241"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L233"
       },
       {
         "name": "average",
@@ -2034,7 +2058,7 @@ const packages = {
         "returns": "int",
         "appliesTo": "Collection",
         "desc": "Average value of a numeric property.\nExample: files:average(item.Size)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L245"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L237"
       },
       {
         "name": "reduce",
@@ -2042,7 +2066,7 @@ const packages = {
         "returns": "Object",
         "appliesTo": "Collection",
         "desc": "Reduces a collection to a single value using an accumulator expression.\nExample: numbers:reduce(acc + item)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L249"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L241"
       },
       {
         "name": "push",
@@ -2050,7 +2074,7 @@ const packages = {
         "returns": "Collection",
         "appliesTo": "Collection",
         "desc": "Returns a new collection with the item appended at the end.\nExample: let updated = items:push(newItem)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L256"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L248"
       },
       {
         "name": "prepend",
@@ -2058,7 +2082,7 @@ const packages = {
         "returns": "Collection",
         "appliesTo": "Collection",
         "desc": "Returns a new collection with the item prepended at the front.\nExample: let updated = items:prepend(newItem)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L260"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L252"
       },
       {
         "name": "pop",
@@ -2066,7 +2090,7 @@ const packages = {
         "returns": "Collection",
         "appliesTo": "Collection",
         "desc": "Returns a new collection without the last element.\nExample: let shorter = items:pop",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L264"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L256"
       },
       {
         "name": "concat",
@@ -2074,7 +2098,7 @@ const packages = {
         "returns": "Collection",
         "appliesTo": "Collection",
         "desc": "Returns a new collection combining both collections.\nExample: let merged = listA:concat(listB)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L268"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L260"
       },
       {
         "name": "object",
@@ -2086,15 +2110,15 @@ const packages = {
       {
         "name": "source",
         "params": "name: string",
-        "returns": "Source",
-        "desc": "Returns a Source handle for the named streaming provider.\nThe stream produces items asynchronously (e.g., incoming HTTP requests).",
+        "returns": "[object]",
+        "desc": "Returns an async streaming collection from the named provider.\nThe stream produces items asynchronously (e.g., incoming HTTP requests).",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L12"
       },
       {
         "name": "sink",
         "params": "name: string",
-        "returns": "Sink",
-        "desc": "Returns a Sink handle for the named streaming provider.\nThe sink consumes items produced by the pipeline (e.g., HTTP responses).",
+        "returns": "[object]",
+        "desc": "Returns an async output collection for the named streaming provider.\nItems pushed into the sink are delivered to the provider's output channel.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L16"
       },
       {
@@ -3039,7 +3063,7 @@ const packages = {
     "samples": [
       {
         "title": "Check client conventions",
-        "code": "import csharp-library-checks\n\n# Find all client types\nforeach Clients\n    => '{Type.Name}'\n\n# Run all client checks\nCHECK csharp-library-checks"
+        "code": "import csharp-library-checks\n\n# Find all client types\ncommand main = foreach Clients\n    => '{Type.Name}'\n\n# Run all client checks\nCHECK csharp-library-checks"
       }
     ],
     "collections": [],
@@ -3302,8 +3326,8 @@ const packages = {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L100"
       },
       {
-        "name": "csharp-library-checks",
-        "desc": "Combined library checks",
+        "name": "csharp-library-async-checks",
+        "desc": "Combined async/sync library checks",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L104"
       },
       {
@@ -3500,28 +3524,34 @@ const packages = {
     },
     "predicates": [
       {
-        "name": "recentlyModified",
+        "name": "empty",
         "appliesTo": "Folder",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L38"
       },
       {
         "name": "recentlyModified",
-        "appliesTo": "DiskFile",
+        "appliesTo": "Folder",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L39"
       },
       {
-        "name": "stale",
-        "appliesTo": "Folder",
+        "name": "recentlyModified",
+        "appliesTo": "DiskFile",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L40"
       },
       {
         "name": "stale",
-        "appliesTo": "DiskFile",
+        "appliesTo": "Folder",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L41"
+      },
+      {
+        "name": "stale",
+        "appliesTo": "DiskFile",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L42"
       }
     ],
     "functions": [],
@@ -3529,7 +3559,7 @@ const packages = {
       {
         "name": "empty-folders",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L44"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L45"
       }
     ],
     "exports": [
@@ -3673,7 +3703,7 @@ const packages = {
     "samples": [
       {
         "title": "Check client conventions",
-        "code": "import javascript-library-checks\n\nforeach Clients\n    => '{Type.Name}'\n\nCHECK js-client-checks"
+        "code": "import javascript-library-checks\n\ncommand main = foreach Clients\n    => '{Type.Name}'\n\nCHECK js-client-checks"
       }
     ],
     "collections": [],
@@ -3790,7 +3820,7 @@ const packages = {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L27"
       },
       {
-        "name": "javascript-library-checks",
+        "name": "javascript-library-design-checks",
         "desc": "Combined library design checks",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L31"
       },
@@ -3891,11 +3921,11 @@ const packages = {
   },
   "json": {
     "label": "json",
-    "overview": "Parse JSON files into typed collections using user-defined type schemas",
+    "overview": "Parse JSON files into typed objects or collections using user-defined type schemas",
     "samples": [
       {
         "title": "Load and query json data",
-        "code": "import json\n\ntype Config = { name: string, enabled: bool }\n\nlet configs = json.Parse('settings.json', 'Config')\n\nforeach configs:enabled\n    => '{item.name} is active'"
+        "code": "import json\n\ntype Config = { name: string, enabled: bool }\n\nlet configs = json.Parse('settings.json', 'Config')\n\ncommand main = foreach configs:enabled\n    => '{item.name} is active'"
       }
     ],
     "collections": [],
@@ -3905,9 +3935,9 @@ const packages = {
       {
         "name": "Parse",
         "params": "path: string, typeName: string",
-        "returns": "Collection",
-        "desc": "Parses a JSON file into a typed collection.\nThe path is relative to the project root.\nThe typeName must match a type declared in the current script.\nExample: json.Parse('settings.json', 'Config') returns [Config]",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/json/src/json.cop#L9"
+        "returns": "object",
+        "desc": "Parses a JSON file into a typed object or collection.\nThe path is relative to the project root.\nThe typeName must match a type declared in the current script.\nIf the JSON root is an array, returns a collection. If it is an object, returns a single typed instance.\nExample: json.Parse('people.json', 'Person') returns [Person] or Person depending on the JSON shape.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/json/src/json.cop#L10"
       }
     ],
     "checks": [],
@@ -3919,7 +3949,7 @@ const packages = {
     "samples": [
       {
         "title": "Check for broken links",
-        "code": "import markdown\n\npredicate isBroken(Link) =>\n    Link.Url:startsWith('http')\n    && Link.Text:empty\n\nforeach Markdown.Links:isBroken\n    => 'Missing link text: {item.Url}'"
+        "code": "import markdown\n\npredicate isBroken(Link) =>\n    Link.Url:startsWith('http')\n    && Link.Text:empty\n\ncommand main = foreach Markdown.Links:isBroken\n    => 'Missing link text: {item.Url}'"
       }
     ],
     "collections": [],
@@ -4432,7 +4462,7 @@ const packages = {
     "samples": [
       {
         "title": "Check client conventions",
-        "code": "import python-library-checks\n\nforeach Clients\n    => '{Type.Name}'\n\nCHECK python-client-checks"
+        "code": "import python-library-checks\n\ncommand main = foreach Clients\n    => '{Type.Name}'\n\nCHECK python-client-checks"
       }
     ],
     "collections": [],
@@ -4551,8 +4581,8 @@ const packages = {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L28"
       },
       {
-        "name": "python-library-checks",
-        "desc": "Combined library checks",
+        "name": "python-library-typing-checks",
+        "desc": "Combined typing checks",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L32"
       },
       {
@@ -4682,7 +4712,7 @@ const packages = {
     "samples": [
       {
         "title": "List all models",
-        "code": "import typespec\n\nforeach Models\n    => '{TspModel.Name} ({TspModel.Properties.Count} props)'"
+        "code": "import typespec\n\ncommand main = foreach Models\n    => '{TspModel.Name} ({TspModel.Properties.Count} props)'"
       }
     ],
     "collections": [],
@@ -4964,7 +4994,7 @@ const packages = {
     "samples": [
       {
         "title": "Find get operations",
-        "code": "import typespec-http\n\nforeach HttpOperations:isGet\n    => '{item.Path} — {item.OperationId}'"
+        "code": "import typespec-http\n\ncommand main = foreach HttpOperations:isGet\n    => '{item.Path} — {item.OperationId}'"
       }
     ],
     "collections": [],

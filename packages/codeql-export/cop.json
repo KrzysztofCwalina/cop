@@ -1,0 +1,14 @@
+{
+  "name": "codeql-export",
+  "version": "1.0.0",
+  "description": "Build and export CodeQL .ql query files programmatically from cop",
+  "title": "CodeQL Query Export",
+  "authors": "cop-team",
+  "tags": [
+    "codeql",
+    "export",
+    "code-analysis"
+  ],
+  "provider": "clr",
+  "providerEntry": "Cop.Providers.CodeqlExportProvider"
+}

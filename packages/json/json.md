@@ -2,7 +2,7 @@
 name: json
 version: 1.0.0
 title: JSON File Parsing
-description: Parse JSON files into typed collections using user-defined type schemas
+description: Parse JSON files into typed objects or collections using user-defined type schemas
 authors: cop-team
 tags: json, parsing, data
 provider: clr
@@ -23,14 +23,17 @@ type Person = {
     age : int
 }
 
-let People = Parse('data.json', [Person])
+let People = Parse('data.json', 'Person')
 ```
 
 ## Parse Function
 
-`Parse(path, [Type])` reads a JSON file and deserializes it into a typed collection.
+`Parse(path, typeName)` reads a JSON file and deserializes it into a typed object or collection.
 
 - **path** — Relative or absolute path to a JSON file. Relative paths resolve from the working directory.
-- **[Type]** — A single-element list containing the target type name. The type must be defined with a `type` declaration.
+- **typeName** — The name of the target type. The type must be defined with a `type` declaration.
 
-The JSON file must contain a top-level array of objects matching the type schema.
+Returns:
+- If the JSON root is an **array**, returns a collection of typed objects.
+- If the JSON root is an **object**, returns a single typed instance.
+- If the JSON root is a **primitive**, returns the value directly.

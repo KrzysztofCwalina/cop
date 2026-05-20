@@ -6,7 +6,7 @@ This document describes how packaging works in cop: what a package is, how to cr
 
 ## Definitions
 
-**`.cop` file** — A text file written in the Cop language. It can define types, predicates, functions, checks, and commands.
+**`.cop` file** — A text file written in the Cop language. It can define types, predicates, functions, checks, and UPPERCASE output functions.
 
 **Package** — A directory on disk that contains `.cop` source files and a `cop.json` manifest. A directory is recognized as a package if it contains a `cop.json` file.
 
@@ -124,7 +124,7 @@ foreach Code.Types
     '{Type.Name}'
 ```
 
-Import statements must appear at the top of the file, after any `feed` declarations and before any type definitions, predicates, or commands.
+Import statements must appear at the top of the file, after any `feed` declarations and before any type definitions, predicates, or UPPERCASE functions.
 
 When cop processes an import, it finds the package directory, parses all `.cop` files in it, and makes the package's definitions available. Imports are **transitive**: if `code-analysis` imports `code` and `files`, those packages are automatically resolved too.
 
@@ -245,7 +245,7 @@ After auto-restore on a fresh machine, `~/.cop/packages/` contains:
 
 ### Step 3: Parse User Scripts
 
-The engine reads every `.cop` file in the script directory (and subdirectories) and parses each one into an in-memory representation. Each parsed file contains the file's import names, type definitions, predicates, functions, commands, and other declarations.
+The engine reads every `.cop` file in the script directory (and subdirectories) and parses each one into an in-memory representation. Each parsed file contains the file's import names, type definitions, predicates, functions, UPPERCASE output functions, and other declarations.
 
 ---
 
@@ -292,10 +292,10 @@ The engine processes the queue breadth-first. For each import name:
    - All **type** definitions (e.g., `type Violation = { ... }`)
    - All **flags** definitions (e.g., `flags Modifier = Public | Private | ...`)
    - All **enum** definitions (e.g., `enum Severity = error | warning | info`)
-   - All **collection** declarations
+   - All top-level collection bindings declared with `let`
    - All **predicates**, **functions**, and **let bindings** are kept in the parsed file for the interpreter
 
-5. **Filter commands.** For **command blocks** (checks, `foreach` loops, named commands), only those marked with the `export` keyword are kept. Non-exported commands are private to the package and not visible to importers.
+5. **Filter exported output functions.** For UPPERCASE `function` blocks (checks, `foreach` loops, named entry points), only those marked with the `export` keyword are kept. Non-exported output functions are private to the package and not visible to importers.
 
 6. **Enqueue transitive imports.** The package's own import names are added to the queue. For example, when processing `code-analysis`, its imports `code` and `files` are enqueued.
 
@@ -315,7 +315,7 @@ After all imports are resolved, the engine registers the user's own type definit
 
 ### Step 6: Execute
 
-With all types registered and all package definitions loaded, the engine executes the user's commands. The interpreter has access to all definitions from both the user's files and all imported packages.
+With all types registered and all package definitions loaded, the engine executes the user's selected UPPERCASE functions. The interpreter has access to all definitions from both the user's files and all imported packages.
 
 ---
 
@@ -332,7 +332,7 @@ When `foo.cop` says `import xxx`, the following definitions from package `xxx` b
 | Functions (`function f(T, ...) => ...`) | Yes | |
 | Let bindings (`let X = ...`) | Yes | |
 | Collections (`let X = runtime::Y`) | Yes | |
-| **Commands / checks** | **Only if marked `export`** | Non-exported commands are private to the package |
+| **UPPERCASE functions / checks** | **Only if marked `export`** | Non-exported output functions are private to the package |
 
 Additionally, everything from `xxx`'s own imports is also available transitively. If `xxx` imports `yyy`, then `foo.cop` can use definitions from `yyy` without importing it explicitly.
 

@@ -11,7 +11,7 @@ Options:
 | Option | Description |
 |--------|-------------|
 | `-t <dir>` | Target directory |
-| `-c <commands>` | Filter to specific commands (comma-separated) |
+| `-c <commands>` | Filter to specific named functions (comma-separated) |
 | `-f <format>` | Output format: `text` (default) or `json` |
 | `-d` | Diagnostic mode (timing, traces, debug output to stderr) |
 | `-cql` | Transpile to CodeQL instead of running |
@@ -36,7 +36,7 @@ cop checks.cop || exit 1
 
 ## cop \<program\>
 
-Run a program. The argument can be a `.cop` file, a URL, a local command name, or a package name from a feed.
+Run a program. The argument can be a `.cop` file, a URL, a local UPPERCASE function name, or a package name from a feed.
 
 ```bash
 cop <program> [-t <target>] [-c <commands>] [-f text|json] [-d] [-cql]
@@ -46,7 +46,7 @@ cop <program> [-t <target>] [-c <commands>] [-f text|json] [-d] [-cql]
 
 1. If the argument ends in `.cop` → run that local file
 2. If the argument is an HTTPS URL → download and run
-3. If local `.cop` files define a command with that name → run that command
+3. If local `.cop` files define an UPPERCASE function with that name → run it
 4. Otherwise → treat as a package name, auto-restore from feed, and run
 
 ### Examples
@@ -75,16 +75,16 @@ Run multiple packages:
 cop csharp-checks csharp-library-checks
 ```
 
-Run a named command defined in local `.cop` files:
+Run a named UPPERCASE function defined in local `.cop` files:
 
 ```bash
-cop my-command
+cop MY-COMMAND
 ```
 
-Run multiple named commands:
+Run multiple named UPPERCASE functions:
 
 ```bash
-cop -c lint,format
+cop -c LINT,FORMAT
 ```
 
 Target a specific directory:
@@ -219,7 +219,7 @@ See [Testing with Agent Cop](testing-with-cop.md) for a full guide on writing te
 
 ## cop help
 
-List commands defined in a `.cop` program.
+List named entry-point functions defined in a `.cop` program.
 
 ```bash
 cop help [<file>]
@@ -231,13 +231,13 @@ cop help [<file>]
 
 ### Examples
 
-List all commands in the current directory:
+List all named entry-point functions in the current directory:
 
 ```bash
 cop help
 ```
 
-List commands in a specific file:
+List named entry-point functions in a specific file:
 
 ```bash
 cop help checks.cop
@@ -340,7 +340,7 @@ cop package list
 
 ### cop package commands
 
-Show the commands and exports of a package.
+Show the named entry-point functions and exports of a package.
 
 ```bash
 cop package commands <package>

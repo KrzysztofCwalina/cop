@@ -8,7 +8,7 @@ Cop is a **lazy, declarative language** for processing typed object graphs. It c
 
 1. **Everything is a function** — Like Haskell, there is no distinction between "fields" and "functions." A field is a zero-arg function. `type.Name` calls a nullary function. `csharp.Types('path')` calls a unary function. The `.` operator always evaluates a function — arity is the only difference.
 2. **Lazy evaluation** — Nothing is computed until demanded. Functions memoize on first application. Like Haskell, everything is a thunk until forced.
-3. **Purity** — Expressions have no side effects. Output is the only effect, isolated in `command` blocks.
+3. **Purity** — Expressions have no side effects. Output is the only effect, isolated in UPPERCASE function blocks.
 4. **One type** — The language has exactly one composite type: DataObject. Collections, functions, providers — all DataObjects with different protocols.
 5. **Two operators** — `.` navigates and transforms (accesses properties, calls functions on an object or collection). `:` applies per-item (filters collections, quantifies with `any`/`all`/`none`/`count`, pipes single values through functions).
 6. **Extension methods** — Predicates and functions are extension methods resolved by their first-parameter type, like C#.
@@ -302,7 +302,7 @@ The casing convention reflects the semantic role and corresponding operator:
 
 - **`camelCase`** — predicates (boolean, per-item, used with `:`): `isPublic`, `startsWith`, `any`, `none`
 - **`PascalCase`** — transforms & properties (value-returning, used with `.`): `Where`, `Select`, `Count`, `Text`
-- **`UPPERCASE`** — commands (side effects): `CHECK`, `PRINT`, `SAVE`
+- **`UPPERCASE`** — side-effecting functions: `CHECK`, `PRINT`, `SAVE`
 
 ---
 
@@ -414,11 +414,11 @@ type Summary = {
 }
 ```
 
-### `command` — Named output action
+### UPPERCASE `function` — Named output action
 
 ```cop
-command CHECK = foreach Types:isPublic => '{item.Name}'
-command REPORT = foreach Violations => '{item.Severity}: {item.Message}'
+function CHECK() = { foreach Types:isPublic => '{item.Name}' }
+function REPORT() = { foreach Violations => '{item.Severity}: {item.Message}' }
 ```
 
 ---
@@ -735,7 +735,7 @@ Because `Codebase` declares its properties, any typed binding like `let cb : Cod
 
 ## Packages and User-Defined Types
 
-Packages are reusable libraries of types, predicates, functions, and commands. Each package defines a namespace matching its name.
+Packages are reusable libraries of types, predicates, functions, and output functions. Each package defines a namespace matching its name.
 
 ### Defining a Package
 
@@ -883,7 +883,7 @@ let hasErrors = violations.any(isError)
 let errorCount = violations.count(isError)
 
 # Output:
-command CHECK = foreach violations => '{item.Severity}: [{item.Rule}] {item.Message}'
+function CHECK() = { foreach violations => '{item.Severity}: [{item.Rule}] {item.Message}' }
 ```
 
 ### Namespaces
@@ -912,7 +912,7 @@ let errors = violations:validation.isError
 export type Violation = { ... }
 export predicate isError(Violation) => ...
 export function validate(...) => ...
-export command CHECK = ...
+export function CHECK() = { ... }
 
 # Internal — only visible within the package:
 type InternalHelper = { ... }
@@ -924,16 +924,16 @@ Only `export`-marked declarations are accessible to importing code. Everything e
 
 ---
 
-## Output and Commands
+## Output and UPPERCASE Functions
 
-Commands are the only place with side effects.
+UPPERCASE functions are the only place with side effects.
 
 ```cop
 # foreach iterates and outputs:
 foreach Types:isPublic => '{item.Name}'
 
-# Named commands:
-command CHECK = foreach Violations => '{item.Message}'
+# Named output functions:
+function CHECK() = { foreach Violations => '{item.Message}' }
 
 # Output actions:
 PRINT('message')
@@ -1005,7 +1005,7 @@ foreach items:isError => 'Failed: {item.Message}'
 `FAIL` represents a code bug — a situation the programmer asserts should never occur. It terminates execution immediately with a diagnostic.
 
 ```cop
-# In command position: FAIL if any items match
+# In output position: FAIL if any items match
 FAIL('public types must be sealed') foreach Types:isPublic:!isSealed
 
 # In expression position: terminate during evaluation

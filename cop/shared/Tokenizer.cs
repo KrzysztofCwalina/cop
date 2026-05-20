@@ -53,6 +53,9 @@ public enum TokenKind
     LessEqual,
     Minus,
     Plus,
+    Star,
+    Slash,
+    Percent,
     DocComment,
     Eof
 }
@@ -105,10 +108,6 @@ public class Tokenizer
             if (_source[_pos] == '\n') { _line++; _pos++; }
             else if (_source[_pos] == '\r') { _pos++; }
             else if (char.IsWhiteSpace(_source[_pos])) { _pos++; }
-            else if (_pos + 1 < _source.Length && _source[_pos] == '/' && _source[_pos + 1] == '/')
-            {
-                while (_pos < _source.Length && _source[_pos] != '\n') _pos++;
-            }
             else break;
         }
     }
@@ -220,6 +219,9 @@ public class Tokenizer
             case '<': _pos++; return new Token(TokenKind.LessThan, "<", line);
             case '-': _pos++; return new Token(TokenKind.Minus, "-", line);
             case '+': _pos++; return new Token(TokenKind.Plus, "+", line);
+            case '*': _pos++; return new Token(TokenKind.Star, "*", line);
+            case '/': _pos++; return new Token(TokenKind.Slash, "/", line);
+            case '%': _pos++; return new Token(TokenKind.Percent, "%", line);
         }
 
         if (c == '\'')

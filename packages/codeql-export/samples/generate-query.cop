@@ -1,0 +1,15 @@
+# Sample: Generate a CodeQL query that finds public abstract classes
+import codeql-export
+
+let publicAbstract = codeql-export.qlQuery(
+  'Find public abstract classes',
+  'Finds classes that are both public and abstract',
+  codeql-export.qlFrom('c', 'Class'),
+  codeql-export.qlAnd(
+    codeql-export.qlModifier('c', 'public'),
+    codeql-export.qlModifier('c', 'abstract')
+  ),
+  'c, "Class " + c.getName() + " is public and abstract"'
+)
+
+command main = save('codeql/public-abstract-classes.ql', publicAbstract)

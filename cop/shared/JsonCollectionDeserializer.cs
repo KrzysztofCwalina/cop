@@ -7,30 +7,36 @@ namespace Cop.Providers;
 /// <summary>
 /// Deserializes UTF-8 JSON from a <see cref="ObjectProvider.Query"/> response
 /// into DataObject instances using the provider's type schema.
-/// Also provides direct array deserialization for Parse('file.json', [Type]).
+/// Also provides direct deserialization for json.Parse('file.json', 'TypeName').
 /// </summary>
 public static class JsonCollectionDeserializer
 {
     /// <summary>
-    /// Deserializes a top-level JSON array into a list of DataObjects
-    /// using the specified type name and its schema for field mapping.
-    /// Used by Parse('file.json', [Type]) to load user-defined typed collections.
+    /// Deserializes a JSON file into either a typed collection (if root is array)
+    /// or a single typed object (if root is object). Primitives are returned as-is.
     /// </summary>
-    public static List<object> DeserializeArray(byte[] utf8Json, string typeName, ProviderSchema schema)
+    public static object DeserializeAny(byte[] utf8Json, string typeName, ProviderSchema schema)
     {
         var typeMap = schema.Types.ToDictionary(t => t.Name, StringComparer.Ordinal);
         using var doc = JsonDocument.Parse(utf8Json);
         var root = doc.RootElement;
 
-        if (root.ValueKind != JsonValueKind.Array)
-            throw new InvalidOperationException($"Parse() expects a JSON array, but got {root.ValueKind}.");
-
-        var items = new List<object>();
-        foreach (var elem in root.EnumerateArray())
+        if (root.ValueKind == JsonValueKind.Array)
         {
-            items.Add(DeserializeElement(elem, typeName, typeMap));
+            var items = new List<object>();
+            foreach (var elem in root.EnumerateArray())
+            {
+                items.Add(DeserializeElement(elem, typeName, typeMap));
+            }
+            return items;
         }
-        return items;
+
+        if (root.ValueKind == JsonValueKind.Object)
+        {
+            return DeserializeObject(root, typeName, typeMap);
+        }
+
+        return DeserializeElement(root, typeName, typeMap);
     }
 
     /// <summary>

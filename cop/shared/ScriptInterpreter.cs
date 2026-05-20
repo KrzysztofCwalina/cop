@@ -401,7 +401,7 @@ public class ScriptInterpreter
             new FileOutput(kv.Key, string.Join(Environment.NewLine, kv.Value)))
             .ToList();
 
-        // Execute RUN invocations
+         // Execute RUN invocations
         foreach (var scriptFile in scriptFiles)
         {
             if (scriptFile.RunInvocations is null) continue;

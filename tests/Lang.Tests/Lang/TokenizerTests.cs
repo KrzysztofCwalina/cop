@@ -62,7 +62,7 @@ public class TokenizerTests
     [Test]
     public void Tokenize_Comments()
     {
-        var tokens = new Tokenizer("a // comment\nb").Tokenize();
+        var tokens = new Tokenizer("a # comment\nb").Tokenize();
         Assert.That(tokens, Has.Count.EqualTo(3)); // a, b, EOF
         Assert.That(tokens[0].Value, Is.EqualTo("a"));
         Assert.That(tokens[1].Value, Is.EqualTo("b"));
@@ -191,9 +191,9 @@ public class TokenizerTests
     }
 
     [Test]
-    public void Tokenize_HashAndSlashCommentsMixed()
+    public void Tokenize_HashCommentsOnMultipleLines()
     {
-        var tokens = new Tokenizer("a // old comment\nb # new comment\nc").Tokenize();
+        var tokens = new Tokenizer("a # first comment\nb # second comment\nc").Tokenize();
         Assert.That(tokens, Has.Count.EqualTo(4)); // a, b, c, EOF
         Assert.That(tokens[0].Value, Is.EqualTo("a"));
         Assert.That(tokens[1].Value, Is.EqualTo("b"));
