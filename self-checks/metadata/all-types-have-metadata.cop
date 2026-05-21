@@ -50,7 +50,7 @@ export let untracked-providers = csharp.Types:untrackedProvider
 # Use provider('core') to access cop code provider for packages/ directory
 let pkg-code = provider('core')
 
-# Streaming providers expose SourceProvider/SinkProvider subclasses.
+# Streaming providers expose StreamProvider/SinkProvider subclasses.
 # Track SinkProvider classes here to ensure they are documented.
 let tracked-streaming-globals = [
     'Receive'

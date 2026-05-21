@@ -167,7 +167,7 @@ Providers choose a data format via `SupportedFormats`:
 | `InMemoryDatabase` | `QueryData()` | High-performance binary format with stride-based `DataTable` records and shared UTF-8 string heap. Best for large datasets. |
 | `Json` | `Query()` | Return raw UTF-8 JSON bytes. Useful when data is already in JSON format. |
 
-For streaming (push-like) providers, use `SourceProvider` instead of `ObjectProvider` — see the Streaming Providers section below.
+For streaming (push-like) providers, use `StreamProvider` instead of `ObjectProvider` — see the Streaming Providers section below.
 
 For most providers, **`ObjectCollections`** is the recommended format. It's the simplest to implement and performs well for typical dataset sizes.
 
@@ -487,16 +487,16 @@ your-packages/
 
 ## Streaming Providers (Source & Sink)
 
-For push-like providers that yield items indefinitely (e.g., HTTP servers, message queues, timers), use the separate `SourceProvider` and `SinkProvider` base classes instead of `ObjectProvider`.
+For push-like providers that yield items indefinitely (e.g., HTTP servers, message queues, timers), use the separate `StreamProvider` and `SinkProvider` base classes instead of `ObjectProvider`.
 
-### SourceProvider
+### StreamProvider
 
 ```csharp
 using System.Runtime.CompilerServices;
 using Cop.Core;
 using Cop.Lang;
 
-public class MySource : SourceProvider
+public class MySource : StreamProvider
 {
     public override ReadOnlyMemory<byte> GetSchema()
     {
@@ -548,7 +548,7 @@ export let Events : [Event] = source('my-streaming-package')
 export let OUTPUT : [Result] = sink('my-streaming-package')
 ```
 
-The engine discovers all `SourceProvider` and `SinkProvider` subclasses in the provider DLL automatically. They are registered under the package namespace.
+The engine discovers all `StreamProvider` and `SinkProvider` subclasses in the provider DLL automatically. They are registered under the package namespace.
 
 ## Reference
 
@@ -556,7 +556,7 @@ The engine discovers all `SourceProvider` and `SinkProvider` subclasses in the p
 
 | Namespace | Contains |
 |-----------|----------|
-| `Cop.Core` | `ObjectProvider`, `SourceProvider`, `SinkProvider`, `ProviderSchema`, `ProviderQuery`, `RuntimeBindings`, `ObjectFormat` |
+| `Cop.Core` | `ObjectProvider`, `StreamProvider`, `SinkProvider`, `ProviderSchema`, `ProviderQuery`, `RuntimeBindings`, `ObjectFormat` |
 | `Cop.Providers.SourceModel` | `SourceFile`, `TypeDeclaration`, `MethodDeclaration`, `ISourceParser` |
 | `Cop.Providers.SourceParsers` | `CodeCollectionBuilder`, `CodeSchema`, `CodeBindings`, `TextFileParser` |
 

@@ -34,7 +34,7 @@ public class TypeRegistry
     private readonly Dictionary<(string, string), List<object>> _extractorCache = new();
     private readonly Dictionary<string, Func<string, string, List<object>>> _fileParsers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Dictionary<string, SinkProvider>> _nsSinks = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, SourceProvider> _streamingSources = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, StreamProvider> _streamingSources = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Dictionary<string, Func<List<object?>, Task<object?>>>> _nsProviderFunctions = new(StringComparer.Ordinal);
     private Func<string, List<Document>>? _documentLoader;
 
@@ -524,7 +524,7 @@ public class TypeRegistry
     /// <summary>
     /// Registers a streaming source provider under a qualified name (e.g., "http.Requests").
     /// </summary>
-    public void RegisterStreamingSource(string qualifiedName, SourceProvider source)
+    public void RegisterStreamingSource(string qualifiedName, StreamProvider source)
     {
         _streamingSources[qualifiedName] = source;
     }
@@ -533,7 +533,7 @@ public class TypeRegistry
     /// Resolves a streaming source provider by qualified or bare name.
     /// Returns null if not found.
     /// </summary>
-    public SourceProvider? ResolveStreamingSource(string name)
+    public StreamProvider? ResolveStreamingSource(string name)
     {
         if (_streamingSources.TryGetValue(name, out var source))
             return source;

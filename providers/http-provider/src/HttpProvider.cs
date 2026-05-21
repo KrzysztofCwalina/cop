@@ -12,7 +12,7 @@ namespace Cop.Providers.Http;
 /// HTTP source provider that exposes incoming HTTP requests as a streaming collection.
 /// Starts a Kestrel web server and yields Request DataObjects as they arrive.
 /// </summary>
-public class HttpSource : SourceProvider
+public class HttpSource : StreamProvider
 {
     private readonly int _port;
     private readonly Channel<HttpRequestItem> _requestChannel;

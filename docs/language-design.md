@@ -561,7 +561,7 @@ export let Acks : [Ack] = sink('ticker')
 async foreach Ticks => transform => Acks
 ```
 
-`Source` and `Sink` are the cop-level representations of `SourceProvider` and `SinkProvider` — provider-agnostic abstractions that any async provider can implement. The type annotation (`: [Request]` or `: [Response]`) provides documentation and schema information about what flows through the pipeline.
+`Source` and `Sink` are the cop-level representations of `StreamProvider` and `SinkProvider` — provider-agnostic abstractions that any async provider can implement. The type annotation (`: [Request]` or `: [Response]`) provides documentation and schema information about what flows through the pipeline.
 
 
 

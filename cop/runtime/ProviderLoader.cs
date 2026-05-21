@@ -21,7 +21,7 @@ public static class ProviderLoader
     /// <summary>
     /// Represents a loaded streaming source provider.
     /// </summary>
-    public record LoadedSourceProvider(SourceProvider Instance, ProviderSchema Schema, string PackageName);
+    public record LoadedStreamProvider(StreamProvider Instance, ProviderSchema Schema, string PackageName);
 
     /// <summary>
     /// Represents a loaded sink provider.
@@ -31,7 +31,7 @@ public static class ProviderLoader
     /// <summary>
     /// Loads a provider assembly from a package directory.
     /// Validates trust, loads the DLL, instantiates the provider, and calls GetSchema().
-    /// Discovers ObjectProvider, SourceProvider, and SinkProvider subclasses.
+    /// Discovers ObjectProvider, StreamProvider, and SinkProvider subclasses.
     /// </summary>
     public static LoadedProvider? Load(string packageDir, PackageMetadata metadata, List<string> errors)
     {
@@ -41,10 +41,10 @@ public static class ProviderLoader
     /// <summary>
     /// Loads a provider from a package directory.
     /// Handles CLR providers (in-process DLL) and process providers (Node.js, Python via stdin/stdout).
-    /// Also outputs any SourceProvider and SinkProvider instances found (CLR only).
+    /// Also outputs any StreamProvider and SinkProvider instances found (CLR only).
     /// </summary>
     public static LoadedProvider? Load(string packageDir, PackageMetadata metadata, List<string> errors,
-        out List<LoadedSourceProvider> sourceProviders, out List<LoadedSinkProvider> sinkProviders)
+        out List<LoadedStreamProvider> sourceProviders, out List<LoadedSinkProvider> sinkProviders)
     {
         sourceProviders = [];
         sinkProviders = [];
@@ -76,15 +76,15 @@ public static class ProviderLoader
             var alc = new ProviderLoadContext(dllPath);
             var assembly = alc.LoadFromAssemblyPath(dllPath);
 
-            // Discover SourceProvider subclasses
+            // Discover StreamProvider subclasses
             foreach (var type in assembly.GetExportedTypes())
             {
                 if (type.IsAbstract) continue;
-                if (typeof(SourceProvider).IsAssignableFrom(type))
+                if (typeof(StreamProvider).IsAssignableFrom(type))
                 {
-                    var instance = (SourceProvider)Activator.CreateInstance(type)!;
+                    var instance = (StreamProvider)Activator.CreateInstance(type)!;
                     var schema = ProviderSchema.FromJson(instance.GetSchema());
-                    sourceProviders.Add(new LoadedSourceProvider(instance, schema, metadata.Name));
+                    sourceProviders.Add(new LoadedStreamProvider(instance, schema, metadata.Name));
                 }
                 else if (typeof(SinkProvider).IsAssignableFrom(type) &&
                          !typeof(ConsoleWriteLineSink).IsAssignableFrom(type) &&
@@ -109,7 +109,7 @@ public static class ProviderLoader
             if (!typeof(ObjectProvider).IsAssignableFrom(providerType))
             {
                 if (sourceProviders.Count > 0 || sinkProviders.Count > 0)
-                    return null; // entry type is a SourceProvider/SinkProvider, not ObjectProvider
+                    return null; // entry type is a StreamProvider/SinkProvider, not ObjectProvider
                 errors.Add($"Provider entry type '{metadata.ProviderEntry}' does not extend ObjectProvider.");
                 return null;
             }
@@ -175,9 +175,9 @@ public static class ProviderLoader
     }
 
     /// <summary>
-    /// Registers a SourceProvider's schema (types use DataObject accessors).
+    /// Registers a StreamProvider's schema (types use DataObject accessors).
     /// </summary>
-    public static ProviderSchema RegisterSchema(SourceProvider instance, TypeRegistry registry)
+    public static ProviderSchema RegisterSchema(StreamProvider instance, TypeRegistry registry)
     {
         var schema = ProviderSchema.FromJson(instance.GetSchema());
         registry.RegisterProviderSchema(schema);
@@ -194,9 +194,9 @@ public static class ProviderLoader
         => QueryAndRegister(provider.Instance, provider.Schema, provider.PackageName, registry, new ProviderQuery { RootPath = rootPath, ExcludedDirectories = excludedDirectories }, errors);
 
     /// <summary>
-    /// Registers a SourceProvider as a streaming source in the registry.
+    /// Registers a StreamProvider as a streaming source in the registry.
     /// </summary>
-    public static void RegisterSourceProvider(SourceProvider instance, ProviderSchema schema, string ns, TypeRegistry registry)
+    public static void RegisterStreamProvider(StreamProvider instance, ProviderSchema schema, string ns, TypeRegistry registry)
     {
         foreach (var coll in schema.Collections)
         {

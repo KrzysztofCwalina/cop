@@ -13,7 +13,7 @@ namespace StreamingProvider;
 ///   import ticker
 ///   async foreach Ticks => handle => Acks
 /// </summary>
-public class TickerSource : SourceProvider
+public class TickerSource : StreamProvider
 {
     private int _tickCount;
 

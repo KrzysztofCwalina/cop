@@ -3,14 +3,14 @@ using System.Runtime.CompilerServices;
 namespace Cop.Core;
 
 /// <summary>
-/// Abstract base class for streaming source providers.
-/// A source provider yields items asynchronously (potentially infinite stream).
+/// Abstract base class for streaming providers.
+/// A stream provider yields items asynchronously (potentially infinite stream).
 /// Examples: HTTP server yielding incoming requests, timer yielding tick events.
 ///
 /// Provider packages contain subclasses of this. The engine discovers them at load time
-/// and registers them as streaming sources accessible via source('namespace') in cop scripts.
+/// and registers them as streaming collections accessible via source('namespace') in cop scripts.
 /// </summary>
-public abstract class SourceProvider
+public abstract class StreamProvider
 {
     /// <summary>
     /// Returns the provider schema as UTF-8 JSON.
@@ -27,18 +27,18 @@ public abstract class SourceProvider
 
     /// <summary>
     /// Human-readable provider name, used in diagnostics.
-    /// Default strips the "Source" suffix from the class name.
+    /// Default strips the "Stream" suffix from the class name.
     /// </summary>
     public override string ToString()
     {
         var name = GetType().Name;
-        return name.EndsWith("Source", StringComparison.Ordinal)
-            ? name[..^"Source".Length]
+        return name.EndsWith("Stream", StringComparison.Ordinal)
+            ? name[..^"Stream".Length]
             : name;
     }
 
     /// <summary>
-    /// Returns namespace-scoped functions exposed by this source provider.
+    /// Returns namespace-scoped functions exposed by this stream provider.
     /// Functions are async and accept a list of evaluated arguments.
     /// </summary>
     public virtual Dictionary<string, Func<List<object?>, Task<object?>>>? GetProviderFunctions() => null;

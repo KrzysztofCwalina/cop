@@ -654,7 +654,7 @@ public static class Engine
             foreach (var sp in sourceProviders)
             {
                 var spSchema = ProviderLoader.RegisterSchema(sp.Instance, typeRegistry);
-                ProviderLoader.RegisterSourceProvider(sp.Instance, spSchema, sp.PackageName, typeRegistry);
+                ProviderLoader.RegisterStreamProvider(sp.Instance, spSchema, sp.PackageName, typeRegistry);
             }
 
             // Register sink providers
@@ -694,7 +694,7 @@ public static class Engine
             foreach (var sp in sourceProviders)
             {
                 var spSchema = ProviderLoader.RegisterSchema(sp.Instance, typeRegistry);
-                ProviderLoader.RegisterSourceProvider(sp.Instance, spSchema, sp.PackageName, typeRegistry);
+                ProviderLoader.RegisterStreamProvider(sp.Instance, spSchema, sp.PackageName, typeRegistry);
             }
 
             // Register sink providers
