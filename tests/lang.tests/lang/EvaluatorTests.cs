@@ -825,4 +825,84 @@ command main = x + 1", "test.cop");
         Assert.That(result, Is.InstanceOf<CopString>());
         Assert.That(((CopString)result).Value, Is.EqualTo("abc"));
     }
+
+    // ========================================================================
+    // Recursion
+
+    [Test]
+    public void RecursiveFactorial()
+    {
+        var source = @"
+function factorial(n) => n <= 1 ? 1 : n * factorial(n - 1)
+command main = factorial(5)";
+        var result = Eval(source);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(120));
+    }
+
+    [Test]
+    public void RecursiveFibonacci()
+    {
+        var source = @"
+function fib(n) => n <= 1 ? n : fib(n - 1) + fib(n - 2)
+command main = fib(7)";
+        var result = Eval(source);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(13));
+    }
+
+    [Test]
+    public void MutualRecursion()
+    {
+        var source = @"
+function isEven(n) => n == 0 ? true : isOdd(n - 1)
+function isOdd(n) => n == 0 ? false : isEven(n - 1)
+command main = isEven(10)";
+        var result = Eval(source);
+        Assert.That(result, Is.InstanceOf<CopBool>());
+        Assert.That(((CopBool)result).IsTruthy, Is.True);
+    }
+
+    // ========================================================================
+    // Function bodies calling other functions (reduce composition)
+
+    [Test]
+    public void FunctionBodyCallsReduceViaFFI()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var source = @"
+function mySum(items) => items.reduce((acc, x) => acc + x, 0)
+command main = mySum([1, 2, 3, 4])";
+        var result = Eval(source, ffi);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(10));
+    }
+
+    [Test]
+    public void FunctionBodyCallsReduceForProduct()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var source = @"
+function product(items) => items.reduce((acc, x) => acc * x, 1)
+command main = product([2, 3, 4])";
+        var result = Eval(source, ffi);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(24));
+    }
+
+    [Test]
+    public void FunctionBodyCallsOtherUserFunction()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var source = @"
+function double(x) => x * 2
+function quadruple(x) => double(double(x))
+command main = quadruple(3)";
+        var result = Eval(source, ffi);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(12));
+    }
 }

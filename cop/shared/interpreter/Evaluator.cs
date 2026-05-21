@@ -932,11 +932,22 @@ public sealed class Evaluator
             ExpressionBody eb => Eval(eb.Expr, funcEnv),
             MappingBody mb => EvalMappingBody(mb, funcEnv),
             BlockBody bb => EvalBlockBody(bb, funcEnv),
-            IntrinsicBody => throw new CopEvaluationException(
-                $"Intrinsic function '{func.Declaration.Name}' has no implementation registered",
-                func.Declaration.Line, _filePath),
+            IntrinsicBody => CallIntrinsicViaFFI(func.Declaration.Name, args, funcEnv),
             _ => CopNull.Instance
         };
+    }
+
+    /// <summary>
+    /// Dispatch an intrinsic-body function to the FFI registry.
+    /// </summary>
+    private CopValue CallIntrinsicViaFFI(string name, IReadOnlyList<CopValue> args, Environment env)
+    {
+        var ffiFunc = _ffi.Resolve(name);
+        if (ffiFunc is ICopCallable callable)
+            return callable.Invoke(args, this, env);
+        throw new CopEvaluationException(
+            $"Intrinsic function '{name}' has no implementation registered in FFI",
+            0, _filePath);
     }
 
     /// <summary>

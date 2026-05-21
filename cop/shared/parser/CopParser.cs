@@ -12,6 +12,7 @@ public class CopParser
     private readonly List<Token> _tokens;
     private readonly string _filePath;
     private int _pos;
+    private bool _suppressFilterColon; // true inside ternary then-branch to prevent `:` being consumed as filter
 
     public CopParser(List<Token> tokens, string filePath = "<unknown>")
     {
@@ -378,9 +379,9 @@ public class CopParser
         // Parse parameters: (param1: Type1, param2: Type2)
         var parameters = ParseParameterList();
 
-        // Optional return type: : ReturnType or => ReturnType
+        // Optional return type: : ReturnType
         TypeRef? returnType = null;
-        if (Match(TokenKind.Colon) || Match(TokenKind.Arrow))
+        if (Match(TokenKind.Colon))
         {
             returnType = ParseTypeRef();
         }
@@ -393,9 +394,9 @@ public class CopParser
             guard = ParseExpression();
         }
 
-        // Body: = expr | = intrinsic | = { block } | mapping body
+        // Body: => expr | = expr | => intrinsic | = intrinsic | = { block } | mapping body
         FunctionBody body;
-        if (Match(TokenKind.Equals))
+        if (Match(TokenKind.Arrow) || Match(TokenKind.Equals))
         {
             if (MatchKeyword("intrinsic"))
             {
@@ -866,7 +867,7 @@ public class CopParser
                     expr = new CallExpr(expr, args, line);
                 }
             }
-            else if (Check(TokenKind.Colon) && IsFilterColonFollowed() && IsFilterableExpression(expr))
+            else if (!_suppressFilterColon && Check(TokenKind.Colon) && IsFilterColonFollowed() && IsFilterableExpression(expr))
             {
                 Advance(); // consume ':'
                 // Filter syntax: expr:predicate or expr:!predicate
@@ -932,8 +933,11 @@ public class CopParser
         //
         // Use ParseBitwiseAnd (not ParseOr) for then-branch to avoid consuming '|'
         // as bitwise or when it's meant as the ternary else separator.
+        // Suppress filter colon so `cond ? x : y` isn't parsed as `cond ? (x:y)`.
 
+        _suppressFilterColon = true;
         var firstExpr = ParseBitwiseAnd();
+        _suppressFilterColon = false;
 
         if (Match(TokenKind.Arrow))
         {
