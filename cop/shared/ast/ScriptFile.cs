@@ -9,7 +9,6 @@ public record ScriptFile(
     List<PredicateDefinition> Predicates,
     List<FunctionDefinition> Functions,
     List<CommandBlock> Commands,
-    List<RunInvocation>? RunInvocations = null,
     List<string>? FeedPaths = null,
     List<FlagsDefinition>? FlagsDefinitions = null,
     List<EnumDefinition>? EnumDefinitions = null,
