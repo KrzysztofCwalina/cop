@@ -49,7 +49,12 @@ public static class StandardLibrary
         ffi.Register("error", (args, env) =>
         {
             var msg = args.Count > 0 ? args[0].Display() : "error";
-            return new CopString(msg);
+            var fields = new Dictionary<string, CopValue>
+            {
+                ["Type"] = new CopString("Error"),
+                ["Message"] = new CopString(msg)
+            };
+            return new CopObject(fields) { TypeName = "Error" };
         });
 
         // I/O functions

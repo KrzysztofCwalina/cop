@@ -108,7 +108,9 @@ public sealed class CopObject : CopValue
     public bool HasField(string name) => Fields.ContainsKey(name);
 
     public CopValue GetField(string name) =>
-        Fields.TryGetValue(name, out var val) ? val : CopNull.Instance;
+        Fields.TryGetValue(name, out var val) ? val
+        : name == "Type" && TypeName is not null ? new CopString(TypeName)
+        : CopNull.Instance;
 
     public override string Display()
     {
@@ -138,10 +140,17 @@ public sealed class CopDynamicObject : CopValue
     public bool HasField(string name)
     {
         var val = _adapter.GetField(_underlying, name);
-        return val is not CopNull;
+        if (val is not CopNull) return true;
+        return name == "Type" && _adapter.TypeName is not null;
     }
 
-    public CopValue GetField(string name) => _adapter.GetField(_underlying, name);
+    public CopValue GetField(string name)
+    {
+        var val = _adapter.GetField(_underlying, name);
+        if (val is CopNull && name == "Type" && _adapter.TypeName is not null)
+            return new CopString(_adapter.TypeName);
+        return val;
+    }
 
     public override string Display() => _adapter.Display(_underlying);
     public override string ToString() => Display();

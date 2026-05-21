@@ -5,7 +5,9 @@
 ## The dynamic base type. Any property access on object is resolved at runtime.
 ## All items in untyped collections are object. Used as the return type for
 ## provider() and as element type for generic collections.
-export type object = {}
+export type object = {
+    Type : string
+}
 
 ## A UTF-8 text value.
 export type string = {}

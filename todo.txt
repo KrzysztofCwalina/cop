@@ -3,3 +3,5 @@
 - properties and predicates (Comment and isComment) are overlapping
 - no empty folders
 - one type per file
+
+- core.cop: expression is empty magic type. should it be a real expression query?
