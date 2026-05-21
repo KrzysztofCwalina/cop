@@ -36,19 +36,19 @@ export function count(items: [object], condition: function) : int =>
 
 ## Returns true if the collection is empty (Count == 0).
 ## Example: errors:empty
-export function empty(items: [object]) : bool => intrinsic
+export function empty(items: [object]) : bool => items.Count == 0
 
 ## First item matching a condition, or nil.
 ## Example: Types:first((item) => item:isPublic)
-export function first(items: [object], condition: function) : object => intrinsic
+export function first(items: [object], condition: function) : object => items.where(condition).First
 
 ## Last item matching a condition, or nil.
 ## Example: Types:last((item) => item:isPublic)
-export function last(items: [object], condition: function) : object => intrinsic
+export function last(items: [object], condition: function) : object => items.where(condition).Last
 
 ## The single item matching a condition, or nil if zero or multiple match.
 ## Example: Types:single((item) => item:isEntryPoint)
-export function single(items: [object], condition: function) : object => intrinsic
+export function single(items: [object], condition: function) : object => items.where(condition).Single
 
 ## Item at a specific zero-based index.
 ## Example: items:elementAt(3)
@@ -64,7 +64,8 @@ export function orderByDescending(items: [object], keySelector: function) : [obj
 
 ## Removes duplicate items (by string representation).
 ## Example: names:distinct
-export function distinct(items: [object]) : [object] => intrinsic
+export function distinct(items: [object]) : [object] =>
+  reduce(items, (acc, item) => acc:any((x) => text(x) == text(item)) ? acc : acc.concat([item]), [])
 
 ## Groups items by a key expression. Returns collection of groups.
 ## Example: Types:groupBy((item) => item.Namespace)
@@ -83,7 +84,8 @@ export function enqueue(items: [object], value: object) : [object] => [value].co
 
 ## Returns a new collection without the last element.
 ## Example: let shorter = items:pop
-export function pop(items: [object]) : [object] => intrinsic
+export function pop(items: [object]) : [object] =>
+  reduce(items, (acc, item) => acc.Count < items.Count - 1 ? acc.concat([item]) : acc, [])
 
 ## Returns a new collection combining both collections.
 ## Example: let merged = listA:concat(listB)
