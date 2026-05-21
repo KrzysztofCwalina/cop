@@ -6,38 +6,38 @@
 ## Returns a dynamic object accessor for the named provider.
 ## Properties on the returned object query the provider's collections.
 ## Example: provider('sample').Widgets returns the Widgets collection.
-export function provider(name : string) : object = intrinsic
+export function provider(name : string) : object => intrinsic
 
 ## Returns an async streaming collection from the named provider.
 ## Use a typed annotation to declare the item type produced by the stream:
 ##   export let Requests : [Request] = source('http')
-export function source(name : string) : [object] = intrinsic
+export function source(name : string) : [object] => intrinsic
 
 ## Returns an async output collection for the named streaming provider.
 ## Items pushed into the sink are delivered to the provider's output channel.
 ##   export let RESPONSES : [Response] = sink('http')
-export function sink(name : string) : [object] = intrinsic
+export function sink(name : string) : [object] => intrinsic
 
 # I/O
 
 ## Reads the content of a file at the given path (sandboxed to project root).
 ## Returns the file content as a string.
-export function read(path : string) : string = intrinsic
+export function read(path : string) : string => intrinsic
 
 ## Prints a message to the output.
 ## Used standalone: print('hello {Name}')
 ## Used in pipeline: foreach Types => print('{item.Name}')
 ## The template supports {Property} interpolation and {@style} formatting.
-export function print(message : string) : string = intrinsic
+export function print(message : string) : string => intrinsic
 
 ## Saves content to a file at the specified path.
 ## Used in pipeline: foreach Types:isPublic => save('api.txt', '{item.Name}')
 ## Creates or appends to the file with the rendered template output.
-export function save(path : string, content : string) = intrinsic
+export function save(path : string, content : string) => intrinsic
 
 ## Outputs a diagnostic message to the debug log (--diag flag).
 ## Same template semantics as print but only visible when diagnostics are enabled.
-export function debug(message : string) = intrinsic
+export function debug(message : string) => intrinsic
 
 # Conversion
 
@@ -48,38 +48,38 @@ export function text(string) => string
 export function text(bool) => bool ? 'true' | 'false'
 
 ## Converts an integer to its decimal text representation.
-export function text(int) : string = intrinsic
+export function text(int) : string => intrinsic
 
 ## Decodes a byte array as UTF-8 text.
-export function text(bytes) : string = intrinsic
+export function text(bytes) : string => intrinsic
 
 ## Converts a Formattable to text by resolving the Template against each item
 ## in Items using {Property} interpolation, then joining results with Separator.
-export function text(Formattable) : string = intrinsic
+export function text(Formattable) : string => intrinsic
 
 # Error Handling
 
 ## Creates an Error value with the given message string.
 ## Example: error('connection timeout')
-export function error(string) : Error = intrinsic
+export function error(string) : Error => intrinsic
 
 ## Terminates execution immediately with a fatal diagnostic.
 ## Use for programmer assertions — situations that should never occur.
 ## Can be used standalone: fail('invariant violated')
 ## Or in pipeline: foreach Items:badCondition => fail('{item.Name} is invalid')
-export function fail(message : string) = intrinsic
+export function fail(message : string) => intrinsic
 
 # Utilities
 
 ## Returns the current program context.
 ## Provides access to command-line arguments passed to the cop invocation.
-export function program() : Program = intrinsic
+export function program() : Program => intrinsic
 
 ## Glob-matches a file path against a pattern.
 ## Supports **, *, ? wildcards. Returns true if the path matches.
-export function pathMatches(path : string, pattern : string) : bool = intrinsic
+export function pathMatches(path : string, pattern : string) : bool => intrinsic
 
 ## Asserts that a condition is true. Fails the test run if false.
 ## Used in tests: assert(Types:isPublic.Count > 0, 'should have public types')
-export function assert(condition : bool, description : string) = intrinsic
+export function assert(condition : bool, description : string) => intrinsic
 

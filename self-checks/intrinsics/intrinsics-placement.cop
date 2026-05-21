@@ -1,6 +1,6 @@
 # Cop Self-Check: Intrinsics must be in intrinsics.cop
 #
-# Design principle: All intrinsic function declarations (= intrinsic)
+# Design principle: All intrinsic function declarations (=> intrinsic)
 # must be defined exclusively in packages/core/src/intrinsics.cop.
 # This keeps the runtime-implemented functions in a single, auditable location.
 #
