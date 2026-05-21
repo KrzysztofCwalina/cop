@@ -1,19 +1,6 @@
 # Object Collection Functions
 # Functions that operate on collections of any item type.
 
-## The built-in ordered collection type.
-## Declared as [T] in property types (e.g., Types : [Type]).
-## Immutable — all operations return new collections without modifying the original.
-## Properties: Count (int), First (item or nic), Last (item or nic),
-## Rest (collection without first element), Single (item if exactly one, or nic).
-export type [T] = {
-    Count : int,
-    First : T,
-    Last : T,
-    Rest : [T],
-    Single : T
-}
-
 ## A deferred query over a collection (like C# IQueryable).
 ## Chaining where/orderBy/select builds an expression tree without materializing.
 ## The query executes when consumed by foreach, Count, print, or assigned to a collection.
