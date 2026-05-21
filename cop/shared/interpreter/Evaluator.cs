@@ -441,11 +441,25 @@ public sealed class Evaluator
             CopList list => EvalListMember(list, mem.Member, mem.Line),
             CopLazyCollection lazy => EvalLazyMember(lazy, mem.Member, mem.Line),
             CopString str => EvalStringMember(str, mem.Member, mem.Line),
+            _ when mem.Member == "Type" => new CopString(CopTypeNameOf(obj)),
             _ => throw new CopEvaluationException(
                 $"Cannot access member '{mem.Member}' on {obj.GetType().Name}",
                 mem.Line, _filePath)
         };
     }
+
+    private static string CopTypeNameOf(CopValue value) => value switch
+    {
+        CopObject co => co.TypeName ?? "object",
+        CopDynamicObject dyn => dyn.TypeName ?? "object",
+        CopString => "string",
+        CopInt => "int",
+        CopNumber => "number",
+        CopBool => "bool",
+        CopList => "collection",
+        CopNull => "nic",
+        _ => "object"
+    };
 
     /// <summary>
     /// Evaluate the object part of a member expression.
@@ -487,6 +501,7 @@ public sealed class Evaluator
     private CopValue EvalStringMember(CopString str, string member, int line) => member switch
     {
         "Length" or "length" => new CopInt(str.Value.Length),
+        "Type" => new CopString("string"),
         _ => throw new CopEvaluationException($"Unknown string member '{member}'", line, _filePath)
     };
 
