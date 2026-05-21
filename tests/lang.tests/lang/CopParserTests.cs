@@ -40,7 +40,7 @@ type Request
     public void Parse_TypeDeclaration_WithBaseType()
     {
         var source = @"
-type Error : Response
+type Response:Error
     Message : string
 ";
         var module = CopParser.Parse(source, "test.cop");

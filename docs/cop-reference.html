@@ -1872,47 +1872,53 @@ const packages = {
     "types": {
       "object": {
         "desc": "The dynamic base type. Any property access on object is resolved at runtime.\nAll items in untyped collections are object. Used as the return type for\nprovider() and as element type for generic collections.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L8",
-        "props": []
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L9",
+        "props": [
+          {
+            "name": "Type",
+            "type": "string",
+            "desc": ""
+          }
+        ]
       },
       "string": {
         "desc": "A UTF-8 text value.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L11",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L14",
         "props": []
       },
       "int": {
         "desc": "A 64-bit signed integer.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L14",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L17",
         "props": []
       },
       "number": {
         "desc": "A 64-bit floating-point number.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L17",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L20",
         "props": []
       },
       "bool": {
         "desc": "A boolean value (true or false).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L20",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L23",
         "props": []
       },
       "byte": {
         "desc": "A single unsigned byte (0–255).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L23",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L26",
         "props": []
       },
       "bytes": {
         "desc": "An array of bytes. Used for binary data (e.g., HTTP request/response bodies).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L26",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L29",
         "props": []
       },
       "expression": {
         "desc": "A deferred expression passed to collection methods.\nEvaluated per-item in the collection (has access to 'item' and 'acc').\nUsed for predicates, projections, and accumulators in where, select, reduce, etc.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L31",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L34",
         "props": []
       },
       "[T]": {
         "desc": "The built-in ordered collection type.\nDeclared as [T] in property types (e.g., Types : [Type]).\nImmutable — all operations return new collections without modifying the original.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L36",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L39",
         "props": [
           {
             "name": "Count",

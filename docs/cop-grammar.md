@@ -140,7 +140,11 @@ decl_body   = type_decl
 ### 3.1 Type Declaration
 
 ```ebnf
-type_decl       = 'type' type_name [ ':' IDENTIFIER ] [ '=' type_body ] ;
+type_decl       = 'type' type_spec [ '=' type_body ] ;
+
+type_spec       = type_name ':' IDENTIFIER         (* Base:Subtype — declares subtype relationship *)
+                | type_name                        (* standalone type, no base *)
+                ;
 
 type_name       = IDENTIFIER
                 | '[' IDENTIFIER ']'            (* generic collection type *)
@@ -153,10 +157,13 @@ type_body       = '{' { property_decl } '}'     (* brace-enclosed *)
 property_decl   = [ doc_comment ] IDENTIFIER ':' type_ref [ '?' ] [ ',' ] ;
 ```
 
+The `Base:Name` syntax reads as "Base narrowed to Name" — consistent with predicate guards.
+Base type is optional; `type Foo = {}` and `type object:Foo = {}` both declare `Foo`.
+
 When `=` is absent, properties follow on subsequent indented lines:
 
 ```ebnf
-type_decl_indented = 'type' type_name [ ':' IDENTIFIER ]
+type_decl_indented = 'type' type_spec
                      { property_decl }          (* indentation-delimited *)
                    ;
 ```

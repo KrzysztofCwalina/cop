@@ -72,6 +72,17 @@ type Type = {
 
 Every member in a type definition is a function. When written as `Name: string`, it means a nullary function returning string. This is why `type.Name` and `csharp.Types('path')` are the same `.` operation — both call a function, just with different arities.
 
+**Type inheritance** uses the narrowing syntax `Base:Subtype`:
+
+```cop
+type object:Error = {
+    Message : string,
+    Source : string
+}
+```
+
+This reads as "object narrowed to Error" — `Error` is a subtype of `object`. The base type is optional; `type Foo = {}` is equivalent to declaring a standalone type. This syntax is consistent with predicate guards: `object:int:isPositive` reads as "object → int → positive int."
+
 Types serve four purposes:
 1. **Shape description** — what fields an object has
 2. **Parameter matching** — `function f(Type) =>` means "accepts objects shaped like Type"

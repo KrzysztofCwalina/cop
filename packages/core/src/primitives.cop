@@ -1,6 +1,7 @@
 # Primitive Types
 # Built-in types provided by the runtime.
 # Declaring them here ensures every type identifier is visible in .cop source files.
+# All primitives are subtypes of object (type object:int means int narrows object).
 
 ## The dynamic base type. Any property access on object is resolved at runtime.
 ## All items in untyped collections are object. Used as the return type for
@@ -10,27 +11,27 @@ export type object = {
 }
 
 ## A UTF-8 text value.
-export type string = {}
+export type object:string = {}
 
 ## A 64-bit signed integer.
-export type int = {}
+export type object:int = {}
 
 ## A 64-bit floating-point number.
-export type number = {}
+export type object:number = {}
 
 ## A boolean value (true or false).
-export type bool = {}
+export type object:bool = {}
 
 ## A single unsigned byte (0–255).
-export type byte = {}
+export type object:byte = {}
 
 ## An array of bytes. Used for binary data (e.g., HTTP request/response bodies).
-export type bytes = {}
+export type object:bytes = {}
 
 ## A deferred expression passed to collection methods.
 ## Evaluated per-item in the collection (has access to 'item' and 'acc').
 ## Used for predicates, projections, and accumulators in where, select, reduce, etc.
-export type expression = {}
+export type object:expression = {}
 
 ## The built-in ordered collection type.
 ## Declared as [T] in property types (e.g., Types : [Type]).

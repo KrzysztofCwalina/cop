@@ -243,10 +243,12 @@ public class CopParser
             name = ExpectIdentifier("type name");
         }
 
+        // type Base:Name syntax — base type comes first, colon narrows to subtype
         string? baseType = null;
         if (Match(TokenKind.Colon))
         {
-            baseType = ExpectIdentifier("base type name");
+            baseType = name;
+            name = ExpectIdentifier("subtype name");
         }
 
         var properties = new List<PropertyDecl>();
