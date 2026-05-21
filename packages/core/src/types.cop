@@ -4,7 +4,7 @@
 ## A template bound to data, ready to be resolved into a string.
 ## Items is the collection of data to format, Template is the {Property} interpolation pattern,
 ## and Separator is the string used to join results (defaults to newline).
-export type Formattable = {
+export type object:Formattable = {
     Items : [object]
     Template : string
     Separator : string
@@ -14,7 +14,7 @@ export type Formattable = {
 ## Errors are not code bugs (use fail() for those). They represent external failures
 ## that code cannot prevent: network timeouts, I/O failures, malformed input.
 ## Use isError predicate to detect errors in pipeline items.
-export type Error = {
+export type object:Error = {
     Message : string
     SourceFile : string
     SourceLine : int
@@ -28,6 +28,6 @@ export predicate isError(object) => item.Type:equals('Error')
 
 ## Represents the running program's context.
 ## Provides access to command-line arguments passed to the cop invocation.
-export type Program = {
+export type object:Program = {
     Args : [string]
 }
