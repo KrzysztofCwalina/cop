@@ -5,19 +5,24 @@
 
 ## Returns a dynamic object accessor for the named provider.
 ## Properties on the returned object query the provider's collections.
-## The options argument is provider-specific (path, connection string, etc.) or nic for default.
+## The options argument is JSON-serialized and passed to the provider.
+## Pass nic for default, or a string/object with provider-specific configuration.
 ## Example: provider('csharp', nic) or provider('csharp', 'lib/MyLib.dll')
-export function provider(name : string, options : json:object) : object => intrinsic
+export function provider(name : string, options : object) : object => intrinsic
 
 ## Returns an async streaming collection from the named provider.
+## The options argument is JSON-serialized and passed to the provider.
+## Pass nic for default, or a string/object with provider-specific configuration.
 ## Use a typed annotation to declare the item type produced by the stream:
-##   export let Requests : [Request] = source('http')
-export function source(name : string) : [object] => intrinsic
+##   export let Requests : [Request] = source('http', nic)
+export function source(name : string, options : object) : [object] => intrinsic
 
 ## Returns an async output collection for the named streaming provider.
 ## Items pushed into the sink are delivered to the provider's output channel.
-##   export let RESPONSES : [Response] = sink('http')
-export function sink(name : string) : [object] => intrinsic
+## The options argument is JSON-serialized and passed to the provider.
+## Pass nic for default, or a string/object with provider-specific configuration.
+##   export let RESPONSES : [Response] = sink('http', nic)
+export function sink(name : string, options : object) : [object] => intrinsic
 
 # I/O
 

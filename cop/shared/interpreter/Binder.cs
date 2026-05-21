@@ -7,11 +7,13 @@ using Cop.Lang.Ast;
 /// and produces a BindingResult. It does NOT evaluate — only resolves names and
 /// reports diagnostics for unresolved or duplicate declarations.
 ///
-/// Design: two-pass binding within a module.
+/// Design: three-pass binding within a module.
 ///   Pass 1: Register all top-level declarations (types, functions, lets, enums, commands)
 ///           so that forward references work.
 ///   Pass 2: Walk function/command bodies and expressions, resolving identifiers
 ///           against the scope chain.
+///   Pass 3: Validate all type references, function call arity, and report errors
+///           for unresolved symbols.
 /// </summary>
 public sealed class Binder
 {
@@ -51,6 +53,10 @@ public sealed class Binder
         // Pass 2: bind bodies (resolve identifiers within function/command bodies)
         foreach (var decl in module.Declarations)
             BindDeclarationBody(decl);
+
+        // Pass 3: validate type references, arity, and unresolved symbols
+        foreach (var decl in module.Declarations)
+            ValidateDeclaration(decl);
 
         return _result;
     }
@@ -441,5 +447,211 @@ public sealed class Binder
             $"Duplicate declaration '{name}'",
             line,
             _filePath);
+    }
+
+    // ========================================================================
+    // Pass 3: Validation (type references, arity, unresolved symbols)
+    // ========================================================================
+
+    private void ValidateDeclaration(Declaration decl)
+    {
+        switch (decl)
+        {
+            case TypeDecl td:
+                ValidateTypeDecl(td);
+                break;
+            case FunctionDecl fd:
+                ValidateFunctionDecl(fd);
+                break;
+            case LetDecl ld:
+                ValidateTypeRef(ld.TypeAnnotation);
+                ValidateExpression(ld.Value);
+                break;
+            case CommandDecl cd:
+                foreach (var stmt in cd.Body)
+                    ValidateStatement(stmt);
+                break;
+        }
+    }
+
+    private void ValidateTypeDecl(TypeDecl decl)
+    {
+        // Validate base type
+        if (decl.BaseType is not null)
+            ValidateTypeName(decl.BaseType, decl.Line);
+
+        // Validate property types
+        foreach (var prop in decl.Properties)
+            ValidateTypeRef(prop.Type);
+    }
+
+    private void ValidateFunctionDecl(FunctionDecl decl)
+    {
+        // Validate parameter types
+        foreach (var param in decl.Params)
+            ValidateTypeRef(param.Type);
+
+        // Validate return type
+        ValidateTypeRef(decl.ReturnType);
+
+        // Validate body expressions
+        switch (decl.Body)
+        {
+            case ExpressionBody eb:
+                ValidateExpression(eb.Expr);
+                break;
+            case MappingBody mb:
+                foreach (var mapping in mb.Mappings)
+                    ValidateExpression(mapping.Value);
+                break;
+        }
+    }
+
+    private void ValidateStatement(Statement stmt)
+    {
+        switch (stmt)
+        {
+            case LetStatement ls:
+                ValidateTypeRef(ls.TypeAnnotation);
+                ValidateExpression(ls.Value);
+                break;
+            case ForEachStatement fs:
+                ValidateExpression(fs.Collection);
+                foreach (var s in fs.Body)
+                    ValidateStatement(s);
+                break;
+            case ExpressionStatement es:
+                ValidateExpression(es.Expr);
+                break;
+            case PipelineStatement ps:
+                ValidateExpression(ps.Source);
+                foreach (var stage in ps.Stages)
+                    ValidateExpression(stage.Expr);
+                break;
+        }
+    }
+
+    private void ValidateExpression(Expression? expr)
+    {
+        if (expr is null) return;
+
+        switch (expr)
+        {
+            case CallExpr ce:
+                ValidateCallExpr(ce);
+                break;
+            case BinaryExpr be:
+                ValidateExpression(be.Left);
+                ValidateExpression(be.Right);
+                break;
+            case UnaryExpr ue:
+                ValidateExpression(ue.Operand);
+                break;
+            case MemberExpr me:
+                ValidateExpression(me.Object);
+                break;
+            case IndexExpr ie:
+                ValidateExpression(ie.Object);
+                ValidateExpression(ie.Index);
+                break;
+            case LambdaExpr le:
+                foreach (var p in le.Params)
+                    ValidateTypeRef(p.Type);
+                ValidateExpression(le.Body);
+                break;
+            case ConditionalExpr cond:
+                ValidateExpression(cond.Condition);
+                ValidateExpression(cond.Then);
+                ValidateExpression(cond.Else);
+                break;
+            case MatchExpr match:
+                ValidateExpression(match.Discriminant);
+                foreach (var arm in match.Arms)
+                    ValidateExpression(arm.Body);
+                break;
+            case ListExpr list:
+                foreach (var elem in list.Elements)
+                    ValidateExpression(elem);
+                break;
+            case ObjectExpr obj:
+                foreach (var field in obj.Fields)
+                    ValidateExpression(field.Value);
+                break;
+            case InterpolatedStringExpr interp:
+                foreach (var part in interp.Parts)
+                {
+                    if (part is ExpressionPart ep)
+                        ValidateExpression(ep.Expr);
+                }
+                break;
+            case FilterExpr filter:
+                ValidateExpression(filter.Collection);
+                ValidateExpression(filter.Predicate);
+                break;
+        }
+    }
+
+    private void ValidateCallExpr(CallExpr ce)
+    {
+        // Validate argument expressions recursively
+        ValidateExpression(ce.Callee);
+        foreach (var arg in ce.Args)
+            ValidateExpression(arg);
+
+        // Check arity if callee resolves to a known function
+        if (ce.Callee is IdentifierExpr id)
+        {
+            var symbol = _currentScope.Resolve(id.Name);
+            if (symbol is FunctionSymbol func && func.Parameters.Count > 0)
+            {
+                // Only check arity when we have a clear mismatch.
+                // Cop allows overloading (same name, different params), so only flag
+                // when too many args are passed (too few may be partial application).
+                if (ce.Args.Count > func.Parameters.Count)
+                {
+                    _result.ReportDiagnostic(
+                        DiagnosticSeverity.Error,
+                        $"Function '{id.Name}' expects {func.Parameters.Count} argument(s) but got {ce.Args.Count}",
+                        ce.Line,
+                        _filePath);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Validates a TypeRef resolves to a known type or enum in scope.
+    /// </summary>
+    private void ValidateTypeRef(TypeRef? typeRef)
+    {
+        if (typeRef is null) return;
+        ValidateTypeName(typeRef.Name, typeRef.Line);
+    }
+
+    /// <summary>
+    /// Validates that a type name resolves to a declared type or enum symbol in scope.
+    /// </summary>
+    private void ValidateTypeName(string name, int line)
+    {
+        // 'T' is a generic type parameter placeholder (used in [T] collection type)
+        if (name == "T") return;
+
+        var symbol = _currentScope.Resolve(name);
+        if (symbol is null)
+        {
+            _result.ReportDiagnostic(
+                DiagnosticSeverity.Error,
+                $"Unknown type '{name}'",
+                line,
+                _filePath);
+        }
+        else if (symbol is not TypeSymbol and not EnumSymbol)
+        {
+            _result.ReportDiagnostic(
+                DiagnosticSeverity.Error,
+                $"'{name}' is not a type (it is a {symbol.Kind})",
+                line,
+                _filePath);
+        }
     }
 }

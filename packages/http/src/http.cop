@@ -4,8 +4,8 @@
 # Usage:
 #   async foreach Requests => handle => RESPONSES
 
-export let Requests : [Request] = source('http')
-export let RESPONSES : [Response] = sink('http')
+export let Requests : [Request] = source('http', nic)
+export let RESPONSES : [Response] = sink('http', nic)
 
 export enum HttpMethod = GET | POST | PUT | DELETE | PATCH | HEAD | OPTIONS
 export enum ContentType = 'application/json' | 'text/plain' | 'text/html' | 'application/xml' | 'multipart/form-data' | 'application/octet-stream'

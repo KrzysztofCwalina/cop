@@ -8,10 +8,31 @@ namespace Cop.Tests.Lang;
 [TestFixture]
 public class BinderTests
 {
+    /// <summary>
+    /// Core type symbols that would normally come from importing the core package.
+    /// These mirror the declarations in packages/core/src/primitives.cop.
+    /// </summary>
+    private static readonly IReadOnlyList<Symbol> CoreTypes = new Symbol[]
+    {
+        new TypeSymbol("object", null, [new PropertySymbol("Type", new TypeRef("string"), false)]),
+        new TypeSymbol("string", "object", []),
+        new TypeSymbol("int", "object", []),
+        new TypeSymbol("number", "object", []),
+        new TypeSymbol("bool", "object", []),
+        new TypeSymbol("byte", "object", []),
+        new TypeSymbol("bytes", "object", []),
+        new TypeSymbol("function", "object", []),
+    };
+
     private BindingResult Bind(string source, IReadOnlyList<Symbol>? externals = null)
     {
+        // Merge core types with any additional externals
+        var allExternals = new List<Symbol>(CoreTypes);
+        if (externals is not null)
+            allExternals.AddRange(externals);
+
         var module = CopParser.Parse(source, "test.cop");
-        var binder = new Binder("test.cop", externals);
+        var binder = new Binder("test.cop", allExternals);
         return binder.Bind(module);
     }
 
@@ -262,6 +283,7 @@ let x : int = 2");
     {
         // In Cop, multiple predicates with same name (different guards) are common
         var result = Bind(@"
+type Item = { Score : int, Rating : string }
 predicate isGood(x : Item) => x.Score > 80
 predicate isGood(x : Item) => x.Rating == 'A'");
 
@@ -307,6 +329,105 @@ predicate isGood(x : Item) => x.Rating == 'A'");
         var scope = new Scope(label: "test");
         Assert.That(scope.Declare(new VariableSymbol("x")), Is.True);
         Assert.That(scope.Declare(new VariableSymbol("x")), Is.False);
+    }
+
+    // ========================================================================
+    // Type Validation
+    // ========================================================================
+
+    [Test]
+    public void UnknownTypeInParameterProducesError()
+    {
+        var result = Bind("function greet(name : Foo) : string = name");
+        Assert.That(result.HasErrors, Is.True);
+        Assert.That(result.Diagnostics[0].Message, Does.Contain("Unknown type 'Foo'"));
+    }
+
+    [Test]
+    public void UnknownTypeInReturnTypeProducesError()
+    {
+        var result = Bind("function make() : Widget = 42");
+        Assert.That(result.HasErrors, Is.True);
+        Assert.That(result.Diagnostics[0].Message, Does.Contain("Unknown type 'Widget'"));
+    }
+
+    [Test]
+    public void UnknownTypeInLetAnnotationProducesError()
+    {
+        var result = Bind("let x : Gadget = 42");
+        Assert.That(result.HasErrors, Is.True);
+        Assert.That(result.Diagnostics[0].Message, Does.Contain("Unknown type 'Gadget'"));
+    }
+
+    [Test]
+    public void UnknownTypeInPropertyProducesError()
+    {
+        var result = Bind(@"
+type Person = {
+    Name : string,
+    Address : Location
+}");
+        Assert.That(result.HasErrors, Is.True);
+        Assert.That(result.Diagnostics[0].Message, Does.Contain("Unknown type 'Location'"));
+    }
+
+    [Test]
+    public void DeclaredTypeInSameModuleIsValid()
+    {
+        var result = Bind(@"
+type Address = { Street : string, City : string }
+type Person = { Name : string, Home : Address }");
+        Assert.That(result.HasErrors, Is.False);
+    }
+
+    [Test]
+    public void EnumUsedAsTypeIsValid()
+    {
+        var result = Bind(@"
+enum Color = Red | Green | Blue
+function paint(c : Color) : string = 'done'");
+        Assert.That(result.HasErrors, Is.False);
+    }
+
+    [Test]
+    public void FunctionUsedAsTypeIsNotAllowed()
+    {
+        var result = Bind(@"
+function helper() : int = 42
+let x : helper = 1");
+        Assert.That(result.HasErrors, Is.True);
+        Assert.That(result.Diagnostics[0].Message, Does.Contain("is not a type"));
+    }
+
+    // ========================================================================
+    // Call Arity Validation
+    // ========================================================================
+
+    [Test]
+    public void TooManyArgumentsProducesError()
+    {
+        var externals = new List<Symbol>
+        {
+            new FunctionSymbol("print", CallableKind.External,
+                new List<ParameterSymbol> { new("value", null, 0) })
+        };
+
+        var result = Bind("let x = print('a', 'b', 'c')", externals);
+        Assert.That(result.HasErrors, Is.True);
+        Assert.That(result.Diagnostics[0].Message, Does.Contain("expects 1 argument(s) but got 3"));
+    }
+
+    [Test]
+    public void CorrectArityDoesNotProduceError()
+    {
+        var externals = new List<Symbol>
+        {
+            new FunctionSymbol("add", CallableKind.External,
+                new List<ParameterSymbol> { new("a", null, 0), new("b", null, 1) })
+        };
+
+        var result = Bind("let x = add(1, 2)", externals);
+        Assert.That(result.HasErrors, Is.False);
     }
 
     // ========================================================================

@@ -18,7 +18,7 @@ export type Ack = {
 }
 
 ## The async stream of Tick events produced by the ticker provider.
-export let Ticks : [Tick] = source('ticker')
+export let Ticks : [Tick] = source('ticker', nic)
 
 ## The sink that accepts Ack items after pipeline processing.
-export let Acks : [Ack] = sink('ticker')
+export let Acks : [Ack] = sink('ticker', nic)
