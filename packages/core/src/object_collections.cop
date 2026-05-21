@@ -1,16 +1,6 @@
 # Object Collection Functions
 # Functions that operate on collections of any item type.
 
-## A deferred query over a collection (like C# IQueryable).
-## Chaining where/orderBy/select builds an expression tree without materializing.
-## The query executes when consumed by foreach, Count, print, or assigned to a collection.
-## Providers may optimize by pushing the full query expression down.
-export type Query = {
-    Count : int,
-    First : object,
-    Last : object
-}
-
 # Collection query functions (intrinsic)
 # These take predicate/projection expressions evaluated per-item.
 # The expression argument is passed from the call site and evaluated lazily per item.
