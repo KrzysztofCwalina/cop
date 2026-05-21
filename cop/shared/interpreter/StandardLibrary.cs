@@ -102,15 +102,7 @@ public static class StandardLibrary
         // Bitwise flag predicates
         RegisterFlagPredicates(ffi);
 
-        // provider/object intrinsic — returns a proxy that resolves member access to provider collections
-        ffi.Register("object", (args, env) =>
-        {
-            if (args.Count == 0) return CopNull.Instance;
-            var providerName = args[0].Display();
-            return new CopProviderProxy(providerName, env);
-        });
-
-        // provider is an alias for object
+        // provider intrinsic — returns a proxy that resolves member access to provider collections
         ffi.Register("provider", (args, env) =>
         {
             if (args.Count == 0) return CopNull.Instance;

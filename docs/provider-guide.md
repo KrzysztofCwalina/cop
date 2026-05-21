@@ -56,7 +56,7 @@ Define types, predicates, and checks in `.cop` files. These define the user-faci
 ## My Provider Package
 ## Provides collections for analyzing widgets.
 
-let db = object('my-provider')
+let db = provider('my-provider')
 export let Widgets = db.Widgets
 
 type Widget = {
@@ -401,7 +401,7 @@ The code model includes:
 Collections are named `Code.Types`, `Code.Methods`, `Code.Statements`, `Code.Lines`, `Code.Files`, etc. Language packages expose these via explicit exports:
 
 ```cop
-let cb : Codebase = object('haskell')
+let cb : Codebase = provider('haskell')
 export let Types = cb.Types
 export let Methods = cb.Methods
 export let Lines = cb.Lines
@@ -419,7 +419,7 @@ export let Files = cb.Files
 ```cop
 import my-provider
 
-foreach Widgets   # Widgets is exported by the package via: export let Widgets = object('my-provider').Widgets
+foreach Widgets   # Widgets is exported by the package via: export let Widgets = provider('my-provider').Widgets
     '{Widget.Name} ({Widget.Category}): {Widget.Weight}'
 ```
 

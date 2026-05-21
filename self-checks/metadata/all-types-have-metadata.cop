@@ -2,7 +2,7 @@
 #
 # Design principle: Every data provider must have a corresponding .cop package
 # that defines 'export type' metadata for the types it registers, and
-# explicit 'export let' bindings using object()/source()/sink() intrinsics.
+# explicit 'export let' bindings using provider()/source()/sink() intrinsics.
 #
 # If this check fails, add the item to the tracked list below AND to docs/review-app.html.
 #
@@ -47,8 +47,8 @@ export let untracked-providers = csharp.Types:untrackedProvider
 # Part 2: Provider Intrinsics
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Use object('core') to access cop code provider for packages/ directory
-let pkg-code = object('core')
+# Use provider('core') to access cop code provider for packages/ directory
+let pkg-code = provider('core')
 
 # Streaming providers expose SourceProvider/SinkProvider subclasses.
 # Track SinkProvider classes here to ensure they are documented.

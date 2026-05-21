@@ -48,7 +48,7 @@ export type MarkdownContent = {
 }
 
 # Provides markdown content via the built-in markdown provider
-export let Markdown : MarkdownContent = object('markdown')
+export let Markdown : MarkdownContent = provider('markdown')
 
 # Violation overloads for markdown types
 export function toError(FenceBlock, message: string) => Violation {

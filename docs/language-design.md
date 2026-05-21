@@ -515,18 +515,18 @@ The runtime's only "magic" is currying the default arg at `import` time. Everyth
 
 ### Provider Accessor Functions
 
-Provider packages expose their collections through the `object()` intrinsic function. It returns a **dynamic accessor object** — property access on the returned object becomes a query to the provider:
+Provider packages expose their collections through the `provider()` intrinsic function. It returns a **dynamic accessor object** — property access on the returned object becomes a query to the provider:
 
 ```cop
 import code
 import core
 
-# object() — works for any provider (code or non-code)
-let db = object('sample')
+# provider() — works for any provider (code or non-code)
+let db = provider('sample')
 export let Widgets = db.Widgets     # queries 'sample' for its 'Widgets' collection
 
 # Use a type annotation to enforce schema on code providers
-let cb : Codebase = object('csharp')
+let cb : Codebase = provider('csharp')
 export let Types = cb.Types         # queries 'csharp' for its 'Types' collection
 ```
 
@@ -535,7 +535,7 @@ export let Types = cb.Types         # queries 'csharp' for its 'Types' collectio
 ```cop
 type SampleData = { Widgets : [Widget], Orders : [Order] }
 
-let db : SampleData = object('sample')   # only Widgets and Orders are accessible
+let db : SampleData = provider('sample')   # only Widgets and Orders are accessible
 db.Widgets     # ✓ valid
 db.Unknown     # ✗ error: 'Unknown' is not defined on type 'SampleData'
 ```
@@ -628,7 +628,7 @@ namespace core
 type Object = {}
 
 # Returns a dynamic accessor for a named data provider.
-function object(name : string) : Object = intrinsic
+function provider(name : string) : Object = intrinsic
 
 # Source represents an async streaming collection source.
 # Type annotation declares item type: let Requests : [Request] = source('http')
@@ -729,7 +729,7 @@ type Codebase = {
 }
 ```
 
-Because `Codebase` declares its properties, any typed binding like `let cb : Codebase = object('csharp')` gets full schema enforcement — accessing `cb.Types` works, but `cb.Unknown` is a compile-time error. The untyped `let cb = object('csharp')` is also valid and allows dynamic access.
+Because `Codebase` declares its properties, any typed binding like `let cb : Codebase = provider('csharp')` gets full schema enforcement — accessing `cb.Types` works, but `cb.Unknown` is a compile-time error. The untyped `let cb = provider('csharp')` is also valid and allows dynamic access.
 
 ---
 

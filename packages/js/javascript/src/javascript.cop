@@ -1,7 +1,7 @@
 # JavaScript/TypeScript source language provider
 import code
 
-let cb : Codebase = object('javascript')
+let cb : Codebase = provider('javascript')
 
 export let Types = cb.Types
 export let Statements = cb.Statements

@@ -5,14 +5,14 @@
 ## A dynamic object accessor (similar to C# dynamic).
 ## Any property access on Object generates a query to the provider.
 ## Use a typed let binding to enforce a schema:
-##   let db : MySchema = object('provider')
+##   let db : MySchema = provider('myProvider')
 ## Without a type annotation, any property is allowed (fails at runtime if provider lacks it).
 ## With a type annotation, only declared properties are accessible (compile-time enforcement).
 
 ## Returns a dynamic Object accessor for the named provider.
 ## Properties on the returned object query the provider's collections.
-## Example: object('sample').Widgets returns the Widgets collection.
-export function object(name : string) : Object = intrinsic
+## Example: provider('sample').Widgets returns the Widgets collection.
+export function provider(name : string) : Object = intrinsic
 
 ## Returns an async streaming collection from the named provider.
 ## Use a typed annotation to declare the item type produced by the stream:

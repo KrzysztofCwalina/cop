@@ -38,10 +38,6 @@ export type expression = {}
 # nic — the null/absent value. Represents "no value" in optional fields and failed lookups.
 # item — the implicit iteration variable in predicates, foreach, and collection pipelines.
 
-## Loads a data provider by name and returns access to its collections.
-## Example: provider('http').Requests returns the Requests collection.
-export function provider(name : string) : object => intrinsic
-
 ## Reads the content of a file at the given path (sandboxed to project root).
 ## Returns the file content as a string.
 export function read(path : string) : string => intrinsic

@@ -77,7 +77,7 @@ These are general-purpose language primitives implemented in C# that any scripti
 | `read(path)` | Read file contents | Core I/O |
 | `pathMatches(path, pattern)` | Glob matching | Utility |
 | `program()` | Access program metadata | Reflection |
-| `object(provider)` | Dynamic provider object | Provider infrastructure |
+| `provider(name)` | Dynamic provider object | Provider infrastructure |
 | `source(provider)` | Streaming source handle | Streaming infrastructure |
 | `sink(provider)` | Streaming sink handle | Streaming infrastructure |
 

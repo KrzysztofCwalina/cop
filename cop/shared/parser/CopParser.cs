@@ -1923,7 +1923,6 @@ public class CopParser
         TokenKind.FlagsKeyword => true,
         TokenKind.EnumKeyword => true,
         TokenKind.IntrinsicKeyword => true,
-        TokenKind.ProviderKeyword => true,
         TokenKind.TypeKeyword => true,
         TokenKind.ImportKeyword => true,
         TokenKind.LetKeyword => true,

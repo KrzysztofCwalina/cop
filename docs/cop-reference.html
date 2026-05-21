@@ -716,13 +716,7 @@ const packages = {
       },
       "Call": {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L131",
-        "props": [
-          {
-            "name": "Signature",
-            "type": "string",
-            "desc": ""
-          }
-        ]
+        "props": []
       },
       "Declaration": {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L135",
@@ -1595,9 +1589,145 @@ const packages = {
       }
     ],
     "collections": [],
-    "types": {},
-    "predicates": [],
-    "functions": [],
+    "types": {
+      "Result": {
+        "desc": "A CodeQL analysis result (alert/finding)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql/src/codeql.cop#L13",
+        "props": [
+          {
+            "name": "RuleId",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Message",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Severity",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "FilePath",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "StartLine",
+            "type": "int",
+            "desc": ""
+          },
+          {
+            "name": "EndLine",
+            "type": "int",
+            "desc": ""
+          },
+          {
+            "name": "StartColumn",
+            "type": "int",
+            "desc": ""
+          },
+          {
+            "name": "EndColumn",
+            "type": "int",
+            "desc": ""
+          }
+        ]
+      },
+      "Rule": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql/src/codeql.cop#L24",
+        "props": [
+          {
+            "name": "Id",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Name",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Description",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Severity",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Tags",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Precision",
+            "type": "string",
+            "desc": ""
+          }
+        ]
+      },
+      "Run": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql/src/codeql.cop#L33",
+        "props": [
+          {
+            "name": "Tool",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Version",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "ResultCount",
+            "type": "int",
+            "desc": ""
+          }
+        ]
+      }
+    },
+    "predicates": [
+      {
+        "name": "isError",
+        "appliesTo": "Result",
+        "desc": "Predicates for filtering results by severity",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql/src/codeql.cop#L44"
+      },
+      {
+        "name": "isWarning",
+        "appliesTo": "Result",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql/src/codeql.cop#L45"
+      },
+      {
+        "name": "isNote",
+        "appliesTo": "Result",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql/src/codeql.cop#L46"
+      },
+      {
+        "name": "isRecommendation",
+        "appliesTo": "Result",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql/src/codeql.cop#L47"
+      }
+    ],
+    "functions": [
+      {
+        "name": "Load",
+        "params": "string",
+        "returns": "collection",
+        "appliesTo": "string",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql/src/codeql.cop#L41"
+      }
+    ],
     "checks": [],
     "commands": []
   },
@@ -1613,7 +1743,100 @@ const packages = {
     "collections": [],
     "types": {},
     "predicates": [],
-    "functions": [],
+    "functions": [
+      {
+        "name": "qlQuery",
+        "params": "description: string, from: string, where: string, select: string",
+        "returns": "string",
+        "desc": "Builds a complete CodeQL query string.\nParameters:\n  name - query name (used in @name metadata)\n  description - query description (used in @description metadata)\n  from - from clause (e.g., 'Class c')\n  where - where clause (e.g., 'c.isPublic()')\n  select - select clause (e.g., 'c, c.getName()')\nReturns a formatted .ql file content string.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L13"
+      },
+      {
+        "name": "qlQueryAll",
+        "params": "description: string, from: string, select: string",
+        "returns": "string",
+        "desc": "Builds a CodeQL query with no where clause (selects all matching).\nParameters:\n  name - query name\n  description - query description\n  from - from clause\n  select - select clause",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L21"
+      },
+      {
+        "name": "qlFrom",
+        "params": "qlType: string",
+        "returns": "string",
+        "desc": "Builds a CodeQL 'from' clause for a single variable.\nExample: qlFrom('c', 'Class') => 'Class c'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L25"
+      },
+      {
+        "name": "qlFrom2",
+        "params": "type1: string, var2: string, type2: string",
+        "returns": "string",
+        "desc": "Builds a CodeQL 'from' clause for two variables (join).\nExample: qlFrom2('c', 'Class', 'm', 'Method') => 'Class c, Method m'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L29"
+      },
+      {
+        "name": "qlAnd",
+        "params": "right: string",
+        "returns": "string",
+        "desc": "Combines two where conditions with 'and'.\nExample: qlAnd('c.isPublic()', 'c.isAbstract()') => 'c.isPublic() and c.isAbstract()'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L33"
+      },
+      {
+        "name": "qlOr",
+        "params": "right: string",
+        "returns": "string",
+        "desc": "Combines two where conditions with 'or'.\nExample: qlOr('c.isPublic()', 'c.isProtected()') => '(c.isPublic() or c.isProtected())'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L37"
+      },
+      {
+        "name": "qlNot",
+        "params": "string",
+        "returns": "string",
+        "appliesTo": "string",
+        "desc": "Negates a where condition.\nExample: qlNot('c.isPublic()') => 'not c.isPublic()'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L41"
+      },
+      {
+        "name": "qlNameMatches",
+        "params": "pattern: string",
+        "returns": "string",
+        "desc": "Builds a name-matching where condition using regexp.\nExample: qlNameMatches('c', 'Get.*') => 'c.getName().regexpMatch(\"Get.*\")'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L45"
+      },
+      {
+        "name": "qlNameStartsWith",
+        "params": "prefix: string",
+        "returns": "string",
+        "desc": "Builds a name starts-with condition.\nExample: qlNameStartsWith('c', 'Base') => 'c.getName().indexOf(\"Base\") = 0'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L49"
+      },
+      {
+        "name": "qlNameContains",
+        "params": "substring: string",
+        "returns": "string",
+        "desc": "Builds a name contains condition.\nExample: qlNameContains('c', 'Helper') => 'c.getName().matches(\"%Helper%\")'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L53"
+      },
+      {
+        "name": "qlModifier",
+        "params": "modifier: string",
+        "returns": "string",
+        "desc": "Builds a modifier predicate call.\nExample: qlIsPublic('c') => 'c.isPublic()'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L57"
+      },
+      {
+        "name": "qlExists",
+        "params": "condition: string",
+        "returns": "string",
+        "desc": "Builds an 'exists' subquery.\nExample: qlExists('Method m', 'm.getDeclaringType() = c') => 'exists(Method m | m.getDeclaringType() = c)'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L61"
+      },
+      {
+        "name": "qlSave",
+        "params": "content: string",
+        "returns": "string",
+        "desc": "Writes a query string to a .ql file.\nUses the save() intrinsic under the hood.\nExample: qlSave('queries/my-query.ql', queryString)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L66"
+      }
+    ],
     "checks": [],
     "commands": []
   },
@@ -1649,11 +1872,11 @@ const packages = {
     "types": {
       "Formattable": {
         "desc": "A template bound to data, ready to be resolved into a string.\nItems is the collection of data to format, Template is the {Property} interpolation pattern,\nand Separator is the string used to join results (defaults to newline).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L48",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L60",
         "props": [
           {
             "name": "Items",
-            "type": "[Object]",
+            "type": "[object]",
             "desc": ""
           },
           {
@@ -1670,7 +1893,7 @@ const packages = {
       },
       "Error": {
         "desc": "Represents an operational error flowing through a pipeline.\nErrors are not code bugs (use fail() for those). They represent external failures\nthat code cannot prevent: network timeouts, I/O failures, malformed input.\nUse isError predicate to detect errors in pipeline items.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L64",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L76",
         "props": [
           {
             "name": "Message",
@@ -1696,7 +1919,7 @@ const packages = {
       },
       "Program": {
         "desc": "Represents the running program's context.\nProvides access to command-line arguments passed to the cop invocation.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L88",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L100",
         "props": [
           {
             "name": "Args",
@@ -1737,8 +1960,8 @@ const packages = {
         ]
       },
       "Query": {
-        "desc": "A deferred query over a collection (like C# IQueryable).\nChaining where/orderBy/select builds an expression tree without materializing.\nThe query executes when consumed by foreach, Count, print, or assigned to a Collection.\nProviders may optimize by pushing the full query expression down.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L145",
+        "desc": "A deferred query over a collection (like C# IQueryable).\nChaining where/orderBy/select builds an expression tree without materializing.\nThe query executes when consumed by foreach, Count, print, or assigned to a collection.\nProviders may optimize by pushing the full query expression down.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L21",
         "props": [
           {
             "name": "Count",
@@ -1747,15 +1970,86 @@ const packages = {
           },
           {
             "name": "First",
-            "type": "Object",
+            "type": "object",
             "desc": ""
           },
           {
             "name": "Last",
-            "type": "Object",
+            "type": "object",
             "desc": ""
           }
         ]
+      },
+      "[T]": {
+        "desc": "The built-in ordered collection type.\nDeclared as [T] in property types (e.g., Types : [Type]).\nImmutable — all operations return new collections without modifying the original.\nProperties: Count (int), First (item or nic), Last (item or nic),\nRest (collection without first element), Single (item if exactly one, or nic).",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L9",
+        "props": [
+          {
+            "name": "Count",
+            "type": "int",
+            "desc": ""
+          },
+          {
+            "name": "First",
+            "type": "T",
+            "desc": ""
+          },
+          {
+            "name": "Last",
+            "type": "T",
+            "desc": ""
+          },
+          {
+            "name": "Rest",
+            "type": "[T]",
+            "desc": ""
+          },
+          {
+            "name": "Single",
+            "type": "T",
+            "desc": ""
+          }
+        ]
+      },
+      "object": {
+        "desc": "The dynamic base type. Any property access on object is resolved at runtime.\nAll items in untyped collections are object. Used as the return type for\nprovider() and as element type for generic collections.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L12",
+        "props": []
+      },
+      "string": {
+        "desc": "A UTF-8 text value.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L15",
+        "props": []
+      },
+      "int": {
+        "desc": "A 64-bit signed integer.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L18",
+        "props": []
+      },
+      "number": {
+        "desc": "A 64-bit floating-point number.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L21",
+        "props": []
+      },
+      "bool": {
+        "desc": "A boolean value (true or false).",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L24",
+        "props": []
+      },
+      "byte": {
+        "desc": "A single unsigned byte (0–255).",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L27",
+        "props": []
+      },
+      "bytes": {
+        "desc": "An array of bytes. Used for binary data (e.g., HTTP request/response bodies).",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L30",
+        "props": []
+      },
+      "expression": {
+        "desc": "A deferred expression passed to collection methods.\nEvaluated per-item in the collection (has access to 'item' and 'acc').\nUsed for predicates, projections, and accumulators in where, select, reduce, etc.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L35",
+        "props": []
       }
     },
     "predicates": [
@@ -1764,66 +2058,76 @@ const packages = {
         "appliesTo": "Object",
         "desc": "Returns true if the current item is an Error value.\nWorks as a bare predicate or as a filter: items:isError\nExample: predicate handleError(Object:isError) => print('{item.Message}')",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L78"
+      },
+      {
+        "name": "isError",
+        "appliesTo": "Unknown",
+        "desc": "Returns true if the current item is an Error value.\nWorks as a bare predicate or as a filter: items:isError\nExample: predicate handleError(object:isError) => print('{item.Message}')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L90"
       }
     ],
     "functions": [
       {
-        "name": "object",
-        "params": "name: string",
+        "name": "provider",
+        "params": "string",
         "returns": "Object",
-        "desc": "A dynamic object accessor (similar to C# dynamic).\nAny property access on Object generates a query to the provider.\nUse a typed let binding to enforce a schema:\n  let db : MySchema = object('provider')\nWithout a type annotation, any property is allowed (fails at runtime if provider lacks it).\nWith a type annotation, only declared properties are accessible (compile-time enforcement).\nReturns a dynamic Object accessor for the named provider.\nProperties on the returned object query the provider's collections.\nExample: object('sample').Widgets returns the Widgets collection.",
+        "appliesTo": "string",
+        "desc": "A dynamic object accessor (similar to C# dynamic).\nAny property access on Object generates a query to the provider.\nUse a typed let binding to enforce a schema:\n  let db : MySchema = provider('myProvider')\nWithout a type annotation, any property is allowed (fails at runtime if provider lacks it).\nWith a type annotation, only declared properties are accessible (compile-time enforcement).\nReturns a dynamic Object accessor for the named provider.\nProperties on the returned object query the provider's collections.\nExample: provider('sample').Widgets returns the Widgets collection.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L15"
       },
       {
         "name": "source",
-        "params": "name: string",
+        "params": "string",
         "returns": "[object]",
+        "appliesTo": "string",
         "desc": "Returns an async streaming collection from the named provider.\nUse a typed annotation to declare the item type produced by the stream:\n  export let Requests : [Request] = source('http')\nWithout annotation, stream items are untyped objects.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L21"
       },
       {
         "name": "sink",
-        "params": "name: string",
+        "params": "string",
         "returns": "[object]",
+        "appliesTo": "string",
         "desc": "Returns an async output collection for the named streaming provider.\nItems pushed into the sink are delivered to the provider's output channel.\n  export let RESPONSES : [Response] = sink('http')\nWithout annotation, the sink accepts any item.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L27"
       },
       {
         "name": "read",
-        "params": "path: string",
+        "params": "string",
         "returns": "string",
+        "appliesTo": "string",
         "desc": "Reads the content of a file at the given path (sandboxed to project root).\nReturns the file content as a string.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L31"
       },
       {
         "name": "text",
-        "params": "string",
-        "returns": "",
-        "appliesTo": "string",
+        "params": "Unknown",
+        "returns": "string",
+        "appliesTo": "Unknown",
         "desc": "Converts a string to text (identity — returns string as-is).",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L34"
       },
       {
         "name": "text",
-        "params": "bool",
-        "returns": "",
-        "appliesTo": "bool",
+        "params": "Unknown",
+        "returns": "bool",
+        "appliesTo": "Unknown",
         "desc": "Converts a bool to text: true => 'true', false => 'false'.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L37"
       },
       {
         "name": "text",
-        "params": "int",
+        "params": "Unknown",
         "returns": "string",
-        "appliesTo": "int",
+        "appliesTo": "Unknown",
         "desc": "Converts an integer to its decimal text representation.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L40"
       },
       {
         "name": "text",
-        "params": "bytes",
+        "params": "Unknown",
         "returns": "string",
-        "appliesTo": "bytes",
+        "appliesTo": "Unknown",
         "desc": "Decodes a byte array as UTF-8 text.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L43"
       },
@@ -1837,58 +2141,63 @@ const packages = {
       },
       {
         "name": "error",
-        "params": "string",
+        "params": "Unknown",
         "returns": "Error",
-        "appliesTo": "string",
+        "appliesTo": "Unknown",
         "desc": "Creates an Error value with the given message string.\nExample: error('connection timeout')",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L73"
       },
       {
         "name": "fail",
-        "params": "message: string",
-        "returns": "",
+        "params": "string",
+        "returns": "Unknown",
+        "appliesTo": "string",
         "desc": "Terminates execution immediately with a fatal diagnostic.\nUse for programmer assertions — situations that should never occur.\nCan be used standalone: fail('invariant violated')\nOr in pipeline: foreach Items:badCondition => fail('{item.Name} is invalid')",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L84"
       },
       {
         "name": "program",
-        "params": "",
+        "params": "Unknown",
         "returns": "Program",
+        "appliesTo": "Unknown",
         "desc": "Returns the current program context.\nProvides access to command-line arguments passed to the cop invocation.\nExample: predicate verbose(Program) => program().Args:contains('/v')",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L95"
       },
       {
         "name": "pathMatches",
-        "params": "path: string, pattern: string",
+        "params": "pattern: string",
         "returns": "bool",
         "desc": "Glob-matches a file path against a pattern.\nSupports **, *, ? wildcards. Returns true if the path matches.\nExample: pathMatches(Statement.File.Path, '**/Tests/**')",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L100"
       },
       {
         "name": "print",
-        "params": "message: string",
+        "params": "string",
         "returns": "string",
+        "appliesTo": "string",
         "desc": "Prints a message to the output.\nUsed standalone: print('hello {Name}')\nUsed in pipeline: foreach Types => print('{item.Name}')\nThe template supports {Property} interpolation and {@style} formatting.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L106"
       },
       {
         "name": "save",
-        "params": "path: string, content: string",
-        "returns": "",
+        "params": "content: string",
+        "returns": "Unknown",
         "desc": "Saves content to a file at the specified path.\nUsed in pipeline: foreach Types:isPublic => save('api.txt', '{item.Name}')\nCreates or appends to the file with the rendered template output.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L111"
       },
       {
         "name": "debug",
-        "params": "message: string",
-        "returns": "",
+        "params": "string",
+        "returns": "Unknown",
+        "appliesTo": "string",
         "desc": "Outputs a diagnostic message to the debug log (--diag flag).\nSame template semantics as print but only visible when diagnostics are enabled.\nUsed for troubleshooting: debug('{Types.Count} types loaded')",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L116"
       },
       {
         "name": "assert",
-        "params": "condition: bool, description: string",
-        "returns": "",
+        "params": "bool, description: string",
+        "returns": "Unknown",
+        "appliesTo": "bool",
         "desc": "Asserts that a condition is true. Fails the test run if false.\nUsed in tests: assert(Types:isPublic.Count > 0, 'should have public types')\nReports pass/fail with the description.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L121"
       },
@@ -2101,46 +2410,50 @@ const packages = {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L260"
       },
       {
-        "name": "object",
-        "params": "name: string",
+        "name": "provider",
+        "params": "string",
         "returns": "Object",
-        "desc": "Returns a dynamic Object accessor for the named provider.\nProperties on the returned object query the provider's collections.\nExample: object('sample').Widgets returns the Widgets collection.",
+        "appliesTo": "string",
+        "desc": "Returns a dynamic Object accessor for the named provider.\nProperties on the returned object query the provider's collections.\nExample: provider('sample').Widgets returns the Widgets collection.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L8"
       },
       {
         "name": "source",
-        "params": "name: string",
+        "params": "string",
         "returns": "[object]",
+        "appliesTo": "string",
         "desc": "Returns an async streaming collection from the named provider.\nThe stream produces items asynchronously (e.g., incoming HTTP requests).",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L12"
       },
       {
         "name": "sink",
-        "params": "name: string",
+        "params": "string",
         "returns": "[object]",
+        "appliesTo": "string",
         "desc": "Returns an async output collection for the named streaming provider.\nItems pushed into the sink are delivered to the provider's output channel.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L16"
       },
       {
         "name": "read",
-        "params": "path: string",
+        "params": "string",
         "returns": "string",
+        "appliesTo": "string",
         "desc": "Reads the content of a file at the given path (sandboxed to project root).\nReturns the file content as a string.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L20"
       },
       {
         "name": "text",
-        "params": "int",
+        "params": "Unknown",
         "returns": "string",
-        "appliesTo": "int",
+        "appliesTo": "Unknown",
         "desc": "Converts an integer to its decimal text representation.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L23"
       },
       {
         "name": "text",
-        "params": "bytes",
+        "params": "Unknown",
         "returns": "string",
-        "appliesTo": "bytes",
+        "appliesTo": "Unknown",
         "desc": "Decodes a byte array as UTF-8 text.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L26"
       },
@@ -2154,58 +2467,63 @@ const packages = {
       },
       {
         "name": "error",
-        "params": "string",
+        "params": "Unknown",
         "returns": "Error",
-        "appliesTo": "string",
+        "appliesTo": "Unknown",
         "desc": "Creates an Error value with the given message string.\nExample: error('connection timeout')",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L36"
       },
       {
         "name": "fail",
-        "params": "message: string",
-        "returns": "",
+        "params": "string",
+        "returns": "Unknown",
+        "appliesTo": "string",
         "desc": "Terminates execution immediately with a fatal diagnostic.\nUse for programmer assertions — situations that should never occur.\nCan be used standalone: fail('invariant violated')\nOr in pipeline: foreach Items:badCondition => fail('{item.Name} is invalid')",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L42"
       },
       {
         "name": "program",
-        "params": "",
+        "params": "Unknown",
         "returns": "Program",
+        "appliesTo": "Unknown",
         "desc": "Returns the current program context.\nProvides access to command-line arguments passed to the cop invocation.\nExample: predicate verbose(Program) => program().Args:contains('/v')",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L47"
       },
       {
         "name": "pathMatches",
-        "params": "path: string, pattern: string",
+        "params": "pattern: string",
         "returns": "bool",
         "desc": "Glob-matches a file path against a pattern.\nSupports **, *, ? wildcards. Returns true if the path matches.\nExample: pathMatches(Statement.File.Path, '**/Tests/**')",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L52"
       },
       {
         "name": "print",
-        "params": "message: string",
+        "params": "string",
         "returns": "string",
+        "appliesTo": "string",
         "desc": "Prints a message to the output.\nUsed standalone: print('hello {Name}')\nUsed in pipeline: foreach Types => print('{item.Name}')\nThe template supports {Property} interpolation and {@style} formatting.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L58"
       },
       {
         "name": "save",
-        "params": "path: string, content: string",
-        "returns": "",
+        "params": "content: string",
+        "returns": "Unknown",
         "desc": "Saves content to a file at the specified path.\nUsed in pipeline: foreach Types:isPublic => save('api.txt', '{item.Name}')\nCreates or appends to the file with the rendered template output.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L63"
       },
       {
         "name": "debug",
-        "params": "message: string",
-        "returns": "",
+        "params": "string",
+        "returns": "Unknown",
+        "appliesTo": "string",
         "desc": "Outputs a diagnostic message to the debug log (--diag flag).\nSame template semantics as print but only visible when diagnostics are enabled.\nUsed for troubleshooting: debug('{Types.Count} types loaded')",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L68"
       },
       {
         "name": "assert",
-        "params": "condition: bool, description: string",
-        "returns": "",
+        "params": "bool, description: string",
+        "returns": "Unknown",
+        "appliesTo": "bool",
         "desc": "Asserts that a condition is true. Fails the test run if false.\nUsed in tests: assert(Types:isPublic.Count > 0, 'should have public types')\nReports pass/fail with the description.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L73"
       },
@@ -2416,6 +2734,355 @@ const packages = {
         "appliesTo": "Collection",
         "desc": "Returns a new collection combining both collections.\nExample: let merged = listA:concat(listB)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L184"
+      },
+      {
+        "name": "sum",
+        "params": "[int], projection: expression",
+        "returns": "int",
+        "appliesTo": "[int]",
+        "desc": "Sums a numeric property across all items.\nExample: files:sum(item.Size)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L6"
+      },
+      {
+        "name": "sum",
+        "params": "[number], projection: expression",
+        "returns": "number",
+        "appliesTo": "[number]",
+        "desc": "Sums a numeric property across all items.\nExample: measurements:sum(item.Value)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L10"
+      },
+      {
+        "name": "min",
+        "params": "[int], projection: expression",
+        "returns": "int",
+        "appliesTo": "[int]",
+        "desc": "Minimum value of a numeric property.\nExample: files:min(item.Size)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L14"
+      },
+      {
+        "name": "min",
+        "params": "[number], projection: expression",
+        "returns": "number",
+        "appliesTo": "[number]",
+        "desc": "Minimum value of a numeric property.\nExample: measurements:min(item.Value)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L18"
+      },
+      {
+        "name": "max",
+        "params": "[int], projection: expression",
+        "returns": "int",
+        "appliesTo": "[int]",
+        "desc": "Maximum value of a numeric property.\nExample: files:max(item.Size)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L22"
+      },
+      {
+        "name": "max",
+        "params": "[number], projection: expression",
+        "returns": "number",
+        "appliesTo": "[number]",
+        "desc": "Maximum value of a numeric property.\nExample: measurements:max(item.Value)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L26"
+      },
+      {
+        "name": "average",
+        "params": "[int], projection: expression",
+        "returns": "number",
+        "appliesTo": "[int]",
+        "desc": "Average value of a numeric property.\nExample: files:average(item.Size)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L30"
+      },
+      {
+        "name": "average",
+        "params": "[number], projection: expression",
+        "returns": "number",
+        "appliesTo": "[number]",
+        "desc": "Average value of a numeric property.\nExample: measurements:average(item.Value)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L34"
+      },
+      {
+        "name": "where",
+        "params": "[object], condition: expression",
+        "returns": "[object]",
+        "appliesTo": "[object]",
+        "desc": "Filters items matching a condition. Returns a new collection.\nExample: Types:where(isPublic)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L33"
+      },
+      {
+        "name": "select",
+        "params": "[object], projection: expression",
+        "returns": "[object]",
+        "appliesTo": "[object]",
+        "desc": "Projects each item through a transformation. Returns a new collection.\nExample: Types:select(item.Name)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L37"
+      },
+      {
+        "name": "any",
+        "params": "[object], condition: expression",
+        "returns": "bool",
+        "appliesTo": "[object]",
+        "desc": "Returns true if any item matches a condition.\nExample: Types:any(isAbstract)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L41"
+      },
+      {
+        "name": "all",
+        "params": "[object], condition: expression",
+        "returns": "bool",
+        "appliesTo": "[object]",
+        "desc": "Returns true if all items match a condition.\nExample: Types:all(isPublic)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L45"
+      },
+      {
+        "name": "none",
+        "params": "[object], condition: expression",
+        "returns": "bool",
+        "appliesTo": "[object]",
+        "desc": "Returns true if no item matches a condition.\nExample: Types:none(isObsolete)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L49"
+      },
+      {
+        "name": "count",
+        "params": "[object], condition: expression",
+        "returns": "int",
+        "appliesTo": "[object]",
+        "desc": "Counts items matching a condition.\nExample: Types:count(isPublic)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L53"
+      },
+      {
+        "name": "contains",
+        "params": "[string], value: string",
+        "returns": "bool",
+        "appliesTo": "[string]",
+        "desc": "Returns true if collection contains a value (case-insensitive string match).\nExample: names:contains('Foo')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L57"
+      },
+      {
+        "name": "containsAny",
+        "params": "[string], value: string",
+        "returns": "bool",
+        "appliesTo": "[string]",
+        "desc": "Returns true if collection contains any of the given values.\nExample: tags:containsAny('api', 'public')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L61"
+      },
+      {
+        "name": "empty",
+        "params": "[object]",
+        "returns": "bool",
+        "appliesTo": "[object]",
+        "desc": "Returns true if the collection is empty (Count == 0).\nExample: errors:empty",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L65"
+      },
+      {
+        "name": "first",
+        "params": "[object], condition: expression",
+        "returns": "object",
+        "appliesTo": "[object]",
+        "desc": "First item matching a condition, or nic.\nExample: Types:first(isPublic)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L69"
+      },
+      {
+        "name": "last",
+        "params": "[object], condition: expression",
+        "returns": "object",
+        "appliesTo": "[object]",
+        "desc": "Last item matching a condition, or nic.\nExample: Types:last(isPublic)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L73"
+      },
+      {
+        "name": "single",
+        "params": "[object], condition: expression",
+        "returns": "object",
+        "appliesTo": "[object]",
+        "desc": "The single item matching a condition, or nic if zero or multiple match.\nExample: Types:single(isEntryPoint)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L77"
+      },
+      {
+        "name": "elementAt",
+        "params": "[object], index: int",
+        "returns": "object",
+        "appliesTo": "[object]",
+        "desc": "Item at a specific zero-based index.\nExample: items:elementAt(3)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L81"
+      },
+      {
+        "name": "orderBy",
+        "params": "[object], key: expression",
+        "returns": "[object]",
+        "appliesTo": "[object]",
+        "desc": "Sorts ascending by a key expression.\nExample: Types:orderBy(item.Name)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L85"
+      },
+      {
+        "name": "orderByDescending",
+        "params": "[object], key: expression",
+        "returns": "[object]",
+        "appliesTo": "[object]",
+        "desc": "Sorts descending by a key expression.\nExample: Types:orderByDescending(item.Count)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L89"
+      },
+      {
+        "name": "distinct",
+        "params": "[object]",
+        "returns": "[object]",
+        "appliesTo": "[object]",
+        "desc": "Removes duplicate items (by string representation).\nExample: names:distinct",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L93"
+      },
+      {
+        "name": "groupBy",
+        "params": "[object], key: expression",
+        "returns": "[object]",
+        "appliesTo": "[object]",
+        "desc": "Groups items by a key expression. Returns collection of groups.\nExample: Types:groupBy(item.Namespace)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L97"
+      },
+      {
+        "name": "reduce",
+        "params": "[object], accumulator: expression",
+        "returns": "object",
+        "appliesTo": "[object]",
+        "desc": "Reduces a collection to a single value using an accumulator expression.\nExample: numbers:reduce(acc + item)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L101"
+      },
+      {
+        "name": "push",
+        "params": "[object], value: object",
+        "returns": "[object]",
+        "appliesTo": "[object]",
+        "desc": "Returns a new collection with the item appended at the end.\nExample: let updated = items:push(newItem)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L108"
+      },
+      {
+        "name": "enqueue",
+        "params": "[object], value: object",
+        "returns": "[object]",
+        "appliesTo": "[object]",
+        "desc": "Returns a new collection with the item added at the front (queue semantics).\nExample: let updated = items:enqueue(newItem)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L112"
+      },
+      {
+        "name": "pop",
+        "params": "[object]",
+        "returns": "[object]",
+        "appliesTo": "[object]",
+        "desc": "Returns a new collection without the last element.\nExample: let shorter = items:pop",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L116"
+      },
+      {
+        "name": "concat",
+        "params": "other: [object]",
+        "returns": "[object]",
+        "desc": "Returns a new collection combining both collections.\nExample: let merged = listA:concat(listB)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L120"
+      },
+      {
+        "name": "read",
+        "params": "string",
+        "returns": "string",
+        "appliesTo": "string",
+        "desc": "Reads the content of a file at the given path (sandboxed to project root).\nReturns the file content as a string.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L43"
+      },
+      {
+        "name": "text",
+        "params": "string",
+        "returns": "value",
+        "appliesTo": "string",
+        "desc": "Converts a string to text (identity — returns string as-is).",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L46"
+      },
+      {
+        "name": "text",
+        "params": "bool",
+        "returns": "value",
+        "appliesTo": "bool",
+        "desc": "Converts a bool to text: true => 'true', false => 'false'.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L49"
+      },
+      {
+        "name": "text",
+        "params": "int",
+        "returns": "string",
+        "appliesTo": "int",
+        "desc": "Converts an integer to its decimal text representation.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L52"
+      },
+      {
+        "name": "text",
+        "params": "bytes",
+        "returns": "string",
+        "appliesTo": "bytes",
+        "desc": "Decodes a byte array as UTF-8 text.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L55"
+      },
+      {
+        "name": "text",
+        "params": "Formattable",
+        "returns": "string",
+        "appliesTo": "Formattable",
+        "desc": "Converts a Formattable to text by resolving the Template against each item\nin Items using {Property} interpolation, then joining results with Separator.\nWhen used in a pipeline: collection.text('{Item.Name}') creates a Formattable\nfrom the pipeline collection and resolves it into a single joined string.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L70"
+      },
+      {
+        "name": "error",
+        "params": "string",
+        "returns": "Error",
+        "appliesTo": "string",
+        "desc": "Creates an Error value with the given message string.\nExample: error('connection timeout')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L85"
+      },
+      {
+        "name": "fail",
+        "params": "string",
+        "returns": "intrinsic",
+        "appliesTo": "string",
+        "desc": "Terminates execution immediately with a fatal diagnostic.\nUse for programmer assertions — situations that should never occur.\nCan be used standalone: fail('invariant violated')\nOr in pipeline: foreach Items:badCondition => fail('{item.Name} is invalid')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L96"
+      },
+      {
+        "name": "program",
+        "params": "Unknown",
+        "returns": "Program",
+        "appliesTo": "Unknown",
+        "desc": "Returns the current program context.\nProvides access to command-line arguments passed to the cop invocation.\nExample: predicate verbose(Program) => program().Args:contains('/v')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L107"
+      },
+      {
+        "name": "pathMatches",
+        "params": "pattern: string",
+        "returns": "bool",
+        "desc": "Glob-matches a file path against a pattern.\nSupports **, *, ? wildcards. Returns true if the path matches.\nExample: pathMatches(Statement.File.Path, '**/Tests/**')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L112"
+      },
+      {
+        "name": "print",
+        "params": "string",
+        "returns": "string",
+        "appliesTo": "string",
+        "desc": "Prints a message to the output.\nUsed standalone: print('hello {Name}')\nUsed in pipeline: foreach Types => print('{item.Name}')\nThe template supports {Property} interpolation and {@style} formatting.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L118"
+      },
+      {
+        "name": "save",
+        "params": "content: string",
+        "returns": "intrinsic",
+        "desc": "Saves content to a file at the specified path.\nUsed in pipeline: foreach Types:isPublic => save('api.txt', '{item.Name}')\nCreates or appends to the file with the rendered template output.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L123"
+      },
+      {
+        "name": "debug",
+        "params": "string",
+        "returns": "intrinsic",
+        "appliesTo": "string",
+        "desc": "Outputs a diagnostic message to the debug log (--diag flag).\nSame template semantics as print but only visible when diagnostics are enabled.\nUsed for troubleshooting: debug('{Types.Count} types loaded')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L128"
+      },
+      {
+        "name": "assert",
+        "params": "bool, description: string",
+        "returns": "intrinsic",
+        "appliesTo": "bool",
+        "desc": "Asserts that a condition is true. Fails the test run if false.\nUsed in tests: assert(Types:isPublic.Count > 0, 'should have public types')\nReports pass/fail with the description.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L133"
       }
     ],
     "checks": [],
@@ -2427,61 +3094,16 @@ const packages = {
     "samples": [],
     "collections": [],
     "types": {},
-    "predicates": [],
-    "functions": [
+    "predicates": [
       {
         "name": "Load",
-        "params": "path: string",
-        "returns": "Codebase",
+        "appliesTo": "string",
         "desc": "Loads a .NET assembly and returns its code model.\nThe path is relative to the project root.\nThe returned Codebase has Types, Api, Members, Lines, etc.\nExample: csharp.Load('lib/MyLib.dll')",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L18"
       }
     ],
+    "functions": [],
     "checks": [],
-    "exports": [
-      {
-        "name": "Types",
-        "type": "[Typ]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L6"
-      },
-      {
-        "name": "Statements",
-        "type": "[Statement]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L7"
-      },
-      {
-        "name": "Lines",
-        "type": "[Lin]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L8"
-      },
-      {
-        "name": "Calls",
-        "type": "[Call]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L9"
-      },
-      {
-        "name": "Files",
-        "type": "[Fil]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L10"
-      },
-      {
-        "name": "Regions",
-        "type": "[Region]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L11"
-      },
-      {
-        "name": "Projects",
-        "type": "[Project]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L12"
-      }
-    ],
     "commands": []
   },
   "csharp-checks": {
@@ -2516,363 +3138,7 @@ const packages = {
       }
     ],
     "functions": [],
-    "checks": [
-      {
-        "name": "var-declarations",
-        "desc": "Disallow implicit typing with var — use explicit types",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L20"
-      },
-      {
-        "name": "dynamic-declarations",
-        "desc": "Disallow dynamic typing",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L24"
-      },
-      {
-        "name": "thread-sleep-calls",
-        "desc": "Use Task.Delay instead of blocking Thread.Sleep",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L52"
-      },
-      {
-        "name": "configure-await-true-calls",
-        "desc": "ConfigureAwait(true) is the default and should not be used explicitly",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L56"
-      },
-      {
-        "name": "sync-over-async-calls",
-        "desc": "Do not block on async code with GetAwaiter().GetResult()",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L60"
-      },
-      {
-        "name": "bare-task-completion-sources",
-        "desc": "TaskCompletionSource should be created with RunContinuationsAsynchronously",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L64"
-      },
-      {
-        "name": "sync-wait-in-async",
-        "desc": "Do not use sync-blocking calls (.Wait(), .GetResult()) inside async methods (AZC0103)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L68"
-      },
-      {
-        "name": "console-calls",
-        "desc": "Avoid Console output in library code",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L77"
-      },
-      {
-        "name": "base-exception-catches",
-        "desc": "Catch specific exception types instead of bare Exception",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L89"
-      },
-      {
-        "name": "swallowed-exceptions",
-        "desc": "Do not swallow base exceptions — always rethrow",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L93"
-      },
-      {
-        "name": "uri-tostring",
-        "desc": "Banned API: Uri.ToString() — use Uri.AbsoluteUri for consistent output",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L104"
-      },
-      {
-        "name": "type-name-is-keyword",
-        "desc": "CA1716: Type names should not match C# reserved keywords",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L123"
-      },
-      {
-        "name": "uninstantiated-internal",
-        "desc": "CA1812: Internal classes should be instantiated (heuristic)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L132"
-      },
-      {
-        "name": "undisposed-new",
-        "desc": "CA2000: Dispose objects before losing scope (heuristic)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L142"
-      },
-      {
-        "name": "readme-install-package",
-        "desc": "README: Should not use Install-Package (use dotnet add package)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L154"
-      },
-      {
-        "name": "cpm-compliance",
-        "desc": "CPM compliance: PackageReference should not have Version attribute",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L158"
-      },
-      {
-        "name": "csharp-correctness-checks",
-        "desc": "Combined correctness checks",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L162"
-      },
-      {
-        "name": "interface-prefix",
-        "desc": "SA1302: Interface names must begin with 'I' followed by an uppercase letter",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L177"
-      },
-      {
-        "name": "type-name-casing",
-        "desc": "SA1300: Type names must begin with an uppercase letter (PascalCase)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L181"
-      },
-      {
-        "name": "method-name-casing",
-        "desc": "SA1300: Public method names must begin with an uppercase letter (PascalCase)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L185"
-      },
-      {
-        "name": "single-type-per-file",
-        "desc": "SA1402: A file may only contain a single type",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L197"
-      },
-      {
-        "name": "file-header-required",
-        "desc": "SA1633: File must have a header",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L201"
-      },
-      {
-        "name": "comment-spacing",
-        "desc": "SA1005: Single-line comment must begin with a space after //",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L228"
-      },
-      {
-        "name": "no-tabs",
-        "desc": "SA1027: Code must not contain tabs",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L232"
-      },
-      {
-        "name": "no-trailing-whitespace",
-        "desc": "SA1028: Code must not contain trailing whitespace",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L236"
-      },
-      {
-        "name": "no-empty-statements",
-        "desc": "SA1106: Code must not contain empty statements",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L240"
-      },
-      {
-        "name": "no-empty-comments",
-        "desc": "SA1120: Comments must contain text",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L244"
-      },
-      {
-        "name": "use-string-empty",
-        "desc": "SA1122: Use string.Empty instead of \"\"",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L248"
-      },
-      {
-        "name": "modifier-order",
-        "desc": "SA1206: Declaration keywords must follow order",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L252"
-      },
-      {
-        "name": "braces-on-own-line",
-        "desc": "SA1500: Braces must be on their own line (Allman style)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L264"
-      },
-      {
-        "name": "required-braces",
-        "desc": "SA1503: Braces must not be omitted",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L268"
-      },
-      {
-        "name": "public-documented",
-        "desc": "SA1600: Public elements should be documented",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L283"
-      },
-      {
-        "name": "public-method-documented",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L286"
-      },
-      {
-        "name": "public-property-documented",
-        "desc": "SA1600: Public properties should be documented",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L290"
-      },
-      {
-        "name": "no-public-fields",
-        "desc": "SA1401: Fields should be private",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L312"
-      },
-      {
-        "name": "private-field-naming",
-        "desc": ".editorconfig naming: private field underscore prefix",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L316"
-      },
-      {
-        "name": "static-field-naming",
-        "desc": ".editorconfig naming: static field s_ prefix",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L320"
-      },
-      {
-        "name": "const-naming",
-        "desc": ".editorconfig naming: const PascalCase",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L324"
-      },
-      {
-        "name": "csharp-style-checks",
-        "desc": "Combined style checks",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L328"
-      },
-      {
-        "name": "exception-suffix",
-        "desc": "FDG: Types inheriting from Exception must end with 'Exception'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L343"
-      },
-      {
-        "name": "attribute-suffix",
-        "desc": "FDG: Types inheriting from Attribute must end with 'Attribute'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L351"
-      },
-      {
-        "name": "eventargs-suffix",
-        "desc": "FDG: Types inheriting from EventArgs must end with 'EventArgs'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L359"
-      },
-      {
-        "name": "stream-suffix",
-        "desc": "FDG: Types inheriting from Stream must end with 'Stream'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L367"
-      },
-      {
-        "name": "no-hungarian-prefix",
-        "desc": "FDG: Classes should not use Hungarian notation (C prefix)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L376"
-      },
-      {
-        "name": "param-camel-case",
-        "desc": "FDG: Parameters must use camelCase",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L384"
-      },
-      {
-        "name": "bool-property-naming",
-        "desc": "FDG: Boolean properties should use affirmative naming",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L395"
-      },
-      {
-        "name": "namespace-segments",
-        "desc": "FDG: Namespace should have at least two segments",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L402"
-      },
-      {
-        "name": "fdg-naming",
-        "desc": "Combined FDG naming checks",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L406"
-      },
-      {
-        "name": "enum-no-suffix",
-        "desc": "FDG: Enum types should not use Enum/Flags suffix",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L415"
-      },
-      {
-        "name": "flags-plural-name",
-        "desc": "FDG: [Flags] enums should use plural names",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L423"
-      },
-      {
-        "name": "abstract-protected-ctor",
-        "desc": "FDG: Abstract classes should have protected constructors",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L431"
-      },
-      {
-        "name": "static-no-instance",
-        "desc": "FDG: Static classes should not have instance members",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L439"
-      },
-      {
-        "name": "no-marker-interfaces",
-        "desc": "FDG: Marker interfaces should be avoided",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L447"
-      },
-      {
-        "name": "should-be-static",
-        "desc": "FDG: Classes with only static members should be static",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L459"
-      },
-      {
-        "name": "struct-size",
-        "desc": "FDG: Structs should be small",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L466"
-      },
-      {
-        "name": "fdg-type-design",
-        "desc": "Combined FDG type design checks",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L470"
-      },
-      {
-        "name": "max-parameters",
-        "desc": "FDG: Methods should not have more than 5 parameters",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L479"
-      },
-      {
-        "name": "no-write-only-properties",
-        "desc": "FDG: No write-only properties",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L487"
-      },
-      {
-        "name": "extension-class-naming",
-        "desc": "FDG: Extension methods should be in *Extensions classes",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L497"
-      },
-      {
-        "name": "ctor-parameter-count",
-        "desc": "FDG: Constructors should not have too many parameters",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L505"
-      },
-      {
-        "name": "avoid-bool-params",
-        "desc": "FDG: Avoid bool parameters in public methods",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L514"
-      },
-      {
-        "name": "no-array-properties",
-        "desc": "FDG: Properties should not return arrays",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L522"
-      },
-      {
-        "name": "fdg-member-design",
-        "desc": "Combined FDG member design checks",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L526"
-      },
-      {
-        "name": "exception-naming",
-        "desc": "FDG: Custom exceptions must end in 'Exception'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L544"
-      },
-      {
-        "name": "exception-standard-ctors",
-        "desc": "FDG: Custom exceptions should have standard constructors",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L557"
-      },
-      {
-        "name": "no-banned-throws",
-        "desc": "FDG: Do not throw banned exception types",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L571"
-      },
-      {
-        "name": "try-pattern-returns-bool",
-        "desc": "FDG: Try* methods should return bool",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L580"
-      },
-      {
-        "name": "no-swallow-cancellation",
-        "desc": "FDG: Do not swallow OperationCanceledException",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L588"
-      },
-      {
-        "name": "fdg-exceptions",
-        "desc": "Combined FDG exception design checks",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L592"
-      },
-      {
-        "name": "fdg-checks",
-        "desc": "Combined FDG checks",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L595"
-      },
-      {
-        "name": "csharp-checks",
-        "desc": "All C# checks combined",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L598"
-      }
-    ],
+    "checks": [],
     "commands": []
   },
   "csharp-library-azure-checks": {
@@ -2888,173 +3154,7 @@ const packages = {
     "types": {},
     "predicates": [],
     "functions": [],
-    "checks": [
-      {
-        "name": "client-needs-token-credential",
-        "desc": "Azure clients must accept TokenCredential for authentication",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/client-design.cop#L11"
-      },
-      {
-        "name": "client-needs-mocking-ctor",
-        "desc": "Client types must provide a protected parameterless constructor for mocking",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/client-design.cop#L15"
-      },
-      {
-        "name": "client-needs-options-ctor",
-        "desc": "Client types should have a constructor that accepts ClientOptions",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/client-design.cop#L28"
-      },
-      {
-        "name": "client-needs-simple-ctor",
-        "desc": "Client types should have a constructor without ClientOptions for simple scenarios",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/client-design.cop#L32"
-      },
-      {
-        "name": "no-request-content-in-convenience",
-        "desc": "Convenience methods should not take RequestContent or RequestBody parameters",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/client-design.cop#L41"
-      },
-      {
-        "name": "settings-ctor-isolation",
-        "desc": "ClientSettings constructor should not combine settings param with other params (AZC0021)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/client-design.cop#L52"
-      },
-      {
-        "name": "no-banned-internal-types",
-        "desc": "Public API should not expose types from banned internal namespaces",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/code-quality.cop#L9"
-      },
-      {
-        "name": "no-pipeline-types-in-api",
-        "desc": "Public API should not expose Azure.Core.Pipeline internal types",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/code-quality.cop#L17"
-      },
-      {
-        "name": "internals-visible-to",
-        "desc": "InternalsVisibleTo — export for project-level filtering",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/code-quality.cop#L24"
-      },
-      {
-        "name": "internals-visible-to-non-test",
-        "desc": "InternalsVisibleTo targeting non-test assemblies (AZC0112)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/code-quality.cop#L32"
-      },
-      {
-        "name": "model-reader-writer-context",
-        "desc": "ModelReaderWriter.Read should include the ModelReaderWriterOptions context parameter",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/code-quality.cop#L40"
-      },
-      {
-        "name": "model-needs-factory",
-        "desc": "Output model types should have a corresponding ModelFactory method (AZC0035)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/code-quality.cop#L52"
-      },
-      {
-        "name": "use-ensure-completed",
-        "desc": "Use EnsureCompleted() instead of GetAwaiter().GetResult() in sync methods (AZC0104)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/code-quality.cop#L60"
-      },
-      {
-        "name": "no-public-async-in-sync",
-        "desc": "Don't call *Async methods from sync context (AZC0107)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/code-quality.cop#L68"
-      },
-      {
-        "name": "cancellation-token-propagation",
-        "desc": "Async calls should propagate CancellationToken or RequestContext (AZC0020)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/code-quality.cop#L81"
-      },
-      {
-        "name": "csharp-library-azure-checks",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/csharp-library-azure-checks.cop#L3"
-      },
-      {
-        "name": "service-method-needs-cancellation",
-        "desc": "Public virtual service methods must accept CancellationToken or RequestContext",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/method-design.cop#L15"
-      },
-      {
-        "name": "no-raw-http-return-types",
-        "desc": "Client methods should return azure-specific types, not raw HTTP types",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/method-design.cop#L26"
-      },
-      {
-        "name": "protocol-method-return-type",
-        "desc": "Protocol methods (with RequestContext) must return allowed types only",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/method-design.cop#L49"
-      },
-      {
-        "name": "no-ambiguous-overloads",
-        "desc": "Avoid ambiguous overloads between protocol and convenience methods",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/method-design.cop#L59"
-      },
-      {
-        "name": "no-collection-suffix",
-        "desc": "Model types should not use 'Collection' suffix",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/naming.cop#L8"
-      },
-      {
-        "name": "no-request-suffix",
-        "desc": "Model types should not use 'Request' suffix",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/naming.cop#L12"
-      },
-      {
-        "name": "no-parameter-suffix",
-        "desc": "Model types should not use 'Parameter' or 'Parameters' suffix",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/naming.cop#L16"
-      },
-      {
-        "name": "no-option-suffix",
-        "desc": "Model types should not use 'Option' or 'Options' suffix (unless ClientOptions)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/naming.cop#L20"
-      },
-      {
-        "name": "no-resource-suffix",
-        "desc": "Model types should not use 'Resource' suffix",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/naming.cop#L26"
-      },
-      {
-        "name": "duplicate-bcl-type-name",
-        "desc": "Model type name duplicates a common .NET BCL type name (AZC0034)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/naming.cop#L77"
-      },
-      {
-        "name": "no-single-word-type-name",
-        "desc": "Avoid single-word public type names — too generic (AZC0012)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/naming.cop#L84"
-      },
-      {
-        "name": "options-inherits-base",
-        "desc": "Options types must inherit from ClientOptions or ClientPipelineOptions",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/options-design.cop#L10"
-      },
-      {
-        "name": "options-single-ctor-param",
-        "desc": "ClientOptions constructors should not take more than one parameter",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/options-design.cop#L17"
-      },
-      {
-        "name": "options-first-param-service-version",
-        "desc": "ClientOptions constructor first parameter should be ServiceVersion",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/options-design.cop#L28"
-      },
-      {
-        "name": "options-needs-service-version-enum",
-        "desc": "ClientOptions types should contain a nested ServiceVersion enum",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/options-design.cop#L34"
-      },
-      {
-        "name": "service-version-naming",
-        "desc": "ServiceVersion enum members should follow 'V{major}_{minor}' naming pattern",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/options-design.cop#L43"
-      },
-      {
-        "name": "service-version-default-value",
-        "desc": "ServiceVersion parameter should have a default value (latest version)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/options-design.cop#L53"
-      }
-    ],
+    "checks": [],
     "commands": []
   },
   "csharp-library-checks": {
@@ -3284,83 +3384,7 @@ const packages = {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L203"
       }
     ],
-    "checks": [
-      {
-        "name": "public-async-bool-params",
-        "desc": "Public methods should not have a bool parameter named 'async'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L25"
-      },
-      {
-        "name": "async-missing-bool-param",
-        "desc": "Non-public async methods should accept a bool 'async' parameter",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L29"
-      },
-      {
-        "name": "awaits-using-default",
-        "desc": "Library code must use ConfigureAwait(false) on all await expressions",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L38"
-      },
-      {
-        "name": "unconditional-await-in-dual-mode",
-        "desc": "Unconditional await in dual-mode method (AZC0110)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L59"
-      },
-      {
-        "name": "unconditional-sync-in-dual-mode",
-        "desc": "Unconditional EnsureCompleted in dual-mode method (AZC0111)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L67"
-      },
-      {
-        "name": "wrong-async-arg-value",
-        "desc": "Wrong async argument value in guarded branch (AZC0108)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L88"
-      },
-      {
-        "name": "wrong-sync-arg-value",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L90"
-      },
-      {
-        "name": "async-param-misuse",
-        "desc": "Misuse of async parameter (AZC0109)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L100"
-      },
-      {
-        "name": "csharp-library-async-checks",
-        "desc": "Combined async/sync library checks",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L104"
-      },
-      {
-        "name": "client-needs-options-ctor",
-        "desc": "Client types must have a constructor that accepts an Options parameter",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L138"
-      },
-      {
-        "name": "client-sealed-or-abstract",
-        "desc": "Client types must be sealed or abstract to prevent unintended inheritance",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L142"
-      },
-      {
-        "name": "async-needs-cancellation-token",
-        "desc": "Async methods on client types must accept a CancellationToken parameter",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L161"
-      },
-      {
-        "name": "client-methods-virtual",
-        "desc": "Public instance methods on client types should be virtual for mocking",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L165"
-      },
-      {
-        "name": "async-needs-sync-counterpart",
-        "desc": "Every public async method on a client type must have a matching sync method",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L169"
-      },
-      {
-        "name": "csharp-library-checks",
-        "desc": "All client library checks combined",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L178"
-      }
-    ],
+    "checks": [],
     "commands": []
   },
   "csharp-lister": {
@@ -3391,33 +3415,7 @@ const packages = {
     "types": {},
     "predicates": [],
     "functions": [],
-    "checks": [
-      {
-        "name": "snippet-missing-docs",
-        "desc": "C# snippet has no corresponding markdown fence",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-snippets-checks/src/csharp-snippets-checks.cop#L44"
-      },
-      {
-        "name": "snippet-orphaned-ref",
-        "desc": "Markdown fence references a snippet that does not exist in C# source",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-snippets-checks/src/csharp-snippets-checks.cop#L48"
-      },
-      {
-        "name": "snippet-duplicate-name",
-        "desc": "Same snippet name defined in multiple C# locations",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-snippets-checks/src/csharp-snippets-checks.cop#L52"
-      },
-      {
-        "name": "snippet-stale-content",
-        "desc": "Markdown snippet content is out of sync with C# source",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-snippets-checks/src/csharp-snippets-checks.cop#L56"
-      },
-      {
-        "name": "csharp-snippets-checks",
-        "desc": "All snippet checks combined",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-snippets-checks/src/csharp-snippets-checks.cop#L60"
-      }
-    ],
+    "checks": [],
     "commands": []
   },
   "files": {
@@ -3555,27 +3553,7 @@ const packages = {
       }
     ],
     "functions": [],
-    "checks": [
-      {
-        "name": "empty-folders",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L45"
-      }
-    ],
-    "exports": [
-      {
-        "name": "Folders",
-        "type": "[Folder]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L34"
-      },
-      {
-        "name": "DiskFiles",
-        "type": "[DiskFil]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L35"
-      }
-    ],
+    "checks": [],
     "commands": []
   },
   "http": {
@@ -3591,10 +3569,145 @@ const packages = {
         "code": "import http\n\nfunction handle(Request:Uri:equals('/hello')) => ok({ message: 'Hello' })\nfunction handle(Request) => notFound\n\n# Handle network errors — log and swallow\nfunction handle(Error) => print(Error.Message)\n\nasync foreach Requests => handle => RESPONSES"
       }
     ],
-    "collections": [],
-    "types": {},
+    "collections": [
+      "Requests",
+      "RESPONSES"
+    ],
+    "enums": [
+      {
+        "name": "HttpMethod",
+        "values": "GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L10"
+      },
+      {
+        "name": "ContentType",
+        "values": "application/json|text/plain|text/html|application/xml|multipart/form-data|application/octet-stream",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L12"
+      }
+    ],
+    "types": {
+      "Response": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L16",
+        "props": [
+          {
+            "name": "StatusCode",
+            "type": "int",
+            "desc": ""
+          },
+          {
+            "name": "Body",
+            "type": "bytes",
+            "desc": ""
+          },
+          {
+            "name": "ContentType",
+            "type": "ContentType",
+            "desc": ""
+          },
+          {
+            "name": "Headers",
+            "type": "Headers",
+            "desc": ""
+          }
+        ]
+      },
+      "Headers": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L24",
+        "props": []
+      },
+      "Request": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L27",
+        "props": [
+          {
+            "name": "Method",
+            "type": "HttpMethod",
+            "desc": ""
+          },
+          {
+            "name": "Uri",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Body",
+            "type": "bytes",
+            "desc": ""
+          },
+          {
+            "name": "ContentType",
+            "type": "ContentType",
+            "desc": ""
+          }
+        ]
+      }
+    },
     "predicates": [],
-    "functions": [],
+    "functions": [
+      {
+        "name": "ok",
+        "params": "Unknown",
+        "returns": "Response",
+        "appliesTo": "Unknown",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L35"
+      },
+      {
+        "name": "ok",
+        "params": "Request, body: string",
+        "returns": "Response",
+        "appliesTo": "Request",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L42"
+      },
+      {
+        "name": "ok",
+        "params": "Request",
+        "returns": "Response",
+        "appliesTo": "Request",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L49"
+      },
+      {
+        "name": "notFound",
+        "params": "Request",
+        "returns": "object",
+        "appliesTo": "Request",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L56"
+      },
+      {
+        "name": "created",
+        "params": "Request",
+        "returns": "object",
+        "appliesTo": "Request",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L63"
+      },
+      {
+        "name": "badRequest",
+        "params": "Request",
+        "returns": "object",
+        "appliesTo": "Request",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L70"
+      },
+      {
+        "name": "serverError",
+        "params": "Request",
+        "returns": "object",
+        "appliesTo": "Request",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L77"
+      },
+      {
+        "name": "serverError",
+        "params": "Error",
+        "returns": "Response",
+        "appliesTo": "Error",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L84"
+      }
+    ],
     "checks": [],
     "commands": []
   },
@@ -3611,53 +3724,7 @@ const packages = {
     "types": {},
     "predicates": [],
     "functions": [],
-    "checks": [
-      {
-        "name": "console-calls",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-checks/src/javascript-checks.cop#L10"
-      },
-      {
-        "name": "alert-calls",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-checks/src/javascript-checks.cop#L16"
-      },
-      {
-        "name": "eval-calls",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-checks/src/javascript-checks.cop#L22"
-      },
-      {
-        "name": "debugger-statements",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-checks/src/javascript-checks.cop#L28"
-      },
-      {
-        "name": "var-declarations",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-checks/src/javascript-checks.cop#L34"
-      },
-      {
-        "name": "swallowed-exceptions",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-checks/src/javascript-checks.cop#L40"
-      },
-      {
-        "name": "javascript-correctness-checks",
-        "desc": "Combined JavaScript correctness checks",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-checks/src/javascript-checks.cop#L44"
-      },
-      {
-        "name": "await-thenable",
-        "desc": "Disallow awaiting a value that is not a Thenable (@typescript-eslint/await-thenable)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-checks/src/javascript-checks.cop#L63"
-      },
-      {
-        "name": "javascript-checks",
-        "desc": "All JavaScript/TypeScript checks combined",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-checks/src/javascript-checks.cop#L70"
-      }
-    ],
+    "checks": [],
     "commands": []
   },
   "javascript-library-azure-checks": {
@@ -3673,28 +3740,7 @@ const packages = {
     "types": {},
     "predicates": [],
     "functions": [],
-    "checks": [
-      {
-        "name": "client-needs-credential",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-azure-checks/src/javascript-library-azure-checks.cop#L15"
-      },
-      {
-        "name": "copyright-header",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-azure-checks/src/javascript-library-azure-checks.cop#L33"
-      },
-      {
-        "name": "error-handling",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-azure-checks/src/javascript-library-azure-checks.cop#L48"
-      },
-      {
-        "name": "javascript-library-azure-checks",
-        "desc": "All Azure-specific JavaScript client library checks combined",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-azure-checks/src/javascript-library-azure-checks.cop#L58"
-      }
-    ],
+    "checks": [],
     "commands": []
   },
   "javascript-library-checks": {
@@ -3798,68 +3844,7 @@ const packages = {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L124"
       }
     ],
-    "checks": [
-      {
-        "name": "no-default-exports",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L10"
-      },
-      {
-        "name": "no-external-promises",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L16"
-      },
-      {
-        "name": "no-const-enums",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L21"
-      },
-      {
-        "name": "no-window-reference",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L27"
-      },
-      {
-        "name": "javascript-library-design-checks",
-        "desc": "Combined library design checks",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L31"
-      },
-      {
-        "name": "standardized-verbs",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L53"
-      },
-      {
-        "name": "subclient-naming",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L62"
-      },
-      {
-        "name": "support-cancellation",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L76"
-      },
-      {
-        "name": "pagination-list-return",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L85"
-      },
-      {
-        "name": "lro-begin-prefix",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L94"
-      },
-      {
-        "name": "javascript-client-checks",
-        "desc": "Combined client checks",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L98"
-      },
-      {
-        "name": "javascript-library-checks",
-        "desc": "All JavaScript library and client library checks combined",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L101"
-      }
-    ],
+    "checks": [],
     "commands": []
   },
   "javascript-lister": {
@@ -3890,33 +3875,7 @@ const packages = {
     "types": {},
     "predicates": [],
     "functions": [],
-    "checks": [
-      {
-        "name": "snippet-missing-docs",
-        "desc": "JavaScript snippet has no corresponding markdown fence",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-snippets-checks/src/javascript-snippets-checks.cop#L44"
-      },
-      {
-        "name": "snippet-orphaned-ref",
-        "desc": "Markdown fence references a snippet that does not exist in JavaScript source",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-snippets-checks/src/javascript-snippets-checks.cop#L48"
-      },
-      {
-        "name": "snippet-duplicate-name",
-        "desc": "Same snippet name defined in multiple JavaScript locations",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-snippets-checks/src/javascript-snippets-checks.cop#L52"
-      },
-      {
-        "name": "snippet-stale-content",
-        "desc": "Markdown snippet content is out of sync with JavaScript source",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-snippets-checks/src/javascript-snippets-checks.cop#L56"
-      },
-      {
-        "name": "javascript-snippets-checks",
-        "desc": "All snippet checks combined",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-snippets-checks/src/javascript-snippets-checks.cop#L60"
-      }
-    ],
+    "checks": [],
     "commands": []
   },
   "json": {
@@ -3934,7 +3893,7 @@ const packages = {
     "functions": [
       {
         "name": "Parse",
-        "params": "path: string, typeName: string",
+        "params": "typeName: string",
         "returns": "object",
         "desc": "Parses a JSON file into a typed object or collection.\nThe path is relative to the project root.\nThe typeName must match a type declared in the current script.\nIf the JSON root is an array, returns a collection. If it is an object, returns a single typed instance.\nExample: json.Parse('people.json', 'Person') returns [Person] or Person depending on the JSON shape.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/json/src/json.cop#L10"
@@ -4240,148 +4199,7 @@ const packages = {
     "types": {},
     "predicates": [],
     "functions": [],
-    "checks": [
-      {
-        "name": "print-calls",
-        "desc": "Avoid print() — use logging instead",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L12"
-      },
-      {
-        "name": "bare-except-clauses",
-        "desc": "Do not use bare except — catch a specific exception type",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L19"
-      },
-      {
-        "name": "silenced-exceptions",
-        "desc": "Do not silence Exception — reraise or catch a specific type",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L30"
-      },
-      {
-        "name": "no-six-import",
-        "desc": "Do not import the six package — Python 2 is no longer supported",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L37"
-      },
-      {
-        "name": "no-legacy-typing",
-        "desc": "Do not use legacy type comments — use Python 3.9+ type annotations",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L44"
-      },
-      {
-        "name": "no-eval",
-        "desc": "Do not use eval() — it is a security risk",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L51"
-      },
-      {
-        "name": "python-correctness-checks",
-        "desc": "Combined correctness checks",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L55"
-      },
-      {
-        "name": "class-name-casing",
-        "desc": "Class names should use PascalCase (CapWords convention)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L65"
-      },
-      {
-        "name": "function-name-casing",
-        "desc": "Function and method names should use snake_case",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L75"
-      },
-      {
-        "name": "import-wildcard",
-        "desc": "Avoid wildcard imports — import specific names instead",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L82"
-      },
-      {
-        "name": "mutable-default-arg",
-        "desc": "Do not use mutable default arguments — use None and assign inside the function",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L96"
-      },
-      {
-        "name": "trailing-whitespace",
-        "desc": "Lines should not have trailing whitespace",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L103"
-      },
-      {
-        "name": "mixed-indentation",
-        "desc": "Use spaces for indentation, not tabs",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L110"
-      },
-      {
-        "name": "python-style-checks",
-        "desc": "Combined style checks",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L114"
-      },
-      {
-        "name": "none-comparison",
-        "desc": "Use 'is None' or 'is not None' instead of '== None' / '!= None'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L122"
-      },
-      {
-        "name": "type-comparison",
-        "desc": "Use isinstance() instead of type() comparison",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L130"
-      },
-      {
-        "name": "old-style-format",
-        "desc": "Prefer f-strings over %-style string formatting",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L138"
-      },
-      {
-        "name": "range-len-pattern",
-        "desc": "Use enumerate() instead of range(len(...))",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L145"
-      },
-      {
-        "name": "global-statement",
-        "desc": "Avoid the global statement — pass values as parameters or use a class",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L152"
-      },
-      {
-        "name": "python-idiom-checks",
-        "desc": "Combined idiom checks",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L156"
-      },
-      {
-        "name": "too-many-params",
-        "desc": "Functions should not have more than 5 parameters — consider using a config object or **kwargs",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L168"
-      },
-      {
-        "name": "empty-except-body",
-        "desc": "Do not use empty except blocks — handle or log the exception",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L176"
-      },
-      {
-        "name": "broad-exception-raise",
-        "desc": "Raise specific exception types instead of generic Exception",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L184"
-      },
-      {
-        "name": "python-quality-checks",
-        "desc": "Combined quality checks",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L188"
-      },
-      {
-        "name": "missing-class-docstring",
-        "desc": "Public classes should have a docstring",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L199"
-      },
-      {
-        "name": "missing-function-docstring",
-        "desc": "Public functions and methods should have a docstring",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L210"
-      },
-      {
-        "name": "python-doc-checks",
-        "desc": "Combined documentation checks",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L214"
-      },
-      {
-        "name": "python-checks",
-        "desc": "All Python checks combined",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L217"
-      }
-    ],
+    "checks": [],
     "commands": []
   },
   "python-library-azure-checks": {
@@ -4397,63 +4215,7 @@ const packages = {
     "types": {},
     "predicates": [],
     "functions": [],
-    "checks": [
-      {
-        "name": "client-needs-credential",
-        "desc": "Azure clients must accept a 'credential' parameter in the constructor",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-azure-checks/src/python-library-azure-checks.cop#L11"
-      },
-      {
-        "name": "client-needs-api-version",
-        "desc": "Azure clients must accept 'api_version' keyword argument",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-azure-checks/src/python-library-azure-checks.cop#L20"
-      },
-      {
-        "name": "method-snake-case",
-        "desc": "Method names must use snake_case",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-azure-checks/src/python-library-azure-checks.cop#L29"
-      },
-      {
-        "name": "type-pascal-case",
-        "desc": "Type names must use PascalCase",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-azure-checks/src/python-library-azure-checks.cop#L36"
-      },
-      {
-        "name": "delete-returns-none",
-        "desc": "Delete operations should return None",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-azure-checks/src/python-library-azure-checks.cop#L49"
-      },
-      {
-        "name": "no-raise-with-traceback",
-        "desc": "Do not use raise_with_traceback; use raise ... from syntax",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-azure-checks/src/python-library-azure-checks.cop#L57"
-      },
-      {
-        "name": "no-legacy-typing",
-        "desc": "Do not use legacy type comments; use Python 3.9+ type hints",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-azure-checks/src/python-library-azure-checks.cop#L64"
-      },
-      {
-        "name": "no-asyncio-sleep",
-        "desc": "Do not use asyncio.sleep; use transport sleep from azure.core",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-azure-checks/src/python-library-azure-checks.cop#L72"
-      },
-      {
-        "name": "no-log-exceptions-above-debug",
-        "desc": "Do not log exceptions at non-debug levels (may reveal sensitive info)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-azure-checks/src/python-library-azure-checks.cop#L83"
-      },
-      {
-        "name": "missing-tracing-decorator",
-        "desc": "Client service methods should have distributed tracing decorator",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-azure-checks/src/python-library-azure-checks.cop#L96"
-      },
-      {
-        "name": "python-library-azure-checks",
-        "desc": "All Azure Python client library checks combined",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-azure-checks/src/python-library-azure-checks.cop#L109"
-      }
-    ],
+    "checks": [],
     "commands": []
   },
   "python-library-checks": {
@@ -4569,73 +4331,7 @@ const packages = {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L176"
       }
     ],
-    "checks": [
-      {
-        "name": "untyped-public-params",
-        "desc": "Public methods should have type hints on all parameters",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L18"
-      },
-      {
-        "name": "missing-return-types",
-        "desc": "Public methods should declare a return type",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L28"
-      },
-      {
-        "name": "python-library-typing-checks",
-        "desc": "Combined typing checks",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L32"
-      },
-      {
-        "name": "async-client-bad-name",
-        "desc": "Async clients should not have 'Async' in the name",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L47"
-      },
-      {
-        "name": "client-missing-kwargs",
-        "desc": "Client constructor must accept **kwargs",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L60"
-      },
-      {
-        "name": "no-connection-string-in-ctor",
-        "desc": "Client constructor should not have a connection_string parameter (use factory method)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L67"
-      },
-      {
-        "name": "no-static-methods",
-        "desc": "Client methods should not use static methods (use module-level functions)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L77"
-      },
-      {
-        "name": "too-many-positional-params",
-        "desc": "Client methods with more than 5 positional parameters",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L86"
-      },
-      {
-        "name": "async-method-missing-kwargs",
-        "desc": "Async client methods should accept **kwargs",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L96"
-      },
-      {
-        "name": "lro-naming",
-        "desc": "LRO methods should be prefixed with begin_",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L107"
-      },
-      {
-        "name": "paging-naming",
-        "desc": "Paging methods should be prefixed with list_",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L120"
-      },
-      {
-        "name": "name-too-long",
-        "desc": "Type/class names should be under 40 characters",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L149"
-      },
-      {
-        "name": "python-library-checks",
-        "desc": "All Python library checks combined",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L153"
-      }
-    ],
+    "checks": [],
     "commands": []
   },
   "python-lister": {
@@ -4666,33 +4362,7 @@ const packages = {
     "types": {},
     "predicates": [],
     "functions": [],
-    "checks": [
-      {
-        "name": "snippet-missing-docs",
-        "desc": "Python snippet has no corresponding markdown fence",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-snippets-checks/src/python-snippets-checks.cop#L44"
-      },
-      {
-        "name": "snippet-orphaned-ref",
-        "desc": "Markdown fence references a snippet that does not exist in Python source",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-snippets-checks/src/python-snippets-checks.cop#L48"
-      },
-      {
-        "name": "snippet-duplicate-name",
-        "desc": "Same snippet name defined in multiple Python locations",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-snippets-checks/src/python-snippets-checks.cop#L52"
-      },
-      {
-        "name": "snippet-stale-content",
-        "desc": "Markdown snippet content is out of sync with Python source",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-snippets-checks/src/python-snippets-checks.cop#L56"
-      },
-      {
-        "name": "python-snippets-checks",
-        "desc": "All snippet checks combined",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-snippets-checks/src/python-snippets-checks.cop#L60"
-      }
-    ],
+    "checks": [],
     "commands": []
   },
   "test-nunit-checks": {
@@ -5206,20 +4876,6 @@ const packages = {
     ],
     "functions": [],
     "checks": [],
-    "exports": [
-      {
-        "name": "Operations",
-        "type": "[Operation]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L55"
-      },
-      {
-        "name": "Services",
-        "type": "[Servic]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L56"
-      }
-    ],
     "commands": []
   }
 };

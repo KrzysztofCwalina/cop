@@ -26,7 +26,6 @@ public enum TokenKind
     FlagsKeyword,
     EnumKeyword,
     IntrinsicKeyword,
-    ProviderKeyword,
     DoubleColon,
     Colon,
     AndAnd,
@@ -389,7 +388,6 @@ public class Tokenizer
             "flags" => TokenKind.FlagsKeyword,
             "enum" => TokenKind.EnumKeyword,
             "intrinsic" => TokenKind.IntrinsicKeyword,
-            "provider" => TokenKind.ProviderKeyword,
 
             _ => TokenKind.Identifier
         };

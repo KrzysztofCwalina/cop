@@ -136,7 +136,7 @@ export type File
     [Test]
     public void Parse_LetDeclaration_ValueBinding()
     {
-        var source = "export let AllRequests : [Request] = object('http').Requests";
+        var source = "export let AllRequests : [Request] = provider('http').Requests";
         var module = CopParser.Parse(source, "test.cop");
         var letDecl = (LetDecl)module.Declarations[0];
         Assert.That(letDecl.Name, Is.EqualTo("AllRequests"));
@@ -345,7 +345,7 @@ import core
 type File
     Path : string
 
-export let Files : [File] = object('fs').Files
+export let Files : [File] = provider('fs').Files
 
 command main = print('done')
 ";
@@ -452,7 +452,7 @@ command main = print('done')
     [Test]
     public void Parse_Expression_NestedMemberCallChain()
     {
-        var source = "let x = object('http').Requests.count()";
+        var source = "let x = provider('http').Requests.count()";
         var module = CopParser.Parse(source, "test.cop");
         var letDecl = (LetDecl)module.Declarations[0];
         Assert.That(letDecl.Value, Is.TypeOf<CallExpr>());

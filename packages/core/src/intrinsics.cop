@@ -4,8 +4,8 @@
 
 ## Returns a dynamic Object accessor for the named provider.
 ## Properties on the returned object query the provider's collections.
-## Example: object('sample').Widgets returns the Widgets collection.
-export function object(name : string) : Object = intrinsic
+## Example: provider('sample').Widgets returns the Widgets collection.
+export function provider(name : string) : Object = intrinsic
 
 ## Returns an async streaming collection from the named provider.
 ## The stream produces items asynchronously (e.g., incoming HTTP requests).
