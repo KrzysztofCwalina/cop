@@ -11,7 +11,7 @@ export function where(items: [object], condition: expression) : [object] => intr
 
 ## Projects each item through a transformation. Returns a new collection.
 ## Example: Types:select(item.Name)
-export function select(items: [object], projection: expression) : [object] => intrinsic
+export function select(items: [object], object2object: expression) : [object] => intrinsic
 
 ## Returns true if any item matches a condition.
 ## Example: Types:any(isAbstract)
@@ -59,11 +59,11 @@ export function elementAt(items: [object], index: int) : object => intrinsic
 
 ## Sorts ascending by a key expression.
 ## Example: Types:orderBy(item.Name)
-export function orderBy(items: [object], key: expression) : [object] => intrinsic
+export function orderBy(items: [object], object2object: expression) : [object] => intrinsic
 
 ## Sorts descending by a key expression.
 ## Example: Types:orderByDescending(item.Count)
-export function orderByDescending(items: [object], key: expression) : [object] => intrinsic
+export function orderByDescending(items: [object], object2object: expression) : [object] => intrinsic
 
 ## Removes duplicate items (by string representation).
 ## Example: names:distinct
@@ -71,7 +71,7 @@ export function distinct(items: [object]) : [object] => intrinsic
 
 ## Groups items by a key expression. Returns collection of groups.
 ## Example: Types:groupBy(item.Namespace)
-export function groupBy(items: [object], key: expression) : [object] => intrinsic
+export function groupBy(items: [object], object2object: expression) : [object] => intrinsic
 
 ## Reduces a collection to a single value using an accumulator expression.
 ## Example: numbers:reduce(acc + item)

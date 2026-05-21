@@ -1,34 +1,50 @@
 # Numeric Collection Functions
 # Aggregate functions that operate on collections of int or number values.
 
-## Sums a numeric property across all items.
+## Sums all items in an integer collection.
+## Example: scores:sum()
+export function sum(items: [int]) : int => intrinsic
+
+## Sums all items in a number collection.
+## Example: measurements:sum()
+export function sum(items: [number]) : number => intrinsic
+
+## Sums a computed value for each item.
 ## Example: files:sum(item.Size)
-export function sum(items: [int], projection: expression) : int => intrinsic
+export function sum(items: [object], object2int: expression) : int => intrinsic
 
-## Sums a numeric property across all items.
-## Example: measurements:sum(item.Value)
-export function sum(items: [number], projection: expression) : number => intrinsic
+## Minimum value in an integer collection.
+## Example: scores:min()
+export function min(items: [int]) : int => intrinsic
 
-## Minimum value of a numeric property.
+## Minimum value in a number collection.
+## Example: measurements:min()
+export function min(items: [number]) : number => intrinsic
+
+## Minimum computed value across items.
 ## Example: files:min(item.Size)
-export function min(items: [int], projection: expression) : int => intrinsic
+export function min(items: [object], object2int: expression) : int => intrinsic
 
-## Minimum value of a numeric property.
-## Example: measurements:min(item.Value)
-export function min(items: [number], projection: expression) : number => intrinsic
+## Maximum value in an integer collection.
+## Example: scores:max()
+export function max(items: [int]) : int => intrinsic
 
-## Maximum value of a numeric property.
+## Maximum value in a number collection.
+## Example: measurements:max()
+export function max(items: [number]) : number => intrinsic
+
+## Maximum computed value across items.
 ## Example: files:max(item.Size)
-export function max(items: [int], projection: expression) : int => intrinsic
+export function max(items: [object], object2int: expression) : int => intrinsic
 
-## Maximum value of a numeric property.
-## Example: measurements:max(item.Value)
-export function max(items: [number], projection: expression) : number => intrinsic
+## Average value of an integer collection.
+## Example: scores:average()
+export function average(items: [int]) : number => intrinsic
 
-## Average value of a numeric property.
+## Average value of a number collection.
+## Example: measurements:average()
+export function average(items: [number]) : number => intrinsic
+
+## Average computed value across items.
 ## Example: files:average(item.Size)
-export function average(items: [int], projection: expression) : number => intrinsic
-
-## Average value of a numeric property.
-## Example: measurements:average(item.Value)
-export function average(items: [number], projection: expression) : number => intrinsic
+export function average(items: [object], object2int: expression) : number => intrinsic
