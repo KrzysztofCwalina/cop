@@ -1870,116 +1870,6 @@ const packages = {
     ],
     "collections": [],
     "types": {
-      "Formattable": {
-        "desc": "A template bound to data, ready to be resolved into a string.\nItems is the collection of data to format, Template is the {Property} interpolation pattern,\nand Separator is the string used to join results (defaults to newline).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L60",
-        "props": [
-          {
-            "name": "Items",
-            "type": "[object]",
-            "desc": ""
-          },
-          {
-            "name": "Template",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "Separator",
-            "type": "string",
-            "desc": ""
-          }
-        ]
-      },
-      "Error": {
-        "desc": "Represents an operational error flowing through a pipeline.\nErrors are not code bugs (use fail() for those). They represent external failures\nthat code cannot prevent: network timeouts, I/O failures, malformed input.\nUse isError predicate to detect errors in pipeline items.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L76",
-        "props": [
-          {
-            "name": "Message",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "SourceFile",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "SourceLine",
-            "type": "int",
-            "desc": ""
-          },
-          {
-            "name": "Source",
-            "type": "string",
-            "desc": ""
-          }
-        ]
-      },
-      "Program": {
-        "desc": "Represents the running program's context.\nProvides access to command-line arguments passed to the cop invocation.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L100",
-        "props": [
-          {
-            "name": "Args",
-            "type": "[string]",
-            "desc": ""
-          }
-        ]
-      },
-      "Collection": {
-        "desc": "The built-in ordered collection type.\nDeclared as [T] in property types (e.g., Types : [Type]).\nImmutable — all operations return new collections without modifying the original.\nProperties: Count (int), First (item or nic), Last (item or nic),\nRest (collection without first element), Single (item if exactly one, or nic).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L133",
-        "props": [
-          {
-            "name": "Count",
-            "type": "int",
-            "desc": ""
-          },
-          {
-            "name": "First",
-            "type": "Object",
-            "desc": ""
-          },
-          {
-            "name": "Last",
-            "type": "Object",
-            "desc": ""
-          },
-          {
-            "name": "Rest",
-            "type": "Collection",
-            "desc": ""
-          },
-          {
-            "name": "Single",
-            "type": "Object",
-            "desc": ""
-          }
-        ]
-      },
-      "Query": {
-        "desc": "A deferred query over a collection (like C# IQueryable).\nChaining where/orderBy/select builds an expression tree without materializing.\nThe query executes when consumed by foreach, Count, print, or assigned to a collection.\nProviders may optimize by pushing the full query expression down.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L21",
-        "props": [
-          {
-            "name": "Count",
-            "type": "int",
-            "desc": ""
-          },
-          {
-            "name": "First",
-            "type": "object",
-            "desc": ""
-          },
-          {
-            "name": "Last",
-            "type": "object",
-            "desc": ""
-          }
-        ]
-      },
       "[T]": {
         "desc": "The built-in ordered collection type.\nDeclared as [T] in property types (e.g., Types : [Type]).\nImmutable — all operations return new collections without modifying the original.\nProperties: Count (int), First (item or nic), Last (item or nic),\nRest (collection without first element), Single (item if exactly one, or nic).",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L9",
@@ -2011,59 +1901,132 @@ const packages = {
           }
         ]
       },
+      "Query": {
+        "desc": "A deferred query over a collection (like C# IQueryable).\nChaining where/orderBy/select builds an expression tree without materializing.\nThe query executes when consumed by foreach, Count, print, or assigned to a collection.\nProviders may optimize by pushing the full query expression down.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L21",
+        "props": [
+          {
+            "name": "Count",
+            "type": "int",
+            "desc": ""
+          },
+          {
+            "name": "First",
+            "type": "object",
+            "desc": ""
+          },
+          {
+            "name": "Last",
+            "type": "object",
+            "desc": ""
+          }
+        ]
+      },
       "object": {
         "desc": "The dynamic base type. Any property access on object is resolved at runtime.\nAll items in untyped collections are object. Used as the return type for\nprovider() and as element type for generic collections.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L12",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L8",
         "props": []
       },
       "string": {
         "desc": "A UTF-8 text value.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L15",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L11",
         "props": []
       },
       "int": {
         "desc": "A 64-bit signed integer.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L18",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L14",
         "props": []
       },
       "number": {
         "desc": "A 64-bit floating-point number.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L21",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L17",
         "props": []
       },
       "bool": {
         "desc": "A boolean value (true or false).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L24",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L20",
         "props": []
       },
       "byte": {
         "desc": "A single unsigned byte (0–255).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L27",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L23",
         "props": []
       },
       "bytes": {
         "desc": "An array of bytes. Used for binary data (e.g., HTTP request/response bodies).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L30",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L26",
         "props": []
       },
       "expression": {
         "desc": "A deferred expression passed to collection methods.\nEvaluated per-item in the collection (has access to 'item' and 'acc').\nUsed for predicates, projections, and accumulators in where, select, reduce, etc.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L35",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L31",
         "props": []
+      },
+      "Formattable": {
+        "desc": "A template bound to data, ready to be resolved into a string.\nItems is the collection of data to format, Template is the {Property} interpolation pattern,\nand Separator is the string used to join results (defaults to newline).",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/types.cop#L7",
+        "props": [
+          {
+            "name": "Items",
+            "type": "[object]",
+            "desc": ""
+          },
+          {
+            "name": "Template",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Separator",
+            "type": "string",
+            "desc": ""
+          }
+        ]
+      },
+      "Error": {
+        "desc": "Represents an operational error flowing through a pipeline.\nErrors are not code bugs (use fail() for those). They represent external failures\nthat code cannot prevent: network timeouts, I/O failures, malformed input.\nUse isError predicate to detect errors in pipeline items.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/types.cop#L17",
+        "props": [
+          {
+            "name": "Message",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "SourceFile",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "SourceLine",
+            "type": "int",
+            "desc": ""
+          },
+          {
+            "name": "Source",
+            "type": "string",
+            "desc": ""
+          }
+        ]
+      },
+      "Program": {
+        "desc": "Represents the running program's context.\nProvides access to command-line arguments passed to the cop invocation.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/types.cop#L31",
+        "props": [
+          {
+            "name": "Args",
+            "type": "[string]",
+            "desc": ""
+          }
+        ]
       }
     },
     "predicates": [
       {
         "name": "isError",
-        "appliesTo": "Object",
-        "desc": "Returns true if the current item is an Error value.\nWorks as a bare predicate or as a filter: items:isError\nExample: predicate handleError(Object:isError) => print('{item.Message}')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L78"
-      },
-      {
-        "name": "isError",
         "appliesTo": "Unknown",
         "desc": "Returns true if the current item is an Error value.\nWorks as a bare predicate or as a filter: items:isError\nExample: predicate handleError(object:isError) => print('{item.Message}')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L90"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/types.cop#L27"
       }
     ],
     "functions": [
@@ -2072,24 +2035,24 @@ const packages = {
         "params": "string",
         "returns": "Object",
         "appliesTo": "string",
-        "desc": "A dynamic object accessor (similar to C# dynamic).\nAny property access on Object generates a query to the provider.\nUse a typed let binding to enforce a schema:\n  let db : MySchema = provider('myProvider')\nWithout a type annotation, any property is allowed (fails at runtime if provider lacks it).\nWith a type annotation, only declared properties are accessible (compile-time enforcement).\nReturns a dynamic Object accessor for the named provider.\nProperties on the returned object query the provider's collections.\nExample: provider('sample').Widgets returns the Widgets collection.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L15"
+        "desc": "Returns a dynamic Object accessor for the named provider.\nProperties on the returned object query the provider's collections.\nExample: provider('sample').Widgets returns the Widgets collection.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L9"
       },
       {
         "name": "source",
         "params": "string",
         "returns": "[object]",
         "appliesTo": "string",
-        "desc": "Returns an async streaming collection from the named provider.\nUse a typed annotation to declare the item type produced by the stream:\n  export let Requests : [Request] = source('http')\nWithout annotation, stream items are untyped objects.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L21"
+        "desc": "Returns an async streaming collection from the named provider.\nUse a typed annotation to declare the item type produced by the stream:\n  export let Requests : [Request] = source('http')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L14"
       },
       {
         "name": "sink",
         "params": "string",
         "returns": "[object]",
         "appliesTo": "string",
-        "desc": "Returns an async output collection for the named streaming provider.\nItems pushed into the sink are delivered to the provider's output channel.\n  export let RESPONSES : [Response] = sink('http')\nWithout annotation, the sink accepts any item.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L27"
+        "desc": "Returns an async output collection for the named streaming provider.\nItems pushed into the sink are delivered to the provider's output channel.\n  export let RESPONSES : [Response] = sink('http')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L19"
       },
       {
         "name": "read",
@@ -2097,7 +2060,30 @@ const packages = {
         "returns": "string",
         "appliesTo": "string",
         "desc": "Reads the content of a file at the given path (sandboxed to project root).\nReturns the file content as a string.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L31"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L25"
+      },
+      {
+        "name": "print",
+        "params": "string",
+        "returns": "string",
+        "appliesTo": "string",
+        "desc": "Prints a message to the output.\nUsed standalone: print('hello {Name}')\nUsed in pipeline: foreach Types => print('{item.Name}')\nThe template supports {Property} interpolation and {@style} formatting.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L31"
+      },
+      {
+        "name": "save",
+        "params": "content: string",
+        "returns": "Unknown",
+        "desc": "Saves content to a file at the specified path.\nUsed in pipeline: foreach Types:isPublic => save('api.txt', '{item.Name}')\nCreates or appends to the file with the rendered template output.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L36"
+      },
+      {
+        "name": "debug",
+        "params": "string",
+        "returns": "Unknown",
+        "appliesTo": "string",
+        "desc": "Outputs a diagnostic message to the debug log (--diag flag).\nSame template semantics as print but only visible when diagnostics are enabled.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L40"
       },
       {
         "name": "text",
@@ -2105,7 +2091,7 @@ const packages = {
         "returns": "string",
         "appliesTo": "Unknown",
         "desc": "Converts a string to text (identity — returns string as-is).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L34"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L45"
       },
       {
         "name": "text",
@@ -2113,7 +2099,7 @@ const packages = {
         "returns": "bool",
         "appliesTo": "Unknown",
         "desc": "Converts a bool to text: true => 'true', false => 'false'.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L37"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L48"
       },
       {
         "name": "text",
@@ -2121,7 +2107,7 @@ const packages = {
         "returns": "string",
         "appliesTo": "Unknown",
         "desc": "Converts an integer to its decimal text representation.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L40"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L51"
       },
       {
         "name": "text",
@@ -2129,611 +2115,54 @@ const packages = {
         "returns": "string",
         "appliesTo": "Unknown",
         "desc": "Decodes a byte array as UTF-8 text.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L43"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L54"
       },
       {
         "name": "text",
         "params": "Formattable",
         "returns": "string",
         "appliesTo": "Formattable",
-        "desc": "Converts a Formattable to text by resolving the Template against each item\nin Items using {Property} interpolation, then joining results with Separator.\nWhen used in a pipeline: collection.text('{Item.Name}') creates a Formattable\nfrom the pipeline collection and resolves it into a single joined string.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L58"
-      },
-      {
-        "name": "error",
-        "params": "Unknown",
-        "returns": "Error",
-        "appliesTo": "Unknown",
-        "desc": "Creates an Error value with the given message string.\nExample: error('connection timeout')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L73"
-      },
-      {
-        "name": "fail",
-        "params": "string",
-        "returns": "Unknown",
-        "appliesTo": "string",
-        "desc": "Terminates execution immediately with a fatal diagnostic.\nUse for programmer assertions — situations that should never occur.\nCan be used standalone: fail('invariant violated')\nOr in pipeline: foreach Items:badCondition => fail('{item.Name} is invalid')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L84"
-      },
-      {
-        "name": "program",
-        "params": "Unknown",
-        "returns": "Program",
-        "appliesTo": "Unknown",
-        "desc": "Returns the current program context.\nProvides access to command-line arguments passed to the cop invocation.\nExample: predicate verbose(Program) => program().Args:contains('/v')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L95"
-      },
-      {
-        "name": "pathMatches",
-        "params": "pattern: string",
-        "returns": "bool",
-        "desc": "Glob-matches a file path against a pattern.\nSupports **, *, ? wildcards. Returns true if the path matches.\nExample: pathMatches(Statement.File.Path, '**/Tests/**')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L100"
-      },
-      {
-        "name": "print",
-        "params": "string",
-        "returns": "string",
-        "appliesTo": "string",
-        "desc": "Prints a message to the output.\nUsed standalone: print('hello {Name}')\nUsed in pipeline: foreach Types => print('{item.Name}')\nThe template supports {Property} interpolation and {@style} formatting.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L106"
-      },
-      {
-        "name": "save",
-        "params": "content: string",
-        "returns": "Unknown",
-        "desc": "Saves content to a file at the specified path.\nUsed in pipeline: foreach Types:isPublic => save('api.txt', '{item.Name}')\nCreates or appends to the file with the rendered template output.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L111"
-      },
-      {
-        "name": "debug",
-        "params": "string",
-        "returns": "Unknown",
-        "appliesTo": "string",
-        "desc": "Outputs a diagnostic message to the debug log (--diag flag).\nSame template semantics as print but only visible when diagnostics are enabled.\nUsed for troubleshooting: debug('{Types.Count} types loaded')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L116"
-      },
-      {
-        "name": "assert",
-        "params": "bool, description: string",
-        "returns": "Unknown",
-        "appliesTo": "bool",
-        "desc": "Asserts that a condition is true. Fails the test run if false.\nUsed in tests: assert(Types:isPublic.Count > 0, 'should have public types')\nReports pass/fail with the description.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L121"
-      },
-      {
-        "name": "where",
-        "params": "Collection",
-        "returns": "Collection",
-        "appliesTo": "Collection",
-        "desc": "Filters items matching a condition. Returns a new collection.\nExample: Types:where(isPublic)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L157"
-      },
-      {
-        "name": "select",
-        "params": "Collection",
-        "returns": "Collection",
-        "appliesTo": "Collection",
-        "desc": "Projects each item through a transformation. Returns a new collection.\nExample: Types:select(item.Name)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L161"
-      },
-      {
-        "name": "any",
-        "params": "Collection",
-        "returns": "bool",
-        "appliesTo": "Collection",
-        "desc": "Returns true if any item matches a condition.\nExample: Types:any(isAbstract)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L165"
-      },
-      {
-        "name": "all",
-        "params": "Collection",
-        "returns": "bool",
-        "appliesTo": "Collection",
-        "desc": "Returns true if all items match a condition.\nExample: Types:all(isPublic)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L169"
-      },
-      {
-        "name": "none",
-        "params": "Collection",
-        "returns": "bool",
-        "appliesTo": "Collection",
-        "desc": "Returns true if no item matches a condition.\nExample: Types:none(isObsolete)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L173"
-      },
-      {
-        "name": "count",
-        "params": "Collection",
-        "returns": "int",
-        "appliesTo": "Collection",
-        "desc": "Counts items matching a condition.\nExample: Types:count(isPublic)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L177"
-      },
-      {
-        "name": "contains",
-        "params": "Collection",
-        "returns": "bool",
-        "appliesTo": "Collection",
-        "desc": "Returns true if collection contains a value (case-insensitive string match).\nExample: names:contains('Foo')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L181"
-      },
-      {
-        "name": "containsAny",
-        "params": "Collection",
-        "returns": "bool",
-        "appliesTo": "Collection",
-        "desc": "Returns true if collection contains any of the given values.\nExample: tags:containsAny('api', 'public')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L185"
-      },
-      {
-        "name": "empty",
-        "params": "Collection",
-        "returns": "bool",
-        "appliesTo": "Collection",
-        "desc": "Returns true if the collection is empty (Count == 0).\nExample: errors:empty",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L189"
-      },
-      {
-        "name": "first",
-        "params": "Collection",
-        "returns": "Object",
-        "appliesTo": "Collection",
-        "desc": "First item matching a condition, or nic.\nExample: Types:first(isPublic)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L193"
-      },
-      {
-        "name": "last",
-        "params": "Collection",
-        "returns": "Object",
-        "appliesTo": "Collection",
-        "desc": "Last item matching a condition, or nic.\nExample: Types:last(isPublic)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L197"
-      },
-      {
-        "name": "single",
-        "params": "Collection",
-        "returns": "Object",
-        "appliesTo": "Collection",
-        "desc": "The single item matching a condition, or nic if zero or multiple match.\nExample: Types:single(isEntryPoint)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L201"
-      },
-      {
-        "name": "elementAt",
-        "params": "Collection",
-        "returns": "Object",
-        "appliesTo": "Collection",
-        "desc": "Item at a specific zero-based index.\nExample: items:elementAt(3)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L205"
-      },
-      {
-        "name": "orderBy",
-        "params": "Collection",
-        "returns": "Collection",
-        "appliesTo": "Collection",
-        "desc": "Sorts ascending by a key expression.\nExample: Types:orderBy(item.Name)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L209"
-      },
-      {
-        "name": "orderByDescending",
-        "params": "Collection",
-        "returns": "Collection",
-        "appliesTo": "Collection",
-        "desc": "Sorts descending by a key expression.\nExample: Types:orderByDescending(item.Count)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L213"
-      },
-      {
-        "name": "distinct",
-        "params": "Collection",
-        "returns": "Collection",
-        "appliesTo": "Collection",
-        "desc": "Removes duplicate items (by string representation).\nExample: names:distinct",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L217"
-      },
-      {
-        "name": "groupBy",
-        "params": "Collection",
-        "returns": "Collection",
-        "appliesTo": "Collection",
-        "desc": "Groups items by a key expression. Returns collection of groups.\nExample: Types:groupBy(item.Namespace)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L221"
-      },
-      {
-        "name": "sum",
-        "params": "Collection",
-        "returns": "int",
-        "appliesTo": "Collection",
-        "desc": "Sums a numeric property across all items.\nExample: files:sum(item.Size)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L225"
-      },
-      {
-        "name": "min",
-        "params": "Collection",
-        "returns": "int",
-        "appliesTo": "Collection",
-        "desc": "Minimum value of a numeric property.\nExample: files:min(item.Size)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L229"
-      },
-      {
-        "name": "max",
-        "params": "Collection",
-        "returns": "int",
-        "appliesTo": "Collection",
-        "desc": "Maximum value of a numeric property.\nExample: files:max(item.Size)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L233"
-      },
-      {
-        "name": "average",
-        "params": "Collection",
-        "returns": "int",
-        "appliesTo": "Collection",
-        "desc": "Average value of a numeric property.\nExample: files:average(item.Size)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L237"
-      },
-      {
-        "name": "reduce",
-        "params": "Collection",
-        "returns": "Object",
-        "appliesTo": "Collection",
-        "desc": "Reduces a collection to a single value using an accumulator expression.\nExample: numbers:reduce(acc + item)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L241"
-      },
-      {
-        "name": "push",
-        "params": "Collection",
-        "returns": "Collection",
-        "appliesTo": "Collection",
-        "desc": "Returns a new collection with the item appended at the end.\nExample: let updated = items:push(newItem)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L248"
-      },
-      {
-        "name": "prepend",
-        "params": "Collection",
-        "returns": "Collection",
-        "appliesTo": "Collection",
-        "desc": "Returns a new collection with the item prepended at the front.\nExample: let updated = items:prepend(newItem)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L252"
-      },
-      {
-        "name": "pop",
-        "params": "Collection",
-        "returns": "Collection",
-        "appliesTo": "Collection",
-        "desc": "Returns a new collection without the last element.\nExample: let shorter = items:pop",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L256"
-      },
-      {
-        "name": "concat",
-        "params": "Collection",
-        "returns": "Collection",
-        "appliesTo": "Collection",
-        "desc": "Returns a new collection combining both collections.\nExample: let merged = listA:concat(listB)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/core.cop#L260"
-      },
-      {
-        "name": "provider",
-        "params": "string",
-        "returns": "Object",
-        "appliesTo": "string",
-        "desc": "Returns a dynamic Object accessor for the named provider.\nProperties on the returned object query the provider's collections.\nExample: provider('sample').Widgets returns the Widgets collection.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L8"
-      },
-      {
-        "name": "source",
-        "params": "string",
-        "returns": "[object]",
-        "appliesTo": "string",
-        "desc": "Returns an async streaming collection from the named provider.\nThe stream produces items asynchronously (e.g., incoming HTTP requests).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L12"
-      },
-      {
-        "name": "sink",
-        "params": "string",
-        "returns": "[object]",
-        "appliesTo": "string",
-        "desc": "Returns an async output collection for the named streaming provider.\nItems pushed into the sink are delivered to the provider's output channel.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L16"
-      },
-      {
-        "name": "read",
-        "params": "string",
-        "returns": "string",
-        "appliesTo": "string",
-        "desc": "Reads the content of a file at the given path (sandboxed to project root).\nReturns the file content as a string.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L20"
-      },
-      {
-        "name": "text",
-        "params": "Unknown",
-        "returns": "string",
-        "appliesTo": "Unknown",
-        "desc": "Converts an integer to its decimal text representation.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L23"
-      },
-      {
-        "name": "text",
-        "params": "Unknown",
-        "returns": "string",
-        "appliesTo": "Unknown",
-        "desc": "Decodes a byte array as UTF-8 text.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L26"
-      },
-      {
-        "name": "text",
-        "params": "Formattable",
-        "returns": "string",
-        "appliesTo": "Formattable",
-        "desc": "Converts a Formattable to text by resolving the Template against each item\nin Items using {Property} interpolation, then joining results with Separator.\nWhen used in a pipeline: collection.text('{Item.Name}') creates a Formattable\nfrom the pipeline collection and resolves it into a single joined string.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L32"
-      },
-      {
-        "name": "error",
-        "params": "Unknown",
-        "returns": "Error",
-        "appliesTo": "Unknown",
-        "desc": "Creates an Error value with the given message string.\nExample: error('connection timeout')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L36"
-      },
-      {
-        "name": "fail",
-        "params": "string",
-        "returns": "Unknown",
-        "appliesTo": "string",
-        "desc": "Terminates execution immediately with a fatal diagnostic.\nUse for programmer assertions — situations that should never occur.\nCan be used standalone: fail('invariant violated')\nOr in pipeline: foreach Items:badCondition => fail('{item.Name} is invalid')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L42"
-      },
-      {
-        "name": "program",
-        "params": "Unknown",
-        "returns": "Program",
-        "appliesTo": "Unknown",
-        "desc": "Returns the current program context.\nProvides access to command-line arguments passed to the cop invocation.\nExample: predicate verbose(Program) => program().Args:contains('/v')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L47"
-      },
-      {
-        "name": "pathMatches",
-        "params": "pattern: string",
-        "returns": "bool",
-        "desc": "Glob-matches a file path against a pattern.\nSupports **, *, ? wildcards. Returns true if the path matches.\nExample: pathMatches(Statement.File.Path, '**/Tests/**')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L52"
-      },
-      {
-        "name": "print",
-        "params": "string",
-        "returns": "string",
-        "appliesTo": "string",
-        "desc": "Prints a message to the output.\nUsed standalone: print('hello {Name}')\nUsed in pipeline: foreach Types => print('{item.Name}')\nThe template supports {Property} interpolation and {@style} formatting.",
+        "desc": "Converts a Formattable to text by resolving the Template against each item\nin Items using {Property} interpolation, then joining results with Separator.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L58"
       },
       {
-        "name": "save",
-        "params": "content: string",
-        "returns": "Unknown",
-        "desc": "Saves content to a file at the specified path.\nUsed in pipeline: foreach Types:isPublic => save('api.txt', '{item.Name}')\nCreates or appends to the file with the rendered template output.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L63"
+        "name": "error",
+        "params": "Unknown",
+        "returns": "Error",
+        "appliesTo": "Unknown",
+        "desc": "Creates an Error value with the given message string.\nExample: error('connection timeout')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L64"
       },
       {
-        "name": "debug",
+        "name": "fail",
         "params": "string",
         "returns": "Unknown",
         "appliesTo": "string",
-        "desc": "Outputs a diagnostic message to the debug log (--diag flag).\nSame template semantics as print but only visible when diagnostics are enabled.\nUsed for troubleshooting: debug('{Types.Count} types loaded')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L68"
+        "desc": "Terminates execution immediately with a fatal diagnostic.\nUse for programmer assertions — situations that should never occur.\nCan be used standalone: fail('invariant violated')\nOr in pipeline: foreach Items:badCondition => fail('{item.Name} is invalid')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L70"
+      },
+      {
+        "name": "program",
+        "params": "Unknown",
+        "returns": "Program",
+        "appliesTo": "Unknown",
+        "desc": "Returns the current program context.\nProvides access to command-line arguments passed to the cop invocation.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L76"
+      },
+      {
+        "name": "pathMatches",
+        "params": "pattern: string",
+        "returns": "bool",
+        "desc": "Glob-matches a file path against a pattern.\nSupports **, *, ? wildcards. Returns true if the path matches.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L80"
       },
       {
         "name": "assert",
         "params": "bool, description: string",
         "returns": "Unknown",
         "appliesTo": "bool",
-        "desc": "Asserts that a condition is true. Fails the test run if false.\nUsed in tests: assert(Types:isPublic.Count > 0, 'should have public types')\nReports pass/fail with the description.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L73"
-      },
-      {
-        "name": "where",
-        "params": "Collection",
-        "returns": "Collection",
-        "appliesTo": "Collection",
-        "desc": "Filters items matching a condition. Returns a new collection.\nExample: Types:where(isPublic)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L81"
-      },
-      {
-        "name": "select",
-        "params": "Collection",
-        "returns": "Collection",
-        "appliesTo": "Collection",
-        "desc": "Projects each item through a transformation. Returns a new collection.\nExample: Types:select(item.Name)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L85"
-      },
-      {
-        "name": "any",
-        "params": "Collection",
-        "returns": "bool",
-        "appliesTo": "Collection",
-        "desc": "Returns true if any item matches a condition.\nExample: Types:any(isAbstract)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L89"
-      },
-      {
-        "name": "all",
-        "params": "Collection",
-        "returns": "bool",
-        "appliesTo": "Collection",
-        "desc": "Returns true if all items match a condition.\nExample: Types:all(isPublic)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L93"
-      },
-      {
-        "name": "none",
-        "params": "Collection",
-        "returns": "bool",
-        "appliesTo": "Collection",
-        "desc": "Returns true if no item matches a condition.\nExample: Types:none(isObsolete)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L97"
-      },
-      {
-        "name": "count",
-        "params": "Collection",
-        "returns": "int",
-        "appliesTo": "Collection",
-        "desc": "Counts items matching a condition.\nExample: Types:count(isPublic)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L101"
-      },
-      {
-        "name": "contains",
-        "params": "Collection",
-        "returns": "bool",
-        "appliesTo": "Collection",
-        "desc": "Returns true if collection contains a value (case-insensitive string match).\nExample: names:contains('Foo')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L105"
-      },
-      {
-        "name": "containsAny",
-        "params": "Collection",
-        "returns": "bool",
-        "appliesTo": "Collection",
-        "desc": "Returns true if collection contains any of the given values.\nExample: tags:containsAny('api', 'public')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L109"
-      },
-      {
-        "name": "empty",
-        "params": "Collection",
-        "returns": "bool",
-        "appliesTo": "Collection",
-        "desc": "Returns true if the collection is empty (Count == 0).\nExample: errors:empty",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L113"
-      },
-      {
-        "name": "first",
-        "params": "Collection",
-        "returns": "Object",
-        "appliesTo": "Collection",
-        "desc": "First item matching a condition, or nic.\nExample: Types:first(isPublic)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L117"
-      },
-      {
-        "name": "last",
-        "params": "Collection",
-        "returns": "Object",
-        "appliesTo": "Collection",
-        "desc": "Last item matching a condition, or nic.\nExample: Types:last(isPublic)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L121"
-      },
-      {
-        "name": "single",
-        "params": "Collection",
-        "returns": "Object",
-        "appliesTo": "Collection",
-        "desc": "The single item matching a condition, or nic if zero or multiple match.\nExample: Types:single(isEntryPoint)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L125"
-      },
-      {
-        "name": "elementAt",
-        "params": "Collection",
-        "returns": "Object",
-        "appliesTo": "Collection",
-        "desc": "Item at a specific zero-based index.\nExample: items:elementAt(3)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L129"
-      },
-      {
-        "name": "orderBy",
-        "params": "Collection",
-        "returns": "Collection",
-        "appliesTo": "Collection",
-        "desc": "Sorts ascending by a key expression.\nExample: Types:orderBy(item.Name)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L133"
-      },
-      {
-        "name": "orderByDescending",
-        "params": "Collection",
-        "returns": "Collection",
-        "appliesTo": "Collection",
-        "desc": "Sorts descending by a key expression.\nExample: Types:orderByDescending(item.Count)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L137"
-      },
-      {
-        "name": "distinct",
-        "params": "Collection",
-        "returns": "Collection",
-        "appliesTo": "Collection",
-        "desc": "Removes duplicate items (by string representation).\nExample: names:distinct",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L141"
-      },
-      {
-        "name": "groupBy",
-        "params": "Collection",
-        "returns": "Collection",
-        "appliesTo": "Collection",
-        "desc": "Groups items by a key expression. Returns collection of groups.\nExample: Types:groupBy(item.Namespace)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L145"
-      },
-      {
-        "name": "sum",
-        "params": "Collection",
-        "returns": "int",
-        "appliesTo": "Collection",
-        "desc": "Sums a numeric property across all items.\nExample: files:sum(item.Size)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L149"
-      },
-      {
-        "name": "min",
-        "params": "Collection",
-        "returns": "int",
-        "appliesTo": "Collection",
-        "desc": "Minimum value of a numeric property.\nExample: files:min(item.Size)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L153"
-      },
-      {
-        "name": "max",
-        "params": "Collection",
-        "returns": "int",
-        "appliesTo": "Collection",
-        "desc": "Maximum value of a numeric property.\nExample: files:max(item.Size)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L157"
-      },
-      {
-        "name": "average",
-        "params": "Collection",
-        "returns": "int",
-        "appliesTo": "Collection",
-        "desc": "Average value of a numeric property.\nExample: files:average(item.Size)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L161"
-      },
-      {
-        "name": "reduce",
-        "params": "Collection",
-        "returns": "Object",
-        "appliesTo": "Collection",
-        "desc": "Reduces a collection to a single value using an accumulator expression.\nExample: numbers:reduce(acc + item)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L165"
-      },
-      {
-        "name": "push",
-        "params": "Collection",
-        "returns": "Collection",
-        "appliesTo": "Collection",
-        "desc": "Returns a new collection with the item appended at the end.\nExample: let updated = items:push(newItem)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L172"
-      },
-      {
-        "name": "prepend",
-        "params": "Collection",
-        "returns": "Collection",
-        "appliesTo": "Collection",
-        "desc": "Returns a new collection with the item prepended at the front.\nExample: let updated = items:prepend(newItem)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L176"
-      },
-      {
-        "name": "pop",
-        "params": "Collection",
-        "returns": "Collection",
-        "appliesTo": "Collection",
-        "desc": "Returns a new collection without the last element.\nExample: let shorter = items:pop",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L180"
-      },
-      {
-        "name": "concat",
-        "params": "Collection",
-        "returns": "Collection",
-        "appliesTo": "Collection",
-        "desc": "Returns a new collection combining both collections.\nExample: let merged = listA:concat(listB)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L184"
+        "desc": "Asserts that a condition is true. Fails the test run if false.\nUsed in tests: assert(Types:isPublic.Count > 0, 'should have public types')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L84"
       },
       {
         "name": "sum",
@@ -2973,116 +2402,6 @@ const packages = {
         "returns": "[object]",
         "desc": "Returns a new collection combining both collections.\nExample: let merged = listA:concat(listB)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L120"
-      },
-      {
-        "name": "read",
-        "params": "string",
-        "returns": "string",
-        "appliesTo": "string",
-        "desc": "Reads the content of a file at the given path (sandboxed to project root).\nReturns the file content as a string.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L43"
-      },
-      {
-        "name": "text",
-        "params": "string",
-        "returns": "value",
-        "appliesTo": "string",
-        "desc": "Converts a string to text (identity — returns string as-is).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L46"
-      },
-      {
-        "name": "text",
-        "params": "bool",
-        "returns": "value",
-        "appliesTo": "bool",
-        "desc": "Converts a bool to text: true => 'true', false => 'false'.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L49"
-      },
-      {
-        "name": "text",
-        "params": "int",
-        "returns": "string",
-        "appliesTo": "int",
-        "desc": "Converts an integer to its decimal text representation.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L52"
-      },
-      {
-        "name": "text",
-        "params": "bytes",
-        "returns": "string",
-        "appliesTo": "bytes",
-        "desc": "Decodes a byte array as UTF-8 text.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L55"
-      },
-      {
-        "name": "text",
-        "params": "Formattable",
-        "returns": "string",
-        "appliesTo": "Formattable",
-        "desc": "Converts a Formattable to text by resolving the Template against each item\nin Items using {Property} interpolation, then joining results with Separator.\nWhen used in a pipeline: collection.text('{Item.Name}') creates a Formattable\nfrom the pipeline collection and resolves it into a single joined string.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L70"
-      },
-      {
-        "name": "error",
-        "params": "string",
-        "returns": "Error",
-        "appliesTo": "string",
-        "desc": "Creates an Error value with the given message string.\nExample: error('connection timeout')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L85"
-      },
-      {
-        "name": "fail",
-        "params": "string",
-        "returns": "intrinsic",
-        "appliesTo": "string",
-        "desc": "Terminates execution immediately with a fatal diagnostic.\nUse for programmer assertions — situations that should never occur.\nCan be used standalone: fail('invariant violated')\nOr in pipeline: foreach Items:badCondition => fail('{item.Name} is invalid')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L96"
-      },
-      {
-        "name": "program",
-        "params": "Unknown",
-        "returns": "Program",
-        "appliesTo": "Unknown",
-        "desc": "Returns the current program context.\nProvides access to command-line arguments passed to the cop invocation.\nExample: predicate verbose(Program) => program().Args:contains('/v')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L107"
-      },
-      {
-        "name": "pathMatches",
-        "params": "pattern: string",
-        "returns": "bool",
-        "desc": "Glob-matches a file path against a pattern.\nSupports **, *, ? wildcards. Returns true if the path matches.\nExample: pathMatches(Statement.File.Path, '**/Tests/**')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L112"
-      },
-      {
-        "name": "print",
-        "params": "string",
-        "returns": "string",
-        "appliesTo": "string",
-        "desc": "Prints a message to the output.\nUsed standalone: print('hello {Name}')\nUsed in pipeline: foreach Types => print('{item.Name}')\nThe template supports {Property} interpolation and {@style} formatting.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L118"
-      },
-      {
-        "name": "save",
-        "params": "content: string",
-        "returns": "intrinsic",
-        "desc": "Saves content to a file at the specified path.\nUsed in pipeline: foreach Types:isPublic => save('api.txt', '{item.Name}')\nCreates or appends to the file with the rendered template output.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L123"
-      },
-      {
-        "name": "debug",
-        "params": "string",
-        "returns": "intrinsic",
-        "appliesTo": "string",
-        "desc": "Outputs a diagnostic message to the debug log (--diag flag).\nSame template semantics as print but only visible when diagnostics are enabled.\nUsed for troubleshooting: debug('{Types.Count} types loaded')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L128"
-      },
-      {
-        "name": "assert",
-        "params": "bool, description: string",
-        "returns": "intrinsic",
-        "appliesTo": "bool",
-        "desc": "Asserts that a condition is true. Fails the test run if false.\nUsed in tests: assert(Types:isPublic.Count > 0, 'should have public types')\nReports pass/fail with the description.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L133"
       }
     ],
     "checks": [],
