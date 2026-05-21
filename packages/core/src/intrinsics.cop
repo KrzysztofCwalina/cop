@@ -39,24 +39,6 @@ export function save(path : string, content : string) => intrinsic
 ## Same template semantics as print but only visible when diagnostics are enabled.
 export function debug(message : string) => intrinsic
 
-# Conversion
-
-## Converts a string to text (identity — returns string as-is).
-export function text(string) => string
-
-## Converts a bool to text: true => 'true', false => 'false'.
-export function text(bool) => bool ? 'true' | 'false'
-
-## Converts an integer to its decimal text representation.
-export function text(int) : string => intrinsic
-
-## Decodes a byte array as UTF-8 text.
-export function text(bytes) : string => intrinsic
-
-## Converts a Formattable to text by resolving the Template against each item
-## in Items using {Property} interpolation, then joining results with Separator.
-export function text(Formattable) : string => intrinsic
-
 # Utilities
 
 ## Returns the current program context.
