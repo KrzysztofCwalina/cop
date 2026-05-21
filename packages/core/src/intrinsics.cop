@@ -3,10 +3,10 @@
 
 # Provider Access
 
-## Returns a dynamic Object accessor for the named provider.
+## Returns a dynamic object accessor for the named provider.
 ## Properties on the returned object query the provider's collections.
 ## Example: provider('sample').Widgets returns the Widgets collection.
-export function provider(name : string) : Object = intrinsic
+export function provider(name : string) : object = intrinsic
 
 ## Returns an async streaming collection from the named provider.
 ## Use a typed annotation to declare the item type produced by the stream:
