@@ -19,14 +19,14 @@ internal static class TestInterpreter
 
     private static readonly Lazy<ScriptFile> _coreCop = new(() =>
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "samples", "core.cop");
-        return Cop.Lang.Parser.CopParser.ParseFile(File.ReadAllText(path), "core.cop");
+        var path = Path.Combine(AppContext.BaseDirectory, "samples", "intrinsics.cop");
+        return Cop.Lang.Parser.CopParser.ParseFile(File.ReadAllText(path), "intrinsics.cop");
     });
 
     /// <summary>The parsed code.cop package (flags definitions + isX predicates).</summary>
     public static ScriptFile CodePackage => _codeCop.Value;
 
-    /// <summary>The parsed core.cop package (intrinsic function declarations).</summary>
+    /// <summary>The parsed intrinsics.cop package (intrinsic function declarations).</summary>
     public static ScriptFile CorePackage => _coreCop.Value;
 
     public static TypeRegistry CreateRegistry()

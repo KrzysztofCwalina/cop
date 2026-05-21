@@ -399,13 +399,13 @@ command main = print('done')
     [Test]
     public void Parse_RealWorld_CoreCop()
     {
-        // Parse the core.cop file
+        // Parse the intrinsics.cop file (canonical declarations)
         var path = Path.Combine(TestContext.CurrentContext.TestDirectory,
-            "..", "..", "..", "..", "..", "packages", "core", "src", "core.cop");
+            "..", "..", "..", "..", "..", "packages", "core", "src", "intrinsics.cop");
         if (!File.Exists(path))
-            Assert.Ignore($"core.cop not found at: {Path.GetFullPath(path)}");
+            Assert.Ignore($"intrinsics.cop not found at: {Path.GetFullPath(path)}");
         var source = File.ReadAllText(path);
-        var module = CopParser.Parse(source, "core.cop");
+        var module = CopParser.Parse(source, "intrinsics.cop");
         Assert.That(module.Declarations.Count, Is.GreaterThan(5));
     }
 
