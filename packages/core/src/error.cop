@@ -19,7 +19,7 @@ export predicate isError(object) => item.Type:equals('Error')
 
 ## Creates an Error value with the given message string.
 ## Example: error('connection timeout')
-export function error(string) : Error => intrinsic
+export function error(message: string) : Error => intrinsic
 
 ## Terminates execution immediately with a fatal diagnostic.
 ## Use for programmer assertions — situations that should never occur.

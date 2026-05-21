@@ -3,7 +3,7 @@
 
 ## Returns true if collection contains a value (case-insensitive string match).
 ## Example: names:contains('Foo')
-export function contains(items: [string], value: string) : bool => intrinsic
+export function contains(items: [string], value: string) : bool => items.reduce((found, x) => found || x == value, false)
 
 ## Returns true if collection contains any of the given values.
 ## Example: tags:containsAny('api', 'public')

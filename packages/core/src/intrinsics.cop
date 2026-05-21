@@ -45,6 +45,12 @@ export function debug(message : string) => intrinsic
 ## Provides access to command-line arguments passed to the cop invocation.
 export function program() : Program => intrinsic
 
+## Represents the running program's context.
+## Provides access to command-line arguments passed to the cop invocation.
+export type object:Program = {
+    Args : [string]
+}
+
 ## Glob-matches a file path against a pattern.
 ## Supports **, *, ? wildcards. Returns true if the path matches.
 export function pathMatches(path : string, pattern : string) : bool => intrinsic

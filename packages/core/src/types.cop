@@ -1,8 +1,0 @@
-# Core Types
-# Compound types used throughout the language runtime.
-
-## Represents the running program's context.
-## Provides access to command-line arguments passed to the cop invocation.
-export type object:Program = {
-    Args : [string]
-}
