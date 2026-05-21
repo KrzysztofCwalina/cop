@@ -1,7 +1,6 @@
 # Numeric Collection Functions
 # Aggregate functions that operate on collections of numbers.
-# reduce is the one fundamental intrinsic. sum is expressed using reduce.
-# min/max/average remain intrinsic pending first() composition support.
+# reduce is the one fundamental intrinsic — all others are expressed in pure Cop.
 
 ## Reduces a collection to a single value using an accumulator.
 ## Example: [1,2,3]:reduce((acc, item) => acc + item, 0)
@@ -13,7 +12,7 @@ export function sum(items: [int]) : int => items.reduce((acc, x) => acc + x, 0)
 
 ## Sums all items in a number collection.
 ## Example: measurements:sum()
-export function sum(items: [number]) : number => items.reduce((acc, x) => acc + x, 0)
+export function sum(items: [number]) : number => items.reduce((acc, x) => acc + x, 0.0)
 
 ## Sums a computed value for each item.
 ## Example: files:sum(item.Size)
@@ -21,11 +20,11 @@ export function sum(items: [object], object2int: expression) : int => intrinsic
 
 ## Minimum value in an integer collection.
 ## Example: scores:min()
-export function min(items: [int]) : int => intrinsic
+export function min(items: [int]) : int => items.reduce((acc, x) => acc < x ? acc : x, items.first())
 
 ## Minimum value in a number collection.
 ## Example: measurements:min()
-export function min(items: [number]) : number => intrinsic
+export function min(items: [number]) : number => items.reduce((acc, x) => acc < x ? acc : x, items.first())
 
 ## Minimum computed value across items.
 ## Example: files:min(item.Size)
@@ -33,11 +32,11 @@ export function min(items: [object], object2int: expression) : int => intrinsic
 
 ## Maximum value in an integer collection.
 ## Example: scores:max()
-export function max(items: [int]) : int => intrinsic
+export function max(items: [int]) : int => items.reduce((acc, x) => acc > x ? acc : x, items.first())
 
 ## Maximum value in a number collection.
 ## Example: measurements:max()
-export function max(items: [number]) : number => intrinsic
+export function max(items: [number]) : number => items.reduce((acc, x) => acc > x ? acc : x, items.first())
 
 ## Maximum computed value across items.
 ## Example: files:max(item.Size)
@@ -45,11 +44,11 @@ export function max(items: [object], object2int: expression) : int => intrinsic
 
 ## Average value of an integer collection.
 ## Example: scores:average()
-export function average(items: [int]) : number => intrinsic
+export function average(items: [int]) : number => items.sum() / items.count()
 
 ## Average value of a number collection.
 ## Example: measurements:average()
-export function average(items: [number]) : number => intrinsic
+export function average(items: [number]) : number => items.sum() / items.count()
 
 ## Average computed value across items.
 ## Example: files:average(item.Size)
