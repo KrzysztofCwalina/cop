@@ -23,7 +23,7 @@ public static class Engine
 
     private record BuiltinProvider(string Name, ObjectProvider Instance, ProviderSchema Schema, HashSet<string> CollectionNames);
 
-    private sealed record ParsedModule(string FilePath, string Source, ModuleNode Module);
+    public sealed record ParsedModule(string FilePath, string Source, ModuleNode Module);
 
     private static readonly BuiltinProvider[] _builtinProviders = _rawProviders.Select(ToBuiltin).ToArray();
 
@@ -525,41 +525,6 @@ public static class Engine
     }
 
     /// <summary>
-    /// Creates and populates a TypeRegistry with type definitions from imports and script files.
-    /// </summary>
-    private static TypeRegistry CreateTypeRegistry(List<ScriptFile> scriptFiles, string scriptsDir, List<string> errors, List<string> fatalErrors, List<(string Dir, PackageMetadata Meta)>? providerPackages = null, string[]? additionalFeedPaths = null)
-    {
-        var feedPaths = FindFeedPaths(scriptsDir);
-
-        // Add feed paths declared in script files (feed "path")
-        foreach (var sf in scriptFiles)
-        {
-            if (sf.FeedPaths is null) continue;
-            var scriptDir = Path.GetDirectoryName(sf.FilePath) ?? scriptsDir;
-            foreach (var fp in sf.FeedPaths)
-            {
-                var resolved = Path.IsPathRooted(fp)
-                    ? Path.GetFullPath(fp)
-                    : Path.GetFullPath(Path.Combine(scriptDir, fp));
-                if (Directory.Exists(resolved) && !feedPaths.Contains(resolved))
-                    feedPaths.Add(resolved);
-            }
-        }
-
-        // Append caller-supplied feed paths (e.g., from CWD when running remote scripts)
-        if (additionalFeedPaths is not null)
-        {
-            foreach (var fp in additionalFeedPaths)
-            {
-                if (Directory.Exists(fp) && !feedPaths.Contains(fp))
-                    feedPaths.Add(fp);
-            }
-        }
-
-        return CreateTypeRegistry(scriptFiles, feedPaths, errors, fatalErrors, providerPackages: providerPackages);
-    }
-
-    /// <summary>
     /// Finds packages/ feed paths by walking up from scriptsDir.
     /// </summary>
     private static List<string> FindFeedPaths(string scriptsDir)
@@ -641,128 +606,6 @@ public static class Engine
             topLevelProviderPackages: providerPackages);
     }
 
-
-    /// <summary>
-    /// Creates a TypeRegistry from script files using the given feed paths for import resolution.
-    /// </summary>
-    private static TypeRegistry CreateTypeRegistry(List<ScriptFile> scriptFiles, List<string> feedPaths, List<string> errors, List<string> fatalErrors, List<string>? preloadedPackages = null, List<(string Dir, PackageMetadata Meta)>? providerPackages = null)
-    {
-        var typeRegistry = new TypeRegistry();
-
-        // Register built-in provider schemas FIRST so they define authoritative type descriptors
-        // (e.g., Line type with isComment). Package .cop type definitions merge but don't replace.
-        foreach (var bp in _builtinProviders)
-            ProviderLoader.RegisterSchema(bp.Instance, typeRegistry);
-        typeRegistry.RegisterProgramType();
-
-        var importResolver = new ImportResolver([.. feedPaths]);
-
-        var resolvedPackages = new HashSet<string>();
-        var importedFiles = new List<ScriptFile>();
-
-        // Pre-register packages that were directly loaded (e.g., from RunProject)
-        // to prevent re-resolution via transitive imports
-        if (preloadedPackages != null)
-        {
-            foreach (var pkg in preloadedPackages)
-                resolvedPackages.Add(pkg);
-        }
-
-        // Collect all imports from user script files into a queue
-        var importQueue = new Queue<string>();
-        foreach (var sf in scriptFiles)
-            foreach (var import in sf.Imports)
-                importQueue.Enqueue(import);
-
-        // Resolve imports transitively (packages may import other packages)
-        while (importQueue.Count > 0)
-        {
-            var import = importQueue.Dequeue();
-            if (!resolvedPackages.Add(import)) continue;
-
-            var packageFile = importResolver.Resolve(import, fatalErrors);
-            if (packageFile is null)
-            {
-                if (!fatalErrors.Any(e => e.Contains(import)))
-                    fatalErrors.Add($"Import '{import}' could not be resolved");
-                continue;
-            }
-
-            var typeErrors = typeRegistry.LoadTypeDefinitions(packageFile.TypeDefinitions);
-            errors.AddRange(typeErrors);
-
-            if (packageFile.FlagsDefinitions is not null)
-            {
-                var flagsErrors = typeRegistry.LoadFlagsDefinitions(packageFile.FlagsDefinitions);
-                errors.AddRange(flagsErrors);
-            }
-
-            if (packageFile.EnumDefinitions is not null)
-            {
-                var enumErrors = typeRegistry.LoadEnumDefinitions(packageFile.EnumDefinitions);
-                errors.AddRange(enumErrors);
-            }
-
-            if (packageFile.TypeImports is not null)
-            {
-                var typeImportErrors = typeRegistry.LoadTypeImports(packageFile.TypeImports);
-                errors.AddRange(typeImportErrors);
-            }
-
-            foreach (var coll in packageFile.CollectionDeclarations)
-                typeRegistry.RegisterCollection(coll);
-
-            // Stamp PackageName on all definitions so the interpreter can detect cross-package conflicts
-            StampPackageName(packageFile, import);
-
-            importedFiles.Add(packageFile);
-
-            // Detect provider packages: check for package metadata with provider:clr
-            if (providerPackages != null)
-                DetectProviderPackage(packageFile.FilePath, import, feedPaths, providerPackages, errors);
-
-            // Enqueue the package's own imports for transitive resolution
-            foreach (var subImport in packageFile.Imports)
-                importQueue.Enqueue(subImport);
-        }
-
-        // Register types from user script files
-        foreach (var sf in scriptFiles)
-        {
-            var localErrors = typeRegistry.LoadTypeDefinitions(sf.TypeDefinitions);
-            errors.AddRange(localErrors);
-
-            if (sf.FlagsDefinitions is not null)
-            {
-                var flagsErrors = typeRegistry.LoadFlagsDefinitions(sf.FlagsDefinitions);
-                errors.AddRange(flagsErrors);
-            }
-
-            if (sf.EnumDefinitions is not null)
-            {
-                var enumErrors = typeRegistry.LoadEnumDefinitions(sf.EnumDefinitions);
-                errors.AddRange(enumErrors);
-            }
-
-            if (sf.TypeImports is not null)
-            {
-                var typeImportErrors = typeRegistry.LoadTypeImports(sf.TypeImports);
-                errors.AddRange(typeImportErrors);
-            }
-
-            foreach (var coll in sf.CollectionDeclarations)
-                typeRegistry.RegisterCollection(coll);
-        }
-
-        scriptFiles.AddRange(importedFiles);
-
-        // Register built-in sinks
-        typeRegistry.RegisterSink("console", ConsoleWriteLineSink.Instance);
-        typeRegistry.RegisterSink("file", new FileWriteSink());
-
-        return typeRegistry;
-    }
-
     /// <summary>
     /// Directories excluded from both filesystem scanning and source parsing.
     /// These are build artifacts, VCS metadata, and package caches that contain
@@ -775,23 +618,6 @@ public static class Engine
         "__pycache__", ".mypy_cache", ".pytest_cache",
         "dist", "build", "out", ".next", ".cache"
     };
-
-    /// <summary>
-    /// Detects if a resolved package is a CLR provider package and adds it to the list.
-    /// </summary>
-    /// <summary>
-    /// Stamps PackageName on all predicates, functions, and let declarations in a ScriptFile.
-    /// Uses record mutation via mutable list replacement since records are immutable.
-    /// </summary>
-    private static void StampPackageName(ScriptFile packageFile, string packageName)
-    {
-        for (int i = 0; i < packageFile.Predicates.Count; i++)
-            packageFile.Predicates[i] = packageFile.Predicates[i] with { PackageName = packageName };
-        for (int i = 0; i < packageFile.Functions.Count; i++)
-            packageFile.Functions[i] = packageFile.Functions[i] with { PackageName = packageName };
-        for (int i = 0; i < packageFile.LetDeclarations.Count; i++)
-            packageFile.LetDeclarations[i] = packageFile.LetDeclarations[i] with { PackageName = packageName };
-    }
 
     private static void DetectProviderPackage(string copDirPath, string packageName, List<string> feedPaths, List<(string Dir, PackageMetadata Meta)> providerPackages, List<string> errors)
     {
@@ -909,7 +735,7 @@ public static class Engine
         // REPL only loads top-level .cop files; packages are resolved via import directives
         var scriptFilePaths = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.TopDirectoryOnly);
         Array.Sort(scriptFilePaths, StringComparer.Ordinal);
-        var scriptFiles = new List<ScriptFile>();
+        var modules = new List<ParsedModule>();
         var parseErrors = new List<string>();
 
         foreach (var path in scriptFilePaths)
@@ -917,12 +743,10 @@ public static class Engine
             try
             {
                 var source = File.ReadAllText(path);
-                scriptFiles.Add(Cop.Lang.Parser.CopParser.ParseFile(source, path));
+                modules.Add(new ParsedModule(path, source, Cop.Lang.Parser.CopParser.Parse(source, path)));
             }
             catch (ParseException ex)
             {
-                // Suppress warnings for files containing only value expressions (lists, strings, numbers)
-                // These are valid REPL content accessible via <N>! line references
                 if (!IsValueOnlyFile(path))
                     parseErrors.Add(ex.Message);
             }
@@ -935,24 +759,54 @@ public static class Engine
 
         errors.AddRange(parseErrors);
 
-        var fatalErrors = new List<string>();
-        var providerPackages = new List<(string Dir, PackageMetadata Meta)>();
+        // Build type registry from modules using the new pipeline
+        var typeRegistry = new TypeRegistry();
+        foreach (var bp in _builtinProviders)
+            ProviderLoader.RegisterSchema(bp.Instance, typeRegistry);
+        typeRegistry.RegisterProgramType();
 
-        // Include ~/.cop/packages/ as a feed path (same as CheckCommand does)
+        // Resolve imports and register types
+        var feedPaths = FindFeedPaths(scriptsDir);
         var globalCachePath = Path.Combine(
             System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
             ".cop", "packages");
-        string[]? additionalFeeds = Directory.Exists(globalCachePath) ? [globalCachePath] : null;
+        if (Directory.Exists(globalCachePath) && !feedPaths.Contains(globalCachePath))
+            feedPaths.Add(globalCachePath);
 
-        var typeRegistry = CreateTypeRegistry(scriptFiles, scriptsDir, parseErrors, fatalErrors, providerPackages: providerPackages, additionalFeedPaths: additionalFeeds);
-
-        if (fatalErrors.Count > 0)
+        var moduleLoader = new Cop.Lang.Interpreter.ModuleLoader(feedPaths);
+        var bridge = CreateBridge([], [], [], null);
+        foreach (var module in modules)
         {
-            errors.AddRange(fatalErrors);
-            // Still return context even with some errors — REPL can still be useful
+            try { bridge.Evaluator.RegisterDeclarations(module.Module); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { errors.Add(ex.Message); }
+        }
+        try { moduleLoader.ResolveImports(modules.Select(m => m.Module), bridge.Evaluator); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { errors.Add(ex.Message); }
+        errors.AddRange(moduleLoader.Errors);
+
+        // Detect provider packages
+        var providerPackages = new List<(string Dir, PackageMetadata Meta)>();
+        foreach (var (dir, _) in moduleLoader.ProviderPackages)
+        {
+            var metadata = PackageMetadata.TryLoadFromDirectory(dir);
+            if (metadata is not null && metadata.IsProvider)
+                providerPackages.Add((dir, metadata));
         }
 
-        return new ReplContext(scriptFiles, typeRegistry, rootPath, scriptsDir, providerPackages,
+        // Load type definitions into TypeRegistry for completion
+        foreach (var module in modules)
+        {
+            foreach (var decl in module.Module.Declarations)
+            {
+                if (decl is Cop.Lang.Ast.TypeDecl typeDecl)
+                {
+                    var props = typeDecl.Properties.Select(p => new PropertyDefinition(p.Name, p.Type.Name, p.IsOptional, p.Type.IsCollection, p.Line)).ToList();
+                    typeRegistry.LoadTypeDefinitions([new TypeDefinition(typeDecl.Name, typeDecl.BaseType, props, 0, typeDecl.IsExported, typeDecl.DocComment)]);
+                }
+            }
+        }
+
+        return new ReplContext(modules, typeRegistry, rootPath, scriptsDir, providerPackages,
             totalFileCount: scriptFilePaths.Length);
     }
 
@@ -1017,7 +871,7 @@ public static class Engine
 /// </summary>
 public class ReplContext
 {
-    public List<ScriptFile> ScriptFiles { get; }
+    public List<Engine.ParsedModule> Modules { get; }
     public TypeRegistry TypeRegistry { get; }
     public string RootPath { get; }
     public string ScriptsDir { get; }
@@ -1027,14 +881,14 @@ public class ReplContext
     public int TotalFileCount { get; }
     public ProviderQueryService QueryService { get; set; }
 
-    public ReplContext(List<ScriptFile> scriptFiles, TypeRegistry typeRegistry, string rootPath, string scriptsDir, List<(string Dir, PackageMetadata Meta)> providerPackages, int totalFileCount = 0)
+    public ReplContext(List<Engine.ParsedModule> modules, TypeRegistry typeRegistry, string rootPath, string scriptsDir, List<(string Dir, PackageMetadata Meta)> providerPackages, int totalFileCount = 0)
     {
-        ScriptFiles = scriptFiles;
+        Modules = modules;
         TypeRegistry = typeRegistry;
         RootPath = rootPath;
         ScriptsDir = scriptsDir;
         ProviderPackages = providerPackages;
-        TotalFileCount = totalFileCount > 0 ? totalFileCount : scriptFiles.Count;
+        TotalFileCount = totalFileCount > 0 ? totalFileCount : modules.Count;
         QueryService = new ProviderQueryService(Directory.GetCurrentDirectory(), Engine.ExcludedDirectoryNames);
     }
 }

@@ -1,6 +1,8 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
 using Cop.Lang;
+using Cop.Lang.Ast;
+using Cop.Lang.Parser;
 
 namespace Cop.Cli.Commands;
 
@@ -53,11 +55,11 @@ public static class HelpCommand
 
         foreach (var path in filePaths)
         {
-            ScriptFile scriptFile;
+            ModuleNode module;
             try
             {
                 var source = File.ReadAllText(path);
-                scriptFile = Cop.Lang.Parser.CopParser.ParseFile(source, path);
+                module = CopParser.Parse(source, path);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
@@ -65,11 +67,18 @@ public static class HelpCommand
                 continue;
             }
 
-            foreach (var cmd in scriptFile.Commands)
+            foreach (var decl in module.Declarations)
             {
-                if (!cmd.IsCommand) continue;
-                if (!seen.Add(cmd.Name)) continue;
-                commandEntries.Add((cmd.Name, cmd.DocComment, cmd.Parameters));
+                if (decl is CommandDecl cmd)
+                {
+                    if (!seen.Add(cmd.Name)) continue;
+                    commandEntries.Add((cmd.Name, cmd.DocComment, cmd.Parameters));
+                }
+                else if (decl is FunctionDecl func && char.IsUpper(func.Name[0]) && func.Body is BlockBody)
+                {
+                    if (!seen.Add(func.Name)) continue;
+                    commandEntries.Add((func.Name, func.DocComment, func.Params.Select(p => p.Name).ToList()));
+                }
             }
         }
 

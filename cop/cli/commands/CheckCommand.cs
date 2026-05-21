@@ -1,5 +1,7 @@
 using System.CommandLine;
 using Cop.Lang;
+using Cop.Lang.Ast;
+using Cop.Lang.Parser;
 using Cop.Providers;
 
 namespace Cop.Cli.Commands;
@@ -65,7 +67,6 @@ public static class CheckCommand
         }
 
         // Parse .cop files to understand what they contain
-        var scriptFiles = new List<ScriptFile>();
         var imports = new List<string>();
         bool hasOwnLogic = false;
 
@@ -74,13 +75,15 @@ public static class CheckCommand
             try
             {
                 var source = File.ReadAllText(file);
-                var sf = Cop.Lang.Parser.CopParser.ParseFile(source, file);
-                scriptFiles.Add(sf);
-                imports.AddRange(sf.Imports);
+                var module = CopParser.Parse(source, file);
 
-                // Does this file define its own commands, checks, or predicates?
-                if (sf.Commands.Count > 0 || sf.LetDeclarations.Count > 0 || sf.Predicates.Count > 0)
-                    hasOwnLogic = true;
+                foreach (var decl in module.Declarations)
+                {
+                    if (decl is ImportDecl imp)
+                        imports.Add(imp.ModuleName);
+                    else if (decl is FunctionDecl || decl is LetDecl || decl is CommandDecl)
+                        hasOwnLogic = true;
+                }
             }
             catch { /* skip unparseable files */ }
         }

@@ -1,6 +1,8 @@
 using System.CommandLine;
 using Cop.Core;
 using Cop.Lang;
+using Cop.Lang.Ast;
+using Cop.Lang.Parser;
 
 namespace Cop.Cli.Commands;
 
@@ -79,13 +81,13 @@ public static class ListCommand
         }
 
         // Parse all .cop files
-        var scriptFiles = new List<ScriptFile>();
+        var modules = new List<(string Path, ModuleNode Module)>();
         foreach (var file in copFiles)
         {
             try
             {
                 var source = File.ReadAllText(file);
-                scriptFiles.Add(Cop.Lang.Parser.CopParser.ParseFile(source, file));
+                modules.Add((file, CopParser.Parse(source, file)));
             }
             catch (ParseException ex)
             {
@@ -98,28 +100,31 @@ public static class ListCommand
         var groups = new List<(string Name, string? Doc, int Count)>();
         var commands = new List<(string Name, string? Doc, List<string>? Params)>();
 
-        var allLets = scriptFiles.SelectMany(sf => sf.LetDeclarations).ToList();
-
-        foreach (var let in allLets)
+        foreach (var (_, module) in modules)
         {
-            if (!let.IsExported) continue;
-
-            if (let.IsCollectionUnion && let.ValueExpression is CollectionUnionExpr union)
+            foreach (var decl in module.Declarations)
             {
-                groups.Add((let.Name, let.DocComment, union.Elements.Count));
-            }
-            else if (!let.IsValueBinding)
-            {
-                lets.Add((let.Name, let.DocComment));
-            }
-        }
-
-        foreach (var sf in scriptFiles)
-        {
-            foreach (var cmd in sf.Commands)
-            {
-                if (!cmd.IsCommand || !cmd.IsExported) continue;
-                commands.Add((cmd.Name, cmd.DocComment, cmd.Parameters));
+                if (decl is LetDecl let && let.IsExported)
+                {
+                    if (let.Value is Cop.Lang.Ast.BinaryExpr { Op: BinaryOp.Add })
+                    {
+                        // Union of collections (a + b + c)
+                        var count = CountBinaryAddElements(let.Value);
+                        groups.Add((let.Name, let.DocComment, count));
+                    }
+                    else
+                    {
+                        lets.Add((let.Name, let.DocComment));
+                    }
+                }
+                else if (decl is CommandDecl cmd && cmd.IsExported)
+                {
+                    commands.Add((cmd.Name, cmd.DocComment, cmd.Parameters));
+                }
+                else if (decl is FunctionDecl func && func.IsExported && char.IsUpper(func.Name[0]) && func.Body is BlockBody)
+                {
+                    commands.Add((func.Name, func.DocComment, func.Params.Select(p => p.Name).ToList()));
+                }
             }
         }
 
@@ -131,7 +136,7 @@ public static class ListCommand
         }
 
         // Get package description from first doc comment or file header
-        var packageDoc = GetPackageDescription(scriptFiles, packageName);
+        var packageDoc = GetPackageDescription(modules.Select(m => m.Path).ToList(), packageName);
         if (packageDoc != null)
             Console.WriteLine($"{packageName} — {packageDoc}");
         else
@@ -180,17 +185,15 @@ public static class ListCommand
         return 0;
     }
 
-    private static string? GetPackageDescription(List<ScriptFile> scriptFiles, string packageName)
+    private static string? GetPackageDescription(List<string> filePaths, string packageName)
     {
-        // Look for a # comment at the top of the main .cop file
-        foreach (var sf in scriptFiles)
+        foreach (var path in filePaths)
         {
-            if (sf.FilePath.Contains(packageName, StringComparison.OrdinalIgnoreCase))
+            if (path.Contains(packageName, StringComparison.OrdinalIgnoreCase))
             {
-                // Read first line comment from the file
                 try
                 {
-                    var lines = File.ReadAllLines(sf.FilePath);
+                    var lines = File.ReadAllLines(path);
                     if (lines.Length > 0 && lines[0].StartsWith("# "))
                         return lines[0][2..].Trim();
                 }
@@ -198,6 +201,13 @@ public static class ListCommand
             }
         }
         return null;
+    }
+
+    private static int CountBinaryAddElements(Cop.Lang.Ast.Expression expr)
+    {
+        if (expr is Cop.Lang.Ast.BinaryExpr { Op: BinaryOp.Add } bin)
+            return CountBinaryAddElements(bin.Left) + CountBinaryAddElements(bin.Right);
+        return 1;
     }
 
     private static List<string> FindFeedPaths()

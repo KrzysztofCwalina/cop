@@ -86,9 +86,11 @@ public static class RestoreCommand
         {
             // Parse the .cop file to extract feed and import declarations
             var source = File.ReadAllText(filePath);
-            var scriptFile = Cop.Lang.Parser.CopParser.ParseFile(source, filePath);
+            var module = Cop.Lang.Parser.CopParser.Parse(source, filePath);
 
-            if (scriptFile.Imports.Count == 0)
+            var imports = module.Declarations.OfType<Cop.Lang.Ast.ImportDecl>().Select(d => d.ModuleName).ToList();
+
+            if (imports.Count == 0)
             {
                 Console.Error.WriteLine("Error: No import declarations found in the .cop file");
                 return 1;
@@ -96,7 +98,8 @@ public static class RestoreCommand
 
             // Build PackageReference list from feed URLs + import names
             // Only GitHub feeds (github.com/owner/repo) support remote restore
-            var githubFeeds = (scriptFile.FeedPaths ?? [])
+            var feedPaths = Cop.Lang.Interpreter.ModuleLoader.ExtractFeedPaths(source, Path.GetDirectoryName(filePath) ?? ".").ToList();
+            var githubFeeds = feedPaths
                 .Where(f => f.StartsWith("github.com/", StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
@@ -107,7 +110,7 @@ public static class RestoreCommand
             }
 
             // For each import, use the first GitHub feed to form the full package reference
-            var packages = scriptFile.Imports
+            var packages = imports
                 .Select(importName => PackageReference.Parse($"{githubFeeds[0]}/{importName}"))
                 .ToList();
 

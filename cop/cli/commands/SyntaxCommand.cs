@@ -51,7 +51,7 @@ public static class SyntaxCommand
             try
             {
                 var source = File.ReadAllText(file);
-                Cop.Lang.Parser.CopParser.ParseFile(source, file);
+                Cop.Lang.Parser.CopParser.Parse(source, file);
             }
             catch (ParseException ex)
             {

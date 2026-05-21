@@ -1,4 +1,5 @@
 using Cop.Lang;
+using Cop.Lang.Ast;
 using Cop.Providers;
 
 namespace Cop.Repl;
@@ -222,16 +223,17 @@ public class ReplSession
 
     private void PrintList()
     {
-        var commands = _context.ScriptFiles
-            .SelectMany(f => f.Commands)
-            .Where(c => c.IsCommand)
-            .Select(c => c.Name)
+        var commands = _context.Modules
+            .SelectMany(m => m.Module.Declarations)
+            .Where(d => d is CommandDecl || (d is FunctionDecl f && char.IsUpper(f.Name[0]) && f.Body is BlockBody))
+            .Select(d => d is CommandDecl cmd ? cmd.Name : ((FunctionDecl)d).Name)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(s => s)
             .ToList();
 
-        var lets = _context.ScriptFiles
-            .SelectMany(f => f.LetDeclarations)
+        var lets = _context.Modules
+            .SelectMany(m => m.Module.Declarations)
+            .OfType<LetDecl>()
             .Select(l => l.Name)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(s => s)

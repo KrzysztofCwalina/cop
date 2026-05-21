@@ -1,4 +1,5 @@
 using Cop.Lang;
+using Cop.Lang.Ast;
 using Cop.Providers;
 
 namespace Cop.Repl;
@@ -154,12 +155,12 @@ public class ReplEvaluator
 
     private List<string>? TryEvaluateCommand(string input)
     {
-        var commands = _context.ScriptFiles
-            .SelectMany(f => f.Commands)
-            .Where(c => c.IsCommand && string.Equals(c.Name, input, StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        var hasCommand = _context.Modules
+            .SelectMany(m => m.Module.Declarations)
+            .Any(d => (d is CommandDecl cmd && string.Equals(cmd.Name, input, StringComparison.OrdinalIgnoreCase))
+                   || (d is FunctionDecl f && char.IsUpper(f.Name[0]) && f.Body is BlockBody && string.Equals(f.Name, input, StringComparison.OrdinalIgnoreCase)));
 
-        if (commands.Count == 0)
+        if (!hasCommand)
             return null;
 
         EnsureProviders();
@@ -171,26 +172,17 @@ public class ReplEvaluator
         if (input.Contains(':') || input.Contains('.') || input.Contains('(') || input.Contains(' '))
             return null;
 
-        var letDecl = _context.ScriptFiles
-            .SelectMany(f => f.LetDeclarations)
+        var letDecl = _context.Modules
+            .SelectMany(m => m.Module.Declarations)
+            .OfType<LetDecl>()
             .FirstOrDefault(l => string.Equals(l.Name, input, StringComparison.OrdinalIgnoreCase));
 
         if (letDecl is null)
             return null;
 
         EnsureProviders();
-
-        // For value bindings that are simple lists, display the list
-        if (letDecl.IsValueBinding && !letDecl.IsCollectionUnion)
-        {
-            var snippet = $"foreach {input} => '{{item}}'";
-            return EvaluateSnippet(snippet);
-        }
-
-        // For collection lets, iterate and print using the best display property
-        string displayProp = GetLetDisplayProperty(letDecl);
-        var templateSnippet = $"foreach {input} => '{{{displayProp}}}'";
-        return EvaluateSnippet(templateSnippet);
+        var snippet = $"foreach {input} => '{{item}}'";
+        return EvaluateSnippet(snippet);
     }
 
     private List<string> EvaluateExpression(string input)
@@ -203,103 +195,23 @@ public class ReplEvaluator
 
     private List<string> EvaluateSnippet(string snippet)
     {
-        try
-        {
-            var scriptFile = Cop.Lang.Parser.CopParser.ParseFile(snippet, "<repl>");
-
-            // Give snippet commands unique names to avoid colliding with loaded files
-            var uniquePrefix = $"__repl_{Environment.TickCount}_";
-            var renamedCommands = new List<CommandBlock>();
-            var snippetCommandNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var cmd in scriptFile.Commands)
-            {
-                var uniqueName = uniquePrefix + cmd.Name;
-                renamedCommands.Add(cmd with { Name = uniqueName });
-                snippetCommandNames.Add(uniqueName);
-            }
-
-            // Create a modified snippet file with renamed commands
-            var modifiedSnippet = scriptFile with { Commands = renamedCommands };
-
-            var allFiles = new List<ScriptFile>(_context.ScriptFiles) { modifiedSnippet };
-
-            // TODO: Migrate REPL snippet execution to the new pipeline.
-            // var interpreter = new ScriptInterpreter(_context.TypeRegistry, providerQueryService: _context.QueryService);
-            // List<Document> documents = [];
-            // var result = interpreter.Run(allFiles, documents, commandFilter: snippetCommandNames);
-            _ = allFiles;
-            _ = snippetCommandNames;
-            return ["REPL evaluation not yet migrated to new pipeline"];
-        }
-        catch (ParseException ex)
-        {
-            return [$"Parse error: {ex.Message}"];
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            return [$"Error: {ex.Message}"];
-        }
+        // TODO: Migrate REPL snippet execution to the new evaluator pipeline.
+        _ = snippet;
+        return ["REPL evaluation not yet migrated to new pipeline"];
     }
 
     private List<string> RunWithCommand(string commandName)
     {
-        try
-        {
-            // TODO: Migrate REPL command execution to the new pipeline.
-            // var interpreter = new ScriptInterpreter(_context.TypeRegistry, providerQueryService: _context.QueryService);
-            // List<Document> documents = [];
-            // var result = interpreter.Run(_context.ScriptFiles, documents, commandName);
-            _ = commandName;
-            return ["REPL evaluation not yet migrated to new pipeline"];
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            return [$"Error: {ex.Message}"];
-        }
+        // TODO: Migrate REPL command execution to the new evaluator pipeline.
+        _ = commandName;
+        return ["REPL evaluation not yet migrated to new pipeline"];
     }
 
-    private static List<string> FormatResult(InterpreterResult result)
-    {
-        var output = new List<string>();
-        foreach (var o in result.Outputs)
-            output.Add(AnsiRenderer.Render(o.Content));
-
-        if (result.Warnings is { Count: > 0 })
-            foreach (var w in result.Warnings)
-                output.Add($"\x1b[33m{w}\x1b[0m");
-
-        if (output.Count == 0)
-            output.Add("nic");
-
-        return output;
-    }
 
     private void EnsureProviders()
     {
         if (!_context.ProvidersLoaded)
             Engine.LoadProviders(_context);
-    }
-
-
-    private string GetLetDisplayProperty(LetDeclaration letDecl)
-    {
-        if (!string.IsNullOrEmpty(letDecl.BaseCollection))
-        {
-            var itemTypeName = _context.TypeRegistry.GetCollectionItemType(letDecl.BaseCollection);
-            if (itemTypeName is not null)
-            {
-                var typeDesc = _context.TypeRegistry.GetType(itemTypeName);
-                if (typeDesc is not null)
-                {
-                    string propName;
-                    if (typeDesc.Properties.ContainsKey("Name")) propName = "Name";
-                    else if (typeDesc.Properties.ContainsKey("Path")) propName = "Path";
-                    else propName = typeDesc.Properties.Keys.FirstOrDefault() ?? "Name";
-                    return $"{itemTypeName}.{propName}";
-                }
-            }
-        }
-        return "item";
     }
 
     /// <summary>
@@ -310,16 +222,18 @@ public class ReplEvaluator
         EnsureProviders();
         var candidates = new List<string>();
 
-        candidates.AddRange(_context.ScriptFiles
-            .SelectMany(f => f.Commands)
-            .Where(c => c.IsCommand)
-            .Select(c => c.Name)
-            .Distinct(StringComparer.OrdinalIgnoreCase));
-
-        candidates.AddRange(_context.ScriptFiles
-            .SelectMany(f => f.LetDeclarations)
-            .Select(l => l.Name)
-            .Distinct(StringComparer.OrdinalIgnoreCase));
+        foreach (var module in _context.Modules)
+        {
+            foreach (var decl in module.Module.Declarations)
+            {
+                if (decl is CommandDecl cmd)
+                    candidates.Add(cmd.Name);
+                else if (decl is FunctionDecl f && char.IsUpper(f.Name[0]) && f.Body is BlockBody)
+                    candidates.Add(f.Name);
+                else if (decl is LetDecl let)
+                    candidates.Add(let.Name);
+            }
+        }
 
         candidates.AddRange(_context.TypeRegistry.GetAllCollectionNames());
         candidates.AddRange(_context.TypeRegistry.GetProviderNamespaces());
@@ -332,9 +246,11 @@ public class ReplEvaluator
     /// </summary>
     public List<string> GetPredicateNames()
     {
-        return _context.ScriptFiles
-            .SelectMany(f => f.Predicates)
-            .Select(p => p.Name)
+        return _context.Modules
+            .SelectMany(m => m.Module.Declarations)
+            .OfType<FunctionDecl>()
+            .Where(f => f.ReturnType?.Name == "bool" || char.IsLower(f.Name[0]))
+            .Select(f => f.Name)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(s => s)
             .ToList();

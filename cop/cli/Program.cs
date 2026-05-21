@@ -172,10 +172,13 @@ static bool IsLocalCommand(string name, string[] copFiles)
         try
         {
             var source = File.ReadAllText(file);
-            var sf = Cop.Lang.Parser.CopParser.ParseFile(source, file);
-            foreach (var cmd in sf.Commands)
+            var module = Cop.Lang.Parser.CopParser.Parse(source, file);
+            foreach (var decl in module.Declarations)
             {
-                if (cmd.IsCommand && cmd.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                if (decl is Cop.Lang.Ast.CommandDecl cmd && cmd.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                    return true;
+                if (decl is Cop.Lang.Ast.FunctionDecl func && char.IsUpper(func.Name[0]) && func.Body is Cop.Lang.Ast.BlockBody
+                    && func.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
                     return true;
             }
         }
@@ -220,11 +223,14 @@ static int ExecuteDefault()
         try
         {
             var source = File.ReadAllText(file);
-            var sf = Cop.Lang.Parser.CopParser.ParseFile(source, file);
-            imports.AddRange(sf.Imports);
-
-            if (sf.Commands.Count > 0 || sf.LetDeclarations.Count > 0 || sf.Predicates.Count > 0)
-                hasOwnLogic = true;
+            var module = Cop.Lang.Parser.CopParser.Parse(source, file);
+            foreach (var decl in module.Declarations)
+            {
+                if (decl is Cop.Lang.Ast.ImportDecl imp)
+                    imports.Add(imp.ModuleName);
+                else if (decl is Cop.Lang.Ast.FunctionDecl || decl is Cop.Lang.Ast.LetDecl || decl is Cop.Lang.Ast.CommandDecl)
+                    hasOwnLogic = true;
+            }
         }
         catch { /* skip unparseable files */ }
     }
