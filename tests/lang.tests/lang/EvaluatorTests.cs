@@ -589,4 +589,134 @@ let result = x(1)", "test.cop");
         Assert.That(obj.Display(), Does.Contain("Name = test"));
         Assert.That(obj.Display(), Does.Contain("Count = 5"));
     }
+
+    // ========================================================================
+    // Thunk (Lazy Evaluation)
+    // ========================================================================
+
+    [Test]
+    public void ThunkForcesToConcreteValue()
+    {
+        var thunk = new CopThunk(() => new CopInt(42));
+        Assert.That(thunk.IsForced, Is.False);
+        var result = thunk.Force();
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(42));
+        Assert.That(thunk.IsForced, Is.True);
+    }
+
+    [Test]
+    public void ThunkMemoizesResult()
+    {
+        int callCount = 0;
+        var thunk = new CopThunk(() => { callCount++; return new CopInt(7); });
+        thunk.Force();
+        thunk.Force();
+        thunk.Force();
+        Assert.That(callCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void ThunkDisplayAutoForces()
+    {
+        var thunk = new CopThunk(() => new CopString("hello"));
+        Assert.That(thunk.Display(), Is.EqualTo("hello"));
+        Assert.That(thunk.IsForced, Is.True);
+    }
+
+    [Test]
+    public void ThunkIsTruthyAutoForces()
+    {
+        var trueThunk = new CopThunk(() => CopBool.True);
+        var falseThunk = new CopThunk(() => CopBool.False);
+        Assert.That(trueThunk.IsTruthy, Is.True);
+        Assert.That(falseThunk.IsTruthy, Is.False);
+    }
+
+    [Test]
+    public void NestedThunksForceRecursively()
+    {
+        var inner = new CopThunk(() => new CopInt(99));
+        var outer = new CopThunk(() => inner);
+        var result = outer.Force();
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(99));
+    }
+
+    [Test]
+    public void RecursiveThunkThrows()
+    {
+        CopThunk? self = null;
+        self = new CopThunk(() => self!.Force());
+        Assert.Throws<CopEvaluationException>(() => self.Force());
+    }
+
+    [Test]
+    public void ThunkInEnvironmentForcesOnAccess()
+    {
+        // Register a thunk as a binding; arithmetic on it should auto-force
+        var ffi = new ForeignFunctionRegistry();
+        ffi.Register("getThunk", (args, env) => new CopThunk(() => new CopInt(10)));
+        var result = EvalExpr("getThunk() + 5", ffi);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(15));
+    }
+
+    [Test]
+    public void ThunkCollectionCoercesForIteration()
+    {
+        // Verify that a thunk wrapping a list can be iterated (Count forces)
+        var ffi = new ForeignFunctionRegistry();
+        var items = new CopList([new CopInt(1), new CopInt(2), new CopInt(3)]);
+        ffi.Register("getItems", (args, env) => new CopThunk(() => items));
+
+        var result = EvalExpr("getItems().Count", ffi);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(3));
+    }
+
+    [Test]
+    public void ThunkMemberAccessAutoForces()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        var obj = new CopObject(new Dictionary<string, CopValue>
+        {
+            ["Name"] = new CopString("test")
+        });
+        ffi.Register("getObj", (args, env) => new CopThunk(() => obj));
+        var result = EvalExpr("getObj().Name", ffi);
+        Assert.That(result, Is.InstanceOf<CopString>());
+        Assert.That(((CopString)result).Value, Is.EqualTo("test"));
+    }
+
+    [Test]
+    public void ThunkComparisonAutoForces()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        ffi.Register("getVal", (args, env) => new CopThunk(() => new CopInt(5)));
+        var result = EvalExpr("getVal() > 3", ffi);
+        Assert.That(result, Is.InstanceOf<CopBool>());
+        Assert.That(((CopBool)result).Value, Is.True);
+    }
+
+    [Test]
+    public void LazyLetBindingEvaluatesOnDemand()
+    {
+        // Verify EvalLetBindings creates thunks that auto-force when accessed
+        var module = CopParser.Parse(@"
+let x = 10 + 5
+command main = x + 1", "test.cop");
+        var eval = new Evaluator(filePath: "test.cop");
+        // Phase 1: register declarations (skips let)
+        eval.RegisterDeclarations(module);
+        // Phase 2: register let as lazy thunk
+        eval.EvalLetBindings(module);
+        // Verify the binding is a thunk
+        eval.GlobalEnvironment.TryLookup("x", out var xVal);
+        Assert.That(xVal, Is.InstanceOf<CopThunk>());
+        // RunCommand should force the thunk transparently
+        var result = eval.RunCommand("main");
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(16));
+    }
 }

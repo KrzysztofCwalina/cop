@@ -72,8 +72,9 @@ public sealed class Evaluator
     }
 
     /// <summary>
-    /// Phase 2: Evaluate all let bindings in a module.
+    /// Phase 2: Register all let bindings in a module as lazy thunks.
     /// Called after providers have registered their data.
+    /// The bindings are only evaluated when first accessed.
     /// </summary>
     public void EvalLetBindings(ModuleNode module)
     {
@@ -81,8 +82,10 @@ public sealed class Evaluator
         {
             if (decl is LetDecl ld)
             {
-                var value = Eval(ld.Value, _globalEnv);
-                _globalEnv.Define(ld.Name, value);
+                var capturedLd = ld;
+                var capturedEnv = _globalEnv;
+                var thunk = new CopThunk(() => Eval(capturedLd.Value, capturedEnv));
+                _globalEnv.Define(ld.Name, thunk);
             }
         }
     }
@@ -105,6 +108,9 @@ public sealed class Evaluator
                     throw new CopEvaluationException($"Command '{name}' not found", filePath: _filePath);
             }
         }
+
+        // Force thunks — let bindings used as runnable rules need evaluation
+        value = ForceValue(value);
 
         _traceLog?.Invoke($"[trace] RunCommand: found '{name}' as {value?.GetType().Name}");
 
@@ -318,17 +324,17 @@ public sealed class Evaluator
         // Short-circuit for logical operators
         if (bin.Op == BinaryOp.And)
         {
-            var left = CoerceCallableToBool(Eval(bin.Left, env), env);
-            return left.IsTruthy ? CoerceCallableToBool(Eval(bin.Right, env), env) : left;
+            var left = CoerceCallableToBool(ForceValue(Eval(bin.Left, env)), env);
+            return left.IsTruthy ? CoerceCallableToBool(ForceValue(Eval(bin.Right, env)), env) : left;
         }
         if (bin.Op == BinaryOp.Or)
         {
-            var left = CoerceCallableToBool(Eval(bin.Left, env), env);
-            return left.IsTruthy ? left : CoerceCallableToBool(Eval(bin.Right, env), env);
+            var left = CoerceCallableToBool(ForceValue(Eval(bin.Left, env)), env);
+            return left.IsTruthy ? left : CoerceCallableToBool(ForceValue(Eval(bin.Right, env)), env);
         }
 
-        var l = Eval(bin.Left, env);
-        var r = Eval(bin.Right, env);
+        var l = ForceValue(Eval(bin.Left, env));
+        var r = ForceValue(Eval(bin.Right, env));
 
         return bin.Op switch
         {
@@ -359,7 +365,7 @@ public sealed class Evaluator
 
     private CopValue EvalUnary(UnaryExpr un, Environment env)
     {
-        var operand = Eval(un.Operand, env);
+        var operand = ForceValue(Eval(un.Operand, env));
         return un.Op switch
         {
             UnaryOp.Not => CopBool.Of(!operand.IsTruthy),
@@ -378,7 +384,7 @@ public sealed class Evaluator
         // Method call dispatch: obj.method(args) → try method(obj, args) via FFI
         if (call.Callee is MemberExpr mem)
         {
-            var obj = Eval(mem.Object, env);
+            var obj = ForceValue(Eval(mem.Object, env));
             var args = call.Args.Select(a => Eval(a, env)).ToList();
 
             // First, try resolving as a member that is callable
@@ -421,6 +427,10 @@ public sealed class Evaluator
 
     private CopValue? TryGetMember(CopValue obj, string member)
     {
+        // Force thunks before member access
+        if (obj is CopThunk thunk)
+            obj = thunk.Force();
+
         return obj switch
         {
             CopObject co when co.HasField(member) => co.GetField(member),
@@ -432,6 +442,10 @@ public sealed class Evaluator
     private CopValue EvalMember(MemberExpr mem, Environment env)
     {
         var obj = EvalMemberObject(mem.Object, env);
+
+        // Force thunks before member access
+        if (obj is CopThunk thunk)
+            obj = thunk.Force();
 
         return obj switch
         {
@@ -450,6 +464,7 @@ public sealed class Evaluator
 
     private static string CopTypeNameOf(CopValue value) => value switch
     {
+        CopThunk thunk => CopTypeNameOf(thunk.Force()),
         CopObject co => co.TypeName ?? "object",
         CopDynamicObject dyn => dyn.TypeName ?? "object",
         CopString => "string",
@@ -457,6 +472,7 @@ public sealed class Evaluator
         CopNumber => "number",
         CopBool => "bool",
         CopList => "collection",
+        CopLazyCollection => "collection",
         CopNull => "nic",
         _ => "object"
     };
@@ -527,8 +543,8 @@ public sealed class Evaluator
 
     private CopValue EvalIndex(IndexExpr idx, Environment env)
     {
-        var obj = Eval(idx.Object, env);
-        var index = Eval(idx.Index, env);
+        var obj = ForceValue(Eval(idx.Object, env));
+        var index = ForceValue(Eval(idx.Index, env));
 
         return (obj, index) switch
         {
@@ -545,7 +561,7 @@ public sealed class Evaluator
 
     private CopValue EvalConditional(ConditionalExpr cond, Environment env)
     {
-        var rawCondition = Eval(cond.Condition, env);
+        var rawCondition = ForceValue(Eval(cond.Condition, env));
         _traceLog?.Invoke($"[trace] EvalConditional: raw condition type={rawCondition?.GetType().Name}, display={rawCondition?.Display()?.Substring(0, Math.Min(rawCondition?.Display()?.Length ?? 0, 50))}");
         var condition = CoerceCallableToBool(rawCondition, env);
         _traceLog?.Invoke($"[trace] EvalConditional: coerced condition type={condition?.GetType().Name}, truthy={condition?.IsTruthy}");
@@ -602,7 +618,7 @@ public sealed class Evaluator
 
     private CopValue EvalFilter(FilterExpr filter, Environment env)
     {
-        var collection = Eval(filter.Collection, env);
+        var collection = ForceValue(Eval(filter.Collection, env));
         bool negated = filter.Negated;
 
         _traceLog?.Invoke($"[trace] EvalFilter: collection type={collection?.GetType().Name}, predicate={filter.Predicate?.GetType().Name}");
@@ -863,6 +879,7 @@ public sealed class Evaluator
 
     private static bool IsEmpty(CopValue value) => value switch
     {
+        CopThunk thunk => IsEmpty(thunk.Force()),
         CopList list => list.Items.Count == 0,
         CopLazyCollection lazy => !lazy.Enumerate().Any(),
         CopString str => str.Value.Length == 0,
@@ -963,6 +980,13 @@ public sealed class Evaluator
     // Helpers
     // ========================================================================
 
+    /// <summary>
+    /// Force a value if it is a thunk. Returns the concrete value.
+    /// Non-thunks pass through unchanged.
+    /// </summary>
+    public static CopValue ForceValue(CopValue value) =>
+        value is CopThunk thunk ? thunk.Force() : value;
+
     private bool ApplyPredicate(CopValue predicate, CopValue item, Environment env)
     {
         if (predicate is ICopCallable callable)
@@ -984,6 +1008,10 @@ public sealed class Evaluator
 
     private IEnumerable<CopValue> CoerceToEnumerable(CopValue value)
     {
+        // Force thunks before coercing
+        if (value is CopThunk thunk)
+            value = thunk.Force();
+
         return value switch
         {
             CopList list => list.Items,
@@ -1060,6 +1088,10 @@ public sealed class Evaluator
 
     private CopValue? CollectionConcat(CopValue l, CopValue r)
     {
+        // Force thunks before collection concat
+        if (l is CopThunk lt) l = lt.Force();
+        if (r is CopThunk rt) r = rt.Force();
+
         var left = AsEnumerable(l);
         var right = AsEnumerable(r);
         if (left is null || right is null) return null;

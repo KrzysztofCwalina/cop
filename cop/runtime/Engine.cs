@@ -459,6 +459,10 @@ public static class Engine
     {
         try
         {
+            // Force thunks before inspecting the result
+            if (result is CopThunk thunk)
+                result = thunk.Force();
+
             IEnumerable<CopValue>? items = result switch
             {
                 CopList list when list.Items.Count > 0 => list.Items,

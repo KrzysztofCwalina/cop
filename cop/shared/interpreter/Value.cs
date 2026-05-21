@@ -97,6 +97,48 @@ public sealed class CopLazyCollection : CopValue
 }
 
 /// <summary>
+/// A deferred computation (thunk). Self-forcing: accessing Display() or IsTruthy
+/// transparently forces evaluation. Memoized: the computation runs at most once.
+/// Cycle detection: forcing a thunk that is already being forced throws.
+/// </summary>
+public sealed class CopThunk : CopValue
+{
+    private readonly Func<CopValue> _compute;
+    private CopValue? _forced;
+    private bool _forcing;
+
+    public CopThunk(Func<CopValue> compute) => _compute = compute;
+
+    /// <summary>
+    /// Force evaluation of this thunk. Returns the memoized result.
+    /// Recursively forces if the result is itself a thunk.
+    /// </summary>
+    public CopValue Force()
+    {
+        if (_forced is not null) return _forced;
+        if (_forcing) throw new CopEvaluationException("Recursive thunk forcing detected (infinite loop)");
+        _forcing = true;
+        try
+        {
+            var result = _compute();
+            // Recursively force nested thunks
+            while (result is CopThunk nested)
+                result = nested.Force();
+            _forced = result;
+            return _forced;
+        }
+        finally { _forcing = false; }
+    }
+
+    /// <summary>True if this thunk has already been forced to a concrete value.</summary>
+    public bool IsForced => _forced is not null;
+
+    public override bool IsTruthy => Force().IsTruthy;
+    public override string Display() => Force().Display();
+    public override string ToString() => Force().ToString() ?? Display();
+}
+
+/// <summary>
 /// Language-created object literal: { Name = 'foo', Age = 42 }
 /// </summary>
 public sealed class CopObject : CopValue
@@ -262,6 +304,7 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
 
     private static string? GetTypeName(CopValue value) => value switch
     {
+        CopThunk thunk => GetTypeName(thunk.Force()),
         CopDynamicObject dyn => dyn.TypeName,
         CopObject obj => obj.TypeName,
         CopString => "string",
@@ -269,6 +312,7 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
         CopNumber => "number",
         CopBool => "bool",
         CopList => "collection",
+        CopLazyCollection => "collection",
         _ => null
     };
 

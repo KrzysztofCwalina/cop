@@ -384,6 +384,10 @@ public static class StandardLibrary
 
     private static IEnumerable<CopValue> CoerceToEnumerable(CopValue value)
     {
+        // Force thunks before coercing
+        if (value is CopThunk thunk)
+            value = thunk.Force();
+
         return value switch
         {
             CopList list => list.Items,
