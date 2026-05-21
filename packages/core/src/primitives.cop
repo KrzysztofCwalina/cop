@@ -36,7 +36,7 @@ export type object:expression = {}
 ## The built-in ordered collection type.
 ## Declared as [T] in property types (e.g., Types : [Type]).
 ## Immutable — all operations return new collections without modifying the original.
-export type [T] = {
+export type object:[T] = {
     Count : int,
     First : T,
     Last : T,

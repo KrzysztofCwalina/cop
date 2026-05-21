@@ -248,7 +248,17 @@ public class CopParser
         if (Match(TokenKind.Colon))
         {
             baseType = name;
-            name = ExpectIdentifier("subtype name");
+            if (Check(TokenKind.LBracket))
+            {
+                Advance(); // consume '['
+                var inner = ExpectIdentifier("type parameter");
+                Expect(TokenKind.RBracket, "']'");
+                name = $"[{inner}]";
+            }
+            else
+            {
+                name = ExpectIdentifier("subtype name");
+            }
         }
 
         var properties = new List<PropertyDecl>();
