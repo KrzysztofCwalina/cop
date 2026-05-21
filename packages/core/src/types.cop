@@ -10,22 +10,6 @@ export type object:Formattable = {
     Separator : string
 }
 
-## Represents an operational error flowing through a pipeline.
-## Errors are not code bugs (use fail() for those). They represent external failures
-## that code cannot prevent: network timeouts, I/O failures, malformed input.
-## Use isError predicate to detect errors in pipeline items.
-export type object:Error = {
-    Message : string
-    SourceFile : string
-    SourceLine : int
-    Source : string
-}
-
-## Returns true if the current item is an Error value.
-## Works as a bare predicate or as a filter: items:isError
-## Example: predicate handleError(object:isError) => print('{item.Message}')
-export predicate isError(object) => item.Type:equals('Error')
-
 ## Represents the running program's context.
 ## Provides access to command-line arguments passed to the cop invocation.
 export type object:Program = {

@@ -57,18 +57,6 @@ export function text(bytes) : string => intrinsic
 ## in Items using {Property} interpolation, then joining results with Separator.
 export function text(Formattable) : string => intrinsic
 
-# Error Handling
-
-## Creates an Error value with the given message string.
-## Example: error('connection timeout')
-export function error(string) : Error => intrinsic
-
-## Terminates execution immediately with a fatal diagnostic.
-## Use for programmer assertions — situations that should never occur.
-## Can be used standalone: fail('invariant violated')
-## Or in pipeline: foreach Items:badCondition => fail('{item.Name} is invalid')
-export function fail(message : string) => intrinsic
-
 # Utilities
 
 ## Returns the current program context.
