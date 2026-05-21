@@ -29,14 +29,6 @@ export function none(items: [object], condition: expression) : bool => intrinsic
 ## Example: Types:count(isPublic)
 export function count(items: [object], condition: expression) : int => intrinsic
 
-## Returns true if collection contains a value (case-insensitive string match).
-## Example: names:contains('Foo')
-export function contains(items: [string], value: string) : bool => intrinsic
-
-## Returns true if collection contains any of the given values.
-## Example: tags:containsAny('api', 'public')
-export function containsAny(items: [string], value: string) : bool => intrinsic
-
 ## Returns true if the collection is empty (Count == 0).
 ## Example: errors:empty
 export function empty(items: [object]) : bool => intrinsic
