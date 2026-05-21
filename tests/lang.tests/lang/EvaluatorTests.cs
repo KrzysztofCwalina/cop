@@ -719,4 +719,67 @@ command main = x + 1", "test.cop");
         Assert.That(result, Is.InstanceOf<CopInt>());
         Assert.That(((CopInt)result).Value, Is.EqualTo(16));
     }
+
+    // ========================================================================
+    // Numeric Aggregates (sum, min, max, average)
+    // ========================================================================
+
+    [Test]
+    public void SumOfIntList()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = EvalExpr("[1, 2, 3, 4, 5].sum()", ffi);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(15));
+    }
+
+    [Test]
+    public void SumWithProjection()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = EvalExpr("[1, 2, 3].sum((x) => x * 2)", ffi);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(12));
+    }
+
+    [Test]
+    public void MinOfIntList()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = EvalExpr("[5, 3, 8, 1, 4].min()", ffi);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void MaxOfIntList()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = EvalExpr("[5, 3, 8, 1, 4].max()", ffi);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(8));
+    }
+
+    [Test]
+    public void AverageOfIntList()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = EvalExpr("[2, 4, 6].average()", ffi);
+        Assert.That(result, Is.InstanceOf<CopNumber>());
+        Assert.That(((CopNumber)result).Value, Is.EqualTo(4.0));
+    }
+
+    [Test]
+    public void AverageOfEmptyListReturnsNull()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = EvalExpr("[].average()", ffi);
+        Assert.That(result, Is.InstanceOf<CopNull>());
+    }
 }

@@ -101,6 +101,9 @@ public static class StandardLibrary
         // Collection methods (registered as functions that operate on collections)
         RegisterCollectionMethods(ffi);
 
+        // Numeric aggregate methods
+        RegisterNumericAggregates(ffi);
+
         // String predicate methods
         RegisterStringPredicates(ffi);
 
@@ -285,6 +288,96 @@ public static class StandardLibrary
             _ => string.Compare(a.Display(), b.Display(), StringComparison.Ordinal)
         };
     }
+
+    private static void RegisterNumericAggregates(ForeignFunctionRegistry ffi)
+    {
+        // sum: collection.sum() or sum(collection, projection)
+        ffi.RegisterEx("sum", (args, evaluator, env) =>
+        {
+            if (args.Count == 0) return new CopInt(0);
+            var items = CoerceToEnumerable(args[0]);
+            var projection = args.Count > 1 ? args[1] as ICopCallable : null;
+
+            double total = 0;
+            bool hasDouble = false;
+            foreach (var item in items)
+            {
+                var val = projection is not null ? projection.Invoke([item], evaluator, env) : item;
+                if (val is CopInt i) total += i.Value;
+                else if (val is CopNumber n) { total += n.Value; hasDouble = true; }
+            }
+            return hasDouble ? new CopNumber(total) : new CopInt((int)total);
+        });
+
+        // min: collection.min() or min(collection, projection)
+        ffi.RegisterEx("min", (args, evaluator, env) =>
+        {
+            if (args.Count == 0) return CopNull.Instance;
+            var items = CoerceToEnumerable(args[0]);
+            var projection = args.Count > 1 ? args[1] as ICopCallable : null;
+
+            CopValue? result = null;
+            double? minVal = null;
+            foreach (var item in items)
+            {
+                var val = projection is not null ? projection.Invoke([item], evaluator, env) : item;
+                var num = ToDouble(val);
+                if (num is not null && (minVal is null || num.Value < minVal.Value))
+                {
+                    minVal = num.Value;
+                    result = val;
+                }
+            }
+            return result ?? CopNull.Instance;
+        });
+
+        // max: collection.max() or max(collection, projection)
+        ffi.RegisterEx("max", (args, evaluator, env) =>
+        {
+            if (args.Count == 0) return CopNull.Instance;
+            var items = CoerceToEnumerable(args[0]);
+            var projection = args.Count > 1 ? args[1] as ICopCallable : null;
+
+            CopValue? result = null;
+            double? maxVal = null;
+            foreach (var item in items)
+            {
+                var val = projection is not null ? projection.Invoke([item], evaluator, env) : item;
+                var num = ToDouble(val);
+                if (num is not null && (maxVal is null || num.Value > maxVal.Value))
+                {
+                    maxVal = num.Value;
+                    result = val;
+                }
+            }
+            return result ?? CopNull.Instance;
+        });
+
+        // average: collection.average() or average(collection, projection)
+        ffi.RegisterEx("average", (args, evaluator, env) =>
+        {
+            if (args.Count == 0) return CopNull.Instance;
+            var items = CoerceToEnumerable(args[0]);
+            var projection = args.Count > 1 ? args[1] as ICopCallable : null;
+
+            double total = 0;
+            int count = 0;
+            foreach (var item in items)
+            {
+                var val = projection is not null ? projection.Invoke([item], evaluator, env) : item;
+                var num = ToDouble(val);
+                if (num is not null) { total += num.Value; count++; }
+            }
+            return count > 0 ? new CopNumber(total / count) : CopNull.Instance;
+        });
+    }
+
+    private static double? ToDouble(CopValue v) => v switch
+    {
+        CopInt i => i.Value,
+        CopNumber n => n.Value,
+        _ => null
+    };
 
     private static void RegisterStringPredicates(ForeignFunctionRegistry ffi)
     {
