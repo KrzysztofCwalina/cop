@@ -28,10 +28,10 @@ export type object:byte = {}
 ## An array of bytes. Used for binary data (e.g., HTTP request/response bodies).
 export type object:bytes = {}
 
-## A deferred expression passed to collection methods.
-## Evaluated per-item in the collection (has access to 'item' and 'acc').
+## A first-class callable value (lambda or named function reference).
+## Passed as an argument and invoked with args: pred(item), transform(x).
 ## Used for predicates, projections, and accumulators in where, select, reduce, etc.
-export type object:expression = {}
+export type object:function = {}
 
 ## The built-in ordered collection type.
 ## Declared as [T] in property types (e.g., Types : [Type]).

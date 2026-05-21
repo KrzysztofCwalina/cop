@@ -228,6 +228,52 @@ let result = inc(9)", "test.cop");
         Assert.That(((CopInt)eval.GlobalEnvironment.Lookup("result")).Value, Is.EqualTo(10));
     }
 
+    [Test]
+    public void EvalLambda_PassedAsArgument()
+    {
+        var source = @"
+function apply(x: number, f: function) => f(x)
+command main = apply(5, (n) => n * 2)";
+        var result = Eval(source);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(10));
+    }
+
+    [Test]
+    public void EvalLambda_HigherOrderFilter()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var source = @"
+function myWhere(items: [number], pred: function) =>
+  reduce(items, (acc, item) => pred(item) ? acc.concat([item]) : acc, [])
+command main = myWhere([1, 2, 3, 4, 5], (x) => x > 3)";
+        var result = Eval(source, ffi);
+        Assert.That(result, Is.InstanceOf<CopList>());
+        var list = (CopList)result;
+        Assert.That(list.Items.Count, Is.EqualTo(2));
+        Assert.That(((CopInt)list.Items[0]).Value, Is.EqualTo(4));
+        Assert.That(((CopInt)list.Items[1]).Value, Is.EqualTo(5));
+    }
+
+    [Test]
+    public void EvalLambda_HigherOrderSelect()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var source = @"
+function mySelect(items: [number], transform: function) =>
+  reduce(items, (acc, item) => acc.concat([transform(item)]), [])
+command main = mySelect([1, 2, 3], (x) => x * 10)";
+        var result = Eval(source, ffi);
+        Assert.That(result, Is.InstanceOf<CopList>());
+        var list = (CopList)result;
+        Assert.That(list.Items.Count, Is.EqualTo(3));
+        Assert.That(((CopInt)list.Items[0]).Value, Is.EqualTo(10));
+        Assert.That(((CopInt)list.Items[1]).Value, Is.EqualTo(20));
+        Assert.That(((CopInt)list.Items[2]).Value, Is.EqualTo(30));
+    }
+
     // ========================================================================
     // Conditionals and Match
     // ========================================================================
