@@ -233,7 +233,7 @@ public class CSharpSourceParserTests
     }
 
     private static string SamplePath(string fileName) =>
-        Path.Combine(AppContext.BaseDirectory, "Samples", fileName);
+        Path.Combine(AppContext.BaseDirectory, "samples", fileName);
 
     // ── Comment line detection ──
 

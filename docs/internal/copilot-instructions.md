@@ -40,14 +40,14 @@ packages/           Seed packages organized by language. General packages are at
                     (dotnet/, js/, python/). Each package contains metadata,
                     instructions, skills, rules, and tests.
 
-tests/Cop.Tests/    NUnit 4.x tests for core library
-tests/Lang.Tests/   NUnit 4.x tests for language runtime
+tests/cop.tests/    NUnit 4.x tests for core library
+tests/lang.tests/   NUnit 4.x tests for language runtime
 
 install/            Publish script and platform subfolders for self-contained binaries
                       install/publish.ps1 builds cop.exe for all platforms
                       install/vscode-cop/ — VS Code syntax highlighting extension
 docs/               Documentation
-samples/            Example .cop scripts (s1-HelloWorld through s17-Currying)
+samples/            Example .cop scripts (s1-helloworld through s17-currying)
 ```
 
 ## Key Classes
@@ -122,10 +122,10 @@ Packages are directories (not zips) under `packages/` in GitHub repositories. Ea
 dotnet build cop.sln
 
 # Run core library tests (44 tests)
-dotnet test tests/Cop.Tests/Cop.Tests.csproj
+dotnet test tests/cop.tests/Cop.Tests.csproj
 
 # Run language runtime tests (281 tests)
-dotnet test tests/Lang.Tests/Lang.Tests.csproj
+dotnet test tests/lang.tests/Lang.Tests.csproj
 
 # Publish self-contained cop.exe for all platforms
 install/publish.ps1

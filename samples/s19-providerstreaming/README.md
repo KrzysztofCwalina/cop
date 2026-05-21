@@ -1,11 +1,11 @@
-# Streaming Provider Sample (s19-ProviderStreaming)
+# Streaming Provider Sample (s19-providerstreaming)
 
 A minimal template demonstrating how to write a **streaming** Cop provider with `source()` and `sink()`.
 
 ## Structure
 
 ```
-s19-ProviderStreaming/
+s19-providerstreaming/
 ├── streaming-provider.csproj   # Provider C# project
 ├── src/
 │   └── TickerProvider.cs       # Streaming ObjectProvider implementation

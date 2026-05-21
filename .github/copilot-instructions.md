@@ -7,8 +7,8 @@
 dotnet build cop.sln
 
 # Run all tests
-dotnet test tests/Cop.Tests/Cop.Tests.csproj
-dotnet test tests/Lang.Tests/Lang.Tests.csproj
+dotnet test tests/cop.tests/Cop.Tests.csproj
+dotnet test tests/lang.tests/Lang.Tests.csproj
 
 # Publish self-contained cop.exe
 install/publish.ps1
@@ -61,8 +61,8 @@ Always commit the regenerated `docs/cop-reference.html` alongside the package ch
   - **cop/shared/** — Core library (Cop.Core): package models, ObjectProvider base class, DataObject binary format, feed manager, dependency resolver, restore engine, checksum manager.
 - **providers/** — Data providers (files, code, typespec, etc.). Each provider extends `ObjectProvider` and supplies typed collections to the language runtime. Built-in providers compile into `cop.exe`; external providers ship as separate DLLs.
 - **packages/** — Seed packages organized by language (general at root, language-specific in dotnet/, js/, python/).
-- **tests/Cop.Tests/** — NUnit 4.x tests for core library.
-- **tests/Lang.Tests/** — NUnit 4.x tests for Cop language runtime.
+- **tests/cop.tests/** — NUnit 4.x tests for core library.
+- **tests/lang.tests/** — NUnit 4.x tests for Cop language runtime.
 - **install/** — Publish script, platform subfolders for self-contained binaries, VS Code extension.
 - **docs/** — User-facing docs (getting started, language reference, package references).
   - **docs/internal/** — Internal architecture and design docs.

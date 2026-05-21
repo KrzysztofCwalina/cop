@@ -7,9 +7,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "cop", "cop\cli\cop.csproj",
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cop.Tests", "tests\Cop.Tests\Cop.Tests.csproj", "{EBACE098-A20A-4CC3-8CB6-2D3712D80F8C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cop.Tests", "tests\cop.tests\Cop.Tests.csproj", "{EBACE098-A20A-4CC3-8CB6-2D3712D80F8C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lang.Tests", "tests\Lang.Tests\Lang.Tests.csproj", "{5B566B7C-E85C-45B8-8A65-D37FB6160273}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lang.Tests", "tests\lang.tests\Lang.Tests.csproj", "{5B566B7C-E85C-45B8-8A65-D37FB6160273}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "providers", "providers", "{D9007A03-FD03-1159-6598-E081D0A1BEBA}"
 EndProject
@@ -27,9 +27,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "cop-provider", "providers\c
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{5D20AA90-6969-D8BD-9DCD-8634F4692FDA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "sample-provider", "samples\s18-Provider\sample-provider.csproj", "{4EC015AF-E7D2-480E-B8FB-02DB6A2D372A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "sample-provider", "samples\s18-provider\sample-provider.csproj", "{4EC015AF-E7D2-480E-B8FB-02DB6A2D372A}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "cop", "cop", "{598DC2AB-5BD8-0342-982A-2B54202215B6}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "cop-src", "cop", "{598DC2AB-5BD8-0342-982A-2B54202215B6}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "cli", "cli", "{991F1F1F-D448-D912-F15B-1A87F455BD15}"
 EndProject

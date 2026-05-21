@@ -12,7 +12,7 @@ namespace Cop.Tests;
 public class ProcessProviderTests
 {
     private static string TestDataDir => Path.Combine(
-        TestContext.CurrentContext.TestDirectory, "..", "..", "..", "TestData");
+        TestContext.CurrentContext.TestDirectory, "..", "..", "..", "testdata");
 
     [Test]
     public void NodeProvider_GetSchema_ReturnsValidSchema()

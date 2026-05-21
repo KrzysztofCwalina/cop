@@ -13,13 +13,13 @@ internal static class TestInterpreter
 {
     private static readonly Lazy<ScriptFile> _codeCop = new(() =>
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "Samples", "code.cop");
+        var path = Path.Combine(AppContext.BaseDirectory, "samples", "code.cop");
         return Cop.Lang.Parser.CopParser.ParseFile(File.ReadAllText(path), "code.cop");
     });
 
     private static readonly Lazy<ScriptFile> _coreCop = new(() =>
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "Samples", "core.cop");
+        var path = Path.Combine(AppContext.BaseDirectory, "samples", "core.cop");
         return Cop.Lang.Parser.CopParser.ParseFile(File.ReadAllText(path), "core.cop");
     });
 

@@ -21,10 +21,10 @@ namespace Cop.Tests.Lang;
 public class ReferenceTypeSystemTests
 {
     private static string ProgramsDir =>
-        Path.Combine(TestContext.CurrentContext.TestDirectory, "ReferenceTests", "Programs");
+        Path.Combine(TestContext.CurrentContext.TestDirectory, "referencetests", "programs");
 
     private static string SamplesDir =>
-        Path.Combine(TestContext.CurrentContext.TestDirectory, "Samples");
+        Path.Combine(TestContext.CurrentContext.TestDirectory, "samples");
 
     private static string PackagesDir
     {
