@@ -594,7 +594,7 @@ public sealed class Evaluator
         var fields = new Dictionary<string, CopValue>(StringComparer.Ordinal);
         foreach (var field in obj.Fields)
             fields[field.Name] = Eval(field.Value, env);
-        return new CopObject(fields);
+        return new CopObject(fields) { TypeName = obj.TypeHint };
     }
 
     private CopValue EvalInterpolation(InterpolatedStringExpr interp, Environment env)

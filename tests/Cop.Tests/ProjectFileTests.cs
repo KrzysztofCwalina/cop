@@ -172,18 +172,20 @@ public class RunProjectTests
         // Add a .cs file to trigger source parsing (like a real project)
         File.WriteAllText(Path.Combine(codebase, "Program.cs"), "var x = 1;\n");
 
+        var diagMessages = new List<string>();
         var result = Engine.RunProject(
             [realPackages],
             ["files"],
             codebase,
-            ["empty-folders"]);
+            ["empty-folders"],
+            diagLog: msg => diagMessages.Add(msg));
 
         Assert.That(result.HasFatalErrors, Is.False,
             "Fatal errors: " + string.Join("; ", result.Errors));
         Assert.That(result.ParseErrors, Has.Count.EqualTo(0),
             "Parse errors: " + string.Join("; ", result.ParseErrors));
         Assert.That(result.Outputs, Has.Count.GreaterThanOrEqualTo(1),
-            $"Should find empty folders. Got @result.Outputs.Count@ outputs.");
+            $"Should find empty folders. Got {result.Outputs.Count} outputs. Errors: [{string.Join("; ", result.Errors)}]\nDiag: {string.Join("\n", diagMessages)}");
         Assert.That(result.Outputs.Any(d => d.Message.Contains("empty-dir")), Is.True,
             $"Outputs ({result.Outputs.Count}): [{string.Join(" | ", result.Outputs.Select(o => o.Message.Length > 200 ? o.Message[..200] : o.Message))}]");
     }

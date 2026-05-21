@@ -58,4 +58,3 @@ export function pathMatches(path : string, pattern : string) : bool => intrinsic
 ## Asserts that a condition is true. Fails the test run if false.
 ## Used in tests: assert(Types:isPublic.Count > 0, 'should have public types')
 export function assert(condition : bool, description : string) => intrinsic
-

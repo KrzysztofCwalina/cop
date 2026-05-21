@@ -70,11 +70,11 @@ export function groupBy(items: [object], object2object: expression) : [object] =
 
 ## Returns a new collection with the item appended at the end.
 ## Example: let updated = items:push(newItem)
-export function push(items: [object], value: object) : [object] => intrinsic
+export function push(items: [object], value: object) : [object] => items.concat([value])
 
 ## Returns a new collection with the item added at the front (queue semantics).
 ## Example: let updated = items:enqueue(newItem)
-export function enqueue(items: [object], value: object) : [object] => intrinsic
+export function enqueue(items: [object], value: object) : [object] => [value].concat(items)
 
 ## Returns a new collection without the last element.
 ## Example: let shorter = items:pop

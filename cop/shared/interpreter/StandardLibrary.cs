@@ -276,6 +276,101 @@ public static class StandardLibrary
 
             return new CopString(args[0].Display());
         });
+
+        // concat: collection.concat(other) — join two collections
+        ffi.Register("concat", (args, env) =>
+        {
+            if (args.Count < 2) return args.Count > 0 ? args[0] : CopNull.Instance;
+            var left = CoerceToEnumerable(args[0]).ToList();
+            var right = CoerceToEnumerable(args[1]).ToList();
+            left.AddRange(right);
+            return new CopList(left);
+        });
+
+        // push: collection.push(item) — append to end
+        ffi.Register("push", (args, env) =>
+        {
+            if (args.Count < 2) return args.Count > 0 ? args[0] : CopNull.Instance;
+            var items = CoerceToEnumerable(args[0]).ToList();
+            items.Add(args[1]);
+            return new CopList(items);
+        });
+
+        // enqueue: collection.enqueue(item) — prepend to front
+        ffi.Register("enqueue", (args, env) =>
+        {
+            if (args.Count < 2) return args.Count > 0 ? args[0] : CopNull.Instance;
+            var items = CoerceToEnumerable(args[0]).ToList();
+            items.Insert(0, args[1]);
+            return new CopList(items);
+        });
+
+        // pop: collection.pop() — remove last item
+        ffi.Register("pop", (args, env) =>
+        {
+            if (args.Count == 0) return new CopList([]);
+            var items = CoerceToEnumerable(args[0]).ToList();
+            if (items.Count == 0) return new CopList([]);
+            return new CopList(items.Take(items.Count - 1).ToList());
+        });
+
+        // elementAt: collection.elementAt(index) — item at zero-based index
+        ffi.Register("elementAt", (args, env) =>
+        {
+            if (args.Count < 2) return CopNull.Instance;
+            var items = CoerceToEnumerable(args[0]).ToList();
+            var index = args[1] is CopInt i ? i.Value : 0;
+            if (index < 0 || index >= items.Count) return CopNull.Instance;
+            return items[index];
+        });
+
+        // empty: collection.empty() — true if collection has no items
+        ffi.Register("empty", (args, env) =>
+        {
+            if (args.Count == 0) return CopBool.True;
+            var items = CoerceToEnumerable(args[0]);
+            return CopBool.Of(!items.Any());
+        });
+
+        // single: collection.single(predicate?) — single matching item or null
+        ffi.RegisterEx("single", (args, evaluator, env) =>
+        {
+            if (args.Count == 0) return CopNull.Instance;
+            var items = CoerceToEnumerable(args[0]).ToList();
+            if (args.Count > 1 && args[1] is ICopCallable predicate)
+                items = items.Where(item => predicate.Invoke([item], evaluator, env).IsTruthy).ToList();
+            return items.Count == 1 ? items[0] : CopNull.Instance;
+        });
+
+        // groupBy: collection.groupBy(keySelector) — group by key
+        ffi.RegisterEx("groupBy", (args, evaluator, env) =>
+        {
+            if (args.Count < 2) return args.Count > 0 ? args[0] : CopNull.Instance;
+            var items = CoerceToEnumerable(args[0]);
+            var keySel = args[1] as ICopCallable;
+            if (keySel is null) return new CopList(items.ToList());
+            var groups = items.GroupBy(item => keySel.Invoke([item], evaluator, env).Display());
+            var result = groups.Select(g => new CopList(g.ToList()) as CopValue).ToList();
+            return new CopList(result);
+        });
+
+        // orderByDescending: collection.orderByDescending(keySelector)
+        ffi.RegisterEx("orderByDescending", (args, evaluator, env) =>
+        {
+            if (args.Count < 2) return args.Count > 0 ? args[0] : CopNull.Instance;
+            var collection = args[0];
+            var keySelector = args[1];
+            if (keySelector is not ICopCallable keySel)
+                return collection;
+            var items = CoerceToEnumerable(collection).ToList();
+            items.Sort((a, b) =>
+            {
+                var ka = keySel.Invoke([a], evaluator, env);
+                var kb = keySel.Invoke([b], evaluator, env);
+                return CompareValues(kb, ka); // reversed for descending
+            });
+            return new CopList(items);
+        });
     }
 
     private static int CompareValues(CopValue a, CopValue b)

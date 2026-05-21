@@ -553,7 +553,8 @@ public static class Engine
         List<string> packageNames,
         string rootPath,
         List<string> rules,
-        string[]? programArgs = null)
+        string[]? programArgs = null,
+        Action<string>? diagLog = null)
     {
         rootPath = Path.GetFullPath(rootPath);
 
@@ -606,7 +607,7 @@ public static class Engine
             rules.Count == 0 ? "main" : null,
             programArgs,
             rules.Count > 0 ? [.. rules] : null,
-            diagLog: null,
+            diagLog: diagLog,
             topLevelProviderPackages: providerPackages);
     }
 

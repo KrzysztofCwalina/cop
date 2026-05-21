@@ -796,6 +796,89 @@ command main = x + 1", "test.cop");
         Assert.That(((CopInt)result).Value, Is.EqualTo(10));
     }
 
+    // ========================================================================
+    // Collection structural operations
+
+    [Test]
+    public void ConcatTwoLists()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = EvalExpr("[1, 2].concat([3, 4])", ffi);
+        Assert.That(result, Is.InstanceOf<CopList>());
+        var items = ((CopList)result).Items;
+        Assert.That(items.Count, Is.EqualTo(4));
+        Assert.That(((CopInt)items[2]).Value, Is.EqualTo(3));
+    }
+
+    [Test]
+    public void PushAppendsToEnd()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        // push calls concat internally via .cop body: items.concat([value])
+        var result = EvalExpr("[1, 2].push(3)", ffi);
+        Assert.That(result, Is.InstanceOf<CopList>());
+        var items = ((CopList)result).Items;
+        Assert.That(items.Count, Is.EqualTo(3));
+        Assert.That(((CopInt)items[2]).Value, Is.EqualTo(3));
+    }
+
+    [Test]
+    public void EnqueuePrependsToFront()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        // enqueue calls: [value].concat(items)
+        var result = EvalExpr("[2, 3].enqueue(1)", ffi);
+        Assert.That(result, Is.InstanceOf<CopList>());
+        var items = ((CopList)result).Items;
+        Assert.That(items.Count, Is.EqualTo(3));
+        Assert.That(((CopInt)items[0]).Value, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void PopRemovesLastElement()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = EvalExpr("[1, 2, 3].pop()", ffi);
+        Assert.That(result, Is.InstanceOf<CopList>());
+        var items = ((CopList)result).Items;
+        Assert.That(items.Count, Is.EqualTo(2));
+        Assert.That(((CopInt)items[1]).Value, Is.EqualTo(2));
+    }
+
+    [Test]
+    public void ElementAtReturnsItemByIndex()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = EvalExpr("[10, 20, 30].elementAt(1)", ffi);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(20));
+    }
+
+    [Test]
+    public void EmptyReturnsTrueForEmptyList()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = EvalExpr("[].empty()", ffi);
+        Assert.That(result, Is.InstanceOf<CopBool>());
+        Assert.That(((CopBool)result).Value, Is.True);
+    }
+
+    [Test]
+    public void EmptyReturnsFalseForNonEmptyList()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = EvalExpr("[1, 2].empty()", ffi);
+        Assert.That(result, Is.InstanceOf<CopBool>());
+        Assert.That(((CopBool)result).Value, Is.False);
+    }
+
     [Test]
     public void ReduceProductIntegers()
     {

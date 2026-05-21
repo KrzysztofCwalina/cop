@@ -850,7 +850,7 @@ public class CopParser
 
     private Expression ParsePostfix()
     {
-        var expr = ParsePrimary();
+         var expr = ParsePrimary();
 
         while (true)
         {
@@ -882,6 +882,21 @@ public class CopParser
                 int line = CurrentLine();
                 var args = ParseArgList();
                 expr = new CallExpr(expr, args, line);
+            }
+            else if (Check(TokenKind.LBrace) && expr is IdentifierExpr typeId && typeId.Name.Length > 0 && char.IsUpper(typeId.Name[0]))
+            {
+                // Typed object literal: TypeName { Field = value, ... }
+                int line = CurrentLine();
+                Advance(); // consume '{'
+                var fields = new List<FieldInit>();
+                if (!Check(TokenKind.RBrace))
+                {
+                    ParseObjectField(fields, CurrentLine());
+                    while (Match(TokenKind.Comma) || (!Check(TokenKind.RBrace) && !IsAtEnd() && IsIdentifierLike(Peek())))
+                        ParseObjectField(fields, CurrentLine());
+                }
+                Expect(TokenKind.RBrace, "'}'");
+                expr = new ObjectExpr(typeId.Name, fields, line);
             }
             else if (Match(TokenKind.LBracket))
             {
