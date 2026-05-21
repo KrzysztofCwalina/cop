@@ -35,7 +35,10 @@ export type Run
   Version : string
   ResultCount : int
 
-
+## Loads CodeQL SARIF results from a file path.
+## Returns a collection of Result items.
+## Example: codeql.Load('results.sarif')
+export function Load(path : string) : collection => provider
 
 ## Predicates for filtering results by severity
 export predicate isError(Result) = Result.Severity:eq('error')
