@@ -14,8 +14,8 @@ export type object:Error = {
 
 ## Returns true if the current item is an Error value.
 ## Works as a bare predicate or as a filter: items:isError
-## Example: predicate handleError(object:isError) => print('{item.Message}')
-export predicate isError(object) => item.Type:equals('Error')
+## Example: predicate handleError(item:isError) => print('{item.Message}')
+export predicate isError(item: object) => item.Type:equals('Error')
 
 ## Creates an Error value with the given message string.
 ## Example: error('connection timeout')

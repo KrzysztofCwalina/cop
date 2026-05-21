@@ -8,27 +8,29 @@ export let Requests : [Request] = source('http')
 export let RESPONSES : [Response] = sink('http')
 
 export enum HttpMethod = GET | POST | PUT | DELETE | PATCH | HEAD | OPTIONS
-export HttpMethod
 export enum ContentType = 'application/json' | 'text/plain' | 'text/html' | 'application/xml' | 'multipart/form-data' | 'application/octet-stream'
-export ContentType
+
+# Header entry — a single name/value pair
+export type Header = {
+    Name : string,
+    Value : string
+}
 
 # Response type produced by helper functions
 export type Response = {
     StatusCode : int,
     Body : bytes,
     ContentType : ContentType,
-    Headers : Headers
+    Headers : [Header]
 }
-
-# Dynamic headers object — fields are header names, values are header values
-export type Headers = {}
 
 # Request type provided by the http streaming source
 export type Request = {
     Method : HttpMethod,
     Uri : string,
     Body : bytes,
-    ContentType : ContentType
+    ContentType : ContentType,
+    Headers : [Header]
 }
 
 # Creates a 200 OK response with JSON body from a string value
