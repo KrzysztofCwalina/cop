@@ -172,7 +172,7 @@ static bool IsLocalCommand(string name, string[] copFiles)
         try
         {
             var source = File.ReadAllText(file);
-            var sf = Cop.Lang.ScriptParser.Parse(source, file);
+            var sf = Cop.Lang.Parser.CopParser.ParseFile(source, file);
             foreach (var cmd in sf.Commands)
             {
                 if (cmd.IsCommand && cmd.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
@@ -220,7 +220,7 @@ static int ExecuteDefault()
         try
         {
             var source = File.ReadAllText(file);
-            var sf = Cop.Lang.ScriptParser.Parse(source, file);
+            var sf = Cop.Lang.Parser.CopParser.ParseFile(source, file);
             imports.AddRange(sf.Imports);
 
             if (sf.Commands.Count > 0 || sf.LetDeclarations.Count > 0 || sf.Predicates.Count > 0)

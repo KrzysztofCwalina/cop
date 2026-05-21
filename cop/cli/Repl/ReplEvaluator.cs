@@ -205,7 +205,7 @@ public class ReplEvaluator
     {
         try
         {
-            var scriptFile = ScriptParser.Parse(snippet, "<repl>");
+            var scriptFile = Cop.Lang.Parser.CopParser.ParseFile(snippet, "<repl>");
 
             // Give snippet commands unique names to avoid colliding with loaded files
             var uniquePrefix = $"__repl_{Environment.TickCount}_";
@@ -223,13 +223,13 @@ public class ReplEvaluator
 
             var allFiles = new List<ScriptFile>(_context.ScriptFiles) { modifiedSnippet };
 
-            var interpreter = new ScriptInterpreter(_context.TypeRegistry, providerQueryService: _context.QueryService);
-            List<Document> documents = [];
-
-            var result = interpreter.Run(allFiles, documents,
-                commandFilter: snippetCommandNames);
-
-            return FormatResult(result);
+            // TODO: Migrate REPL snippet execution to the new pipeline.
+            // var interpreter = new ScriptInterpreter(_context.TypeRegistry, providerQueryService: _context.QueryService);
+            // List<Document> documents = [];
+            // var result = interpreter.Run(allFiles, documents, commandFilter: snippetCommandNames);
+            _ = allFiles;
+            _ = snippetCommandNames;
+            return ["REPL evaluation not yet migrated to new pipeline"];
         }
         catch (ParseException ex)
         {
@@ -245,10 +245,12 @@ public class ReplEvaluator
     {
         try
         {
-            var interpreter = new ScriptInterpreter(_context.TypeRegistry, providerQueryService: _context.QueryService);
-            List<Document> documents = [];
-            var result = interpreter.Run(_context.ScriptFiles, documents, commandName);
-            return FormatResult(result);
+            // TODO: Migrate REPL command execution to the new pipeline.
+            // var interpreter = new ScriptInterpreter(_context.TypeRegistry, providerQueryService: _context.QueryService);
+            // List<Document> documents = [];
+            // var result = interpreter.Run(_context.ScriptFiles, documents, commandName);
+            _ = commandName;
+            return ["REPL evaluation not yet migrated to new pipeline"];
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

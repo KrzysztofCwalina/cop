@@ -180,7 +180,7 @@ public class TypeRegistryTests
     {
         var source = File.ReadAllText(Path.Combine(TestContext.CurrentContext.TestDirectory,
             "..", "..", "..", "..", "..", "packages", "code", "src", "code.cop"));
-        var parsed = ScriptParser.Parse(source, "code.cop");
+        var parsed = Cop.Lang.Parser.CopParser.ParseFile(source, "code.cop");
 
         var registry = new TypeRegistry();
         var errors = registry.LoadTypeDefinitions(parsed.TypeDefinitions);

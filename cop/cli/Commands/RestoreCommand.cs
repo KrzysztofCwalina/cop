@@ -86,7 +86,7 @@ public static class RestoreCommand
         {
             // Parse the .cop file to extract feed and import declarations
             var source = File.ReadAllText(filePath);
-            var scriptFile = ScriptParser.Parse(source, filePath);
+            var scriptFile = Cop.Lang.Parser.CopParser.ParseFile(source, filePath);
 
             if (scriptFile.Imports.Count == 0)
             {

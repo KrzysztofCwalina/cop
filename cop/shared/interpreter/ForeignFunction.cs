@@ -8,6 +8,11 @@ namespace Cop.Lang.Interpreter;
 public delegate CopValue ForeignFunction(IReadOnlyList<CopValue> args, Environment env);
 
 /// <summary>
+/// Extended delegate for foreign functions that need evaluator access (e.g., higher-order functions).
+/// </summary>
+public delegate CopValue ForeignFunctionEx(IReadOnlyList<CopValue> args, Evaluator evaluator, Environment env);
+
+/// <summary>
 /// Registry for foreign functions provided by the runtime.
 /// This is the sole extension point for adding built-in behavior.
 /// </summary>
@@ -21,6 +26,17 @@ public sealed class ForeignFunctionRegistry
     public void Register(string name, ForeignFunction impl, int arity = -1)
     {
         _functions[name] = new CopExternalFunction(name, impl, arity);
+    }
+
+    /// <summary>
+    /// Register a foreign function that needs evaluator access (for higher-order functions).
+    /// </summary>
+    public void RegisterEx(string name, ForeignFunctionEx impl, int arity = -1)
+    {
+        _functions[name] = new CopExternalFunction(name, (args, env) => CopNull.Instance, arity)
+        {
+            ExtendedImpl = impl
+        };
     }
 
     /// <summary>

@@ -102,7 +102,10 @@ public sealed class CopLazyCollection : CopValue
 public sealed class CopObject : CopValue
 {
     public IReadOnlyDictionary<string, CopValue> Fields { get; }
+    public string? TypeName { get; init; }
     public CopObject(IReadOnlyDictionary<string, CopValue> fields) => Fields = fields;
+
+    public bool HasField(string name) => Fields.ContainsKey(name);
 
     public CopValue GetField(string name) =>
         Fields.TryGetValue(name, out var val) ? val : CopNull.Instance;
@@ -130,6 +133,13 @@ public sealed class CopDynamicObject : CopValue
     }
 
     public object Underlying => _underlying;
+    public string? TypeName => _adapter.TypeName;
+
+    public bool HasField(string name)
+    {
+        var val = _adapter.GetField(_underlying, name);
+        return val is not CopNull;
+    }
 
     public CopValue GetField(string name) => _adapter.GetField(_underlying, name);
 
@@ -145,6 +155,7 @@ public interface IDynamicObjectAdapter
 {
     CopValue GetField(object obj, string name);
     string Display(object obj);
+    string? TypeName => null;
 }
 
 // ============================================================================
@@ -186,8 +197,75 @@ public sealed class CopFunction : CopValue, ICopCallable
 }
 
 /// <summary>
-/// A lambda (anonymous function) with its closure environment.
+/// A group of overloaded functions with the same name but different typed parameters.
+/// Dispatches to the correct overload based on the first argument's type.
 /// </summary>
+public sealed class CopFunctionGroup : CopValue, ICopCallable
+{
+    public string Name { get; }
+    private readonly List<CopFunction> _overloads = [];
+
+    public CopFunctionGroup(string name)
+    {
+        Name = name;
+    }
+
+    public void Add(CopFunction func) => _overloads.Add(func);
+
+    public int Arity => _overloads.Count > 0 ? _overloads[0].Arity : 0;
+
+    public CopValue Invoke(IReadOnlyList<CopValue> args, Evaluator evaluator, Environment env)
+    {
+        // Try to find matching overload by first parameter type
+        if (args.Count > 0)
+        {
+            var subject = args[0];
+            var subjectTypeName = GetTypeName(subject);
+
+            if (subjectTypeName is not null)
+            {
+                foreach (var overload in _overloads)
+                {
+                    if (overload.Declaration.Params.Count > 0)
+                    {
+                        var firstParam = overload.Declaration.Params[0];
+                        var paramType = firstParam.Type?.Name;
+                        if (paramType is not null &&
+                            string.Equals(paramType, subjectTypeName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return evaluator.CallUserFunction(overload, args);
+                        }
+                    }
+                }
+            }
+
+            // Try matching by arity
+            foreach (var overload in _overloads)
+            {
+                if (overload.Arity == args.Count)
+                    return evaluator.CallUserFunction(overload, args);
+            }
+        }
+
+        // Fall back to last registered overload
+        return evaluator.CallUserFunction(_overloads[^1], args);
+    }
+
+    private static string? GetTypeName(CopValue value) => value switch
+    {
+        CopDynamicObject dyn => dyn.TypeName,
+        CopObject obj => obj.TypeName,
+        CopString => "string",
+        CopInt => "int",
+        CopNumber => "number",
+        CopBool => "bool",
+        CopList => "collection",
+        _ => null
+    };
+
+    public override string Display() => $"<function-group {Name} ({_overloads.Count} overloads)>";
+    public override string ToString() => Display();
+}
 public sealed class CopLambda : CopValue, ICopCallable
 {
     public Ast.LambdaExpr Expr { get; }
@@ -217,6 +295,7 @@ public sealed class CopExternalFunction : CopValue, ICopCallable
 {
     public string Name { get; }
     public ForeignFunction Implementation { get; }
+    public ForeignFunctionEx? ExtendedImpl { get; init; }
     public int Arity { get; }
 
     public CopExternalFunction(string name, ForeignFunction impl, int arity = -1)
@@ -228,9 +307,55 @@ public sealed class CopExternalFunction : CopValue, ICopCallable
 
     public CopValue Invoke(IReadOnlyList<CopValue> args, Evaluator evaluator, Environment env)
     {
+        if (ExtendedImpl is not null)
+            return ExtendedImpl(args, evaluator, env);
         return Implementation(args, env);
     }
 
     public override string Display() => $"<extern {Name}>";
+    public override string ToString() => Display();
+}
+
+/// <summary>
+/// A provider proxy returned by `object('providerName')`.
+/// Member access resolves to provider collections registered in the environment.
+/// For example: object('code').Types → looks up "Types" or "code.Types" in the environment.
+/// </summary>
+public sealed class CopProviderProxy : CopValue
+{
+    public string ProviderName { get; }
+    private readonly Environment _env;
+
+    public CopProviderProxy(string providerName, Environment env)
+    {
+        ProviderName = providerName;
+        _env = env;
+    }
+
+    public bool HasField(string name)
+    {
+        // Check qualified name first (provider.Collection), then bare name
+        if (_env.TryLookup($"{ProviderName}.{name}", out _)) return true;
+        if (_env.TryLookup(name, out _)) return true;
+        return false;
+    }
+
+    public CopValue GetField(string name)
+    {
+        // Try qualified name first (e.g., "code.Types")
+        if (_env.TryLookup($"{ProviderName}.{name}", out var qualified))
+        {
+            // Skip empty placeholder collections — fall through to bare name
+            if (qualified is not CopList { Items.Count: 0 })
+                return qualified;
+        }
+        // Then try bare name (e.g., "Types")
+        if (_env.TryLookup(name, out var bare))
+            return bare;
+        // Return qualified even if empty (rather than null) if bare also not found
+        return qualified ?? CopNull.Instance;
+    }
+
+    public override string Display() => $"<provider {ProviderName}>";
     public override string ToString() => Display();
 }

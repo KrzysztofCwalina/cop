@@ -85,7 +85,7 @@ public static class ListCommand
             try
             {
                 var source = File.ReadAllText(file);
-                scriptFiles.Add(ScriptParser.Parse(source, file));
+                scriptFiles.Add(Cop.Lang.Parser.CopParser.ParseFile(source, file));
             }
             catch (ParseException ex)
             {

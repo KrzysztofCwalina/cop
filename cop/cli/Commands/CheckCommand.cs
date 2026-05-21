@@ -74,7 +74,7 @@ public static class CheckCommand
             try
             {
                 var source = File.ReadAllText(file);
-                var sf = ScriptParser.Parse(source, file);
+                var sf = Cop.Lang.Parser.CopParser.ParseFile(source, file);
                 scriptFiles.Add(sf);
                 imports.AddRange(sf.Imports);
 

@@ -19,12 +19,107 @@ public class CopParser
         _filePath = filePath;
     }
 
-    public static ModuleNode Parse(string source, string filePath = "<unknown>")
+    public static ModuleNode Parse(string source, string? filePath = null)
     {
+        filePath ??= "<unknown>";
         var tokenizer = new Tokenizer(source, filePath);
         var tokens = tokenizer.Tokenize();
         var parser = new CopParser(tokens, filePath);
         return parser.ParseModule();
+    }
+
+    /// <summary>
+    /// Compatibility bridge for legacy ScriptFile consumers.
+    /// Converts the new AST parser output into the older ScriptFile shape.
+    /// </summary>
+    public static Cop.Lang.ScriptFile ParseFile(string source, string? filePath = null)
+    {
+        var resolvedFilePath = filePath ?? "<unknown>";
+        var module = Parse(source, resolvedFilePath);
+
+        var imports = new List<string>();
+        var typeDefinitions = new List<Cop.Lang.TypeDefinition>();
+        var collectionDeclarations = new List<Cop.Lang.CollectionDeclaration>();
+        var letDeclarations = new List<Cop.Lang.LetDeclaration>();
+        var predicates = new List<Cop.Lang.PredicateDefinition>();
+        var functions = new List<Cop.Lang.FunctionDefinition>();
+        var commands = new List<Cop.Lang.CommandBlock>();
+        var flagsDefinitions = new List<Cop.Lang.FlagsDefinition>();
+        var enumDefinitions = new List<Cop.Lang.EnumDefinition>();
+
+        foreach (var declaration in module.Declarations)
+        {
+            switch (declaration)
+            {
+                case ImportDecl importDecl:
+                    imports.Add(importDecl.ModuleName);
+                    break;
+
+                case TypeDecl typeDecl:
+                    typeDefinitions.Add(ConvertTypeDefinition(typeDecl));
+                    break;
+
+                case LetDecl letDecl:
+                    if (letDecl.TypeAnnotation?.IsCollection == true)
+                    {
+                        collectionDeclarations.Add(new Cop.Lang.CollectionDeclaration(
+                            letDecl.Name,
+                            letDecl.TypeAnnotation.Name,
+                            letDecl.Line,
+                            letDecl.IsExported,
+                            letDecl.DocComment));
+                    }
+
+                    letDeclarations.Add(ConvertLetDeclaration(letDecl));
+                    break;
+
+                case FunctionDecl functionDecl when IsCommandLike(functionDecl):
+                    commands.Add(ConvertCommandBlock(functionDecl));
+                    break;
+
+                case FunctionDecl functionDecl when IsPredicateLike(functionDecl):
+                    predicates.Add(ConvertPredicateDefinition(functionDecl));
+                    break;
+
+                case FunctionDecl functionDecl:
+                    functions.Add(ConvertFunctionDefinition(functionDecl));
+                    break;
+
+                case EnumDecl enumDecl:
+                    enumDefinitions.Add(new Cop.Lang.EnumDefinition(
+                        enumDecl.Name,
+                        enumDecl.Members,
+                        enumDecl.Line,
+                        enumDecl.IsExported,
+                        enumDecl.DocComment));
+                    break;
+
+                case FlagsDecl flagsDecl:
+                    flagsDefinitions.Add(new Cop.Lang.FlagsDefinition(
+                        flagsDecl.Name,
+                        flagsDecl.Members,
+                        flagsDecl.Line,
+                        flagsDecl.IsExported,
+                        flagsDecl.DocComment));
+                    break;
+
+                case CommandDecl commandDecl:
+                    commands.Add(ConvertCommandBlock(commandDecl));
+                    break;
+            }
+        }
+
+        return new Cop.Lang.ScriptFile(
+            resolvedFilePath,
+            imports,
+            typeDefinitions,
+            collectionDeclarations,
+            letDeclarations,
+            predicates,
+            functions,
+            commands,
+            FlagsDefinitions: flagsDefinitions.Count > 0 ? flagsDefinitions : null,
+            EnumDefinitions: enumDefinitions.Count > 0 ? enumDefinitions : null);
     }
 
     // ========================================================================
@@ -315,6 +410,13 @@ public class CopParser
         {
             // Block body without = (alternate syntax): function MAIN() { ... }
             body = ParseBlockBody();
+        }
+        else if (Check(TokenKind.LBrace) && returnType is not null)
+        {
+            // Braced mapping body after return type: => Violation { Severity = ..., ... }
+            // Parse as object literal expression
+            var expr = ParseExpression();
+            body = new ExpressionBody(expr);
         }
         else
         {
@@ -814,12 +916,12 @@ public class CopParser
     private Expression ParseTernaryOrMatch(Expression condition, int line)
     {
         // Check if this is a match expression: condition ? pattern => result | ...
-        // Or a simple ternary: condition ? thenExpr : elseExpr
+        // Or a simple ternary: condition ? thenExpr | elseExpr (or : elseExpr)
         //
-        // Use ParseOr (not ParseExpression) for then-branch to avoid consuming ':'
-        // as a filter. The ':' must stay for us to find the else-branch.
+        // Use ParseBitwiseAnd (not ParseOr) for then-branch to avoid consuming '|'
+        // as bitwise or when it's meant as the ternary else separator.
 
-        var firstExpr = ParseOr();
+        var firstExpr = ParseBitwiseAnd();
 
         if (Match(TokenKind.Arrow))
         {
@@ -840,9 +942,9 @@ public class CopParser
             return new MatchExpr(condition, arms, line);
         }
 
-        if (Match(TokenKind.Colon))
+        if (Match(TokenKind.Colon) || Match(TokenKind.Pipe))
         {
-            // Simple ternary
+            // Simple ternary: condition ? then : else  OR  condition ? then | else
             var elseExpr = ParseExpression();
             return new ConditionalExpr(condition, firstExpr, elseExpr, line);
         }
@@ -1049,6 +1151,8 @@ public class CopParser
     {
         // Parse '{expr}' and '{text@style}' interpolation patterns in a string.
         // Returns InterpolatedStringExpr with TextPart and ExpressionPart segments.
+        // Only treat {X} as interpolation if X starts with a letter (valid identifier).
+        // This allows regex quantifiers like {2}, {1,3} to remain literal.
         var parts = new List<StringPart>();
         int i = 0;
 
@@ -1066,14 +1170,21 @@ public class CopParser
 
                 var inner = raw[(i + 1)..end];
 
-                // Check for style syntax: {text@style} — treat whole thing as text with style marker
+                // Only interpolate if content starts with a letter (valid identifier start)
+                if (inner.Length == 0 || !char.IsLetter(inner[0]))
+                {
+                    // Literal brace content (e.g., {2}, {1,3})
+                    parts.Add(new TextPart(raw[i..(end + 1)]));
+                    i = end + 1;
+                    continue;
+                }
+
+                // Check for style syntax: {text@style} — literal text with styling
                 if (inner.Contains('@'))
                 {
-                    // For now, just render the text part (before @)
+                    // {text@style} renders the text before @ as literal styled text
                     var textPart = inner.Split('@')[0];
-                    // Parse the text part as an expression path
-                    var exprParts = ParseDottedPath(textPart, line);
-                    parts.Add(new ExpressionPart(exprParts));
+                    parts.Add(new TextPart(textPart));
                 }
                 else
                 {
@@ -1160,7 +1271,7 @@ public class CopParser
                 {
                     // This is "Type:constraint" — skip the constraint chain
                     SkipConstraintChain();
-                    return new Parameter(first.ToLower(), new TypeRef(first, false, line), line);
+                    return new Parameter(first, new TypeRef(first, false, line), line);
                 }
             }
 
@@ -1172,7 +1283,7 @@ public class CopParser
         // If it starts with uppercase, it's likely just a type name (anonymous param)
         if (char.IsUpper(first[0]))
         {
-            return new Parameter(first.ToLower(), new TypeRef(first, false, line), line);
+            return new Parameter(first, new TypeRef(first, false, line), line);
         }
 
         // Otherwise it's an untyped parameter name
@@ -1314,6 +1425,423 @@ public class CopParser
         LiteralExpr => false,
         _ => true
     };
+
+    private static bool IsCommandLike(FunctionDecl functionDecl)
+        => IsCommandName(functionDecl.Name);
+
+    private static bool IsPredicateLike(FunctionDecl functionDecl)
+        => !IsCommandLike(functionDecl)
+            && functionDecl.Params.Count == 1
+            && functionDecl.Body is ExpressionBody { Expr: not ObjectExpr };
+
+    private static Cop.Lang.TypeDefinition ConvertTypeDefinition(TypeDecl typeDecl)
+        => new(
+            typeDecl.Name,
+            typeDecl.BaseType,
+            typeDecl.Properties.Select(ConvertPropertyDefinition).ToList(),
+            typeDecl.Line,
+            typeDecl.IsExported,
+            typeDecl.DocComment);
+
+    private static Cop.Lang.PropertyDefinition ConvertPropertyDefinition(PropertyDecl propertyDecl)
+        => new(
+            propertyDecl.Name,
+            propertyDecl.Type.Name,
+            propertyDecl.IsOptional,
+            propertyDecl.Type.IsCollection,
+            propertyDecl.Line);
+
+    private static Cop.Lang.LetDeclaration ConvertLetDeclaration(LetDecl letDecl)
+    {
+        string baseCollection = string.Empty;
+        List<Cop.Lang.Expression> filters = [];
+        string? pathOverride = null;
+        Cop.Lang.Expression? exclusions = null;
+        Cop.Lang.Expression? valueExpression = null;
+
+        if (IsLegacyLetQuery(letDecl.Value)
+            && TryExtractCollectionQuery(letDecl.Value, out baseCollection, out filters, out pathOverride, out exclusions))
+        {
+            valueExpression = null;
+        }
+        else
+        {
+            valueExpression = WrapExpression(letDecl.Value);
+        }
+
+        return new Cop.Lang.LetDeclaration(
+            letDecl.Name,
+            baseCollection,
+            filters,
+            letDecl.Line,
+            letDecl.IsExported,
+            valueExpression,
+            exclusions,
+            null,
+            pathOverride,
+            letDecl.DocComment,
+            null,
+            letDecl.TypeAnnotation is not null ? FormatTypeRef(letDecl.TypeAnnotation) : null);
+    }
+
+    private static Cop.Lang.PredicateDefinition ConvertPredicateDefinition(FunctionDecl functionDecl)
+    {
+        var parameter = functionDecl.Params[0];
+        var parameterType = parameter.Type is not null ? FormatTypeRef(parameter.Type) : "Unknown";
+        var narrowedType = functionDecl.ReturnType is not null
+            && !string.Equals(functionDecl.ReturnType.Name, "bool", StringComparison.OrdinalIgnoreCase)
+                ? FormatTypeRef(functionDecl.ReturnType)
+                : null;
+
+        return new Cop.Lang.PredicateDefinition(
+            functionDecl.Name,
+            parameterType,
+            TryExtractSimpleName(functionDecl.Guard),
+            ExtractBodyExpression(functionDecl.Body, functionDecl.Line, true),
+            functionDecl.Line,
+            functionDecl.IsExported,
+            narrowedType,
+            functionDecl.DocComment);
+    }
+
+    private static Cop.Lang.FunctionDefinition ConvertFunctionDefinition(FunctionDecl functionDecl)
+    {
+        var inputType = functionDecl.Params.Count > 0 && functionDecl.Params[0].Type is not null
+            ? FormatTypeRef(functionDecl.Params[0].Type!)
+            : "Unknown";
+
+        var parameters = functionDecl.Params
+            .Skip(1)
+            .Select(p => new Cop.Lang.FunctionParameter(p.Name, p.Type is not null ? FormatTypeRef(p.Type) : "Unknown"))
+            .ToList();
+
+        var fieldMappings = new Dictionary<string, Cop.Lang.Expression>();
+        switch (functionDecl.Body)
+        {
+            case MappingBody mappingBody:
+                foreach (var mapping in mappingBody.Mappings)
+                    fieldMappings[mapping.FieldName] = WrapExpression(mapping.Value);
+                break;
+
+            case ExpressionBody { Expr: ObjectExpr objectExpr }:
+                foreach (var field in objectExpr.Fields)
+                    fieldMappings[field.Name] = WrapExpression(field.Value);
+                break;
+        }
+
+        return new Cop.Lang.FunctionDefinition(
+            functionDecl.Name,
+            inputType,
+            functionDecl.ReturnType is not null ? FormatTypeRef(functionDecl.ReturnType) : "Unknown",
+            parameters,
+            fieldMappings,
+            functionDecl.Line,
+            functionDecl.IsExported,
+            functionDecl.Body is ExpressionBody expressionBody ? WrapExpression(expressionBody.Expr) : null,
+            functionDecl.Guard is not null ? WrapExpression(functionDecl.Guard) : null,
+            functionDecl.DocComment,
+            null,
+            functionDecl.Body is IntrinsicBody);
+    }
+
+    private static Cop.Lang.CommandBlock ConvertCommandBlock(FunctionDecl functionDecl)
+    {
+        var name = functionDecl.Name;
+        string messageTemplate = string.Empty;
+        string? collection = null;
+        List<Cop.Lang.Expression> filters = [];
+        string? pathOverride = null;
+        Cop.Lang.Expression? outputExpression = null;
+        Cop.Lang.Expression? exclusions = null;
+
+        PopulateCommandShape(functionDecl.Body, ref name, ref messageTemplate, ref collection, filters, ref pathOverride, ref outputExpression, ref exclusions);
+
+        var isTest = name.StartsWith("TEST-", StringComparison.Ordinal);
+        var isCommand = !string.Equals(functionDecl.Name, "__FOREACH__", StringComparison.Ordinal) && !isTest;
+        var parameters = functionDecl.Params.Count > 0 ? functionDecl.Params.Select(p => p.Name).ToList() : null;
+
+        return new Cop.Lang.CommandBlock(
+            name,
+            messageTemplate,
+            collection,
+            filters,
+            functionDecl.Line,
+            functionDecl.DocComment,
+            isCommand,
+            functionDecl.IsExported,
+            isTest,
+            null,
+            null,
+            functionDecl.Guard is not null ? WrapExpression(functionDecl.Guard) : null,
+            null,
+            exclusions,
+            parameters,
+            outputExpression,
+            null,
+            pathOverride,
+            false,
+            functionDecl.Body is IntrinsicBody);
+    }
+
+    private static Cop.Lang.CommandBlock ConvertCommandBlock(CommandDecl commandDecl)
+    {
+        var name = commandDecl.Name;
+        string messageTemplate = string.Empty;
+        string? collection = null;
+        List<Cop.Lang.Expression> filters = [];
+        string? pathOverride = null;
+        Cop.Lang.Expression? outputExpression = null;
+        Cop.Lang.Expression? exclusions = null;
+
+        foreach (var statement in commandDecl.Body)
+            ApplyCommandStatement(statement, ref name, ref messageTemplate, ref collection, filters, ref pathOverride, ref outputExpression, ref exclusions);
+
+        return new Cop.Lang.CommandBlock(
+            name,
+            messageTemplate,
+            collection,
+            filters,
+            commandDecl.Line,
+            commandDecl.DocComment,
+            true,
+            commandDecl.IsExported,
+            false,
+            null,
+            null,
+            null,
+            null,
+            exclusions,
+            commandDecl.Parameters,
+            outputExpression,
+            null,
+            pathOverride);
+    }
+
+    private static void PopulateCommandShape(
+        FunctionBody body,
+        ref string name,
+        ref string messageTemplate,
+        ref string? collection,
+        List<Cop.Lang.Expression> filters,
+        ref string? pathOverride,
+        ref Cop.Lang.Expression? outputExpression,
+        ref Cop.Lang.Expression? exclusions)
+    {
+        switch (body)
+        {
+            case ExpressionBody expressionBody:
+                ApplyCommandExpression(expressionBody.Expr, ref messageTemplate, ref collection, filters, ref pathOverride, ref outputExpression, ref exclusions);
+                break;
+
+            case BlockBody blockBody:
+                foreach (var statement in blockBody.Statements)
+                    ApplyCommandStatement(statement, ref name, ref messageTemplate, ref collection, filters, ref pathOverride, ref outputExpression, ref exclusions);
+                break;
+        }
+
+        if (string.Equals(name, "__FOREACH__", StringComparison.Ordinal) && !string.IsNullOrEmpty(collection))
+            name = collection!;
+    }
+
+    private static void ApplyCommandStatement(
+        Statement statement,
+        ref string name,
+        ref string messageTemplate,
+        ref string? collection,
+        List<Cop.Lang.Expression> filters,
+        ref string? pathOverride,
+        ref Cop.Lang.Expression? outputExpression,
+        ref Cop.Lang.Expression? exclusions)
+    {
+        switch (statement)
+        {
+            case ForEachStatement forEachStatement:
+                if (TryExtractCollectionQuery(forEachStatement.Collection, out var extractedCollection, out var extractedFilters, out var extractedPath, out var extractedExclusions))
+                {
+                    collection = extractedCollection;
+                    filters.AddRange(extractedFilters);
+                    pathOverride = extractedPath;
+                    exclusions = extractedExclusions;
+                }
+
+                if (forEachStatement.Body.Count > 0)
+                {
+                    ApplyCommandStatement(
+                        forEachStatement.Body[^1],
+                        ref name,
+                        ref messageTemplate,
+                        ref collection,
+                        filters,
+                        ref pathOverride,
+                        ref outputExpression,
+                        ref exclusions);
+                }
+                break;
+
+            case ExpressionStatement expressionStatement:
+                ApplyCommandExpression(expressionStatement.Expr, ref messageTemplate, ref collection, filters, ref pathOverride, ref outputExpression, ref exclusions);
+                break;
+
+            case PipelineStatement pipelineStatement:
+                if (collection is null
+                    && TryExtractCollectionQuery(pipelineStatement.Source, out var pipelineCollection, out var pipelineFilters, out var pipelinePath, out var pipelineExclusions))
+                {
+                    collection = pipelineCollection;
+                    filters.AddRange(pipelineFilters);
+                    pathOverride = pipelinePath;
+                    exclusions = pipelineExclusions;
+                }
+
+                if (pipelineStatement.Stages.Count > 0)
+                    outputExpression = WrapExpression(pipelineStatement.Stages[^1].Expr);
+                break;
+        }
+    }
+
+    private static void ApplyCommandExpression(
+        Expression expression,
+        ref string messageTemplate,
+        ref string? collection,
+        List<Cop.Lang.Expression> filters,
+        ref string? pathOverride,
+        ref Cop.Lang.Expression? outputExpression,
+        ref Cop.Lang.Expression? exclusions)
+    {
+        if (TryExtractStringLiteral(expression, out var literal))
+        {
+            messageTemplate = literal;
+            return;
+        }
+
+        if (collection is null
+            && TryExtractCollectionQuery(expression, out var extractedCollection, out var extractedFilters, out var extractedPath, out var extractedExclusions))
+        {
+            collection = extractedCollection;
+            filters.AddRange(extractedFilters);
+            pathOverride = extractedPath;
+            exclusions = extractedExclusions;
+            return;
+        }
+
+        outputExpression = WrapExpression(expression);
+    }
+
+    private static Cop.Lang.Expression ExtractBodyExpression(FunctionBody body, int line, bool defaultValue)
+        => body switch
+        {
+            ExpressionBody expressionBody => WrapExpression(expressionBody.Expr),
+            _ => new Cop.Lang.AstExpressionWrapper(new Cop.Lang.Ast.LiteralExpr(defaultValue, line))
+        };
+
+    private static bool IsLegacyLetQuery(Expression expression)
+        => expression switch
+        {
+            FilterExpr => true,
+            BinaryExpr { Op: BinaryOp.Subtract } subtraction => IsLegacyLetQuery(subtraction.Left),
+            _ => false
+        };
+
+    private static bool TryExtractCollectionQuery(
+        Expression expression,
+        out string baseCollection,
+        out List<Cop.Lang.Expression> filters,
+        out string? pathOverride,
+        out Cop.Lang.Expression? exclusions)
+    {
+        baseCollection = string.Empty;
+        filters = [];
+        pathOverride = null;
+        exclusions = null;
+
+        if (expression is BinaryExpr { Op: BinaryOp.Subtract } subtraction
+            && TryExtractCollectionQuery(subtraction.Left, out baseCollection, out filters, out pathOverride, out var nestedExclusions))
+        {
+            exclusions = nestedExclusions ?? WrapExpression(subtraction.Right);
+            return true;
+        }
+
+        var collectedFilters = new Stack<Expression>();
+        var current = expression;
+        while (current is FilterExpr filterExpr)
+        {
+            var predicate = filterExpr.Negated
+                ? new UnaryExpr(UnaryOp.Not, filterExpr.Predicate, filterExpr.Line)
+                : filterExpr.Predicate;
+            collectedFilters.Push(predicate);
+            current = filterExpr.Collection;
+        }
+
+        if (!TryExtractCollectionReference(current, out baseCollection, out pathOverride))
+            return false;
+
+        while (collectedFilters.Count > 0)
+            filters.Add(WrapExpression(collectedFilters.Pop()));
+
+        return true;
+    }
+
+    private static bool TryExtractCollectionReference(Expression expression, out string collection, out string? pathOverride)
+    {
+        collection = string.Empty;
+        pathOverride = null;
+
+        if (TryExtractDottedName(expression, out collection))
+            return true;
+
+        if (expression is CallExpr { Args.Count: 1 } callExpr
+            && TryExtractStringLiteral(callExpr.Args[0], out var path)
+            && TryExtractDottedName(callExpr.Callee, out collection))
+        {
+            pathOverride = path;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryExtractDottedName(Expression expression, out string name)
+    {
+        switch (expression)
+        {
+            case IdentifierExpr identifierExpr:
+                name = identifierExpr.Name;
+                return true;
+
+            case MemberExpr memberExpr when TryExtractDottedName(memberExpr.Object, out var parentName):
+                name = $"{parentName}.{memberExpr.Member}";
+                return true;
+
+            default:
+                name = string.Empty;
+                return false;
+        }
+    }
+
+    private static bool TryExtractStringLiteral(Expression expression, out string value)
+    {
+        if (expression is LiteralExpr { Value: string literal })
+        {
+            value = literal;
+            return true;
+        }
+
+        value = string.Empty;
+        return false;
+    }
+
+    private static string? TryExtractSimpleName(Expression? expression)
+    {
+        if (expression is null)
+            return null;
+
+        return TryExtractDottedName(expression, out var name) ? name : null;
+    }
+
+    private static string FormatTypeRef(TypeRef typeRef)
+        => typeRef.IsCollection ? $"[{typeRef.Name}]" : typeRef.Name;
+
+    private static Cop.Lang.Expression WrapExpression(Expression expression)
+        => new Cop.Lang.AstExpressionWrapper(expression);
 
     // ========================================================================
     // Token Navigation

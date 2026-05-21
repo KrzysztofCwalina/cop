@@ -57,7 +57,7 @@ public static class HelpCommand
             try
             {
                 var source = File.ReadAllText(path);
-                scriptFile = ScriptParser.Parse(source, path);
+                scriptFile = Cop.Lang.Parser.CopParser.ParseFile(source, path);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {

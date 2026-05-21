@@ -7,21 +7,20 @@ using Cop.Providers.SourceParsers;
 namespace Cop.Tests.Lang;
 
 /// <summary>
-/// Test helper that creates a properly configured ScriptInterpreter
-/// with code type registrations and parses source files into Documents.
+/// Test helper that provides parsed package files and source file utilities.
 /// </summary>
 internal static class TestInterpreter
 {
     private static readonly Lazy<ScriptFile> _codeCop = new(() =>
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Samples", "code.cop");
-        return ScriptParser.Parse(File.ReadAllText(path), "code.cop");
+        return Cop.Lang.Parser.CopParser.ParseFile(File.ReadAllText(path), "code.cop");
     });
 
     private static readonly Lazy<ScriptFile> _coreCop = new(() =>
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Samples", "core.cop");
-        return ScriptParser.Parse(File.ReadAllText(path), "core.cop");
+        return Cop.Lang.Parser.CopParser.ParseFile(File.ReadAllText(path), "core.cop");
     });
 
     /// <summary>The parsed code.cop package (flags definitions + isX predicates).</summary>
@@ -30,23 +29,9 @@ internal static class TestInterpreter
     /// <summary>The parsed core.cop package (intrinsic function declarations).</summary>
     public static ScriptFile CorePackage => _coreCop.Value;
 
-    public static ScriptInterpreter Create() => Create(out _);
-
-    /// <summary>
-    /// Creates a configured interpreter with documents pre-registered as namespaced collections.
-    /// This makes object('csharp').Types etc. resolvable in tests.
-    /// </summary>
-    public static (ScriptInterpreter Interpreter, List<Document> Documents) CreateWithDocuments(params string[] filePaths)
+    public static TypeRegistry CreateRegistry()
     {
-        var interp = Create(out var registry);
-        var docs = ParseSourceFiles(filePaths);
-        RegisterDocumentsAsNamespaced(registry, docs);
-        return (interp, docs);
-    }
-
-    public static ScriptInterpreter Create(out TypeRegistry registry)
-    {
-        registry = new TypeRegistry();
+        var registry = new TypeRegistry();
         ProviderLoader.RegisterSchema(new CodeSchemaProvider(), registry);
         ProviderLoader.RegisterSchema(new MarkdownProvider(), registry);
         var codeFile = CodePackage;
@@ -57,19 +42,16 @@ internal static class TestInterpreter
         if (codeFile.TypeImports != null)
             registry.LoadTypeImports(codeFile.TypeImports);
         registry.RegisterProgramType();
-        return new ScriptInterpreter(registry);
+        return registry;
     }
 
     /// <summary>
     /// Registers document collection data into namespaced collections in the TypeRegistry.
-    /// Mimics what ProviderLoader.QueryAndRegister does in production — makes
-    /// object('python').Types etc. resolvable in tests.
     /// </summary>
     public static void RegisterDocumentsAsNamespaced(TypeRegistry registry, List<Document> documents)
     {
         foreach (var collName in registry.GetDocumentCollectionNames())
         {
-            // Group items by document language
             var byLanguage = new Dictionary<string, List<object>>();
             foreach (var doc in documents)
             {
@@ -91,7 +73,6 @@ internal static class TestInterpreter
 
     public static List<Document> ParseSourceFiles(params string[] filePaths)
     {
-        // Find common root to compute relative paths that preserve directory structure
         var commonRoot = filePaths.Length > 1
             ? FindCommonRoot(filePaths)
             : Path.GetDirectoryName(filePaths[0]) ?? "";

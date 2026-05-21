@@ -481,4 +481,44 @@ command main = print('done')
         Assert.That(outer.Op, Is.EqualTo(BinaryOp.Add));
         Assert.That(outer.Left, Is.TypeOf<BinaryExpr>());
     }
+
+    [Test]
+    public void Parse_AllPackageFiles_NoErrors()
+    {
+        var repoRoot = FindRepoRoot();
+        var packagesDir = Path.Combine(repoRoot, "packages");
+        if (!Directory.Exists(packagesDir))
+            Assert.Ignore("packages/ directory not found");
+
+        var copFiles = Directory.GetFiles(packagesDir, "*.cop", SearchOption.AllDirectories);
+        var errors = new List<string>();
+
+        foreach (var file in copFiles)
+        {
+            try
+            {
+                var source = File.ReadAllText(file);
+                CopParser.Parse(source, file);
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"{Path.GetRelativePath(repoRoot, file)}: {ex.Message}");
+            }
+        }
+
+        if (errors.Count > 0)
+            Assert.Fail($"Failed to parse {errors.Count}/{copFiles.Length} files:\n{string.Join("\n", errors.Take(20))}");
+    }
+
+    private static string FindRepoRoot()
+    {
+        var dir = TestContext.CurrentContext.TestDirectory;
+        while (dir is not null)
+        {
+            if (Directory.Exists(Path.Combine(dir, ".git")))
+                return dir;
+            dir = Path.GetDirectoryName(dir);
+        }
+        return TestContext.CurrentContext.TestDirectory;
+    }
 }

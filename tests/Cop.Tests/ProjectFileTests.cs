@@ -81,7 +81,8 @@ public class RunProjectTests
             ["empty-folders"]);
 
         Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
-        Assert.That(result.Outputs, Has.Count.GreaterThanOrEqualTo(1));
+        Assert.That(result.Outputs, Has.Count.GreaterThanOrEqualTo(1),
+            $"Should find empty folders. Errors: [{string.Join("; ", result.Errors)}]");
         Assert.That(result.Outputs.Any(d => d.Message.Contains("empty-dir")), Is.True,
             "Should detect the empty folder");
     }
@@ -183,6 +184,7 @@ public class RunProjectTests
             "Parse errors: " + string.Join("; ", result.ParseErrors));
         Assert.That(result.Outputs, Has.Count.GreaterThanOrEqualTo(1),
             $"Should find empty folders. Got @result.Outputs.Count@ outputs.");
-        Assert.That(result.Outputs.Any(d => d.Message.Contains("empty-dir")), Is.True);
+        Assert.That(result.Outputs.Any(d => d.Message.Contains("empty-dir")), Is.True,
+            $"Outputs ({result.Outputs.Count}): [{string.Join(" | ", result.Outputs.Select(o => o.Message.Length > 200 ? o.Message[..200] : o.Message))}]");
     }
 }

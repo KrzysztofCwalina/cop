@@ -53,7 +53,7 @@ public class PackageExtractor
 
             try
             {
-                var scriptFile = ScriptParser.Parse(source, copFile);
+                var scriptFile = Cop.Lang.Parser.CopParser.ParseFile(source, copFile);
                 ExtractTypes(scriptFile, entry, copFile);
                 ExtractPredicates(scriptFile, entry, copFile);
                 ExtractFunctions(scriptFile, entry, copFile);

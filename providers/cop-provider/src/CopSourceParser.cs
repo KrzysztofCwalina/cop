@@ -4,7 +4,7 @@ using Cop.Providers.SourceModel;
 namespace Cop.Providers.SourceParsers;
 
 /// <summary>
-/// Source parser for .cop files. Reuses the existing ScriptParser to parse
+/// Source parser for .cop files. Uses the CopParser.ParseFile compatibility bridge to parse
 /// .cop syntax, then maps the AST to the shared code source model.
 /// </summary>
 public class CopSourceParser : ISourceParser
@@ -17,7 +17,7 @@ public class CopSourceParser : ISourceParser
         ScriptFile script;
         try
         {
-            script = ScriptParser.Parse(sourceText, filePath);
+            script = Cop.Lang.Parser.CopParser.ParseFile(sourceText, filePath);
         }
         catch (ParseException)
         {

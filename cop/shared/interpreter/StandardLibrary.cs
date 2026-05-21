@@ -52,20 +52,6 @@ public static class StandardLibrary
             return new CopString(msg);
         });
 
-        // String functions
-        ffi.Register("text", (args, env) =>
-        {
-            if (args.Count == 0) return new CopString("");
-            var separator = args.Count > 1 ? args[1].Display() : ", ";
-
-            if (args[0] is CopList list)
-                return new CopString(string.Join(separator, list.Items.Select(i => i.Display())));
-            if (args[0] is CopLazyCollection lazy)
-                return new CopString(string.Join(separator, lazy.Enumerate().Select(i => i.Display())));
-
-            return new CopString(args[0].Display());
-        });
-
         // I/O functions
         ffi.Register("read", (args, env) =>
         {
@@ -112,15 +98,40 @@ public static class StandardLibrary
 
         // String predicate methods
         RegisterStringPredicates(ffi);
+
+        // Bitwise flag predicates
+        RegisterFlagPredicates(ffi);
+
+        // provider/object intrinsic — returns a proxy that resolves member access to provider collections
+        ffi.Register("object", (args, env) =>
+        {
+            if (args.Count == 0) return CopNull.Instance;
+            var providerName = args[0].Display();
+            return new CopProviderProxy(providerName, env);
+        });
+
+        // provider is an alias for object
+        ffi.Register("provider", (args, env) =>
+        {
+            if (args.Count == 0) return CopNull.Instance;
+            var providerName = args[0].Display();
+            return new CopProviderProxy(providerName, env);
+        });
     }
 
     private static void RegisterCollectionMethods(ForeignFunctionRegistry ffi)
     {
         // count: collection.count() or count(collection) or collection.count(predicate)
-        ffi.Register("count", (args, env) =>
+        ffi.RegisterEx("count", (args, evaluator, env) =>
         {
             if (args.Count == 0) return new CopInt(0);
             var collection = args[0];
+            if (args.Count > 1 && args[1] is ICopCallable predicate)
+            {
+                var items = CoerceToEnumerable(collection);
+                var count = items.Count(item => predicate.Invoke([item], evaluator, env).IsTruthy);
+                return new CopInt(count);
+            }
             return collection switch
             {
                 CopList list => new CopInt(list.Items.Count),
@@ -129,20 +140,111 @@ public static class StandardLibrary
             };
         });
 
-        // any: collection.any(predicate) — returns bool
-        ffi.Register("any", (args, env) =>
+        // any: collection.any() or collection.any(predicate) — returns bool
+        ffi.RegisterEx("any", (args, evaluator, env) =>
         {
             if (args.Count == 0) return CopBool.False;
             var items = CoerceToEnumerable(args[0]);
+            if (args.Count > 1 && args[1] is ICopCallable predicate)
+                return CopBool.Of(items.Any(item => predicate.Invoke([item], evaluator, env).IsTruthy));
             return CopBool.Of(items.Any());
         });
 
-        // none: collection.none(predicate) — returns bool
-        ffi.Register("none", (args, env) =>
+        // all: collection.all(predicate) — returns bool
+        ffi.RegisterEx("all", (args, evaluator, env) =>
         {
             if (args.Count == 0) return CopBool.True;
             var items = CoerceToEnumerable(args[0]);
+            if (args.Count > 1 && args[1] is ICopCallable predicate)
+                return CopBool.Of(items.All(item => predicate.Invoke([item], evaluator, env).IsTruthy));
+            return CopBool.Of(items.All(item => item.IsTruthy));
+        });
+
+        // none: collection.none(predicate) — returns bool
+        ffi.RegisterEx("none", (args, evaluator, env) =>
+        {
+            if (args.Count == 0) return CopBool.True;
+            var items = CoerceToEnumerable(args[0]);
+            if (args.Count > 1 && args[1] is ICopCallable predicate)
+                return CopBool.Of(!items.Any(item => predicate.Invoke([item], evaluator, env).IsTruthy));
             return CopBool.Of(!items.Any());
+        });
+
+        // where: collection.where(predicate) — filter
+        ffi.RegisterEx("where", (args, evaluator, env) =>
+        {
+            if (args.Count < 2) return args.Count > 0 ? args[0] : CopNull.Instance;
+            var collection = args[0];
+            var predicate = args[1];
+            if (predicate is not ICopCallable pred)
+                return collection;
+            return new CopLazyCollection(() =>
+                CoerceToEnumerable(collection).Where(item =>
+                    pred.Invoke([item], evaluator, env).IsTruthy));
+        });
+
+        // select: collection.select(transform) — map/project
+        ffi.RegisterEx("select", (args, evaluator, env) =>
+        {
+            if (args.Count < 2) return args.Count > 0 ? args[0] : CopNull.Instance;
+            var collection = args[0];
+            var transform = args[1];
+            if (transform is not ICopCallable fn)
+                return collection;
+            return new CopLazyCollection(() =>
+                CoerceToEnumerable(collection).Select(item =>
+                    fn.Invoke([item], evaluator, env)));
+        });
+
+        // orderBy: collection.orderBy(keySelector) — sort ascending
+        ffi.RegisterEx("orderBy", (args, evaluator, env) =>
+        {
+            if (args.Count < 2) return args.Count > 0 ? args[0] : CopNull.Instance;
+            var collection = args[0];
+            var keySelector = args[1];
+            if (keySelector is not ICopCallable keySel)
+                return collection;
+            var items = CoerceToEnumerable(collection).ToList();
+            items.Sort((a, b) =>
+            {
+                var ka = keySel.Invoke([a], evaluator, env);
+                var kb = keySel.Invoke([b], evaluator, env);
+                return CompareValues(ka, kb);
+            });
+            return new CopList(items);
+        });
+
+        // distinct: collection.distinct() — deduplicate
+        ffi.Register("distinct", (args, env) =>
+        {
+            if (args.Count == 0) return CopNull.Instance;
+            var items = CoerceToEnumerable(args[0]);
+            var seen = new HashSet<string>();
+            var result = new List<CopValue>();
+            foreach (var item in items)
+            {
+                if (seen.Add(item.Display()))
+                    result.Add(item);
+            }
+            return new CopList(result);
+        });
+
+        // take: collection.take(n) — first n items
+        ffi.Register("take", (args, env) =>
+        {
+            if (args.Count < 2) return args.Count > 0 ? args[0] : CopNull.Instance;
+            var items = CoerceToEnumerable(args[0]);
+            var n = args[1] is CopInt i ? i.Value : 0;
+            return new CopList(items.Take(n).ToList());
+        });
+
+        // skip: collection.skip(n) — skip first n items
+        ffi.Register("skip", (args, env) =>
+        {
+            if (args.Count < 2) return args.Count > 0 ? args[0] : CopNull.Instance;
+            var items = CoerceToEnumerable(args[0]);
+            var n = args[1] is CopInt i ? i.Value : 0;
+            return new CopList(items.Skip(n).ToList());
         });
 
         // first: collection.first() — returns first item or null
@@ -160,6 +262,31 @@ public static class StandardLibrary
             var items = CoerceToEnumerable(args[0]);
             return items.LastOrDefault() ?? CopNull.Instance;
         });
+
+        // text: collection.text(separator) — join items with separator
+        ffi.Register("text", (args, env) =>
+        {
+            if (args.Count == 0) return new CopString("");
+            var separator = args.Count > 1 ? args[1].Display() : ", ";
+
+            if (args[0] is CopList list)
+                return new CopString(string.Join(separator, list.Items.Select(i => i.Display())));
+            if (args[0] is CopLazyCollection lazy)
+                return new CopString(string.Join(separator, lazy.Enumerate().Select(i => i.Display())));
+
+            return new CopString(args[0].Display());
+        });
+    }
+
+    private static int CompareValues(CopValue a, CopValue b)
+    {
+        return (a, b) switch
+        {
+            (CopInt ia, CopInt ib) => ia.Value.CompareTo(ib.Value),
+            (CopNumber na, CopNumber nb) => na.Value.CompareTo(nb.Value),
+            (CopString sa, CopString sb) => string.Compare(sa.Value, sb.Value, StringComparison.Ordinal),
+            _ => string.Compare(a.Display(), b.Display(), StringComparison.Ordinal)
+        };
     }
 
     private static void RegisterStringPredicates(ForeignFunctionRegistry ffi)
@@ -196,6 +323,14 @@ public static class StandardLibrary
             return CopBool.Of(str.Equals(other, StringComparison.OrdinalIgnoreCase));
         });
 
+        ffi.Register("notEquals", (args, env) =>
+        {
+            if (args.Count < 2) return CopBool.True;
+            var str = args[0].Display();
+            var other = args[1].Display();
+            return CopBool.Of(!str.Equals(other, StringComparison.OrdinalIgnoreCase));
+        });
+
         ffi.Register("matches", (args, env) =>
         {
             if (args.Count < 2) return CopBool.False;
@@ -217,6 +352,34 @@ public static class StandardLibrary
             return new CopInt(args[0].Display().Length);
         });
     }
+
+    private static void RegisterFlagPredicates(ForeignFunctionRegistry ffi)
+    {
+        // isSet(value, mask) → (value & mask) != 0
+        ffi.Register("isSet", (args, env) =>
+        {
+            if (args.Count < 2) return CopBool.False;
+            var value = ToLong(args[0]);
+            var mask = ToLong(args[1]);
+            return CopBool.Of((value & mask) != 0);
+        });
+
+        // isClear(value, mask) → (value & mask) == 0
+        ffi.Register("isClear", (args, env) =>
+        {
+            if (args.Count < 2) return CopBool.True;
+            var value = ToLong(args[0]);
+            var mask = ToLong(args[1]);
+            return CopBool.Of((value & mask) == 0);
+        });
+    }
+
+    private static long ToLong(CopValue v) => v switch
+    {
+        CopInt i => i.Value,
+        CopNumber n => (long)n.Value,
+        _ => 0
+    };
 
     // ========================================================================
     // Helpers

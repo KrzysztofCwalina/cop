@@ -90,7 +90,7 @@ public static class RunCommand
             try
             {
                 var source = File.ReadAllText(path);
-                scriptFiles.Add(ScriptParser.Parse(source, path));
+                scriptFiles.Add(Cop.Lang.Parser.CopParser.ParseFile(source, path));
             }
             catch (ParseException ex)
             {
@@ -123,7 +123,7 @@ public static class RunCommand
                             try
                             {
                                 var source = File.ReadAllText(impFile);
-                                importedFiles.Add(ScriptParser.Parse(source, impFile));
+                                importedFiles.Add(Cop.Lang.Parser.CopParser.ParseFile(source, impFile));
                             }
                             catch { /* skip unparseable import files */ }
                         }
@@ -494,7 +494,7 @@ public static class RunCommand
             try
             {
                 var source = File.ReadAllText(path);
-                var sf = ScriptParser.Parse(source, path);
+                var sf = Cop.Lang.Parser.CopParser.ParseFile(source, path);
                 foreach (var imp in sf.Imports)
                     imports.Add(imp);
             }
@@ -604,7 +604,7 @@ public static class RunCommand
                         try
                         {
                             var src = File.ReadAllText(filePath);
-                            var sf = ScriptParser.Parse(src, filePath);
+                            var sf = Cop.Lang.Parser.CopParser.ParseFile(src, filePath);
                             foreach (var imp in sf.Imports)
                             {
                                 if (!downloaded.Contains(imp))
@@ -745,7 +745,7 @@ public static class RunCommand
                         try
                         {
                             var src = File.ReadAllText(filePath);
-                            var sf = ScriptParser.Parse(src, filePath);
+                            var sf = Cop.Lang.Parser.CopParser.ParseFile(src, filePath);
                             foreach (var imp in sf.Imports)
                             {
                                 if (!downloaded.Contains(imp))
