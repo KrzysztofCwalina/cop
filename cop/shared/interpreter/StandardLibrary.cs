@@ -291,6 +291,21 @@ public static class StandardLibrary
 
     private static void RegisterNumericAggregates(ForeignFunctionRegistry ffi)
     {
+        // reduce: the fundamental fold — only true intrinsic needed for aggregation
+        // reduce(collection, (acc, item) => expr, initialValue)
+        ffi.RegisterEx("reduce", (args, evaluator, env) =>
+        {
+            if (args.Count < 3) return CopNull.Instance;
+            var items = CoerceToEnumerable(args[0]);
+            var fn = args[1] as ICopCallable;
+            var acc = args[2];
+            if (fn is null) return acc;
+
+            foreach (var item in items)
+                acc = fn.Invoke([acc, item], evaluator, env);
+            return acc;
+        });
+
         // sum: collection.sum() or sum(collection, projection)
         ffi.RegisterEx("sum", (args, evaluator, env) =>
         {

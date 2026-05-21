@@ -1,5 +1,10 @@
 # Numeric Collection Functions
 # Aggregate functions that operate on collections of int or number values.
+# Only reduce is intrinsic — all others are expressed using reduce.
+
+## Reduces a collection to a single value using an accumulator.
+## Example: [1,2,3]:reduce((acc, item) => acc + item, 0)
+export function reduce(items: [object], accumulator: expression, initial: object) : object => intrinsic
 
 ## Sums all items in an integer collection.
 ## Example: scores:sum()

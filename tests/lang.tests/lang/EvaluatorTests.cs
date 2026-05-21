@@ -782,4 +782,47 @@ command main = x + 1", "test.cop");
         var result = EvalExpr("[].average()", ffi);
         Assert.That(result, Is.InstanceOf<CopNull>());
     }
+
+    // ========================================================================
+    // Reduce (fold)
+
+    [Test]
+    public void ReduceSumIntegers()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = EvalExpr("[1, 2, 3, 4].reduce((acc, item) => acc + item, 0)", ffi);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(10));
+    }
+
+    [Test]
+    public void ReduceProductIntegers()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = EvalExpr("[1, 2, 3, 4].reduce((acc, item) => acc * item, 1)", ffi);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(24));
+    }
+
+    [Test]
+    public void ReduceEmptyListReturnsInitial()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = EvalExpr("[].reduce((acc, item) => acc + item, 42)", ffi);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(42));
+    }
+
+    [Test]
+    public void ReduceStringConcat()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = EvalExpr("['a', 'b', 'c'].reduce((acc, item) => acc + item, '')", ffi);
+        Assert.That(result, Is.InstanceOf<CopString>());
+        Assert.That(((CopString)result).Value, Is.EqualTo("abc"));
+    }
 }

@@ -73,10 +73,6 @@ export function distinct(items: [object]) : [object] => intrinsic
 ## Example: Types:groupBy(item.Namespace)
 export function groupBy(items: [object], object2object: expression) : [object] => intrinsic
 
-## Reduces a collection to a single value using an accumulator expression.
-## Example: numbers:reduce(acc + item)
-export function reduce(items: [object], accumulator: expression) : object => intrinsic
-
 # Immutable collection operations
 # All return new collections — the original is never modified.
 
