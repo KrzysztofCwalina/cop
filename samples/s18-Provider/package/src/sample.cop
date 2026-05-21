@@ -5,7 +5,7 @@ type SampleData = {
     Widgets : [Widget]
 }
 
-let db : SampleData = provider('sample')
+let db : SampleData = provider('sample', nic)
 export let Widgets = db.Widgets
 
 type Widget = {

@@ -5,19 +5,13 @@
 # Modifier flags — bit values match the code provider's CLR Modifier enum.
 # Use with :isSet() and :isClear() predicates: Type.Modifiers:isSet(Public)
 export flags Modifier = Public | Private | Protected | Internal | Static | Sealed | Abstract | Virtual | Async | Override | Readonly | Const
-export Modifier
 
 # Extensible enums — known values for Kind properties. Providers may return additional values.
 export enum TypeKind = Class | Struct | Interface | Enum
-export TypeKind
 export enum StatementKind = call | declaration | import | command | attribute | throw | return | using | foreach | try | catch | if | else | while | for | switch | await
-export StatementKind
 export enum ApiKind = class | struct | interface | enum | enumvalue | ctor | method | property | event | field
-export ApiKind
 export enum LineKind = code | comment | blank
-export LineKind
 export enum Language = csharp | python | javascript | cop | text
-export Language
 
 export type Type = {
     Name : string,

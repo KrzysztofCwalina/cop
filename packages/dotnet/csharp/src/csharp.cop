@@ -1,7 +1,7 @@
 # C# source language provider
 import code
 
-let cb : Codebase = provider('csharp')
+let cb : Codebase = provider('csharp', nic)
 
 export let Types = cb.Types
 export let Statements = cb.Statements
@@ -15,4 +15,4 @@ export let Projects = cb.Projects
 ## The path is relative to the project root.
 ## The returned Codebase has Types, Api, Members, Lines, etc.
 ## Example: csharp.Load('lib/MyLib.dll')
-export function Load(path : string) : Codebase = provider
+export function Load(path : string) : Codebase => provider('csharp', path)

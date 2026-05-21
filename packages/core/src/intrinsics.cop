@@ -5,8 +5,9 @@
 
 ## Returns a dynamic object accessor for the named provider.
 ## Properties on the returned object query the provider's collections.
-## Example: provider('sample').Widgets returns the Widgets collection.
-export function provider(name : string) : object => intrinsic
+## The options argument is provider-specific (path, connection string, etc.) or nic for default.
+## Example: provider('csharp', nic) or provider('csharp', 'lib/MyLib.dll')
+export function provider(name : string, options : json:object) : object => intrinsic
 
 ## Returns an async streaming collection from the named provider.
 ## Use a typed annotation to declare the item type produced by the stream:
@@ -39,6 +40,10 @@ export function save(path : string, content : string) => intrinsic
 ## Same template semantics as print but only visible when diagnostics are enabled.
 export function debug(message : string) => intrinsic
 
+## Asserts that a condition is true. Fails the test run if false.
+## Used in tests: assert(Types:isPublic.Count > 0, 'should have public types')
+export function assert(condition : bool, description : string) => intrinsic
+
 # Utilities
 
 ## Returns the current program context.
@@ -54,7 +59,3 @@ export type object:Program = {
 ## Glob-matches a file path against a pattern.
 ## Supports **, *, ? wildcards. Returns true if the path matches.
 export function pathMatches(path : string, pattern : string) : bool => intrinsic
-
-## Asserts that a condition is true. Fails the test run if false.
-## Used in tests: assert(Types:isPublic.Count > 0, 'should have public types')
-export function assert(condition : bool, description : string) => intrinsic

@@ -1,11 +1,8 @@
 # TypeSpec HTTP protocol graph types
 
 export enum HttpVerb = get | put | post | patch | delete | head
-export HttpVerb
 export enum HttpStatusCode = 200 | 201 | 204 | 304 | default
-export HttpStatusCode
 export enum HttpParameterLocation = path | query | header | body | cookie
-export HttpParameterLocation
 
 export type TspDecorator = {
     Name : string,
@@ -51,7 +48,7 @@ export type HttpService = {
 }
 
 # Explicit collection exports
-export let tsp = provider('typespec-http')
+export let tsp = provider('typespec-http', nic)
 export let Operations = tsp.Operations
 export let Services = tsp.Services
 

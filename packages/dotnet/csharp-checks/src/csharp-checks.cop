@@ -3,8 +3,8 @@
 import csharp
 import code-analysis
 
-let md : Codebase = provider('markdown')
-let xml : Codebase = provider('xml')
+let md : Codebase = provider('markdown', nic)
+let xml : Codebase = provider('xml', nic)
 let mdLines = md.Lines
 let xmlLines = xml.Lines
 

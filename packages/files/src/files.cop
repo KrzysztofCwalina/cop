@@ -30,7 +30,7 @@ export type Filesystem = {
 }
 
 # Provides filesystem data via the built-in filesystem provider
-export let Disk : Filesystem = provider('filesystem')
+export let Disk : Filesystem = provider('filesystem', nic)
 export let Folders = Disk.Folders
 export let DiskFiles = Disk.Files
 

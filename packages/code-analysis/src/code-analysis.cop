@@ -6,7 +6,6 @@ import code
 import files
 
 export enum Severity = error | warning | info
-export Severity
 
 export type Violation = {
     Severity : Severity,

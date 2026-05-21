@@ -47,8 +47,8 @@ export let untracked-providers = csharp.Types:untrackedProvider
 # Part 2: Provider Intrinsics
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Use provider('core') to access cop code provider for packages/ directory
-let pkg-code = provider('core')
+# Use provider('core', nic) to access cop code provider for packages/ directory
+let pkg-code = provider('core', nic)
 
 # Streaming providers expose StreamProvider/SinkProvider subclasses.
 # Track SinkProvider classes here to ensure they are documented.
