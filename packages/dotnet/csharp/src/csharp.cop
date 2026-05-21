@@ -11,8 +11,3 @@ export let Files = cb.Files
 export let Regions = cb.Regions
 export let Projects = cb.Projects
 
-## Loads a .NET assembly and returns its code model.
-## The path is relative to the project root.
-## The returned Codebase has Types, Api, Members, Lines, etc.
-## Example: csharp.Load('lib/MyLib.dll')
-export function Load(path : string) : Codebase = provider
