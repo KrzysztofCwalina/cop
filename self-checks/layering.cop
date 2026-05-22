@@ -1,0 +1,25 @@
+# Runtime must not reference providers
+
+import csharp-checks
+import code-analysis
+import code-layering
+
+let runtime-projects = ['runtime']
+let provider-projects = [
+    'code'
+    'markdown-provider'
+    'csharp-provider'
+    'python-provider'
+    'javascript-provider'
+    'json-provider'
+    'http-provider'
+    'typespec-provider'
+    'cop-provider'
+]
+
+predicate runtimeReferencesProvider(Project) =>
+    Project.Name:in(runtime-projects)
+    && Project.References:containsAny(provider-projects)
+
+export let layering-violations = csharp.Projects:runtimeReferencesProvider
+    :toError('{item.Name} must not reference providers other than filesystem-provider')

@@ -1,0 +1,4 @@
+import csharp-checks
+import code-analysis
+
+let allowed-interfaces = ['ICopCallable

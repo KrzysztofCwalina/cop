@@ -1,0 +1,13 @@
+# No new interfaces — use abstract classes instead
+# ICopCallable must remain an interface (multiple inheritance with CopValue)
+
+import csharp-checks
+import code-analysis
+
+let allowed-interfaces = ['ICopCallable']
+
+predicate isDisallowedInterface(Type) => Type.Kind == 'Interface'
+    && !Type.Name:in(allowed-interfaces)
+
+export let no-new-interfaces = csharp.Types:isDisallowedInterface
+    :toError('Do not add new interfaces — use abstract classes instead: {item.Name} in {item.File.Path}')

@@ -66,7 +66,22 @@ if (!knownVerbs.Contains(args[0]) && !args[0].StartsWith('-') && !args[0].Starts
     // 1. Explicit .cop file → run it directly
     if (firstArg.EndsWith(".cop", StringComparison.OrdinalIgnoreCase))
     {
-        return RunCommand.Execute(firstArg, args.Length > 1 ? args[1..] : null);
+        // Extract known flags (-t, -f, -d, -c) from remaining args
+        string? copTarget = null;
+        string? copFormat = null;
+        string? copCommands = null;
+        bool copDiag = diag;
+        var programArgs = new List<string>();
+        var remaining = args.Length > 1 ? args[1..] : Array.Empty<string>();
+        for (int i = 0; i < remaining.Length; i++)
+        {
+            if (remaining[i] == "-t" && i + 1 < remaining.Length) copTarget = remaining[++i];
+            else if (remaining[i] == "-f" && i + 1 < remaining.Length) copFormat = remaining[++i];
+            else if (remaining[i] == "-c" && i + 1 < remaining.Length) copCommands = remaining[++i];
+            else if (remaining[i] == "-d") copDiag = true;
+            else programArgs.Add(remaining[i]);
+        }
+        return RunCommand.Execute(firstArg, programArgs.Count > 0 ? programArgs.ToArray() : null, copTarget, copFormat, copCommands, copDiag);
     }
 
     // 2. URL → run remotely

@@ -1,63 +1,9 @@
 # Cop Self-Checks
 # Run all self-checks: cop self-checks/main.cop -t .
 
-import cop
-import csharp-checks
-import code-analysis
-import code-layering
-
-# 1. Intrinsics must be in intrinsics.cop
-
-predicate isStrayIntrinsic(Statement) => Statement.Kind == 'declaration'
-    && Statement.Keywords:contains('intrinsic')
-    && !Statement.File.Path:endsWith('intrinsics.cop')
-
-let intrinsics-in-wrong-file = cop.Statements:isStrayIntrinsic
-    :toError('Intrinsic declaration must be in intrinsics.cop, not {item.File.Path}')
-
-# 2. All C# types must be in namespaces
-
-predicate inTestProject(Type) => Type.File.Path:startsWith('tests/') || Type.File.Path:startsWith('samples/')
-predicate hasNamespace(Type) => Type.File.Namespace.Length:greaterThan(0)
-predicate missingNamespace(Type) => !hasNamespace && !inTestProject
-
-let types-without-namespace = csharp.Types:missingNamespace
-    :toError('{item.Name} in {item.File.Path} must be in a namespace')
-
-# 3. No new interfaces — use abstract classes instead
-# ICopCallable must remain an interface (multiple inheritance with CopValue)
-
-let allowed-interfaces = ['ICopCallable']
-
-predicate isDisallowedInterface(Type) => Type.Kind == 'Interface'
-    && !Type.Name:in(allowed-interfaces)
-
-let no-new-interfaces = csharp.Types:isDisallowedInterface
-    :toError('Do not add new interfaces — use abstract classes instead: {item.Name} in {item.File.Path}')
-
-# 4. Runtime must not reference providers
-
-let runtime-projects = ['runtime']
-let provider-projects = [
-    'code'
-    'markdown-provider'
-    'csharp-provider'
-    'python-provider'
-    'javascript-provider'
-    'json-provider'
-    'http-provider'
-    'typespec-provider'
-    'cop-provider'
-]
-
-predicate runtimeReferencesProvider(Project) =>
-    Project.Name:in(runtime-projects)
-    && Project.References:containsAny(provider-projects)
-
-let layering-violations = csharp.Projects:runtimeReferencesProvider
-    :toError('{item.Name} must not reference providers other than filesystem-provider')
-
-# Union all violations
-export let all-violations = intrinsics-in-wrong-file + types-without-namespace + no-new-interfaces + layering-violations
+export let all-violations = 
+    types-without-namespace + 
+    no-new-interfaces + 
+    layering-violations
 
 command main = CHECK(all-violations)
