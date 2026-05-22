@@ -1734,7 +1734,7 @@ const packages = {
     "samples": [
       {
         "title": "Generate query",
-        "code": "# Sample: Generate a CodeQL query that finds public abstract classes\nimport codeql-export\n\nlet publicAbstract = codeql-export.qlQuery(\n  'Find public abstract classes',\n  'Finds classes that are both public and abstract',\n  codeql-export.qlFrom('c', 'Class'),\n  codeql-export.qlAnd(\n    codeql-export.qlModifier('c', 'public'),\n    codeql-export.qlModifier('c', 'abstract')\n  ),\n  'c, \"Class \" + c.getName() + \" is public and abstract\"'\n)\n\ncommand main = save('codeql/public-abstract-classes.ql', publicAbstract)"
+        "code": "# Sample: Generate a CodeQL query that finds public abstract classes\nimport codeql-export\n\nlet publicAbstract = qlQuery(\n  'Find public abstract classes',\n  'Finds classes that are both public and abstract',\n  qlFrom('c', 'Class'),\n  qlAnd(\n    qlModifier('c', 'public'),\n    qlModifier('c', 'abstract')\n  ),\n  'c, \"Class \" + c.getName() + \" is public and abstract\"'\n)\n\ncommand main = save('codeql/public-abstract-classes.ql', publicAbstract)"
       }
     ],
     "collections": [],
@@ -1828,7 +1828,7 @@ const packages = {
       {
         "name": "qlSave",
         "params": "content: string",
-        "returns": "string",
+        "returns": "Unknown",
         "desc": "Writes a query string to a .ql file.\nExample: qlSave('queries/my-query.ql', queryString)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L68"
       }
@@ -2139,9 +2139,9 @@ const packages = {
       },
       {
         "name": "print",
-        "params": "string",
-        "returns": "string",
-        "appliesTo": "string",
+        "params": "object",
+        "returns": "Unknown",
+        "appliesTo": "object",
         "desc": "Prints a message to the output.\nUsed standalone: print('hello {Name}')\nUsed in pipeline: foreach Types => print('{item.Name}')\nThe template supports {Property} interpolation and {@style} formatting.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L37"
       },
@@ -2154,9 +2154,9 @@ const packages = {
       },
       {
         "name": "debug",
-        "params": "string",
+        "params": "object",
         "returns": "Unknown",
-        "appliesTo": "string",
+        "appliesTo": "object",
         "desc": "Outputs a diagnostic message to the debug log (--diag flag).\nSame template semantics as print but only visible when diagnostics are enabled.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L46"
       },
@@ -2484,7 +2484,7 @@ const packages = {
     "samples": [
       {
         "title": "Check client conventions",
-        "code": "import csharp-library-checks\n\n# Find all client types\ncommand main = foreach Clients\n    => '{Type.Name}'\n\n# Run all client checks\nCHECK csharp-library-checks"
+        "code": "import csharp-library-checks\n\n# Find all client types\ncommand main = foreach Clients\n    => '{item.Name}'\n\n# Run all client checks\nCHECK csharp-library-checks"
       }
     ],
     "collections": [],
@@ -3086,7 +3086,7 @@ const packages = {
     "samples": [
       {
         "title": "Check client conventions",
-        "code": "import javascript-library-checks\n\ncommand main = foreach Clients\n    => '{Type.Name}'\n\nCHECK js-client-checks"
+        "code": "import javascript-library-checks\n\ncommand main = foreach Clients\n    => '{item.Name}'\n\nCHECK js-client-checks"
       }
     ],
     "collections": [],
@@ -3221,7 +3221,7 @@ const packages = {
     "samples": [
       {
         "title": "Load and query json data",
-        "code": "import json\n\ntype Config = { name: string, enabled: bool }\n\nlet configs = json.Parse('settings.json', 'Config')\n\ncommand main = foreach configs:enabled\n    => '{item.name} is active'"
+        "code": "import json\n\ntype Config = { name: string, enabled: bool }\n\nlet configs: [Config] = json.Load('settings.json')\n\ncommand main = foreach configs:enabled\n    => '{item.name} is active'"
       }
     ],
     "collections": [],
@@ -3718,7 +3718,7 @@ const packages = {
     "samples": [
       {
         "title": "List all models",
-        "code": "import typespec\n\ncommand main = foreach Models\n    => '{TspModel.Name} ({TspModel.Properties.Count} props)'"
+        "code": "import typespec\n\nlet tsp = provider('typespec', nic)\nlet Models = tsp.Models\n\ncommand main = foreach Models\n    => '{item.Name} ({item.Properties.Count} props)'"
       }
     ],
     "collections": [],
@@ -4000,7 +4000,7 @@ const packages = {
     "samples": [
       {
         "title": "Find get operations",
-        "code": "import typespec-http\n\ncommand main = foreach HttpOperations:isGet\n    => '{item.Path} — {item.OperationId}'"
+        "code": "import typespec-http\n\ncommand main = foreach Operations\n    => '{item.Path} — {item.Name}'"
       }
     ],
     "collections": [],
