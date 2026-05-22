@@ -1694,12 +1694,6 @@ const packages = {
     },
     "predicates": [
       {
-        "name": "Load",
-        "appliesTo": "string",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql/src/codeql.cop#L41"
-      },
-      {
         "name": "isError",
         "appliesTo": "Result",
         "desc": "Predicates for filtering results by severity",
@@ -1724,7 +1718,16 @@ const packages = {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql/src/codeql.cop#L47"
       }
     ],
-    "functions": [],
+    "functions": [
+      {
+        "name": "Load",
+        "params": "string",
+        "returns": "object",
+        "appliesTo": "string",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql/src/codeql.cop#L41"
+      }
+    ],
     "checks": [],
     "commands": []
   },
@@ -1739,14 +1742,7 @@ const packages = {
     ],
     "collections": [],
     "types": {},
-    "predicates": [
-      {
-        "name": "qlNot",
-        "appliesTo": "string",
-        "desc": "Negates a where condition.\nExample: qlNot('c.isPublic()') => 'not c.isPublic()'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L43"
-      }
-    ],
+    "predicates": [],
     "functions": [
       {
         "name": "qlQuery",
@@ -1789,6 +1785,14 @@ const packages = {
         "returns": "string",
         "desc": "Combines two where conditions with 'or'.\nExample: qlOr('c.isPublic()', 'c.isProtected()') => '(c.isPublic() or c.isProtected())'",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L39"
+      },
+      {
+        "name": "qlNot",
+        "params": "string",
+        "returns": "string",
+        "appliesTo": "string",
+        "desc": "Negates a where condition.\nExample: qlNot('c.isPublic()') => 'not c.isPublic()'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L43"
       },
       {
         "name": "qlNameMatches",
@@ -2026,70 +2030,10 @@ const packages = {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L102"
       },
       {
-        "name": "sum",
-        "appliesTo": "[int]",
-        "desc": "Sums all items in an integer collection.\nExample: scores:sum()",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L6"
-      },
-      {
-        "name": "sum",
-        "appliesTo": "[number]",
-        "desc": "Sums all items in a number collection.\nExample: measurements:sum()",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L11"
-      },
-      {
-        "name": "min",
-        "appliesTo": "[int]",
-        "desc": "Minimum value in an integer collection.\nExample: scores:min()",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L21"
-      },
-      {
-        "name": "min",
-        "appliesTo": "[number]",
-        "desc": "Minimum value in a number collection.\nExample: measurements:min()",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L26"
-      },
-      {
-        "name": "max",
-        "appliesTo": "[int]",
-        "desc": "Maximum value in an integer collection.\nExample: scores:max()",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L36"
-      },
-      {
-        "name": "max",
-        "appliesTo": "[number]",
-        "desc": "Maximum value in a number collection.\nExample: measurements:max()",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L41"
-      },
-      {
-        "name": "average",
-        "appliesTo": "[int]",
-        "desc": "Average value of an integer collection.\nExample: scores:average()",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L51"
-      },
-      {
-        "name": "average",
-        "appliesTo": "[number]",
-        "desc": "Average value of a number collection.\nExample: measurements:average()",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L56"
-      },
-      {
         "name": "empty",
         "appliesTo": "[object]",
         "desc": "Returns true if the collection is empty (Count == 0).\nExample: errors:empty",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L45"
-      },
-      {
-        "name": "distinct",
-        "appliesTo": "[object]",
-        "desc": "Removes duplicate items (by string representation).\nExample: names:distinct",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L86"
-      },
-      {
-        "name": "pop",
-        "appliesTo": "[object]",
-        "desc": "Returns a new collection without the last element.\nExample: let shorter = items:pop",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L114"
       },
       {
         "name": "text",
@@ -2241,11 +2185,43 @@ const packages = {
       },
       {
         "name": "sum",
+        "params": "[int]",
+        "returns": "int",
+        "appliesTo": "[int]",
+        "desc": "Sums all items in an integer collection.\nExample: scores:sum()",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L6"
+      },
+      {
+        "name": "sum",
+        "params": "[number]",
+        "returns": "number",
+        "appliesTo": "[number]",
+        "desc": "Sums all items in a number collection.\nExample: measurements:sum()",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L11"
+      },
+      {
+        "name": "sum",
         "params": "[object], project: lambda",
         "returns": "int",
         "appliesTo": "[object]",
         "desc": "Sums a projected value for each item.\nExample: files:sum((f) => f.Size)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L16"
+      },
+      {
+        "name": "min",
+        "params": "[int]",
+        "returns": "int",
+        "appliesTo": "[int]",
+        "desc": "Minimum value in an integer collection.\nExample: scores:min()",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L21"
+      },
+      {
+        "name": "min",
+        "params": "[number]",
+        "returns": "number",
+        "appliesTo": "[number]",
+        "desc": "Minimum value in a number collection.\nExample: measurements:min()",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L26"
       },
       {
         "name": "min",
@@ -2257,11 +2233,43 @@ const packages = {
       },
       {
         "name": "max",
+        "params": "[int]",
+        "returns": "int",
+        "appliesTo": "[int]",
+        "desc": "Maximum value in an integer collection.\nExample: scores:max()",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L36"
+      },
+      {
+        "name": "max",
+        "params": "[number]",
+        "returns": "number",
+        "appliesTo": "[number]",
+        "desc": "Maximum value in a number collection.\nExample: measurements:max()",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L41"
+      },
+      {
+        "name": "max",
         "params": "[object], project: lambda",
         "returns": "int",
         "appliesTo": "[object]",
         "desc": "Maximum projected value across items.\nExample: files:max((f) => f.Size)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L46"
+      },
+      {
+        "name": "average",
+        "params": "[int]",
+        "returns": "number",
+        "appliesTo": "[int]",
+        "desc": "Average value of an integer collection.\nExample: scores:average()",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L51"
+      },
+      {
+        "name": "average",
+        "params": "[number]",
+        "returns": "number",
+        "appliesTo": "[number]",
+        "desc": "Average value of a number collection.\nExample: measurements:average()",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L56"
       },
       {
         "name": "average",
@@ -2368,6 +2376,14 @@ const packages = {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L78"
       },
       {
+        "name": "distinct",
+        "params": "[object]",
+        "returns": "[object]",
+        "appliesTo": "[object]",
+        "desc": "Removes duplicate items (by string representation).\nExample: names:distinct",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L86"
+      },
+      {
         "name": "groupBy",
         "params": "[object], keySelector: lambda",
         "returns": "[object]",
@@ -2390,6 +2406,14 @@ const packages = {
         "appliesTo": "[object]",
         "desc": "Returns a new collection with the item added at the front (queue semantics).\nExample: let updated = items:enqueue(newItem)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L109"
+      },
+      {
+        "name": "pop",
+        "params": "[object]",
+        "returns": "[object]",
+        "appliesTo": "[object]",
+        "desc": "Returns a new collection without the last element.\nExample: let shorter = items:pop",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L114"
       },
       {
         "name": "contains",
@@ -2417,15 +2441,17 @@ const packages = {
     "samples": [],
     "collections": [],
     "types": {},
-    "predicates": [
+    "predicates": [],
+    "functions": [
       {
         "name": "Load",
+        "params": "string",
+        "returns": "object",
         "appliesTo": "string",
         "desc": "Loads a .NET assembly and returns its code model.\nThe path is relative to the project root.\nThe returned Codebase has Types, Api, Members, Lines, etc.\nExample: csharp.Load('lib/MyLib.dll')",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L18"
       }
     ],
-    "functions": [],
     "checks": [],
     "commands": []
   },
@@ -3228,15 +3254,17 @@ const packages = {
     ],
     "collections": [],
     "types": {},
-    "predicates": [
+    "predicates": [],
+    "functions": [
       {
         "name": "Load",
+        "params": "string",
+        "returns": "object",
         "appliesTo": "string",
         "desc": "Loads a JSON file into a dynamic collection or object.\nThe path is relative to the project root.\nIf the JSON root is an array, returns a collection. If it is an object, returns a single instance.\nProperties are resolved dynamically from JSON keys.\nExample: json.Load('people.json') returns a collection of objects with name, age, etc.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/json/src/json.cop#L10"
       }
     ],
-    "functions": [],
     "checks": [],
     "commands": []
   },

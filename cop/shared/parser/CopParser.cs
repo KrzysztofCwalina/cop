@@ -486,7 +486,7 @@ public class CopParser
             body = new ExpressionBody(expr);
         }
 
-        return new FunctionDecl(name, parameters, returnType, body, isExported, guard, docComment, line);
+        return new FunctionDecl(name, parameters, returnType, body, isExported, guard, docComment, line, IsPredicate: true);
     }
 
     private Declaration ParseLetDecl(bool isExported, string? docComment, int line)
@@ -1461,9 +1461,11 @@ public class CopParser
         => IsCommandName(functionDecl.Name);
 
     private static bool IsPredicateLike(FunctionDecl functionDecl)
-        => !IsCommandLike(functionDecl)
-            && functionDecl.Params.Count == 1
-            && functionDecl.Body is ExpressionBody { Expr: not ObjectExpr };
+        => functionDecl.IsPredicate
+            || (!IsCommandLike(functionDecl)
+                && functionDecl.Params.Count == 1
+                && functionDecl.Body is ExpressionBody { Expr: not ObjectExpr }
+                && (functionDecl.ReturnType is null || FormatTypeRef(functionDecl.ReturnType) == "bool"));
 
     private static Cop.Lang.TypeDefinition ConvertTypeDefinition(TypeDecl typeDecl)
         => new(

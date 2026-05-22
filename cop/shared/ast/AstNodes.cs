@@ -82,7 +82,8 @@ public record FunctionDecl(
     bool IsExported = false,
     Expression? Guard = null,
     string? DocComment = null,
-    int Line = 0) : Declaration(Line);
+    int Line = 0,
+    bool IsPredicate = false) : Declaration(Line);
 
 /// <summary>
 /// Let binding: let Name : Type = Expression
