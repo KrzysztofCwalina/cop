@@ -88,11 +88,11 @@ export function distinct(items: [object]) : [object]
 
 ## Groups items by a key expression. Returns collection of groups.
 ## Each group has a Key property and an Items collection.
-## Example: Types:groupBy((item) => item.Namespace)
-export function groupBy(items: [object], keySelector: (object) => object) : [Group] 
+## Example: Types:groupBy((item) => item.Namespace, (a, b) => a == b)
+export function groupBy(items: [object], keySelector: (object) => object, compare: (object, object) => bool) : [Group] 
   => reduce(items, (groups, item) =>
-    groups:any((g) => g.Key == keySelector(item))
-      ? groups.select((g) => g.Key == keySelector(item) ? Group { Key = g.Key, Items = g.Items.concat([item]) } : g)
+    groups:any((g) => compare(g.Key, keySelector(item)))
+      ? groups.select((g) => compare(g.Key, keySelector(item)) ? Group { Key = g.Key, Items = g.Items.concat([item]) } : g)
       : groups.concat([Group { Key = keySelector(item), Items = [item] }])
   , [])
 

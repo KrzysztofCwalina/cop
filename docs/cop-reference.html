@@ -2382,10 +2382,10 @@ const packages = {
       },
       {
         "name": "groupBy",
-        "params": "items: [object], keySelector: (object) => object",
+        "params": "items: [object], keySelector: (object) => object, compare: (object, object) => bool",
         "returns": "[Group]",
         "appliesTo": "[object]",
-        "desc": "Groups items by a key expression. Returns collection of groups.\nEach group has a Key property and an Items collection.\nExample: Types:groupBy((item) => item.Namespace)",
+        "desc": "Groups items by a key expression. Returns collection of groups.\nEach group has a Key property and an Items collection.\nExample: Types:groupBy((item) => item.Namespace, (a, b) => a == b)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L92"
       },
       {
