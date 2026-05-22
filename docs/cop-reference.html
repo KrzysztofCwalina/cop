@@ -1322,7 +1322,7 @@ const packages = {
     "functions": [
       {
         "name": "toError",
-        "params": "Statement, message: string",
+        "params": "Statement: Statement, message: string",
         "returns": "Unknown",
         "appliesTo": "Statement",
         "desc": "",
@@ -1330,7 +1330,7 @@ const packages = {
       },
       {
         "name": "toWarning",
-        "params": "Statement, message: string",
+        "params": "Statement: Statement, message: string",
         "returns": "Unknown",
         "appliesTo": "Statement",
         "desc": "",
@@ -1338,7 +1338,7 @@ const packages = {
       },
       {
         "name": "toInfo",
-        "params": "Statement, message: string",
+        "params": "Statement: Statement, message: string",
         "returns": "Unknown",
         "appliesTo": "Statement",
         "desc": "",
@@ -1346,7 +1346,7 @@ const packages = {
       },
       {
         "name": "toError",
-        "params": "Type, message: string",
+        "params": "Type: Type, message: string",
         "returns": "Unknown",
         "appliesTo": "Type",
         "desc": "",
@@ -1354,7 +1354,7 @@ const packages = {
       },
       {
         "name": "toWarning",
-        "params": "Type, message: string",
+        "params": "Type: Type, message: string",
         "returns": "Unknown",
         "appliesTo": "Type",
         "desc": "",
@@ -1362,7 +1362,7 @@ const packages = {
       },
       {
         "name": "toInfo",
-        "params": "Type, message: string",
+        "params": "Type: Type, message: string",
         "returns": "Unknown",
         "appliesTo": "Type",
         "desc": "",
@@ -1370,7 +1370,7 @@ const packages = {
       },
       {
         "name": "toError",
-        "params": "Line, message: string",
+        "params": "Line: Line, message: string",
         "returns": "Unknown",
         "appliesTo": "Line",
         "desc": "",
@@ -1378,7 +1378,7 @@ const packages = {
       },
       {
         "name": "toWarning",
-        "params": "Line, message: string",
+        "params": "Line: Line, message: string",
         "returns": "Unknown",
         "appliesTo": "Line",
         "desc": "",
@@ -1386,7 +1386,7 @@ const packages = {
       },
       {
         "name": "toInfo",
-        "params": "Line, message: string",
+        "params": "Line: Line, message: string",
         "returns": "Unknown",
         "appliesTo": "Line",
         "desc": "",
@@ -1394,7 +1394,7 @@ const packages = {
       },
       {
         "name": "toError",
-        "params": "Folder, message: string",
+        "params": "Folder: Folder, message: string",
         "returns": "Unknown",
         "appliesTo": "Folder",
         "desc": "",
@@ -1402,7 +1402,7 @@ const packages = {
       },
       {
         "name": "toWarning",
-        "params": "Folder, message: string",
+        "params": "Folder: Folder, message: string",
         "returns": "Unknown",
         "appliesTo": "Folder",
         "desc": "",
@@ -1410,7 +1410,7 @@ const packages = {
       },
       {
         "name": "toInfo",
-        "params": "Folder, message: string",
+        "params": "Folder: Folder, message: string",
         "returns": "Unknown",
         "appliesTo": "Folder",
         "desc": "",
@@ -1418,7 +1418,7 @@ const packages = {
       },
       {
         "name": "toError",
-        "params": "Api, message: string",
+        "params": "Api: Api, message: string",
         "returns": "Unknown",
         "appliesTo": "Api",
         "desc": "",
@@ -1426,7 +1426,7 @@ const packages = {
       },
       {
         "name": "toWarning",
-        "params": "Api, message: string",
+        "params": "Api: Api, message: string",
         "returns": "Unknown",
         "appliesTo": "Api",
         "desc": "",
@@ -1434,7 +1434,7 @@ const packages = {
       },
       {
         "name": "toInfo",
-        "params": "Api, message: string",
+        "params": "Api: Api, message: string",
         "returns": "Unknown",
         "appliesTo": "Api",
         "desc": "",
@@ -1442,7 +1442,7 @@ const packages = {
       },
       {
         "name": "toError",
-        "params": "Region, message: string",
+        "params": "Region: Region, message: string",
         "returns": "Unknown",
         "appliesTo": "Region",
         "desc": "",
@@ -1450,7 +1450,7 @@ const packages = {
       },
       {
         "name": "toWarning",
-        "params": "Region, message: string",
+        "params": "Region: Region, message: string",
         "returns": "Unknown",
         "appliesTo": "Region",
         "desc": "",
@@ -1458,7 +1458,7 @@ const packages = {
       },
       {
         "name": "toInfo",
-        "params": "Region, message: string",
+        "params": "Region: Region, message: string",
         "returns": "Unknown",
         "appliesTo": "Region",
         "desc": "",
@@ -1553,7 +1553,7 @@ const packages = {
     "functions": [
       {
         "name": "toError",
-        "params": "Project, message: string",
+        "params": "Project: Project, message: string",
         "returns": "Unknown",
         "appliesTo": "Project",
         "desc": "",
@@ -1561,7 +1561,7 @@ const packages = {
       },
       {
         "name": "toWarning",
-        "params": "Project, message: string",
+        "params": "Project: Project, message: string",
         "returns": "Unknown",
         "appliesTo": "Project",
         "desc": "",
@@ -1569,7 +1569,7 @@ const packages = {
       },
       {
         "name": "toInfo",
-        "params": "Project, message: string",
+        "params": "Project: Project, message: string",
         "returns": "Unknown",
         "appliesTo": "Project",
         "desc": "",
@@ -1721,7 +1721,7 @@ const packages = {
     "functions": [
       {
         "name": "Load",
-        "params": "string",
+        "params": "path: string",
         "returns": "object",
         "appliesTo": "string",
         "desc": "",
@@ -1788,7 +1788,7 @@ const packages = {
       },
       {
         "name": "qlNot",
-        "params": "string",
+        "params": "condition: string",
         "returns": "string",
         "appliesTo": "string",
         "desc": "Negates a where condition.\nExample: qlNot('c.isPublic()') => 'not c.isPublic()'",
@@ -2051,7 +2051,7 @@ const packages = {
     "functions": [
       {
         "name": "provider",
-        "params": "string, options: object",
+        "params": "name: string, options: object",
         "returns": "object",
         "appliesTo": "string",
         "desc": "Returns a dynamic object accessor for the named provider.\nProperties on the returned object query the provider's collections.\nThe options argument is JSON-serialized and passed to the provider.\nPass nic for default, or a string/object with provider-specific configuration.\nExample: provider('csharp', nic) or provider('csharp', 'lib/MyLib.dll')",
@@ -2059,7 +2059,7 @@ const packages = {
       },
       {
         "name": "source",
-        "params": "string, options: object",
+        "params": "name: string, options: object",
         "returns": "[object]",
         "appliesTo": "string",
         "desc": "Returns an async streaming collection from the named provider.\nThe options argument is JSON-serialized and passed to the provider.\nPass nic for default, or a string/object with provider-specific configuration.\nUse a typed annotation to declare the item type produced by the stream:\n  export let Requests : [Request] = source('http', nic)",
@@ -2067,7 +2067,7 @@ const packages = {
       },
       {
         "name": "sink",
-        "params": "string, options: object",
+        "params": "name: string, options: object",
         "returns": "[object]",
         "appliesTo": "string",
         "desc": "Returns an async output collection for the named streaming provider.\nItems pushed into the sink are delivered to the provider's output channel.\nThe options argument is JSON-serialized and passed to the provider.\nPass nic for default, or a string/object with provider-specific configuration.\n  export let RESPONSES : [Response] = sink('http', nic)",
@@ -2075,7 +2075,7 @@ const packages = {
       },
       {
         "name": "read",
-        "params": "string",
+        "params": "path: string",
         "returns": "string",
         "appliesTo": "string",
         "desc": "Reads the content of a file at the given path (sandboxed to project root).\nReturns the file content as a string.",
@@ -2083,7 +2083,7 @@ const packages = {
       },
       {
         "name": "print",
-        "params": "object",
+        "params": "message: object",
         "returns": "Unknown",
         "appliesTo": "object",
         "desc": "Prints a message to the output.\nUsed standalone: print('hello {Name}')\nUsed in pipeline: foreach Types => print('{item.Name}')\nThe template supports {Property} interpolation and {@style} formatting.",
@@ -2098,7 +2098,7 @@ const packages = {
       },
       {
         "name": "debug",
-        "params": "object",
+        "params": "message: object",
         "returns": "Unknown",
         "appliesTo": "object",
         "desc": "Outputs a diagnostic message to the debug log (--diag flag).\nSame template semantics as print but only visible when diagnostics are enabled.",
@@ -2106,7 +2106,7 @@ const packages = {
       },
       {
         "name": "assert",
-        "params": "bool, description: string",
+        "params": "condition: bool, description: string",
         "returns": "Unknown",
         "appliesTo": "bool",
         "desc": "Asserts that a condition is true. Fails the test run if false.\nUsed in tests: assert(Types:isPublic.Count > 0, 'should have public types')",
@@ -2114,7 +2114,7 @@ const packages = {
       },
       {
         "name": "reduce",
-        "params": "[object], accumulator: lambda, initial: object",
+        "params": "items: [object], accumulator: lambda, initial: object",
         "returns": "object",
         "appliesTo": "[object]",
         "desc": "Reduces a collection to a single value using an accumulator function.\nThe accumulator takes (acc, item) and returns the new accumulator value.\nExample: [1,2,3]:reduce((acc, item) => acc + item, 0)",
@@ -2122,7 +2122,7 @@ const packages = {
       },
       {
         "name": "concat",
-        "params": "[object], other: [object]",
+        "params": "items: [object], other: [object]",
         "returns": "[object]",
         "appliesTo": "[object]",
         "desc": "Returns a new collection combining both collections.\nExample: let merged = listA:concat(listB)",
@@ -2130,7 +2130,7 @@ const packages = {
       },
       {
         "name": "text",
-        "params": "Unknown",
+        "params": "int: Unknown",
         "returns": "string",
         "appliesTo": "Unknown",
         "desc": "Converts an integer to its decimal text representation.",
@@ -2138,7 +2138,7 @@ const packages = {
       },
       {
         "name": "text",
-        "params": "Unknown",
+        "params": "bytes: Unknown",
         "returns": "string",
         "appliesTo": "Unknown",
         "desc": "Decodes a byte array as UTF-8 text.",
@@ -2146,7 +2146,7 @@ const packages = {
       },
       {
         "name": "text",
-        "params": "Formattable",
+        "params": "Formattable: Formattable",
         "returns": "string",
         "appliesTo": "Formattable",
         "desc": "Converts a Formattable to text by resolving the Template against each item\nin Items using {Property} interpolation, then joining results with Separator.",
@@ -2154,7 +2154,7 @@ const packages = {
       },
       {
         "name": "error",
-        "params": "string",
+        "params": "message: string",
         "returns": "Error",
         "appliesTo": "string",
         "desc": "Creates an Error value with the given message string.\nExample: error('connection timeout')",
@@ -2162,7 +2162,7 @@ const packages = {
       },
       {
         "name": "fail",
-        "params": "string",
+        "params": "message: string",
         "returns": "Unknown",
         "appliesTo": "string",
         "desc": "Terminates execution immediately with a fatal diagnostic.\nUse for programmer assertions — situations that should never occur.\nCan be used standalone: fail('invariant violated')\nOr in pipeline: foreach Items:badCondition => fail('{item.Name} is invalid')",
@@ -2185,7 +2185,7 @@ const packages = {
       },
       {
         "name": "sum",
-        "params": "[int]",
+        "params": "items: [int]",
         "returns": "int",
         "appliesTo": "[int]",
         "desc": "Sums all items in an integer collection.\nExample: scores:sum()",
@@ -2193,7 +2193,7 @@ const packages = {
       },
       {
         "name": "sum",
-        "params": "[number]",
+        "params": "items: [number]",
         "returns": "number",
         "appliesTo": "[number]",
         "desc": "Sums all items in a number collection.\nExample: measurements:sum()",
@@ -2201,7 +2201,7 @@ const packages = {
       },
       {
         "name": "sum",
-        "params": "[object], project: lambda",
+        "params": "items: [object], project: lambda",
         "returns": "int",
         "appliesTo": "[object]",
         "desc": "Sums a projected value for each item.\nExample: files:sum((f) => f.Size)",
@@ -2209,7 +2209,7 @@ const packages = {
       },
       {
         "name": "min",
-        "params": "[int]",
+        "params": "items: [int]",
         "returns": "int",
         "appliesTo": "[int]",
         "desc": "Minimum value in an integer collection.\nExample: scores:min()",
@@ -2217,7 +2217,7 @@ const packages = {
       },
       {
         "name": "min",
-        "params": "[number]",
+        "params": "items: [number]",
         "returns": "number",
         "appliesTo": "[number]",
         "desc": "Minimum value in a number collection.\nExample: measurements:min()",
@@ -2225,7 +2225,7 @@ const packages = {
       },
       {
         "name": "min",
-        "params": "[object], project: lambda",
+        "params": "items: [object], project: lambda",
         "returns": "int",
         "appliesTo": "[object]",
         "desc": "Minimum projected value across items.\nExample: files:min((f) => f.Size)",
@@ -2233,7 +2233,7 @@ const packages = {
       },
       {
         "name": "max",
-        "params": "[int]",
+        "params": "items: [int]",
         "returns": "int",
         "appliesTo": "[int]",
         "desc": "Maximum value in an integer collection.\nExample: scores:max()",
@@ -2241,7 +2241,7 @@ const packages = {
       },
       {
         "name": "max",
-        "params": "[number]",
+        "params": "items: [number]",
         "returns": "number",
         "appliesTo": "[number]",
         "desc": "Maximum value in a number collection.\nExample: measurements:max()",
@@ -2249,7 +2249,7 @@ const packages = {
       },
       {
         "name": "max",
-        "params": "[object], project: lambda",
+        "params": "items: [object], project: lambda",
         "returns": "int",
         "appliesTo": "[object]",
         "desc": "Maximum projected value across items.\nExample: files:max((f) => f.Size)",
@@ -2257,7 +2257,7 @@ const packages = {
       },
       {
         "name": "average",
-        "params": "[int]",
+        "params": "items: [int]",
         "returns": "number",
         "appliesTo": "[int]",
         "desc": "Average value of an integer collection.\nExample: scores:average()",
@@ -2265,7 +2265,7 @@ const packages = {
       },
       {
         "name": "average",
-        "params": "[number]",
+        "params": "items: [number]",
         "returns": "number",
         "appliesTo": "[number]",
         "desc": "Average value of a number collection.\nExample: measurements:average()",
@@ -2273,7 +2273,7 @@ const packages = {
       },
       {
         "name": "average",
-        "params": "[object], project: lambda",
+        "params": "items: [object], project: lambda",
         "returns": "number",
         "appliesTo": "[object]",
         "desc": "Average projected value across items.\nExample: files:average((f) => f.Size)",
@@ -2281,7 +2281,7 @@ const packages = {
       },
       {
         "name": "where",
-        "params": "[object], condition: lambda",
+        "params": "items: [object], condition: lambda",
         "returns": "[object]",
         "appliesTo": "[object]",
         "desc": "Filters items matching a condition. Returns a new collection.\nExample: Types:where((item) => item:isPublic)",
@@ -2289,7 +2289,7 @@ const packages = {
       },
       {
         "name": "select",
-        "params": "[object], transform: lambda",
+        "params": "items: [object], transform: lambda",
         "returns": "[object]",
         "appliesTo": "[object]",
         "desc": "Projects each item through a transformation. Returns a new collection.\nExample: Types:select((item) => item.Name)",
@@ -2297,7 +2297,7 @@ const packages = {
       },
       {
         "name": "any",
-        "params": "[object], condition: lambda",
+        "params": "items: [object], condition: lambda",
         "returns": "bool",
         "appliesTo": "[object]",
         "desc": "Returns true if any item matches a condition.\nExample: Types:any((item) => item:isAbstract)",
@@ -2305,7 +2305,7 @@ const packages = {
       },
       {
         "name": "all",
-        "params": "[object], condition: lambda",
+        "params": "items: [object], condition: lambda",
         "returns": "bool",
         "appliesTo": "[object]",
         "desc": "Returns true if all items match a condition.\nExample: Types:all((item) => item:isPublic)",
@@ -2313,7 +2313,7 @@ const packages = {
       },
       {
         "name": "none",
-        "params": "[object], condition: lambda",
+        "params": "items: [object], condition: lambda",
         "returns": "bool",
         "appliesTo": "[object]",
         "desc": "Returns true if no item matches a condition.\nExample: Types:none((item) => item:isObsolete)",
@@ -2321,7 +2321,7 @@ const packages = {
       },
       {
         "name": "count",
-        "params": "[object], condition: lambda",
+        "params": "items: [object], condition: lambda",
         "returns": "int",
         "appliesTo": "[object]",
         "desc": "Counts items matching a condition.\nExample: Types:count((item) => item:isPublic)",
@@ -2329,7 +2329,7 @@ const packages = {
       },
       {
         "name": "first",
-        "params": "[object], condition: lambda",
+        "params": "items: [object], condition: lambda",
         "returns": "object",
         "appliesTo": "[object]",
         "desc": "First item matching a condition, or nil.\nExample: Types:first((item) => item:isPublic)",
@@ -2337,7 +2337,7 @@ const packages = {
       },
       {
         "name": "last",
-        "params": "[object], condition: lambda",
+        "params": "items: [object], condition: lambda",
         "returns": "object",
         "appliesTo": "[object]",
         "desc": "Last item matching a condition, or nil.\nExample: Types:last((item) => item:isPublic)",
@@ -2345,7 +2345,7 @@ const packages = {
       },
       {
         "name": "single",
-        "params": "[object], condition: lambda",
+        "params": "items: [object], condition: lambda",
         "returns": "object",
         "appliesTo": "[object]",
         "desc": "The single item matching a condition, or nil if zero or multiple match.\nExample: Types:single((item) => item:isEntryPoint)",
@@ -2353,7 +2353,7 @@ const packages = {
       },
       {
         "name": "elementAt",
-        "params": "[object], index: int",
+        "params": "items: [object], index: int",
         "returns": "object",
         "appliesTo": "[object]",
         "desc": "Item at a specific zero-based index.\nExample: items:elementAt(3)",
@@ -2361,7 +2361,7 @@ const packages = {
       },
       {
         "name": "orderBy",
-        "params": "[object], keySelector: lambda",
+        "params": "items: [object], keySelector: lambda",
         "returns": "[object]",
         "appliesTo": "[object]",
         "desc": "Sorts ascending by a key expression (quicksort).\nExample: Types:orderBy((item) => item.Name)",
@@ -2369,7 +2369,7 @@ const packages = {
       },
       {
         "name": "orderByDescending",
-        "params": "[object], keySelector: lambda",
+        "params": "items: [object], keySelector: lambda",
         "returns": "[object]",
         "appliesTo": "[object]",
         "desc": "Sorts descending by a key expression (quicksort).\nExample: Types:orderByDescending((item) => item.Count)",
@@ -2377,7 +2377,7 @@ const packages = {
       },
       {
         "name": "distinct",
-        "params": "[object]",
+        "params": "items: [object]",
         "returns": "[object]",
         "appliesTo": "[object]",
         "desc": "Removes duplicate items (by string representation).\nExample: names:distinct",
@@ -2385,7 +2385,7 @@ const packages = {
       },
       {
         "name": "groupBy",
-        "params": "[object], keySelector: lambda",
+        "params": "items: [object], keySelector: lambda",
         "returns": "[object]",
         "appliesTo": "[object]",
         "desc": "Groups items by a key expression. Returns collection of groups.\nEach group has a Key property and an Items collection.\nExample: Types:groupBy((item) => item.Namespace)",
@@ -2393,7 +2393,7 @@ const packages = {
       },
       {
         "name": "push",
-        "params": "[object], value: object",
+        "params": "items: [object], value: object",
         "returns": "[object]",
         "appliesTo": "[object]",
         "desc": "Returns a new collection with the item appended at the end.\nExample: let updated = items:push(newItem)",
@@ -2401,7 +2401,7 @@ const packages = {
       },
       {
         "name": "enqueue",
-        "params": "[object], value: object",
+        "params": "items: [object], value: object",
         "returns": "[object]",
         "appliesTo": "[object]",
         "desc": "Returns a new collection with the item added at the front (queue semantics).\nExample: let updated = items:enqueue(newItem)",
@@ -2409,7 +2409,7 @@ const packages = {
       },
       {
         "name": "pop",
-        "params": "[object]",
+        "params": "items: [object]",
         "returns": "[object]",
         "appliesTo": "[object]",
         "desc": "Returns a new collection without the last element.\nExample: let shorter = items:pop",
@@ -2417,7 +2417,7 @@ const packages = {
       },
       {
         "name": "contains",
-        "params": "[string], value: string",
+        "params": "items: [string], value: string",
         "returns": "bool",
         "appliesTo": "[string]",
         "desc": "Returns true if collection contains a value (case-insensitive string match).\nExample: names:contains('Foo')",
@@ -2425,7 +2425,7 @@ const packages = {
       },
       {
         "name": "containsAny",
-        "params": "[string], values: [string]",
+        "params": "items: [string], values: [string]",
         "returns": "bool",
         "appliesTo": "[string]",
         "desc": "Returns true if collection contains any of the values in the second collection.\nExample: tags:containsAny(['api', 'public'])",
@@ -2445,7 +2445,7 @@ const packages = {
     "functions": [
       {
         "name": "Load",
-        "params": "string",
+        "params": "path: string",
         "returns": "object",
         "appliesTo": "string",
         "desc": "Loads a .NET assembly and returns its code model.\nThe path is relative to the project root.\nThe returned Codebase has Types, Api, Members, Lines, etc.\nExample: csharp.Load('lib/MyLib.dll')",
@@ -2726,7 +2726,7 @@ const packages = {
     "functions": [
       {
         "name": "toApiLine",
-        "params": "Api",
+        "params": "Api: Api",
         "returns": "Unknown",
         "appliesTo": "Api",
         "desc": "",
@@ -3010,7 +3010,7 @@ const packages = {
     "functions": [
       {
         "name": "ok",
-        "params": "Unknown",
+        "params": "string: Unknown",
         "returns": "Unknown",
         "appliesTo": "Unknown",
         "desc": "",
@@ -3018,7 +3018,7 @@ const packages = {
       },
       {
         "name": "ok",
-        "params": "Request, body: string",
+        "params": "Request: Request, body: string",
         "returns": "Unknown",
         "appliesTo": "Request",
         "desc": "",
@@ -3026,7 +3026,7 @@ const packages = {
       },
       {
         "name": "ok",
-        "params": "Request",
+        "params": "Request: Request",
         "returns": "Unknown",
         "appliesTo": "Request",
         "desc": "",
@@ -3034,7 +3034,7 @@ const packages = {
       },
       {
         "name": "notFound",
-        "params": "Request",
+        "params": "Request: Request",
         "returns": "Unknown",
         "appliesTo": "Request",
         "desc": "",
@@ -3042,7 +3042,7 @@ const packages = {
       },
       {
         "name": "created",
-        "params": "Request",
+        "params": "Request: Request",
         "returns": "Unknown",
         "appliesTo": "Request",
         "desc": "",
@@ -3050,7 +3050,7 @@ const packages = {
       },
       {
         "name": "badRequest",
-        "params": "Request",
+        "params": "Request: Request",
         "returns": "Unknown",
         "appliesTo": "Request",
         "desc": "",
@@ -3058,7 +3058,7 @@ const packages = {
       },
       {
         "name": "serverError",
-        "params": "Request",
+        "params": "Request: Request",
         "returns": "Unknown",
         "appliesTo": "Request",
         "desc": "",
@@ -3066,7 +3066,7 @@ const packages = {
       },
       {
         "name": "serverError",
-        "params": "Error",
+        "params": "Error: Error",
         "returns": "Unknown",
         "appliesTo": "Error",
         "desc": "",
@@ -3202,7 +3202,7 @@ const packages = {
     "functions": [
       {
         "name": "toApiLine",
-        "params": "Api",
+        "params": "Api: Api",
         "returns": "Unknown",
         "appliesTo": "Api",
         "desc": "",
@@ -3258,7 +3258,7 @@ const packages = {
     "functions": [
       {
         "name": "Load",
-        "params": "string",
+        "params": "path: string",
         "returns": "object",
         "appliesTo": "string",
         "desc": "Loads a JSON file into a dynamic collection or object.\nThe path is relative to the project root.\nIf the JSON root is an array, returns a collection. If it is an object, returns a single instance.\nProperties are resolved dynamically from JSON keys.\nExample: json.Load('people.json') returns a collection of objects with name, age, etc.",
@@ -3454,7 +3454,7 @@ const packages = {
     "functions": [
       {
         "name": "toError",
-        "params": "FenceBlock, message: string",
+        "params": "FenceBlock: FenceBlock, message: string",
         "returns": "Unknown",
         "appliesTo": "FenceBlock",
         "desc": "",
@@ -3462,7 +3462,7 @@ const packages = {
       },
       {
         "name": "toWarning",
-        "params": "FenceBlock, message: string",
+        "params": "FenceBlock: FenceBlock, message: string",
         "returns": "Unknown",
         "appliesTo": "FenceBlock",
         "desc": "",
@@ -3470,7 +3470,7 @@ const packages = {
       },
       {
         "name": "toInfo",
-        "params": "FenceBlock, message: string",
+        "params": "FenceBlock: FenceBlock, message: string",
         "returns": "Unknown",
         "appliesTo": "FenceBlock",
         "desc": "",
@@ -3478,7 +3478,7 @@ const packages = {
       },
       {
         "name": "toError",
-        "params": "Heading, message: string",
+        "params": "Heading: Heading, message: string",
         "returns": "Unknown",
         "appliesTo": "Heading",
         "desc": "",
@@ -3486,7 +3486,7 @@ const packages = {
       },
       {
         "name": "toWarning",
-        "params": "Heading, message: string",
+        "params": "Heading: Heading, message: string",
         "returns": "Unknown",
         "appliesTo": "Heading",
         "desc": "",
@@ -3494,7 +3494,7 @@ const packages = {
       },
       {
         "name": "toInfo",
-        "params": "Heading, message: string",
+        "params": "Heading: Heading, message: string",
         "returns": "Unknown",
         "appliesTo": "Heading",
         "desc": "",
@@ -3502,7 +3502,7 @@ const packages = {
       },
       {
         "name": "toError",
-        "params": "Link, message: string",
+        "params": "Link: Link, message: string",
         "returns": "Unknown",
         "appliesTo": "Link",
         "desc": "",
@@ -3510,7 +3510,7 @@ const packages = {
       },
       {
         "name": "toWarning",
-        "params": "Link, message: string",
+        "params": "Link: Link, message: string",
         "returns": "Unknown",
         "appliesTo": "Link",
         "desc": "",
@@ -3518,7 +3518,7 @@ const packages = {
       },
       {
         "name": "toInfo",
-        "params": "Link, message: string",
+        "params": "Link: Link, message: string",
         "returns": "Unknown",
         "appliesTo": "Link",
         "desc": "",
@@ -3526,7 +3526,7 @@ const packages = {
       },
       {
         "name": "toError",
-        "params": "Section, message: string",
+        "params": "Section: Section, message: string",
         "returns": "Unknown",
         "appliesTo": "Section",
         "desc": "",
@@ -3534,7 +3534,7 @@ const packages = {
       },
       {
         "name": "toWarning",
-        "params": "Section, message: string",
+        "params": "Section: Section, message: string",
         "returns": "Unknown",
         "appliesTo": "Section",
         "desc": "",
@@ -3542,7 +3542,7 @@ const packages = {
       },
       {
         "name": "toInfo",
-        "params": "Section, message: string",
+        "params": "Section: Section, message: string",
         "returns": "Unknown",
         "appliesTo": "Section",
         "desc": "",
@@ -3690,7 +3690,7 @@ const packages = {
     "functions": [
       {
         "name": "toApiLine",
-        "params": "Api",
+        "params": "Api: Api",
         "returns": "Unknown",
         "appliesTo": "Api",
         "desc": "",

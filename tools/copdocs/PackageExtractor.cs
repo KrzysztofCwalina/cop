@@ -126,7 +126,11 @@ public class PackageExtractor
             if (!string.IsNullOrEmpty(fd.InputType)
                 && (fd.InputType.StartsWith('[') || !(fd.Parameters.Count > 0 && fd.Parameters[0].TypeName == fd.InputType)))
             {
-                parts.Add(fd.InputType);
+                // Include the first parameter's name if available
+                var inputLabel = !string.IsNullOrEmpty(fd.InputName)
+                    ? $"{fd.InputName}: {fd.InputType}"
+                    : fd.InputType;
+                parts.Add(inputLabel);
                 appliesTo = fd.InputType;
             }
             parts.AddRange(fd.Parameters.Select(p => $"{p.Name}: {p.TypeName}"));

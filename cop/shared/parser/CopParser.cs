@@ -1543,6 +1543,8 @@ public class CopParser
             ? FormatTypeRef(functionDecl.Params[0].Type!)
             : "Unknown";
 
+        var inputName = functionDecl.Params.Count > 0 ? functionDecl.Params[0].Name : null;
+
         var parameters = functionDecl.Params
             .Skip(1)
             .Select(p => new Cop.Lang.FunctionParameter(p.Name, p.Type is not null ? FormatTypeRef(p.Type) : "Unknown"))
@@ -1574,7 +1576,8 @@ public class CopParser
             functionDecl.Guard is not null ? WrapExpression(functionDecl.Guard) : null,
             functionDecl.DocComment,
             null,
-            functionDecl.Body is IntrinsicBody);
+            functionDecl.Body is IntrinsicBody,
+            inputName);
     }
 
     private static Cop.Lang.CommandBlock ConvertCommandBlock(FunctionDecl functionDecl)
