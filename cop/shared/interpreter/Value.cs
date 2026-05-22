@@ -513,5 +513,3 @@ public sealed class CopProviderProxy : CopValue
     public override string Display() => $"<provider {ProviderName}>";
     public override string ToString() => Display();
 }
-
-public interface ITestShouldFail { }

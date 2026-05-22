@@ -2,6 +2,7 @@
 # Run all self-checks: cop self-checks/main.cop -t .
 
 export let all-violations = 
+    intrinsics-in-wrong-file +
     types-without-namespace + 
     no-new-interfaces + 
     layering-violations

@@ -1,5 +1,0 @@
-import csharp
-
-predicate isICopCallable(Type) => Type.Name == 'ICopCallable'
-let found = csharp.Types:isICopCallable
-command main = foreach found => 'Found: {item.Name}'
