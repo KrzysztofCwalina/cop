@@ -1,44 +1,116 @@
+using System.Text;
+using System.Text.Json;
 using Cop.Core;
 using Cop.Lang;
 
 namespace Cop.Providers;
 
 /// <summary>
-/// Provider for JSON file parsing. Exposes json.Parse(path, typeName) function
-/// that parses JSON files into typed objects or collections.
-/// Must be imported with: import json
+/// JSON file provider. Loads a JSON file and returns its contents as a collection.
+/// If the root is an array, returns a single "Items" collection.
+/// If the root is an object, returns it as a single-item "Items" collection.
+/// Properties are resolved dynamically from JSON keys.
 /// </summary>
-public class JsonProvider : ObjectProvider, ICapabilityProvider
+public sealed class JsonProvider : DataProvider
 {
-    public override ObjectFormat SupportedFormats => ObjectFormat.ObjectCollections;
-
-    public override ReadOnlyMemory<byte> GetSchema() => new ProviderSchema().ToJson();
-
-    public override Dictionary<string, List<object>>? QueryCollections(ProviderQuery query) => new();
-
-    public void RegisterCapabilities(TypeRegistry registry, string rootPath)
+    public override ReadOnlyMemory<byte> GetSchema()
     {
-        registry.RegisterProviderFunction("json", "Parse", args =>
-        {
-            if (args.Count < 2)
-                throw new InvalidOperationException("json.Parse requires 2 arguments: json.Parse('file.json', 'TypeName')");
-
-            var filePath = args[0]?.ToString()
-                ?? throw new InvalidOperationException("json.Parse: file path cannot be null");
-            var typeName = args[1]?.ToString()
-                ?? throw new InvalidOperationException("json.Parse: type name cannot be null");
-
-            var fullPath = Path.IsPathRooted(filePath) ? filePath : Path.Combine(rootPath, filePath);
-            if (!File.Exists(fullPath))
-                throw new InvalidOperationException($"json.Parse: file not found: {fullPath}");
-
-            var schema = registry.ExportTypeAsSchema(typeName);
-            object result = JsonCollectionDeserializer.DeserializeAny(File.ReadAllBytes(fullPath), typeName, schema);
-            JsonCollectionDeserializer.RegisterDataObjectAccessors(registry, schema);
-
-            return Task.FromResult<object?>(result);
-        });
+        using var ms = new MemoryStream();
+        using var w = new Utf8JsonWriter(ms);
+        w.WriteStartObject();
+        w.WriteStartArray("types");
+        w.WriteEndArray();
+        w.WriteStartArray("collections");
+        w.WriteStartObject();
+        w.WriteString("name", "Items");
+        w.WriteString("itemType", "object");
+        w.WriteEndObject();
+        w.WriteEndArray();
+        w.WriteEndObject();
+        w.Flush();
+        return ms.ToArray();
     }
 
-    public override string ToString() => "JsonProvider";
+    public override object? Query(ProviderQuery query)
+    {
+        if (string.IsNullOrEmpty(query.RootPath))
+            return null;
+
+        var filePath = query.RootPath;
+
+        // If RootPath is a directory (startup query), return empty — JSON loads on-demand
+        if (Directory.Exists(filePath))
+            return null;
+
+        if (!File.Exists(filePath))
+            throw new FileNotFoundException($"JSON file not found: '{filePath}'");
+
+        var json = File.ReadAllBytes(filePath);
+        var items = ParseJson(json);
+
+        return new Dictionary<string, List<object>>(StringComparer.Ordinal)
+        {
+            ["Items"] = items
+        };
+    }
+
+    private static List<object> ParseJson(byte[] utf8Json)
+    {
+        using var doc = JsonDocument.Parse(utf8Json);
+        var root = doc.RootElement;
+
+        if (root.ValueKind == JsonValueKind.Array)
+        {
+            var items = new List<object>();
+            foreach (var elem in root.EnumerateArray())
+            {
+                if (elem.ValueKind == JsonValueKind.Object)
+                    items.Add(ElementToDataObject(elem));
+                else
+                    items.Add(ElementToValue(elem));
+            }
+            return items;
+        }
+
+        if (root.ValueKind == JsonValueKind.Object)
+            return [ElementToDataObject(root)];
+
+        return [ElementToValue(root)];
+    }
+
+    private static DataObject ElementToDataObject(JsonElement elem)
+    {
+        var fields = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var prop in elem.EnumerateObject())
+        {
+            fields[prop.Name] = ElementToValue(prop.Value);
+        }
+        return new DataObject("object", fields);
+    }
+
+    private static object ElementToValue(JsonElement elem) => elem.ValueKind switch
+    {
+        JsonValueKind.String => elem.GetString() ?? "",
+        JsonValueKind.Number when elem.TryGetInt32(out var i) => i,
+        JsonValueKind.Number => elem.GetDouble(),
+        JsonValueKind.True => true,
+        JsonValueKind.False => false,
+        JsonValueKind.Null => "",
+        JsonValueKind.Array => ParseNestedArray(elem),
+        JsonValueKind.Object => ElementToDataObject(elem),
+        _ => elem.ToString() ?? ""
+    };
+
+    private static List<object> ParseNestedArray(JsonElement elem)
+    {
+        var items = new List<object>();
+        foreach (var child in elem.EnumerateArray())
+        {
+            if (child.ValueKind == JsonValueKind.Object)
+                items.Add(ElementToDataObject(child));
+            else
+                items.Add(ElementToValue(child));
+        }
+        return items;
+    }
 }

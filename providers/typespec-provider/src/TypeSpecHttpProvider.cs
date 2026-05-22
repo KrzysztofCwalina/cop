@@ -3,14 +3,13 @@ using Cop.Core;
 namespace TypeSpecProvider;
 
 /// <summary>
-/// ObjectProvider for HTTP protocol graph derived from TypeSpec.
+/// DataProvider for HTTP protocol graph derived from TypeSpec.
 /// Transforms raw TypeSpec AST through HTTP decorator interpretation.
 /// Exposes HttpOperations, HttpServices with resolved verbs, paths, parameters.
 /// Uses stride-based DataTables with shared UTF-8 string heap.
 /// </summary>
-public class TypeSpecHttpProvider : ObjectProvider
+public class TypeSpecHttpProvider : DataProvider
 {
-    public override ObjectFormat SupportedFormats => ObjectFormat.InMemoryDatabase;
 
     public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
 
@@ -74,15 +73,15 @@ public class TypeSpecHttpProvider : ObjectProvider
         };
     }
 
-    public override DataStore QueryData(ProviderQuery query)
+    public override object? Query(ProviderQuery query)
     {
         var rawSpec = new TspSpec();
         if (query.RootPath is not null && Directory.Exists(query.RootPath))
             rawSpec = TspParser.ParseFiles(query.RootPath);
 
         var httpSpec = HttpTransformer.Transform(rawSpec);
-        var requested = query.RequestedCollections;
-        bool Want(string name) => requested is null || requested.Any(c => c.Equals(name, StringComparison.OrdinalIgnoreCase));
+        var requested = query.Collection;
+        bool Want(string name) => requested is null || requested == name;
 
         var db = new DataStoreBuilder();
 

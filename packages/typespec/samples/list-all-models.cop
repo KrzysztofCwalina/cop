@@ -1,4 +1,7 @@
 import typespec
 
+let tsp = provider('typespec', nic)
+let Models = tsp.Models
+
 command main = foreach Models
-    => '{TspModel.Name} ({TspModel.Properties.Count} props)'
+    => '{item.Name} ({item.Properties.Count} props)'

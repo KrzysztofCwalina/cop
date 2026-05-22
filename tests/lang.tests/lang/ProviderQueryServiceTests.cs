@@ -112,11 +112,9 @@ public class ProviderQueryServiceTests
     /// <summary>
     /// Fake provider that returns the root path as an item in an "Items" collection.
     /// </summary>
-    private class FakeProvider : ObjectProvider
+    private class FakeProvider : DataProvider
     {
         public int QueryCount { get; private set; }
-
-        public override ObjectFormat SupportedFormats => ObjectFormat.ObjectCollections;
 
         private static readonly byte[] SchemaBytes = System.Text.Encoding.UTF8.GetBytes("""
             {
@@ -128,7 +126,7 @@ public class ProviderQueryServiceTests
 
         public override ReadOnlyMemory<byte> GetSchema() => SchemaBytes;
 
-        public override Dictionary<string, List<object>> QueryCollections(ProviderQuery query)
+        public override object? Query(ProviderQuery query)
         {
             QueryCount++;
             return new Dictionary<string, List<object>>

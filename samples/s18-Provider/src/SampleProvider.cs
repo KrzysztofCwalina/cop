@@ -12,9 +12,8 @@ namespace SampleProvider;
 ///   foreach Widgets   # Widgets is explicitly exported by the sample package
 ///       '{Widget.Name} ({Widget.Category})'
 /// </summary>
-public class SampleProvider : ObjectProvider
+public class SampleProvider : DataProvider
 {
-    public override ObjectFormat SupportedFormats => ObjectFormat.ObjectCollections;
 
     public override ReadOnlyMemory<byte> GetSchema()
     {
@@ -38,12 +37,12 @@ public class SampleProvider : ObjectProvider
         return schema.ToJson();
     }
 
-    public override Dictionary<string, List<object>>? QueryCollections(ProviderQuery query)
+    public override object? Query(ProviderQuery query)
     {
         // Skip if the engine doesn't need Widgets
-        if (query.RequestedCollections != null &&
-            !query.RequestedCollections.Contains("Widgets"))
-            return new();
+        if (query.Collection != null &&
+            query.Collection != "Widgets")
+            return new Dictionary<string, List<object>>();
 
         var widgets = new List<object>();
         var rootPath = query.RootPath ?? ".";

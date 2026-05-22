@@ -8,9 +8,8 @@ namespace Cop.Providers;
 /// Uses the fast Objects path — stride-based DataTable records with a shared UTF-8 string heap.
 /// No per-record CLR objects or CLR strings allocated for the permanent data.
 /// </summary>
-public class FilesystemProvider : ObjectProvider
+public class FilesystemProvider : DataProvider
 {
-    public override ObjectFormat SupportedFormats => ObjectFormat.InMemoryDatabase;
 
 
     public override ReadOnlyMemory<byte> GetSchema()
@@ -81,14 +80,14 @@ public class FilesystemProvider : ObjectProvider
         w.WriteEndObject();
     }
 
-    public override DataStore QueryData(ProviderQuery query)
+    public override object? Query(ProviderQuery query)
     {
         var rootPath = Path.GetFullPath(query.RootPath
             ?? throw new ArgumentException("RootPath is required for FilesystemProvider."));
 
-        var requested = query.RequestedCollections;
-        bool wantFiles = requested is null || requested.Any(c => c.Equals("DiskFiles", StringComparison.OrdinalIgnoreCase));
-        bool wantFolders = requested is null || requested.Any(c => c.Equals("Folders", StringComparison.OrdinalIgnoreCase));
+        var requested = query.Collection;
+        bool wantFiles = requested is null || requested == "DiskFiles";
+        bool wantFolders = requested is null || requested == "Folders";
 
         // Use per-collection filters when available, fall back to combined Filter
         var fileFilter = query.CollectionFilters?.GetValueOrDefault("DiskFiles") ?? query.Filter;

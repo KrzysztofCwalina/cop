@@ -6,7 +6,7 @@ using Cop.Core;
 namespace Cop.Providers;
 
 /// <summary>
-/// An ObjectProvider adapter that communicates with an external process (Node.js, Python, etc.)
+/// A DataProvider adapter that communicates with an external process (Node.js, Python, etc.)
 /// via stdin/stdout using LSP-style length-prefixed JSON messages.
 ///
 /// Protocol framing:
@@ -16,7 +16,7 @@ namespace Cop.Providers;
 ///
 /// The provider process is launched on first use and stays alive for the session.
 /// </summary>
-public sealed class ProcessObjectProvider : ObjectProvider, IDisposable
+public sealed class ProcessObjectProvider : DataProvider, IDisposable
 {
     private readonly string _runtime;     // e.g., "node", "python"
     private readonly string _entryScript; // e.g., "src/index.js"
@@ -37,8 +37,6 @@ public sealed class ProcessObjectProvider : ObjectProvider, IDisposable
         _entryScript = entryScript;
         _workingDir = workingDir;
     }
-
-    public override ObjectFormat SupportedFormats => ObjectFormat.Json;
 
     public override ReadOnlyMemory<byte> GetSchema()
     {
@@ -200,13 +198,8 @@ public sealed class ProcessObjectProvider : ObjectProvider, IDisposable
         if (query.RootPath is not null)
             writer.WriteString("rootPath", query.RootPath);
 
-        if (query.RequestedCollections is not null)
-        {
-            writer.WriteStartArray("requestedCollections");
-            foreach (var c in query.RequestedCollections)
-                writer.WriteStringValue(c);
-            writer.WriteEndArray();
-        }
+        if (query.Collection is not null)
+            writer.WriteString("collection", query.Collection);
 
         if (query.ExcludedDirectories is not null)
         {

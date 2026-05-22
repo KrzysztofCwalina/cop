@@ -14,20 +14,20 @@ namespace Cop.Providers;
 public static class Engine
 {
     // Built-in providers — all accessed uniformly via RegisterSchema + QueryAndRegister
-    private static readonly ObjectProvider[] _rawProviders =
+    private static readonly DataProvider[] _rawProviders =
     [
         new FilesystemProvider(),
         new CodeSchemaProvider(),
         new Markdown.MarkdownProvider(),
     ];
 
-    private record BuiltinProvider(string Name, ObjectProvider Instance, ProviderSchema Schema, HashSet<string> CollectionNames);
+    private record BuiltinProvider(string Name, DataProvider Instance, ProviderSchema Schema, HashSet<string> CollectionNames);
 
     public sealed record ParsedModule(string FilePath, string Source, ModuleNode Module);
 
     private static readonly BuiltinProvider[] _builtinProviders = _rawProviders.Select(ToBuiltin).ToArray();
 
-    private static BuiltinProvider ToBuiltin(ObjectProvider provider)
+    private static BuiltinProvider ToBuiltin(DataProvider provider)
     {
         var schema = ProviderSchema.FromJson(provider.GetSchema());
         var collNames = new HashSet<string>(schema.Collections.Select(c => c.Name), StringComparer.Ordinal);
@@ -406,46 +406,20 @@ public static class Engine
     }
 
     private static Dictionary<string, List<object>> QueryProviderCollections(
-        ObjectProvider provider,
+        DataProvider provider,
         ProviderSchema schema,
         ProviderQuery query,
         List<string> errors)
     {
         try
         {
-            if (provider.SupportedFormats.HasFlag(ObjectFormat.ObjectCollections))
-                return provider.QueryCollections(query) ?? new Dictionary<string, List<object>>(StringComparer.Ordinal);
-
-            if (provider.SupportedFormats.HasFlag(ObjectFormat.InMemoryDatabase))
-            {
-                var store = provider.QueryData(query);
-                var collections = new Dictionary<string, List<object>>(StringComparer.Ordinal);
-                var topLevelCollections = new HashSet<string>(schema.Collections.Select(c => c.Name), StringComparer.Ordinal);
-                foreach (var (collectionName, table) in store.Tables)
-                {
-                    if (!topLevelCollections.Contains(collectionName))
-                        continue;
-
-                    var items = new List<object>(table.Count);
-                    for (int i = 0; i < table.Count; i++)
-                        items.Add(new RecordView(table, i));
-                    collections[collectionName] = items;
-                }
-
-                return collections;
-            }
-
-            if (provider.SupportedFormats.HasFlag(ObjectFormat.Json))
-                return JsonCollectionDeserializer.Deserialize(provider.Query(query), schema);
-
-            errors.Add($"Provider '{provider}' does not support any query format.");
+            return ProviderLoader.QueryCollections(provider, schema, query);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             errors.Add($"Provider '{provider}' query failed: {ex.Message}");
+            return new Dictionary<string, List<object>>(StringComparer.Ordinal);
         }
-
-        return new Dictionary<string, List<object>>(StringComparer.Ordinal);
     }
 
     private static void RegisterProviderCollections(Cop.Lang.Interpreter.Environment env, string providerName, Dictionary<string, List<object>> collections, ProviderSchema schema, RuntimeBindings? bindings = null)

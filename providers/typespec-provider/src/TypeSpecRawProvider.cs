@@ -3,14 +3,13 @@ using Cop.Core;
 namespace TypeSpecProvider;
 
 /// <summary>
-/// ObjectProvider for raw TypeSpec type graph.
+/// DataProvider for raw TypeSpec type graph.
 /// Exposes Models, Operations, Interfaces, Enums, Unions, Scalars, Namespaces
 /// as stride-based DataTables with shared UTF-8 string heap.
-/// Supports RequestedCollections pruning and FilterEvaluator pushdown.
+/// Supports Collection pruning and FilterEvaluator pushdown.
 /// </summary>
-public class TypeSpecRawProvider : ObjectProvider
+public class TypeSpecRawProvider : DataProvider
 {
-    public override ObjectFormat SupportedFormats => ObjectFormat.InMemoryDatabase;
 
     public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
 
@@ -111,14 +110,14 @@ public class TypeSpecRawProvider : ObjectProvider
         };
     }
 
-    public override DataStore QueryData(ProviderQuery query)
+    public override object? Query(ProviderQuery query)
     {
         var spec = new TspSpec();
         if (query.RootPath is not null && Directory.Exists(query.RootPath))
             spec = TspParser.ParseFiles(query.RootPath);
 
-        var requested = query.RequestedCollections;
-        bool Want(string name) => requested is null || requested.Any(c => c.Equals(name, StringComparison.OrdinalIgnoreCase));
+        var requested = query.Collection;
+        bool Want(string name) => requested is null || requested == name;
 
         var db = new DataStoreBuilder();
 

@@ -70,7 +70,7 @@ public static class CodeCollectionBuilder
         }
 
         var sorted = sourceFiles.OrderBy(f => f.Path, StringComparer.Ordinal).ToList();
-        return ExtractCollections(sorted, query.RequestedCollections, query.CollectionFilters);
+        return ExtractCollections(sorted, query.Collection, query.CollectionFilters);
     }
 
     /// <summary>
@@ -78,7 +78,7 @@ public static class CodeCollectionBuilder
     /// When collectionFilters are provided, items are filtered inline during extraction.
     /// </summary>
     public static Dictionary<string, List<object>> ExtractCollections(
-        List<SourceFile> sourceFiles, IReadOnlyList<string>? requestedCollections,
+        List<SourceFile> sourceFiles, string? collection,
         IReadOnlyDictionary<string, FilterExpression>? collectionFilters = null)
     {
         var extractors = CodeBindings.BuildExtractors();
@@ -88,7 +88,7 @@ public static class CodeCollectionBuilder
 
         foreach (var (name, extractor) in extractors)
         {
-            if (requestedCollections != null && !requestedCollections.Contains(name))
+            if (collection != null && collection != name)
                 continue;
 
             // Compile a filter predicate for this collection if available

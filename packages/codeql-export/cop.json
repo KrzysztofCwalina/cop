@@ -8,7 +8,5 @@
     "codeql",
     "export",
     "code-analysis"
-  ],
-  "provider": "clr",
-  "providerEntry": "Cop.Providers.CodeqlExportProvider"
+  ]
 }

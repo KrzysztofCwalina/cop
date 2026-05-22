@@ -101,7 +101,7 @@ public class CodeProviderQueryTests
             ["Types"] = new StringOpFilter("Name", StringOp.EndsWith, "Provider")
         };
 
-        var collections = CodeCollectionBuilder.ExtractCollections(TestFiles, ["Types"], filters);
+        var collections = CodeCollectionBuilder.ExtractCollections(TestFiles, "Types", filters);
 
         var types = collections["Types"];
         Assert.That(types, Has.Count.EqualTo(1));
@@ -117,7 +117,7 @@ public class CodeProviderQueryTests
             ["Types"] = new StringOpFilter("Name", StringOp.StartsWith, "Graph")
         };
 
-        var collections = CodeCollectionBuilder.ExtractCollections(TestFiles, ["Types"], filters);
+        var collections = CodeCollectionBuilder.ExtractCollections(TestFiles, "Types", filters);
 
         var types = collections["Types"];
         Assert.That(types, Has.Count.EqualTo(2)); // GraphClient, GraphClientFactory
@@ -135,7 +135,7 @@ public class CodeProviderQueryTests
             ["Types"] = new StringOpFilter("Name", StringOp.Contains, "Service")
         };
 
-        var collections = CodeCollectionBuilder.ExtractCollections(TestFiles, ["Types"], filters);
+        var collections = CodeCollectionBuilder.ExtractCollections(TestFiles, "Types", filters);
 
         var types = collections["Types"];
         Assert.That(types, Has.Count.EqualTo(3)); // UserService, UserServiceOptions, ServiceStatus
@@ -152,7 +152,7 @@ public class CodeProviderQueryTests
             ["Types"] = new FlagsFilter("Modifiers", FlagsOp.IsSet, (long)Modifier.Public)
         };
 
-        var collections = CodeCollectionBuilder.ExtractCollections(TestFiles, ["Types"], filters);
+        var collections = CodeCollectionBuilder.ExtractCollections(TestFiles, "Types", filters);
 
         var types = collections["Types"];
         // UserServiceOptions is Internal, not Public — should be excluded
@@ -170,7 +170,7 @@ public class CodeProviderQueryTests
             ["Types"] = new PropertyFilter("Documented", true)
         };
 
-        var collections = CodeCollectionBuilder.ExtractCollections(TestFiles, ["Types"], filters);
+        var collections = CodeCollectionBuilder.ExtractCollections(TestFiles, "Types", filters);
 
         var types = collections["Types"];
         Assert.That(types, Has.Count.EqualTo(3)); // HttpProvider, UserService, GraphClient
@@ -189,7 +189,7 @@ public class CodeProviderQueryTests
                 new StringOpFilter("Name", StringOp.EndsWith, "Client"))
         };
 
-        var collections = CodeCollectionBuilder.ExtractCollections(TestFiles, ["Types"], filters);
+        var collections = CodeCollectionBuilder.ExtractCollections(TestFiles, "Types", filters);
 
         var types = collections["Types"];
         Assert.That(types, Has.Count.EqualTo(2)); // IHttpClient, GraphClient
@@ -208,7 +208,7 @@ public class CodeProviderQueryTests
                 new StringOpFilter("Name", StringOp.EndsWith, "Client"))
         };
 
-        var collections = CodeCollectionBuilder.ExtractCollections(TestFiles, ["Types"], filters);
+        var collections = CodeCollectionBuilder.ExtractCollections(TestFiles, "Types", filters);
 
         var types = collections["Types"];
         Assert.That(types, Has.Count.EqualTo(3)); // HttpProvider, IHttpClient, GraphClient
@@ -225,7 +225,7 @@ public class CodeProviderQueryTests
             ["Types"] = new NotFilter(new StringOpFilter("Kind", StringOp.Equals, "Interface"))
         };
 
-        var collections = CodeCollectionBuilder.ExtractCollections(TestFiles, ["Types"], filters);
+        var collections = CodeCollectionBuilder.ExtractCollections(TestFiles, "Types", filters);
 
         var types = collections["Types"];
         // IHttpClient is the only interface — 7 total minus 1
@@ -243,7 +243,7 @@ public class CodeProviderQueryTests
             ["Statements"] = new StringOpFilter("Kind", StringOp.Equals, "return")
         };
 
-        var collections = CodeCollectionBuilder.ExtractCollections(TestFiles, ["Statements"], filters);
+        var collections = CodeCollectionBuilder.ExtractCollections(TestFiles, "Statements", filters);
 
         var stmts = collections["Statements"];
         Assert.That(stmts, Has.Count.EqualTo(2)); // return in HttpProvider.Query and UserService.GetUser
@@ -259,7 +259,7 @@ public class CodeProviderQueryTests
             ["Types"] = new StringOpFilter("Name", StringOp.EndsWith, "Provider") // matches 1
         };
 
-        var collections = CodeCollectionBuilder.ExtractCollections(TestFiles, ["Types", "Lines"], filters);
+        var collections = CodeCollectionBuilder.ExtractCollections(TestFiles, null, filters);
 
         // Types should be filtered
         Assert.That(collections["Types"], Has.Count.EqualTo(1));

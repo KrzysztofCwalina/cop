@@ -3,32 +3,14 @@ using System.Text.Json;
 namespace Cop.Core;
 
 /// <summary>
-/// Flags indicating which query formats a provider supports.
-/// The engine checks this before calling any QueryXxx method.
-/// New formats can be added without breaking existing providers.
-/// </summary>
-[Flags]
-public enum ObjectFormat
-{
-    Json = 1,
-    // Binary = 2,   // e.g. MessagePack
-    InMemoryDatabase = 4,
-    ObjectCollections = 8,
-}
-
-/// <summary>
-/// Abstract base class for extensible Cop object providers.
-/// Provider DLLs contain a subclass of this and are loaded dynamically by the engine.
+/// Abstract base class for Cop data providers.
+/// Provider DLLs contain a subclass and are loaded dynamically by the engine.
 ///
-/// Two main methods:
-///   GetSchema() — returns the provider schema as UTF-8 JSON (always implemented).
-///   Query()     — returns collection data as UTF-8 JSON (the canonical format).
-///
-/// Performance-optimized alternative:
-///   QueryData() — returns a DataStore (in-memory database) for built-in providers.
-///                 Providers that support this set SupportedFormats to include InMemoryDatabase.
+/// Contract:
+///   GetSchema() — declares what types and collections this provider can produce (static capability).
+///   Query()     — returns actual data for a given context. Single method for all formats.
 /// </summary>
-public abstract class ObjectProvider
+public abstract class DataProvider
 {
     /// <summary>
     /// Human-readable provider name, used in diagnostics.
@@ -41,58 +23,48 @@ public abstract class ObjectProvider
             ? name[..^"Provider".Length]
             : name;
     }
-    /// <summary>
-    /// Discovers what query formats the provider supports.
-    /// The engine checks this before calling <see cref="Query"/> or <see cref="QueryData"/>.
-    /// </summary>
-    public virtual ObjectFormat SupportedFormats => ObjectFormat.Json;
 
     /// <summary>
     /// Returns the provider schema as UTF-8 JSON.
-    /// Describes the types and collections this provider exposes.
-    /// All providers must implement this with a real schema (use <see cref="System.Text.Json.Utf8JsonWriter"/>).
+    /// Declares the types and collections this provider can produce.
+    /// Called once at load time for type registration and placeholder setup.
+    /// Does not change per-query — it's the provider's static contract.
     /// </summary>
     public abstract ReadOnlyMemory<byte> GetSchema();
 
     /// <summary>
     /// Returns CLR runtime bindings: type mappings, lambda property accessors,
     /// collection extractors, and method evaluators. Called once at registration time.
-    /// Providers that return InMemoryDatabase format should override this to provide native accessors.
     /// </summary>
     public virtual RuntimeBindings? GetRuntimeBindings() => null;
 
     /// <summary>
-    /// Queries for collection data as UTF-8 JSON.
-    /// Only callable if <see cref="SupportedFormats"/> includes <see cref="ObjectFormat.Json"/>.
+    /// Queries for provider data. Single entry point for all data retrieval.
+    /// Returns one of:
+    ///   - Dictionary&lt;string, List&lt;object&gt;&gt; — named collections of CLR objects
+    ///   - DataStore — binary stride-based data (high-performance path)
+    ///   - null — no data (provider only contributes types/bindings/functions)
+    ///
+    /// Use query.Collection to select a single collection (optimization hint:
+    /// providers may skip computing other collections).
     /// </summary>
-    public virtual byte[] Query(ProviderQuery query)
-        => throw new NotSupportedException("This provider does not support JSON queries.");
+    public virtual object? Query(ProviderQuery query) => null;
 
     /// <summary>
-    /// Queries for collection data as a <see cref="DataStore"/> — an in-memory database
-    /// of stride-based <see cref="DataTable"/> records with a shared UTF-8 string heap.
-    /// Only callable if <see cref="SupportedFormats"/> includes <see cref="ObjectFormat.InMemoryDatabase"/>.
-    /// This is the fast in-proc path — no serialization overhead.
-    /// </summary>
-    public virtual DataStore QueryData(ProviderQuery query)
-        => throw new NotSupportedException("This provider does not support object queries.");
-
-    /// <summary>
-    /// Queries for collection data as CLR object lists.
-    /// Used by providers with hierarchical CLR data that can't be flattened into DataStore.
-    /// Only callable if <see cref="SupportedFormats"/> includes <see cref="ObjectFormat.ObjectCollections"/>.
-    /// Returns a dictionary mapping collection names to lists of CLR objects.
-    /// </summary>
-    public virtual Dictionary<string, List<object>>? QueryCollections(ProviderQuery query)
-        => throw new NotSupportedException("This provider does not support CLR object collection queries.");
-
-    /// <summary>
-    /// Returns namespace-scoped functions that this provider exposes (e.g., http.Get, http.Post).
+    /// Returns namespace-scoped functions that this provider exposes (e.g., http.Get, json.Load).
     /// Functions are async (return Task&lt;object?&gt;) and accept a list of evaluated arguments.
     /// The engine registers these under the provider's namespace so they can be called as
     /// namespace.FunctionName(args) in cop scripts.
     /// </summary>
-    public virtual Dictionary<string, Func<List<object?>, Task<object?>>>? GetProviderFunctions() => null;
+    public virtual Dictionary<string, Func<List<object?>, Task<object?>>>? GetFunctions() => null;
+}
+
+/// <summary>
+/// Legacy alias. Use DataProvider instead.
+/// </summary>
+[Obsolete("Use DataProvider instead")]
+public abstract class ObjectProvider : DataProvider
+{
 }
 
 /// <summary>
@@ -139,10 +111,11 @@ public class ProviderQuery
     public string? RootPath { get; init; }
 
     /// <summary>
-    /// Which collections the engine needs (null = all).
-    /// Allows providers to skip expensive computation for unneeded collections.
+    /// Select a single collection by name. When set, the provider only needs
+    /// to populate this collection in its response (optimization hint).
+    /// Null means return all collections.
     /// </summary>
-    public IReadOnlyList<string>? RequestedCollections { get; init; }
+    public string? Collection { get; init; }
 
     /// <summary>
     /// Pushdown filter expression (combined). Providers that support query optimization

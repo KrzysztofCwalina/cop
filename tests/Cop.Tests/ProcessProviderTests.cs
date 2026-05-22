@@ -38,10 +38,10 @@ public class ProcessProviderTests
 
         using var provider = new ProcessObjectProvider("node", "mock-provider.js", TestDataDir);
         var query = new ProviderQuery { RootPath = TestDataDir };
-        var resultJson = provider.Query(query);
+        var resultJson = provider.Query(query) as byte[];
 
         Assert.That(resultJson, Is.Not.Null);
-        Assert.That(resultJson.Length, Is.GreaterThan(0));
+        Assert.That(resultJson!.Length, Is.GreaterThan(0));
 
         // Verify we can deserialize the JSON
         var text = System.Text.Encoding.UTF8.GetString(resultJson);
@@ -63,10 +63,10 @@ public class ProcessProviderTests
 
         // Query data
         var query = new ProviderQuery { RootPath = TestDataDir };
-        var resultJson = provider.Query(query);
+        var resultJson = provider.Query(query) as byte[];
 
         // Deserialize using the standard path
-        var collections = JsonCollectionDeserializer.Deserialize(resultJson, schema);
+        var collections = JsonCollectionDeserializer.Deserialize(resultJson!, schema);
         Assert.That(collections, Does.ContainKey("Items"));
         Assert.That(collections["Items"], Has.Count.EqualTo(3));
     }
@@ -93,9 +93,9 @@ public class ProcessProviderTests
 
         using var provider = new ProcessObjectProvider("python", "mock-provider.py", TestDataDir);
         var query = new ProviderQuery { RootPath = TestDataDir };
-        var resultJson = provider.Query(query);
+        var resultJson = provider.Query(query) as byte[];
 
-        var text = System.Text.Encoding.UTF8.GetString(resultJson);
+        var text = System.Text.Encoding.UTF8.GetString(resultJson!);
         Assert.That(text, Does.Contain("one"));
         Assert.That(text, Does.Contain("two"));
     }
@@ -118,10 +118,11 @@ public class ProcessProviderTests
     }
 
     [Test]
-    public void ProcessProvider_SupportedFormats_IsJson()
+    public void ProcessProvider_Query_ReturnsJsonBytes()
     {
         using var provider = new ProcessObjectProvider("node", "mock-provider.js", TestDataDir);
-        Assert.That(provider.SupportedFormats, Is.EqualTo(ObjectFormat.Json));
+        var result = provider.Query(new ProviderQuery { RootPath = TestDataDir });
+        Assert.That(result, Is.TypeOf<byte[]>());
     }
 
     [Test]

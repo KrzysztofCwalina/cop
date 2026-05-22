@@ -244,6 +244,10 @@ public static class RunCommand
             // No streaming command or setup failed — fall through to normal execution
             diagLog?.Invoke($"[diag] Streaming mode skipped: {ex.Message}");
         }
+        catch (NotImplementedException)
+        {
+            // Streaming not yet reimplemented — fall through to normal execution
+        }
 
         var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog, additionalFeedPaths: FindFeedPathsFromCwd());
 

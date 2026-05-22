@@ -8,15 +8,14 @@ namespace Cop.Providers;
 /// exposing their structure (types, predicates, functions, imports) through
 /// the shared code analysis collections (Types, Statements, Lines, Files).
 /// </summary>
-public class CopProvider : ObjectProvider
+public class CopProvider : DataProvider
 {
-    public override ObjectFormat SupportedFormats => ObjectFormat.ObjectCollections;
 
     public override ReadOnlyMemory<byte> GetSchema() => CodeSchema.GetJson();
 
     public override RuntimeBindings GetRuntimeBindings() => CodeBindings.Build();
 
-    public override Dictionary<string, List<object>>? QueryCollections(ProviderQuery query)
+    public override object? Query(ProviderQuery query)
     {
         var parsers = new SourceParserRegistry();
         parsers.Register(new CopSourceParser());

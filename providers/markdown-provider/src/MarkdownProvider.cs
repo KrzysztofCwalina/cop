@@ -8,9 +8,8 @@ namespace Cop.Providers.Markdown;
 /// Provider for markdown document analysis (Headings, Links, Sections, FenceBlocks).
 /// Scans .md files, parses them, and returns flat CLR object collections.
 /// </summary>
-public class MarkdownProvider : ObjectProvider
+public class MarkdownProvider : DataProvider
 {
-    public override ObjectFormat SupportedFormats => ObjectFormat.ObjectCollections;
 
     public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
 
@@ -81,10 +80,10 @@ public class MarkdownProvider : ObjectProvider
     /// <summary>
     /// Scans for .md files, parses them, and returns flat collections.
     /// </summary>
-    public override Dictionary<string, List<object>>? QueryCollections(ProviderQuery query)
+    public override object? Query(ProviderQuery query)
     {
         if (query.RootPath is null)
-            return new();
+            return new Dictionary<string, List<object>>();
 
         var rootPath = query.RootPath;
         var excluded = query.ExcludedDirectories;
@@ -130,11 +129,11 @@ public class MarkdownProvider : ObjectProvider
         }
 
         var collections = new Dictionary<string, List<object>>();
-        var requested = query.RequestedCollections;
-        if (requested is null || requested.Contains("Headings")) collections["Headings"] = headings;
-        if (requested is null || requested.Contains("Links")) collections["Links"] = links;
-        if (requested is null || requested.Contains("Sections")) collections["Sections"] = sections;
-        if (requested is null || requested.Contains("FenceBlocks")) collections["FenceBlocks"] = fenceBlocks;
+        var requested = query.Collection;
+        if (requested is null || requested == "Headings") collections["Headings"] = headings;
+        if (requested is null || requested == "Links") collections["Links"] = links;
+        if (requested is null || requested == "Sections") collections["Sections"] = sections;
+        if (requested is null || requested == "FenceBlocks") collections["FenceBlocks"] = fenceBlocks;
 
         return collections;
     }

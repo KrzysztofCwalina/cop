@@ -8,15 +8,14 @@ namespace Cop.Providers;
 /// (Type, Statement, Method, etc.) are always available in the type system.
 /// Actual data comes from language-specific providers (CSharp, Python, JavaScript).
 /// </summary>
-public class CodeSchemaProvider : ObjectProvider
+public class CodeSchemaProvider : DataProvider
 {
-    public override ObjectFormat SupportedFormats => ObjectFormat.ObjectCollections;
 
     public override ReadOnlyMemory<byte> GetSchema() => CodeSchema.GetJson();
 
     public override RuntimeBindings? GetRuntimeBindings() => CodeBindings.Build();
 
-    public override Dictionary<string, List<object>>? QueryCollections(ProviderQuery query) => new();
+    public override object? Query(ProviderQuery query) => null;
 
     public override string ToString() => "CodeSchemaProvider";
 }

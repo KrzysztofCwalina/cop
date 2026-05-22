@@ -8,7 +8,7 @@ namespace Cop.Tests;
 [TestFixture]
 public class FilesystemTests
 {
-    private static readonly ObjectProvider _fsProvider = new FilesystemProvider();
+    private static readonly DataProvider _fsProvider = new FilesystemProvider();
     private static readonly ProviderSchema _fsSchema = ProviderSchema.FromJson(_fsProvider.GetSchema());
 
     private string _tempDir = null!;

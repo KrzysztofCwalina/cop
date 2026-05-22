@@ -9,8 +9,8 @@ type Person = {
     age : int
 }
 
-# Parse a JSON file into a typed collection
-let Persons = json.Parse('data.json', 'Person')
+# Load a JSON file into a dynamic collection
+let Persons : [Person] = json.Load('data.json')
 
 # Filter persons by age using a predicate
 predicate canVote(Person) => Person.age >= 18

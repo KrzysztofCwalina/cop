@@ -6,15 +6,14 @@ namespace Cop.Providers;
 /// <summary>
 /// Python source code provider. Scans and parses .py files.
 /// </summary>
-public class PythonProvider : ObjectProvider
+public class PythonProvider : DataProvider
 {
-    public override ObjectFormat SupportedFormats => ObjectFormat.ObjectCollections;
 
     public override ReadOnlyMemory<byte> GetSchema() => CodeSchema.GetJson();
 
     public override RuntimeBindings GetRuntimeBindings() => CodeBindings.Build();
 
-    public override Dictionary<string, List<object>>? QueryCollections(ProviderQuery query)
+    public override object? Query(ProviderQuery query)
     {
         var parsers = new SourceParserRegistry();
         parsers.Register(new PythonSourceParser());
@@ -25,7 +24,7 @@ public class PythonProvider : ObjectProvider
         if (query.RootPath is not null)
         {
             var projects = PythonProjectDiscovery.Discover(query.RootPath, query.ExcludedDirectories);
-            if (query.RequestedCollections is null || query.RequestedCollections.Contains("Projects"))
+            if (query.Collection == null || query.Collection == "Projects")
                 collections["Projects"] = projects.Cast<object>().ToList();
         }
 

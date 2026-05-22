@@ -217,9 +217,8 @@ public class HttpSink : SinkProvider
 /// HTTP data provider for outbound HTTP client functions (Get, Post, Send).
 /// This is a sync data provider that exposes helper functions, not collections.
 /// </summary>
-public class HttpProvider : ObjectProvider
+public class HttpProvider : DataProvider
 {
-    public override ObjectFormat SupportedFormats => ObjectFormat.ObjectCollections;
 
     public override ReadOnlyMemory<byte> GetSchema()
     {
@@ -246,9 +245,9 @@ public class HttpProvider : ObjectProvider
 
     private static readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
 
-    public override Dictionary<string, List<object>>? QueryCollections(ProviderQuery query) => new();
+    public override object? Query(ProviderQuery query) => null;
 
-    public override Dictionary<string, Func<List<object?>, Task<object?>>>? GetProviderFunctions()
+    public override Dictionary<string, Func<List<object?>, Task<object?>>>? GetFunctions()
     {
         return new(StringComparer.OrdinalIgnoreCase)
         {

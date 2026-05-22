@@ -1,5 +1,6 @@
 using Cop.Core;
 using Cop.Lang;
+using Cop.Lang.Interpreter;
 
 namespace Cop.Providers;
 
@@ -13,7 +14,7 @@ public class ProviderQueryService : IProviderQueryService
     private readonly record struct CacheKey(string ProviderName, string CollectionName, string AbsolutePath);
 
     private readonly Dictionary<CacheKey, List<object>> _cache = new();
-    private readonly Dictionary<string, (ObjectProvider Instance, ProviderSchema Schema)> _providers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (DataProvider Instance, ProviderSchema Schema)> _providers = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _invocationDirectory;
     private readonly IReadOnlySet<string>? _excludedDirectories;
     private readonly List<string> _warnings = [];
@@ -31,7 +32,7 @@ public class ProviderQueryService : IProviderQueryService
     /// <summary>
     /// Registers a provider so it can be queried by name at evaluation time.
     /// </summary>
-    public void RegisterProvider(string name, ObjectProvider instance, ProviderSchema schema)
+    public void RegisterProvider(string name, DataProvider instance, ProviderSchema schema)
     {
         _providers[name] = (instance, schema);
     }
@@ -73,7 +74,7 @@ public class ProviderQueryService : IProviderQueryService
         var query = new ProviderQuery
         {
             RootPath = absolutePath,
-            RequestedCollections = [collectionName],
+            Collection = collectionName,
             ExcludedDirectories = _excludedDirectories
         };
 
@@ -82,34 +83,11 @@ public class ProviderQueryService : IProviderQueryService
         try
         {
             var (instance, schema) = provider;
-
-            if (instance.SupportedFormats.HasFlag(ObjectFormat.ObjectCollections))
+            var collections = ProviderLoader.QueryCollections(instance, schema, query);
+            if (collections.TryGetValue(collectionName, out var items))
             {
-                var collections = instance.QueryCollections(query);
-                if (collections != null && collections.TryGetValue(collectionName, out var items))
-                {
-                    _cache[key] = items;
-                    return items;
-                }
-            }
-            else if (instance.SupportedFormats.HasFlag(ObjectFormat.InMemoryDatabase))
-            {
-                var store = instance.QueryData(query);
-                if (store.Tables.TryGetValue(collectionName, out var table))
-                {
-                    var views = new List<object>(table.Count);
-                    for (int i = 0; i < table.Count; i++)
-                        views.Add(new RecordView(table, i));
-                    _cache[key] = views;
-                    return views;
-                }
-            }
-            else if (instance.SupportedFormats.HasFlag(ObjectFormat.Json))
-            {
-                var json = instance.Query(query);
-                // JSON deserialization for path-scoped queries would require TypeRegistry wiring.
-                // For now, warn and return empty. Built-in providers use ObjectCollections or InMemoryDatabase.
-                _warnings.Add($"JSON-format providers are not yet supported for path-scoped queries (provider: '{providerName}').");
+                _cache[key] = items;
+                return items;
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -120,5 +98,52 @@ public class ProviderQueryService : IProviderQueryService
         var result = new List<object>();
         _cache[key] = result;
         return result;
+    }
+
+    /// <summary>
+    /// Queries a provider with a ProviderQuery and returns the result as a CopValue.
+    /// The provider decides what collections to return. Single collection → CopList, multiple → CopObject.
+    /// </summary>
+    public CopValue QueryProvider(string providerName, ProviderQuery query)
+    {
+        if (!_providers.TryGetValue(providerName, out var provider))
+        {
+            _warnings.Add($"Provider '{providerName}' not found.");
+            return CopNull.Instance;
+        }
+
+        var (instance, schema) = provider;
+        Dictionary<string, List<object>>? collections = null;
+
+        try
+        {
+            collections = ProviderLoader.QueryCollections(instance, schema, query);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _warnings.Add($"Error querying provider '{providerName}': {ex.Message}");
+            return CopNull.Instance;
+        }
+
+        if (collections is null || collections.Count == 0)
+            return new CopList([]);
+
+        // Convert raw objects to CopValues using DataObjectAdapter
+        CopList ToCopList(List<object> items)
+        {
+            return new CopList(items
+                .Select(item => (CopValue)new CopDynamicObject(item, DataObjectAdapter.Instance))
+                .ToList());
+        }
+
+        // Single collection → return as CopList directly
+        if (collections.Count == 1)
+            return ToCopList(collections.Values.First());
+
+        // Multiple collections → return as CopObject with named fields
+        var fields = new Dictionary<string, CopValue>(StringComparer.Ordinal);
+        foreach (var (name, items) in collections)
+            fields[name] = ToCopList(items);
+        return new CopObject(fields);
     }
 }

@@ -9,9 +9,8 @@ namespace Cop.Providers;
 /// Supports loading SARIF files (the standard output format of `codeql database analyze`).
 /// Import with: import codeql
 /// </summary>
-public class CodeqlProvider : ObjectProvider, ICapabilityProvider
+public class CodeqlProvider : DataProvider, ICapabilityProvider
 {
-    public override ObjectFormat SupportedFormats => ObjectFormat.ObjectCollections;
 
     public override ReadOnlyMemory<byte> GetSchema()
     {
@@ -57,7 +56,7 @@ public class CodeqlProvider : ObjectProvider, ICapabilityProvider
         return schema.ToJson();
     }
 
-    public override Dictionary<string, List<object>>? QueryCollections(ProviderQuery query)
+    public override object? Query(ProviderQuery query)
     {
         // Auto-discover SARIF files in the root path
         var results = new List<object>();
@@ -113,25 +112,8 @@ public class CodeqlProvider : ObjectProvider, ICapabilityProvider
 
     public void RegisterCapabilities(TypeRegistry registry, string rootPath)
     {
-        // Register codeql.Load(path) function for loading SARIF from a specific file
-        registry.RegisterProviderFunction("codeql", "Load", args =>
-        {
-            if (args.Count < 1)
-                throw new InvalidOperationException("codeql.Load requires 1 argument: codeql.Load('results.sarif')");
-
-            var filePath = args[0]?.ToString()
-                ?? throw new InvalidOperationException("codeql.Load: file path cannot be null");
-
-            var fullPath = Path.IsPathRooted(filePath) ? filePath : Path.Combine(rootPath, filePath);
-            if (!File.Exists(fullPath))
-                throw new InvalidOperationException($"codeql.Load: SARIF file not found: {fullPath}");
-
-            var results = new List<object>();
-            var rules = new List<object>();
-            LoadSarifFile(fullPath, results, rules);
-
-            return Task.FromResult<object?>(results);
-        });
+        // codeql.Load is now handled via .cop function body: provider('codeql', path)
+        // No provider function registration needed.
     }
 
     private static void LoadSarifFile(string filePath, List<object> results, List<object> rules)
