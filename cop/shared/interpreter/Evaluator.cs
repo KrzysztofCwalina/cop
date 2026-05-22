@@ -694,6 +694,55 @@ public sealed class Evaluator
 
         _traceLog?.Invoke($"[trace] EvalFilter: collection type={collection?.GetType().Name}, predicate={filter.Predicate?.GetType().Name}");
 
+        // Queryable collection: try to compile predicate and accumulate filter (lazy pushdown)
+        if (collection is CopQueryableCollection queryable)
+        {
+            // Try to compile the predicate AST to a FilterExpression for pushdown
+            var compiled = PredicateCompiler.TryCompile(filter.Predicate, negated);
+            if (compiled is not null)
+            {
+                _traceLog?.Invoke($"[trace] EvalFilter: compiled predicate to FilterExpression, accumulating on queryable");
+                return queryable.WithFilter(compiled);
+            }
+
+            // Check if this is a property access (map semantic) that could be part of a compound filter
+            var propName = PredicateCompiler.TryExtractPropertyAccess(filter.Predicate);
+            if (propName is not null)
+            {
+                // Return a queryable with property context — next filter in chain may compile to StringOp/Comparison
+                _traceLog?.Invoke($"[trace] EvalFilter: property access '{propName}' on queryable, creating property proxy");
+                return new CopQueryableProperty(queryable, propName);
+            }
+
+            // Cannot compile — materialize and fall through to normal path
+            _traceLog?.Invoke($"[trace] EvalFilter: cannot compile predicate, materializing queryable");
+            collection = queryable.Materialize();
+            collection = ForceValue(collection);
+        }
+
+        // Queryable property: compound pattern e.g., queryable:Name:startsWith('A')
+        if (collection is CopQueryableProperty queryProp)
+        {
+            // Try to compile the predicate with property context
+            var compiled = PredicateCompiler.TryCompile(filter.Predicate, negated, queryProp.PropertyName);
+            if (compiled is not null)
+            {
+                _traceLog?.Invoke($"[trace] EvalFilter: compiled compound filter {queryProp.PropertyName}:{filter.Predicate}");
+                return queryProp.Source.WithFilter(compiled);
+            }
+
+            // Cannot compile — materialize the source and apply property access + filter locally
+            _traceLog?.Invoke($"[trace] EvalFilter: cannot compile compound, materializing");
+            collection = queryProp.Source.Materialize();
+            collection = ForceValue(collection);
+            // Apply property access as a map, then let normal filter logic handle it
+            var mapped = CoerceToEnumerable(collection)
+                .Select(item => GetFieldOnValue(item, queryProp.PropertyName))
+                .Where(v => v is not CopNull)
+                .ToList();
+            collection = new CopList(mapped);
+        }
+
         // If collection resolved to a predicate/function, resolve as a "named subset":
         // predicate Clients(Types) => ... used bare as `Clients:filter` means Types:Clients:filter
         collection = TryResolveNamedSubset(collection, env);
@@ -962,6 +1011,13 @@ public sealed class Evaluator
         _ => false
     };
 
+    private static CopValue GetFieldOnValue(CopValue value, string fieldName) => value switch
+    {
+        CopDynamicObject dyn when dyn.HasField(fieldName) => dyn.GetField(fieldName),
+        CopObject obj when obj.HasField(fieldName) => obj.GetField(fieldName),
+        _ => CopNull.Instance
+    };
+
     // ========================================================================
     // Call Dispatch (public for ICopCallable implementations)
     // ========================================================================
@@ -1105,6 +1161,13 @@ public sealed class Evaluator
         // Force thunks before coercing
         if (value is CopThunk thunk)
             value = thunk.Force();
+
+        // Materialize queryable collections on demand
+        if (value is CopQueryableCollection queryable)
+            return queryable.Enumerate();
+
+        if (value is CopQueryableProperty queryProp)
+            return queryProp.Source.Enumerate();
 
         return value switch
         {

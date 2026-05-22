@@ -48,10 +48,24 @@ public sealed class JsonProvider : DataProvider
         var json = File.ReadAllBytes(filePath);
         var items = ParseJson(json);
 
+        // Apply filter pushdown if present
+        if (query.Filter is not null)
+        {
+            items = items.Where(item => FilterEvaluator.Matches(query.Filter,
+                prop => GetFieldValue(item, prop))).ToList();
+        }
+
         return new Dictionary<string, List<object>>(StringComparer.Ordinal)
         {
             ["Items"] = items
         };
+    }
+
+    private static object? GetFieldValue(object item, string propertyName)
+    {
+        if (item is DataObject dataObj && dataObj.Fields.TryGetValue(propertyName, out var value))
+            return value;
+        return null;
     }
 
     private static List<object> ParseJson(byte[] utf8Json)

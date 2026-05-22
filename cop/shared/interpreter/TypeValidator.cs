@@ -64,7 +64,7 @@ public static class TypeValidator
     {
         // Collection type: [T]
         if (typeRef.IsCollection)
-            return value is CopList or CopLazyCollection;
+            return value is CopList or CopLazyCollection or CopQueryableCollection;
 
         // Primitive and named types
         return typeRef.Name.ToLowerInvariant() switch
@@ -76,7 +76,7 @@ public static class TypeValidator
             "bool" => value is CopBool,
             "bytes" => value is CopObject obj && obj.TypeName == "bytes",
             "lambda" or "function" => value is ICopCallable,
-            "collection" => value is CopList or CopLazyCollection,
+            "collection" => value is CopList or CopLazyCollection or CopQueryableCollection,
             _ => IsNamedTypeCompatible(value, typeRef.Name)
         };
     }
@@ -93,6 +93,7 @@ public static class TypeValidator
         CopBool => "bool",
         CopList => "collection",
         CopLazyCollection => "collection",
+        CopQueryableCollection => "collection",
         CopObject obj => obj.TypeName ?? "object",
         CopDynamicObject dyn => dyn.TypeName ?? "object",
         CopProviderProxy proxy => $"provider({proxy.ProviderName})",

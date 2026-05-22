@@ -262,7 +262,9 @@ public static class Engine
                         : Path.GetFullPath(Path.Combine(rootPath, options)),
                     ExcludedDirectories = ExcludedDirectoryNames
                 };
-                return queryService.QueryProvider(providerName, providerQuery);
+                // Return a queryable collection that defers provider execution until materialization.
+                // Filters from predicate chains will be accumulated and pushed to the provider.
+                return new CopQueryableCollection(providerName, providerQuery, queryService);
             }
 
             return new CopProviderProxy(providerName, env);

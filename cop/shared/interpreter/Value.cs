@@ -97,6 +97,94 @@ public sealed class CopLazyCollection : CopValue
 }
 
 /// <summary>
+/// A queryable collection that defers provider execution until materialization.
+/// Accumulates filter expressions from predicate chains and pushes them to the provider.
+/// Analogous to LINQ's IQueryable — filters are composed, not executed, until iteration.
+/// </summary>
+public sealed class CopQueryableCollection : CopValue
+{
+    public string ProviderName { get; }
+    public Cop.Core.ProviderQuery Query { get; }
+    public IProviderQueryService QueryService { get; }
+    public Cop.Core.FilterExpression? AccumulatedFilter { get; }
+
+    public CopQueryableCollection(string providerName, Cop.Core.ProviderQuery query, IProviderQueryService queryService, Cop.Core.FilterExpression? filter = null)
+    {
+        ProviderName = providerName;
+        Query = query;
+        QueryService = queryService;
+        AccumulatedFilter = filter;
+    }
+
+    /// <summary>
+    /// Returns a new queryable with an additional filter accumulated (immutable).
+    /// Multiple filters are combined with AND.
+    /// </summary>
+    public CopQueryableCollection WithFilter(Cop.Core.FilterExpression filter)
+    {
+        var combined = AccumulatedFilter is null
+            ? filter
+            : Cop.Core.FilterExpression.And(AccumulatedFilter, filter);
+        return new CopQueryableCollection(ProviderName, Query, QueryService, combined);
+    }
+
+    /// <summary>
+    /// Materializes the queryable by calling the provider with accumulated filters.
+    /// Returns the provider result as a CopValue (typically CopList).
+    /// </summary>
+    public CopValue Materialize()
+    {
+        var queryWithFilter = new Cop.Core.ProviderQuery
+        {
+            RootPath = Query.RootPath,
+            Collection = Query.Collection,
+            Filter = AccumulatedFilter,
+            CollectionFilters = Query.CollectionFilters,
+            ExcludedDirectories = Query.ExcludedDirectories,
+            Options = Query.Options
+        };
+        return QueryService.QueryProvider(ProviderName, queryWithFilter);
+    }
+
+    /// <summary>
+    /// Materializes and returns items as an enumerable of CopValues.
+    /// </summary>
+    public IEnumerable<CopValue> Enumerate()
+    {
+        var result = Materialize();
+        return result switch
+        {
+            CopList list => list.Items,
+            CopLazyCollection lazy => lazy.Enumerate(),
+            _ => [result]
+        };
+    }
+
+    public override string Display() => $"<queryable {ProviderName}>";
+    public override string ToString() => Display();
+}
+
+/// <summary>
+/// Intermediate value representing a property access on a queryable collection.
+/// Used for compound filter patterns like: queryable:PropertyName:stringOp(value).
+/// The next filter in the chain provides the operation and value.
+/// </summary>
+public sealed class CopQueryableProperty : CopValue
+{
+    public CopQueryableCollection Source { get; }
+    public string PropertyName { get; }
+
+    public CopQueryableProperty(CopQueryableCollection source, string propertyName)
+    {
+        Source = source;
+        PropertyName = propertyName;
+    }
+
+    public override string Display() => $"<queryable-property {Source.ProviderName}.{PropertyName}>";
+    public override string ToString() => Display();
+}
+
+/// <summary>
 /// A deferred computation (thunk). Self-forcing: accessing Display() or IsTruthy
 /// transparently forces evaluation. Memoized: the computation runs at most once.
 /// Cycle detection: forcing a thunk that is already being forced throws.
