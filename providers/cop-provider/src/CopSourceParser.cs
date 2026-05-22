@@ -90,7 +90,10 @@ public class CopSourceParser : ISourceParser
             parameters.Insert(0, new ParameterDeclaration(
                 fn.InputType.ToLowerInvariant(), MakeTypeRef(fn.InputType), false, false, false, fn.Line));
 
-            statements.Add(new StatementInfo("declaration", ["function"],
+            var keywords = new List<string> { "function" };
+            if (fn.IsIntrinsic) keywords.Add("intrinsic");
+
+            statements.Add(new StatementInfo("declaration", keywords,
                 fn.ReturnType, fn.Name, [], fn.Line, false));
         }
 

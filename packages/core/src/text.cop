@@ -1,27 +1,8 @@
 # Text
-# Types and functions for text conversion and formatting.
-
-## A template bound to data, ready to be resolved into a string.
-## Items is the collection of data to format, Template is the {Property} interpolation pattern,
-## and Separator is the string used to join results (defaults to newline).
-export type object:Formattable = {
-    Items : [object]
-    Template : string
-    Separator : string
-}
+# Non-intrinsic text conversion functions.
 
 ## Converts a string to text (identity — returns string as-is).
 export function text(string) => string
 
 ## Converts a bool to text: true => 'true', false => 'false'.
 export function text(bool) => bool ? 'true' | 'false'
-
-## Converts an integer to its decimal text representation.
-export function text(int) : string => intrinsic
-
-## Decodes a byte array as UTF-8 text.
-export function text(bytes) : string => intrinsic
-
-## Converts a Formattable to text by resolving the Template against each item
-## in Items using {Property} interpolation, then joining results with Separator.
-export function text(Formattable) : string => intrinsic

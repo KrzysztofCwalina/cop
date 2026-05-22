@@ -49,6 +49,68 @@ export function debug(message : string) => intrinsic
 ## Used in tests: assert(Types:isPublic.Count > 0, 'should have public types')
 export function assert(condition : bool, description : string) => intrinsic
 
+# Collections
+
+## Reduces a collection to a single value using an accumulator function.
+## The accumulator takes (acc, item) and returns the new accumulator value.
+## Example: [1,2,3]:reduce((acc, item) => acc + item, 0)
+export function reduce(items: [object], accumulator: lambda, initial: object) : object 
+  => intrinsic
+
+## Returns a new collection combining both collections.
+## Example: let merged = listA:concat(listB)
+export function concat(items: [object], other: [object]) : [object] 
+  => intrinsic
+
+# Text Conversion
+
+## A template bound to data, ready to be resolved into a string.
+## Items is the collection of data to format, Template is the {Property} interpolation pattern,
+## and Separator is the string used to join results (defaults to newline).
+export type object:Formattable = {
+    Items : [object]
+    Template : string
+    Separator : string
+}
+
+## Converts an integer to its decimal text representation.
+export function text(int) : string => intrinsic
+
+## Decodes a byte array as UTF-8 text.
+export function text(bytes) : string => intrinsic
+
+## Converts a Formattable to text by resolving the Template against each item
+## in Items using {Property} interpolation, then joining results with Separator.
+export function text(Formattable) : string => intrinsic
+
+# Error Handling
+
+## Represents an operational error flowing through a pipeline.
+## Errors are not code bugs (use fail() for those). They represent external failures
+## that code cannot prevent: network timeouts, I/O failures, malformed input.
+## Use isError predicate to detect errors in pipeline items.
+export type object:Error = {
+    Message : string
+    SourceFile : string
+    SourceLine : int
+    Source : string
+}
+
+## Returns true if the current item is an Error value.
+## Works as a bare predicate or as a filter: items:isError
+## Example: predicate handleError(item:isError) => print('{item.Message}')
+export predicate isError(item: object) => item.Type:equals('Error')
+
+## Creates an Error value with the given message string.
+## Example: error('connection timeout')
+export function error(message: string) : Error => intrinsic
+
+## Terminates execution immediately with a fatal diagnostic.
+## Use for programmer assertions — situations that should never occur.
+## Can be used standalone: fail('invariant violated')
+## Or in pipeline: foreach Items:badCondition => fail('{item.Name} is invalid')
+export function fail(message : string) => intrinsic
+
 # Utilities
 
 ## Returns the current program context.

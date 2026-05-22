@@ -31,7 +31,7 @@ export type object:bytes = {}
 ## A first-class callable value (lambda or named function reference).
 ## Passed as an argument and invoked with args: pred(item), transform(x).
 ## Used for predicates, projections, and accumulators in where, select, reduce, etc.
-export type object:function = {}
+export type object:lambda = {}
 
 ## The built-in ordered collection type.
 ## Declared as [T] in property types (e.g., Types : [Type]).

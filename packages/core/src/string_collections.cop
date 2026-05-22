@@ -4,9 +4,9 @@
 ## Returns true if collection contains a value (case-insensitive string match).
 ## Example: names:contains('Foo')
 export function contains(items: [string], value: string) : bool 
-    => items.reduce((found, x) => found || x == value, false)
+    => items.any((item) => item == value)
 
 ## Returns true if collection contains any of the values in the second collection.
 ## Example: tags:containsAny(['api', 'public'])
 export function containsAny(items: [string], values: [string]) : bool 
-    => values.reduce((found, v) => found || items.contains(v), false)
+    => values.any((value) => items.contains(value))

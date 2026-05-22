@@ -1,12 +1,5 @@
 # Numeric Collection Functions
 # Aggregate functions that operate on collections of numbers.
-# reduce is the one fundamental intrinsic — all others are expressed in pure Cop.
-
-## Reduces a collection to a single value using an accumulator function.
-## The accumulator takes (acc, item) and returns the new accumulator value.
-## Example: [1,2,3]:reduce((acc, item) => acc + item, 0)
-export function reduce(items: [object], accumulator: function, initial: object) : object 
-  => intrinsic
 
 ## Sums all items in an integer collection.
 ## Example: scores:sum()
@@ -20,7 +13,7 @@ export function sum(items: [number]) : number
 
 ## Sums a projected value for each item.
 ## Example: files:sum((f) => f.Size)
-export function sum(items: [object], project: function) : int 
+export function sum(items: [object], project: lambda) : int 
   => items.reduce((acc, item) => acc + project(item), 0)
 
 ## Minimum value in an integer collection.
@@ -35,7 +28,7 @@ export function min(items: [number]) : number
 
 ## Minimum projected value across items.
 ## Example: files:min((f) => f.Size)
-export function min(items: [object], project: function) : int 
+export function min(items: [object], project: lambda) : int 
   => items.reduce((acc, item) => project(item) < acc ? project(item) : acc, project(items.first()))
 
 ## Maximum value in an integer collection.
@@ -50,7 +43,7 @@ export function max(items: [number]) : number
 
 ## Maximum projected value across items.
 ## Example: files:max((f) => f.Size)
-export function max(items: [object], project: function) : int 
+export function max(items: [object], project: lambda) : int 
   => items.reduce((acc, item) => project(item) > acc ? project(item) : acc, project(items.first()))
 
 ## Average value of an integer collection.
@@ -65,5 +58,5 @@ export function average(items: [number]) : number
 
 ## Average projected value across items.
 ## Example: files:average((f) => f.Size)
-export function average(items: [object], project: function) : number 
+export function average(items: [object], project: lambda) : number 
   => items.sum(project) / items.count()
