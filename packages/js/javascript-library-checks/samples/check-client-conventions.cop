@@ -1,3 +1,4 @@
+# @sample skip-validation — depends on javascript-library-checks package source bug
 import javascript-library-checks
 
 command main = foreach Clients

@@ -6,6 +6,9 @@ using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Linq;
 using Cop.Core;
+using Cop.Providers;
+using Cop.Lang;
+using Cop.Lang.Parser;
 
 namespace Cop.Cli.Commands;
 
@@ -20,13 +23,16 @@ public static class ValidateCommand
     /// <returns>A System.CommandLine.Command configured for the validate subcommand.</returns>
     public static Command Create()
     {
-        var nameArgument = new Argument<string>("name");
-        var command = new Command("validate", "Validate a package structure")
+        var pathArgument = new Argument<string>("path")
         {
-            nameArgument
+            Description = "Package directory path or package name"
+        };
+        var command = new Command("validate", "Validate a package structure, source, and samples")
+        {
+            pathArgument
         };
 
-        command.SetAction(parseResult => Execute(parseResult.GetValue(nameArgument)));
+        command.SetAction(parseResult => Execute(parseResult.GetValue(pathArgument)));
 
         return command;
     }
@@ -34,10 +40,22 @@ public static class ValidateCommand
     /// <summary>
     /// Executes validations on a package.
     /// </summary>
-    public static int Execute(string name)
+    public static int Execute(string path)
     {
-        var packagePath = LocalPackageSource.FindPackagePath("packages", name)
-            ?? Path.Combine("packages", name);
+        // Resolve path: if it's an existing directory use it directly,
+        // otherwise try name-based lookup for backward compatibility
+        string packagePath;
+        if (Directory.Exists(path))
+        {
+            packagePath = Path.GetFullPath(path);
+        }
+        else
+        {
+            packagePath = LocalPackageSource.FindPackagePath("packages", path)
+                ?? Path.Combine("packages", path);
+        }
+
+        var name = Path.GetFileName(packagePath);
         var results = new List<ValidationResult>();
 
         // Step 1: Directory exists
@@ -209,6 +227,72 @@ public static class ValidateCommand
             circularError
         ));
 
+        // Step 13: Source files parse (src/*.cop)
+        if (Directory.Exists(srcPath))
+        {
+            var srcFiles = Directory.GetFiles(srcPath, "*.cop");
+            var srcErrors = new List<string>();
+            foreach (var file in srcFiles)
+            {
+                try
+                {
+                    var source = File.ReadAllText(file);
+                    CopParser.Parse(source, file);
+                }
+                catch (ParseException ex)
+                {
+                    srcErrors.Add(ex.Message);
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    srcErrors.Add($"{file}: {ex.Message}");
+                }
+            }
+            results.Add(new ValidationResult(
+                $"Source files parse ({srcFiles.Length} file(s))",
+                srcErrors.Count == 0,
+                srcErrors.Count > 0 ? string.Join("; ", srcErrors) : null
+            ));
+        }
+
+        // Step 14: Samples compile (samples/*.cop)
+        var samplesPath = Path.Combine(packagePath, "samples");
+        if (Directory.Exists(samplesPath))
+        {
+            var sampleFiles = Directory.GetFiles(samplesPath, "*.cop");
+            var sampleErrors = new List<string>();
+            var skipped = 0;
+
+            // Find packages directory for import resolution
+            var packagesDir = FindPackagesDir(packagePath);
+
+            foreach (var file in sampleFiles)
+            {
+                var sampleSource = File.ReadAllText(file);
+
+                // Skip if marked with @sample skip-validation
+                if (sampleSource.Contains("@sample skip-validation"))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                var sampleResult = ValidateSample(file, sampleSource, packagesDir);
+                if (sampleResult != null)
+                    sampleErrors.Add(sampleResult);
+            }
+
+            var detail = sampleErrors.Count > 0
+                ? string.Join("; ", sampleErrors)
+                : skipped > 0 ? $"{skipped} skipped" : null;
+
+            results.Add(new ValidationResult(
+                $"Samples compile ({sampleFiles.Length} file(s))",
+                sampleErrors.Count == 0,
+                detail
+            ));
+        }
+
         PrintResults(results);
 
         // Return 0 if all passed, 1 if any failed
@@ -252,5 +336,71 @@ public static class ValidateCommand
             Passed = passed;
             Details = details;
         }
+    }
+
+    /// <summary>
+    /// Validates a single sample file by running it through the engine.
+    /// Returns an error message or null if valid.
+    /// </summary>
+    private static string? ValidateSample(string filePath, string source, string? packagesDir)
+    {
+        // First check if it parses
+        try
+        {
+            CopParser.Parse(source, filePath);
+        }
+        catch (ParseException ex)
+        {
+            return $"{Path.GetFileName(filePath)}: {ex.Message}";
+        }
+
+        // Run through engine to validate imports and bindings
+        var tempDir = Path.Combine(Path.GetTempPath(), "cop-validate", Path.GetFileNameWithoutExtension(filePath));
+        if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            File.Copy(filePath, Path.Combine(tempDir, Path.GetFileName(filePath)));
+            var feedPaths = packagesDir != null ? new[] { packagesDir } : null;
+            var result = Engine.Run(tempDir, tempDir, additionalFeedPaths: feedPaths);
+
+            if (result.HasParseErrors)
+                return $"{Path.GetFileName(filePath)}: {string.Join("; ", result.ParseErrors)}";
+            if (result.HasFatalErrors)
+            {
+                // "Command 'main' not found" is expected for snippet-style samples
+                var realErrors = result.Errors
+                    .Where(e => !e.Contains("Command 'main' not found"))
+                    .ToList();
+                if (realErrors.Count > 0)
+                    return $"{Path.GetFileName(filePath)}: {string.Join("; ", realErrors)}";
+            }
+
+            return null;
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    /// <summary>
+    /// Walks up from a package path to find the packages/ root directory.
+    /// </summary>
+    private static string? FindPackagesDir(string packagePath)
+    {
+        var dir = Path.GetDirectoryName(packagePath);
+        while (dir != null)
+        {
+            // Check if this is a packages directory (contains multiple package dirs with src/)
+            if (Path.GetFileName(dir).Equals("packages", StringComparison.OrdinalIgnoreCase))
+                return dir;
+            // Also check if parent is packages
+            var parent = Path.GetDirectoryName(dir);
+            if (parent != null && Path.GetFileName(parent).Equals("packages", StringComparison.OrdinalIgnoreCase))
+                return parent;
+            dir = parent;
+        }
+        return null;
     }
 }

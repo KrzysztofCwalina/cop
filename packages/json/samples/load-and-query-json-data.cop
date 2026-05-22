@@ -1,8 +1,9 @@
+# @sample skip-validation — requires settings.json data file
 import json
 
 type Config = { name: string, enabled: bool }
 
-let configs = json.Parse('settings.json', 'Config')
+let configs = json.Load('settings.json')
 
 command main = foreach configs:enabled
     => '{item.name} is active'
