@@ -2190,7 +2190,7 @@ const packages = {
       },
       {
         "name": "sum",
-        "params": "items: [object], project: (object) => number",
+        "params": "items: [object], selector: (object) => number",
         "returns": "int",
         "appliesTo": "[object]",
         "desc": "Sums a projected value for each item.\nExample: files:sum((f) => f.Size)",
@@ -2214,7 +2214,7 @@ const packages = {
       },
       {
         "name": "min",
-        "params": "items: [object], project: (object) => number",
+        "params": "items: [object], selector: (object) => number",
         "returns": "int",
         "appliesTo": "[object]",
         "desc": "Minimum projected value across items.\nExample: files:min((f) => f.Size)",
@@ -2238,7 +2238,7 @@ const packages = {
       },
       {
         "name": "max",
-        "params": "items: [object], project: (object) => number",
+        "params": "items: [object], selector: (object) => number",
         "returns": "int",
         "appliesTo": "[object]",
         "desc": "Maximum projected value across items.\nExample: files:max((f) => f.Size)",
@@ -2262,7 +2262,7 @@ const packages = {
       },
       {
         "name": "average",
-        "params": "items: [object], project: (object) => number",
+        "params": "items: [object], selector: (object) => number",
         "returns": "number",
         "appliesTo": "[object]",
         "desc": "Average projected value across items.\nExample: files:average((f) => f.Size)",
