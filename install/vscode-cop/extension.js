@@ -633,10 +633,10 @@ const NUMERIC_PREDICATES = [
 ];
 
 const COLLECTION_PREDICATES = [
-    { label: 'any', detail: '(predicate) — true if any item matches', kind: Kind.Method },
-    { label: 'none', detail: '(predicate) — true if no items match', kind: Kind.Method },
-    { label: 'all', detail: '(predicate) — true if all items match', kind: Kind.Method },
-    { label: 'count', detail: '(predicate) — count items matching predicate', kind: Kind.Method },
+    { label: 'any', detail: '((object) => bool) — true if any item matches', kind: Kind.Method },
+    { label: 'none', detail: '((object) => bool) — true if no items match', kind: Kind.Method },
+    { label: 'all', detail: '((object) => bool) — true if all items match', kind: Kind.Method },
+    { label: 'count', detail: '((object) => bool) — count items matching predicate', kind: Kind.Method },
     { label: 'contains', detail: '(value) — list contains value', kind: Kind.Method },
     { label: 'containsAny', detail: '(values) — list contains any value from list', kind: Kind.Method },
     { label: 'empty', detail: '— collection is empty', kind: Kind.Method },
@@ -678,21 +678,21 @@ const COLLECTION_PROPERTIES = [
 ];
 
 const COLLECTION_TRANSFORMS = [
-    { label: 'Where', detail: '(predicate) — filter items', kind: Kind.Method },
-    { label: 'First', detail: '(predicate?) — first matching item', kind: Kind.Method },
-    { label: 'Last', detail: '(predicate?) — last matching item', kind: Kind.Method },
-    { label: 'Single', detail: '(predicate?) — single matching item', kind: Kind.Method },
-    { label: 'ElementAt', detail: '(index) — item at position', kind: Kind.Method },
-    { label: 'Select', detail: '(expression) — project each item', kind: Kind.Method },
-    { label: 'OrderBy', detail: '(field) — sort ascending', kind: Kind.Method },
-    { label: 'OrderByDescending', detail: '(field) — sort descending', kind: Kind.Method },
-    { label: 'Distinct', detail: '(field?) — remove duplicates', kind: Kind.Method },
-    { label: 'GroupBy', detail: '(field) — group by field → Key, Items', kind: Kind.Method },
-    { label: 'Sum', detail: '(field) — sum numeric field', kind: Kind.Method },
-    { label: 'Min', detail: '(field) — minimum value', kind: Kind.Method },
-    { label: 'Max', detail: '(field) — maximum value', kind: Kind.Method },
-    { label: 'Average', detail: '(field) — average value', kind: Kind.Method },
-    { label: 'Reduce', detail: '(op, field, separator?) — reduce collection', kind: Kind.Method },
+    { label: 'Where', detail: '((object) => bool) — filter items', kind: Kind.Method },
+    { label: 'First', detail: '((object) => bool?) — first matching item', kind: Kind.Method },
+    { label: 'Last', detail: '((object) => bool?) — last matching item', kind: Kind.Method },
+    { label: 'Single', detail: '((object) => bool?) — single matching item', kind: Kind.Method },
+    { label: 'ElementAt', detail: '(index: int) — item at position', kind: Kind.Method },
+    { label: 'Select', detail: '((object) => object) — project each item', kind: Kind.Method },
+    { label: 'OrderBy', detail: '((object) => object) — sort ascending', kind: Kind.Method },
+    { label: 'OrderByDescending', detail: '((object) => object) — sort descending', kind: Kind.Method },
+    { label: 'Distinct', detail: '— remove duplicates', kind: Kind.Method },
+    { label: 'GroupBy', detail: '((object) => object) — group by key → Key, Items', kind: Kind.Method },
+    { label: 'Sum', detail: '((object) => number) — sum numeric field', kind: Kind.Method },
+    { label: 'Min', detail: '((object) => number) — minimum value', kind: Kind.Method },
+    { label: 'Max', detail: '((object) => number) — maximum value', kind: Kind.Method },
+    { label: 'Average', detail: '((object) => number) — average value', kind: Kind.Method },
+    { label: 'Reduce', detail: '((object, object) => object, initial) — reduce collection', kind: Kind.Method },
 ];
 
 const KEYWORDS = [

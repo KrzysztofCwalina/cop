@@ -28,16 +28,6 @@ export type object:byte = {}
 ## An array of bytes. Used for binary data (e.g., HTTP request/response bodies).
 export type object:bytes = {}
 
-## A first-class callable value (lambda or named function reference).
-## Passed as an argument and invoked with args: pred(item), transform(x).
-## Used for projections and accumulators in select, orderBy, reduce, etc.
-export type object:lambda = {}
-
-## A predicate: a callable that tests an item and returns bool.
-## Can be a named predicate reference or an inline lambda.
-## Example: isPublic, (item) => item.Name:startsWith('I')
-export type object:predicate = {}
-
 ## The built-in ordered collection type.
 ## Declared as [T] in property types (e.g., Types : [Type]).
 ## Immutable — all operations return new collections without modifying the original.

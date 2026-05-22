@@ -13,7 +13,7 @@ export function sum(items: [number]) : number
 
 ## Sums a projected value for each item.
 ## Example: files:sum((f) => f.Size)
-export function sum(items: [object], project: lambda) : int 
+export function sum(items: [object], project: (object) => number) : int 
   => items.reduce((acc, item) => acc + project(item), 0)
 
 ## Minimum value in an integer collection.
@@ -28,7 +28,7 @@ export function min(items: [number]) : number
 
 ## Minimum projected value across items.
 ## Example: files:min((f) => f.Size)
-export function min(items: [object], project: lambda) : int 
+export function min(items: [object], project: (object) => number) : int 
   => items.reduce((acc, item) => project(item) < acc ? project(item) : acc, project(items.first()))
 
 ## Maximum value in an integer collection.
@@ -43,7 +43,7 @@ export function max(items: [number]) : number
 
 ## Maximum projected value across items.
 ## Example: files:max((f) => f.Size)
-export function max(items: [object], project: lambda) : int 
+export function max(items: [object], project: (object) => number) : int 
   => items.reduce((acc, item) => project(item) > acc ? project(item) : acc, project(items.first()))
 
 ## Average value of an integer collection.
@@ -58,5 +58,5 @@ export function average(items: [number]) : number
 
 ## Average projected value across items.
 ## Example: files:average((f) => f.Size)
-export function average(items: [object], project: lambda) : number 
+export function average(items: [object], project: (object) => number) : number 
   => items.sum(project) / items.count()

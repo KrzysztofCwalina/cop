@@ -1344,8 +1344,30 @@ public class CopParser
             SkipBalancedBraces();
             return new TypeRef("object", false, line);
         }
+        // (Type, ...) => ReturnType — function type signature
+        if (Check(TokenKind.LParen))
+        {
+            return ParseFunctionTypeRef(line);
+        }
         var name = ExpectIdentifier("type name");
         return new TypeRef(name, false, line);
+    }
+
+    private TypeRef ParseFunctionTypeRef(int line)
+    {
+        Advance(); // consume '('
+        var paramTypes = new List<string>();
+        if (!Check(TokenKind.RParen))
+        {
+            paramTypes.Add(FormatTypeRef(ParseTypeRef()));
+            while (Match(TokenKind.Comma))
+                paramTypes.Add(FormatTypeRef(ParseTypeRef()));
+        }
+        Expect(TokenKind.RParen, "')'");
+        Expect(TokenKind.Arrow, "'=>'");
+        var returnType = ParseTypeRef();
+        var signature = $"({string.Join(", ", paramTypes)}) => {FormatTypeRef(returnType)}";
+        return new TypeRef(signature, false, line);
     }
 
     private void SkipBalancedBraces()

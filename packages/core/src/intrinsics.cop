@@ -54,7 +54,7 @@ export function assert(condition : bool, description : string) => intrinsic
 ## Reduces a collection to a single value using an accumulator function.
 ## The accumulator takes (acc, item) and returns the new accumulator value.
 ## Example: [1,2,3]:reduce((acc, item) => acc + item, 0)
-export function reduce(items: [object], accumulator: lambda, initial: object) : object 
+export function reduce(items: [object], accumulator: (object, object) => object, initial: object) : object 
   => intrinsic
 
 ## Returns a new collection combining both collections.

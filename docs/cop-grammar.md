@@ -390,8 +390,16 @@ otherwise, the parenthesized content is a grouped expression.
 ```ebnf
 type_ref        = '[' IDENTIFIER ']'            (* collection type *)
                 | '{' balanced_braces '}'       (* anonymous record type — treated as 'object' *)
+                | '(' type_ref { ',' type_ref } ')' '=>' type_ref   (* function type *)
                 | IDENTIFIER                    (* named type *)
                 ;
+```
+
+Function type syntax expresses the full signature of callable parameters:
+```cop
+condition: (object) => bool          # predicate taking one arg
+transform: (object) => object        # projection function
+accumulator: (object, object) => object  # two-arg reducer
 ```
 
 ---

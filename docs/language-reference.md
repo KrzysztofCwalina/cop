@@ -436,6 +436,29 @@ double(3) + 1             # → 7
 Types.Select(isLarge)     # → list of booleans
 ```
 
+#### Function Type Annotations
+
+Parameters that accept callable values (predicates, projections, accumulators) use function type syntax to express their full signature:
+
+```ruby
+# (ParamTypes) => ReturnType
+function where(items: [object], condition: (object) => bool) : [object]
+function select(items: [object], transform: (object) => object) : [object]
+function reduce(items: [object], accumulator: (object, object) => object, initial: object) : object
+function sum(items: [object], project: (object) => number) : int
+```
+
+This enables documentation tooling to show full signatures and allows future compile-time verification that passed functions match the expected signature.
+
+When calling these functions, you can pass either a named predicate/function or an inline lambda:
+
+```ruby
+Types:where(isPublic)                    # named predicate
+Types:where((t) => t.Name:startsWith('I'))  # inline lambda
+Types:select((t) => t.Name)              # projection lambda
+items:reduce((acc, x) => acc + x, 0)     # accumulator lambda
+```
+
 #### Record-Body Functions
 
 A record-body function produces a structured object with field mappings. The return type comes after `=>`:
@@ -730,11 +753,21 @@ Items.Single                 # single item (nic if 0 or 2+)
 Predicate applications test a list per-item and return a boolean. These use `:` because the predicate is applied **to each item**:
 
 ```ruby
-Items:any(predicate)         # true if any item matches
-Items:none(predicate)        # true if no items match
-Items:all(predicate)         # true if all items match
+Items:any(isPublic)          # true if any item matches (shorthand)
+Items:none(isObsolete)       # true if no items match
+Items:all(isPublic)          # true if all items match
 Items:contains('value')      # true if list contains value
 Items:empty                  # true if list has no items
+```
+
+Named predicates can be passed directly — no lambda wrapper needed:
+
+```ruby
+predicate isPublic(Type) => Type.Modifiers:isSet(Public)
+
+Types:any(isPublic)          # equivalent to Types:any((item) => item:isPublic)
+Types:all(isPublic)          # equivalent to Types:all((item) => item:isPublic)
+Types:count(isPublic)        # count matching items
 ```
 
 ### List Transforms (`.`)
@@ -742,22 +775,22 @@ Items:empty                  # true if list has no items
 Transforms operate on the collection as a whole and return a new list or value. These use `.` because they are **collection-level operations**:
 
 ```ruby
-Items.Where(predicate)       # subset of matching items
+Items.Where(predicate)       # subset of matching items — e.g. Items.Where(isPublic)
 Items.First(predicate)       # first matching item
 Items.Last(predicate)        # last matching item
 Items.Single(predicate)      # single matching item
 Items.ElementAt(n)           # item at index n
-Items.Select(expr)           # project each item to a new value
+Items.Select(transform)     # project each item — e.g. Items.Select((t) => t.Name)
 Items.Text(template)         # format each item and join into a single string
-Items.OrderBy(expr)          # sort ascending by expression
-Items.OrderByDescending(expr) # sort descending by expression
+Items.OrderBy(keySelector)  # sort ascending — e.g. Items.OrderBy((t) => t.Name)
+Items.OrderByDescending(keySelector) # sort descending
 Items.Distinct(expr)         # deduplicate by expression (or by value if no arg)
-Items.GroupBy(expr)          # group into Group objects with Key, Items, Count
-Items.Sum(expr)              # sum numeric values
-Items.Min(expr)              # minimum numeric value
-Items.Max(expr)              # maximum numeric value
-Items.Average(expr)          # average numeric value
-Items.Reduce(op, expr, sep?) # aggregate with operator
+Items.GroupBy(keySelector)  # group by key — e.g. Items.GroupBy((t) => t.Namespace)
+Items.Sum(projection)        # sum numeric values — e.g. Items.Sum((f) => f.Size)
+Items.Min(projection)        # minimum numeric value
+Items.Max(projection)        # maximum numeric value
+Items.Average(projection)    # average numeric value
+Items.Reduce(accumulator, initial) # fold with (acc, item) => result
 ```
 
 #### Collection Concatenation (`+`)
