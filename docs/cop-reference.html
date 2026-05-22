@@ -2025,12 +2025,6 @@ const packages = {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L102"
       },
       {
-        "name": "empty",
-        "appliesTo": "[object]",
-        "desc": "Returns true if the collection is empty (Count == 0).\nExample: errors:empty",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L45"
-      },
-      {
         "name": "text",
         "appliesTo": "Unknown",
         "desc": "Converts a string to text (identity — returns string as-is).",
@@ -2321,6 +2315,14 @@ const packages = {
         "appliesTo": "[object]",
         "desc": "Counts items matching a condition.\nExample: Types:count(isPublic)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L40"
+      },
+      {
+        "name": "empty",
+        "params": "items: [object]",
+        "returns": "bool",
+        "appliesTo": "[object]",
+        "desc": "Returns true if the collection is empty (Count == 0).\nExample: errors:empty",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L45"
       },
       {
         "name": "first",

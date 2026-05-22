@@ -1487,7 +1487,8 @@ public class CopParser
             || (!IsCommandLike(functionDecl)
                 && functionDecl.Params.Count == 1
                 && functionDecl.Body is ExpressionBody { Expr: not ObjectExpr }
-                && (functionDecl.ReturnType is null || FormatTypeRef(functionDecl.ReturnType) == "bool"));
+                && (functionDecl.ReturnType is null || FormatTypeRef(functionDecl.ReturnType) == "bool")
+                && !(functionDecl.Params[0].Type is { IsCollection: true }));
 
     private static Cop.Lang.TypeDefinition ConvertTypeDefinition(TypeDecl typeDecl)
         => new(
