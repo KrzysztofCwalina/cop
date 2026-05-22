@@ -10,7 +10,8 @@
 ##   where - where clause (e.g., 'c.isPublic()')
 ##   select - select clause (e.g., 'c, c.getName()')
 ## Returns a formatted .ql file content string.
-export function qlQuery(name : string, description : string, from : string, where : string, select : string) : string => provider
+export function qlQuery(name : string, description : string, from : string, where : string, select : string) : string =>
+  '/**\n * @name {name}\n * @description {description}\n * @kind problem\n * @problem.severity warning\n */\n\nimport csharp\n\nfrom {from}\nwhere {where}\nselect {select}'
 
 ## Builds a CodeQL query with no where clause (selects all matching).
 ## Parameters:
@@ -18,49 +19,50 @@ export function qlQuery(name : string, description : string, from : string, wher
 ##   description - query description
 ##   from - from clause
 ##   select - select clause
-export function qlQueryAll(name : string, description : string, from : string, select : string) : string => provider
+export function qlQueryAll(name : string, description : string, from : string, select : string) : string =>
+  '/**\n * @name {name}\n * @description {description}\n * @kind problem\n * @problem.severity warning\n */\n\nimport csharp\n\nfrom {from}\nselect {select}'
 
 ## Builds a CodeQL 'from' clause for a single variable.
 ## Example: qlFrom('c', 'Class') => 'Class c'
-export function qlFrom(variable : string, qlType : string) : string => provider
+export function qlFrom(variable : string, qlType : string) : string => '{qlType} {variable}'
 
 ## Builds a CodeQL 'from' clause for two variables (join).
 ## Example: qlFrom2('c', 'Class', 'm', 'Method') => 'Class c, Method m'
-export function qlFrom2(var1 : string, type1 : string, var2 : string, type2 : string) : string => provider
+export function qlFrom2(var1 : string, type1 : string, var2 : string, type2 : string) : string => '{type1} {var1}, {type2} {var2}'
 
 ## Combines two where conditions with 'and'.
-## Example: qlAnd('c.isPublic()', 'c.isAbstract()') => 'c.isPublic() and c.isAbstract()'
-export function qlAnd(left : string, right : string) : string => provider
+## Example: qlAnd('c.isPublic()', 'c.isAbstract()') => 'c.isPublic() and\n  c.isAbstract()'
+export function qlAnd(left : string, right : string) : string => '{left} and\n  {right}'
 
 ## Combines two where conditions with 'or'.
 ## Example: qlOr('c.isPublic()', 'c.isProtected()') => '(c.isPublic() or c.isProtected())'
-export function qlOr(left : string, right : string) : string => provider
+export function qlOr(left : string, right : string) : string => '({left} or {right})'
 
 ## Negates a where condition.
 ## Example: qlNot('c.isPublic()') => 'not c.isPublic()'
-export function qlNot(condition : string) : string => provider
+export function qlNot(condition : string) : string => 'not {condition}'
 
 ## Builds a name-matching where condition using regexp.
 ## Example: qlNameMatches('c', 'Get.*') => 'c.getName().regexpMatch("Get.*")'
-export function qlNameMatches(variable : string, pattern : string) : string => provider
+export function qlNameMatches(variable : string, pattern : string) : string => '{variable}.getName().regexpMatch("{pattern}")'
 
 ## Builds a name starts-with condition.
 ## Example: qlNameStartsWith('c', 'Base') => 'c.getName().indexOf("Base") = 0'
-export function qlNameStartsWith(variable : string, prefix : string) : string => provider
+export function qlNameStartsWith(variable : string, prefix : string) : string => '{variable}.getName().indexOf("{prefix}") = 0'
 
 ## Builds a name contains condition.
 ## Example: qlNameContains('c', 'Helper') => 'c.getName().matches("%Helper%")'
-export function qlNameContains(variable : string, substring : string) : string => provider
+export function qlNameContains(variable : string, substring : string) : string => '{variable}.getName().matches("%{substring}%")'
 
 ## Builds a modifier predicate call.
-## Example: qlIsPublic('c') => 'c.isPublic()'
-export function qlModifier(variable : string, modifier : string) : string => provider
+## Pass modifier with capital first letter (CodeQL predicate suffix).
+## Example: qlModifier('c', 'Public') => 'c.isPublic()'
+export function qlModifier(variable : string, modifier : string) : string => '{variable}.is{modifier}()'
 
 ## Builds an 'exists' subquery.
 ## Example: qlExists('Method m', 'm.getDeclaringType() = c') => 'exists(Method m | m.getDeclaringType() = c)'
-export function qlExists(declaration : string, condition : string) : string => provider
+export function qlExists(declaration : string, condition : string) : string => 'exists({declaration} | {condition})'
 
 ## Writes a query string to a .ql file.
-## Uses the save() intrinsic under the hood.
 ## Example: qlSave('queries/my-query.ql', queryString)
-export function qlSave(path : string, content : string) : string => provider
+export function qlSave(path : string, content : string) => save(path, content)

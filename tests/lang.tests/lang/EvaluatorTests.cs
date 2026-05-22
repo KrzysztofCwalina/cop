@@ -529,7 +529,7 @@ let c = Red", "test.cop");
     public void EvalFunctionWithMappingBody()
     {
         var module = CopParser.Parse(@"
-function makeGreeting(name : string) : string
+function makeGreeting(name : string)
     Message = 'Hello ' + name
     Target = name
 let result = makeGreeting('World')", "test.cop");

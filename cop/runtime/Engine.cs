@@ -221,6 +221,8 @@ public static class Engine
             ExcludedDirectories = ExcludedDirectoryNames
         };
 
+        var queryService = new ProviderQueryService(rootPath, ExcludedDirectoryNames, diagLog);
+
         foreach (var (dir, meta) in providerPackages)
         {
             var loaded = ProviderLoader.Load(dir, meta, errors, out _, out _);
@@ -228,6 +230,7 @@ public static class Engine
             if (loaded is null)
                 continue;
 
+            queryService.RegisterProvider(loaded.PackageName, loaded.Instance, loaded.Schema);
             var collections = QueryProviderCollections(loaded.Instance, loaded.Schema, query, errors);
             diagLog?.Invoke($"[diag] Provider '{loaded.PackageName}' returned {collections.Count} collections: {string.Join(", ", collections.Select(c => $"{c.Key}({c.Value.Count})"))}");
             var runtimeBindings = loaded.Instance.GetRuntimeBindings();
@@ -236,11 +239,34 @@ public static class Engine
 
         foreach (var builtinProvider in _builtinProviders)
         {
+            queryService.RegisterProvider(builtinProvider.Name, builtinProvider.Instance, builtinProvider.Schema);
             var collections = QueryProviderCollections(builtinProvider.Instance, builtinProvider.Schema, query, errors);
             diagLog?.Invoke($"[diag] Provider '{builtinProvider.Name}' returned {collections.Count} collections: {string.Join(", ", collections.Select(c => $"{c.Key}({c.Value.Count})"))}");
             var runtimeBindings = builtinProvider.Instance.GetRuntimeBindings();
             RegisterProviderCollections(bridge.Evaluator.GlobalEnvironment, builtinProvider.Name, collections, builtinProvider.Schema, runtimeBindings);
         }
+
+        // Re-register provider intrinsic with query service access (same pattern as print/save/assert)
+        bridge.RegisterFunction("provider", (args, env) =>
+        {
+            if (args.Count == 0) return CopNull.Instance;
+            var providerName = args[0].Display();
+
+            if (args.Count > 1 && args[1] is not CopNull)
+            {
+                var options = args[1].Display();
+                var providerQuery = new ProviderQuery
+                {
+                    RootPath = Path.IsPathRooted(options)
+                        ? options
+                        : Path.GetFullPath(Path.Combine(rootPath, options)),
+                    ExcludedDirectories = ExcludedDirectoryNames
+                };
+                return queryService.QueryProvider(providerName, providerQuery);
+            }
+
+            return new CopProviderProxy(providerName, env);
+        });
 
         // Phase 2: Evaluate let bindings (now that provider data is available)
         // First: deferred let bindings from imported packages
@@ -357,10 +383,14 @@ public static class Engine
         var args = (programArgs ?? [])
             .Select(arg => (CopValue)new CopString(arg))
             .ToList();
-        bridge.RegisterValue("Program", new CopObject(new Dictionary<string, CopValue>(StringComparer.Ordinal)
+        var programObj = new CopObject(new Dictionary<string, CopValue>(StringComparer.Ordinal)
         {
             ["Args"] = new CopList(args)
-        }));
+        }) { TypeName = "Program" };
+
+        // Register as both a value (Program) and FFI function (program())
+        bridge.RegisterValue("Program", programObj);
+        bridge.RegisterFunction("program", (_, _) => programObj, 0);
     }
 
     private static void RegisterPlaceholderCollections(Cop.Lang.Interpreter.Environment env, IEnumerable<(string Name, ProviderSchema Schema)> providers)

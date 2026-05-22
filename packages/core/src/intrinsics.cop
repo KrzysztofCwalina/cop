@@ -34,7 +34,7 @@ export function read(path : string) : string => intrinsic
 ## Used standalone: print('hello {Name}')
 ## Used in pipeline: foreach Types => print('{item.Name}')
 ## The template supports {Property} interpolation and {@style} formatting.
-export function print(message : string) : string => intrinsic
+export function print(message : object) => intrinsic
 
 ## Saves content to a file at the specified path.
 ## Used in pipeline: foreach Types:isPublic => save('api.txt', '{item.Name}')
@@ -43,7 +43,7 @@ export function save(path : string, content : string) => intrinsic
 
 ## Outputs a diagnostic message to the debug log (--diag flag).
 ## Same template semantics as print but only visible when diagnostics are enabled.
-export function debug(message : string) => intrinsic
+export function debug(message : object) => intrinsic
 
 ## Asserts that a condition is true. Fails the test run if false.
 ## Used in tests: assert(Types:isPublic.Count > 0, 'should have public types')

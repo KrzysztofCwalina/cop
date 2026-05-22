@@ -60,15 +60,16 @@ public static class StandardLibrary
         // I/O functions
         ffi.Register("read", (args, env) =>
         {
-            if (args.Count == 0) return CopNull.Instance;
+            if (args.Count == 0)
+                throw new CopEvaluationException("read() requires a path argument");
             var path = args[0].Display();
             try
             {
                 return new CopString(File.ReadAllText(path));
             }
-            catch
+            catch (Exception ex)
             {
-                return CopNull.Instance;
+                throw new CopEvaluationException($"read('{path}') failed: {ex.Message}");
             }
         });
 

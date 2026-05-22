@@ -435,6 +435,7 @@ public sealed class Evaluator
         {
             CopObject co when co.HasField(member) => co.GetField(member),
             CopDynamicObject dyn when dyn.HasField(member) => dyn.GetField(member),
+            CopProviderProxy proxy when proxy.HasField(member) => proxy.GetField(member),
             _ => null
         };
     }
@@ -896,6 +897,9 @@ public sealed class Evaluator
     /// </summary>
     public CopValue CallUserFunction(CopFunction func, IReadOnlyList<CopValue> args)
     {
+        // Validate arguments before dispatch (arity + parameter types)
+        TypeValidator.ValidateArguments(func.Declaration, args);
+
         var funcEnv = func.Closure.Extend();
 
         // Bind parameters
@@ -927,7 +931,7 @@ public sealed class Evaluator
         }
 
         // Evaluate body
-        return func.Declaration.Body switch
+        var result = func.Declaration.Body switch
         {
             ExpressionBody eb => Eval(eb.Expr, funcEnv),
             MappingBody mb => EvalMappingBody(mb, funcEnv),
@@ -935,6 +939,11 @@ public sealed class Evaluator
             IntrinsicBody => CallIntrinsicViaFFI(func.Declaration.Name, args, funcEnv),
             _ => CopNull.Instance
         };
+
+        // Validate return type after execution
+        TypeValidator.ValidateReturn(func.Declaration, result);
+
+        return result;
     }
 
     /// <summary>

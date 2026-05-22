@@ -15,4 +15,4 @@ export let Projects = cb.Projects
 ## The path is relative to the project root.
 ## The returned Codebase has Types, Api, Members, Lines, etc.
 ## Example: csharp.Load('lib/MyLib.dll')
-export function Load(path : string) : Codebase => provider('csharp', path)
+export function Load(path : string) : object => provider('csharp', path)
