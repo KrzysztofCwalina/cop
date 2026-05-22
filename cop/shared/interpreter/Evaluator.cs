@@ -825,8 +825,6 @@ public sealed class Evaluator
     /// </summary>
     private CopValue? TryEvalCollectionPredicate(Expression predicateExpr, CopValue collection, bool negated, Environment env)
     {
-        // Only 'contains(value)' with an argument is unambiguously a collection membership test.
-        // Other predicates like 'empty', 'any', 'all', 'none' are ambiguous (could be per-item).
         if (predicateExpr is not CallExpr call) return null;
 
         string? methodName = call.Callee switch
@@ -837,19 +835,61 @@ public sealed class Evaluator
 
         if (methodName is null || call.Args.Count == 0) return null;
 
-        switch (methodName)
+        // Generic dispatch: if any arg is a lambda or resolves to a callable,
+        // this is a collection-level method call (e.g., Types:all(isPublic))
+        if (HasCallableArg(call.Args, env))
         {
-            case "contains":
-            {
-                var items = CoerceToEnumerable(collection).ToList();
-                var searchVal = Eval(call.Args[0], env).Display();
-                bool found = items.Any(item => string.Equals(item.Display(), searchVal, StringComparison.OrdinalIgnoreCase));
-                return CopBool.Of(negated ? !found : found);
-            }
+            var evaluatedArgs = call.Args.Select(a => Eval(a, env)).ToList();
+            var allArgs = new List<CopValue> { collection };
+            allArgs.AddRange(evaluatedArgs);
 
-            default:
-                return null;
+            ICopCallable? method = null;
+            if (env.TryLookup(methodName, out var fn) && fn is ICopCallable c)
+                method = c;
+            else if (_ffi.Resolve(methodName) is ICopCallable f)
+                method = f;
+
+            if (method is not null)
+            {
+                var result = method.Invoke(allArgs, this, env);
+                if (negated && result is CopBool b)
+                    return CopBool.Of(!b.Value);
+                return result;
+            }
         }
+
+        // Fallback: contains(value) for collection membership test
+        if (methodName == "contains")
+        {
+            var items = CoerceToEnumerable(collection).ToList();
+            var searchVal = Eval(call.Args[0], env).Display();
+            bool found = items.Any(item => string.Equals(item.Display(), searchVal, StringComparison.OrdinalIgnoreCase));
+            return CopBool.Of(negated ? !found : found);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Checks if any argument in a call expression is a callable (lambda expression
+    /// or identifier that resolves to ICopCallable). Used to determine whether a
+    /// colon-syntax call should dispatch at the collection level.
+    /// </summary>
+    private bool HasCallableArg(IReadOnlyList<Expression> args, Environment env)
+    {
+        foreach (var arg in args)
+        {
+            if (arg is LambdaExpr)
+                return true;
+            if (arg is IdentifierExpr id)
+            {
+                if (env.TryLookup(id.Name, out var val) && val is ICopCallable)
+                    return true;
+                if (_ffi.Resolve(id.Name) is ICopCallable)
+                    return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>
