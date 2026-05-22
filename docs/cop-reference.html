@@ -1986,13 +1986,18 @@ const packages = {
         "props": []
       },
       "lambda": {
-        "desc": "A first-class callable value (lambda or named function reference).\nPassed as an argument and invoked with args: pred(item), transform(x).\nUsed for predicates, projections, and accumulators in where, select, reduce, etc.",
+        "desc": "A first-class callable value (lambda or named function reference).\nPassed as an argument and invoked with args: pred(item), transform(x).\nUsed for projections and accumulators in select, orderBy, reduce, etc.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L34",
+        "props": []
+      },
+      "predicate": {
+        "desc": "A predicate: a callable that tests an item and returns bool.\nCan be a named predicate reference or an inline lambda.\nExample: isPublic, (item) => item.Name:startsWith('I')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L39",
         "props": []
       },
       "[T]": {
         "desc": "The built-in ordered collection type.\nDeclared as [T] in property types (e.g., Types : [Type]).\nImmutable — all operations return new collections without modifying the original.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L39",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L44",
         "props": [
           {
             "name": "Count",
@@ -2281,7 +2286,7 @@ const packages = {
       },
       {
         "name": "where",
-        "params": "items: [object], condition: lambda",
+        "params": "items: [object], condition: predicate",
         "returns": "[object]",
         "appliesTo": "[object]",
         "desc": "Filters items matching a condition. Returns a new collection.\nExample: Types:where(isPublic)",
@@ -2297,7 +2302,7 @@ const packages = {
       },
       {
         "name": "any",
-        "params": "items: [object], condition: lambda",
+        "params": "items: [object], condition: predicate",
         "returns": "bool",
         "appliesTo": "[object]",
         "desc": "Returns true if any item matches a condition.\nExample: Types:any(isAbstract)",
@@ -2305,7 +2310,7 @@ const packages = {
       },
       {
         "name": "all",
-        "params": "items: [object], condition: lambda",
+        "params": "items: [object], condition: predicate",
         "returns": "bool",
         "appliesTo": "[object]",
         "desc": "Returns true if all items match a condition.\nExample: Types:all(isPublic)",
@@ -2313,7 +2318,7 @@ const packages = {
       },
       {
         "name": "none",
-        "params": "items: [object], condition: lambda",
+        "params": "items: [object], condition: predicate",
         "returns": "bool",
         "appliesTo": "[object]",
         "desc": "Returns true if no item matches a condition.\nExample: Types:none(isObsolete)",
@@ -2321,7 +2326,7 @@ const packages = {
       },
       {
         "name": "count",
-        "params": "items: [object], condition: lambda",
+        "params": "items: [object], condition: predicate",
         "returns": "int",
         "appliesTo": "[object]",
         "desc": "Counts items matching a condition.\nExample: Types:count(isPublic)",
@@ -2329,7 +2334,7 @@ const packages = {
       },
       {
         "name": "first",
-        "params": "items: [object], condition: lambda",
+        "params": "items: [object], condition: predicate",
         "returns": "object",
         "appliesTo": "[object]",
         "desc": "First item matching a condition, or nil.\nExample: Types:first(isPublic)",
@@ -2337,7 +2342,7 @@ const packages = {
       },
       {
         "name": "last",
-        "params": "items: [object], condition: lambda",
+        "params": "items: [object], condition: predicate",
         "returns": "object",
         "appliesTo": "[object]",
         "desc": "Last item matching a condition, or nil.\nExample: Types:last(isPublic)",
@@ -2345,7 +2350,7 @@ const packages = {
       },
       {
         "name": "single",
-        "params": "items: [object], condition: lambda",
+        "params": "items: [object], condition: predicate",
         "returns": "object",
         "appliesTo": "[object]",
         "desc": "The single item matching a condition, or nil if zero or multiple match.\nExample: Types:single(isEntryPoint)",

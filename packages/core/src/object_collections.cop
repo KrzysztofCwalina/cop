@@ -12,7 +12,7 @@ export type object:Group = {
 
 ## Filters items matching a condition. Returns a new collection.
 ## Example: Types:where(isPublic)
-export function where(items: [object], condition: lambda) : [object] 
+export function where(items: [object], condition: predicate) : [object] 
   => reduce(items, (acc, item) => condition(item) ? acc.concat([item]) : acc, [])
 
 ## Projects each item through a transformation. Returns a new collection.
@@ -22,22 +22,22 @@ export function select(items: [object], transform: lambda) : [object]
 
 ## Returns true if any item matches a condition.
 ## Example: Types:any(isAbstract)
-export function any(items: [object], condition: lambda) : bool
+export function any(items: [object], condition: predicate) : bool
   => reduce(items, (acc, item) => acc || condition(item), false)
 
 ## Returns true if all items match a condition.
 ## Example: Types:all(isPublic)
-export function all(items: [object], condition: lambda) : bool 
+export function all(items: [object], condition: predicate) : bool 
   => reduce(items, (acc, item) => acc && condition(item), true)
 
 ## Returns true if no item matches a condition.
 ## Example: Types:none(isObsolete)
-export function none(items: [object], condition: lambda) : bool 
+export function none(items: [object], condition: predicate) : bool 
   => reduce(items, (acc, item) => acc && !condition(item), true)
 
 ## Counts items matching a condition.
 ## Example: Types:count(isPublic)
-export function count(items: [object], condition: lambda) : int 
+export function count(items: [object], condition: predicate) : int 
   => reduce(items, (acc, item) => condition(item) ? acc + 1 : acc, 0)
 
 ## Returns true if the collection is empty (Count == 0).
@@ -47,17 +47,17 @@ export function empty(items: [object]) : bool
 
 ## First item matching a condition, or nil.
 ## Example: Types:first(isPublic)
-export function first(items: [object], condition: lambda) : object 
+export function first(items: [object], condition: predicate) : object 
   => items.where(condition).First
 
 ## Last item matching a condition, or nil.
 ## Example: Types:last(isPublic)
-export function last(items: [object], condition: lambda) : object 
+export function last(items: [object], condition: predicate) : object 
   => items.where(condition).Last
 
 ## The single item matching a condition, or nil if zero or multiple match.
 ## Example: Types:single(isEntryPoint)
-export function single(items: [object], condition: lambda) : object 
+export function single(items: [object], condition: predicate) : object 
   => items.where(condition).Single
 
 ## Item at a specific zero-based index.
