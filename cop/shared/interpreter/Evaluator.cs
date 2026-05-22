@@ -695,7 +695,7 @@ public sealed class Evaluator
         _traceLog?.Invoke($"[trace] EvalFilter: collection type={collection?.GetType().Name}, predicate={filter.Predicate?.GetType().Name}");
 
         // Queryable collection: try to compile predicate and accumulate filter (lazy pushdown)
-        if (collection is CopQueryableCollection queryable)
+        if (collection is CopQueryable queryable)
         {
             // Try to compile the predicate AST to a FilterExpression for pushdown
             var compiled = PredicateCompiler.TryCompile(filter.Predicate, negated);
@@ -1163,7 +1163,7 @@ public sealed class Evaluator
             value = thunk.Force();
 
         // Materialize queryable collections on demand
-        if (value is CopQueryableCollection queryable)
+        if (value is CopQueryable queryable)
             return queryable.Enumerate();
 
         if (value is CopQueryableProperty queryProp)

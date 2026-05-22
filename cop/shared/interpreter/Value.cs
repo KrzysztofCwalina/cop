@@ -101,14 +101,14 @@ public sealed class CopLazyCollection : CopValue
 /// Accumulates filter expressions from predicate chains and pushes them to the provider.
 /// Analogous to LINQ's IQueryable — filters are composed, not executed, until iteration.
 /// </summary>
-public sealed class CopQueryableCollection : CopValue
+public sealed class CopQueryable : CopValue
 {
     public string ProviderName { get; }
     public Cop.Core.ProviderQuery Query { get; }
     public IProviderQueryService QueryService { get; }
     public Cop.Core.FilterExpression? AccumulatedFilter { get; }
 
-    public CopQueryableCollection(string providerName, Cop.Core.ProviderQuery query, IProviderQueryService queryService, Cop.Core.FilterExpression? filter = null)
+    public CopQueryable(string providerName, Cop.Core.ProviderQuery query, IProviderQueryService queryService, Cop.Core.FilterExpression? filter = null)
     {
         ProviderName = providerName;
         Query = query;
@@ -120,12 +120,12 @@ public sealed class CopQueryableCollection : CopValue
     /// Returns a new queryable with an additional filter accumulated (immutable).
     /// Multiple filters are combined with AND.
     /// </summary>
-    public CopQueryableCollection WithFilter(Cop.Core.FilterExpression filter)
+    public CopQueryable WithFilter(Cop.Core.FilterExpression filter)
     {
         var combined = AccumulatedFilter is null
             ? filter
             : Cop.Core.FilterExpression.And(AccumulatedFilter, filter);
-        return new CopQueryableCollection(ProviderName, Query, QueryService, combined);
+        return new CopQueryable(ProviderName, Query, QueryService, combined);
     }
 
     /// <summary>
@@ -171,10 +171,10 @@ public sealed class CopQueryableCollection : CopValue
 /// </summary>
 public sealed class CopQueryableProperty : CopValue
 {
-    public CopQueryableCollection Source { get; }
+    public CopQueryable Source { get; }
     public string PropertyName { get; }
 
-    public CopQueryableProperty(CopQueryableCollection source, string propertyName)
+    public CopQueryableProperty(CopQueryable source, string propertyName)
     {
         Source = source;
         PropertyName = propertyName;
