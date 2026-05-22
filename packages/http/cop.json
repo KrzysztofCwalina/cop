@@ -10,5 +10,6 @@
     "api"
   ],
   "provider": "clr",
-  "providerEntry": "Cop.Providers.Http.HttpProvider"
+  "providerEntry": "Cop.Providers.Http.HttpProvider",
+  "providerAssembly": "HttpProvider.dll"
 }

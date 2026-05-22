@@ -176,6 +176,7 @@ public sealed class ModuleLoader
     /// <summary>
     /// Evaluate all deferred let bindings from imported packages.
     /// Call AFTER provider data has been registered.
+    /// Uses lazy thunks to handle cross-file references regardless of file order.
     /// </summary>
     public void EvalDeferredLetBindings(Evaluator evaluator, List<string> errors)
     {
@@ -183,8 +184,9 @@ public sealed class ModuleLoader
         {
             try
             {
-                var value = evaluator.Eval(ld.Value, evaluator.GlobalEnvironment);
-                evaluator.GlobalEnvironment.Define(ld.Name, value);
+                var capturedLd = ld;
+                var thunk = new CopThunk(() => evaluator.Eval(capturedLd.Value, evaluator.GlobalEnvironment));
+                evaluator.GlobalEnvironment.Define(ld.Name, thunk);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {

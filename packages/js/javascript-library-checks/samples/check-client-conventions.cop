@@ -1,6 +1,6 @@
 import javascript-library-checks
 
 command main = foreach Clients
-    => '{Type.Name}'
+    => '{item.Name}'
 
 CHECK js-client-checks

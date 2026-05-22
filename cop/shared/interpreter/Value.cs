@@ -255,6 +255,7 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
 {
     public string Name { get; }
     private readonly List<CopFunction> _overloads = [];
+    public IReadOnlyList<CopFunction> Functions => _overloads;
 
     public CopFunctionGroup(string name)
     {
@@ -404,7 +405,19 @@ public sealed class CopProviderProxy : CopValue
         }
         // Then try bare name (e.g., "Types")
         if (_env.TryLookup(name, out var bare))
-            return bare;
+        {
+            // Force thunks eagerly — catches self-referencing cycles
+            // (e.g., `let Operations = tsp.Operations` where tsp is this proxy)
+            if (bare is CopThunk thunk)
+            {
+                try { return thunk.Force(); }
+                catch (CopEvaluationException) { /* recursive thunk → skip bare */ }
+            }
+            else
+            {
+                return bare;
+            }
+        }
         // Return qualified even if empty (rather than null) if bare also not found
         return qualified ?? CopNull.Instance;
     }

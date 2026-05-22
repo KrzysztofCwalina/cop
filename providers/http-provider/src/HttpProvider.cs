@@ -219,7 +219,7 @@ public class HttpSink : SinkProvider
 /// </summary>
 public class HttpProvider : ObjectProvider
 {
-    public override ObjectFormat SupportedFormats => ObjectFormat.Json;
+    public override ObjectFormat SupportedFormats => ObjectFormat.ObjectCollections;
 
     public override ReadOnlyMemory<byte> GetSchema()
     {
@@ -245,6 +245,8 @@ public class HttpProvider : ObjectProvider
     }
 
     private static readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
+
+    public override Dictionary<string, List<object>>? QueryCollections(ProviderQuery query) => new();
 
     public override Dictionary<string, Func<List<object?>, Task<object?>>>? GetProviderFunctions()
     {

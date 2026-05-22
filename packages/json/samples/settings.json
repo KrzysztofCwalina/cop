@@ -1,0 +1,5 @@
+[
+  { "name": "feature-flags", "enabled": true },
+  { "name": "dark-mode", "enabled": true },
+  { "name": "beta-api", "enabled": false }
+]

@@ -348,7 +348,11 @@ public static class ValidateCommand
         Directory.CreateDirectory(tempDir);
         try
         {
-            File.Copy(filePath, Path.Combine(tempDir, Path.GetFileName(filePath)));
+            // Copy all files from the sample's directory (includes data files)
+            var sampleDir = Path.GetDirectoryName(filePath)!;
+            foreach (var file in Directory.GetFiles(sampleDir))
+                File.Copy(file, Path.Combine(tempDir, Path.GetFileName(file)), true);
+
             var feedPaths = packagesDir != null ? new[] { packagesDir } : null;
             var result = Engine.Run(tempDir, tempDir, additionalFeedPaths: feedPaths);
 

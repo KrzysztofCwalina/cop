@@ -212,6 +212,8 @@ public sealed class Evaluator
     private void ExecForEach(ForEachStatement stmt, Environment env)
     {
         var collection = Eval(stmt.Collection, env);
+        // Named subset resolution: predicate Clients(Types) used as foreach source
+        collection = TryResolveNamedSubset(collection, env);
         _traceLog?.Invoke($"[trace] ExecForEach: collection type={collection?.GetType().Name}, body stmts={stmt.Body.Count}");
         var items = CoerceToEnumerable(collection);
         int count = 0;
@@ -448,6 +450,9 @@ public sealed class Evaluator
         if (obj is CopThunk thunk)
             obj = thunk.Force();
 
+        // Named subset resolution: if obj is a predicate-as-collection, expand it
+        obj = TryResolveNamedSubset(obj, env);
+
         return obj switch
         {
             CopObject co => co.GetField(mem.Member),
@@ -461,6 +466,71 @@ public sealed class Evaluator
                 $"Cannot access member '{mem.Member}' on {obj.GetType().Name}",
                 mem.Line, _filePath)
         };
+    }
+
+    /// <summary>
+    /// If value is a predicate with 1 parameter matching a known collection,
+    /// resolve it to the filtered collection (named subset pattern).
+    /// </summary>
+    private CopValue TryResolveNamedSubset(CopValue value, Environment env)
+    {
+        if (value is CopFunction predFunc && predFunc.Declaration.Params.Count == 1)
+        {
+            var inputName = predFunc.Declaration.Params[0].Name;
+            if (env.TryLookup(inputName, out var inputCollection))
+            {
+                // Force thunks before checking type
+                if (inputCollection is CopThunk thunk)
+                    inputCollection = thunk.Force();
+                if (inputCollection is CopList || inputCollection is CopLazyCollection)
+                {
+                    var captured = inputCollection;
+                    return new CopLazyCollection(() =>
+                    {
+                        var items = CoerceToEnumerable(captured);
+                        var filtered = new List<CopValue>();
+                        foreach (var item in items)
+                        {
+                            var result = predFunc.Invoke([item], this, env);
+                            if (result.IsTruthy)
+                                filtered.Add(item);
+                        }
+                        return filtered;
+                    });
+                }
+            }
+        }
+        else if (value is CopFunctionGroup group)
+        {
+            var firstFunc = group.Functions.FirstOrDefault();
+            if (firstFunc is not null && firstFunc.Declaration.Params.Count == 1)
+            {
+                var inputName = firstFunc.Declaration.Params[0].Name;
+                if (env.TryLookup(inputName, out var inputCollection))
+                {
+                    // Force thunks before checking type
+                    if (inputCollection is CopThunk thunk)
+                        inputCollection = thunk.Force();
+                    if (inputCollection is CopList || inputCollection is CopLazyCollection)
+                    {
+                        var captured = inputCollection;
+                        return new CopLazyCollection(() =>
+                        {
+                            var items = CoerceToEnumerable(captured);
+                            var filtered = new List<CopValue>();
+                            foreach (var item in items)
+                            {
+                                var result = group.Invoke([item], this, env);
+                                if (result.IsTruthy)
+                                    filtered.Add(item);
+                            }
+                            return filtered;
+                        });
+                    }
+                }
+            }
+        }
+        return value;
     }
 
     private static string CopTypeNameOf(CopValue value) => value switch
@@ -623,6 +693,10 @@ public sealed class Evaluator
         bool negated = filter.Negated;
 
         _traceLog?.Invoke($"[trace] EvalFilter: collection type={collection?.GetType().Name}, predicate={filter.Predicate?.GetType().Name}");
+
+        // If collection resolved to a predicate/function, resolve as a "named subset":
+        // predicate Clients(Types) => ... used bare as `Clients:filter` means Types:Clients:filter
+        collection = TryResolveNamedSubset(collection, env);
 
         // If collection is a scalar (not a list/collection), apply predicate as a test
         if (collection is not CopList and not CopLazyCollection)

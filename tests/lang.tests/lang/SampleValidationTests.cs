@@ -54,7 +54,10 @@ public class SampleValidationTests
 
         try
         {
-            File.Copy(sampleFilePath, Path.Combine(tempDir, Path.GetFileName(sampleFilePath)));
+            // Copy all files from the sample's directory (includes data files)
+            var sampleDir = Path.GetDirectoryName(sampleFilePath)!;
+            foreach (var file in Directory.GetFiles(sampleDir))
+                File.Copy(file, Path.Combine(tempDir, Path.GetFileName(file)), true);
 
             var result = Engine.Run(tempDir, tempDir, additionalFeedPaths: [PackagesDir]);
 
