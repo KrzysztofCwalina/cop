@@ -40,10 +40,6 @@ public class SampleValidationTests
             var parts = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             if (!parts.Contains("samples")) continue;
 
-            // Check for skip directive
-            var content = File.ReadAllText(sampleFile);
-            if (content.Contains("@sample skip-validation")) continue;
-
             // Use relative path as test name for readability
             yield return new TestCaseData(sampleFile).SetName(relativePath.Replace('\\', '/'));
         }

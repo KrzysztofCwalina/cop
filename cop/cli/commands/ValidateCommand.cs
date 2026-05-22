@@ -261,7 +261,6 @@ public static class ValidateCommand
         {
             var sampleFiles = Directory.GetFiles(samplesPath, "*.cop");
             var sampleErrors = new List<string>();
-            var skipped = 0;
 
             // Find packages directory for import resolution
             var packagesDir = FindPackagesDir(packagePath);
@@ -270,26 +269,15 @@ public static class ValidateCommand
             {
                 var sampleSource = File.ReadAllText(file);
 
-                // Skip if marked with @sample skip-validation
-                if (sampleSource.Contains("@sample skip-validation"))
-                {
-                    skipped++;
-                    continue;
-                }
-
                 var sampleResult = ValidateSample(file, sampleSource, packagesDir);
                 if (sampleResult != null)
                     sampleErrors.Add(sampleResult);
             }
 
-            var detail = sampleErrors.Count > 0
-                ? string.Join("; ", sampleErrors)
-                : skipped > 0 ? $"{skipped} skipped" : null;
-
             results.Add(new ValidationResult(
                 $"Samples compile ({sampleFiles.Length} file(s))",
                 sampleErrors.Count == 0,
-                detail
+                sampleErrors.Count > 0 ? string.Join("; ", sampleErrors) : null
             ));
         }
 

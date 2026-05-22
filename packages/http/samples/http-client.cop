@@ -1,4 +1,3 @@
-# @sample skip-validation — http provider requires external DLL
 import http
 
 function complete(string) =>
