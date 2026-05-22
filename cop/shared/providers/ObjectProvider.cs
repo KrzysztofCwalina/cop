@@ -60,14 +60,6 @@ public abstract class DataProvider
 }
 
 /// <summary>
-/// Legacy alias. Use DataProvider instead.
-/// </summary>
-[Obsolete("Use DataProvider instead")]
-public abstract class ObjectProvider : DataProvider
-{
-}
-
-/// <summary>
 /// CLR runtime bindings provided by a provider at registration time.
 /// Contains type mappings, lambda property accessors, collection extractors, and method evaluators.
 /// </summary>
