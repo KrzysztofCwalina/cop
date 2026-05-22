@@ -120,18 +120,23 @@ public class PackageExtractor
         {
             var parts = new List<string>();
             string? appliesTo = null;
-            // Show InputType when it's a standalone positional type (e.g., Statement).
-            // Skip when it duplicates the first named parameter's type (e.g., data(name: string)),
-            // but always include for collection types (starts with '[') since those are method targets.
-            if (!string.IsNullOrEmpty(fd.InputType)
-                && (fd.InputType.StartsWith('[') || !(fd.Parameters.Count > 0 && fd.Parameters[0].TypeName == fd.InputType)))
+            // The first parameter is stored as InputType/InputName in the AST.
+            // Show it as a collection method target (appliesTo) only when it's a collection type.
+            // Otherwise include it as a regular named parameter.
+            if (!string.IsNullOrEmpty(fd.InputType) && fd.InputType.StartsWith('['))
             {
-                // Include the first parameter's name if available
                 var inputLabel = !string.IsNullOrEmpty(fd.InputName)
                     ? $"{fd.InputName}: {fd.InputType}"
                     : fd.InputType;
                 parts.Add(inputLabel);
                 appliesTo = fd.InputType;
+            }
+            else if (!string.IsNullOrEmpty(fd.InputType))
+            {
+                var inputLabel = !string.IsNullOrEmpty(fd.InputName)
+                    ? $"{fd.InputName}: {fd.InputType}"
+                    : fd.InputType;
+                parts.Add(inputLabel);
             }
             parts.AddRange(fd.Parameters.Select(p => $"{p.Name}: {p.TypeName}"));
             var paramStr = string.Join(", ", parts);
