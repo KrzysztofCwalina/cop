@@ -16,7 +16,7 @@ public sealed class DataObjectAdapter : IDynamicObjectAdapter
 
     private DataObjectAdapter() { }
 
-    public CopValue GetField(object obj, string name)
+    public override CopValue GetField(object obj, string name)
     {
         if (obj is not DataObject dataObj)
             return CopNull.Instance;
@@ -25,7 +25,7 @@ public sealed class DataObjectAdapter : IDynamicObjectAdapter
         return Marshal(raw);
     }
 
-    public string Display(object obj)
+    public override string Display(object obj)
     {
         if (obj is DataObject dataObj)
             return dataObj.GetField("Name")?.ToString()
@@ -75,7 +75,7 @@ public sealed class RecordViewAdapter : IDynamicObjectAdapter
     private readonly Dictionary<string, DataTable>? _childTables;
     private readonly string? _typeName;
 
-    public string? TypeName => _typeName;
+    public override string? TypeName => _typeName;
 
     public RecordViewAdapter(IReadOnlyList<ProviderPropertySchema> properties, Dictionary<string, DataTable>? childTables = null, string? typeName = null)
     {
@@ -86,7 +86,7 @@ public sealed class RecordViewAdapter : IDynamicObjectAdapter
         _typeName = typeName;
     }
 
-    public CopValue GetField(object obj, string name)
+    public override CopValue GetField(object obj, string name)
     {
         if (obj is not RecordView rv)
             return CopNull.Instance;
@@ -104,7 +104,7 @@ public sealed class RecordViewAdapter : IDynamicObjectAdapter
         };
     }
 
-    public string Display(object obj)
+    public override string Display(object obj)
     {
         if (obj is not RecordView rv)
             return obj.ToString() ?? "";
@@ -135,7 +135,7 @@ public sealed class ClrObjectAdapter : IDynamicObjectAdapter
     private readonly Dictionary<Type, string>? _clrTypeMappings;
     private readonly string? _typeName;
 
-    public string? TypeName => _typeName;
+    public override string? TypeName => _typeName;
 
     public ClrObjectAdapter(
         Dictionary<string, Func<object, object?>> accessors,
@@ -149,7 +149,7 @@ public sealed class ClrObjectAdapter : IDynamicObjectAdapter
         _clrTypeMappings = clrTypeMappings;
     }
 
-    public CopValue GetField(object obj, string name)
+    public override CopValue GetField(object obj, string name)
     {
         if (_accessors.TryGetValue(name, out var accessor))
         {
@@ -193,7 +193,7 @@ public sealed class ClrObjectAdapter : IDynamicObjectAdapter
         return DataObjectAdapter.Marshal(raw);
     }
 
-    public string Display(object obj)
+    public override string Display(object obj)
     {
         if (_accessors.TryGetValue("Name", out var nameAccessor))
         {

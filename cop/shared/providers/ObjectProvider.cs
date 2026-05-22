@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Cop.Lang;
 
 namespace Cop.Core;
 
@@ -57,6 +58,13 @@ public abstract class DataProvider
     /// namespace.FunctionName(args) in cop scripts.
     /// </summary>
     public virtual Dictionary<string, Func<List<object?>, Task<object?>>>? GetFunctions() => null;
+
+    /// <summary>
+    /// Registers additional capabilities (e.g., document loaders, file parsers) into the TypeRegistry.
+    /// Called once by the runtime after schema registration.
+    /// Override in providers that need to register custom loaders.
+    /// </summary>
+    public virtual void RegisterCapabilities(TypeRegistry registry, string rootPath) { }
 }
 
 /// <summary>

@@ -292,13 +292,11 @@ public static class ProviderLoader
 
     /// <summary>
     /// Initializes provider capabilities (document loaders, file parsers, etc.).
-    /// Providers implement <see cref="ICapabilityProvider"/> to register additional capabilities.
-    /// Also registers built-in file parsers (e.g., JSON).
+    /// Calls the provider's RegisterCapabilities virtual method.
     /// </summary>
     public static void InitializeCapabilities(DataProvider instance, TypeRegistry registry, string rootPath)
     {
-        if (instance is ICapabilityProvider cap)
-            cap.RegisterCapabilities(registry, rootPath);
+        instance.RegisterCapabilities(registry, rootPath);
     }
 
     /// <summary>

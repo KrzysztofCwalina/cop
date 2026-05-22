@@ -8,10 +8,10 @@ namespace Cop.Providers.SourceParsers;
 
 public class CSharpSourceParser : ISourceParser
 {
-    public IReadOnlyList<string> Extensions => [".cs"];
-    public string Language => "csharp";
+    public override IReadOnlyList<string> Extensions => [".cs"];
+    public override string Language => "csharp";
 
-    public SourceFile? Parse(string filePath, string sourceText)
+    public override SourceFile? Parse(string filePath, string sourceText)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceText);
         var root = tree.GetCompilationUnitRoot();

@@ -5,10 +5,10 @@ namespace Cop.Providers.SourceParsers;
 
 public class PythonSourceParser : ISourceParser
 {
-    public IReadOnlyList<string> Extensions => [".py"];
-    public string Language => "python";
+    public override IReadOnlyList<string> Extensions => [".py"];
+    public override string Language => "python";
 
-    public SourceFile? Parse(string filePath, string sourceText)
+    public override SourceFile? Parse(string filePath, string sourceText)
     {
         var lines = sourceText.Split('\n');
         var types = new List<TypeDeclaration>();

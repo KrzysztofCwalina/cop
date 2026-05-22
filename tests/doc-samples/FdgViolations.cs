@@ -32,8 +32,8 @@ namespace SingleSegment
         public BaseService() { }
     }
 
-    // Type Design: marker interface
-    public interface ISerializable { }
+    // Type Design: marker abstract class
+    public abstract class ISerializable { }
 
     // Member Design: too many params
     public class DataProcessor

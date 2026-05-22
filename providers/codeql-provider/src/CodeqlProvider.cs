@@ -9,7 +9,7 @@ namespace Cop.Providers;
 /// Supports loading SARIF files (the standard output format of `codeql database analyze`).
 /// Import with: import codeql
 /// </summary>
-public class CodeqlProvider : DataProvider, ICapabilityProvider
+public class CodeqlProvider : DataProvider
 {
 
     public override ReadOnlyMemory<byte> GetSchema()
@@ -109,12 +109,6 @@ public class CodeqlProvider : DataProvider, ICapabilityProvider
             }
         }
     };
-
-    public void RegisterCapabilities(TypeRegistry registry, string rootPath)
-    {
-        // codeql.Load is now handled via .cop function body: provider('codeql', path)
-        // No provider function registration needed.
-    }
 
     private static void LoadSarifFile(string filePath, List<object> results, List<object> rules)
     {

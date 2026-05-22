@@ -13,8 +13,8 @@ public class OrderService
     public void CancelOrder(int orderId) { }
 }
 
-public interface IRepository<T>
+public abstract class IRepository<T>
 {
-    T GetById(int id);
-    void Save(T entity);
+    public abstract T GetById(int id);
+    public abstract void Save(T entity);
 }

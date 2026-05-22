@@ -2,9 +2,9 @@ using Cop.Providers.SourceModel;
 
 namespace Cop.Providers.SourceParsers;
 
-public interface ISourceParser
+public abstract class ISourceParser
 {
-    IReadOnlyList<string> Extensions { get; }
-    string Language { get; }
-    SourceFile? Parse(string filePath, string sourceText);
+    public abstract IReadOnlyList<string> Extensions { get; }
+    public abstract string Language { get; }
+    public abstract SourceFile? Parse(string filePath, string sourceText);
 }

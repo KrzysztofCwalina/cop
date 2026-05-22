@@ -8,7 +8,7 @@ namespace Cop.Providers;
 /// C# source code provider. Scans and parses .cs files using Roslyn.
 /// Also provides csharp.Load('assembly.dll') for assembly loading.
 /// </summary>
-public class CSharpProvider : DataProvider, ICapabilityProvider
+public class CSharpProvider : DataProvider
 {
 
     public override ReadOnlyMemory<byte> GetSchema() => CodeSchema.GetJson();
@@ -33,9 +33,8 @@ public class CSharpProvider : DataProvider, ICapabilityProvider
         return collections;
     }
 
-    public void RegisterCapabilities(TypeRegistry registry, string rootPath)
+    public override void RegisterCapabilities(TypeRegistry registry, string rootPath)
     {
-        // Keep document loader registration for backward compatibility during transition
         registry.RegisterDocumentLoader(path =>
         {
             var sourceFile = AssemblyApiReader.ReadAssembly(path);

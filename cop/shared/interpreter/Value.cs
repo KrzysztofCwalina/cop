@@ -105,14 +105,14 @@ public sealed class CopQueryable : CopValue
 {
     public string ProviderName { get; }
     public Cop.Core.ProviderQuery Query { get; }
-    public IProviderQueryService QueryService { get; }
+    private readonly Func<string, Cop.Core.ProviderQuery, CopValue> _queryProvider;
     public Cop.Core.FilterExpression? AccumulatedFilter { get; }
 
-    public CopQueryable(string providerName, Cop.Core.ProviderQuery query, IProviderQueryService queryService, Cop.Core.FilterExpression? filter = null)
+    public CopQueryable(string providerName, Cop.Core.ProviderQuery query, Func<string, Cop.Core.ProviderQuery, CopValue> queryProvider, Cop.Core.FilterExpression? filter = null)
     {
         ProviderName = providerName;
         Query = query;
-        QueryService = queryService;
+        _queryProvider = queryProvider;
         AccumulatedFilter = filter;
     }
 
@@ -125,7 +125,7 @@ public sealed class CopQueryable : CopValue
         var combined = AccumulatedFilter is null
             ? filter
             : Cop.Core.FilterExpression.And(AccumulatedFilter, filter);
-        return new CopQueryable(ProviderName, Query, QueryService, combined);
+        return new CopQueryable(ProviderName, Query, _queryProvider, combined);
     }
 
     /// <summary>
@@ -143,7 +143,7 @@ public sealed class CopQueryable : CopValue
             ExcludedDirectories = Query.ExcludedDirectories,
             Options = Query.Options
         };
-        return QueryService.QueryProvider(ProviderName, queryWithFilter);
+        return _queryProvider(ProviderName, queryWithFilter);
     }
 
     /// <summary>
@@ -287,14 +287,14 @@ public sealed class CopDynamicObject : CopValue
 }
 
 /// <summary>
-/// Interface for adapting provider objects (DataObject, etc.) to the evaluator.
+/// Abstract base for adapting provider objects (DataObject, etc.) to the evaluator.
 /// Implemented by the runtime bridge — keeps provider knowledge out of core.
 /// </summary>
-public interface IDynamicObjectAdapter
+public abstract class IDynamicObjectAdapter
 {
-    CopValue GetField(object obj, string name);
-    string Display(object obj);
-    string? TypeName => null;
+    public abstract CopValue GetField(object obj, string name);
+    public abstract string Display(object obj);
+    public virtual string? TypeName => null;
 }
 
 // ============================================================================

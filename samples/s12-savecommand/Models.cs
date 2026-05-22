@@ -7,10 +7,10 @@ public class Customer
     public void Delete() { }
 }
 
-public interface IService
+public abstract class IService
 {
-    void Start();
-    void Stop();
+    public abstract void Start();
+    public abstract void Stop();
 }
 
 public class OrderProcessor

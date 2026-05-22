@@ -9,7 +9,7 @@ namespace Cop.Providers;
 /// Caches results by (provider, collection, absolutePath) to avoid re-scanning.
 /// Used by the interpreter when a collection reference has a PathOverride.
 /// </summary>
-public class ProviderQueryService : IProviderQueryService
+public class ProviderQueryService
 {
     private readonly record struct CacheKey(string ProviderName, string CollectionName, string AbsolutePath);
 

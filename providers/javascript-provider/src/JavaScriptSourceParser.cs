@@ -5,10 +5,10 @@ namespace Cop.Providers.SourceParsers;
 
 public class JavaScriptSourceParser : ISourceParser
 {
-    public IReadOnlyList<string> Extensions => [".js", ".ts"];
-    public string Language => "javascript";
+    public override IReadOnlyList<string> Extensions => [".js", ".ts"];
+    public override string Language => "javascript";
 
-    public SourceFile? Parse(string filePath, string sourceText)
+    public override SourceFile? Parse(string filePath, string sourceText)
     {
         var lines = sourceText.Split('\n');
         var types = new List<TypeDeclaration>();

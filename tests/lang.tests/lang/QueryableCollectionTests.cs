@@ -13,7 +13,7 @@ public class QueryableCollectionTests
     {
         var svc = new FakeQueryService();
         var query = new ProviderQuery { RootPath = "/test.json" };
-        var queryable = new CopQueryable("json", query, svc);
+        var queryable = new CopQueryable("json", query, svc.QueryProvider);
 
         var f1 = new PropertyFilter("Active", true);
         var q2 = queryable.WithFilter(f1);
@@ -33,7 +33,7 @@ public class QueryableCollectionTests
     {
         var svc = new FakeQueryService();
         var query = new ProviderQuery { RootPath = "/test.json" };
-        var original = new CopQueryable("json", query, svc);
+        var original = new CopQueryable("json", query, svc.QueryProvider);
 
         var modified = original.WithFilter(new PropertyFilter("Active", true));
 
@@ -46,7 +46,7 @@ public class QueryableCollectionTests
     {
         var svc = new FakeQueryService();
         var query = new ProviderQuery { RootPath = "/data.json" };
-        var queryable = new CopQueryable("json", query, svc);
+        var queryable = new CopQueryable("json", query, svc.QueryProvider);
 
         var filter = new PropertyFilter("Enabled", true);
         var filtered = queryable.WithFilter(filter);
@@ -67,7 +67,7 @@ public class QueryableCollectionTests
             new CopString("item2")
         ]));
         var query = new ProviderQuery { RootPath = "/test.json" };
-        var queryable = new CopQueryable("json", query, svc);
+        var queryable = new CopQueryable("json", query, svc.QueryProvider);
 
         var items = queryable.Enumerate().ToList();
 
@@ -80,7 +80,7 @@ public class QueryableCollectionTests
     {
         // CopQueryable should work anywhere a collection is expected
         var svc = new FakeQueryService(new CopList([new CopString("a")]));
-        var queryable = new CopQueryable("json", new ProviderQuery { RootPath = "/t" }, svc);
+        var queryable = new CopQueryable("json", new ProviderQuery { RootPath = "/t" }, svc.QueryProvider);
 
         // Display shows it's queryable (not yet materialized)
         Assert.That(queryable.Display(), Does.Contain("queryable"));
@@ -95,13 +95,13 @@ public class QueryableCollectionTests
     public void TypeValidator_AcceptsQueryableAsCollection()
     {
         var svc = new FakeQueryService();
-        var queryable = new CopQueryable("json", new ProviderQuery { RootPath = "/t" }, svc);
+        var queryable = new CopQueryable("json", new ProviderQuery { RootPath = "/t" }, svc.QueryProvider);
 
         var typeName = TypeValidator.GetActualTypeName(queryable);
         Assert.That(typeName, Is.EqualTo("collection"));
     }
 
-    private class FakeQueryService : IProviderQueryService
+    private class FakeQueryService
     {
         private readonly CopValue _result;
         public int QueryCount { get; private set; }
@@ -111,12 +111,6 @@ public class QueryableCollectionTests
         public FakeQueryService(CopValue? result = null)
         {
             _result = result ?? new CopList([]);
-        }
-
-        public List<object> Query(string providerName, string collectionName, string pathOverride)
-        {
-            QueryCount++;
-            return [];
         }
 
         public CopValue QueryProvider(string providerName, ProviderQuery query)

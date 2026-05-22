@@ -21,10 +21,10 @@ public class TextFileParser : ISourceParser
         [".bicep"] = "bicep",
     };
 
-    public IReadOnlyList<string> Extensions { get; } = ExtensionLanguageMap.Keys.ToList();
-    public string Language => "text";
+    public override IReadOnlyList<string> Extensions { get; } = ExtensionLanguageMap.Keys.ToList();
+    public override string Language => "text";
 
-    public SourceFile? Parse(string filePath, string sourceText)
+    public override SourceFile? Parse(string filePath, string sourceText)
     {
         var ext = Path.GetExtension(filePath);
         var language = ExtensionLanguageMap.TryGetValue(ext, out var lang) ? lang : "text";

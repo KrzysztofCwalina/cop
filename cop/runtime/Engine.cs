@@ -264,7 +264,7 @@ public static class Engine
                 };
                 // Return a queryable collection that defers provider execution until materialization.
                 // Filters from predicate chains will be accumulated and pushed to the provider.
-                return new CopQueryable(providerName, providerQuery, queryService);
+                return new CopQueryable(providerName, providerQuery, queryService.QueryProvider);
             }
 
             return new CopProviderProxy(providerName, env);

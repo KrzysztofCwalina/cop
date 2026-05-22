@@ -52,9 +52,9 @@ namespace Sample
         public abstract Task ProcessAsync();
     }
 
-    public interface IStorageProvider
+    public abstract class IStorageProvider
     {
-        Task<byte[]> ReadAsync(string path);
+        public abstract Task<byte[]> ReadAsync(string path);
     }
 
     public enum ServiceVersion

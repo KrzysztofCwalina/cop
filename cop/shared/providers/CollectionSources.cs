@@ -12,7 +12,7 @@ public class DocumentCollectionSource : ICollectionSource
     private readonly Func<Document, List<object>> _extractor;
     private readonly Func<FilterExpression, Func<object, bool>>? _filterCompiler;
 
-    public bool IsPerDocument => true;
+    public override bool IsPerDocument => true;
 
     public DocumentCollectionSource(
         Func<Document, List<object>> extractor,
@@ -22,7 +22,7 @@ public class DocumentCollectionSource : ICollectionSource
         _filterCompiler = filterCompiler;
     }
 
-    public List<object> Query(CollectionQuery query)
+    public override List<object> Query(CollectionQuery query)
     {
         if (query.Document is not Document doc)
             return [];
@@ -50,7 +50,7 @@ public class GlobalCollectionSource : ICollectionSource
     private readonly List<object> _items;
     private readonly Func<FilterExpression, Func<object, bool>>? _filterCompiler;
 
-    public bool IsPerDocument => false;
+    public override bool IsPerDocument => false;
 
     public GlobalCollectionSource(
         List<object> items,
@@ -60,7 +60,7 @@ public class GlobalCollectionSource : ICollectionSource
         _filterCompiler = filterCompiler;
     }
 
-    public List<object> Query(CollectionQuery query)
+    public override List<object> Query(CollectionQuery query)
     {
         if (query.Filter is not null && _filterCompiler is not null)
         {

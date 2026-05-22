@@ -9,10 +9,10 @@ namespace Cop.Providers.SourceParsers;
 /// </summary>
 public class CopSourceParser : ISourceParser
 {
-    public IReadOnlyList<string> Extensions => [".cop"];
-    public string Language => "cop";
+    public override IReadOnlyList<string> Extensions => [".cop"];
+    public override string Language => "cop";
 
-    public SourceFile? Parse(string filePath, string sourceText)
+    public override SourceFile? Parse(string filePath, string sourceText)
     {
         ScriptFile script;
         try
