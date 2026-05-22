@@ -2178,8 +2178,9 @@ const packages = {
       },
       {
         "name": "concat",
-        "params": "other: [object]",
+        "params": "[object], other: [object]",
         "returns": "[object]",
+        "appliesTo": "[object]",
         "desc": "Returns a new collection combining both collections.\nExample: let merged = listA:concat(listB)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L62"
       },
@@ -2400,8 +2401,9 @@ const packages = {
       },
       {
         "name": "containsAny",
-        "params": "values: [string]",
+        "params": "[string], values: [string]",
         "returns": "bool",
+        "appliesTo": "[string]",
         "desc": "Returns true if collection contains any of the values in the second collection.\nExample: tags:containsAny(['api', 'public'])",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/string_collections.cop#L11"
       }
