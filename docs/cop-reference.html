@@ -2284,7 +2284,7 @@ const packages = {
         "params": "items: [object], condition: lambda",
         "returns": "[object]",
         "appliesTo": "[object]",
-        "desc": "Filters items matching a condition. Returns a new collection.\nExample: Types:where((item) => item:isPublic)",
+        "desc": "Filters items matching a condition. Returns a new collection.\nExample: Types:where(isPublic)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L15"
       },
       {
@@ -2300,7 +2300,7 @@ const packages = {
         "params": "items: [object], condition: lambda",
         "returns": "bool",
         "appliesTo": "[object]",
-        "desc": "Returns true if any item matches a condition.\nExample: Types:any((item) => item:isAbstract)",
+        "desc": "Returns true if any item matches a condition.\nExample: Types:any(isAbstract)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L25"
       },
       {
@@ -2308,7 +2308,7 @@ const packages = {
         "params": "items: [object], condition: lambda",
         "returns": "bool",
         "appliesTo": "[object]",
-        "desc": "Returns true if all items match a condition.\nExample: Types:all((item) => item:isPublic)",
+        "desc": "Returns true if all items match a condition.\nExample: Types:all(isPublic)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L30"
       },
       {
@@ -2316,7 +2316,7 @@ const packages = {
         "params": "items: [object], condition: lambda",
         "returns": "bool",
         "appliesTo": "[object]",
-        "desc": "Returns true if no item matches a condition.\nExample: Types:none((item) => item:isObsolete)",
+        "desc": "Returns true if no item matches a condition.\nExample: Types:none(isObsolete)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L35"
       },
       {
@@ -2324,7 +2324,7 @@ const packages = {
         "params": "items: [object], condition: lambda",
         "returns": "int",
         "appliesTo": "[object]",
-        "desc": "Counts items matching a condition.\nExample: Types:count((item) => item:isPublic)",
+        "desc": "Counts items matching a condition.\nExample: Types:count(isPublic)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L40"
       },
       {
@@ -2332,7 +2332,7 @@ const packages = {
         "params": "items: [object], condition: lambda",
         "returns": "object",
         "appliesTo": "[object]",
-        "desc": "First item matching a condition, or nil.\nExample: Types:first((item) => item:isPublic)",
+        "desc": "First item matching a condition, or nil.\nExample: Types:first(isPublic)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L50"
       },
       {
@@ -2340,7 +2340,7 @@ const packages = {
         "params": "items: [object], condition: lambda",
         "returns": "object",
         "appliesTo": "[object]",
-        "desc": "Last item matching a condition, or nil.\nExample: Types:last((item) => item:isPublic)",
+        "desc": "Last item matching a condition, or nil.\nExample: Types:last(isPublic)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L55"
       },
       {
@@ -2348,7 +2348,7 @@ const packages = {
         "params": "items: [object], condition: lambda",
         "returns": "object",
         "appliesTo": "[object]",
-        "desc": "The single item matching a condition, or nil if zero or multiple match.\nExample: Types:single((item) => item:isEntryPoint)",
+        "desc": "The single item matching a condition, or nil if zero or multiple match.\nExample: Types:single(isEntryPoint)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L60"
       },
       {
