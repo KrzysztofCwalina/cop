@@ -1543,7 +1543,7 @@ public class CopParser
     private static Cop.Lang.PredicateDefinition ConvertPredicateDefinition(FunctionDecl functionDecl)
     {
         var parameter = functionDecl.Params[0];
-        var parameterType = parameter.Type is not null ? FormatTypeRef(parameter.Type) : "Unknown";
+        var parameterType = parameter.Type is not null ? FormatTypeRef(parameter.Type) : "object";
         var narrowedType = functionDecl.ReturnType is not null
             && !string.Equals(functionDecl.ReturnType.Name, "bool", StringComparison.OrdinalIgnoreCase)
                 ? FormatTypeRef(functionDecl.ReturnType)
@@ -1564,13 +1564,13 @@ public class CopParser
     {
         var inputType = functionDecl.Params.Count > 0 && functionDecl.Params[0].Type is not null
             ? FormatTypeRef(functionDecl.Params[0].Type!)
-            : "Unknown";
+            : "";
 
         var inputName = functionDecl.Params.Count > 0 ? functionDecl.Params[0].Name : null;
 
         var parameters = functionDecl.Params
             .Skip(1)
-            .Select(p => new Cop.Lang.FunctionParameter(p.Name, p.Type is not null ? FormatTypeRef(p.Type) : "Unknown"))
+            .Select(p => new Cop.Lang.FunctionParameter(p.Name, p.Type is not null ? FormatTypeRef(p.Type) : "object"))
             .ToList();
 
         var fieldMappings = new Dictionary<string, Cop.Lang.Expression>();
@@ -1590,7 +1590,7 @@ public class CopParser
         return new Cop.Lang.FunctionDefinition(
             functionDecl.Name,
             inputType,
-            functionDecl.ReturnType is not null ? FormatTypeRef(functionDecl.ReturnType) : "Unknown",
+            functionDecl.ReturnType is not null ? FormatTypeRef(functionDecl.ReturnType) : "",
             parameters,
             fieldMappings,
             functionDecl.Line,
