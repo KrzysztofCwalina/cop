@@ -10,7 +10,8 @@ public static class TypeValidator
 {
     /// <summary>
     /// Validates arguments before function body dispatch.
-    /// Checks arity and parameter types.
+    /// Checks arity and parameter types. For generic functions, infers type bindings
+    /// and validates against substituted types.
     /// </summary>
     public static void ValidateArguments(FunctionDecl decl, IReadOnlyList<CopValue> args)
     {
@@ -22,7 +23,14 @@ public static class TypeValidator
                 decl.Line);
         }
 
-        // Parameter type checks
+        // For generic functions, infer bindings and validate with substituted types
+        if (GenericInference.HasTypeParameters(decl))
+        {
+            ValidateGenericArguments(decl, args);
+            return;
+        }
+
+        // Non-generic: standard parameter type checks
         for (int i = 0; i < args.Count && i < decl.Params.Count; i++)
         {
             var param = decl.Params[i];
@@ -40,12 +48,53 @@ public static class TypeValidator
     }
 
     /// <summary>
+    /// Validates arguments for a generic function using inferred type bindings.
+    /// Substitutes type variables with inferred concrete types before checking compatibility.
+    /// </summary>
+    private static void ValidateGenericArguments(FunctionDecl decl, IReadOnlyList<CopValue> args)
+    {
+        var bindings = GenericInference.InferBindings(decl, args);
+
+        for (int i = 0; i < args.Count && i < decl.Params.Count; i++)
+        {
+            var param = decl.Params[i];
+            if (param.Type is null) continue;
+
+            // Skip callable/lambda parameters — validated at invocation time
+            var substituted = GenericInference.SubstituteTypeRef(param.Type, bindings);
+            if (substituted.Name.Contains("=>")) continue;
+            if (substituted.Name is "lambda" or "function") continue;
+
+            var arg = ForceValue(args[i]);
+            // Skip lambda values — they're validated at invocation time
+            if (arg is ICopCallable) continue;
+
+            if (!IsCompatible(arg, substituted))
+            {
+                throw new CopEvaluationException(
+                    $"'{decl.Name}' parameter '{param.Name}' expects {FormatTypeRef(substituted)}, " +
+                    $"got {GetActualTypeName(arg)}",
+                    decl.Line);
+            }
+        }
+    }
+
+    /// <summary>
     /// Validates the return value after function body execution.
     /// Only checks if the function has a declared return type.
+    /// For generic functions, infers the concrete return type from type bindings.
     /// </summary>
     public static void ValidateReturn(FunctionDecl decl, CopValue result)
     {
         if (decl.ReturnType is null) return; // no declared return type — no check
+
+        // Skip validation for generic return types — inference handles consistency
+        if (GenericInference.IsTypeVariable(decl.ReturnType.Name))
+            return;
+
+        // For non-generic return types, check as before
+        if (decl.ReturnType.IsCollection && GenericInference.IsTypeVariable(decl.ReturnType.Name))
+            return;
 
         var value = ForceValue(result);
         if (!IsCompatible(value, decl.ReturnType))
@@ -62,6 +111,14 @@ public static class TypeValidator
     /// </summary>
     public static bool IsCompatible(CopValue value, TypeRef typeRef)
     {
+        // Type variables are always compatible (validated through inference)
+        if (GenericInference.IsTypeVariable(typeRef.Name))
+            return true;
+
+        // Function type signatures are compatible with callables
+        if (typeRef.Name.Contains("=>"))
+            return value is ICopCallable;
+
         // Collection type: [T]
         if (typeRef.IsCollection)
             return value is CopList or CopLazyCollection or CopQueryable;

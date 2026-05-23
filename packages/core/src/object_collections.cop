@@ -12,62 +12,62 @@ export type object:Group = {
 
 ## Filters items matching a condition. Returns a new collection.
 ## Example: Types:where(isPublic)
-export function where(items: [object], condition: (object) => bool) : [object] 
+export function where(items: [T], condition: (T) => bool) : [T] 
   => reduce(items, (acc, item) => condition(item) ? acc.concat([item]) : acc, [])
 
 ## Projects each item through a transformation. Returns a new collection.
 ## Example: Types:select((item) => item.Name)
-export function select(items: [object], transform: (object) => object) : [object]
+export function select(items: [T], transform: (T) => R) : [R]
   => reduce(items, (acc, item) => acc.concat([transform(item)]), [])
 
 ## Returns true if any item matches a condition.
 ## Example: Types:any(isAbstract)
-export function any(items: [object], condition: (object) => bool) : bool
+export function any(items: [T], condition: (T) => bool) : bool
   => reduce(items, (acc, item) => acc || condition(item), false)
 
 ## Returns true if all items match a condition.
 ## Example: Types:all(isPublic)
-export function all(items: [object], condition: (object) => bool) : bool 
+export function all(items: [T], condition: (T) => bool) : bool 
   => reduce(items, (acc, item) => acc && condition(item), true)
 
 ## Returns true if no item matches a condition.
 ## Example: Types:none(isObsolete)
-export function none(items: [object], condition: (object) => bool) : bool 
+export function none(items: [T], condition: (T) => bool) : bool 
   => reduce(items, (acc, item) => acc && !condition(item), true)
 
 ## Counts items matching a condition.
 ## Example: Types:count(isPublic)
-export function count(items: [object], condition: (object) => bool) : int 
+export function count(items: [T], condition: (T) => bool) : int 
   => reduce(items, (acc, item) => condition(item) ? acc + 1 : acc, 0)
 
 ## Returns true if the collection is empty (Count == 0).
 ## Example: errors:empty
-export function empty(items: [object]) : bool 
+export function empty(items: [T]) : bool 
   => items.Count == 0
 
 ## First item matching a condition, or nil.
 ## Example: Types:first(isPublic)
-export function first(items: [object], condition: (object) => bool) : object 
+export function first(items: [T], condition: (T) => bool) : T 
   => items.where(condition).First
 
 ## Last item matching a condition, or nil.
 ## Example: Types:last(isPublic)
-export function last(items: [object], condition: (object) => bool) : object 
+export function last(items: [T], condition: (T) => bool) : T 
   => items.where(condition).Last
 
 ## The single item matching a condition, or nil if zero or multiple match.
 ## Example: Types:single(isEntryPoint)
-export function single(items: [object], condition: (object) => bool) : object 
+export function single(items: [T], condition: (T) => bool) : T 
   => items.where(condition).Single
 
 ## Item at a specific zero-based index.
 ## Example: items:elementAt(3)
-export function elementAt(items: [object], index: int) : object 
+export function elementAt(items: [T], index: int) : T 
   => index == 0 ? items.First : elementAt(items.Rest, index - 1)
 
 ## Sorts ascending by a key expression (quicksort).
 ## Example: Types:orderBy((item) => item.Name)
-export function orderBy(items: [object], keySelector: (object) => object) : [object] 
+export function orderBy(items: [T], keySelector: (T) => R) : [T] 
   => items.Count <= 1 ? items :
     orderBy(items.Rest.where((x) => keySelector(x) < keySelector(items.First)), keySelector)
       .concat([items.First])
@@ -75,7 +75,7 @@ export function orderBy(items: [object], keySelector: (object) => object) : [obj
 
 ## Sorts descending by a key expression (quicksort).
 ## Example: Types:orderByDescending((item) => item.Count)
-export function orderByDescending(items: [object], keySelector: (object) => object) : [object] 
+export function orderByDescending(items: [T], keySelector: (T) => R) : [T] 
   => items.Count <= 1 ? items :
     orderByDescending(items.Rest.where((x) => keySelector(x) > keySelector(items.First)), keySelector)
       .concat([items.First])
@@ -83,13 +83,13 @@ export function orderByDescending(items: [object], keySelector: (object) => obje
 
 ## Removes duplicate items (by string representation).
 ## Example: names:distinct
-export function distinct(items: [object]) : [object] 
+export function distinct(items: [T]) : [T] 
   => reduce(items, (acc, item) => acc:any((x) => text(x) == text(item)) ? acc : acc.concat([item]), [])
 
 ## Groups items by a key expression. Returns collection of groups.
 ## Each group has a Key property and an Items collection.
 ## Example: Types:groupBy((item) => item.Namespace, (a, b) => a == b)
-export function groupBy(items: [object], keySelector: (object) => object, compare: (object, object) => bool) : [Group] 
+export function groupBy(items: [T], keySelector: (T) => R, compare: (R, R) => bool) : [Group] 
   => reduce(items, (groups, item) =>
     groups:any((g) => compare(g.Key, keySelector(item)))
       ? groups.select((g) => compare(g.Key, keySelector(item)) ? Group { Key = g.Key, Items = g.Items.concat([item]) } : g)
@@ -101,15 +101,15 @@ export function groupBy(items: [object], keySelector: (object) => object, compar
 
 ## Returns a new collection with the item appended at the end.
 ## Example: let updated = items:push(newItem)
-export function push(items: [object], value: object) : [object] 
+export function push(items: [T], value: T) : [T] 
   => items.concat([value])
 
 ## Returns a new collection with the item added at the front (queue semantics).
 ## Example: let updated = items:enqueue(newItem)
-export function enqueue(items: [object], value: object) : [object] 
+export function enqueue(items: [T], value: T) : [T] 
   => [value].concat(items)
 
 ## Returns a new collection without the last element.
 ## Example: let shorter = items:pop
-export function pop(items: [object]) : [object] 
+export function pop(items: [T]) : [T] 
   => reduce(items, (acc, item) => acc.Count < items.Count - 1 ? acc.concat([item]) : acc, [])

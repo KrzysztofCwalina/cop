@@ -90,6 +90,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .tag-function { background: #dcffe4; color: #1a7f37; }
 .tag-check { background: #ffebe9; color: #cf222e; }
 .tag-command { background: #fbefff; color: #8250df; }
+.tag-export { background: #e8f5e9; color: #2e7d32; }
 .tag-enum { background: #fff1e5; color: #bc4c00; }
 .enum-values { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; padding-left: 2px; }
 .enum-value { display: inline-block; padding: 2px 8px; background: #fff1e5; color: #bc4c00; border-radius: 4px; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px; }
@@ -2073,17 +2074,17 @@ const packages = {
       },
       {
         "name": "reduce",
-        "params": "items: [object], accumulator: (object, object) => object, initial: object",
-        "returns": "object",
-        "appliesTo": "[object]",
+        "params": "items: [T], accumulator: (R, T) => R, initial: R",
+        "returns": "R",
+        "appliesTo": "[T]",
         "desc": "Reduces a collection to a single value using an accumulator function.\nThe accumulator takes (acc, item) and returns the new accumulator value.\nExample: [1,2,3]:reduce((acc, item) => acc + item, 0)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L57"
       },
       {
         "name": "concat",
-        "params": "items: [object], other: [object]",
-        "returns": "[object]",
-        "appliesTo": "[object]",
+        "params": "items: [T], other: [T]",
+        "returns": "[T]",
+        "appliesTo": "[T]",
         "desc": "Returns a new collection combining both collections.\nExample: let merged = listA:concat(listB)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L62"
       },
@@ -2154,9 +2155,9 @@ const packages = {
       },
       {
         "name": "sum",
-        "params": "items: [object], selector: (object) => number",
+        "params": "items: [T], selector: (T) => number",
         "returns": "int",
-        "appliesTo": "[object]",
+        "appliesTo": "[T]",
         "desc": "Sums a projected value for each item.\nExample: files:sum((f) => f.Size)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L16"
       },
@@ -2178,9 +2179,9 @@ const packages = {
       },
       {
         "name": "min",
-        "params": "items: [object], selector: (object) => number",
+        "params": "items: [T], selector: (T) => number",
         "returns": "int",
-        "appliesTo": "[object]",
+        "appliesTo": "[T]",
         "desc": "Minimum projected value across items.\nExample: files:min((f) => f.Size)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L31"
       },
@@ -2202,9 +2203,9 @@ const packages = {
       },
       {
         "name": "max",
-        "params": "items: [object], selector: (object) => number",
+        "params": "items: [T], selector: (T) => number",
         "returns": "int",
-        "appliesTo": "[object]",
+        "appliesTo": "[T]",
         "desc": "Maximum projected value across items.\nExample: files:max((f) => f.Size)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L46"
       },
@@ -2226,153 +2227,153 @@ const packages = {
       },
       {
         "name": "average",
-        "params": "items: [object], selector: (object) => number",
+        "params": "items: [T], selector: (T) => number",
         "returns": "number",
-        "appliesTo": "[object]",
+        "appliesTo": "[T]",
         "desc": "Average projected value across items.\nExample: files:average((f) => f.Size)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/number_collections.cop#L61"
       },
       {
         "name": "where",
-        "params": "items: [object], condition: (object) => bool",
-        "returns": "[object]",
-        "appliesTo": "[object]",
+        "params": "items: [T], condition: (T) => bool",
+        "returns": "[T]",
+        "appliesTo": "[T]",
         "desc": "Filters items matching a condition. Returns a new collection.\nExample: Types:where(isPublic)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L15"
       },
       {
         "name": "select",
-        "params": "items: [object], transform: (object) => object",
-        "returns": "[object]",
-        "appliesTo": "[object]",
+        "params": "items: [T], transform: (T) => R",
+        "returns": "[R]",
+        "appliesTo": "[T]",
         "desc": "Projects each item through a transformation. Returns a new collection.\nExample: Types:select((item) => item.Name)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L20"
       },
       {
         "name": "any",
-        "params": "items: [object], condition: (object) => bool",
+        "params": "items: [T], condition: (T) => bool",
         "returns": "bool",
-        "appliesTo": "[object]",
+        "appliesTo": "[T]",
         "desc": "Returns true if any item matches a condition.\nExample: Types:any(isAbstract)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L25"
       },
       {
         "name": "all",
-        "params": "items: [object], condition: (object) => bool",
+        "params": "items: [T], condition: (T) => bool",
         "returns": "bool",
-        "appliesTo": "[object]",
+        "appliesTo": "[T]",
         "desc": "Returns true if all items match a condition.\nExample: Types:all(isPublic)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L30"
       },
       {
         "name": "none",
-        "params": "items: [object], condition: (object) => bool",
+        "params": "items: [T], condition: (T) => bool",
         "returns": "bool",
-        "appliesTo": "[object]",
+        "appliesTo": "[T]",
         "desc": "Returns true if no item matches a condition.\nExample: Types:none(isObsolete)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L35"
       },
       {
         "name": "count",
-        "params": "items: [object], condition: (object) => bool",
+        "params": "items: [T], condition: (T) => bool",
         "returns": "int",
-        "appliesTo": "[object]",
+        "appliesTo": "[T]",
         "desc": "Counts items matching a condition.\nExample: Types:count(isPublic)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L40"
       },
       {
         "name": "empty",
-        "params": "items: [object]",
+        "params": "items: [T]",
         "returns": "bool",
-        "appliesTo": "[object]",
+        "appliesTo": "[T]",
         "desc": "Returns true if the collection is empty (Count == 0).\nExample: errors:empty",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L45"
       },
       {
         "name": "first",
-        "params": "items: [object], condition: (object) => bool",
-        "returns": "object",
-        "appliesTo": "[object]",
+        "params": "items: [T], condition: (T) => bool",
+        "returns": "T",
+        "appliesTo": "[T]",
         "desc": "First item matching a condition, or nil.\nExample: Types:first(isPublic)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L50"
       },
       {
         "name": "last",
-        "params": "items: [object], condition: (object) => bool",
-        "returns": "object",
-        "appliesTo": "[object]",
+        "params": "items: [T], condition: (T) => bool",
+        "returns": "T",
+        "appliesTo": "[T]",
         "desc": "Last item matching a condition, or nil.\nExample: Types:last(isPublic)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L55"
       },
       {
         "name": "single",
-        "params": "items: [object], condition: (object) => bool",
-        "returns": "object",
-        "appliesTo": "[object]",
+        "params": "items: [T], condition: (T) => bool",
+        "returns": "T",
+        "appliesTo": "[T]",
         "desc": "The single item matching a condition, or nil if zero or multiple match.\nExample: Types:single(isEntryPoint)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L60"
       },
       {
         "name": "elementAt",
-        "params": "items: [object], index: int",
-        "returns": "object",
-        "appliesTo": "[object]",
+        "params": "items: [T], index: int",
+        "returns": "T",
+        "appliesTo": "[T]",
         "desc": "Item at a specific zero-based index.\nExample: items:elementAt(3)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L65"
       },
       {
         "name": "orderBy",
-        "params": "items: [object], keySelector: (object) => object",
-        "returns": "[object]",
-        "appliesTo": "[object]",
+        "params": "items: [T], keySelector: (T) => R",
+        "returns": "[T]",
+        "appliesTo": "[T]",
         "desc": "Sorts ascending by a key expression (quicksort).\nExample: Types:orderBy((item) => item.Name)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L70"
       },
       {
         "name": "orderByDescending",
-        "params": "items: [object], keySelector: (object) => object",
-        "returns": "[object]",
-        "appliesTo": "[object]",
+        "params": "items: [T], keySelector: (T) => R",
+        "returns": "[T]",
+        "appliesTo": "[T]",
         "desc": "Sorts descending by a key expression (quicksort).\nExample: Types:orderByDescending((item) => item.Count)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L78"
       },
       {
         "name": "distinct",
-        "params": "items: [object]",
-        "returns": "[object]",
-        "appliesTo": "[object]",
+        "params": "items: [T]",
+        "returns": "[T]",
+        "appliesTo": "[T]",
         "desc": "Removes duplicate items (by string representation).\nExample: names:distinct",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L86"
       },
       {
         "name": "groupBy",
-        "params": "items: [object], keySelector: (object) => object, compare: (object, object) => bool",
+        "params": "items: [T], keySelector: (T) => R, compare: (R, R) => bool",
         "returns": "[Group]",
-        "appliesTo": "[object]",
+        "appliesTo": "[T]",
         "desc": "Groups items by a key expression. Returns collection of groups.\nEach group has a Key property and an Items collection.\nExample: Types:groupBy((item) => item.Namespace, (a, b) => a == b)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L92"
       },
       {
         "name": "push",
-        "params": "items: [object], value: object",
-        "returns": "[object]",
-        "appliesTo": "[object]",
+        "params": "items: [T], value: T",
+        "returns": "[T]",
+        "appliesTo": "[T]",
         "desc": "Returns a new collection with the item appended at the end.\nExample: let updated = items:push(newItem)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L104"
       },
       {
         "name": "enqueue",
-        "params": "items: [object], value: object",
-        "returns": "[object]",
-        "appliesTo": "[object]",
+        "params": "items: [T], value: T",
+        "returns": "[T]",
+        "appliesTo": "[T]",
         "desc": "Returns a new collection with the item added at the front (queue semantics).\nExample: let updated = items:enqueue(newItem)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L109"
       },
       {
         "name": "pop",
-        "params": "items: [object]",
-        "returns": "[object]",
-        "appliesTo": "[object]",
+        "params": "items: [T]",
+        "returns": "[T]",
+        "appliesTo": "[T]",
         "desc": "Returns a new collection without the last element.\nExample: let shorter = items:pop",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L114"
       },
@@ -2413,6 +2414,50 @@ const packages = {
       }
     ],
     "checks": [],
+    "exports": [
+      {
+        "name": "Types",
+        "type": "[Type]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L6"
+      },
+      {
+        "name": "Statements",
+        "type": "[Statement]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L7"
+      },
+      {
+        "name": "Lines",
+        "type": "[Line]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L8"
+      },
+      {
+        "name": "Calls",
+        "type": "[Call]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L9"
+      },
+      {
+        "name": "Files",
+        "type": "[File]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L10"
+      },
+      {
+        "name": "Regions",
+        "type": "[Region]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L11"
+      },
+      {
+        "name": "Projects",
+        "type": "[Project]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L12"
+      }
+    ],
     "commands": []
   },
   "csharp-checks": {
@@ -2862,6 +2907,26 @@ const packages = {
     ],
     "functions": [],
     "checks": [],
+    "exports": [
+      {
+        "name": "Disk",
+        "type": "Filesystem",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L33"
+      },
+      {
+        "name": "Folders",
+        "type": "[Folder]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L34"
+      },
+      {
+        "name": "DiskFiles",
+        "type": "[DiskFile]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/files/src/files.cop#L35"
+      }
+    ],
     "commands": []
   },
   "http": {
@@ -3025,6 +3090,20 @@ const packages = {
       }
     ],
     "checks": [],
+    "exports": [
+      {
+        "name": "Requests",
+        "type": "[Request]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L7"
+      },
+      {
+        "name": "RESPONSES",
+        "type": "[Response]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L8"
+      }
+    ],
     "commands": []
   },
   "javascript-checks": {
@@ -3487,6 +3566,14 @@ const packages = {
       }
     ],
     "checks": [],
+    "exports": [
+      {
+        "name": "Markdown",
+        "type": "MarkdownContent",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/markdown/src/markdown.cop#L51"
+      }
+    ],
     "commands": []
   },
   "python-checks": {
@@ -4178,6 +4265,26 @@ const packages = {
     ],
     "functions": [],
     "checks": [],
+    "exports": [
+      {
+        "name": "tsp",
+        "type": "provider('typespec-http')",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L51"
+      },
+      {
+        "name": "Operations",
+        "type": "[HttpOperation]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L52"
+      },
+      {
+        "name": "Services",
+        "type": "[Service]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L53"
+      }
+    ],
     "commands": []
   }
 };
@@ -4225,6 +4332,7 @@ function buildTree() {
       const hasChecks = pkg.checks && pkg.checks.length > 0;
       const hasCmds = pkg.commands && pkg.commands.length > 0;
       const hasEnums = pkg.enums && pkg.enums.length > 0;
+      const hasExports = pkg.exports && pkg.exports.length > 0;
 
       pkgNode.innerHTML = `
         <div class="tree-label" data-pkg="${pkgId}">
@@ -4321,6 +4429,19 @@ function buildTree() {
         childrenDiv.appendChild(secNode);
       }
 
+      if (hasExports) {
+        const secNode = document.createElement('div');
+        secNode.className = 'tree-node';
+        secNode.innerHTML = `
+          <div class="tree-label" data-pkg="${pkgId}" data-view="exports">
+            <span class="tree-toggle" style="visibility:hidden"></span>
+            <span class="section-tag tag-export">E</span>
+            <span>Exports (${pkg.exports.length})</span>
+          </div>
+        `;
+        childrenDiv.appendChild(secNode);
+      }
+
       catChildrenDiv.appendChild(pkgNode);
     }
     tree.appendChild(catDiv);
@@ -4348,6 +4469,7 @@ function buildTree() {
       else if (view === 'checks') renderChecks(pkg);
       else if (view === 'commands') renderCommands(pkg);
       else if (view === 'enums') renderEnums(pkg);
+      else if (view === 'exports') renderExports(pkg);
       location.hash = `${pkg}/${view}`;
     } else if (section) {
       // Toggle section expand
@@ -4392,6 +4514,7 @@ function renderPackageOverview(pkgId) {
   const checkCount = pkg.checks ? pkg.checks.length : 0;
   const cmdCount = pkg.commands ? pkg.commands.length : 0;
   const enumCount = pkg.enums ? pkg.enums.length : 0;
+  const exportCount = pkg.exports ? pkg.exports.length : 0;
 
   html += `<div class="pkg-exports">`;
   if (typeCount > 0) html += `<a onclick="navToSection('${pkgId}','types-header')"><span class="section-tag tag-type">T</span> <span class="count">${typeCount}</span> types</a>`;
@@ -4399,6 +4522,7 @@ function renderPackageOverview(pkgId) {
   if (combinedFuncCount > 0) html += `<a onclick="navToSection('${pkgId}','functions')"><span class="section-tag tag-function">F</span> <span class="count">${combinedFuncCount}</span> functions</a>`;
   if (checkCount > 0) html += `<a onclick="navToSection('${pkgId}','checks')"><span class="section-tag tag-check">C</span> <span class="count">${checkCount}</span> checks</a>`;
   if (cmdCount > 0) html += `<a onclick="navToSection('${pkgId}','commands')"><span class="section-tag tag-command">!</span> <span class="count">${cmdCount}</span> commands</a>`;
+  if (exportCount > 0) html += `<a onclick="navToSection('${pkgId}','exports')"><span class="section-tag tag-export">E</span> <span class="count">${exportCount}</span> exports</a>`;
   html += `</div>`;
 
   // Code samples
@@ -4648,6 +4772,34 @@ function renderChecks(pkgId) {
 
 function renderCommands(pkgId) {
   renderCallables(pkgId, packages[pkgId].commands, 'Commands', 'cmd');
+}
+
+function renderExports(pkgId) {
+  const pkg = packages[pkgId];
+  const content = document.getElementById('content');
+
+  let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Exports</h1>`;
+  html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">${pkg.exports.length} exported collections — use these as data sources in your .cop files</p>`;
+
+  for (const exp of pkg.exports.slice().sort((a,b) => a.name.localeCompare(b.name))) {
+    const key = `${pkgId}.export.${exp.name}`;
+    const hasComment = comments[key] ? 'has-comment' : '';
+    html += `
+      <div class="comment-wrapper">
+        <div class="item-row">
+          <span class="item-name">${exp.name}</span>
+          <span class="prop-type">${formatTypeLink(pkgId, exp.type)}</span>
+          <span class="item-detail">${escapeHtml(exp.desc)}</span>
+          ${sourceLink(exp.sourceUrl)}
+          <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
+        </div>
+        <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
+      </div>
+    `;
+  }
+
+  content.innerHTML = html;
+  wireUpComments(content);
 }
 
 function renderEnums(pkgId) {
@@ -4933,12 +5085,13 @@ function navigateToHash() {
   if (!target) {
     renderPackageOverview(pkgId);
     if (pkgLabel) pkgLabel.classList.add('active');
-  } else if (['predicates','functions','checks','commands','enums'].includes(target)) {
+  } else if (['predicates','functions','checks','commands','enums','exports'].includes(target)) {
     if (target === 'predicates') renderFunctions(pkgId);
     else if (target === 'functions') renderFunctions(pkgId);
     else if (target === 'checks') renderChecks(pkgId);
     else if (target === 'commands') renderCommands(pkgId);
     else if (target === 'enums') renderEnums(pkgId);
+    else if (target === 'exports') renderExports(pkgId);
     var viewLabel = document.querySelector(`.tree-label[data-pkg="${pkgId}"][data-view="${target}"]`);
     if (viewLabel) viewLabel.classList.add('active');
   } else {

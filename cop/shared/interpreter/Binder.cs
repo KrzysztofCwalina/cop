@@ -633,8 +633,8 @@ public sealed class Binder
     /// </summary>
     private void ValidateTypeName(string name, int line)
     {
-        // 'T' is a generic type parameter placeholder (used in [T] collection type)
-        if (name == "T") return;
+        // Single uppercase letters are generic type parameter placeholders (A-Z)
+        if (name.Length == 1 && name[0] >= 'A' && name[0] <= 'Z') return;
 
         var symbol = _currentScope.Resolve(name);
         if (symbol is null)
