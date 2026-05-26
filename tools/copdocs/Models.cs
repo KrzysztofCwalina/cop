@@ -90,6 +90,22 @@ public class TypeEntry
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? SourceUrl { get; set; }
 
+    [JsonPropertyName("isTrait")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool IsTrait { get; set; }
+
+    [JsonPropertyName("baseType")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? BaseType { get; set; }
+
+    [JsonPropertyName("conformers")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? Conformers { get; set; }
+
+    [JsonPropertyName("traits")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? Traits { get; set; }
+
     [JsonPropertyName("props")]
     public List<PropEntry> Props { get; set; } = [];
 }

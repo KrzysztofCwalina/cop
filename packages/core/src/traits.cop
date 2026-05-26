@@ -1,0 +1,24 @@
+# Traits
+# Types that define contracts for type parameters.
+
+## A type that supports equality comparison.
+export type Comparable = {
+  equals : (left: T, right: T) => bool
+}
+
+## A type that can be converted to a text representation.
+export type Formattable = {
+  format : (value: T) => string
+}
+
+# Primitive conformances
+export type int : Comparable = {}
+export type string : Comparable = {}
+export type bool : Comparable = {}
+export type number : Comparable = {}
+
+export type int : Formattable = {}
+export type string : Formattable = {}
+export type bool : Formattable = {}
+export type number : Formattable = {}
+export type bytes : Formattable = {}

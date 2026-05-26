@@ -244,21 +244,31 @@ public class CopParser
             name = ExpectIdentifier("type name");
         }
 
-        // type Base:Name syntax — base type comes first, colon narrows to subtype
+        // C#-style: type Name : Base, Trait1, Trait2
         string? baseType = null;
+        List<string>? traits = null;
         if (Match(TokenKind.Colon))
         {
-            baseType = name;
+            // Read first parent (base type or trait)
+            string firstParent;
             if (Check(TokenKind.LBracket))
             {
-                Advance(); // consume '['
+                Advance();
                 var inner = ExpectIdentifier("type parameter");
                 Expect(TokenKind.RBracket, "']'");
-                name = $"[{inner}]";
+                firstParent = $"[{inner}]";
             }
             else
             {
-                name = ExpectIdentifier("subtype name");
+                firstParent = ExpectIdentifier("base type or trait name");
+            }
+            baseType = firstParent;
+
+            // Read additional traits after commas
+            while (Match(TokenKind.Comma))
+            {
+                traits ??= [];
+                traits.Add(ExpectIdentifier("trait name"));
             }
         }
 
@@ -284,11 +294,11 @@ public class CopParser
                     properties.Add(new PropertyDecl(propName, typeRef, isOptional, propLine));
                 }
                 Expect(TokenKind.RBrace, "'}'");
-                return new TypeDecl(name, baseType, properties, isExported, docComment, line);
+                return new TypeDecl(name, baseType, properties, isExported, docComment, line, traits);
             }
             // type Name = BaseType (alias) — treat base type as the value after =
             baseType = ExpectIdentifier("base type name");
-            return new TypeDecl(name, baseType, properties, isExported, docComment, line);
+            return new TypeDecl(name, baseType, properties, isExported, docComment, line, traits);
         }
 
         // Properties follow on subsequent indented lines: Name : Type
@@ -326,7 +336,7 @@ public class CopParser
             }
         }
 
-        return new TypeDecl(name, baseType, properties, isExported, docComment, line);
+        return new TypeDecl(name, baseType, properties, isExported, docComment, line, traits);
     }
 
     private Declaration ParseEnumDecl(bool isExported, string? docComment, int line)
@@ -1331,12 +1341,15 @@ public class CopParser
     private TypeRef ParseTypeRef()
     {
         int line = CurrentLine();
-        // [Type] for collection types
+        // [Type] or [Type:Constraint] for collection types
         if (Match(TokenKind.LBracket))
         {
             var innerName = ExpectIdentifier("type name");
+            string? constraint = null;
+            if (Match(TokenKind.Colon))
+                constraint = ExpectIdentifier("constraint name");
             Expect(TokenKind.RBracket, "']'");
-            return new TypeRef(innerName, true, line);
+            return new TypeRef(innerName, true, line, constraint);
         }
         // { ... } anonymous record type — skip and return "object"
         if (Check(TokenKind.LBrace))
@@ -1359,15 +1372,28 @@ public class CopParser
         var paramTypes = new List<string>();
         if (!Check(TokenKind.RParen))
         {
-            paramTypes.Add(FormatTypeRef(ParseTypeRef()));
+            paramTypes.Add(ParseFunctionParam());
             while (Match(TokenKind.Comma))
-                paramTypes.Add(FormatTypeRef(ParseTypeRef()));
+                paramTypes.Add(ParseFunctionParam());
         }
         Expect(TokenKind.RParen, "')'");
         Expect(TokenKind.Arrow, "'=>'");
         var returnType = ParseTypeRef();
         var signature = $"({string.Join(", ", paramTypes)}) => {FormatTypeRef(returnType)}";
         return new TypeRef(signature, false, line);
+    }
+
+    private string ParseFunctionParam()
+    {
+        // Check for named parameter: name : Type
+        if (Check(TokenKind.Identifier) && _pos + 1 < _tokens.Count && _tokens[_pos + 1].Kind == TokenKind.Colon)
+        {
+            var paramName = Advance().Value;
+            Advance(); // consume ':'
+            var typeRef = ParseTypeRef();
+            return $"{paramName}: {FormatTypeRef(typeRef)}";
+        }
+        return FormatTypeRef(ParseTypeRef());
     }
 
     private void SkipBalancedBraces()
@@ -1497,7 +1523,8 @@ public class CopParser
             typeDecl.Properties.Select(ConvertPropertyDefinition).ToList(),
             typeDecl.Line,
             typeDecl.IsExported,
-            typeDecl.DocComment);
+            typeDecl.DocComment,
+            typeDecl.Traits);
 
     private static Cop.Lang.PropertyDefinition ConvertPropertyDefinition(PropertyDecl propertyDecl)
         => new(
@@ -1897,7 +1924,9 @@ public class CopParser
     }
 
     private static string FormatTypeRef(TypeRef typeRef)
-        => typeRef.IsCollection ? $"[{typeRef.Name}]" : typeRef.Name;
+        => typeRef.IsCollection
+            ? (typeRef.Constraint != null ? $"[{typeRef.Name}:{typeRef.Constraint}]" : $"[{typeRef.Name}]")
+            : typeRef.Name;
 
     private static Cop.Lang.Expression WrapExpression(Expression expression)
         => new Cop.Lang.AstExpressionWrapper(expression);

@@ -264,11 +264,12 @@ function buildTree() {
           for (const typeName of Object.keys(pkg.types).sort()) {
             const typeNode = document.createElement('div');
             typeNode.className = 'tree-node';
+            const traitBadge = pkg.types[typeName].isTrait ? ' <span style="color:#0969da; font-size:10px; opacity:0.8;">(trait)</span>' : '';
             typeNode.innerHTML = `
               <div class="tree-label" data-pkg="${pkgId}" data-type="${typeName}">
                 <span class="tree-toggle" style="visibility:hidden"></span>
                 <span class="tree-icon">◆</span>
-                <span>${typeName}</span>
+                <span>${typeName}${traitBadge}</span>
               </div>
             `;
             typesChildren.appendChild(typeNode);
@@ -460,15 +461,28 @@ function renderType(pkgId, typeName) {
   const content = document.getElementById('content');
 
   let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> ${typeName}${sourceLink(type.sourceUrl)}</h1>`;
+  if (type.isTrait) {
+    html += `<span style="display:inline-block; background:#ddf4ff; color:#0969da; border-radius:12px; padding:2px 10px; font-size:12px; font-weight:500; margin-bottom:8px;">trait</span>`;
+  }
+  // Show type definition with inheritance chain (C#-style: type Name : Base, Traits)
+  const chain = [];
+  if (type.baseType) chain.push(type.baseType);
+  if (type.traits && type.traits.length > 0) chain.push(...type.traits);
+  if (chain.length > 0) {
+    html += `<pre style="background:#f6f8fa; border:1px solid #d0d7de; border-radius:6px; padding:12px 16px; font-size:14px; margin:8px 0 12px;"><code>type <strong>${typeName}</strong> : ${chain.join(', ')}</code></pre>`;
+  }
   if (type.desc) {
     html += `<div class="type-overview">${type.desc}</div>`;
+  }
+  if (type.conformers && type.conformers.length > 0) {
+    html += `<p style="color:#57606a; font-size:13px; margin-top:4px;">Conforming types: <code>${type.conformers.join('</code>, <code>')}</code></p>`;
   }
   if (pkg.collections && pkg.collections.length > 0) {
     const names = pkg.collections.map(c => typeof c === 'string' ? c : c.name);
     html += `<p style="color:#57606a; font-size:13px; margin-top:4px;">Functions: <code>${names.join('</code>, <code>')}</code></p>`;
   }
   if (type.props.length > 0) {
-    html += `<h2>Properties</h2>`;
+    html += `<h2>${type.isTrait ? 'Members' : 'Properties'}</h2>`;
   }
 
   for (const prop of type.props) {
@@ -926,8 +940,11 @@ function escapeHtml(str) {
 }
 
 // Returns true if the function has a type page (i.e., appliesTo matches a defined type in some package)
+// Generic collection functions ([T]) should appear in both the Functions section and the [T] type page
 function hasTypePage(fn) {
   if (!fn.appliesTo) return false;
+  // [T] is the universal collection type — don't hide these from Functions
+  if (fn.appliesTo === '[T]') return false;
   for (const p of Object.values(packages)) {
     if (p.types && p.types[fn.appliesTo]) return true;
   }

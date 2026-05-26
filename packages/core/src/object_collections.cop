@@ -2,7 +2,7 @@
 # Functions that operate on collections of any item type.
 
 ## A group produced by groupBy. Contains the shared key and matching items.
-export type object:Group = {
+export type Group : object = {
     Key : object
     Items : [object]
 }
@@ -67,7 +67,7 @@ export function elementAt(items: [T], index: int) : T
 
 ## Sorts ascending by a key expression (quicksort).
 ## Example: Types:orderBy((item) => item.Name)
-export function orderBy(items: [T], keySelector: (T) => R) : [T] 
+export function orderBy(items: [T], keySelector: (T) => K) : [T] 
   => items.Count <= 1 ? items :
     orderBy(items.Rest.where((x) => keySelector(x) < keySelector(items.First)), keySelector)
       .concat([items.First])
@@ -75,21 +75,21 @@ export function orderBy(items: [T], keySelector: (T) => R) : [T]
 
 ## Sorts descending by a key expression (quicksort).
 ## Example: Types:orderByDescending((item) => item.Count)
-export function orderByDescending(items: [T], keySelector: (T) => R) : [T] 
+export function orderByDescending(items: [T], keySelector: (T) => K) : [T] 
   => items.Count <= 1 ? items :
     orderByDescending(items.Rest.where((x) => keySelector(x) > keySelector(items.First)), keySelector)
       .concat([items.First])
       .concat(orderByDescending(items.Rest.where((x) => keySelector(x) <= keySelector(items.First)), keySelector))
 
-## Removes duplicate items (by string representation).
+## Removes duplicate items (by equality comparison).
 ## Example: names:distinct
-export function distinct(items: [T]) : [T] 
+export function distinct(items: [T:Comparable]) : [T] 
   => reduce(items, (acc, item) => acc:any((x) => text(x) == text(item)) ? acc : acc.concat([item]), [])
 
 ## Groups items by a key expression. Returns collection of groups.
 ## Each group has a Key property and an Items collection.
 ## Example: Types:groupBy((item) => item.Namespace, (a, b) => a == b)
-export function groupBy(items: [T], keySelector: (T) => R, compare: (R, R) => bool) : [Group] 
+export function groupBy(items: [T], keySelector: (T) => K, compare: (K, K) => bool) : [Group] 
   => reduce(items, (groups, item) =>
     groups:any((g) => compare(g.Key, keySelector(item)))
       ? groups.select((g) => compare(g.Key, keySelector(item)) ? Group { Key = g.Key, Items = g.Items.concat([item]) } : g)

@@ -35,6 +35,7 @@ public class TypeRegistry
     private readonly Dictionary<string, Func<string, string, List<object>>> _fileParsers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Dictionary<string, SinkProvider>> _nsSinks = new(StringComparer.Ordinal);
     private readonly Dictionary<string, StreamProvider> _streamingSources = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, HashSet<string>> _traitConformance = new();
     private Func<string, List<Document>>? _documentLoader;
 
     public TypeRegistry()
@@ -704,6 +705,11 @@ public class TypeRegistry
         // First pass: create all descriptors
         foreach (var td in typeDefs)
         {
+            // Conformance-only declaration: type existing : Trait = {}
+            // Don't overwrite existing type descriptor; handled in third pass
+            if (td.BaseType is not null && td.Properties.Count == 0 && _types.ContainsKey(td.Name))
+                continue;
+
             if (_types.ContainsKey(td.Name) && !IsCorePrimitive(td.Name))
             {
                 // If the existing type was registered by a provider schema,
@@ -727,7 +733,9 @@ public class TypeRegistry
             var descriptor = new TypeDescriptor(td.Name);
             foreach (var prop in td.Properties)
             {
-                ValidatePropertyCasing(td.Name, prop.Name);
+                // Trait members (function-typed signatures) use camelCase — skip casing validation
+                if (!prop.TypeName.Contains("=>"))
+                    ValidatePropertyCasing(td.Name, prop.Name);
                 descriptor.Properties[prop.Name] = new PropertyDescriptor(
                     prop.Name, prop.TypeName, prop.IsOptional, prop.IsCollection);
             }
@@ -735,6 +743,7 @@ public class TypeRegistry
         }
 
         // Second pass: resolve base types and check for duplicate properties
+        // Skip conformance-only declarations (handled in third pass)
         foreach (var td in typeDefs)
         {
             if (td.BaseType is null) continue;
@@ -745,6 +754,9 @@ public class TypeRegistry
                 errors.Add($"line {td.Line}: base type '{td.BaseType}' not found for '{td.Name}'");
                 continue;
             }
+
+            // Trait conformance declarations don't create inheritance relationships
+            if (IsTrait(baseDescriptor)) continue;
 
             // Check for inheritance cycles
             if (HasCycle(td.Name, td.BaseType))
@@ -765,7 +777,76 @@ public class TypeRegistry
             descriptor.BaseType = baseDescriptor;
         }
 
+        // Third pass: register trait conformances
+        // type int : Comparable = {} means "int conforms to Comparable"
+        // type int : object, Comparable, Formattable = {} — Traits list contains conformances
+        foreach (var td in typeDefs)
+        {
+            // Handle BaseType that is a trait
+            if (td.BaseType is not null && _types.TryGetValue(td.BaseType, out var baseDescriptor))
+            {
+                if (IsTrait(baseDescriptor))
+                {
+                    RegisterConformance(td.Name, td.BaseType);
+                }
+            }
+
+            // Handle explicit Traits list
+            if (td.Traits is not null)
+            {
+                foreach (var traitName in td.Traits)
+                {
+                    if (_types.TryGetValue(traitName, out var traitDescriptor) && IsTrait(traitDescriptor))
+                    {
+                        RegisterConformance(td.Name, traitName);
+                    }
+                }
+            }
+        }
+
         return errors;
+    }
+
+    /// <summary>
+    /// Returns true if the given type descriptor is a trait — a type whose
+    /// properties include function-typed signatures (containing "=>").
+    /// </summary>
+    public static bool IsTrait(TypeDescriptor descriptor)
+    {
+        if (descriptor.Properties.Count == 0) return false;
+        return descriptor.Properties.Values.Any(p => p.TypeName.Contains("=>"));
+    }
+
+    /// <summary>
+    /// Registers that a type conforms to a trait.
+    /// </summary>
+    public void RegisterConformance(string typeName, string traitName)
+    {
+        if (!_traitConformance.TryGetValue(traitName, out var conformers))
+        {
+            conformers = new HashSet<string>();
+            _traitConformance[traitName] = conformers;
+        }
+        conformers.Add(typeName);
+    }
+
+    /// <summary>
+    /// Checks if a type conforms to a trait. "object" always conforms to any trait (wildcard).
+    /// </summary>
+    public bool ConformsTo(string typeName, string traitName)
+    {
+        if (typeName == "object") return true;
+        if (_traitConformance.TryGetValue(traitName, out var conformers))
+            return conformers.Contains(typeName);
+        return false;
+    }
+
+    /// <summary>
+    /// Returns true if the given type name is a registered trait.
+    /// </summary>
+    public bool IsTraitName(string name)
+    {
+        return _types.TryGetValue(name, out var desc) && IsTrait(desc);
     }
 
     /// <summary>

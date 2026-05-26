@@ -388,18 +388,41 @@ otherwise, the parenthesized content is a grouped expression.
 ## 6. Type References
 
 ```ebnf
-type_ref        = '[' IDENTIFIER ']'            (* collection type *)
+type_ref        = '[' IDENTIFIER [ ':' IDENTIFIER ] ']'  (* collection type, optional constraint *)
                 | '{' balanced_braces '}'       (* anonymous record type — treated as 'object' *)
                 | '(' type_ref { ',' type_ref } ')' '=>' type_ref   (* function type *)
                 | IDENTIFIER                    (* named type *)
                 ;
 ```
 
+**Type variables:** A single uppercase letter (A–Z) that does not resolve to a known type is treated
+as a type variable. Type variables are implicitly introduced by their first occurrence in a function
+signature — no explicit declaration syntax is needed.
+
+```cop
+function reduce(items: [T], accumulator: (A, T) => A, initial: A) : A => intrinsic
+function select(items: [T], selector: (T) => R) : [R] => intrinsic
+```
+
+**Constrained type parameters:** Collection type references support an optional constraint after the
+type variable, separated by `:`. The constraint names a trait that the inferred type must conform to.
+
+```ebnf
+collection_type = '[' type_var ':' constraint_name ']' ;
+type_var        = UPPER_LETTER ;               (* single uppercase A–Z *)
+constraint_name = IDENTIFIER ;                 (* must be a registered trait type *)
+```
+
+Example:
+```cop
+function distinct(items: [T:Comparable]) : [T] => ...
+```
+
 Function type syntax expresses the full signature of callable parameters:
 ```cop
 condition: (object) => bool          # predicate taking one arg
 transform: (object) => object        # projection function
-accumulator: (object, object) => object  # two-arg reducer
+accumulator: (A, T) => A            # two-arg reducer with type variables
 ```
 
 ---

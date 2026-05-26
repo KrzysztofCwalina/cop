@@ -84,7 +84,73 @@ public class PackageExtractor
     {
         foreach (var td in sf.TypeDefinitions.Where(t => t.IsExported))
         {
+            // Conformance-only declarations (type int : Comparable = {}) — add to conformers list
+            if (td.BaseType is not null && td.Properties.Count == 0
+                && entry.Types.TryGetValue(td.BaseType, out var baseEntry) && baseEntry.IsTrait)
+            {
+                baseEntry.Conformers ??= [];
+                baseEntry.Conformers.Add(td.Name);
+                // Also record the trait on the concrete type
+                if (entry.Types.TryGetValue(td.Name, out var concreteEntry))
+                {
+                    concreteEntry.Traits ??= [];
+                    concreteEntry.Traits.Add(td.BaseType);
+                }
+                // Handle additional traits from Traits list
+                if (td.Traits is not null)
+                {
+                    foreach (var traitName in td.Traits)
+                    {
+                        if (entry.Types.TryGetValue(traitName, out var traitEntry) && traitEntry.IsTrait)
+                        {
+                            traitEntry.Conformers ??= [];
+                            traitEntry.Conformers.Add(td.Name);
+                            if (entry.Types.TryGetValue(td.Name, out var ce))
+                            {
+                                ce.Traits ??= [];
+                                ce.Traits.Add(traitName);
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+
+            // Subtype declarations (type string : object = {}) — record base type on the sub
+            if (td.BaseType is not null && td.Properties.Count == 0 && entry.Types.ContainsKey(td.Name))
+            {
+                // Already exists — just set the base type
+                entry.Types[td.Name].BaseType = td.BaseType;
+                // Handle traits from Traits list
+                if (td.Traits is not null)
+                {
+                    foreach (var traitName in td.Traits)
+                    {
+                        if (entry.Types.TryGetValue(traitName, out var traitEntry) && traitEntry.IsTrait)
+                        {
+                            traitEntry.Conformers ??= [];
+                            traitEntry.Conformers.Add(td.Name);
+                            entry.Types[td.Name].Traits ??= [];
+                            entry.Types[td.Name].Traits!.Add(traitName);
+                        }
+                    }
+                }
+                continue;
+            }
+
             var typeEntry = new TypeEntry { Desc = td.DocComment, SourceUrl = MakeSourceUrl(copFile, td.Line) };
+            // Detect traits: types whose properties are all function-typed (contain =>)
+            bool hasFunctionProps = td.Properties.Count > 0 && td.Properties.All(p => p.TypeName.Contains("=>"));
+            typeEntry.IsTrait = hasFunctionProps;
+            if (td.BaseType is not null)
+                typeEntry.BaseType = td.BaseType;
+            // Handle traits from Traits list on new type definitions
+            if (td.Traits is not null)
+            {
+                typeEntry.Traits ??= [];
+                typeEntry.Traits.AddRange(td.Traits);
+            }
+
             foreach (var prop in td.Properties)
             {
                 var typeName = prop.IsCollection ? $"[{prop.TypeName}]" : prop.TypeName;

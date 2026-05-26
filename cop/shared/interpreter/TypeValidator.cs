@@ -13,7 +13,7 @@ public static class TypeValidator
     /// Checks arity and parameter types. For generic functions, infers type bindings
     /// and validates against substituted types.
     /// </summary>
-    public static void ValidateArguments(FunctionDecl decl, IReadOnlyList<CopValue> args)
+    public static void ValidateArguments(FunctionDecl decl, IReadOnlyList<CopValue> args, TypeRegistry? registry = null)
     {
         // Arity check: too many arguments
         if (args.Count > decl.Params.Count && decl.Params.Count > 0)
@@ -26,7 +26,7 @@ public static class TypeValidator
         // For generic functions, infer bindings and validate with substituted types
         if (GenericInference.HasTypeParameters(decl))
         {
-            ValidateGenericArguments(decl, args);
+            ValidateGenericArguments(decl, args, registry);
             return;
         }
 
@@ -51,9 +51,17 @@ public static class TypeValidator
     /// Validates arguments for a generic function using inferred type bindings.
     /// Substitutes type variables with inferred concrete types before checking compatibility.
     /// </summary>
-    private static void ValidateGenericArguments(FunctionDecl decl, IReadOnlyList<CopValue> args)
+    private static void ValidateGenericArguments(FunctionDecl decl, IReadOnlyList<CopValue> args, TypeRegistry? registry)
     {
         var bindings = GenericInference.InferBindings(decl, args);
+
+        // Validate trait constraints if a registry is available
+        if (registry is not null)
+        {
+            var constraintError = GenericInference.ValidateConstraints(decl, bindings, registry);
+            if (constraintError is not null)
+                throw new CopEvaluationException(constraintError, decl.Line);
+        }
 
         for (int i = 0; i < args.Count && i < decl.Params.Count; i++)
         {

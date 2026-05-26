@@ -38,7 +38,8 @@ public record TypeDecl(
     List<PropertyDecl> Properties,
     bool IsExported = false,
     string? DocComment = null,
-    int Line = 0) : Declaration(Line);
+    int Line = 0,
+    List<string>? Traits = null) : Declaration(Line);
 
 /// <summary>
 /// A single property within a type declaration.
@@ -233,8 +234,9 @@ public record Parameter(string Name, TypeRef? Type = null, int Line = 0) : AstNo
 
 /// <summary>
 /// Type reference (used in annotations).
+/// Constraint is used for type parameter bounds: [T:comparable] → Constraint="comparable"
 /// </summary>
-public record TypeRef(string Name, bool IsCollection = false, int Line = 0) : AstNode(Line);
+public record TypeRef(string Name, bool IsCollection = false, int Line = 0, string? Constraint = null) : AstNode(Line);
 
 /// <summary>
 /// A single arm in a match expression.

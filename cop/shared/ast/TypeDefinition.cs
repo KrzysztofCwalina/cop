@@ -9,7 +9,8 @@ public record TypeDefinition(
     List<PropertyDefinition> Properties,
     int Line,
     bool IsExported = false,
-    string? DocComment = null);
+    string? DocComment = null,
+    List<string>? Traits = null);
 
 public record PropertyDefinition(
     string Name,

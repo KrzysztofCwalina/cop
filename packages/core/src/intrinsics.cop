@@ -54,7 +54,7 @@ export function assert(condition : bool, description : string) => intrinsic
 ## Reduces a collection to a single value using an accumulator function.
 ## The accumulator takes (acc, item) and returns the new accumulator value.
 ## Example: [1,2,3]:reduce((acc, item) => acc + item, 0)
-export function reduce(items: [T], accumulator: (R, T) => R, initial: R) : R 
+export function reduce(items: [T], accumulator: (A, T) => A, initial: A) : A 
   => intrinsic
 
 ## Returns a new collection combining both collections.
@@ -67,7 +67,7 @@ export function concat(items: [T], other: [T]) : [T]
 ## A template bound to data, ready to be resolved into a string.
 ## Items is the collection of data to format, Template is the {Property} interpolation pattern,
 ## and Separator is the string used to join results (defaults to newline).
-export type object:Formattable = {
+export type InterpolatedString : object = {
     Items : [object]
     Template : string
     Separator : string
@@ -79,9 +79,9 @@ export function text(int) : string => intrinsic
 ## Decodes a byte array as UTF-8 text.
 export function text(bytes) : string => intrinsic
 
-## Converts a Formattable to text by resolving the Template against each item
+## Converts an InterpolatedString to text by resolving the Template against each item
 ## in Items using {Property} interpolation, then joining results with Separator.
-export function text(Formattable) : string => intrinsic
+export function text(InterpolatedString) : string => intrinsic
 
 # Error Handling
 
@@ -89,7 +89,7 @@ export function text(Formattable) : string => intrinsic
 ## Errors are not code bugs (use fail() for those). They represent external failures
 ## that code cannot prevent: network timeouts, I/O failures, malformed input.
 ## Use isError predicate to detect errors in pipeline items.
-export type object:Error = {
+export type Error : object = {
     Message : string
     SourceFile : string
     SourceLine : int
@@ -119,7 +119,7 @@ export function program() : Program => intrinsic
 
 ## Represents the running program's context.
 ## Provides access to command-line arguments passed to the cop invocation.
-export type object:Program = {
+export type Program : object = {
     Args : [string]
 }
 

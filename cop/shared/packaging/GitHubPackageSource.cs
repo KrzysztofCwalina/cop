@@ -36,12 +36,8 @@ public class GitHubPackageSource
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _githubToken = githubToken;
 
-        // Configure default headers
+        // Configure default headers (User-Agent only; Authorization is added per-request for security)
         _httpClient.DefaultRequestHeaders.Add("User-Agent", UserAgent);
-        if (!string.IsNullOrEmpty(githubToken))
-        {
-            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {githubToken}");
-        }
     }
 
     /// <summary>
@@ -67,7 +63,8 @@ public class GitHubPackageSource
 
         try
         {
-            var response = await _httpClient.GetAsync(url, ct);
+            using var request = CreateRequestWithAuth(HttpMethod.Get, url);
+            var response = await _httpClient.SendAsync(request, ct);
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync(ct);
@@ -89,7 +86,8 @@ public class GitHubPackageSource
                 $"{packagePath}/{packageRef.PackageName}.md",
                 packageRef.Version);
 
-            var legacyResponse = await _httpClient.GetAsync(legacyUrl, ct);
+            using var legacyRequest = CreateRequestWithAuth(HttpMethod.Get, legacyUrl);
+            var legacyResponse = await _httpClient.SendAsync(legacyRequest, ct);
             legacyResponse.EnsureSuccessStatusCode();
 
             var legacyJson = await legacyResponse.Content.ReadAsStringAsync(ct);
@@ -167,7 +165,8 @@ public class GitHubPackageSource
         try
         {
             var url = $"{GitHubApiBaseUrl}/repos/{owner}/{repo}/contents/{dirPath}";
-            var response = await _httpClient.GetAsync(url, ct);
+            using var request = CreateRequestWithAuth(HttpMethod.Get, url);
+            var response = await _httpClient.SendAsync(request, ct);
             if (!response.IsSuccessStatusCode) return;
 
             var json = await response.Content.ReadAsStringAsync(ct);
@@ -211,12 +210,14 @@ public class GitHubPackageSource
         {
             // Check for cop.json first
             var metadataUrl = $"{GitHubApiBaseUrl}/repos/{owner}/{repo}/contents/{dirPath}/{PackageMetadata.MetadataFileName}";
-            var response = await _httpClient.GetAsync(metadataUrl, ct);
+            using var metadataRequest = CreateRequestWithAuth(HttpMethod.Get, metadataUrl);
+            var response = await _httpClient.SendAsync(metadataRequest, ct);
             if (response.IsSuccessStatusCode) return true;
 
             // Fallback: check for legacy {name}.md
             var legacyUrl = $"{GitHubApiBaseUrl}/repos/{owner}/{repo}/contents/{dirPath}/{dirName}.md";
-            var legacyResponse = await _httpClient.GetAsync(legacyUrl, ct);
+            using var legacyRequest = CreateRequestWithAuth(HttpMethod.Get, legacyUrl);
+            var legacyResponse = await _httpClient.SendAsync(legacyRequest, ct);
             return legacyResponse.IsSuccessStatusCode;
         }
         catch
@@ -238,7 +239,8 @@ public class GitHubPackageSource
         var directUrl = BuildContentsUrl(owner, repo, $"{directPath}/{PackageMetadata.MetadataFileName}", version);
         try
         {
-            var response = await _httpClient.GetAsync(directUrl, ct);
+            using var directRequest = CreateRequestWithAuth(HttpMethod.Get, directUrl);
+            var response = await _httpClient.SendAsync(directRequest, ct);
             if (response.IsSuccessStatusCode) return directPath;
         }
         catch { /* fall through */ }
@@ -247,7 +249,8 @@ public class GitHubPackageSource
         var legacyDirectUrl = BuildContentsUrl(owner, repo, $"{directPath}/{packageName}.md", version);
         try
         {
-            var response = await _httpClient.GetAsync(legacyDirectUrl, ct);
+            using var legacyDirectRequest = CreateRequestWithAuth(HttpMethod.Get, legacyDirectUrl);
+            var response = await _httpClient.SendAsync(legacyDirectRequest, ct);
             if (response.IsSuccessStatusCode) return directPath;
         }
         catch { /* fall through to group search */ }
@@ -256,7 +259,8 @@ public class GitHubPackageSource
         var rootUrl = BuildContentsUrl(owner, repo, "packages", version);
         try
         {
-            var response = await _httpClient.GetAsync(rootUrl, ct);
+            using var rootRequest = CreateRequestWithAuth(HttpMethod.Get, rootUrl);
+            var response = await _httpClient.SendAsync(rootRequest, ct);
             if (!response.IsSuccessStatusCode) return null;
 
             var json = await response.Content.ReadAsStringAsync(ct);
@@ -272,7 +276,8 @@ public class GitHubPackageSource
                 var nestedUrl = BuildContentsUrl(owner, repo, $"{nestedPath}/{PackageMetadata.MetadataFileName}", version);
                 try
                 {
-                    var nestedResponse = await _httpClient.GetAsync(nestedUrl, ct);
+                    using var nestedRequest = CreateRequestWithAuth(HttpMethod.Get, nestedUrl);
+                    var nestedResponse = await _httpClient.SendAsync(nestedRequest, ct);
                     if (nestedResponse.IsSuccessStatusCode) return nestedPath;
                 }
                 catch { /* continue */ }
@@ -281,7 +286,8 @@ public class GitHubPackageSource
                 var nestedLegacyUrl = BuildContentsUrl(owner, repo, $"{nestedPath}/{packageName}.md", version);
                 try
                 {
-                    var nestedLegacyResponse = await _httpClient.GetAsync(nestedLegacyUrl, ct);
+                    using var nestedLegacyRequest = CreateRequestWithAuth(HttpMethod.Get, nestedLegacyUrl);
+                    var nestedLegacyResponse = await _httpClient.SendAsync(nestedLegacyRequest, ct);
                     if (nestedLegacyResponse.IsSuccessStatusCode) return nestedPath;
                 }
                 catch { continue; }
@@ -303,7 +309,8 @@ public class GitHubPackageSource
 
         try
         {
-            var response = await _httpClient.GetAsync(url, ct);
+            using var request = CreateRequestWithAuth(HttpMethod.Get, url);
+            var response = await _httpClient.SendAsync(request, ct);
 
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
@@ -363,7 +370,8 @@ public class GitHubPackageSource
 
         try
         {
-            var response = await _httpClient.GetAsync(url, ct);
+            using var request = CreateRequestWithAuth(HttpMethod.Get, url);
+            var response = await _httpClient.SendAsync(request, ct);
             response.EnsureSuccessStatusCode();
 
             var json = await response.Content.ReadAsStringAsync(ct);
@@ -402,7 +410,8 @@ public class GitHubPackageSource
                     else if (item.DownloadUrl != null)
                     {
                         // Directory listings don't include content; download each file individually
-                        var fileResponse = await _httpClient.GetAsync(item.DownloadUrl, ct);
+                        using var fileRequest = CreateRequestWithAuth(HttpMethod.Get, item.DownloadUrl);
+                        var fileResponse = await _httpClient.SendAsync(fileRequest, ct);
                         if (fileResponse.IsSuccessStatusCode)
                             files[itemRelativePath] = await fileResponse.Content.ReadAsByteArrayAsync(ct);
                     }
@@ -431,6 +440,20 @@ public class GitHubPackageSource
         }
 
         return url;
+    }
+
+    /// <summary>
+    /// Creates an HttpRequestMessage with Authorization header added per-request (not stored in DefaultRequestHeaders).
+    /// This prevents token exposure in logs, debugging tools, and memory dumps.
+    /// </summary>
+    private HttpRequestMessage CreateRequestWithAuth(HttpMethod method, string url)
+    {
+        var request = new HttpRequestMessage(method, url);
+        if (!string.IsNullOrEmpty(_githubToken))
+        {
+            request.Headers.Add("Authorization", $"Bearer {_githubToken}");
+        }
+        return request;
     }
 
     /// <summary>

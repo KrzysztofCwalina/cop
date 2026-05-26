@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -228,7 +229,7 @@ public class RestoreEngine
                 else
                 {
                     var packageDir = Path.Combine(repoRoot, ".cop", "packages", package.PackageName);
-                    targetPath = Path.Combine(packageDir, relativePath);
+                    targetPath = ValidatePackagePath(relativePath, packageDir);
                     var targetDir = Path.GetDirectoryName(targetPath);
                     Directory.CreateDirectory(targetDir);
                     await File.WriteAllBytesAsync(targetPath, content);
@@ -395,6 +396,26 @@ public class RestoreEngine
         {
             // Silently fail on parse errors, continue with other processing
         }
+    }
+
+    /// <summary>
+    /// Validates that a relative path from a package doesn't escape the intended directory.
+    /// Prevents path traversal attacks via sequences like ../../ in package file paths.
+    /// </summary>
+    private static string ValidatePackagePath(string relativePath, string baseDir)
+    {
+        // Normalize the path by combining with a dummy base and checking it stays within bounds
+        var testBase = Path.GetFullPath("dummy");
+        var testPath = Path.GetFullPath(Path.Combine("dummy", relativePath));
+        
+        if (!testPath.StartsWith(testBase + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
+            !testPath.Equals(testBase, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new SecurityException($"Invalid package path (potential path traversal): {relativePath}");
+        }
+        
+        // Return the validated combined path
+        return Path.Combine(baseDir, relativePath);
     }
 }
 

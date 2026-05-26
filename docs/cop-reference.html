@@ -413,6 +413,7 @@ const packages = {
       },
       "Constructor": {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L49",
+        "baseType": "Method",
         "props": []
       },
       "Field": {
@@ -717,18 +718,22 @@ const packages = {
       },
       "Call": {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L125",
+        "baseType": "Statement",
         "props": []
       },
       "Declaration": {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L129",
+        "baseType": "Statement",
         "props": []
       },
       "ErrorHandler": {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L131",
+        "baseType": "Statement",
         "props": []
       },
       "Attribute": {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L133",
+        "baseType": "Statement",
         "props": []
       },
       "Line": {
@@ -1848,9 +1853,10 @@ const packages = {
     ],
     "collections": [],
     "types": {
-      "Formattable": {
+      "InterpolatedString": {
         "desc": "A template bound to data, ready to be resolved into a string.\nItems is the collection of data to format, Template is the {Property} interpolation pattern,\nand Separator is the string used to join results (defaults to newline).",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L70",
+        "baseType": "object",
         "props": [
           {
             "name": "Items",
@@ -1872,6 +1878,7 @@ const packages = {
       "Error": {
         "desc": "Represents an operational error flowing through a pipeline.\nErrors are not code bugs (use fail() for those). They represent external failures\nthat code cannot prevent: network timeouts, I/O failures, malformed input.\nUse isError predicate to detect errors in pipeline items.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L92",
+        "baseType": "object",
         "props": [
           {
             "name": "Message",
@@ -1898,6 +1905,7 @@ const packages = {
       "Program": {
         "desc": "Represents the running program's context.\nProvides access to command-line arguments passed to the cop invocation.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L122",
+        "baseType": "object",
         "props": [
           {
             "name": "Args",
@@ -1909,6 +1917,7 @@ const packages = {
       "Group": {
         "desc": "A group produced by groupBy. Contains the shared key and matching items.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L5",
+        "baseType": "object",
         "props": [
           {
             "name": "Key",
@@ -1936,36 +1945,62 @@ const packages = {
       "string": {
         "desc": "A UTF-8 text value.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L14",
+        "baseType": "object",
+        "traits": [
+          "Comparable",
+          "Formattable"
+        ],
         "props": []
       },
       "int": {
         "desc": "A 64-bit signed integer.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L17",
+        "baseType": "object",
+        "traits": [
+          "Comparable",
+          "Formattable"
+        ],
         "props": []
       },
       "number": {
         "desc": "A 64-bit floating-point number.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L20",
+        "baseType": "object",
+        "traits": [
+          "Comparable",
+          "Formattable"
+        ],
         "props": []
       },
       "bool": {
         "desc": "A boolean value (true or false).",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L23",
+        "baseType": "object",
+        "traits": [
+          "Comparable",
+          "Formattable"
+        ],
         "props": []
       },
       "byte": {
         "desc": "A single unsigned byte (0–255).",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L26",
+        "baseType": "object",
         "props": []
       },
       "bytes": {
         "desc": "An array of bytes. Used for binary data (e.g., HTTP request/response bodies).",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L29",
+        "baseType": "object",
+        "traits": [
+          "Formattable"
+        ],
         "props": []
       },
       "[T]": {
         "desc": "The built-in ordered collection type.\nDeclared as [T] in property types (e.g., Types : [Type]).\nImmutable — all operations return new collections without modifying the original.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/primitives.cop#L34",
+        "baseType": "object",
         "props": [
           {
             "name": "Count",
@@ -1990,6 +2025,43 @@ const packages = {
           {
             "name": "Single",
             "type": "T",
+            "desc": ""
+          }
+        ]
+      },
+      "Comparable": {
+        "desc": "A type that supports equality comparison.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/traits.cop#L5",
+        "isTrait": true,
+        "conformers": [
+          "int",
+          "string",
+          "bool",
+          "number"
+        ],
+        "props": [
+          {
+            "name": "equals",
+            "type": "(left: T, right: T) => bool",
+            "desc": ""
+          }
+        ]
+      },
+      "Formattable": {
+        "desc": "A type that can be converted to a text representation.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/traits.cop#L10",
+        "isTrait": true,
+        "conformers": [
+          "int",
+          "string",
+          "bool",
+          "number",
+          "bytes"
+        ],
+        "props": [
+          {
+            "name": "format",
+            "type": "(value: T) => string",
             "desc": ""
           }
         ]
@@ -2074,8 +2146,8 @@ const packages = {
       },
       {
         "name": "reduce",
-        "params": "items: [T], accumulator: (R, T) => R, initial: R",
-        "returns": "R",
+        "params": "items: [T], accumulator: (A, T) => A, initial: A",
+        "returns": "A",
         "appliesTo": "[T]",
         "desc": "Reduces a collection to a single value using an accumulator function.\nThe accumulator takes (acc, item) and returns the new accumulator value.\nExample: [1,2,3]:reduce((acc, item) => acc + item, 0)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L57"
@@ -2104,9 +2176,9 @@ const packages = {
       },
       {
         "name": "text",
-        "params": "Formattable: Formattable",
+        "params": "InterpolatedString: InterpolatedString",
         "returns": "string",
-        "desc": "Converts a Formattable to text by resolving the Template against each item\nin Items using {Property} interpolation, then joining results with Separator.",
+        "desc": "Converts an InterpolatedString to text by resolving the Template against each item\nin Items using {Property} interpolation, then joining results with Separator.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L84"
       },
       {
@@ -2323,7 +2395,7 @@ const packages = {
       },
       {
         "name": "orderBy",
-        "params": "items: [T], keySelector: (T) => R",
+        "params": "items: [T], keySelector: (T) => K",
         "returns": "[T]",
         "appliesTo": "[T]",
         "desc": "Sorts ascending by a key expression (quicksort).\nExample: Types:orderBy((item) => item.Name)",
@@ -2331,7 +2403,7 @@ const packages = {
       },
       {
         "name": "orderByDescending",
-        "params": "items: [T], keySelector: (T) => R",
+        "params": "items: [T], keySelector: (T) => K",
         "returns": "[T]",
         "appliesTo": "[T]",
         "desc": "Sorts descending by a key expression (quicksort).\nExample: Types:orderByDescending((item) => item.Count)",
@@ -2339,15 +2411,15 @@ const packages = {
       },
       {
         "name": "distinct",
-        "params": "items: [T]",
+        "params": "items: [T:Comparable]",
         "returns": "[T]",
-        "appliesTo": "[T]",
-        "desc": "Removes duplicate items (by string representation).\nExample: names:distinct",
+        "appliesTo": "[T:Comparable]",
+        "desc": "Removes duplicate items (by equality comparison).\nExample: names:distinct",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/object_collections.cop#L86"
       },
       {
         "name": "groupBy",
-        "params": "items: [T], keySelector: (T) => R, compare: (R, R) => bool",
+        "params": "items: [T], keySelector: (T) => K, compare: (K, K) => bool",
         "returns": "[Group]",
         "appliesTo": "[T]",
         "desc": "Groups items by a key expression. Returns collection of groups.\nEach group has a Key property and an Items collection.\nExample: Types:groupBy((item) => item.Namespace, (a, b) => a == b)",
@@ -4360,11 +4432,12 @@ function buildTree() {
           for (const typeName of Object.keys(pkg.types).sort()) {
             const typeNode = document.createElement('div');
             typeNode.className = 'tree-node';
+            const traitBadge = pkg.types[typeName].isTrait ? ' <span style="color:#0969da; font-size:10px; opacity:0.8;">(trait)</span>' : '';
             typeNode.innerHTML = `
               <div class="tree-label" data-pkg="${pkgId}" data-type="${typeName}">
                 <span class="tree-toggle" style="visibility:hidden"></span>
                 <span class="tree-icon">◆</span>
-                <span>${typeName}</span>
+                <span>${typeName}${traitBadge}</span>
               </div>
             `;
             typesChildren.appendChild(typeNode);
@@ -4556,15 +4629,28 @@ function renderType(pkgId, typeName) {
   const content = document.getElementById('content');
 
   let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> ${typeName}${sourceLink(type.sourceUrl)}</h1>`;
+  if (type.isTrait) {
+    html += `<span style="display:inline-block; background:#ddf4ff; color:#0969da; border-radius:12px; padding:2px 10px; font-size:12px; font-weight:500; margin-bottom:8px;">trait</span>`;
+  }
+  // Show type definition with inheritance chain (C#-style: type Name : Base, Traits)
+  const chain = [];
+  if (type.baseType) chain.push(type.baseType);
+  if (type.traits && type.traits.length > 0) chain.push(...type.traits);
+  if (chain.length > 0) {
+    html += `<pre style="background:#f6f8fa; border:1px solid #d0d7de; border-radius:6px; padding:12px 16px; font-size:14px; margin:8px 0 12px;"><code>type <strong>${typeName}</strong> : ${chain.join(', ')}</code></pre>`;
+  }
   if (type.desc) {
     html += `<div class="type-overview">${type.desc}</div>`;
+  }
+  if (type.conformers && type.conformers.length > 0) {
+    html += `<p style="color:#57606a; font-size:13px; margin-top:4px;">Conforming types: <code>${type.conformers.join('</code>, <code>')}</code></p>`;
   }
   if (pkg.collections && pkg.collections.length > 0) {
     const names = pkg.collections.map(c => typeof c === 'string' ? c : c.name);
     html += `<p style="color:#57606a; font-size:13px; margin-top:4px;">Functions: <code>${names.join('</code>, <code>')}</code></p>`;
   }
   if (type.props.length > 0) {
-    html += `<h2>Properties</h2>`;
+    html += `<h2>${type.isTrait ? 'Members' : 'Properties'}</h2>`;
   }
 
   for (const prop of type.props) {
@@ -5022,8 +5108,11 @@ function escapeHtml(str) {
 }
 
 // Returns true if the function has a type page (i.e., appliesTo matches a defined type in some package)
+// Generic collection functions ([T]) should appear in both the Functions section and the [T] type page
 function hasTypePage(fn) {
   if (!fn.appliesTo) return false;
+  // [T] is the universal collection type — don't hide these from Functions
+  if (fn.appliesTo === '[T]') return false;
   for (const p of Object.values(packages)) {
     if (p.types && p.types[fn.appliesTo]) return true;
   }

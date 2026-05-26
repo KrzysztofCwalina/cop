@@ -1,6 +1,7 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
 using System.Net.Http;
+using System.Security;
 using System.Text.Json;
 using Cop.Core;
 using Cop.Lang;
@@ -567,6 +568,12 @@ public static class RunCommand
         var queue = new Queue<string>(missing);
         var downloaded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        if (missing.Count > 0)
+        {
+            var feedCount = githubFeeds.Distinct().Count();
+            Console.Error.WriteLine($"Auto-restoring {missing.Count} package(s) from {feedCount} feed(s)...");
+        }
+
         while (queue.Count > 0)
         {
             var pkgName = queue.Dequeue();
@@ -584,7 +591,7 @@ public static class RunCommand
                 try
                 {
                     var pkgRef = PackageReference.Parse($"{feed}/{pkgName}");
-                    Console.Error.Write($"  Restoring {pkgName}...");
+                    Console.Error.Write($"  Restoring '{pkgName}' from {feed}...");
                     var files = source2.DownloadPackageFilesAsync(pkgRef).GetAwaiter().GetResult();
 
                     if (files.Count == 0) { Console.Error.WriteLine(" no files"); continue; }
@@ -592,7 +599,7 @@ public static class RunCommand
                     var pkgDir = Path.Combine(cachePath, pkgName);
                     foreach (var (relativePath, content) in files)
                     {
-                        var destPath = Path.Combine(pkgDir, relativePath);
+                        var destPath = ValidatePackagePath(relativePath, pkgDir);
                         Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
                         File.WriteAllBytes(destPath, content);
                     }
@@ -632,6 +639,11 @@ public static class RunCommand
 
             if (!restored)
                 Console.Error.WriteLine($"Warning: Package '{pkgName}' not found in any configured feed.");
+        }
+
+        if (downloaded.Count > 0)
+        {
+            Console.Error.WriteLine($"{downloaded.Count} package(s) restored successfully");
         }
     }
 
@@ -708,6 +720,12 @@ public static class RunCommand
         var queue = new Queue<string>(packageNames);
         var downloaded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        if (packageNames.Count > 0)
+        {
+            var feedCount = githubFeeds.Distinct().Count();
+            Console.Error.WriteLine($"Auto-restoring {packageNames.Count} package(s) from {feedCount} feed(s)...");
+        }
+
         while (queue.Count > 0)
         {
             var pkgName = queue.Dequeue();
@@ -725,7 +743,7 @@ public static class RunCommand
                 try
                 {
                     var pkgRef = PackageReference.Parse($"{feed}/{pkgName}");
-                    Console.Error.Write($"  Downloading {pkgName}...");
+                    Console.Error.Write($"  Restoring '{pkgName}' from {feed}...");
                     var files = await source.DownloadPackageFilesAsync(pkgRef);
 
                     if (files.Count == 0) { Console.Error.WriteLine(" no files"); continue; }
@@ -733,7 +751,7 @@ public static class RunCommand
                     var pkgDir = Path.Combine(cachePath, pkgName);
                     foreach (var (relativePath, content) in files)
                     {
-                        var destPath = Path.Combine(pkgDir, relativePath);
+                        var destPath = ValidatePackagePath(relativePath, pkgDir);
                         Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
                         await File.WriteAllBytesAsync(destPath, content);
                     }
@@ -778,6 +796,11 @@ public static class RunCommand
             }
         }
 
+        if (downloaded.Count > 0)
+        {
+            Console.Error.WriteLine($"{downloaded.Count} package(s) restored successfully");
+        }
+
         return true;
     }
 
@@ -807,5 +830,25 @@ public static class RunCommand
         catch { }
 
         return null;
+    }
+
+    /// <summary>
+    /// Validates that a relative path from a package doesn't escape the intended directory.
+    /// Prevents path traversal attacks via sequences like ../../ in package file paths.
+    /// </summary>
+    private static string ValidatePackagePath(string relativePath, string baseDir)
+    {
+        // Normalize the path by combining with a dummy base and checking it stays within bounds
+        var testBase = Path.GetFullPath("dummy");
+        var testPath = Path.GetFullPath(Path.Combine("dummy", relativePath));
+        
+        if (!testPath.StartsWith(testBase + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
+            !testPath.Equals(testBase, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new SecurityException($"Invalid package path (potential path traversal): {relativePath}");
+        }
+        
+        // Return the validated combined path
+        return Path.Combine(baseDir, relativePath);
     }
 }

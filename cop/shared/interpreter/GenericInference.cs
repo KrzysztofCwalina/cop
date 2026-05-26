@@ -55,6 +55,29 @@ public static class GenericInference
     }
 
     /// <summary>
+    /// Validates that inferred type bindings satisfy any declared constraints.
+    /// Returns null if all constraints pass, or an error message if a constraint is violated.
+    /// </summary>
+    public static string? ValidateConstraints(FunctionDecl decl, Dictionary<string, string> bindings, TypeRegistry registry)
+    {
+        foreach (var param in decl.Params)
+        {
+            if (param.Type is null || param.Type.Constraint is null) continue;
+
+            var typeVar = param.Type.Name;
+            var constraint = param.Type.Constraint;
+
+            if (!bindings.TryGetValue(typeVar, out var concreteType))
+                continue; // unresolved — can't check
+
+            if (!registry.ConformsTo(concreteType, constraint))
+                return $"'{decl.Name}' requires {typeVar} to satisfy '{constraint}', but '{concreteType}' does not declare conformance to '{constraint}'";
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Substitutes type variables in a TypeRef with their inferred concrete types.
     /// Returns a new TypeRef with type variables replaced, or the original if no substitution needed.
     /// </summary>
