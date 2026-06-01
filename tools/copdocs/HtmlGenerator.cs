@@ -135,7 +135,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .tag-function { background: #dcffe4; color: #1a7f37; }
 .tag-check { background: #ffebe9; color: #cf222e; }
 .tag-command { background: #fbefff; color: #8250df; }
-.tag-export { background: #e8f5e9; color: #2e7d32; }
 .tag-enum { background: #fff1e5; color: #bc4c00; }
 .enum-values { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; padding-left: 2px; }
 .enum-value { display: inline-block; padding: 2px 8px; background: #fff1e5; color: #bc4c00; border-radius: 4px; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px; }
@@ -236,7 +235,6 @@ function buildTree() {
       const hasChecks = pkg.checks && pkg.checks.length > 0;
       const hasCmds = pkg.commands && pkg.commands.length > 0;
       const hasEnums = pkg.enums && pkg.enums.length > 0;
-      const hasExports = pkg.exports && pkg.exports.length > 0;
 
       pkgNode.innerHTML = `
         <div class="tree-label" data-pkg="${pkgId}">
@@ -334,19 +332,6 @@ function buildTree() {
         childrenDiv.appendChild(secNode);
       }
 
-      if (hasExports) {
-        const secNode = document.createElement('div');
-        secNode.className = 'tree-node';
-        secNode.innerHTML = `
-          <div class="tree-label" data-pkg="${pkgId}" data-view="exports">
-            <span class="tree-toggle" style="visibility:hidden"></span>
-            <span class="section-tag tag-export">E</span>
-            <span>Exports (${pkg.exports.length})</span>
-          </div>
-        `;
-        childrenDiv.appendChild(secNode);
-      }
-
       catChildrenDiv.appendChild(pkgNode);
     }
     tree.appendChild(catDiv);
@@ -366,6 +351,8 @@ function buildTree() {
       label.classList.add('active');
       renderType(pkg, type);
       location.hash = `${pkg}/${type}`;
+      // Ensure parent package node is expanded
+      ensurePackageExpanded(pkg);
     } else if (view) {
       document.querySelectorAll('.tree-label.active').forEach(el => el.classList.remove('active'));
       label.classList.add('active');
@@ -374,8 +361,10 @@ function buildTree() {
       else if (view === 'checks') renderChecks(pkg);
       else if (view === 'commands') renderCommands(pkg);
       else if (view === 'enums') renderEnums(pkg);
-      else if (view === 'exports') renderExports(pkg);
+      else if (view === 'exports') renderFunctions(pkg);
       location.hash = `${pkg}/${view}`;
+      // Ensure parent package node is expanded
+      ensurePackageExpanded(pkg);
     } else if (section) {
       // Toggle section expand
       const children = label.nextElementSibling;
@@ -400,6 +389,18 @@ function buildTree() {
   });
 }
 
+// Ensure a package node in the tree is expanded (not collapsed)
+function ensurePackageExpanded(pkgId) {
+  const pkgLabel = document.querySelector(`.tree-label[data-pkg="${pkgId}"]:not([data-type]):not([data-view]):not([data-section])`);
+  if (!pkgLabel) return;
+  const children = pkgLabel.nextElementSibling;
+  const toggle = pkgLabel.querySelector('.tree-toggle');
+  if (children && children.classList.contains('collapsed')) {
+    children.classList.remove('collapsed');
+    if (toggle) toggle.textContent = '▼';
+  }
+}
+
 // === CONTENT RENDERING ===
 function renderPackageOverview(pkgId) {
   const pkg = packages[pkgId];
@@ -419,7 +420,6 @@ function renderPackageOverview(pkgId) {
   const checkCount = pkg.checks ? pkg.checks.length : 0;
   const cmdCount = pkg.commands ? pkg.commands.length : 0;
   const enumCount = pkg.enums ? pkg.enums.length : 0;
-  const exportCount = pkg.exports ? pkg.exports.length : 0;
 
   html += `<div class="pkg-exports">`;
   if (typeCount > 0) html += `<a onclick="navToSection('${pkgId}','types-header')"><span class="section-tag tag-type">T</span> <span class="count">${typeCount}</span> types</a>`;
@@ -427,7 +427,6 @@ function renderPackageOverview(pkgId) {
   if (combinedFuncCount > 0) html += `<a onclick="navToSection('${pkgId}','functions')"><span class="section-tag tag-function">F</span> <span class="count">${combinedFuncCount}</span> functions</a>`;
   if (checkCount > 0) html += `<a onclick="navToSection('${pkgId}','checks')"><span class="section-tag tag-check">C</span> <span class="count">${checkCount}</span> checks</a>`;
   if (cmdCount > 0) html += `<a onclick="navToSection('${pkgId}','commands')"><span class="section-tag tag-command">!</span> <span class="count">${cmdCount}</span> commands</a>`;
-  if (exportCount > 0) html += `<a onclick="navToSection('${pkgId}','exports')"><span class="section-tag tag-export">E</span> <span class="count">${exportCount}</span> exports</a>`;
   html += `</div>`;
 
   // Code samples
@@ -690,34 +689,6 @@ function renderChecks(pkgId) {
 
 function renderCommands(pkgId) {
   renderCallables(pkgId, packages[pkgId].commands, 'Commands', 'cmd');
-}
-
-function renderExports(pkgId) {
-  const pkg = packages[pkgId];
-  const content = document.getElementById('content');
-
-  let html = `<h1>${pkg.label} <span style="color:#57606a; font-weight:400">›</span> Exports</h1>`;
-  html += `<p style="color:#57606a; font-size:13px; margin-top:4px; margin-bottom:16px;">${pkg.exports.length} exported collections — use these as data sources in your .cop files</p>`;
-
-  for (const exp of pkg.exports.slice().sort((a,b) => a.name.localeCompare(b.name))) {
-    const key = `${pkgId}.export.${exp.name}`;
-    const hasComment = comments[key] ? 'has-comment' : '';
-    html += `
-      <div class="comment-wrapper">
-        <div class="item-row">
-          <span class="item-name">${exp.name}</span>
-          <span class="prop-type">${formatTypeLink(pkgId, exp.type)}</span>
-          <span class="item-detail">${escapeHtml(exp.desc)}</span>
-          ${sourceLink(exp.sourceUrl)}
-          <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
-        </div>
-        <textarea class="comment-input ${comments[key] ? 'visible' : ''}" data-key="${key}" placeholder="Add comment...">${comments[key] || ''}</textarea>
-      </div>
-    `;
-  }
-
-  content.innerHTML = html;
-  wireUpComments(content);
 }
 
 function renderEnums(pkgId) {
@@ -1006,13 +977,12 @@ function navigateToHash() {
   if (!target) {
     renderPackageOverview(pkgId);
     if (pkgLabel) pkgLabel.classList.add('active');
-  } else if (['predicates','functions','checks','commands','enums','exports'].includes(target)) {
+  } else if (['predicates','functions','checks','commands','enums'].includes(target)) {
     if (target === 'predicates') renderFunctions(pkgId);
     else if (target === 'functions') renderFunctions(pkgId);
     else if (target === 'checks') renderChecks(pkgId);
     else if (target === 'commands') renderCommands(pkgId);
     else if (target === 'enums') renderEnums(pkgId);
-    else if (target === 'exports') renderExports(pkgId);
     var viewLabel = document.querySelector(`.tree-label[data-pkg="${pkgId}"][data-view="${target}"]`);
     if (viewLabel) viewLabel.classList.add('active');
   } else {

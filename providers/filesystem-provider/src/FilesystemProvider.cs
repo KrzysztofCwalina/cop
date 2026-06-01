@@ -4,7 +4,7 @@ using Cop.Core;
 namespace Cop.Providers;
 
 /// <summary>
-/// Built-in provider for filesystem data (Folders and DiskFiles).
+/// Built-in provider for filesystem data (Folders and Files).
 /// Uses the fast Objects path — stride-based DataTable records with a shared UTF-8 string heap.
 /// No per-record CLR objects or CLR strings allocated for the permanent data.
 /// </summary>
@@ -35,9 +35,9 @@ public class FilesystemProvider : DataProvider
         w.WriteEndArray();
         w.WriteEndObject();
 
-        // DiskFile
+        // File
         w.WriteStartObject();
-        w.WriteString("name"u8, "DiskFile"u8);
+        w.WriteString("name"u8, "File"u8);
         w.WriteStartArray("properties"u8);
         WriteProp(w, "Path"u8);
         WriteProp(w, "Name"u8);
@@ -54,7 +54,7 @@ public class FilesystemProvider : DataProvider
 
         w.WriteStartArray("collections"u8);
         WriteColl(w, "Folders"u8, "Folder"u8);
-        WriteColl(w, "DiskFiles"u8, "DiskFile"u8);
+        WriteColl(w, "Files"u8, "File"u8);
         w.WriteEndArray();
 
         w.WriteEndObject();
@@ -86,17 +86,17 @@ public class FilesystemProvider : DataProvider
             ?? throw new ArgumentException("RootPath is required for FilesystemProvider."));
 
         var requested = query.Collection;
-        bool wantFiles = requested is null || requested == "DiskFiles";
+        bool wantFiles = requested is null || requested == "Files";
         bool wantFolders = requested is null || requested == "Folders";
 
         // Use per-collection filters when available, fall back to combined Filter
-        var fileFilter = query.CollectionFilters?.GetValueOrDefault("DiskFiles") ?? query.Filter;
+        var fileFilter = query.CollectionFilters?.GetValueOrDefault("Files") ?? query.Filter;
         var folderFilter = query.CollectionFilters?.GetValueOrDefault("Folders") ?? query.Filter;
         int maxDepth = Math.Min(ExtractMaxDepth(fileFilter), ExtractMaxDepth(folderFilter));
         if (maxDepth == -1) maxDepth = Math.Max(ExtractMaxDepth(fileFilter), ExtractMaxDepth(folderFilter));
 
         var db = new DataStoreBuilder();
-        var files = wantFiles ? db.AddTable("DiskFiles", "DiskFile", stride: 8) : null;
+        var files = wantFiles ? db.AddTable("Files", "File", stride: 8) : null;
         var folders = wantFolders ? db.AddTable("Folders", "Folder", stride: 8) : null;
 
         ScanDirectory(rootPath, rootPath, files, folders, query.ExcludedDirectories, fileFilter, folderFilter, maxDepth, DateTime.UtcNow, depth: 0);
@@ -149,7 +149,7 @@ public class FilesystemProvider : DataProvider
                     "Depth" => depth,
                     "MinutesSinceModified" => minutesSinceModified,
                     "Source" => fileRelPath,
-                    _ => throw new ArgumentException($"Unknown DiskFile property in filter: '{prop}'")
+                    _ => throw new ArgumentException($"Unknown File property in filter: '{prop}'")
                 }))
                     continue;
 

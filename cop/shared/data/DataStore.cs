@@ -8,7 +8,7 @@ namespace Cop.Core;
 public class DataStore
 {
     /// <summary>
-    /// Tables keyed by collection name (e.g., "DiskFiles", "Folders").
+    /// Tables keyed by collection name (e.g., "Files", "Folders").
     /// </summary>
     public Dictionary<string, DataTable> Tables { get; }
 

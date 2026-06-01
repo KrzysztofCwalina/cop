@@ -1,6 +1,12 @@
-import code
+import csharp
+import python
+import javascript
 
-predicate isLong(Method) => Method.LineCount:greaterThan(50)
+# Language-independent predicate works on any Method regardless of source language
+predicate isLong(Method) => Method.Statements.count() > 50
 
-command main = foreach Types => '{Type.Name}':Methods:isLong
-    => '  {Method.Name} ({Method.LineCount} lines)'
+# Combine all types from all languages
+let allTypes = csharp.types() + python.types() + javascript.types()
+
+command main = foreach allTypes => '{Type.Name} ({Type.File.Language})':Methods:isLong
+    => '  {Method.Name} ({Method.Statements.count()} statements)'

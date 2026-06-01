@@ -15,9 +15,11 @@ public sealed class ModuleLoader
     private readonly List<string> _errors = [];
     private readonly List<(string Dir, string PackageName)> _providerPackages = [];
     private readonly List<(LetDecl Decl, string FilePath)> _deferredLetBindings = [];
+    private readonly List<ModuleNode> _loadedModules = [];
 
     public IReadOnlyList<string> Errors => _errors;
     public IReadOnlyList<(string Dir, string PackageName)> ProviderPackages => _providerPackages;
+    public IReadOnlyList<ModuleNode> LoadedModules => _loadedModules;
 
     public ModuleLoader(IEnumerable<string> feedPaths)
     {
@@ -83,7 +85,10 @@ public sealed class ModuleLoader
 
         // Register exported declarations in the evaluator
         foreach (var (module, path) in modules)
+        {
+            _loadedModules.Add(module);
             RegisterExportedDeclarations(module, path, evaluator);
+        }
     }
 
     /// <summary>

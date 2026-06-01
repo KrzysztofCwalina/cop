@@ -42,7 +42,7 @@ public class DocumentCollectionSource : ICollectionSource
 
 /// <summary>
 /// Collection source backed by a pre-computed global list.
-/// Used by filesystem provider (DiskFiles, Folders) and external providers.
+/// Used by filesystem provider (Files, Folders) and external providers.
 /// Supports filter pushdown using registered property accessors.
 /// </summary>
 public class GlobalCollectionSource : ICollectionSource

@@ -99,7 +99,7 @@ public sealed class RecordViewAdapter : IDynamicObjectAdapter
         {
             "bool" => CopBool.Of(rv.Table.GetBool(rv.Index, slot)),
             "int" => new CopInt(rv.Table.GetInt32(rv.Index, slot)),
-            "number" => new CopNumber(BitConverter.Int64BitsToDouble(rv.Table.GetSlot(rv.Index, slot))),
+            "float" => new CopNumber(BitConverter.Int64BitsToDouble(rv.Table.GetSlot(rv.Index, slot))),
             _ => new CopString(rv.Table.GetString(rv.Index, slot))
         };
     }

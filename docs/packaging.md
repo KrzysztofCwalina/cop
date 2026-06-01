@@ -304,7 +304,7 @@ The queue continues until empty. In this example, the resolution order is:
 ```
 code-analysis  →  Severity enum, Violation type, toError/toWarning/toInfo functions
 code           →  TypeKind/StatementKind enums, Type/Method/Statement types, Modifier flags
-files          →  Folder/DiskFile types, Disk collection
+files          →  Folder/File types, Disk collection
 ```
 
 #### Step 5c: Register User Definitions

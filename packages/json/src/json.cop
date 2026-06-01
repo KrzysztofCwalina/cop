@@ -1,10 +1,10 @@
 # Cop JSON Package v1.0
-# Provides json.Load() for loading and querying JSON files.
+# Provides json.Parse() for loading and querying JSON files.
 # Import with: import json
 
-## Loads a JSON file into a dynamic collection or object.
+## Parses a JSON file into a dynamic collection or object.
 ## The path is relative to the project root.
 ## If the JSON root is an array, returns a collection. If it is an object, returns a single instance.
 ## Properties are resolved dynamically from JSON keys.
-## Example: json.Load('people.json') returns a collection of objects with name, age, etc.
-export function Load(path : string) : object => provider('json', path)
+## Example: json.Parse('people.json') returns a collection of objects with name, age, etc.
+export function Parse(path : string) : object => provider('json', path)

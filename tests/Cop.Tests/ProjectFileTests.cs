@@ -38,7 +38,7 @@ public class RunProjectTests
                     Depth : int,
                     MinutesSinceModified : int
                 }
-                export type DiskFile = {
+                export type File = {
                     Path : string,
                     Name : string,
                     Extension : string,
@@ -49,11 +49,11 @@ public class RunProjectTests
                 }
                 export type Filesystem = {
                     Folders : [Folder],
-                    Files : [DiskFile]
+                    Files : [File]
                 }
                 export let Disk = provider('filesystem')
                 export let Folders = Disk.Folders
-                export let DiskFiles = Disk.Files
+                export let Files = Disk.Files
                 export predicate isEmpty(Folder) => Folder.Empty == true
                 command empty-folders = foreach Folders:isEmpty => 'Empty folder: {item.Path}'
                 """);

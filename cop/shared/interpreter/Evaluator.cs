@@ -33,6 +33,7 @@ public sealed class Evaluator
     public Environment GlobalEnvironment => _globalEnv;
     public ForeignFunctionRegistry FFI => _ffi;
     public Action<string>? TraceLog { get => _traceLog; set => _traceLog = value; }
+    public TypeRegistry? TypeRegistry { get; set; }
 
     public Evaluator(ForeignFunctionRegistry? ffi = null, string? filePath = null)
     {
@@ -453,7 +454,7 @@ public sealed class Evaluator
         // Named subset resolution: if obj is a predicate-as-collection, expand it
         obj = TryResolveNamedSubset(obj, env);
 
-        return obj switch
+        var result = obj switch
         {
             CopObject co => co.GetField(mem.Member),
             CopDynamicObject dyn => dyn.GetField(mem.Member),
@@ -466,6 +467,30 @@ public sealed class Evaluator
                 $"Cannot access member '{mem.Member}' on {obj.GetType().Name}",
                 mem.Line, _filePath)
         };
+
+        // Computed property fallback for trait conformance
+        if (result == CopNull.Instance && TypeRegistry is not null)
+        {
+            var typeName = obj switch
+            {
+                CopDynamicObject d => d.TypeName,
+                CopObject o => o.TypeName,
+                _ => null
+            };
+            if (typeName is not null)
+            {
+                var computedExpr = TypeRegistry.GetComputedProperty(typeName, mem.Member);
+                if (computedExpr is not null)
+                {
+                    // Evaluate computed expression with 'item' bound to the object
+                    var computedEnv = new Environment(env);
+                    computedEnv.Define("item", obj);
+                    result = Eval(computedExpr, computedEnv);
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -540,7 +565,7 @@ public sealed class Evaluator
         CopDynamicObject dyn => dyn.TypeName ?? "object",
         CopString => "string",
         CopInt => "int",
-        CopNumber => "number",
+        CopNumber => "float",
         CopBool => "bool",
         CopList => "collection",
         CopLazyCollection => "collection",
@@ -1068,7 +1093,7 @@ public sealed class Evaluator
     public CopValue CallUserFunction(CopFunction func, IReadOnlyList<CopValue> args)
     {
         // Validate arguments before dispatch (arity + parameter types)
-        TypeValidator.ValidateArguments(func.Declaration, args);
+        TypeValidator.ValidateArguments(func.Declaration, args, TypeRegistry);
 
         var funcEnv = func.Closure.Extend();
 

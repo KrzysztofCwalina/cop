@@ -20,7 +20,7 @@ The language combines **declarative filtering** with **functional expressions** 
 |------|-------------|
 | `string` | Text values |
 | `int` | Integer values (64-bit signed) |
-| `number` | Floating-point values (64-bit double) |
+| `float` | Floating-point values (64-bit double) |
 | `bool` | `true` or `false` |
 | `byte` | Integer 0-255 |
 | `nic` | Null — absence of a value |
@@ -326,7 +326,7 @@ let People = Parse('data.json', [Person])
 ```ruby
 let sdkTypes = csharp-checks.Types('../azure-sdk/')
 let sdkPublic = csharp-checks.Types('../azure-sdk/'):isPublic
-let localFiles = files.DiskFiles('src/lib/')
+let localFiles = files.Files('src/lib/')
 ```
 
 Path-scoped collections query the provider against the given path instead of the default root (CWD or `-t`). The path is resolved relative to the process working directory. Results are cached by `(provider, collection, absolutePath)` so repeated references with the same path are efficient. Each collection is parameterized individually — `csharp-checks.Types('../sdk/')` does not affect `csharp-checks.Statements`.
@@ -419,8 +419,8 @@ Functions come in two forms: **expression-body** (returns a computed value) and 
 An expression-body function takes a named, typed parameter and returns the result of an expression:
 
 ```ruby
-function inc(x:number) => x + 1
-function double(n:number) => n * 2
+function inc(x:float) => x + 1
+function double(n:float) => n * 2
 function greet(name:string) => 'Hello, ' + name
 function isLarge(t:Type) => t.Methods.Count > 20
 ```
@@ -445,7 +445,7 @@ Parameters that accept callable values (predicates, projections, accumulators) u
 function where(items: [object], condition: (object) => bool) : [object]
 function select(items: [object], transform: (object) => object) : [object]
 function reduce(items: [object], accumulator: (object, object) => object, initial: object) : object
-function sum(items: [object], project: (object) => number) : int
+function sum(items: [object], project: (object) => float) : int
 ```
 
 This enables documentation tooling to show full signatures and allows future compile-time verification that passed functions match the expected signature.

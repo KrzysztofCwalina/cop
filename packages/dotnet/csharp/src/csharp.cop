@@ -3,13 +3,26 @@ import code
 
 let cb : Codebase = provider('csharp', nic)
 
-export let Types = cb.Types
-export let Statements = cb.Statements
-export let Lines = cb.Lines
-export let Calls = cb.Calls
-export let Files = cb.Files
-export let Regions = cb.Regions
-export let Projects = cb.Projects
+## Returns all types (classes, structs, interfaces, enums) in the C# codebase.
+export function types() : [Type] => cb.Types
+
+## Returns all statements in the C# codebase.
+export function statements() : [Statement] => cb.Statements
+
+## Returns all source lines in the C# codebase.
+export function lines() : [Line] => cb.Lines
+
+## Returns all method/function calls in the C# codebase.
+export function calls() : [Call] => cb.Calls
+
+## Returns all source files in the C# codebase.
+export function files() : [File] => cb.Files
+
+## Returns all code regions in the C# codebase.
+export function regions() : [Region] => cb.Regions
+
+## Returns all projects in the C# solution.
+export function projects() : [Project] => cb.Projects
 
 ## Loads a .NET assembly and returns its code model.
 ## The path is relative to the project root.

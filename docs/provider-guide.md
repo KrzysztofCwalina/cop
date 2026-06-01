@@ -62,7 +62,7 @@ export let Widgets = db.Widgets
 type Widget = {
     Name : string,
     Category : string,
-    Weight : number,
+    Weight : float,
     IsActive : bool
 }
 
@@ -100,7 +100,7 @@ public class MyProvider : ObjectProvider
                 [
                     new() { Name = "Name" },
                     new() { Name = "Category" },
-                    new() { Name = "Weight", Type = "number" },
+                    new() { Name = "Weight", Type = "float" },
                     new() { Name = "IsActive", Type = "bool" },
                 ]}
             ],
@@ -149,7 +149,7 @@ The schema describes what types and collections your provider exposes. The engin
 
 **`ProviderPropertySchema`** defines a property:
 - `Name` — PascalCase property name
-- `Type` — `"string"` (default), `"int"`, `"number"`, `"bool"`, `"byte"`, `"bytes"`, or another type name
+- `Type` — `"string"` (default), `"int"`, `"float"`, `"bool"`, `"byte"`, `"bytes"`, or another type name
 - `Optional` — `true` if the property may be null
 - `Collection` — `true` if the property is a list
 
@@ -573,7 +573,7 @@ The engine discovers all `StreamProvider` and `SinkProvider` subclasses in the p
 |-------------|----------|-------------|
 | `"string"` | `string` | Text (default if omitted) |
 | `"int"` | `long` | 64-bit integer |
-| `"number"` | `double` | 64-bit floating-point |
+| `"float"` | `double` | 64-bit floating-point |
 | `"bool"` | `bool` | Boolean |
 | `"byte"` | `byte` | Single byte |
 | `"bytes"` | `byte[]` | Binary data |

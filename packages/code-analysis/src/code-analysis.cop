@@ -15,153 +15,42 @@ export type Violation = {
     Source : string
 }
 
-# Statement overloads
-export function toError(Statement, message: string) => Violation {
+## A type that has a source location (file path and line number).
+export type TextFilePosition = {
+  filePath : (item: T) => string,
+  line : (item: T) => int
+}
+
+# Trait conformances — map TextFilePosition properties for each type
+export type Statement : TextFilePosition = { filePath => item.File.Path, line => item.Line }
+export type Type : TextFilePosition = { filePath => item.File.Path, line => item.Line }
+export type Api : TextFilePosition = { filePath => item.File.Path, line => item.Line }
+export type Line : TextFilePosition = { filePath => item.File.Path, line => item.Number }
+export type Region : TextFilePosition = { filePath => item.File.Path, line => item.StartLine }
+export type Folder : TextFilePosition = { filePath => item.Path, line => 0 }
+
+# Generic violation functions — dispatch via TextFilePosition trait
+export function toError(TextFilePosition, message: string) : Violation => Violation {
     Severity = 'error',
     Message = message,
-    File = item.File.Path,
-    Line = item.Line,
+    File = item.filePath,
+    Line = item.line,
     Source = item.Source
 }
 
-export function toWarning(Statement, message: string) => Violation {
+export function toWarning(TextFilePosition, message: string) : Violation => Violation {
     Severity = 'warning',
     Message = message,
-    File = item.File.Path,
-    Line = item.Line,
+    File = item.filePath,
+    Line = item.line,
     Source = item.Source
 }
 
-export function toInfo(Statement, message: string) => Violation {
+export function toInfo(TextFilePosition, message: string) : Violation => Violation {
     Severity = 'info',
     Message = message,
-    File = item.File.Path,
-    Line = item.Line,
-    Source = item.Source
-}
-
-# Type overloads
-export function toError(Type, message: string) => Violation {
-    Severity = 'error',
-    Message = message,
-    File = item.File.Path,
-    Line = item.Line,
-    Source = item.Source
-}
-
-export function toWarning(Type, message: string) => Violation {
-    Severity = 'warning',
-    Message = message,
-    File = item.File.Path,
-    Line = item.Line,
-    Source = item.Source
-}
-
-export function toInfo(Type, message: string) => Violation {
-    Severity = 'info',
-    Message = message,
-    File = item.File.Path,
-    Line = item.Line,
-    Source = item.Source
-}
-
-# Line overloads
-export function toError(Line, message: string) => Violation {
-    Severity = 'error',
-    Message = message,
-    File = Line.File.Path,
-    Line = Line.Number,
-    Source = Line.Source
-}
-
-export function toWarning(Line, message: string) => Violation {
-    Severity = 'warning',
-    Message = message,
-    File = Line.File.Path,
-    Line = Line.Number,
-    Source = Line.Source
-}
-
-export function toInfo(Line, message: string) => Violation {
-    Severity = 'info',
-    Message = message,
-    File = Line.File.Path,
-    Line = Line.Number,
-    Source = Line.Source
-}
-
-# Folder overloads
-export function toError(Folder, message: string) => Violation {
-    Severity = 'error',
-    Message = message,
-    File = item.Path,
-    Line = 0,
-    Source = item.Source
-}
-
-export function toWarning(Folder, message: string) => Violation {
-    Severity = 'warning',
-    Message = message,
-    File = item.Path,
-    Line = 0,
-    Source = item.Source
-}
-
-export function toInfo(Folder, message: string) => Violation {
-    Severity = 'info',
-    Message = message,
-    File = item.Path,
-    Line = 0,
-    Source = item.Source
-}
-
-# Api overloads
-export function toError(Api, message: string) => Violation {
-    Severity = 'error',
-    Message = message,
-    File = item.File.Path,
-    Line = item.Line,
-    Source = item.Source
-}
-
-export function toWarning(Api, message: string) => Violation {
-    Severity = 'warning',
-    Message = message,
-    File = item.File.Path,
-    Line = item.Line,
-    Source = item.Source
-}
-
-export function toInfo(Api, message: string) => Violation {
-    Severity = 'info',
-    Message = message,
-    File = item.File.Path,
-    Line = item.Line,
-    Source = item.Source
-}
-
-# Region overloads
-export function toError(Region, message: string) => Violation {
-    Severity = 'error',
-    Message = message,
-    File = item.File.Path,
-    Line = item.StartLine,
-    Source = item.Source
-}
-
-export function toWarning(Region, message: string) => Violation {
-    Severity = 'warning',
-    Message = message,
-    File = item.File.Path,
-    Line = item.StartLine,
-    Source = item.Source
-}
-
-export function toInfo(Region, message: string) => Violation {
-    Severity = 'info',
-    Message = message,
-    File = item.File.Path,
-    Line = item.StartLine,
+    File = item.filePath,
+    Line = item.line,
     Source = item.Source
 }
 

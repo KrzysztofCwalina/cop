@@ -14,14 +14,16 @@ export function provider(name : string, options : object) : object => intrinsic
 ## The options argument is JSON-serialized and passed to the provider.
 ## Pass nic for default, or a string/object with provider-specific configuration.
 ## Use a typed annotation to declare the item type produced by the stream:
-##   export let Requests : [Request] = source('http', nic)
+##   let req : [Request] = source('http', nic)
+##   export function requests() : [Request] => req
 export function source(name : string, options : object) : [object] => intrinsic
 
 ## Returns an async output collection for the named streaming provider.
 ## Items pushed into the sink are delivered to the provider's output channel.
 ## The options argument is JSON-serialized and passed to the provider.
 ## Pass nic for default, or a string/object with provider-specific configuration.
-##   export let RESPONSES : [Response] = sink('http', nic)
+##   let resp : [Response] = sink('http', nic)
+##   export function responses() : [Response] => resp
 export function sink(name : string, options : object) : [object] => intrinsic
 
 # I/O

@@ -21,4 +21,4 @@ function handle(Request:Uri:equals('/hello')) => ok('{"message": "Hello, World!"
 function handle(Request:Uri:equals('/health')) => ok
 function handle(Request) => notFound
 
-async foreach Requests => handle => RESPONSES
+async foreach requests() => handle => responses()

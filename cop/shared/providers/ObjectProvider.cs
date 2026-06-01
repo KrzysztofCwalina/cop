@@ -74,7 +74,7 @@ public abstract class DataProvider
 public class RuntimeBindings
 {
     /// <summary>
-    /// Maps CLR types to cop type names (e.g., typeof(DiskFileInfo) → "DiskFile").
+    /// Maps CLR types to cop type names (e.g., typeof(DiskFileInfo) → "File").
     /// </summary>
     public Dictionary<Type, string> ClrTypeMappings { get; init; } = new();
 

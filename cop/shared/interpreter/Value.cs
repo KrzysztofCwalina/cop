@@ -377,6 +377,24 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
                         }
                     }
                 }
+
+                // Trait conformance fallback: if subject's type conforms to a trait used as param type
+                var registry = evaluator.TypeRegistry;
+                if (registry is not null)
+                {
+                    foreach (var overload in _overloads)
+                    {
+                        if (overload.Declaration.Params.Count > 0)
+                        {
+                            var firstParam = overload.Declaration.Params[0];
+                            var paramType = firstParam.Type?.Name;
+                            if (paramType is not null && registry.ConformsTo(subjectTypeName, paramType))
+                            {
+                                return evaluator.CallUserFunction(overload, args);
+                            }
+                        }
+                    }
+                }
             }
 
             // Try matching by arity
@@ -398,7 +416,7 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
         CopObject obj => obj.TypeName,
         CopString => "string",
         CopInt => "int",
-        CopNumber => "number",
+        CopNumber => "float",
         CopBool => "bool",
         CopList => "collection",
         CopLazyCollection => "collection",

@@ -11,14 +11,20 @@ export type Formattable = {
   format : (value: T) => string
 }
 
+## A type that has a source location (file path and line number).
+export type TextFilePosition = {
+  filePath : (item: T) => string,
+  line : (item: T) => int
+}
+
 # Primitive conformances
 export type int : Comparable = {}
 export type string : Comparable = {}
 export type bool : Comparable = {}
-export type number : Comparable = {}
+export type float : Comparable = {}
 
 export type int : Formattable = {}
 export type string : Formattable = {}
 export type bool : Formattable = {}
-export type number : Formattable = {}
+export type float : Formattable = {}
 export type bytes : Formattable = {}

@@ -27,7 +27,7 @@ public class DataTable
     /// <summary>Number of records in this table.</summary>
     public int Count { get; }
 
-    /// <summary>The cop type name for records in this table (e.g., "DiskFile").</summary>
+    /// <summary>The cop type name for records in this table (e.g., "File").</summary>
     public string TypeName { get; }
 
     public DataTable(long[] data, int stride, int count, string typeName, byte[] stringHeap)

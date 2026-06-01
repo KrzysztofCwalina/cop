@@ -36,6 +36,7 @@ public class TypeRegistry
     private readonly Dictionary<string, Dictionary<string, SinkProvider>> _nsSinks = new(StringComparer.Ordinal);
     private readonly Dictionary<string, StreamProvider> _streamingSources = new(StringComparer.Ordinal);
     private readonly Dictionary<string, HashSet<string>> _traitConformance = new();
+    private readonly Dictionary<(string TypeName, string PropName), Ast.Expression> _computedProperties = new();
     private Func<string, List<Document>>? _documentLoader;
 
     public TypeRegistry()
@@ -54,7 +55,7 @@ public class TypeRegistry
         {
             TextConverter = obj => obj?.ToString() ?? "0"
         });
-        Register(new TypeDescriptor("number")
+        Register(new TypeDescriptor("float")
         {
             TextConverter = obj => obj is double d ? d.ToString(System.Globalization.CultureInfo.InvariantCulture) : "0"
         });
@@ -689,7 +690,7 @@ public class TypeRegistry
     public bool HasCollection(string name) => _collections.ContainsKey(name);
 
     private static bool IsCorePrimitive(string name) =>
-        name is "Object" or "string" or "int" or "number" or "bool" or "byte";
+        name is "Object" or "string" or "int" or "float" or "bool" or "byte";
 
     public IEnumerable<TypeDescriptor> AllTypes => _types.Values;
     public IEnumerable<CollectionDeclaration> AllCollections => _collections.Values;
@@ -734,7 +735,8 @@ public class TypeRegistry
             foreach (var prop in td.Properties)
             {
                 // Trait members (function-typed signatures) use camelCase — skip casing validation
-                if (!prop.TypeName.Contains("=>"))
+                // Computed properties (conformance declarations) also use camelCase — skip
+                if (!prop.TypeName.Contains("=>") && prop.ComputedExpr is null)
                     ValidatePropertyCasing(td.Name, prop.Name);
                 descriptor.Properties[prop.Name] = new PropertyDescriptor(
                     prop.Name, prop.TypeName, prop.IsOptional, prop.IsCollection);
@@ -777,9 +779,9 @@ public class TypeRegistry
             descriptor.BaseType = baseDescriptor;
         }
 
-        // Third pass: register trait conformances
+        // Third pass: register trait conformances and computed properties
         // type int : Comparable = {} means "int conforms to Comparable"
-        // type int : object, Comparable, Formattable = {} — Traits list contains conformances
+        // type Statement : TextFilePosition = { filePath => item.File.Path } means conformance + computed property
         foreach (var td in typeDefs)
         {
             // Handle BaseType that is a trait
@@ -800,6 +802,15 @@ public class TypeRegistry
                     {
                         RegisterConformance(td.Name, traitName);
                     }
+                }
+            }
+
+            // Register computed properties from conformance declarations
+            foreach (var prop in td.Properties)
+            {
+                if (prop.ComputedExpr is not null)
+                {
+                    RegisterComputedProperty(td.Name, prop.Name, prop.ComputedExpr);
                 }
             }
         }
@@ -847,6 +858,40 @@ public class TypeRegistry
     public bool IsTraitName(string name)
     {
         return _types.TryGetValue(name, out var desc) && IsTrait(desc);
+    }
+
+    /// <summary>
+    /// Registers a computed property expression for a type's trait conformance.
+    /// </summary>
+    public void RegisterComputedProperty(string typeName, string propName, Ast.Expression expr)
+    {
+        _computedProperties[(typeName, propName)] = expr;
+    }
+
+    /// <summary>
+    /// Gets a computed property expression for a type, or null if none registered.
+    /// </summary>
+    public Ast.Expression? GetComputedProperty(string typeName, string propName)
+    {
+        return _computedProperties.TryGetValue((typeName, propName), out var expr) ? expr : null;
+    }
+
+    /// <summary>
+    /// Checks if a type conforms to any trait that the given trait-typed parameter accepts.
+    /// Returns true if typeName conforms to traitName.
+    /// </summary>
+    public bool ConformsToAny(string typeName, out string? matchedTrait)
+    {
+        foreach (var (traitName, conformers) in _traitConformance)
+        {
+            if (conformers.Contains(typeName))
+            {
+                matchedTrait = traitName;
+                return true;
+            }
+        }
+        matchedTrait = null;
+        return false;
     }
 
     /// <summary>

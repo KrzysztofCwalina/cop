@@ -11,5 +11,5 @@ tags: types, filesystem, analysis
 
 Defines the type system for filesystem structural and temporal analysis. Import with `import files` in `.cop` files.
 
-Provides types for: Folder, DiskFile.
-Provides collections for: Folders, DiskFiles.
+Provides types for: Folder, File.
+Provides collections for: Folders, Files.

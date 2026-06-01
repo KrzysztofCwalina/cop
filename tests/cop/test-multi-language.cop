@@ -35,5 +35,5 @@ let public-all = public-cs + python.Types
 test union-filtered = assert(public-all.Count > 0, 'union with filtered branch')
 
 # ── Filesystem ──
-test has-files = assert(DiskFiles.Count > 0, 'should have files')
+test has-files = assert(Files.Count > 0, 'should have files')
 test has-folders = assert(Folders.Count > 0, 'should have folders')

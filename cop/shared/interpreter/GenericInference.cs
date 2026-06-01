@@ -122,7 +122,7 @@ public static class GenericInference
         CopNull => "object",
         CopString => "string",
         CopInt => "int",
-        CopNumber => "number",
+        CopNumber => "float",
         CopBool => "bool",
         CopList => "collection",
         CopLazyCollection => "collection",

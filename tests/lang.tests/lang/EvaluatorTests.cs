@@ -232,7 +232,7 @@ let result = inc(9)", "test.cop");
     public void EvalLambda_PassedAsArgument()
     {
         var source = @"
-function apply(x: number, f: function) => f(x)
+function apply(x: float, f: function) => f(x)
 command main = apply(5, (n) => n * 2)";
         var result = Eval(source);
         Assert.That(result, Is.InstanceOf<CopInt>());
@@ -245,7 +245,7 @@ command main = apply(5, (n) => n * 2)";
         var ffi = new ForeignFunctionRegistry();
         StandardLibrary.Register(ffi);
         var source = @"
-function myWhere(items: [number], pred: function) =>
+function myWhere(items: [float], pred: function) =>
   reduce(items, (acc, item) => pred(item) ? acc.concat([item]) : acc, [])
 command main = myWhere([1, 2, 3, 4, 5], (x) => x > 3)";
         var result = Eval(source, ffi);
@@ -262,7 +262,7 @@ command main = myWhere([1, 2, 3, 4, 5], (x) => x > 3)";
         var ffi = new ForeignFunctionRegistry();
         StandardLibrary.Register(ffi);
         var source = @"
-function mySelect(items: [number], transform: function) =>
+function mySelect(items: [float], transform: function) =>
   reduce(items, (acc, item) => acc.concat([transform(item)]), [])
 command main = mySelect([1, 2, 3], (x) => x * 10)";
         var result = Eval(source, ffi);

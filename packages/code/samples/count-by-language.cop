@@ -1,0 +1,12 @@
+import csharp
+import python
+import javascript
+
+# All types from all languages use the same unified schema
+let allTypes = csharp.types() + python.types() + javascript.types()
+
+# Group and count by language - demonstrates language-independent querying
+command main = 
+    foreach allTypes:isCSharp => 'C# types: {collection.count()}' |
+    foreach allTypes:isPython => 'Python types: {collection.count()}' |
+    foreach allTypes:isJavaScript => 'JavaScript types: {collection.count()}'

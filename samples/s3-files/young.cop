@@ -8,7 +8,7 @@ type Person = {
     age : int
 }
 
-let Persons : [Person] = json.Load('people.json')
+let Persons : [Person] = json.Parse('people.json')
 
 predicate canVote(Person) => Person.age >= 18
 let Voters = Persons:canVote

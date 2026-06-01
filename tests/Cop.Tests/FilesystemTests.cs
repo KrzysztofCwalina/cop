@@ -60,15 +60,15 @@ public class FilesystemTests
     }
 
     [Test]
-    public void Scan_DiskFiles_AreEnumerated()
+    public void Scan_Files_AreEnumerated()
     {
         Directory.CreateDirectory(Path.Combine(_tempDir, "docs"));
         File.WriteAllText(Path.Combine(_tempDir, "root.txt"), "root");
         File.WriteAllText(Path.Combine(_tempDir, "docs", "readme.md"), "# Hi");
 
         var registry = CreateRegistryAndScan(_tempDir);
-        var diskFiles = registry.GetGlobalCollectionItems("files.DiskFiles");
-        var acc = registry.GetAccessors("DiskFile")!;
+        var diskFiles = registry.GetGlobalCollectionItems("files.Files");
+        var acc = registry.GetAccessors("File")!;
 
         Assert.That(diskFiles, Is.Not.Null);
         Assert.That(diskFiles, Has.Count.EqualTo(2));
@@ -106,9 +106,9 @@ public class FilesystemTests
 
         var registry = CreateRegistryAndScan(_tempDir);
         var folders = registry.GetGlobalCollectionItems("files.Folders")!;
-        var files = registry.GetGlobalCollectionItems("files.DiskFiles")!;
+        var files = registry.GetGlobalCollectionItems("files.Files")!;
         var fAcc = registry.GetAccessors("Folder")!;
-        var dAcc = registry.GetAccessors("DiskFile")!;
+        var dAcc = registry.GetAccessors("File")!;
 
         Assert.That(fAcc["Path"](folders.Single(f => (string)fAcc["Name"](f)! == "child")), Is.EqualTo("parent/child"));
         Assert.That(dAcc["Path"](files.Single()), Is.EqualTo("parent/child/file.cs"));

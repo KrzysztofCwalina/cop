@@ -155,7 +155,7 @@ function resolveCollectionElementType(collectionName, types) {
     const singular = collectionName.replace(/s$/, '');
     if (types[singular]) return singular;
 
-    // Strip 'es' ending: DiskFiles → DiskFile
+    // Strip 'es' ending: Files → File
     const singularEs = collectionName.replace(/es$/, '');
     if (types[singularEs]) return singularEs;
 
@@ -442,7 +442,7 @@ const TYPES = {
         { name: 'MinutesSinceModified', type: 'int' },
         { name: 'Source', type: 'string' },
     ]},
-    DiskFile: { properties: [
+    File: { properties: [
         { name: 'Path', type: 'string' },
         { name: 'Name', type: 'string' },
         { name: 'Extension', type: 'string' },
@@ -454,7 +454,7 @@ const TYPES = {
     ]},
     Filesystem: { properties: [
         { name: 'Folders', type: '[Folder]' },
-        { name: 'Files', type: '[DiskFile]' },
+        { name: 'Files', type: '[File]' },
     ]},
     // TypeSpec raw types
     TspDecorator: { properties: [
@@ -688,10 +688,10 @@ const COLLECTION_TRANSFORMS = [
     { label: 'OrderByDescending', detail: '((object) => object) — sort descending', kind: Kind.Method },
     { label: 'Distinct', detail: '— remove duplicates', kind: Kind.Method },
     { label: 'GroupBy', detail: '((object) => object) — group by key → Key, Items', kind: Kind.Method },
-    { label: 'Sum', detail: '((object) => number) — sum numeric field', kind: Kind.Method },
-    { label: 'Min', detail: '((object) => number) — minimum value', kind: Kind.Method },
-    { label: 'Max', detail: '((object) => number) — maximum value', kind: Kind.Method },
-    { label: 'Average', detail: '((object) => number) — average value', kind: Kind.Method },
+    { label: 'Sum', detail: '((object) => float) — sum numeric field', kind: Kind.Method },
+    { label: 'Min', detail: '((object) => float) — minimum value', kind: Kind.Method },
+    { label: 'Max', detail: '((object) => float) — maximum value', kind: Kind.Method },
+    { label: 'Average', detail: '((object) => float) — average value', kind: Kind.Method },
     { label: 'Reduce', detail: '((object, object) => object, initial) — reduce collection', kind: Kind.Method },
 ];
 
@@ -764,7 +764,7 @@ const STATIC_PACKAGE_COLLECTIONS = {
     'python': { Types: 'Type', Statements: 'Statement', Calls: 'Statement', Lines: 'Line', Files: 'File', Members: 'Member', Api: 'Api', Regions: 'Region', Projects: 'Project' },
     'javascript': { Types: 'Type', Statements: 'Statement', Calls: 'Statement', Lines: 'Line', Files: 'File', Members: 'Member', Api: 'Api', Regions: 'Region', Projects: 'Project' },
     'code-analysis': { Types: 'Type', Statements: 'Statement', Calls: 'Statement', Lines: 'Line', Files: 'File', Members: 'Member', Api: 'Api', Regions: 'Region', Projects: 'Project' },
-    'files': { Folders: 'Folder', DiskFiles: 'DiskFile' },
+    'files': { Folders: 'Folder', Files: 'File' },
     'markdown': { Headings: 'Heading', Links: 'Link', Sections: 'Section', FenceBlocks: 'FenceBlock' },
     'typespec': { Models: 'TspModel', Operations: 'TspOperation', Interfaces: 'TspInterface', Enums: 'TspEnum', Unions: 'TspUnion', Scalars: 'TspScalar', Namespaces: 'TspNamespace' },
     'typespec-http': { Operations: 'HttpOperation', Services: 'HttpService' },

@@ -13,8 +13,8 @@ public class DataStoreBuilder
     /// Adds a table for a collection. Returns a <see cref="DataTableBuilder"/>
     /// for populating rows.
     /// </summary>
-    /// <param name="collectionName">Collection name (e.g., "DiskFiles").</param>
-    /// <param name="typeName">Cop type name for records (e.g., "DiskFile").</param>
+    /// <param name="collectionName">Collection name (e.g., "Files").</param>
+    /// <param name="typeName">Cop type name for records (e.g., "File").</param>
     /// <param name="stride">Number of properties (slots per record).</param>
     public DataTableBuilder AddTable(string collectionName, string typeName, int stride)
     {

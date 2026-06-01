@@ -112,7 +112,7 @@ Properties default to `"string"`. Supported types:
 |------|-------------------|
 | `string` | JSON string |
 | `int` | JSON number (integer) |
-| `number` | JSON number (float) |
+| `float` | JSON number (float) |
 | `bool` | JSON boolean |
 
 Properties can also be `optional: true` or `collection: true` (array of items).

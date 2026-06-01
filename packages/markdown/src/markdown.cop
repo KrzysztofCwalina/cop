@@ -48,101 +48,22 @@ export type MarkdownContent = {
 }
 
 # Provides markdown content via the built-in markdown provider
-export let Markdown : MarkdownContent = provider('markdown', nic)
+let md : MarkdownContent = provider('markdown', nic)
 
-# Violation overloads for markdown types
-export function toError(FenceBlock, message: string) => Violation {
-    Severity = 'error',
-    Message = message,
-    File = item.File.Path,
-    Line = item.StartLine,
-    Source = item.Source
-}
+## Returns all headings found in markdown files.
+export function headings() : [Heading] => md.Headings
 
-export function toWarning(FenceBlock, message: string) => Violation {
-    Severity = 'warning',
-    Message = message,
-    File = item.File.Path,
-    Line = item.StartLine,
-    Source = item.Source
-}
+## Returns all links found in markdown files.
+export function links() : [Link] => md.Links
 
-export function toInfo(FenceBlock, message: string) => Violation {
-    Severity = 'info',
-    Message = message,
-    File = item.File.Path,
-    Line = item.StartLine,
-    Source = item.Source
-}
+## Returns all sections found in markdown files.
+export function sections() : [Section] => md.Sections
 
-export function toError(Heading, message: string) => Violation {
-    Severity = 'error',
-    Message = message,
-    File = item.File.Path,
-    Line = item.Line,
-    Source = item.Source
-}
+## Returns all fenced code blocks found in markdown files.
+export function fenceBlocks() : [FenceBlock] => md.FenceBlocks
 
-export function toWarning(Heading, message: string) => Violation {
-    Severity = 'warning',
-    Message = message,
-    File = item.File.Path,
-    Line = item.Line,
-    Source = item.Source
-}
-
-export function toInfo(Heading, message: string) => Violation {
-    Severity = 'info',
-    Message = message,
-    File = item.File.Path,
-    Line = item.Line,
-    Source = item.Source
-}
-
-export function toError(Link, message: string) => Violation {
-    Severity = 'error',
-    Message = message,
-    File = item.File.Path,
-    Line = item.Line,
-    Source = item.Source
-}
-
-export function toWarning(Link, message: string) => Violation {
-    Severity = 'warning',
-    Message = message,
-    File = item.File.Path,
-    Line = item.Line,
-    Source = item.Source
-}
-
-export function toInfo(Link, message: string) => Violation {
-    Severity = 'info',
-    Message = message,
-    File = item.File.Path,
-    Line = item.Line,
-    Source = item.Source
-}
-
-export function toError(Section, message: string) => Violation {
-    Severity = 'error',
-    Message = message,
-    File = item.File.Path,
-    Line = item.StartLine,
-    Source = item.Source
-}
-
-export function toWarning(Section, message: string) => Violation {
-    Severity = 'warning',
-    Message = message,
-    File = item.File.Path,
-    Line = item.StartLine,
-    Source = item.Source
-}
-
-export function toInfo(Section, message: string) => Violation {
-    Severity = 'info',
-    Message = message,
-    File = item.File.Path,
-    Line = item.StartLine,
-    Source = item.Source
-}
+# Violation overloads for markdown types — via TextFilePosition trait conformance
+export type FenceBlock : TextFilePosition = { filePath => item.File.Path, line => item.StartLine }
+export type Heading : TextFilePosition = { filePath => item.File.Path, line => item.Line }
+export type Link : TextFilePosition = { filePath => item.File.Path, line => item.Line }
+export type Section : TextFilePosition = { filePath => item.File.Path, line => item.StartLine }

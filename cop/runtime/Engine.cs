@@ -195,6 +195,26 @@ public static class Engine
 
         warnings.AddRange(moduleLoader.Errors);
 
+        // Build TypeRegistry for trait dispatch and computed property resolution
+        var typeRegistry = new TypeRegistry();
+        foreach (var bp in _builtinProviders)
+            ProviderLoader.RegisterSchema(bp.Instance, typeRegistry);
+        // Only load types that define traits or conformances (have BaseType pointing to a trait, or computed properties)
+        var allTypeDecls = modules.SelectMany(m => m.Module.Declarations)
+            .Concat(moduleLoader.LoadedModules.SelectMany(m => m.Declarations))
+            .OfType<Cop.Lang.Ast.TypeDecl>();
+        var traitCandidates = allTypeDecls.Where(td =>
+            td.Properties.Any(p => p.ComputedExpr is not null || p.Type.Name.Contains("=>"))).ToList();
+        // Load all trait-related types in one batch so conformance registration works
+        var traitTypeDefs = traitCandidates.Select(td =>
+        {
+            var props = td.Properties.Select(p =>
+                new PropertyDefinition(p.Name, p.Type.Name, p.IsOptional, p.Type.IsCollection, p.Line, p.ComputedExpr)).ToList();
+            return new TypeDefinition(td.Name, td.BaseType, props, 0, td.IsExported, td.DocComment, td.Traits);
+        }).ToList();
+        typeRegistry.LoadTypeDefinitions(traitTypeDefs);
+        bridge.Evaluator.TypeRegistry = typeRegistry;
+
         var providerPackages = new List<(string Dir, PackageMetadata Meta)>();
         var seenProviderDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -811,8 +831,8 @@ public static class Engine
             {
                 if (decl is Cop.Lang.Ast.TypeDecl typeDecl)
                 {
-                    var props = typeDecl.Properties.Select(p => new PropertyDefinition(p.Name, p.Type.Name, p.IsOptional, p.Type.IsCollection, p.Line)).ToList();
-                    typeRegistry.LoadTypeDefinitions([new TypeDefinition(typeDecl.Name, typeDecl.BaseType, props, 0, typeDecl.IsExported, typeDecl.DocComment)]);
+                    var props = typeDecl.Properties.Select(p => new PropertyDefinition(p.Name, p.Type.Name, p.IsOptional, p.Type.IsCollection, p.Line, p.ComputedExpr)).ToList();
+                    typeRegistry.LoadTypeDefinitions([new TypeDefinition(typeDecl.Name, typeDecl.BaseType, props, 0, typeDecl.IsExported, typeDecl.DocComment, typeDecl.Traits)]);
                 }
             }
         }

@@ -28,7 +28,7 @@ cop/shared/         Core library (namespace Cop.Core). ObjectProvider base class
 
 providers/          Data providers. Each extends ObjectProvider and supplies typed
                     collections to the language runtime.
-  filesystem-provider/  Folders, DiskFiles — built-in, uses DataObject[] format (package name: files)
+  filesystem-provider/  Folders, Files — built-in, uses DataObject[] format (package name: files)
   code-provider/        Types, Methods, Statements, Files — built-in, uses CLR objects
   typespec-provider/    TypeSpec HTTP API analysis — external, uses JSON format
   csharp-provider/      C# language-specific analysis

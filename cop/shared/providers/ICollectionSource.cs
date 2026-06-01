@@ -6,7 +6,7 @@ namespace Cop.Core;
 /// </summary>
 public class CollectionQuery
 {
-    /// <summary>Name of the collection being queried (e.g., "Types", "DiskFiles").</summary>
+    /// <summary>Name of the collection being queried (e.g., "Types", "Files").</summary>
     public required string CollectionName { get; init; }
 
     /// <summary>

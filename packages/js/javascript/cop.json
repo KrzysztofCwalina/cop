@@ -1,0 +1,14 @@
+{
+  "name": "javascript",
+  "version": "1.0.0",
+  "description": "JavaScript/TypeScript source code parser and analyzer",
+  "title": "JavaScript Source Language Provider",
+  "authors": "cop-team",
+  "tags": [
+    "javascript",
+    "typescript"
+  ],
+  "provider": "clr",
+  "providerEntry": "Cop.Providers.JavaScriptProvider",
+  "providerAssembly": "javascript-provider.dll"
+}

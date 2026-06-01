@@ -311,9 +311,9 @@ command main = text(42)", "test.cop");
     [Test]
     public void IsCompatible_NumberType_AcceptsIntAndNumber()
     {
-        Assert.That(TypeValidator.IsCompatible(new CopInt(1), new TypeRef("number")), Is.True);
-        Assert.That(TypeValidator.IsCompatible(new CopNumber(1.5), new TypeRef("number")), Is.True);
-        Assert.That(TypeValidator.IsCompatible(new CopString("1"), new TypeRef("number")), Is.False);
+        Assert.That(TypeValidator.IsCompatible(new CopInt(1), new TypeRef("float")), Is.True);
+        Assert.That(TypeValidator.IsCompatible(new CopNumber(1.5), new TypeRef("float")), Is.True);
+        Assert.That(TypeValidator.IsCompatible(new CopString("1"), new TypeRef("float")), Is.False);
     }
 
     [Test]
@@ -377,7 +377,7 @@ command main = text(42)", "test.cop");
         Assert.That(TypeValidator.GetActualTypeName(CopNull.Instance), Is.EqualTo("null"));
         Assert.That(TypeValidator.GetActualTypeName(new CopString("x")), Is.EqualTo("string"));
         Assert.That(TypeValidator.GetActualTypeName(new CopInt(1)), Is.EqualTo("int"));
-        Assert.That(TypeValidator.GetActualTypeName(new CopNumber(1.5)), Is.EqualTo("number"));
+        Assert.That(TypeValidator.GetActualTypeName(new CopNumber(1.5)), Is.EqualTo("float"));
         Assert.That(TypeValidator.GetActualTypeName(CopBool.True), Is.EqualTo("bool"));
         Assert.That(TypeValidator.GetActualTypeName(new CopList([])), Is.EqualTo("collection"));
     }

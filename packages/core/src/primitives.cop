@@ -17,7 +17,7 @@ export type string : object = {}
 export type int : object = {}
 
 ## A 64-bit floating-point number.
-export type number : object = {}
+export type float : object = {}
 
 ## A boolean value (true or false).
 export type bool : object = {}

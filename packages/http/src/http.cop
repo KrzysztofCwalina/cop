@@ -2,10 +2,16 @@
 # Provides helper functions for building HTTP responses in cop pipelines.
 # Import with: import http
 # Usage:
-#   async foreach Requests => handle => RESPONSES
+#   async foreach requests() => handle => responses()
 
-export let Requests : [Request] = source('http', nic)
-export let RESPONSES : [Response] = sink('http', nic)
+let req : [Request] = source('http', nic)
+let resp : [Response] = sink('http', nic)
+
+## Returns the stream of incoming HTTP requests.
+export function requests() : [Request] => req
+
+## Returns the HTTP response sink for writing responses.
+export function responses() : [Response] => resp
 
 export enum HttpMethod = GET | POST | PUT | DELETE | PATCH | HEAD | OPTIONS
 export enum ContentType = 'application/json' | 'text/plain' | 'text/html' | 'application/xml' | 'multipart/form-data' | 'application/octet-stream'

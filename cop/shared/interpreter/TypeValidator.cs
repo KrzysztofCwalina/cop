@@ -37,7 +37,7 @@ public static class TypeValidator
             if (param.Type is null) continue; // untyped parameter — no check
 
             var arg = ForceValue(args[i]);
-            if (!IsCompatible(arg, param.Type))
+            if (!IsCompatible(arg, param.Type, registry))
             {
                 throw new CopEvaluationException(
                     $"'{decl.Name}' parameter '{param.Name}' expects {FormatTypeRef(param.Type)}, " +
@@ -117,7 +117,7 @@ public static class TypeValidator
     /// <summary>
     /// Checks if a runtime value is compatible with a declared type reference.
     /// </summary>
-    public static bool IsCompatible(CopValue value, TypeRef typeRef)
+    public static bool IsCompatible(CopValue value, TypeRef typeRef, TypeRegistry? registry = null)
     {
         // Type variables are always compatible (validated through inference)
         if (GenericInference.IsTypeVariable(typeRef.Name))
@@ -137,12 +137,12 @@ public static class TypeValidator
             "object" => true, // top type — accepts anything including null
             "string" => value is CopString,
             "int" => value is CopInt,
-            "number" => value is CopInt or CopNumber,
+            "float" => value is CopInt or CopNumber,
             "bool" => value is CopBool,
             "bytes" => value is CopObject obj && obj.TypeName == "bytes",
             "lambda" or "function" => value is ICopCallable,
             "collection" => value is CopList or CopLazyCollection or CopQueryable,
-            _ => IsNamedTypeCompatible(value, typeRef.Name)
+            _ => IsNamedTypeCompatible(value, typeRef.Name, registry)
         };
     }
 
@@ -154,7 +154,7 @@ public static class TypeValidator
         CopNull => "null",
         CopString => "string",
         CopInt => "int",
-        CopNumber => "number",
+        CopNumber => "float",
         CopBool => "bool",
         CopList => "collection",
         CopLazyCollection => "collection",
@@ -182,19 +182,34 @@ public static class TypeValidator
     /// <summary>
     /// Checks compatibility with a named (non-primitive) type.
     /// Matches CopObject.TypeName or CopDynamicObject.TypeName.
+    /// Also checks trait conformance if a registry is provided.
     /// </summary>
-    private static bool IsNamedTypeCompatible(CopValue value, string typeName)
+    private static bool IsNamedTypeCompatible(CopValue value, string typeName, TypeRegistry? registry = null)
     {
         // CopNull is NOT compatible with named types
         if (value is CopNull) return false;
 
         // CopObject with matching TypeName
         if (value is CopObject obj)
-            return string.Equals(obj.TypeName, typeName, StringComparison.OrdinalIgnoreCase);
+        {
+            if (string.Equals(obj.TypeName, typeName, StringComparison.OrdinalIgnoreCase))
+                return true;
+            // Check trait conformance
+            if (registry is not null && obj.TypeName is not null && registry.ConformsTo(obj.TypeName, typeName))
+                return true;
+            return false;
+        }
 
         // CopDynamicObject (provider-backed) with matching TypeName
         if (value is CopDynamicObject dyn)
-            return string.Equals(dyn.TypeName, typeName, StringComparison.OrdinalIgnoreCase);
+        {
+            if (string.Equals(dyn.TypeName, typeName, StringComparison.OrdinalIgnoreCase))
+                return true;
+            // Check trait conformance
+            if (registry is not null && dyn.TypeName is not null && registry.ConformsTo(dyn.TypeName, typeName))
+                return true;
+            return false;
+        }
 
         // CopProviderProxy matches 'object' (already handled above) but not named types
         return false;

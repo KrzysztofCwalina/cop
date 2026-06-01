@@ -50,10 +50,6 @@ public class PackageEntry
     [JsonPropertyName("checks")]
     public List<CheckEntry> Checks { get; set; } = [];
 
-    [JsonPropertyName("exports")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public List<CollectionExportEntry>? Exports { get; set; }
-
     [JsonPropertyName("commands")]
     public List<CommandEntry> Commands { get; set; } = [];
 }
@@ -165,22 +161,6 @@ public class CheckEntry
 {
     [JsonPropertyName("name")]
     public string Name { get; set; } = "";
-
-    [JsonPropertyName("desc")]
-    public string Desc { get; set; } = "";
-
-    [JsonPropertyName("sourceUrl")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? SourceUrl { get; set; }
-}
-
-public class CollectionExportEntry
-{
-    [JsonPropertyName("name")]
-    public string Name { get; set; } = "";
-
-    [JsonPropertyName("type")]
-    public string Type { get; set; } = "";
 
     [JsonPropertyName("desc")]
     public string Desc { get; set; } = "";

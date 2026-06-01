@@ -39,7 +39,7 @@ Scalars are the terminal values — the base case where navigation stops:
 |------|----------|-------|
 | `string` | `'hello'`, `'it''s'` | Single-quoted. `''` escapes quote. |
 | `int` | `42`, `-1` | 32-bit signed integer |
-| `number` | `3.14` | 64-bit float |
+| `float` | `3.14` | 64-bit float |
 | `bool` | `true`, `false` | |
 | `nic` | `nic` | Absence of value |
 
@@ -580,7 +580,7 @@ async foreach Ticks => transform => Acks
 
 ## Namespaces
 
-All types, functions, and predicates live in a namespace. The only exception: **built-in scalar types** (`string`, `int`, `number`, `bool`, `nic`) are in the global namespace.
+All types, functions, and predicates live in a namespace. The only exception: **built-in scalar types** (`string`, `int`, `float`, `bool`, `nic`) are in the global namespace.
 
 ### Package = Namespace
 
@@ -674,8 +674,8 @@ type int = {
     Sign: int
 }
 
-type number = {
-    Abs: number,
+type float = {
+    Abs: float,
     Floor: int,
     Ceiling: int,
     Round: int
@@ -698,7 +698,7 @@ type List<T> = {
     map: function(transform: function(T) => U) => List<U>,
     orderBy: function(key: function(T) => K) => List<T>,
     groupBy: function(key: function(T) => K) => List<Group<K, T>>,
-    sum: function(selector: function(T) => number) => number,
+    sum: function(selector: function(T) => float) => float,
     distinct: List<T>,
     flatten: List<T>
 }

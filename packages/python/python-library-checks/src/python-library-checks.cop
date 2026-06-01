@@ -15,7 +15,7 @@ predicate isMissingParamTypes(Method) => Method:isPublic
 predicate hasUntypedParams(Type) => Type.Methods:any(isMissingParamTypes)
 
 ## Public methods should have type hints on all parameters
-export let untyped-public-params = Types:hasUntypedParams
+export let untyped-public-params = types():hasUntypedParams
     :toWarning('{item.Name} has public methods with missing parameter type hints')
 
 # Return type detection
@@ -25,7 +25,7 @@ predicate isMissingReturnType(Method) => Method:isPublic
 predicate hasMissingReturnTypes(Type) => Type.Methods:any(isMissingReturnType)
 
 ## Public methods should declare a return type
-export let missing-return-types = Types:hasMissingReturnTypes
+export let missing-return-types = types():hasMissingReturnTypes
     :toWarning('{item.Name} has public methods without return type annotations')
 
 ## Combined typing checks
@@ -38,7 +38,7 @@ export predicate isClient(Type) => Type.Name:endsWith('Client')
 export predicate isAsyncClient(Type) => Type.Name:contains('Async') && isClient
 
 # Collect all Python client types
-export let Clients = Types:isClient
+export let Clients = types():isClient
 
 # Naming
 export predicate hasBadAsyncName(Type) => isClient && Type.Name:contains('Async')
@@ -146,7 +146,7 @@ export predicate hasNameTooLong(Type) => Type.Name.Length > 40
 predicate hasMethodNameTooLong(Method) => isPublicMethod && Method.Name.Length > 40
 
 ## Type/class names should be under 40 characters
-export let name-too-long = Types:hasNameTooLong
+export let name-too-long = types():hasNameTooLong
     :toWarning('{item.Name} exceeds 40 characters — use a shorter name')
 
 ## All Python library checks combined

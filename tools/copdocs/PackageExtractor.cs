@@ -71,9 +71,6 @@ public class PackageExtractor
         // Extract checks from let declarations
         ExtractChecks(allLets, entry);
 
-        // Extract collection exports (non-check exported lets that provide data)
-        ExtractCollectionExports(allLets, entry);
-
         // Load samples
         LoadSamples(packageDir, entry);
 
@@ -322,102 +319,6 @@ public class PackageExtractor
                 return true;
         }
         return false;
-    }
-
-    private void ExtractCollectionExports(List<(LetDeclaration Let, string FilePath)> allLets, PackageEntry entry)
-    {
-        var lets = allLets.Select(l => l.Let).ToList();
-        foreach (var (let, filePath) in allLets.Where(l => l.Let.IsExported))
-        {
-            // Skip checks (already extracted)
-            if (IsViolationCollection(let, lets)) continue;
-
-            // Skip collection unions that aggregate checks (e.g., python-checks = a + b + c)
-            if (let.IsCollectionUnion) continue;
-
-            // Unwrap AstExpressionWrapper to get the actual AST node
-            var astNode = (let.ValueExpression as AstExpressionWrapper)?.AstExpression;
-
-            // Collection-forwarding let: export let Types = cb.Types
-            if (!let.IsValueBinding && let.Filters.Count == 0 && let.BaseCollection.Contains('.'))
-            {
-                var memberName = let.BaseCollection[(let.BaseCollection.LastIndexOf('.') + 1)..];
-                entry.Exports ??= [];
-                entry.Exports.Add(new CollectionExportEntry
-                {
-                    Name = let.Name,
-                    Type = TryResolvePropertyType(entry, memberName) ?? InferCollectionType(let.Name),
-                    Desc = let.DocComment ?? "",
-                    SourceUrl = MakeSourceUrl(filePath, let.Line)
-                });
-                continue;
-            }
-
-            // Member-access value binding: export let Folders = Disk.Folders
-            if (let.IsValueBinding && astNode is Cop.Lang.Ast.MemberExpr memberExpr)
-            {
-                var resolvedType = let.TypeAnnotation
-                    ?? TryResolvePropertyType(entry, memberExpr.Member)
-                    ?? InferCollectionType(let.Name);
-                entry.Exports ??= [];
-                entry.Exports.Add(new CollectionExportEntry
-                {
-                    Name = let.Name,
-                    Type = resolvedType,
-                    Desc = let.DocComment ?? "",
-                    SourceUrl = MakeSourceUrl(filePath, let.Line)
-                });
-                continue;
-            }
-
-            // Intrinsic call: export let Disk = provider('filesystem'), data('x'), source('http'), sink('http')
-            if (let.IsValueBinding && astNode is Cop.Lang.Ast.CallExpr astCall
-                && astCall.Callee is Cop.Lang.Ast.IdentifierExpr calleeId
-                && calleeId.Name is "data" or "source" or "sink" or "provider")
-            {
-                var providerArg = astCall.Args.Count > 0 && astCall.Args[0] is Cop.Lang.Ast.LiteralExpr litArg && litArg.Value is string sv ? sv : "?";
-                entry.Exports ??= [];
-                entry.Exports.Add(new CollectionExportEntry
-                {
-                    Name = let.Name,
-                    Type = let.TypeAnnotation ?? $"{calleeId.Name}('{providerArg}')",
-                    Desc = let.DocComment ?? "",
-                    SourceUrl = MakeSourceUrl(filePath, let.Line)
-                });
-                continue;
-            }
-        }
-    }
-
-    private static string InferCollectionType(string name)
-    {
-        // Singularize common collection names: Types→[Type], Statements→[Statement], etc.
-        if (name.EndsWith("ies"))
-            return $"[{name[..^3]}y]";
-        // Only strip "es" for words ending in ches/shes/xes/zes/sses (standard English "-es" plurals)
-        if (name.EndsWith("ches") || name.EndsWith("shes") || name.EndsWith("xes")
-            || name.EndsWith("zes") || name.EndsWith("sses"))
-            return $"[{name[..^2]}]";
-        if (name.EndsWith("s") && !name.EndsWith("ss"))
-            return $"[{name[..^1]}]";
-        return $"[{name}]";
-    }
-
-    /// <summary>
-    /// Try to resolve the type of a property by looking it up in already-extracted types.
-    /// For example, if the Filesystem type has property "Files : [DiskFile]", resolves "Files" → "[DiskFile]".
-    /// </summary>
-    private static string? TryResolvePropertyType(PackageEntry entry, string propertyName)
-    {
-        foreach (var type in entry.Types.Values)
-        {
-            foreach (var prop in type.Props)
-            {
-                if (prop.Name == propertyName)
-                    return prop.Type;
-            }
-        }
-        return null;
     }
 
     private static void LoadSamples(string packageDir, PackageEntry entry)

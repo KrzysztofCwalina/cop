@@ -17,7 +17,8 @@ public record PropertyDefinition(
     string TypeName,
     bool IsOptional,
     bool IsCollection,
-    int Line);
+    int Line,
+    Cop.Lang.Ast.Expression? ComputedExpr = null);
 
 /// <summary>
 /// A flags enum definition: flags Visibility = Public | Protected | Private | Internal

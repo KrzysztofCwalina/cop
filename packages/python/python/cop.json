@@ -1,0 +1,13 @@
+{
+  "name": "python",
+  "version": "1.0.0",
+  "description": "Python source code parser and analyzer",
+  "title": "Python Source Language Provider",
+  "authors": "cop-team",
+  "tags": [
+    "python"
+  ],
+  "provider": "clr",
+  "providerEntry": "Cop.Providers.PythonProvider",
+  "providerAssembly": "python-provider.dll"
+}

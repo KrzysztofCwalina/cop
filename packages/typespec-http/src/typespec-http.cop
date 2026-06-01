@@ -47,10 +47,14 @@ export type HttpService = {
     Auth : string?
 }
 
-# Explicit collection exports
-export let tsp = provider('typespec-http', nic)
-export let Operations = tsp.Operations
-export let Services = tsp.Services
+# Provides TypeSpec HTTP protocol graph data
+let tsp = provider('typespec-http', nic)
+
+## Returns all HTTP operations defined in the TypeSpec project.
+export function operations() : [HttpOperation] => tsp.Operations
+
+## Returns all HTTP services defined in the TypeSpec project.
+export function services() : [HttpService] => tsp.Services
 
 # Common HTTP predicates
 export predicate isGet(HttpOperation) => HttpOperation.Verb == get

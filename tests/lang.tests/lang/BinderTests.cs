@@ -17,7 +17,7 @@ public class BinderTests
         new TypeSymbol("object", null, [new PropertySymbol("Type", new TypeRef("string"), false)]),
         new TypeSymbol("string", "object", []),
         new TypeSymbol("int", "object", []),
-        new TypeSymbol("number", "object", []),
+        new TypeSymbol("float", "object", []),
         new TypeSymbol("bool", "object", []),
         new TypeSymbol("byte", "object", []),
         new TypeSymbol("bytes", "object", []),

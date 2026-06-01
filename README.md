@@ -117,7 +117,7 @@ import files
 foreach Disk.Folders:empty => PRINT('{warning:@yellow} Empty folder: {item.Path}')
 
 # Find large files (over 1MB)
-predicate large(DiskFile) => DiskFile.Size > 1048576
+predicate large(File) => File.Size > 1048576
 foreach Disk.Files:large => PRINT('{item.Path} ({item.Size} bytes)')
 
 # Find stale folders not modified in 24+ hours
@@ -315,7 +315,7 @@ Packages provide reusable types, predicates, and checks. Use `import` to bring t
 
 ```ruby
 import code              # Type, Statement, File definitions and modifier predicates
-import files        # Folder, DiskFile for file system analysis
+import files        # Folder, File for file system analysis
 import csharp            # C# language provider (scans .cs files)
 import javascript        # JavaScript/TypeScript provider (scans .js/.ts files)
 import python            # Python provider (scans .py files)

@@ -6,14 +6,14 @@
 export function sum(items: [int]) : int 
   => items.reduce((acc, x) => acc + x, 0)
 
-## Sums all items in a number collection.
+## Sums all items in a float collection.
 ## Example: measurements:sum()
-export function sum(items: [number]) : number 
+export function sum(items: [float]) : float 
   => items.reduce((acc, x) => acc + x, 0.0)
 
 ## Sums a projected value for each item.
 ## Example: files:sum((f) => f.Size)
-export function sum(items: [T], selector: (T) => number) : int 
+export function sum(items: [T], selector: (T) => float) : int 
   => items.reduce((acc, item) => acc + selector(item), 0)
 
 ## Minimum value in an integer collection.
@@ -21,14 +21,14 @@ export function sum(items: [T], selector: (T) => number) : int
 export function min(items: [int]) : int 
   => items.reduce((acc, x) => acc < x ? acc : x, items.first())
 
-## Minimum value in a number collection.
+## Minimum value in a float collection.
 ## Example: measurements:min()
-export function min(items: [number]) : number 
+export function min(items: [float]) : float 
   => items.reduce((acc, x) => acc < x ? acc : x, items.first())
 
 ## Minimum projected value across items.
 ## Example: files:min((f) => f.Size)
-export function min(items: [T], selector: (T) => number) : int 
+export function min(items: [T], selector: (T) => float) : int 
   => items.reduce((acc, item) => selector(item) < acc ? selector(item) : acc, selector(items.first()))
 
 ## Maximum value in an integer collection.
@@ -36,27 +36,27 @@ export function min(items: [T], selector: (T) => number) : int
 export function max(items: [int]) : int 
   => items.reduce((acc, x) => acc > x ? acc : x, items.first())
 
-## Maximum value in a number collection.
+## Maximum value in a float collection.
 ## Example: measurements:max()
-export function max(items: [number]) : number 
+export function max(items: [float]) : float 
   => items.reduce((acc, x) => acc > x ? acc : x, items.first())
 
 ## Maximum projected value across items.
 ## Example: files:max((f) => f.Size)
-export function max(items: [T], selector: (T) => number) : int 
+export function max(items: [T], selector: (T) => float) : int 
   => items.reduce((acc, item) => selector(item) > acc ? selector(item) : acc, selector(items.first()))
 
 ## Average value of an integer collection.
 ## Example: scores:average()
-export function average(items: [int]) : number 
+export function average(items: [int]) : float 
   => items.sum() / items.count()
 
-## Average value of a number collection.
+## Average value of a float collection.
 ## Example: measurements:average()
-export function average(items: [number]) : number 
+export function average(items: [float]) : float 
   => items.sum() / items.count()
 
 ## Average projected value across items.
 ## Example: files:average((f) => f.Size)
-export function average(items: [T], selector: (T) => number) : number 
+export function average(items: [T], selector: (T) => float) : float 
   => items.sum(selector) / items.count()

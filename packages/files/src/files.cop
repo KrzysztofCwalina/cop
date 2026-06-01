@@ -14,7 +14,7 @@ export type Folder = {
     MinutesSinceModified : int
 }
 
-export type DiskFile = {
+export type File = {
     Path : string,
     Name : string,
     Extension : string,
@@ -26,21 +26,25 @@ export type DiskFile = {
 
 export type Filesystem = {
     Folders : [Folder],
-    Files : [DiskFile]
+    Files : [File]
 }
 
 # Provides filesystem data via the built-in filesystem provider
-export let Disk : Filesystem = provider('filesystem', nic)
-export let Folders = Disk.Folders
-export let DiskFiles = Disk.Files
+let disk : Filesystem = provider('filesystem', nic)
+
+## Returns all folders in the project directory tree.
+export function folders() : [Folder] => disk.Folders
+
+## Returns all files in the project directory tree.
+export function files() : [File] => disk.Files
 
 # Convenience predicates
 export predicate empty(Folder) => Folder.Empty == true
 export predicate recentlyModified(Folder) => Folder.MinutesSinceModified < 10
-export predicate recentlyModified(DiskFile) => DiskFile.MinutesSinceModified < 10
+export predicate recentlyModified(File) => File.MinutesSinceModified < 10
 export predicate stale(Folder) => Folder.MinutesSinceModified > 1440
-export predicate stale(DiskFile) => DiskFile.MinutesSinceModified > 1440
+export predicate stale(File) => File.MinutesSinceModified > 1440
 
 # Violation collections
-export let empty-folders = Disk.Folders:empty
+export let empty-folders = folders():empty
     :toError('Empty folder: {item.Path}')

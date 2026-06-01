@@ -2,7 +2,7 @@ import json
 
 type Config = { name: string, enabled: bool }
 
-let configs: [Config] = json.Load('settings.json')
+let configs: [Config] = json.Parse('settings.json')
 
 command main = foreach configs:enabled
     => '{item.name} is active'

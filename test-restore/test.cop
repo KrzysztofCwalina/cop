@@ -1,0 +1,4 @@
+import code
+import files
+
+foreach Code.Files => PRINT('{item.Path}')

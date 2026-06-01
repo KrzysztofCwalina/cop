@@ -285,6 +285,17 @@ public class CopParser
                     if (Check(TokenKind.RBrace)) break;
                     var propLine = CurrentLine();
                     var propName = ExpectIdentifier("property name");
+
+                    // Computed property: name => expr
+                    if (Match(TokenKind.Arrow))
+                    {
+                        var expr = ParseExpression();
+                        Match(TokenKind.Comma); // optional trailing comma
+                        var computedType = new TypeRef("computed", false, propLine);
+                        properties.Add(new PropertyDecl(propName, computedType, false, propLine, expr));
+                        continue;
+                    }
+
                     Expect(TokenKind.Colon, "':'");
                     var typeRef = ParseTypeRef();
                     bool isOptional = false;
@@ -1532,7 +1543,8 @@ public class CopParser
             propertyDecl.Type.Name,
             propertyDecl.IsOptional,
             propertyDecl.Type.IsCollection,
-            propertyDecl.Line);
+            propertyDecl.Line,
+            propertyDecl.ComputedExpr);
 
     private static Cop.Lang.LetDeclaration ConvertLetDeclaration(LetDecl letDecl)
     {

@@ -13,4 +13,4 @@ function handle(Request:Uri:equals('/chat')) =>
 
 function handle(Request) => notFound
 
-async foreach Requests => handle => RESPONSES
+async foreach requests() => handle => responses()
