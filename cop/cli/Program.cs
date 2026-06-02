@@ -17,7 +17,7 @@ if (diag)
 // Known verbs (subcommands) — anything else is treated as a program to run
 var knownVerbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 {
-    "test", "syntax", "lock", "unlock", "help", "package", "repl", "init", "update"
+    "test", "syntax", "verify", "lock", "unlock", "help", "package", "repl", "init", "update"
 };
 
 // Bare invocation (no arguments): look for local .cop files to run or show getting-started
@@ -41,6 +41,7 @@ if (args.Length == 1 && (args[0] == "-h" || args[0] == "-help" || args[0] == "--
           cop init                           Generate agent instruction files
           cop update                         Update cop to the latest release
           cop test [<file>]                  Run tests
+          cop verify [<path>]               Verify program correctness (syntax, imports, types)
           cop syntax <path>                  Validate .cop file syntax
           cop lock/unlock <files>            Tamper protection
           cop repl                           Interactive REPL
@@ -167,6 +168,7 @@ rootCommand.Options.Add(new VersionOption("-v"));
 
 rootCommand.Add(TestCommand.Create());
 rootCommand.Add(SyntaxCommand.Create());
+rootCommand.Add(VerifyCommand.Create());
 rootCommand.Add(LockCommand.Create());
 rootCommand.Add(UnlockCommand.Create());
 

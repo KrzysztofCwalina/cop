@@ -636,6 +636,12 @@ public sealed class Binder
         // Single uppercase letters are generic type parameter placeholders (A-Z)
         if (name.Length == 1 && name[0] >= 'A' && name[0] <= 'Z') return;
 
+        // Function types like '(T) => bool' or '(A, T) => A' are always valid structurally
+        if (name.Contains("=>")) return;
+
+        // Core primitive types are always valid
+        if (name is "string" or "int" or "float" or "bool" or "byte" or "bytes" or "object") return;
+
         var symbol = _currentScope.Resolve(name);
         if (symbol is null)
         {

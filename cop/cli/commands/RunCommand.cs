@@ -407,8 +407,18 @@ public static class RunCommand
 
     private static int HandleResult(EngineResult result, string? format, string rootPath)
     {
-        foreach (var error in result.ParseErrors)
-            Console.Error.WriteLine(error);
+        // Use structured diagnostics for rich error output when available
+        if (result.Diagnostics is { Count: > 0 })
+        {
+            DiagnosticFormatter.WriteAllToStdErr(result.Diagnostics);
+        }
+
+        // Fall back to string errors for any not covered by structured diagnostics
+        if (result.Diagnostics is null or { Count: 0 })
+        {
+            foreach (var error in result.ParseErrors)
+                Console.Error.WriteLine(error);
+        }
 
         if (result.Warnings is { Count: > 0 })
         {
@@ -418,8 +428,21 @@ public static class RunCommand
 
         if (result.HasFatalErrors)
         {
-            foreach (var error in result.Errors)
-                Console.Error.WriteLine(error);
+            // Only print string errors that aren't already represented by diagnostics
+            if (result.Diagnostics is null or { Count: 0 })
+            {
+                foreach (var error in result.Errors)
+                    Console.Error.WriteLine(error);
+            }
+            else
+            {
+                // Print non-diagnostic errors (e.g., runtime errors without source info)
+                foreach (var error in result.Errors)
+                {
+                    if (!result.Diagnostics.Any(d => error.Contains(d.Message)))
+                        Console.Error.WriteLine(error);
+                }
+            }
             return 2;
         }
 

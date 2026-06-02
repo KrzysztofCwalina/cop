@@ -13,11 +13,13 @@ public sealed class ModuleLoader
     private readonly string[] _feedPaths;
     private readonly HashSet<string> _loadedPackages = new(StringComparer.Ordinal);
     private readonly List<string> _errors = [];
+    private readonly List<CopDiagnostic> _diagnostics = [];
     private readonly List<(string Dir, string PackageName)> _providerPackages = [];
     private readonly List<(LetDecl Decl, string FilePath)> _deferredLetBindings = [];
     private readonly List<ModuleNode> _loadedModules = [];
 
     public IReadOnlyList<string> Errors => _errors;
+    public IReadOnlyList<CopDiagnostic> Diagnostics => _diagnostics;
     public IReadOnlyList<(string Dir, string PackageName)> ProviderPackages => _providerPackages;
     public IReadOnlyList<ModuleNode> LoadedModules => _loadedModules;
 
@@ -38,7 +40,14 @@ public sealed class ModuleLoader
         var packageDir = FindPackageDir(packageName);
         if (packageDir is null)
         {
+            // Try to suggest a close package name from available feeds
+            var available = GetAvailablePackageNames();
+            var suggestion = StringDistance.FindClosest(packageName, available);
             _errors.Add($"Import '{packageName}' could not be resolved");
+            _diagnostics.Add(new CopDiagnostic(
+                CopDiagnosticSeverity.Error,
+                $"Import '{packageName}' could not be resolved. Package not found in any feed.",
+                Suggestion: suggestion));
             return;
         }
 
@@ -46,6 +55,9 @@ public sealed class ModuleLoader
         if (!Directory.Exists(srcDir))
         {
             _errors.Add($"Package '{packageName}' has no src/ directory");
+            _diagnostics.Add(new CopDiagnostic(
+                CopDiagnosticSeverity.Error,
+                $"Package '{packageName}' has no src/ directory"));
             return;
         }
 
@@ -248,5 +260,32 @@ public sealed class ModuleLoader
             }
         }
         env.Define(name, func);
+    }
+
+    /// <summary>
+    /// Lists all available package names from configured feed paths.
+    /// Used for "Did you mean?" suggestions on import failures.
+    /// </summary>
+    private List<string> GetAvailablePackageNames()
+    {
+        var names = new List<string>();
+        foreach (var feedPath in _feedPaths)
+        {
+            if (!Directory.Exists(feedPath)) continue;
+            foreach (var dir in Directory.GetDirectories(feedPath))
+            {
+                var name = Path.GetFileName(dir);
+                if (!name.StartsWith('.'))
+                    names.Add(name);
+                // Also check subdirectories (e.g., dotnet/, js/, python/ under packages/)
+                foreach (var subDir in Directory.GetDirectories(dir))
+                {
+                    var subName = Path.GetFileName(subDir);
+                    if (!subName.StartsWith('.') && Directory.Exists(Path.Combine(subDir, "src")))
+                        names.Add(subName);
+                }
+            }
+        }
+        return names;
     }
 }

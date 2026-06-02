@@ -119,6 +119,37 @@ public static class Engine
         return modules;
     }
 
+    /// <summary>
+    /// Parses modules and also collects structured diagnostics from parse failures.
+    /// </summary>
+    internal static List<ParsedModule> ParseModulesWithDiagnostics(IEnumerable<string> filePaths, List<string> parseErrors, List<CopDiagnostic> diagnostics)
+    {
+        var modules = new List<ParsedModule>();
+        foreach (var path in filePaths)
+        {
+            try
+            {
+                var source = File.ReadAllText(path);
+                modules.Add(new ParsedModule(path, source, CopParser.Parse(source, path)));
+            }
+            catch (ParseException ex)
+            {
+                parseErrors.Add(ex.Message);
+                diagnostics.Add(ex.ToDiagnostic());
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                parseErrors.Add($"Error parsing {path}: {ex.Message}");
+                diagnostics.Add(new CopDiagnostic(
+                    CopDiagnosticSeverity.Error,
+                    ex.Message,
+                    path));
+            }
+        }
+
+        return modules;
+    }
+
     private static List<string> CollectFeedPaths(string scriptsDir, IEnumerable<ParsedModule> modules, string[]? additionalFeedPaths)
     {
         var feedPaths = FindFeedPaths(scriptsDir);
@@ -338,6 +369,10 @@ public static class Engine
 
         errors.AddRange(bridge.Errors);
 
+        // Collect structured diagnostics from module loader
+        var diagnostics = new List<CopDiagnostic>();
+        diagnostics.AddRange(moduleLoader.Diagnostics);
+
         var fileOutputs = fileOutputLines
             .Select(kv => new FileOutput(kv.Key, string.Join(System.Environment.NewLine, kv.Value)))
             .ToList();
@@ -346,7 +381,7 @@ public static class Engine
             ? commandsToRun.Count == 1 ? commandsToRun[0] : null
             : commandName ?? "main";
 
-        return new EngineResult(outputs, parseErrors, errors, resultCommandName, fileOutputs, warnings, asserts);
+        return new EngineResult(outputs, parseErrors, errors, resultCommandName, fileOutputs, warnings, asserts, diagnostics);
     }
 
     private static LanguageBridge CreateBridge(
@@ -934,7 +969,8 @@ public record EngineResult(
     string? CommandName = null,
     List<FileOutput>? FileOutputs = null,
     List<string>? Warnings = null,
-    List<AssertResult>? Asserts = null)
+    List<AssertResult>? Asserts = null,
+    List<CopDiagnostic>? Diagnostics = null)
 {
     public bool HasParseErrors => ParseErrors.Count > 0;
     public bool HasFatalErrors => Errors.Count > 0;

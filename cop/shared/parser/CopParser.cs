@@ -11,13 +11,15 @@ public class CopParser
 {
     private readonly List<Token> _tokens;
     private readonly string _filePath;
+    private readonly string? _source;
     private int _pos;
     private bool _suppressFilterColon; // true inside ternary then-branch to prevent `:` being consumed as filter
 
-    public CopParser(List<Token> tokens, string filePath = "<unknown>")
+    public CopParser(List<Token> tokens, string filePath = "<unknown>", string? source = null)
     {
         _tokens = tokens;
         _filePath = filePath;
+        _source = source;
     }
 
     public static ModuleNode Parse(string source, string? filePath = null)
@@ -25,7 +27,7 @@ public class CopParser
         filePath ??= "<unknown>";
         var tokenizer = new Tokenizer(source, filePath);
         var tokens = tokenizer.Tokenize();
-        var parser = new CopParser(tokens, filePath);
+        var parser = new CopParser(tokens, filePath, source);
         return parser.ParseModule();
     }
 
@@ -1065,7 +1067,8 @@ public class CopParser
             return new IdentifierExpr(token.Value, line);
         }
 
-        throw new ParseException($"Unexpected token '{token.Value}' ({token.Kind})", _filePath, line);
+        throw new ParseException($"Unexpected token '{token.Value}' ({token.Kind})", _filePath, line,
+            sourceLine: ParseException.GetSourceLine(_source ?? "", line));
     }
 
     private Expression ParseParenOrLambda()
@@ -1190,7 +1193,11 @@ public class CopParser
         var fieldName = ExpectIdentifier("field name");
         // Accept both ':' and '=' as field separator
         if (!Match(TokenKind.Colon) && !Match(TokenKind.Equals))
-            throw new ParseException($"Expected ':' or '=' after field name '{fieldName}'", _filePath, CurrentLine());
+        {
+            var errLine = CurrentLine();
+            throw new ParseException($"Expected ':' or '=' after field name '{fieldName}'", _filePath, errLine,
+                sourceLine: ParseException.GetSourceLine(_source ?? "", errLine));
+        }
         var fieldValue = ParseExpression();
         fields.Add(new FieldInit(fieldName, fieldValue, line));
     }
@@ -1978,7 +1985,9 @@ public class CopParser
     private Token Expect(TokenKind kind, string expected)
     {
         if (Check(kind)) return Advance();
-        throw new ParseException($"Expected {expected}, got '{Peek().Value}'", _filePath, CurrentLine());
+        var line = CurrentLine();
+        throw new ParseException($"Expected {expected}, got '{Peek().Value}'", _filePath, line,
+            sourceLine: ParseException.GetSourceLine(_source ?? "", line));
     }
 
     private string ExpectIdentifier(string context)
@@ -1989,7 +1998,9 @@ public class CopParser
             Advance();
             return token.Value;
         }
-        throw new ParseException($"Expected {context} (identifier), got '{token.Value}' ({token.Kind})", _filePath, CurrentLine());
+        var line = CurrentLine();
+        throw new ParseException($"Expected {context} (identifier), got '{token.Value}' ({token.Kind})", _filePath, line,
+            sourceLine: ParseException.GetSourceLine(_source ?? "", line));
     }
 
     private string ExpectIdentifierOrString(string context)
@@ -2001,7 +2012,9 @@ public class CopParser
             Advance();
             return token.Value;
         }
-        throw new ParseException($"Expected {context}, got '{token.Value}'", _filePath, CurrentLine());
+        var line = CurrentLine();
+        throw new ParseException($"Expected {context}, got '{token.Value}'", _filePath, line,
+            sourceLine: ParseException.GetSourceLine(_source ?? "", line));
     }
 
     /// <summary>

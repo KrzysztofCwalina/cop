@@ -79,6 +79,7 @@ public static class InitCommand
             cop <file.cop>           # Run a .cop file
             cop <package-name>       # Run a package by name
             cop                      # Run all .cop files in current directory
+            cop verify               # Verify program correctness (no execution)
             cop test                 # Run tests
             cop repl                 # Interactive REPL
             ```
@@ -240,6 +241,24 @@ public static class InitCommand
 
             Run with: `cop test`
 
+            ## Verifying Rules
+
+            After writing or modifying `.cop` files, always verify correctness:
+
+            ```bash
+            cop verify                # Verify all .cop files in current directory
+            cop verify <file.cop>     # Verify a specific file
+            cop verify <directory>    # Verify all .cop files in a directory
+            ```
+
+            `cop verify` performs full static analysis without executing:
+            - Syntax validation (parse errors with source context)
+            - Import resolution (are all packages available?)
+            - Name binding (are all identifiers defined?)
+            - Type checking (do referenced types and fields exist?)
+
+            If verification fails, fix the reported errors before running the program.
+
             ## Tips for Agents
 
             1. **Always start with** `cop help language` to get the full syntax reference
@@ -247,8 +266,9 @@ public static class InitCommand
             3. **Use single quotes** for all strings (not double quotes)
             4. **Use `{item.Prop}`** for string interpolation in templates
             5. **Predicates are camelCase**, types are PascalCase, commands are UPPERCASE
-            6. **Test with** `cop test` after writing rules
-            7. **Validate syntax** with `cop syntax <file.cop>`
+            6. **After writing rules, run `cop verify`** to check for errors before execution
+            7. **Test with** `cop test` after writing rules
+            8. **Validate syntax only** with `cop syntax <file.cop>` (lighter than verify)
             """;
     }
 }

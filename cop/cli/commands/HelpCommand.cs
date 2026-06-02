@@ -107,6 +107,8 @@ public static class HelpCommand
         if (commandEntries.Count == 0)
         {
             Console.WriteLine("No commands defined.");
+            Console.WriteLine();
+            PrintHelpFooter();
             return 0;
         }
 
@@ -123,7 +125,16 @@ public static class HelpCommand
                 Console.WriteLine($"  {displayName}");
         }
 
+        Console.WriteLine();
+        PrintHelpFooter();
         return 0;
+    }
+
+    private static void PrintHelpFooter()
+    {
+        Console.WriteLine("Other help commands:");
+        Console.WriteLine("  cop help <package>     Show exports from an imported package");
+        Console.WriteLine("  cop help language      Full language reference");
     }
 
     public static int ExecuteLanguageHelp()
@@ -134,37 +145,46 @@ public static class HelpCommand
 
     public static int ExecutePackageHelp(string packageName)
     {
-        // Search for the package in common locations
         var cwd = Directory.GetCurrentDirectory();
         string? packageDir = null;
 
-        // 1. Local restored packages: .cop/packages/<name>/
-        var localPackage = Path.Combine(cwd, ".cop", "packages", packageName);
-        if (Directory.Exists(localPackage))
-            packageDir = localPackage;
-
-        // 2. Local packages/ directory (for package repos)
-        if (packageDir == null)
+        // Collect feed paths the same way the engine does:
+        // 1. Walk up from cwd looking for packages/ directories
+        var feedPaths = new List<string>();
+        var walkDir = cwd;
+        while (walkDir is not null)
         {
-            var repoPackage = Path.Combine(cwd, "packages", packageName);
-            if (Directory.Exists(repoPackage))
-                packageDir = repoPackage;
+            var packagesDir = Path.Combine(walkDir, "packages");
+            if (Directory.Exists(packagesDir))
+                feedPaths.Add(packagesDir);
+            walkDir = Path.GetDirectoryName(walkDir);
         }
 
-        // 3. Search parent directories for packages/ (monorepo)
+        // 2. Check .cop/packages/ local restored packages
+        var localRestored = Path.Combine(cwd, ".cop", "packages");
+        if (Directory.Exists(localRestored) && !feedPaths.Contains(localRestored))
+            feedPaths.Add(localRestored);
+
+        // 3. Check global cache ~/.cop/packages/
+        var globalCache = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".cop", "packages");
+        if (Directory.Exists(globalCache) && !feedPaths.Contains(globalCache))
+            feedPaths.Add(globalCache);
+
+        // Search all feed paths using ImportResolver's recursive logic
+        foreach (var feedPath in feedPaths)
+        {
+            packageDir = ImportResolver.FindPackageDir(feedPath, packageName);
+            if (packageDir != null) break;
+        }
+
+        // Auto-restore if not found locally
         if (packageDir == null)
         {
-            var dir = Directory.GetParent(cwd);
-            while (dir != null)
-            {
-                var candidate = Path.Combine(dir.FullName, "packages", packageName);
-                if (Directory.Exists(candidate))
-                {
-                    packageDir = candidate;
-                    break;
-                }
-                dir = dir.Parent;
-            }
+            var restored = RunCommand.AutoRestorePackagesAsync([packageName], globalCache).GetAwaiter().GetResult();
+            if (restored)
+                packageDir = ImportResolver.FindPackageDir(globalCache, packageName);
         }
 
         if (packageDir == null)
@@ -172,8 +192,10 @@ public static class HelpCommand
             Console.Error.WriteLine($"Package '{packageName}' not found.");
             Console.Error.WriteLine();
             Console.Error.WriteLine("Searched:");
-            Console.Error.WriteLine($"  .cop/packages/{packageName}/");
-            Console.Error.WriteLine($"  packages/{packageName}/");
+            foreach (var fp in feedPaths)
+                Console.Error.WriteLine($"  {fp}");
+            if (feedPaths.Count == 0)
+                Console.Error.WriteLine("  (no package directories found)");
             Console.Error.WriteLine();
             Console.Error.WriteLine("Try: cop package restore   (to download packages from feeds)");
             return 1;

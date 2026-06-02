@@ -59,4 +59,9 @@ public sealed class Environment
     {
         return new Environment(this);
     }
+
+    /// <summary>
+    /// Returns all bindings in this environment (not walking parent chain).
+    /// </summary>
+    public IEnumerable<KeyValuePair<string, CopValue>> AllBindings() => _bindings;
 }
