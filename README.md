@@ -14,6 +14,12 @@ Agent Cop gives you a formal rule language that coding agents can read and write
 2. **Ask for rules** — tell the agent what conventions to enforce
 3. **Rules run in CI** — violations block PRs and feed back to agents automatically
 
+## Installation
+
+Download `cop.exe` from the [releases](https://github.com/KrzysztofCwalina/cop/releases) page and add it to your PATH. Cop ships as a self-contained executable — no .NET runtime needed.
+
+Cop comes with a default package feed (`github.com/KrzysztofCwalina/cop`) so all standard packages are available out of the box.
+
 ## Quick Start
 
 ### 1. Initialize Agent Context
@@ -77,12 +83,6 @@ cop help language        # Full language reference (syntax, types, operators)
 cop help <package>       # Package documentation (types, functions, examples)
 cop package list         # List all available packages
 ```
-
-## Installation
-
-Download `cop.exe` from the [releases](https://github.com/KrzysztofCwalina/cop/releases) page and add it to your PATH. Cop ships as a self-contained executable — no .NET runtime needed.
-
-Cop comes with a default package feed (`github.com/KrzysztofCwalina/cop`) so all standard packages are available out of the box.
 
 ### VS Code Extension
 

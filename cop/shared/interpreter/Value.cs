@@ -265,7 +265,7 @@ public sealed class CopDynamicObject : CopValue
     }
 
     public object Underlying => _underlying;
-    public string? TypeName => _adapter.TypeName;
+    public string? TypeName => _adapter.TypeName ?? (_underlying is DataObject dao ? dao.TypeName : null);
 
     public bool HasField(string name)
     {

@@ -1,0 +1,15 @@
+{
+  "name": "semgrep",
+  "version": "0.1.0",
+  "description": "Run Semgrep and expose findings as cop diagnostics",
+  "title": "Semgrep Integration",
+  "tags": [
+    "security",
+    "semgrep",
+    "patterns",
+    "static-analysis"
+  ],
+  "provider": "python",
+  "providerEntry": "src/main.py",
+  "authors": "cop-team"
+}

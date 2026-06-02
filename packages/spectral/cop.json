@@ -1,0 +1,15 @@
+{
+  "name": "spectral",
+  "version": "0.1.0",
+  "description": "Run Spectral OpenAPI linter and expose diagnostics",
+  "title": "Spectral Integration",
+  "tags": [
+    "openapi",
+    "spectral",
+    "api",
+    "linting"
+  ],
+  "provider": "node",
+  "providerEntry": "src/index.js",
+  "authors": "cop-team"
+}

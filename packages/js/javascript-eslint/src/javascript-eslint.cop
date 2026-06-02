@@ -1,0 +1,11 @@
+# ESLint integration — runs eslint and produces cop diagnostics
+# Prerequisites: eslint must be installed (npm install eslint)
+
+import code-analysis
+
+let data = provider('javascript-eslint', nic)
+
+export function diagnostics() => data.Diagnostics
+export let checks = data.Diagnostics
+
+command main = foreach checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'

@@ -1,0 +1,15 @@
+{
+  "name": "python-ruff",
+  "version": "0.1.0",
+  "description": "Run Ruff linter and expose diagnostics as cop Violations",
+  "title": "Python Ruff Integration",
+  "authors": "cop-team",
+  "tags": [
+    "python",
+    "ruff",
+    "linting",
+    "static-analysis"
+  ],
+  "provider": "python",
+  "providerEntry": "src/main.py"
+}

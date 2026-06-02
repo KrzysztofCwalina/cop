@@ -1,0 +1,14 @@
+{
+  "name": "typescript-tsc",
+  "version": "0.1.0",
+  "description": "Run TypeScript compiler and expose diagnostics",
+  "title": "TypeScript Compiler Integration",
+  "authors": "cop-team",
+  "tags": [
+    "typescript",
+    "type-checking",
+    "static-analysis"
+  ],
+  "provider": "node",
+  "providerEntry": "src/index.js"
+}

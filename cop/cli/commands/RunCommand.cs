@@ -264,8 +264,17 @@ public static class RunCommand
         string rootPath = target != null ? Path.GetFullPath(target) : Directory.GetCurrentDirectory();
         Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(ColorDiagLine(msg)) : null;
 
-        // Discover local feed paths (walking up from target to find packages/ dirs)
+        // Discover local feed paths (walking up from target AND CWD to find packages/ dirs)
         var feedPaths = FindFeedPaths(rootPath);
+        var cwd = Directory.GetCurrentDirectory();
+        if (!string.Equals(Path.GetFullPath(cwd), Path.GetFullPath(rootPath), StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var p in FindFeedPaths(cwd))
+            {
+                if (!feedPaths.Contains(p, StringComparer.OrdinalIgnoreCase))
+                    feedPaths.Add(p);
+            }
+        }
 
         // ~/.cop/packages/ is always a feed path (auto-restored packages live here)
         var cachePath = Path.Combine(
@@ -294,7 +303,7 @@ public static class RunCommand
         // Convert rules filter
         var rulesList = rules?.ToList() ?? [];
 
-        var result = Engine.RunProject(feedPaths, [.. packages], rootPath, rulesList);
+        var result = Engine.RunProject(feedPaths, [.. packages], rootPath, rulesList, diagLog: diagLog);
 
         return HandleResult(result, format, rootPath);
     }

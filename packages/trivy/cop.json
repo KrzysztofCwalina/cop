@@ -1,0 +1,15 @@
+{
+  "name": "trivy",
+  "version": "0.1.0",
+  "description": "Run Trivy vulnerability scanner and expose findings",
+  "title": "Trivy Integration",
+  "tags": [
+    "security",
+    "vulnerabilities",
+    "trivy",
+    "scanning"
+  ],
+  "provider": "python",
+  "providerEntry": "src/main.py",
+  "authors": "cop-team"
+}

@@ -1,0 +1,15 @@
+{
+  "name": "python-pylint",
+  "version": "0.1.0",
+  "description": "Run pylint and expose diagnostics",
+  "title": "Python Pylint Integration",
+  "authors": "cop-team",
+  "tags": [
+    "python",
+    "pylint",
+    "linting",
+    "static-analysis"
+  ],
+  "provider": "python",
+  "providerEntry": "src/main.py"
+}

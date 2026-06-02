@@ -1,0 +1,15 @@
+# Pylint integration — runs pylint and produces cop diagnostics
+# Prerequisites: pylint must be installed (pip install pylint)
+# Usage: import python-pylint
+
+import code-analysis
+
+let data = provider('python-pylint', nic)
+
+## Returns all pylint diagnostics.
+export function diagnostics() => data.Diagnostics
+
+## All pylint checks as a collection (can be combined with other checks).
+export let checks = data.Diagnostics
+
+command main = foreach checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'

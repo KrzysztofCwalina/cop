@@ -1,0 +1,11 @@
+# StyleCop integration — runs StyleCop and produces cop diagnostics
+# Prerequisites: StyleCop must be installed
+
+import code-analysis
+
+let data = provider('csharp-stylecop', nic)
+
+export function diagnostics() => data.Diagnostics
+export let checks = data.Diagnostics
+
+command main = foreach checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'

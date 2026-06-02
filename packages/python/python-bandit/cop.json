@@ -1,0 +1,15 @@
+{
+  "name": "python-bandit",
+  "version": "0.1.0",
+  "description": "Run bandit security scanner and expose diagnostics",
+  "title": "Python Bandit Integration",
+  "authors": "cop-team",
+  "tags": [
+    "python",
+    "bandit",
+    "security",
+    "static-analysis"
+  ],
+  "provider": "python",
+  "providerEntry": "src/main.py"
+}

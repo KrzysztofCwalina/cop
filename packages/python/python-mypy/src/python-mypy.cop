@@ -1,0 +1,15 @@
+# Mypy type checker integration — runs mypy and produces cop diagnostics
+# Prerequisites: mypy must be installed (pip install mypy)
+# Usage: import python-mypy
+
+import code-analysis
+
+let data = provider('python-mypy', nic)
+
+## Returns all mypy diagnostics.
+export function diagnostics() => data.Diagnostics
+
+## All mypy checks as a collection (can be combined with other checks).
+export let checks = data.Diagnostics
+
+command main = foreach checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'

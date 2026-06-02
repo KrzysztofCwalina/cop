@@ -1,0 +1,15 @@
+{
+  "name": "python-mypy",
+  "version": "0.1.0",
+  "description": "Run mypy type checker and expose diagnostics",
+  "title": "Python Mypy Integration",
+  "authors": "cop-team",
+  "tags": [
+    "python",
+    "mypy",
+    "type-checking",
+    "static-analysis"
+  ],
+  "provider": "python",
+  "providerEntry": "src/main.py"
+}

@@ -1,0 +1,11 @@
+# Trivy integration — runs Trivy and produces cop diagnostics
+# Prerequisites: Trivy must be installed
+
+import code-analysis
+
+let data = provider('trivy', nic)
+
+export function diagnostics() => data.Diagnostics
+export let checks = data.Diagnostics
+
+command main = foreach checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'

@@ -1,0 +1,16 @@
+{
+  "name": "checkov",
+  "version": "0.1.0",
+  "description": "Run Checkov IaC security scanner",
+  "title": "Checkov Integration",
+  "tags": [
+    "security",
+    "iac",
+    "checkov",
+    "terraform",
+    "static-analysis"
+  ],
+  "provider": "python",
+  "providerEntry": "src/main.py",
+  "authors": "cop-team"
+}

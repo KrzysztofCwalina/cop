@@ -1,0 +1,11 @@
+# dotnet format integration — runs dotnet format and produces cop diagnostics
+# Prerequisites: dotnet format must be installed
+
+import code-analysis
+
+let data = provider('csharp-format', nic)
+
+export function diagnostics() => data.Diagnostics
+export let checks = data.Diagnostics
+
+command main = foreach checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'

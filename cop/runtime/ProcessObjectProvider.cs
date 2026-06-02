@@ -25,8 +25,8 @@ public sealed class ProcessObjectProvider : DataProvider, IDisposable
     private readonly object _lock = new();
     private bool _disposed;
 
-    /// <summary>Timeout for provider responses (default 60s).</summary>
-    public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(60);
+    /// <summary>Timeout for provider responses (default 900s for large repo support).</summary>
+    public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(900);
 
     /// <summary>Collected stderr output for diagnostics.</summary>
     private readonly StringBuilder _stderr = new();

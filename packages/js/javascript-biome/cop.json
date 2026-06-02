@@ -1,0 +1,16 @@
+{
+  "name": "javascript-biome",
+  "version": "0.1.0",
+  "description": "Run Biome and expose diagnostics",
+  "title": "Biome Integration",
+  "authors": "cop-team",
+  "tags": [
+    "javascript",
+    "typescript",
+    "biome",
+    "linting",
+    "static-analysis"
+  ],
+  "provider": "node",
+  "providerEntry": "src/index.js"
+}

@@ -1,0 +1,15 @@
+# Ruff linter integration — runs ruff and produces cop Violations
+# Prerequisites: ruff must be installed (pip install ruff)
+# Usage: import python-ruff
+
+import code-analysis
+
+let data = provider('python-ruff', nic)
+
+## Returns all ruff diagnostics.
+export function diagnostics() => data.Diagnostics
+
+## All ruff checks as a collection (can be combined with other checks).
+export let checks = data.Diagnostics
+
+command main = foreach checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'

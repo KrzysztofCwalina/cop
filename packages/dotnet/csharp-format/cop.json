@@ -1,0 +1,15 @@
+{
+  "name": "csharp-format",
+  "version": "0.1.0",
+  "description": "Run dotnet format and expose formatting violations",
+  "title": "C# Format Check",
+  "tags": [
+    "csharp",
+    "dotnet",
+    "formatting",
+    "static-analysis"
+  ],
+  "provider": "python",
+  "providerEntry": "src/main.py",
+  "authors": "cop-team"
+}

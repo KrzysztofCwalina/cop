@@ -1,0 +1,16 @@
+{
+  "name": "csharp-stylecop",
+  "version": "0.1.0",
+  "description": "Run StyleCop analyzers via dotnet build and expose diagnostics",
+  "title": "C# StyleCop Integration",
+  "tags": [
+    "csharp",
+    "dotnet",
+    "stylecop",
+    "style",
+    "static-analysis"
+  ],
+  "provider": "python",
+  "providerEntry": "src/main.py",
+  "authors": "cop-team"
+}
