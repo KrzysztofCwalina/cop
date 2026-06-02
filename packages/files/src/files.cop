@@ -45,6 +45,12 @@ export predicate recentlyModified(File) => File.MinutesSinceModified < 10
 export predicate stale(Folder) => Folder.MinutesSinceModified > 1440
 export predicate stale(File) => File.MinutesSinceModified > 1440
 
+## True if the file is in the repository root (depth 0).
+export predicate isRoot(File) => File.Depth == 0
+
+## True if the file has a common image extension (.png, .jpg, .jpeg, .gif, .bmp, .svg, .ico, .webp, .tiff).
+export predicate isImage(File) => File.Extension:in(['.png' '.jpg' '.jpeg' '.gif' '.bmp' '.svg' '.ico' '.webp' '.tiff'])
+
 # Violation collections
 export let empty-folders = folders():empty
     :toError('Empty folder: {item.Path}')
