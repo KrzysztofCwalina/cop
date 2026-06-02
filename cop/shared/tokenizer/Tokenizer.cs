@@ -128,48 +128,9 @@ public class Tokenizer
             return new Token(TokenKind.DocComment, text, line);
         }
 
-        // Check if # is alone on the line (multi-line comment opener)
-        if (IsHashAloneOnLine())
-        {
-            SkipMultiLineComment();
-            return null;
-        }
-
-        // Single-line # comment
+        // Single-line # comment (including bare # with no content)
         while (_pos < _source.Length && _source[_pos] != '\n') _pos++;
         return null;
-    }
-
-    private bool IsHashAloneOnLine()
-    {
-        int lookahead = _pos + 1;
-        // Only match '#' immediately followed by end-of-line (or EOF), not '# ' with trailing spaces
-        while (lookahead < _source.Length && _source[lookahead] == '\r')
-            lookahead++;
-        return lookahead >= _source.Length || _source[lookahead] == '\n';
-    }
-
-    private void SkipMultiLineComment()
-    {
-        // Skip the opening # and rest of line
-        while (_pos < _source.Length && _source[_pos] != '\n') _pos++;
-
-        // Read until we find a closing # alone on a line
-        while (_pos < _source.Length)
-        {
-            if (_source[_pos] == '\n') { _line++; _pos++; continue; }
-            if (_source[_pos] == '\r') { _pos++; continue; }
-
-            // Check if current line starts with # alone
-            if (_source[_pos] == '#' && IsHashAloneOnLine())
-            {
-                while (_pos < _source.Length && _source[_pos] != '\n') _pos++;
-                return;
-            }
-
-            // Skip to end of line
-            while (_pos < _source.Length && _source[_pos] != '\n') _pos++;
-        }
     }
 
     private Token ReadToken()

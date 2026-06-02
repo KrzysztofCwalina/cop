@@ -174,20 +174,23 @@ public class TokenizerTests
     }
 
     [Test]
-    public void Tokenize_MultiLineComment()
+    public void Tokenize_BareHashIsEmptyComment()
     {
-        var tokens = new Tokenizer("a\n#\nthis is ignored\nalso ignored\n#\nb").Tokenize();
+        // A bare # (no content) is just an empty single-line comment, not a multi-line opener
+        var tokens = new Tokenizer("a\n#\nb").Tokenize();
         Assert.That(tokens, Has.Count.EqualTo(3)); // a, b, EOF
         Assert.That(tokens[0].Value, Is.EqualTo("a"));
         Assert.That(tokens[1].Value, Is.EqualTo("b"));
     }
 
     [Test]
-    public void Tokenize_MultiLineComment_TracksLines()
+    public void Tokenize_BareHashDoesNotSwallowCode()
     {
-        var tokens = new Tokenizer("a\n#\nskipped\n#\nb").Tokenize();
-        Assert.That(tokens[0].Line, Is.EqualTo(1));
-        Assert.That(tokens[1].Line, Is.EqualTo(5));
+        // Bare # between code lines must not consume subsequent lines
+        var tokens = new Tokenizer("a\n#\ncommand main = b").Tokenize();
+        Assert.That(tokens[0].Value, Is.EqualTo("a"));
+        Assert.That(tokens[1].Value, Is.EqualTo("command"));
+        Assert.That(tokens[2].Value, Is.EqualTo("main"));
     }
 
     [Test]
