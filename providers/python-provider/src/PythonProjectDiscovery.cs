@@ -105,7 +105,7 @@ public static class PythonProjectDiscovery
             if (name is null)
                 return null;
 
-            return new ProjectInfo(name, relativePath, "python", dependencies);
+            return new ProjectInfo(name, relativePath, "python", dependencies, dependencies, []);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -129,7 +129,7 @@ public static class PythonProjectDiscovery
             if (depsMatch.Success)
                 ParseDependencyList(depsMatch.Groups[1].Value, dependencies);
 
-            return new ProjectInfo(name, relativePath, "python", dependencies);
+            return new ProjectInfo(name, relativePath, "python", dependencies, dependencies, []);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

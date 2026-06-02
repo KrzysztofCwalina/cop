@@ -98,7 +98,7 @@ public static class CodeSchema
 
                 TypeDef("Project", null,
                     Prop("Name"), Prop("Path"), Opt("Language"),
-                    Coll("References")),
+                    Coll("References"), Coll("Packages"), Coll("Frameworks")),
             ],
             Collections =
             [

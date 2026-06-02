@@ -21,19 +21,19 @@ public static class CSharpProjectDiscovery
 
         // First pass: build a map of normalized path → project name
         var pathToName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var projects = new List<(string Name, string RelativePath, List<string> RefPaths)>();
+        var projects = new List<(string Name, string RelativePath, List<string> RefPaths, List<string> Packages, List<string> Frameworks)>();
 
         foreach (var csprojPath in csprojPaths)
         {
-            var (name, refPaths) = ParseCsproj(csprojPath);
+            var (name, refPaths, packages, frameworks) = ParseCsproj(csprojPath);
             var relativePath = Path.GetRelativePath(rootPath, csprojPath).Replace('\\', '/');
             pathToName[Path.GetFullPath(csprojPath)] = name;
-            projects.Add((name, relativePath, refPaths));
+            projects.Add((name, relativePath, refPaths, packages, frameworks));
         }
 
         // Second pass: resolve ProjectReference paths to project names
         var result = new List<ProjectInfo>();
-        foreach (var (name, relativePath, refPaths) in projects)
+        foreach (var (name, relativePath, refPaths, packages, frameworks) in projects)
         {
             var references = new List<string>();
             var csprojDir = Path.GetDirectoryName(Path.Combine(rootPath, relativePath.Replace('/', '\\'))) ?? rootPath;
@@ -47,16 +47,18 @@ public static class CSharpProjectDiscovery
                     references.Add(Path.GetFileNameWithoutExtension(refPath));
             }
 
-            result.Add(new ProjectInfo(name, relativePath, "csharp", references));
+            result.Add(new ProjectInfo(name, relativePath, "csharp", references, packages, frameworks));
         }
 
         return result;
     }
 
-    private static (string Name, List<string> RefPaths) ParseCsproj(string csprojPath)
+    private static (string Name, List<string> RefPaths, List<string> Packages, List<string> Frameworks) ParseCsproj(string csprojPath)
     {
         string name = Path.GetFileNameWithoutExtension(csprojPath);
         var refPaths = new List<string>();
+        var packages = new List<string>();
+        var frameworks = new List<string>();
 
         try
         {
@@ -75,13 +77,29 @@ public static class CSharpProjectDiscovery
                 if (!string.IsNullOrWhiteSpace(include))
                     refPaths.Add(include);
             }
+
+            // Extract PackageReference names
+            foreach (var pkgRef in doc.Root?.Descendants(ns + "PackageReference") ?? [])
+            {
+                var include = pkgRef.Attribute("Include")?.Value;
+                if (!string.IsNullOrWhiteSpace(include))
+                    packages.Add(include);
+            }
+
+            // Extract FrameworkReference names
+            foreach (var fwRef in doc.Root?.Descendants(ns + "FrameworkReference") ?? [])
+            {
+                var include = fwRef.Attribute("Include")?.Value;
+                if (!string.IsNullOrWhiteSpace(include))
+                    frameworks.Add(include);
+            }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             // Malformed csproj — return what we have
         }
 
-        return (name, refPaths);
+        return (name, refPaths, packages, frameworks);
     }
 
     private static void CollectCsprojFiles(string dir, IReadOnlySet<string>? excluded, List<string> result)

@@ -218,7 +218,9 @@ export type Project = {
     Name : string,
     Path : string,
     Language : Language?,
-    References : [string]
+    References : [string],
+    Packages : [string],
+    Frameworks : [string]
 }
 
 export type Codebase = {

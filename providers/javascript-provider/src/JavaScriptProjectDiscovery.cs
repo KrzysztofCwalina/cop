@@ -57,7 +57,7 @@ public static class JavaScriptProjectDiscovery
                     dependencies.Add(prop.Name);
             }
 
-            return new ProjectInfo(name, relativePath, "javascript", dependencies);
+            return new ProjectInfo(name, relativePath, "javascript", dependencies, dependencies, []);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

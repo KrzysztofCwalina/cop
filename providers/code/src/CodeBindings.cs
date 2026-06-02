@@ -197,6 +197,8 @@ public static class CodeBindings
                 ["Path"] = o => ((ProjectInfo)o).Path,
                 ["Language"] = o => ((ProjectInfo)o).Language,
                 ["References"] = o => (object)((ProjectInfo)o).References,
+                ["Packages"] = o => (object)((ProjectInfo)o).Packages,
+                ["Frameworks"] = o => (object)((ProjectInfo)o).Frameworks,
             },
         };
     }
