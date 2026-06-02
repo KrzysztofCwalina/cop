@@ -17,7 +17,7 @@ if (diag)
 // Known verbs (subcommands) — anything else is treated as a program to run
 var knownVerbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 {
-    "test", "syntax", "lock", "unlock", "help", "package", "repl"
+    "test", "syntax", "lock", "unlock", "help", "package", "repl", "init"
 };
 
 // Bare invocation (no arguments): look for local .cop files to run or show getting-started
@@ -36,6 +36,9 @@ if (args.Length == 1 && (args[0] == "-h" || args[0] == "-help" || args[0] == "--
           cop <program>                      Run a package, local command, or .cop file
           cop package list                   Browse available packages
           cop package commands <package>     Show what a package exports
+          cop help language                  Full language reference
+          cop help <package>                 Package documentation
+          cop init                           Generate agent instruction files
           cop test [<file>]                  Run tests
           cop syntax <path>                  Validate .cop file syntax
           cop lock/unlock <files>            Tamper protection
@@ -54,8 +57,14 @@ if (args.Length == 1 && (args[0] == "-h" || args[0] == "-help" || args[0] == "--
 // System.CommandLine reserves 'help' as a directive, so intercept it before parsing
 if (args[0] == "help")
 {
-    string? file = args.Length >= 2 ? args[1] : null;
-    return HelpCommand.Execute(file);
+    string? helpArg = args.Length >= 2 ? args[1] : null;
+    return HelpCommand.Execute(helpArg);
+}
+
+// cop init — generate agent instruction files
+if (args[0] == "init")
+{
+    return InitCommand.Execute();
 }
 
 // If first arg is not a known verb and not a switch, figure out what to run

@@ -219,17 +219,39 @@ See [Testing with Agent Cop](testing-with-cop.md) for a full guide on writing te
 
 ## cop help
 
-List named entry-point functions defined in a `.cop` program.
+Show help for the Cop language, a package, or list commands in a `.cop` file.
 
 ```bash
-cop help [<file>]
+cop help language         # Full language reference
+cop help <package>        # Package documentation (types, functions, samples)
+cop help [<file>]         # List commands defined in a .cop program
 ```
 
 | Argument | Description |
 |----------|-------------|
-| `<file>` | `.cop` file to inspect. When omitted, all `.cop` files in the current directory are used. |
+| `language` | Print the full Cop language reference (syntax, types, operators, patterns) |
+| `<package>` | Print documentation for a package — exports, types, predicates, functions, and samples |
+| `<file>` | `.cop` file to inspect for commands. When omitted, scans current directory. |
 
 ### Examples
+
+Print the full language reference:
+
+```bash
+cop help language
+```
+
+Show documentation for the `code` package:
+
+```bash
+cop help code
+```
+
+Show documentation for the `code-analysis` package:
+
+```bash
+cop help code-analysis
+```
 
 List all named entry-point functions in the current directory:
 
@@ -241,6 +263,41 @@ List named entry-point functions in a specific file:
 
 ```bash
 cop help checks.cop
+```
+
+### Package help resolution
+
+`cop help <package>` looks for the package in this order:
+1. `.cop/packages/<name>/` — locally restored packages
+2. `packages/<name>/` — package repo layout
+3. Parent directories containing `packages/<name>/`
+
+If the package is not found locally, run `cop package restore` first.
+
+## cop init
+
+Generate agent instruction files for coding agents (GitHub Copilot, Claude Code) so they can write cop rules in your project.
+
+```bash
+cop init
+```
+
+Creates:
+- `.github/copilot-instructions.md` — discovered automatically by GitHub Copilot
+- `AGENTS.md` — discovered automatically by Claude Code
+
+The files contain a concise cop language overview, common patterns, and instructions pointing agents to `cop help language` and `cop help <package>` for full reference.
+
+Skips files that already exist. Run once per project, then commit the generated files.
+
+### Example
+
+```bash
+cd my-project
+cop init
+# Created: .github/copilot-instructions.md
+# Created: AGENTS.md
+# 2 file(s) created. Agents will now discover cop language context automatically.
 ```
 
 ## cop lock

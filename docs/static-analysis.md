@@ -1,8 +1,30 @@
 # Static Analysis with Agent Cop
 
-Agent Cop is a language independent static alanysis system that can be used to check source code for bugs, convention violations, and design issues. Check packages define rules as predicates over a language-neutral data model (types, statements, lines, files), so you get consistent analysis across C#, Python, JavaScript, and other languages without writing language-specific tooling.
+Agent Cop is designed for coding agents to write and maintain custom static analysis rules. You describe conventions in plain English, the agent writes `.cop` rules, and those rules run deterministically in CI — catching violations before they reach code review.
 
-You start by running pre-built check packages against your repo. As your team's conventions become clearer, you exclude rules that don't apply, add project-specific checks, and eventually ask coding agents to encode new rules as they work — turning one-off code review feedback into permanent, automated enforcement.
+The workflow has three phases: start with built-in check packages, exclude what doesn't apply, then ask your coding agent to encode project-specific conventions as custom rules.
+
+## Setting Up for Agents
+
+Before asking an agent to write rules, set up agent context:
+
+```bash
+cop init
+```
+
+This generates instruction files that agents auto-discover:
+- `.github/copilot-instructions.md` — for GitHub Copilot
+- `AGENTS.md` — for Claude Code
+
+The files teach the agent the Cop language and point it to help commands:
+
+```bash
+cop help language        # Full language reference (syntax, types, operators)
+cop help <package>       # Package documentation (types, functions, examples)
+cop package list         # List all available packages
+```
+
+Commit these files so every contributor's agent has context automatically.
 
 ## Running Checks
 
@@ -244,11 +266,21 @@ function MAIN() = { CHECK(all-checks) }
 
 ---
 
-## Self-Checks with a Coding Agent
+## Writing Rules with a Coding Agent
 
-When a coding agent (Copilot, etc.) makes a change you don't like, you can ask it to create a self-check that prevents the pattern in the future.
+Once `cop init` is set up (see [Setting Up for Agents](#setting-up-for-agents) above), you can ask the agent to write rules directly:
 
-### The Workflow
+> "Write a cop rule that flags any method longer than 50 statements"
+
+> "Create a cop check that ensures all public types in src/ have XML documentation"
+
+> "Add a cop rule that no file in src/Core/ imports from src/Infrastructure/"
+
+The agent reads the instruction files, runs `cop help language` and `cop help <package>` as needed, and produces working `.cop` code.
+
+### The Self-Check Loop
+
+When a coding agent makes a change you don't like, ask it to encode that feedback as a permanent rule:
 
 1. Agent produces code with a pattern you dislike (e.g., uses `DateTime.Now`)
 2. You say: **"Add a self-check that flags DateTime.Now — we use DateTimeOffset.UtcNow here"**
@@ -331,8 +363,83 @@ The coding agent's own changes are now checked against the rules before the PR m
 
 ---
 
+## Running External Analyzers
+
+Cop can run external analysis tools (like Ruff, ESLint, or any tool that produces structured output) and present their results in the same unified format as native checks. This lets you combine results from multiple tools into a single report, filter them with `.cop` predicates, or compose them with your own custom rules.
+
+### Available External Analyzer Packages
+
+| Package | Tool | What it checks | Prerequisite |
+|---------|------|----------------|--------------|
+| `python-ruff` | [Ruff](https://docs.astral.sh/ruff/) | Python lint (800+ rules, fast) | `pip install ruff` |
+| `python-mypy` | [mypy](https://mypy-lang.org/) | Python type errors | `pip install mypy` |
+| `python-bandit` | [Bandit](https://bandit.readthedocs.io/) | Python security vulnerabilities | `pip install bandit` |
+| `python-pylint` | [Pylint](https://pylint.readthedocs.io/) | Python conventions + bugs | `pip install pylint` |
+| `javascript-eslint` | [ESLint](https://eslint.org/) | JS/TS lint | `npm install eslint` |
+| `javascript-biome` | [Biome](https://biomejs.dev/) | JS/TS lint + format (fast) | `npm install @biomejs/biome` |
+| `typescript-tsc` | TypeScript | Type errors | `npm install typescript` |
+| `csharp-stylecop` | [StyleCop](https://github.com/DotNetAnalyzers/StyleCopAnalyzers) | C# style/naming | StyleCop NuGet + `dotnet` |
+| `csharp-format` | dotnet format | C# formatting | `dotnet` SDK |
+| `semgrep` | [Semgrep](https://semgrep.dev/) | Security patterns (any language) | `pip install semgrep` |
+| `trivy` | [Trivy](https://trivy.dev/) | Vulnerabilities + misconfig | `trivy` binary |
+| `checkov` | [Checkov](https://www.checkov.io/) | IaC security (Terraform, etc.) | `pip install checkov` |
+| `spectral` | [Spectral](https://stoplight.io/spectral) | OpenAPI linting | `npm install @stoplight/spectral-cli` |
+
+### Running an Analyzer
+
+```bash
+cop python-ruff -t path/to/project          # Python lint
+cop python-mypy -t path/to/project          # Python type check
+cop javascript-eslint -t path/to/project    # JS/TS lint
+cop csharp-stylecop -t path/to/project      # C# style
+cop semgrep -t path/to/project              # Security scan
+cop trivy -t path/to/project                # Vulnerability scan
+```
+
+All produce the same unified output format:
+
+```
+src/app.py(1): warning: F401: `os` imported but unused
+src/app.py(9): error: E711: Comparison to `None` should be `cond is None`
+tests/test_main.py(15): warning: F841: Local variable `result` is assigned to but never used
+```
+
+### Combining External and Native Checks
+
+You can import external analyzer results into a `.cop` file and combine them with native checks or your own rules:
+
+```ruby
+import python-ruff
+import python-checks
+import code-analysis
+
+# Combine ruff findings with native cop checks
+let all-checks = checks + python-checks
+
+command main = CHECK(all-checks)
+```
+
+Or filter the external results:
+
+```ruby
+import python-ruff
+
+# Only show errors (not warnings)
+predicate isError(item) => item.Severity == 'error'
+
+command main = foreach diagnostics():isError
+    => '{item.FilePath}({item.Line}): {item.RuleId}: {item.Message}'
+```
+
+### Performance
+
+External analyzer packages delegate the heavy work to purpose-built tools. For example, `python-ruff` runs Ruff (written in Rust) under the hood — it processes the entire Azure SDK for Python repo (55,000+ files, 52,000+ findings) in about 20 seconds.
+
+---
+
 ## Further Reading
 
 - [Language Reference](language-reference.md) — full DSL syntax
 - [Code Package Reference](packages/code.md) — Type, Statement, Line, File properties
 - [Testing with Cop](testing-with-cop.md) — ASSERT and test mode
+- [Extensibility](extensibility.md) — adding providers and external analyzers

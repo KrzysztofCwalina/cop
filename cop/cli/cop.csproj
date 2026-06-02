@@ -33,4 +33,9 @@
     <Compile Include="..\..\providers\markdown-provider\src\**\*.cs" LinkBase="BuiltinProviders" />
   </ItemGroup>
 
+  <!-- Embedded resources for cop help language -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\docs\language-reference.md" LogicalName="Cop.Cli.LanguageReference.md" />
+  </ItemGroup>
+
 </Project>

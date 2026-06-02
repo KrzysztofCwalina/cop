@@ -1,14 +1,82 @@
 # Agent Cop
 
-**Agent Cop** is a static analysis tool that detects and prevents code slop — the architectural violations, convention drift, and design debt that coding agents introduce at machine speed. It ships with built-in checks for common rules and a formal specification language (DSL) for expressing custom requirements that are deterministically enforced in CI.
+**Agent Cop** lets you turn code review feedback into permanent, automated rules — stopping slop before it lands. Describe what you want in plain English, your coding agent writes the rule, and it runs deterministically in CI — no human review needed.
 
-Read the [product pitch](why-agent-cop.md) for the strategic rationale.
+## The Problem
 
-## Why Agent Cop
+Coding agents produce code at machine speed. Without deterministic enforcement, architects become bottlenecked reviewing everything for convention drift and design violations. Natural language instructions (copilot instructions, system prompts) are advisory — agents drift from them, and humans still can't trust the output without manual review.
 
-Coding agents produce 10x–100x the volume of code. Without deterministic enforcement, architects become bottlenecked reviewing everything for slop. Natural language instructions (copilot instructions, system prompts) are advisory — agents drift from them, and humans still can't trust the output without manual review.
+## The Solution
 
-Agent Cop solves this by giving architects a way to **formally specify** their rules in a simple DSL. These rules run as a build step, produce compiler-style errors, and feed directly back to agents for auto-remediation — no human in the loop.
+Agent Cop gives you a formal rule language that coding agents can read and write. The workflow:
+
+1. **Set up agent context** — run `cop init` so the agent knows the language
+2. **Ask for rules** — tell the agent what conventions to enforce
+3. **Rules run in CI** — violations block PRs and feed back to agents automatically
+
+## Quick Start
+
+### 1. Initialize Agent Context
+
+```bash
+cop init
+```
+
+This generates instruction files (`.github/copilot-instructions.md`, `AGENTS.md`) that teach coding agents how to write cop rules. Commit them to your repo.
+
+### 2. Ask the Agent to Write Rules
+
+With context in place, just ask:
+
+> "Write a cop rule that flags any method longer than 50 statements"
+
+> "Add a cop check that all public client types must be sealed"
+
+> "Create a rule that no file in src/Core/ imports from src/Infrastructure/"
+
+The agent reads the instruction files, runs `cop help language` for full syntax reference, and produces working `.cop` code:
+
+```ruby
+import code-analysis
+
+predicate client(Type) => Type.Name:endsWith('Client')
+
+let unsealed-clients = Code.Types:csharp:client:!isSealed
+    :toError('{item.Name} must be sealed')
+
+CHECK(unsealed-clients)
+```
+
+### 3. Run the Rules
+
+```bash
+cop checks.cop
+```
+
+```
+src/BlobClient.cs(15): error: BlobClient must be sealed
+src/QueueClient.cs(8): error: QueueClient must be sealed
+```
+
+Exit code 1 if violations found, 0 if clean — suitable for CI. Agents see these errors and fix them automatically, just like compiler errors.
+
+### 4. The Self-Check Loop
+
+When a coding agent makes a change you don't like, ask it to encode that feedback as a rule:
+
+> "Add a self-check that we never use `Console.WriteLine` — we use our Logger class"
+
+The agent writes the rule, and from that point forward the convention is enforced permanently. One-off code review feedback becomes automated policy.
+
+## Agent Help Commands
+
+Agents use these commands to learn the language on demand:
+
+```bash
+cop help language        # Full language reference (syntax, types, operators)
+cop help <package>       # Package documentation (types, functions, examples)
+cop package list         # List all available packages
+```
 
 ## Installation
 
@@ -25,38 +93,6 @@ For syntax highlighting and completions, install the VS Code extension:
 3. Select `install/vscode-cop/` from this repository (or package it first with `cd install/vscode-cop && npx @vscode/vsce package`)
 
 The extension provides syntax highlighting, keyword completions, and snippet support for `.cop` files.
-
-## Quick Start
-
-Create a file called `checks.cop` in any project folder:
-
-```ruby
-import code-analysis
-
-# Define what a "client type" means
-predicate client(Type) => Type.Name:endsWith('Client')
-
-# Specify the rule: clients must be sealed
-let unsealed-clients = Code.Types:csharp:client:!isSealed
-    :toError('{item.Name} must be sealed')
-
-CHECK(unsealed-clients)
-```
-
-Run it:
-
-```bash
-cop checks.cop
-```
-
-Output:
-
-```
-src/BlobClient.cs(15): error: BlobClient must be sealed
-src/QueueClient.cs(8): error: QueueClient must be sealed
-```
-
-Exit code 1 if violations found, 0 if clean — suitable for CI. Agents see these errors and fix them automatically, just like compiler errors.
 
 ## Running Built-In Checks
 

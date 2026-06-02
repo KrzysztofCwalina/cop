@@ -148,10 +148,14 @@ const categories = [
   {
     "name": "Core",
     "packages": [
+      "checkov",
       "core",
       "files",
       "json",
-      "markdown"
+      "markdown",
+      "semgrep",
+      "spectral",
+      "trivy"
     ]
   },
   {
@@ -169,10 +173,12 @@ const categories = [
     "packages": [
       "csharp",
       "csharp-checks",
+      "csharp-format",
       "csharp-library-azure-checks",
       "csharp-library-checks",
       "csharp-lister",
       "csharp-snippets-checks",
+      "csharp-stylecop",
       "test-nunit-checks"
     ]
   },
@@ -180,10 +186,14 @@ const categories = [
     "name": "Python",
     "packages": [
       "python",
+      "python-bandit",
       "python-checks",
       "python-library-azure-checks",
       "python-library-checks",
       "python-lister",
+      "python-mypy",
+      "python-pylint",
+      "python-ruff",
       "python-snippets-checks"
     ]
   },
@@ -191,11 +201,14 @@ const categories = [
     "name": "JavaScript",
     "packages": [
       "javascript",
+      "javascript-biome",
       "javascript-checks",
+      "javascript-eslint",
       "javascript-library-azure-checks",
       "javascript-library-checks",
       "javascript-lister",
-      "javascript-snippets-checks"
+      "javascript-snippets-checks",
+      "typescript-tsc"
     ]
   },
   {
@@ -220,6 +233,25 @@ const categories = [
 ];
 
 const packages = {
+  "checkov": {
+    "label": "checkov",
+    "overview": "Run Checkov IaC security scanner",
+    "samples": [],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [
+      {
+        "name": "diagnostics",
+        "params": "",
+        "returns": "",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/checkov/src/checkov.cop#L8"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
   "code": {
     "label": "code",
     "overview": "Core type definitions for source code structural analysis",
@@ -2602,6 +2634,25 @@ const packages = {
     "checks": [],
     "commands": []
   },
+  "csharp-format": {
+    "label": "csharp-format",
+    "overview": "Run dotnet format and expose formatting violations",
+    "samples": [],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [
+      {
+        "name": "diagnostics",
+        "params": "",
+        "returns": "",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-format/src/csharp-format.cop#L8"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
   "csharp-library-azure-checks": {
     "label": "csharp-library-azure-checks",
     "overview": "Azure SDK patterns for client library development using Azure.Core or System.ClientModel with TokenCredential support",
@@ -2875,6 +2926,25 @@ const packages = {
     "types": {},
     "predicates": [],
     "functions": [],
+    "checks": [],
+    "commands": []
+  },
+  "csharp-stylecop": {
+    "label": "csharp-stylecop",
+    "overview": "Run StyleCop analyzers via dotnet build and expose diagnostics",
+    "samples": [],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [
+      {
+        "name": "diagnostics",
+        "params": "",
+        "returns": "",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-stylecop/src/csharp-stylecop.cop#L8"
+      }
+    ],
     "checks": [],
     "commands": []
   },
@@ -3266,6 +3336,25 @@ const packages = {
     "checks": [],
     "commands": []
   },
+  "javascript-biome": {
+    "label": "javascript-biome",
+    "overview": "Run Biome and expose diagnostics",
+    "samples": [],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [
+      {
+        "name": "diagnostics",
+        "params": "",
+        "returns": "",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-biome/src/javascript-biome.cop#L8"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
   "javascript-checks": {
     "label": "javascript-checks",
     "overview": "JavaScript and TypeScript coding conventions, correctness checks, and async/await rules for coding agents",
@@ -3279,6 +3368,25 @@ const packages = {
     "types": {},
     "predicates": [],
     "functions": [],
+    "checks": [],
+    "commands": []
+  },
+  "javascript-eslint": {
+    "label": "javascript-eslint",
+    "overview": "Run ESLint and expose diagnostics",
+    "samples": [],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [
+      {
+        "name": "diagnostics",
+        "params": "",
+        "returns": "",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-eslint/src/javascript-eslint.cop#L8"
+      }
+    ],
     "checks": [],
     "commands": []
   },
@@ -3652,6 +3760,25 @@ const packages = {
     "checks": [],
     "commands": []
   },
+  "python-bandit": {
+    "label": "python-bandit",
+    "overview": "Run bandit security scanner and expose diagnostics",
+    "samples": [],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [
+      {
+        "name": "diagnostics",
+        "params": "",
+        "returns": "",
+        "desc": "Returns all bandit diagnostics.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-bandit/src/python-bandit.cop#L10"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
   "python-checks": {
     "label": "python-checks",
     "overview": "Python correctness, style, idiom, quality, and documentation checks for coding agents",
@@ -3819,6 +3946,63 @@ const packages = {
     "checks": [],
     "commands": []
   },
+  "python-mypy": {
+    "label": "python-mypy",
+    "overview": "Run mypy type checker and expose diagnostics",
+    "samples": [],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [
+      {
+        "name": "diagnostics",
+        "params": "",
+        "returns": "",
+        "desc": "Returns all mypy diagnostics.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-mypy/src/python-mypy.cop#L10"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
+  "python-pylint": {
+    "label": "python-pylint",
+    "overview": "Run pylint and expose diagnostics",
+    "samples": [],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [
+      {
+        "name": "diagnostics",
+        "params": "",
+        "returns": "",
+        "desc": "Returns all pylint diagnostics.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-pylint/src/python-pylint.cop#L10"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
+  "python-ruff": {
+    "label": "python-ruff",
+    "overview": "Run Ruff linter and expose diagnostics as cop Violations",
+    "samples": [],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [
+      {
+        "name": "diagnostics",
+        "params": "",
+        "returns": "",
+        "desc": "Returns all ruff diagnostics.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-ruff/src/python-ruff.cop#L10"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
   "python-snippets-checks": {
     "label": "python-snippets-checks",
     "overview": "Validates that Python code snippets in # [START/END] blocks match markdown documentation references",
@@ -3830,6 +4014,44 @@ const packages = {
     "checks": [],
     "commands": []
   },
+  "semgrep": {
+    "label": "semgrep",
+    "overview": "Run Semgrep and expose findings as cop diagnostics",
+    "samples": [],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [
+      {
+        "name": "diagnostics",
+        "params": "",
+        "returns": "",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/semgrep/src/semgrep.cop#L8"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
+  "spectral": {
+    "label": "spectral",
+    "overview": "Run Spectral OpenAPI linter and expose diagnostics",
+    "samples": [],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [
+      {
+        "name": "diagnostics",
+        "params": "",
+        "returns": "",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/spectral/src/spectral.cop#L8"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
   "test-nunit-checks": {
     "label": "test-nunit-checks",
     "overview": "NUnit-specific testing patterns and analyzer references",
@@ -3838,6 +4060,44 @@ const packages = {
     "types": {},
     "predicates": [],
     "functions": [],
+    "checks": [],
+    "commands": []
+  },
+  "trivy": {
+    "label": "trivy",
+    "overview": "Run Trivy vulnerability scanner and expose findings",
+    "samples": [],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [
+      {
+        "name": "diagnostics",
+        "params": "",
+        "returns": "",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/trivy/src/trivy.cop#L8"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
+  "typescript-tsc": {
+    "label": "typescript-tsc",
+    "overview": "Run TypeScript compiler and expose diagnostics",
+    "samples": [],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [
+      {
+        "name": "diagnostics",
+        "params": "",
+        "returns": "",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/typescript-tsc/src/typescript-tsc.cop#L8"
+      }
+    ],
     "checks": [],
     "commands": []
   },
