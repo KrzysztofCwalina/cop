@@ -5,6 +5,7 @@ export let all-violations =
     intrinsics-in-wrong-file +
     types-without-namespace + 
     no-new-interfaces + 
-    layering-violations
+    layering-violations +
+    no-aspnet-in-cli
 
 command main = CHECK(all-violations)

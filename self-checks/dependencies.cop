@@ -1,0 +1,7 @@
+# Dependency checks for the cop project itself
+
+predicate hasAspNetFrameworkRef(Line) => Line.File.Path:matches('cop[\\/]cli[\\/].*\\.csproj$') && Line.Text:matches('FrameworkReference.*Microsoft\\.AspNetCore')
+
+## ASP.NET FrameworkReference breaks single-file publish (adds aspnetcorev2_inprocess.dll)
+export let no-aspnet-in-cli = Lines:hasAspNetFrameworkRef
+    :toError('FrameworkReference to Microsoft.AspNetCore.App breaks single-file publish')
