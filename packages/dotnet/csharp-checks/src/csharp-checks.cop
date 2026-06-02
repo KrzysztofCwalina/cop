@@ -150,6 +150,9 @@ predicate isReadmeInstallPackage(Line) => Line.File.Path:matches('README') && Li
 # .csproj: PackageReference should not have Version attribute (CPM compliance)
 predicate hasPackageRefWithVersion(Line) => Line.File.Path:matches('\\.csproj$') && Line.Text:matches('PackageReference.*Version\s*=')
 
+# .csproj: FrameworkReference to ASP.NET in non-web projects adds unnecessary native DLLs
+predicate hasAspNetFrameworkRef(Line) => Line.File.Path:matches('\\.csproj$') && Line.Text:matches('FrameworkReference.*Microsoft\\.AspNetCore')
+
 ## README: Should not use Install-Package (use dotnet add package)
 export let readme-install-package = mdLines:isReadmeInstallPackage
     :toWarning('Use \'dotnet add package\' instead of \'Install-Package\' in README')
@@ -158,8 +161,12 @@ export let readme-install-package = mdLines:isReadmeInstallPackage
 export let cpm-compliance = xmlLines:hasPackageRefWithVersion
     :toWarning('PackageReference should not specify Version (use Central Package Management)')
 
+## ASP.NET FrameworkReference: breaks single-file publish (adds aspnetcorev2_inprocess.dll)
+export let aspnet-framework-ref = xmlLines:hasAspNetFrameworkRef
+    :toWarning('FrameworkReference to Microsoft.AspNetCore.App breaks single-file publish; remove unless this is a web app')
+
 ## Combined correctness checks
-export let csharp-correctness-checks = var-declarations + dynamic-declarations + thread-sleep-calls + console-calls + base-exception-catches + swallowed-exceptions + configure-await-true-calls + sync-over-async-calls + bare-task-completion-sources + sync-wait-in-async + uri-tostring + type-name-is-keyword + uninstantiated-internal + undisposed-new + readme-install-package + cpm-compliance
+export let csharp-correctness-checks = var-declarations + dynamic-declarations + thread-sleep-calls + console-calls + base-exception-catches + swallowed-exceptions + configure-await-true-calls + sync-over-async-calls + bare-task-completion-sources + sync-wait-in-async + uri-tostring + type-name-is-keyword + uninstantiated-internal + undisposed-new + readme-install-package + cpm-compliance + aspnet-framework-ref
 
 ## Style Checks (StyleCop)
 
