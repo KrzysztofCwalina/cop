@@ -9,16 +9,18 @@ public static class InitCommand
 {
     public static Command Create()
     {
+        var forceOption = new Option<bool>("--force", "Overwrite existing instruction files");
         var command = new Command("init", "Generate agent instruction files for writing cop rules")
         {
+            forceOption
         };
 
-        command.SetAction(_ => Execute());
+        command.SetAction(ctx => Execute(ctx.GetValue(forceOption)));
 
         return command;
     }
 
-    public static int Execute()
+    public static int Execute(bool force = false)
     {
         var cwd = Directory.GetCurrentDirectory();
         int filesCreated = 0;
@@ -26,35 +28,35 @@ public static class InitCommand
         // Generate .github/copilot-instructions.md
         var githubDir = Path.Combine(cwd, ".github");
         var copilotPath = Path.Combine(githubDir, "copilot-instructions.md");
-        if (File.Exists(copilotPath))
+        if (File.Exists(copilotPath) && !force)
         {
-            Console.Error.WriteLine($"Skipped: {GetRelativePath(cwd, copilotPath)} already exists");
+            Console.Error.WriteLine($"Skipped: {GetRelativePath(cwd, copilotPath)} already exists (use --force to overwrite)");
         }
         else
         {
             Directory.CreateDirectory(githubDir);
             File.WriteAllText(copilotPath, GetInstructionContent());
-            Console.WriteLine($"Created: {GetRelativePath(cwd, copilotPath)}");
+            Console.WriteLine($"{(force && File.Exists(copilotPath) ? "Updated" : "Created")}: {GetRelativePath(cwd, copilotPath)}");
             filesCreated++;
         }
 
         // Generate AGENTS.md
         var agentsPath = Path.Combine(cwd, "AGENTS.md");
-        if (File.Exists(agentsPath))
+        if (File.Exists(agentsPath) && !force)
         {
-            Console.Error.WriteLine($"Skipped: AGENTS.md already exists");
+            Console.Error.WriteLine($"Skipped: AGENTS.md already exists (use --force to overwrite)");
         }
         else
         {
             File.WriteAllText(agentsPath, GetInstructionContent());
-            Console.WriteLine($"Created: AGENTS.md");
+            Console.WriteLine($"{(force && File.Exists(agentsPath) ? "Updated" : "Created")}: AGENTS.md");
             filesCreated++;
         }
 
         if (filesCreated > 0)
             Console.WriteLine($"\n{filesCreated} file(s) created. Agents will now discover cop language context automatically.");
         else
-            Console.WriteLine("\nNo files created (all already exist).");
+            Console.WriteLine("\nNo files created (all already exist). Use --force to overwrite.");
 
         return 0;
     }
@@ -269,6 +271,21 @@ public static class InitCommand
             6. **After writing rules, run `cop verify`** to check for errors before execution
             7. **Test with** `cop test` after writing rules
             8. **Validate syntax only** with `cop syntax <file.cop>` (lighter than verify)
+
+            ## Reporting Issues
+
+            If cop produces confusing errors, unexpected behavior, or you cannot figure out how to
+            accomplish something after consulting `cop help language` and `cop help <package>`,
+            please report it so we can improve cop:
+
+            ```bash
+            gh issue create --repo KrzysztofCwalina/cop --label agent-feedback \
+              --title "Agent feedback: <brief description of the problem>" \
+              --body "## What I tried\n<the cop command or code>\n\n## What happened\n<error or unexpected output>\n\n## What I expected\n<desired behavior>"
+            ```
+
+            Only report genuine blocking problems (not style preferences). This feedback loop
+            helps improve cop for everyone.
             """;
     }
 }

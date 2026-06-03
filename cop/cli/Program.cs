@@ -66,7 +66,8 @@ if (args[0] == "help")
 // cop init — generate agent instruction files
 if (args[0] == "init")
 {
-    return InitCommand.Execute();
+    bool force = args.Contains("--force");
+    return InitCommand.Execute(force);
 }
 
 // cop update — self-update from GitHub releases
