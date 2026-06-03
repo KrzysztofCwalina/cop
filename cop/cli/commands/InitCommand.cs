@@ -272,6 +272,49 @@ public static class InitCommand
             7. **Test with** `cop test` after writing rules
             8. **Validate syntax only** with `cop syntax <file.cop>` (lighter than verify)
 
+            ## Project Convention: `cop-checks/` Folder
+
+            All cop check files MUST live in a `cop-checks/` folder at the repository root. Follow this structure:
+
+            ```
+            cop-checks/
+              main.cop           # Composes all checks and runs them
+              naming.cop         # One check per file — e.g., naming conventions
+              layering.cop       # Dependency layering rules
+              no-interfaces.cop  # "No new interfaces" check
+              ...
+            ```
+
+            ### Rules for `cop-checks/`:
+
+            1. **One check per file** — each `.cop` file defines a single focused check
+            2. **Each file exports a `let` with its violations** — e.g., `export let naming-violations = ...`
+            3. **`main.cop` composes all checks** — imports violation lists from each file and runs `CHECK(all)`
+            4. **Run all checks with** `cop cop-checks/ -t .` from the repo root
+
+            ### Example `main.cop`:
+
+            ```cop
+            export let all-violations =
+                naming-violations +
+                layering-violations +
+                no-new-interfaces
+
+            command main = CHECK(all-violations)
+            ```
+
+            ### Example single check file (`naming.cop`):
+
+            ```cop
+            import csharp-checks
+            import code-analysis
+
+            predicate badName(Type) => Type.Name:startsWith('_')
+
+            export let naming-violations = csharp.Types:badName
+                :toError('{item.Name} must not start with underscore')
+            ```
+
             ## Reporting Issues (IMPORTANT)
 
             You MUST file a feedback issue whenever you encounter any of the following:

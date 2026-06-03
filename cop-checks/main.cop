@@ -1,5 +1,5 @@
 # Cop Self-Checks
-# Run all self-checks: cop self-checks/main.cop -t .
+# Run all checks: cop cop-checks/ -t .
 
 export let all-violations = 
     intrinsics-in-wrong-file +

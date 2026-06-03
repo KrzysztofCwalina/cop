@@ -1,6 +1,9 @@
 # Dependency checks for the cop project itself
-# Uses line-based matching since self-checks run as standalone .cop files
+# Uses line-based matching since checks run as standalone .cop files
 # (provider DLLs aren't loaded for non-package scripts)
+
+import csharp-checks
+import code-analysis
 
 predicate hasAspNetFrameworkRef(Line) => Line.File.Path:matches('cop[\\/]cli[\\/].*\\.csproj$') && Line.Text:matches('FrameworkReference.*Microsoft\\.AspNetCore')
 

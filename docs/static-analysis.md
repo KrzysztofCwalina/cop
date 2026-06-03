@@ -319,7 +319,7 @@ Examples:
 
 ### Self-Check as CI Gate
 
-Once self-checks live in your `cop.cop`, they run in CI like any other check:
+Once checks live in your `cop-checks/` folder, they run in CI like any other check:
 
 ```yaml
 - name: Run cop checks
