@@ -112,17 +112,33 @@ public static class HelpCommand
             return 0;
         }
 
-        Console.WriteLine("Commands:");
+        bool color = ConsoleMarkdown.UseColor;
+        if (color)
+            Console.WriteLine($"{ConsoleMarkdown.Bold}Commands:{ConsoleMarkdown.Reset}");
+        else
+            Console.WriteLine("Commands:");
+
         foreach (var (name, doc, parameters) in commandEntries)
         {
             var displayName = parameters is { Count: > 0 }
                 ? $"{name}({string.Join(", ", parameters)})"
                 : name;
 
-            if (!string.IsNullOrEmpty(doc))
-                Console.WriteLine($"  {displayName,-30} {doc}");
+            if (color)
+            {
+                var styledName = $"{ConsoleMarkdown.Bold}{displayName}{ConsoleMarkdown.Reset}";
+                if (!string.IsNullOrEmpty(doc))
+                    Console.WriteLine($"  {styledName,-42} {ConsoleMarkdown.Gray}{doc}{ConsoleMarkdown.Reset}");
+                else
+                    Console.WriteLine($"  {styledName}");
+            }
             else
-                Console.WriteLine($"  {displayName}");
+            {
+                if (!string.IsNullOrEmpty(doc))
+                    Console.WriteLine($"  {displayName,-30} {doc}");
+                else
+                    Console.WriteLine($"  {displayName}");
+            }
         }
 
         Console.WriteLine();
@@ -132,60 +148,31 @@ public static class HelpCommand
 
     private static void PrintHelpFooter()
     {
-        Console.WriteLine("Other help commands:");
-        Console.WriteLine("  cop help <package>     Show exports from an imported package");
-        Console.WriteLine("  cop help language      Full language reference");
+        bool color = ConsoleMarkdown.UseColor;
+        if (color)
+        {
+            Console.WriteLine($"{ConsoleMarkdown.Gray}Other help commands:{ConsoleMarkdown.Reset}");
+            Console.WriteLine($"  {ConsoleMarkdown.Cyan}cop help <package>{ConsoleMarkdown.Reset}     Show exports from an imported package");
+            Console.WriteLine($"  {ConsoleMarkdown.Cyan}cop help language{ConsoleMarkdown.Reset}      Full language reference");
+        }
+        else
+        {
+            Console.WriteLine("Other help commands:");
+            Console.WriteLine("  cop help <package>     Show exports from an imported package");
+            Console.WriteLine("  cop help language      Full language reference");
+        }
     }
 
     public static int ExecuteLanguageHelp()
     {
-        Console.WriteLine(LanguageReference.Content);
+        ConsoleMarkdown.WriteMarkdown(LanguageReference.Content);
         return 0;
     }
 
     public static int ExecutePackageHelp(string packageName)
     {
-        var cwd = Directory.GetCurrentDirectory();
-        string? packageDir = null;
-
-        // Collect feed paths the same way the engine does:
-        // 1. Walk up from cwd looking for packages/ directories
-        var feedPaths = new List<string>();
-        var walkDir = cwd;
-        while (walkDir is not null)
-        {
-            var packagesDir = Path.Combine(walkDir, "packages");
-            if (Directory.Exists(packagesDir))
-                feedPaths.Add(packagesDir);
-            walkDir = Path.GetDirectoryName(walkDir);
-        }
-
-        // 2. Check .cop/packages/ local restored packages
-        var localRestored = Path.Combine(cwd, ".cop", "packages");
-        if (Directory.Exists(localRestored) && !feedPaths.Contains(localRestored))
-            feedPaths.Add(localRestored);
-
-        // 3. Check global cache ~/.cop/packages/
-        var globalCache = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".cop", "packages");
-        if (Directory.Exists(globalCache) && !feedPaths.Contains(globalCache))
-            feedPaths.Add(globalCache);
-
-        // Search all feed paths using ImportResolver's recursive logic
-        foreach (var feedPath in feedPaths)
-        {
-            packageDir = ImportResolver.FindPackageDir(feedPath, packageName);
-            if (packageDir != null) break;
-        }
-
-        // Auto-restore if not found locally
-        if (packageDir == null)
-        {
-            var restored = RunCommand.AutoRestorePackagesAsync([packageName], globalCache).GetAwaiter().GetResult();
-            if (restored)
-                packageDir = ImportResolver.FindPackageDir(globalCache, packageName);
-        }
+        var feedPaths = PackageResolver.GetFeedPaths();
+        var packageDir = PackageResolver.ResolvePackageDir(packageName, feedPaths);
 
         if (packageDir == null)
         {
@@ -206,10 +193,16 @@ public static class HelpCommand
 
     private static int PrintPackageHelp(string packageName, string packageDir)
     {
-        Console.WriteLine($"# {packageName}");
+        bool color = ConsoleMarkdown.UseColor;
+
+        // Title
+        if (color)
+            Console.WriteLine($"{ConsoleMarkdown.Bold}{ConsoleMarkdown.Cyan}{packageName}{ConsoleMarkdown.Reset}");
+        else
+            Console.WriteLine(packageName);
         Console.WriteLine();
 
-        // Read README.md if present
+        // Read README.md if present — render through markdown formatter
         var readmePath = Path.Combine(packageDir, "README.md");
         if (File.Exists(readmePath))
         {
@@ -219,8 +212,8 @@ public static class HelpCommand
             int startLine = 0;
             if (lines.Length > 0 && lines[0].TrimStart().StartsWith($"# {packageName}", StringComparison.OrdinalIgnoreCase))
                 startLine = 1;
-            for (int i = startLine; i < lines.Length; i++)
-                Console.WriteLine(lines[i].TrimEnd());
+            var readmeBody = string.Join('\n', lines.Skip(startLine));
+            ConsoleMarkdown.WriteMarkdown(readmeBody.Trim());
             Console.WriteLine();
         }
 
@@ -302,15 +295,17 @@ public static class HelpCommand
             }
         }
 
-        // Print exports
+        // Print exports with colorization
         if (enums.Count > 0)
         {
-            Console.WriteLine("## Enums");
+            ConsoleMarkdown.WriteHeader("Enums");
             Console.WriteLine();
             foreach (var (name, doc, members) in enums)
             {
-                Console.Write($"  enum {name} = {members}");
-                if (doc != null) Console.Write($"    # {doc}");
+                Console.Write("  ");
+                ConsoleMarkdown.WriteKeywordName("enum", name);
+                Console.Write($" = {members}");
+                if (doc != null) { Console.Write("    "); ConsoleMarkdown.WriteDocComment(doc); }
                 Console.WriteLine();
             }
             Console.WriteLine();
@@ -318,12 +313,14 @@ public static class HelpCommand
 
         if (flags.Count > 0)
         {
-            Console.WriteLine("## Flags");
+            ConsoleMarkdown.WriteHeader("Flags");
             Console.WriteLine();
             foreach (var (name, doc, members) in flags)
             {
-                Console.Write($"  flags {name} = {members}");
-                if (doc != null) Console.Write($"    # {doc}");
+                Console.Write("  ");
+                ConsoleMarkdown.WriteKeywordName("flags", name);
+                Console.Write($" = {members}");
+                if (doc != null) { Console.Write("    "); ConsoleMarkdown.WriteDocComment(doc); }
                 Console.WriteLine();
             }
             Console.WriteLine();
@@ -331,15 +328,21 @@ public static class HelpCommand
 
         if (types.Count > 0)
         {
-            Console.WriteLine("## Types");
+            ConsoleMarkdown.WriteHeader("Types");
             Console.WriteLine();
             foreach (var (name, doc, props) in types)
             {
                 if (doc != null)
-                    Console.WriteLine($"  ## {doc}");
-                Console.WriteLine($"  type {name} = {{");
+                {
+                    Console.Write("  ");
+                    ConsoleMarkdown.WriteDocComment(doc);
+                    Console.WriteLine();
+                }
+                Console.Write("  ");
+                ConsoleMarkdown.WriteKeywordName("type", name);
+                Console.WriteLine(" = {");
                 foreach (var prop in props)
-                    Console.WriteLine($"  {prop}");
+                    WritePropertyLine("    " + prop.TrimStart());
                 Console.WriteLine("  }");
                 Console.WriteLine();
             }
@@ -347,12 +350,13 @@ public static class HelpCommand
 
         if (predicates.Count > 0)
         {
-            Console.WriteLine("## Predicates");
+            ConsoleMarkdown.WriteHeader("Predicates");
             Console.WriteLine();
             foreach (var (name, doc, paramType) in predicates)
             {
-                Console.Write($"  predicate {name}({paramType})");
-                if (doc != null) Console.Write($"    # {doc}");
+                Console.Write("  ");
+                ConsoleMarkdown.WriteKeywordName("predicate", $"{name}({paramType})");
+                if (doc != null) { Console.Write("    "); ConsoleMarkdown.WriteDocComment(doc); }
                 Console.WriteLine();
             }
             Console.WriteLine();
@@ -360,12 +364,13 @@ public static class HelpCommand
 
         if (functions.Count > 0)
         {
-            Console.WriteLine("## Functions");
+            ConsoleMarkdown.WriteHeader("Functions");
             Console.WriteLine();
             foreach (var (name, doc, sig) in functions)
             {
-                Console.Write($"  {sig}");
-                if (doc != null) Console.Write($"    # {doc}");
+                Console.Write("  ");
+                WriteColoredSignature(sig);
+                if (doc != null) { Console.Write("    "); ConsoleMarkdown.WriteDocComment(doc); }
                 Console.WriteLine();
             }
             Console.WriteLine();
@@ -373,12 +378,16 @@ public static class HelpCommand
 
         if (commands.Count > 0)
         {
-            Console.WriteLine("## Commands");
+            ConsoleMarkdown.WriteHeader("Commands");
             Console.WriteLine();
             foreach (var (name, doc) in commands)
             {
-                Console.Write($"  {name}");
-                if (doc != null) Console.Write($"    # {doc}");
+                Console.Write("  ");
+                if (color)
+                    Console.Write($"{ConsoleMarkdown.Bold}{name}{ConsoleMarkdown.Reset}");
+                else
+                    Console.Write(name);
+                if (doc != null) { Console.Write("    "); ConsoleMarkdown.WriteDocComment(doc); }
                 Console.WriteLine();
             }
             Console.WriteLine();
@@ -391,22 +400,76 @@ public static class HelpCommand
             var sampleFiles = Directory.GetFiles(samplesDir, "*.cop", SearchOption.TopDirectoryOnly);
             if (sampleFiles.Length > 0)
             {
-                Console.WriteLine("## Samples");
+                ConsoleMarkdown.WriteHeader("Samples");
                 Console.WriteLine();
                 foreach (var sampleFile in sampleFiles)
                 {
                     var sampleName = Path.GetFileNameWithoutExtension(sampleFile);
-                    Console.WriteLine($"### {sampleName}");
+                    ConsoleMarkdown.WriteHeader(sampleName, 3);
                     Console.WriteLine();
-                    Console.WriteLine("```cop");
-                    Console.WriteLine(File.ReadAllText(sampleFile).TrimEnd());
-                    Console.WriteLine("```");
+                    var sampleContent = File.ReadAllText(sampleFile).TrimEnd();
+                    WriteCopSource(sampleContent);
+                    Console.WriteLine();
                     Console.WriteLine();
                 }
             }
         }
 
         return 0;
+    }
+
+    /// <summary>
+    /// Writes a property line with type annotation colorized.
+    /// Input format: "  PropName : TypeName" or "  PropName : TypeName?"
+    /// </summary>
+    private static void WritePropertyLine(string prop)
+    {
+        bool color = ConsoleMarkdown.UseColor;
+        int colonIdx = prop.IndexOf(" : ", StringComparison.Ordinal);
+        if (colonIdx < 0 || !color)
+        {
+            Console.WriteLine(prop);
+            return;
+        }
+
+        var namePart = prop[..colonIdx];
+        var typePart = prop[(colonIdx + 3)..];
+        Console.Write(namePart);
+        ConsoleMarkdown.WriteTypeAnnotation(typePart);
+        Console.WriteLine();
+    }
+
+    /// <summary>
+    /// Writes a function signature with keyword "function" colored.
+    /// Input format: "function name(params) : ReturnType"
+    /// </summary>
+    private static void WriteColoredSignature(string sig)
+    {
+        bool color = ConsoleMarkdown.UseColor;
+        if (!color || !sig.StartsWith("function "))
+        {
+            Console.Write(sig);
+            return;
+        }
+
+        // Color the "function" keyword
+        Console.Write($"{ConsoleMarkdown.Cyan}function{ConsoleMarkdown.Reset} ");
+
+        var rest = sig["function ".Length..];
+
+        // Find the return type annotation
+        int colonIdx = rest.LastIndexOf(") : ", StringComparison.Ordinal);
+        if (colonIdx >= 0)
+        {
+            var nameAndParams = rest[..(colonIdx + 1)];
+            var returnType = rest[(colonIdx + 4)..];
+            Console.Write($"{ConsoleMarkdown.Bold}{nameAndParams}{ConsoleMarkdown.Reset}");
+            ConsoleMarkdown.WriteTypeAnnotation(returnType);
+        }
+        else
+        {
+            Console.Write($"{ConsoleMarkdown.Bold}{rest}{ConsoleMarkdown.Reset}");
+        }
     }
 
     private static string FormatFunctionSignature(FunctionDecl fd)
@@ -425,5 +488,86 @@ public static class HelpCommand
     {
         var name = tr.IsCollection ? $"[{tr.Name}]" : tr.Name;
         return isOptional ? $"{name}?" : name;
+    }
+
+    private static readonly HashSet<string> CopKeywords = new(StringComparer.Ordinal)
+    {
+        "import", "export", "let", "type", "enum", "flags", "predicate", "function",
+        "command", "foreach", "async", "if", "else", "match", "true", "false", "nic"
+    };
+
+    /// <summary>
+    /// Writes cop source code with syntax highlighting:
+    /// keywords in cyan, comments in gray, strings in green.
+    /// </summary>
+    private static void WriteCopSource(string source)
+    {
+        bool color = ConsoleMarkdown.UseColor;
+        var lines = source.Split('\n');
+
+        foreach (var rawLine in lines)
+        {
+            var line = rawLine.TrimEnd('\r');
+
+            if (!color)
+            {
+                Console.WriteLine($"  {line}");
+                continue;
+            }
+
+            // Comment lines
+            if (line.TrimStart().StartsWith('#'))
+            {
+                Console.WriteLine($"  {ConsoleMarkdown.Gray}{line}{ConsoleMarkdown.Reset}");
+                continue;
+            }
+
+            // Colorize the line token by token
+            Console.Write("  ");
+            WriteCopLine(line);
+            Console.WriteLine();
+        }
+    }
+
+    private static void WriteCopLine(string line)
+    {
+        int i = 0;
+        while (i < line.Length)
+        {
+            // Inline comment
+            if (line[i] == '#')
+            {
+                Console.Write($"{ConsoleMarkdown.Gray}{line[i..]}{ConsoleMarkdown.Reset}");
+                return;
+            }
+
+            // String literal (single quotes)
+            if (line[i] == '\'')
+            {
+                int end = line.IndexOf('\'', i + 1);
+                if (end < 0) end = line.Length - 1;
+                var str = line[i..(end + 1)];
+                Console.Write($"{ConsoleMarkdown.Green}{str}{ConsoleMarkdown.Reset}");
+                i = end + 1;
+                continue;
+            }
+
+            // Identifier or keyword
+            if (char.IsLetter(line[i]) || line[i] == '_')
+            {
+                int start = i;
+                while (i < line.Length && (char.IsLetterOrDigit(line[i]) || line[i] == '_'))
+                    i++;
+                var word = line[start..i];
+                if (CopKeywords.Contains(word))
+                    Console.Write($"{ConsoleMarkdown.Cyan}{word}{ConsoleMarkdown.Reset}");
+                else
+                    Console.Write(word);
+                continue;
+            }
+
+            Console.Write(line[i]);
+            i++;
+        }
     }
 }

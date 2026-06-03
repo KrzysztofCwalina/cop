@@ -9,6 +9,7 @@
     <PublishReadyToRun>true</PublishReadyToRun>
     <SelfContained>false</SelfContained>
     <AssemblyName>cop</AssemblyName>
+    <Version>0.11.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

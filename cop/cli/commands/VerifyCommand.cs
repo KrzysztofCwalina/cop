@@ -259,27 +259,6 @@ public static class VerifyCommand
         }
     }
 
-    private static List<string> FindFeedPaths(string scriptsDir)
-    {
-        var paths = new List<string>();
-
-        // ~/.cop/packages/
-        var cachePath = Path.Combine(
-            System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
-            ".cop", "packages");
-        if (Directory.Exists(cachePath))
-            paths.Add(cachePath);
-
-        // Walk up from scriptsDir looking for packages/ directories
-        var dir = scriptsDir;
-        while (dir is not null)
-        {
-            var packagesDir = Path.Combine(dir, "packages");
-            if (Directory.Exists(packagesDir))
-                paths.Add(packagesDir);
-            dir = Path.GetDirectoryName(dir);
-        }
-
-        return paths;
-    }
+    private static List<string> FindFeedPaths(string scriptsDir) =>
+        PackageResolver.GetFeedPaths(scriptsDir);
 }

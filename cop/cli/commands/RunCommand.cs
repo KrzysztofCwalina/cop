@@ -264,24 +264,20 @@ public static class RunCommand
         string rootPath = target != null ? Path.GetFullPath(target) : Directory.GetCurrentDirectory();
         Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(ColorDiagLine(msg)) : null;
 
-        // Discover local feed paths (walking up from target AND CWD to find packages/ dirs)
-        var feedPaths = FindFeedPaths(rootPath);
+        // Discover feed paths from both rootPath and CWD (includes global cache)
+        var feedPaths = PackageResolver.GetFeedPaths(rootPath);
         var cwd = Directory.GetCurrentDirectory();
         if (!string.Equals(Path.GetFullPath(cwd), Path.GetFullPath(rootPath), StringComparison.OrdinalIgnoreCase))
         {
-            foreach (var p in FindFeedPaths(cwd))
+            foreach (var p in PackageResolver.GetFeedPaths(cwd))
             {
                 if (!feedPaths.Contains(p, StringComparer.OrdinalIgnoreCase))
                     feedPaths.Add(p);
             }
         }
 
-        // ~/.cop/packages/ is always a feed path (auto-restored packages live here)
-        var cachePath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".cop", "packages");
-
         // Auto-restore any packages not found locally from configured GitHub feeds
+        var cachePath = PackageResolver.GlobalCachePath;
         var missing = FindMissingPackages(packages, feedPaths, cachePath);
         if (missing.Count > 0)
         {
@@ -290,7 +286,7 @@ public static class RunCommand
                 return 2;
         }
 
-        // Ensure cache path is in feed list
+        // Ensure cache path is in feed list after restore
         if (Directory.Exists(cachePath) && !feedPaths.Contains(cachePath))
             feedPaths.Add(cachePath);
 
@@ -384,26 +380,8 @@ public static class RunCommand
         => value.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
         || value.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
 
-    private static string[] FindFeedPathsFromCwd()
-    {
-        var paths = new List<string>();
-
-        // Include ~/.cop/packages/ (auto-restored packages)
-        var cachePath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cop", "packages");
-        if (Directory.Exists(cachePath))
-            paths.Add(cachePath);
-
-        var dir = Directory.GetCurrentDirectory();
-        while (dir is not null)
-        {
-            var packagesDir = Path.Combine(dir, "packages");
-            if (Directory.Exists(packagesDir))
-                paths.Add(packagesDir);
-            dir = Path.GetDirectoryName(dir);
-        }
-        return paths.ToArray();
-    }
+    private static string[] FindFeedPathsFromCwd() =>
+        PackageResolver.GetFeedPaths().ToArray();
 
     private static int HandleResult(EngineResult result, string? format, string rootPath)
     {
@@ -540,8 +518,14 @@ public static class RunCommand
 
         if (imports.Count == 0) return;
 
-        // Determine available feed paths (same as FindFeedPathsFromCwd logic)
-        var feedPaths = FindFeedPathsFromCwd();
+        // Determine available feed paths (includes global cache + walk-up from cwd and scriptsDir)
+        var feedPaths = PackageResolver.GetFeedPaths();
+        // Also include walk-up from scriptsDir if different from cwd
+        foreach (var p in PackageResolver.GetFeedPaths(scriptsDir))
+        {
+            if (!feedPaths.Contains(p, StringComparer.OrdinalIgnoreCase))
+                feedPaths.Add(p);
+        }
 
         // Find imports that can't be resolved from any known path
         var missing = new List<string>();
@@ -554,21 +538,6 @@ public static class RunCommand
                 {
                     found = true;
                     break;
-                }
-            }
-            // Also check scriptsDir walk-up paths (Engine's FindFeedPaths)
-            if (!found)
-            {
-                var dir = scriptsDir;
-                while (dir is not null)
-                {
-                    var packagesDir = Path.Combine(dir, "packages");
-                    if (Directory.Exists(packagesDir) && ImportResolver.FindPackageDir(packagesDir, imp) is not null)
-                    {
-                        found = true;
-                        break;
-                    }
-                    dir = Path.GetDirectoryName(dir);
                 }
             }
             if (!found)
@@ -677,23 +646,6 @@ public static class RunCommand
         {
             Console.Error.WriteLine($"{downloaded.Count} package(s) restored successfully");
         }
-    }
-
-    /// <summary>
-    /// Walks up from startDir to find packages/ directories (for package mode).
-    /// </summary>
-    private static List<string> FindFeedPaths(string startDir)
-    {
-        var paths = new List<string>();
-        var dir = startDir;
-        while (dir is not null)
-        {
-            var packagesDir = Path.Combine(dir, "packages");
-            if (Directory.Exists(packagesDir))
-                paths.Add(packagesDir);
-            dir = Path.GetDirectoryName(dir);
-        }
-        return paths;
     }
 
     /// <summary>

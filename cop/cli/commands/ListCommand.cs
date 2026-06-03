@@ -31,37 +31,12 @@ public static class ListCommand
 
     public static int Execute(string packageName)
     {
-        // Find the package in feed paths
-        var feedPaths = FindFeedPaths();
-        string? packageDir = null;
-
-        foreach (var feed in feedPaths)
-        {
-            var candidate = ImportResolver.FindPackageDir(Path.GetFullPath(feed), packageName);
-            if (candidate != null)
-            {
-                packageDir = candidate;
-                break;
-            }
-        }
+        var packageDir = PackageResolver.ResolvePackageDir(packageName);
 
         if (packageDir == null)
         {
-            // Try auto-restore
-            var cachePath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                ".cop", "packages");
-            var restored = RunCommand.AutoRestorePackagesAsync([packageName], cachePath).GetAwaiter().GetResult();
-            if (restored)
-            {
-                packageDir = ImportResolver.FindPackageDir(cachePath, packageName);
-            }
-
-            if (packageDir == null)
-            {
-                Console.Error.WriteLine($"Error: Package '{packageName}' not found.");
-                return 1;
-            }
+            Console.Error.WriteLine($"Error: Package '{packageName}' not found.");
+            return 1;
         }
 
         // Find .cop source files
@@ -208,26 +183,5 @@ public static class ListCommand
         if (expr is Cop.Lang.Ast.BinaryExpr { Op: BinaryOp.Add } bin)
             return CountBinaryAddElements(bin.Left) + CountBinaryAddElements(bin.Right);
         return 1;
-    }
-
-    private static List<string> FindFeedPaths()
-    {
-        var paths = new List<string>();
-
-        var cachePath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".cop", "packages");
-        if (Directory.Exists(cachePath))
-            paths.Add(cachePath);
-
-        var dir = Directory.GetCurrentDirectory();
-        while (dir != null)
-        {
-            var packagesDir = Path.Combine(dir, "packages");
-            if (Directory.Exists(packagesDir))
-                paths.Add(packagesDir);
-            dir = Path.GetDirectoryName(dir);
-        }
-        return paths;
     }
 }
