@@ -35,6 +35,7 @@
   <!-- Embedded resources for cop help language -->
   <ItemGroup>
     <EmbeddedResource Include="..\..\docs\language-reference.md" LogicalName="Cop.Cli.LanguageReference.md" />
+    <EmbeddedResource Include="resources\init-instructions.md" LogicalName="Cop.Cli.InitInstructions.md" />
   </ItemGroup>
 
 </Project>
