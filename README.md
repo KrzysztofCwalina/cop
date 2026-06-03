@@ -463,7 +463,7 @@ Cop's exit codes make it easy to integrate into CI pipelines:
 
 ## Next Steps
 
-- Read [Why Agent Cop](why-agent-cop.md) for the product strategy and rationale
+- Read [Why Agent Cop](docs/why-agent-cop.md) for the product strategy and rationale
 - Read the [Language Reference](docs/language-reference.md) for the full specification DSL syntax
 - Read the [CLI Reference](docs/cli-reference.md) for all commands and options
 - Read [Static Analysis with Cop](docs/static-analysis.md) for writing source code checks
