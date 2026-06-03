@@ -279,16 +279,20 @@ If the package is not found locally, run `cop package restore` first.
 Generate agent instruction files for coding agents (GitHub Copilot, Claude Code) so they can write cop rules in your project.
 
 ```bash
-cop init
+cop init [--force]
 ```
+
+| Option | Description |
+|--------|-------------|
+| `--force` | Overwrite existing instruction files |
 
 Creates:
 - `.github/copilot-instructions.md` — discovered automatically by GitHub Copilot
 - `AGENTS.md` — discovered automatically by Claude Code
 
-The files contain a concise cop language overview, common patterns, and instructions pointing agents to `cop help language` and `cop help <package>` for full reference.
+The files contain a concise cop language overview, common patterns, instructions pointing agents to `cop help language` and `cop help <package>` for full reference, and guidance for reporting issues back to the cop project.
 
-Skips files that already exist. Run once per project, then commit the generated files.
+Skips files that already exist (use `--force` to overwrite). Run once per project, then commit the generated files.
 
 ### Example
 

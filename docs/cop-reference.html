@@ -1885,7 +1885,36 @@ const packages = {
     "collections": [],
     "types": {},
     "predicates": [],
-    "functions": [],
+    "functions": [
+      {
+        "name": "types",
+        "params": "",
+        "returns": "[Type]",
+        "desc": "Returns all types defined in .cop source files.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/cop/src/cop.cop#L13"
+      },
+      {
+        "name": "statements",
+        "params": "",
+        "returns": "[Statement]",
+        "desc": "Returns all statements in .cop source files.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/cop/src/cop.cop#L16"
+      },
+      {
+        "name": "lines",
+        "params": "",
+        "returns": "[Line]",
+        "desc": "Returns all source lines in .cop source files.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/cop/src/cop.cop#L19"
+      },
+      {
+        "name": "files",
+        "params": "",
+        "returns": "[File]",
+        "desc": "Returns all .cop source files.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/cop/src/cop.cop#L22"
+      }
+    ],
     "checks": [],
     "commands": []
   },
