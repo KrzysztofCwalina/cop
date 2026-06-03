@@ -120,7 +120,12 @@ public static class ProviderLoader
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            errors.Add($"Failed to load provider '{metadata.Name}': {ex.Message}");
+            var detail = ex.Message;
+            if (string.IsNullOrWhiteSpace(detail))
+                detail = ex.InnerException?.Message ?? $"{ex.GetType().Name} (no detail)";
+            if (ex.InnerException != null && !string.IsNullOrWhiteSpace(ex.InnerException.Message) && !detail.Contains(ex.InnerException.Message))
+                detail += $" -> {ex.InnerException.Message}";
+            errors.Add($"Failed to load provider '{metadata.Name}': {detail}");
             return null;
         }
     }

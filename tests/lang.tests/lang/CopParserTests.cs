@@ -292,6 +292,58 @@ function MAIN() = {
     }
 
     [Test]
+    public void Parse_Expression_FilterChain_MultiLine()
+    {
+        var source = "let v = items():foo\n    :bar('msg')";
+        var module = CopParser.Parse(source, "test.cop");
+        // Should parse as a single let with chained filters: items():foo:bar('msg')
+        Assert.That(module.Declarations, Has.Count.EqualTo(1));
+        var letDecl = (LetDecl)module.Declarations[0];
+        Assert.That(letDecl.Value, Is.TypeOf<FilterExpr>());
+        var outer = (FilterExpr)letDecl.Value;
+        // outer predicate should be bar('msg')
+        Assert.That(outer.Predicate, Is.TypeOf<CallExpr>());
+        var barCall = (CallExpr)outer.Predicate;
+        Assert.That(((IdentifierExpr)barCall.Callee).Name, Is.EqualTo("bar"));
+        // inner collection should be items():foo
+        Assert.That(outer.Collection, Is.TypeOf<FilterExpr>());
+        var inner = (FilterExpr)outer.Collection;
+        Assert.That(((IdentifierExpr)inner.Predicate).Name, Is.EqualTo("foo"));
+    }
+
+    [Test]
+    public void Parse_Expression_FilterChain_MultiLine_WithCommand()
+    {
+        // Exact repro from issue #4
+        var source = "export let v = items():usesHttpClient\n    :toError('msg')\ncommand main = foreach v => '{item.Message}'";
+        var module = CopParser.Parse(source, "test.cop");
+        // Should have 2 declarations: let + command
+        Assert.That(module.Declarations, Has.Count.EqualTo(2));
+        var letDecl = (LetDecl)module.Declarations[0];
+        Assert.That(letDecl.Name, Is.EqualTo("v"));
+        Assert.That(letDecl.Value, Is.TypeOf<FilterExpr>());
+        var outer = (FilterExpr)letDecl.Value;
+        Assert.That(outer.Predicate, Is.TypeOf<CallExpr>());
+        var toErrorCall = (CallExpr)outer.Predicate;
+        Assert.That(((IdentifierExpr)toErrorCall.Callee).Name, Is.EqualTo("toError"));
+    }
+
+    [Test]
+    public void Parse_Expression_FilterChain_MultiLine_ColonInTemplate()
+    {
+        // Exact string from issue #4 with colon inside template interpolation
+        var source = "export let v = items():usesHttpClient\n    :toError('msg {item.File.Path}:{item.Number}')\ncommand main = foreach v => '{item.Message}'";
+        var module = CopParser.Parse(source, "test.cop");
+        // Should have 2 declarations: let + command
+        Assert.That(module.Declarations, Has.Count.EqualTo(2));
+        var letDecl = (LetDecl)module.Declarations[0];
+        Assert.That(letDecl.Name, Is.EqualTo("v"));
+        Assert.That(letDecl.Value, Is.TypeOf<FilterExpr>());
+        var outer = (FilterExpr)letDecl.Value;
+        Assert.That(outer.Predicate, Is.TypeOf<CallExpr>());
+    }
+
+    [Test]
     public void Parse_Expression_ListLiteral()
     {
         var source = "let x = ['a', 'b', 'c']";

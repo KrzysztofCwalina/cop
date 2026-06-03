@@ -44,7 +44,7 @@ public static class Engine
     /// <summary>
     /// Discovers .cop scripts and source files, then runs all commands.
     /// </summary>
-    public static EngineResult Run(string scriptsDir, string rootPath, string? commandName = null, string[]? programArgs = null, string[]? commandFilter = null, Action<string>? diagLog = null, bool assertMode = false, string[]? additionalFeedPaths = null)
+    public static EngineResult Run(string scriptsDir, string rootPath, string? commandName = null, string[]? programArgs = null, string[]? commandFilter = null, Action<string>? diagLog = null, bool assertMode = false, string[]? additionalFeedPaths = null, string[]? scriptFiles = null)
     {
         var totalSw = Stopwatch.StartNew();
 
@@ -54,7 +54,7 @@ public static class Engine
         if (!Directory.Exists(scriptsDir))
             return new EngineResult([], [], [$"Scripts directory not found: {scriptsDir}"]);
 
-        var scriptFilePaths = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
+        var scriptFilePaths = scriptFiles ?? Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
         Array.Sort(scriptFilePaths, StringComparer.Ordinal);
         if (scriptFilePaths.Length == 0)
             return new EngineResult([], [], []);
@@ -284,6 +284,7 @@ public static class Engine
             queryService.RegisterProvider(loaded.PackageName, loaded.Instance, loaded.Schema);
             var collections = QueryProviderCollections(loaded.Instance, loaded.Schema, query, errors);
             diagLog?.Invoke($"[diag] Provider '{loaded.PackageName}' returned {collections.Count} collections: {string.Join(", ", collections.Select(c => $"{c.Key}({c.Value.Count})"))}");
+            WarnIfProviderEmpty(loaded.PackageName, collections, loaded.Schema, warnings);
             var runtimeBindings = loaded.Instance.GetRuntimeBindings();
             RegisterProviderCollections(bridge.Evaluator.GlobalEnvironment, loaded.PackageName, collections, loaded.Schema, runtimeBindings);
         }
@@ -293,6 +294,7 @@ public static class Engine
             queryService.RegisterProvider(builtinProvider.Name, builtinProvider.Instance, builtinProvider.Schema);
             var collections = QueryProviderCollections(builtinProvider.Instance, builtinProvider.Schema, query, errors);
             diagLog?.Invoke($"[diag] Provider '{builtinProvider.Name}' returned {collections.Count} collections: {string.Join(", ", collections.Select(c => $"{c.Key}({c.Value.Count})"))}");
+            WarnIfProviderEmpty(builtinProvider.Name, collections, builtinProvider.Schema, warnings);
             var runtimeBindings = builtinProvider.Instance.GetRuntimeBindings();
             RegisterProviderCollections(bridge.Evaluator.GlobalEnvironment, builtinProvider.Name, collections, builtinProvider.Schema, runtimeBindings);
         }
@@ -459,6 +461,25 @@ public static class Engine
                 env.Define($"{providerName}.{collection.Name}", new CopList([]));
                 env.Define(collection.Name, new CopList([]));
             }
+        }
+    }
+
+    private static void WarnIfProviderEmpty(string providerName, Dictionary<string, List<object>> collections, ProviderSchema schema, List<string> warnings)
+    {
+        // Skip providers that don't declare any collections (e.g., pure schema providers)
+        if (schema.Collections.Count == 0)
+            return;
+
+        // Check if ALL collections returned 0 items
+        int totalItems = 0;
+        foreach (var (_, items) in collections)
+            totalItems += items.Count;
+
+        if (totalItems == 0 && collections.Count > 0)
+        {
+            warnings.Add($"Warning: Provider '{providerName}' returned 0 items across all collections. " +
+                $"This may indicate a transient issue (file locking, process failure). " +
+                $"Rule results based on this provider may be unreliable.");
         }
     }
 

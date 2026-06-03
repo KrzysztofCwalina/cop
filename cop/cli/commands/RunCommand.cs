@@ -191,14 +191,16 @@ public static class RunCommand
         string? commandName = null;
         string scriptsDir;
         string rootPath;
+        string[]? scopedFiles = null;
 
         if (command != null && command.EndsWith(".cop", StringComparison.OrdinalIgnoreCase))
         {
-            // .cop file mode: load scripts from that file's directory
+            // .cop file mode: scope execution to just this file
             var spec = new FileInfo(command);
             if (!spec.Exists) { Console.Error.WriteLine($"Error: File '{spec.FullName}' not found"); return 1; }
             scriptsDir = spec.DirectoryName ?? Directory.GetCurrentDirectory();
             rootPath = scriptsDir;
+            scopedFiles = [spec.FullName];
 
             // First extra arg is the command name (if not a switch)
             if (programArgs is { Length: > 0 } && !programArgs[0].StartsWith('/') && !programArgs[0].StartsWith('-'))
@@ -250,7 +252,7 @@ public static class RunCommand
             // Streaming not yet reimplemented — fall through to normal execution
         }
 
-        var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog, additionalFeedPaths: FindFeedPathsFromCwd());
+        var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog, additionalFeedPaths: FindFeedPathsFromCwd(), scriptFiles: scopedFiles);
 
         return HandleResult(result, format, rootPath);
     }

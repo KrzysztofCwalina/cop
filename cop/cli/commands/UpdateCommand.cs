@@ -95,16 +95,11 @@ static class UpdateCommand
 
         Console.WriteLine($"Downloaded {zipBytes.Length / (1024 * 1024)}MB. Installing...");
 
-        // Determine current exe path
-        var currentExe = Environment.ProcessPath;
-        if (string.IsNullOrEmpty(currentExe))
-        {
-            Console.Error.WriteLine("Error: Could not determine current executable path.");
-            return 1;
-        }
-
-        var installDir = Path.GetDirectoryName(currentExe)!;
-        var exeName = Path.GetFileName(currentExe);
+        // Determine install directory — prefer ~/.cop, fall back to current exe location
+        var installDir = GetInstallDirectory();
+        var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        var exeName = isWindows ? "cop.exe" : "cop";
+        var targetExe = Path.Combine(installDir, exeName);
 
         // Extract zip to temp directory
         var tempDir = Path.Combine(Path.GetTempPath(), $"cop-update-{Guid.NewGuid():N}");
@@ -119,10 +114,7 @@ static class UpdateCommand
             }
 
             // Find the main executable in the extracted files
-            var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-            var newExePath = isWindows
-                ? Path.Combine(tempDir, "cop.exe")
-                : Path.Combine(tempDir, "cop");
+            var newExePath = Path.Combine(tempDir, exeName);
 
             if (!File.Exists(newExePath))
             {
@@ -130,24 +122,29 @@ static class UpdateCommand
                 return 1;
             }
 
+            // Ensure install directory exists
+            Directory.CreateDirectory(installDir);
+
             if (isWindows)
             {
                 // Windows: can't overwrite running exe. Rename current, copy new, schedule old deletion.
-                var backupPath = currentExe + ".old";
+                var backupPath = targetExe + ".old";
                 if (File.Exists(backupPath))
                     File.Delete(backupPath);
-                File.Move(currentExe, backupPath);
-                File.Copy(newExePath, currentExe);
+                if (File.Exists(targetExe))
+                    File.Move(targetExe, backupPath);
+                File.Copy(newExePath, targetExe);
                 // Try to delete backup; if locked, it'll be cleaned up next time
                 try { File.Delete(backupPath); } catch { }
             }
             else
             {
                 // Unix: can overwrite via delete + copy (inode-based, running process keeps old)
-                File.Delete(currentExe);
-                File.Copy(newExePath, currentExe);
+                if (File.Exists(targetExe))
+                    File.Delete(targetExe);
+                File.Copy(newExePath, targetExe);
                 // Set executable permissions
-                File.SetUnixFileMode(currentExe,
+                File.SetUnixFileMode(targetExe,
                     UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
                     UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
                     UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
@@ -166,7 +163,20 @@ static class UpdateCommand
             }
 
             Console.WriteLine($"Updated to {tagName}");
+            Console.WriteLine($"Installed at: {installDir}");
+
+            // Warn if a shadowing copy exists on PATH
+            WarnAboutShadowingInstalls(installDir, exeName);
+
             return 0;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"Error: Cannot write to '{installDir}' (permission denied).");
+            Console.Error.WriteLine($"The install location requires elevated privileges.");
+            var userDir = GetUserInstallDirectory();
+            Console.Error.WriteLine($"Suggestion: install cop to '{userDir}' (user-writable) and add it to PATH.");
+            return 1;
         }
         catch (Exception ex)
         {
@@ -177,6 +187,94 @@ static class UpdateCommand
         {
             // Clean up temp directory
             try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
+    /// <summary>
+    /// Returns the preferred install directory:
+    /// - If running from ~/.cop, use that.
+    /// - If running from a non-writable location (Program Files), use ~/.cop instead.
+    /// - Otherwise, use the current executable's directory.
+    /// </summary>
+    private static string GetInstallDirectory()
+    {
+        var userDir = GetUserInstallDirectory();
+
+        var currentExe = Environment.ProcessPath;
+        if (string.IsNullOrEmpty(currentExe))
+            return userDir;
+
+        var currentDir = Path.GetDirectoryName(currentExe)!;
+
+        // If already running from ~/.cop, stay there
+        if (currentDir.Equals(userDir, StringComparison.OrdinalIgnoreCase))
+            return userDir;
+
+        // Check if current location is writable
+        if (IsAdminOnlyPath(currentDir))
+        {
+            Console.Error.WriteLine($"Warning: Current install at '{currentDir}' requires admin to update.");
+            Console.Error.WriteLine($"Updating to user-writable location: {userDir}");
+            return userDir;
+        }
+
+        // Use current location if writable
+        return currentDir;
+    }
+
+    private static string GetUserInstallDirectory() =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cop");
+
+    /// <summary>
+    /// Checks if a path is in a known admin-only location (Program Files, etc.)
+    /// </summary>
+    private static bool IsAdminOnlyPath(string path)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return false;
+
+        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        var programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+
+        return (!string.IsNullOrEmpty(programFiles) && path.StartsWith(programFiles, StringComparison.OrdinalIgnoreCase))
+            || (!string.IsNullOrEmpty(programFilesX86) && path.StartsWith(programFilesX86, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Warns if there are other copies of cop on PATH that might shadow the updated one.
+    /// </summary>
+    private static void WarnAboutShadowingInstalls(string installDir, string exeName)
+    {
+        var pathDirs = (Environment.GetEnvironmentVariable("PATH") ?? "")
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
+
+        var shadows = new List<string>();
+        bool foundInstallDir = false;
+
+        foreach (var dir in pathDirs)
+        {
+            var normalized = Path.GetFullPath(dir.Trim());
+            if (normalized.Equals(Path.GetFullPath(installDir), StringComparison.OrdinalIgnoreCase))
+            {
+                foundInstallDir = true;
+                continue;
+            }
+
+            var candidate = Path.Combine(normalized, exeName);
+            if (File.Exists(candidate))
+            {
+                if (!foundInstallDir)
+                    shadows.Add(normalized); // ahead on PATH = shadows our install
+            }
+        }
+
+        if (shadows.Count > 0)
+        {
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("Warning: Other cop installations found ahead on PATH (may shadow this update):");
+            foreach (var s in shadows)
+                Console.Error.WriteLine($"  {Path.Combine(s, exeName)}");
+            Console.Error.WriteLine($"Consider removing them or reordering PATH so '{installDir}' comes first.");
         }
     }
 

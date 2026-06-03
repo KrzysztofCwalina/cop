@@ -1315,6 +1315,10 @@ public sealed class Evaluator
             (CopInt ia, CopNumber nb) => Math.Abs(ia.Value - nb.Value) < double.Epsilon,
             (CopNumber na, CopInt ib) => Math.Abs(na.Value - ib.Value) < double.Epsilon,
             (CopString sa, CopString sb) => sa.Value == sb.Value,
+            // Provider proxy names compare as strings (enum members like 'csharp' may be
+            // shadowed by provider proxies named 'csharp' — treat proxy as its name string)
+            (CopString sa, CopProviderProxy pp) => sa.Value == pp.ProviderName,
+            (CopProviderProxy pp, CopString sa) => pp.ProviderName == sa.Value,
             _ => ReferenceEquals(a, b)
         };
     }
