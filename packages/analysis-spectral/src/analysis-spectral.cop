@@ -1,9 +1,9 @@
-# Trivy integration — runs Trivy and produces cop diagnostics
-# Prerequisites: Trivy must be installed
+# Spectral integration — runs Spectral and produces cop diagnostics
+# Prerequisites: Spectral must be installed
 
 import code-analysis
 
-let data = provider('trivy', nic)
+let data = provider('analysis-spectral', nic)
 
 export function diagnostics() => data.Diagnostics
 export let checks = data.Diagnostics

@@ -1,6 +1,6 @@
 # CodeQL Data Provider v1.0
 # Reads CodeQL analysis results (SARIF format) and exposes them as cop collections.
-# Import with: import codeql
+# Import with: import analysis-codeql
 #
 # Prerequisites:
 #   - CodeQL CLI installed (https://github.com/github/codeql-cli-binaries)
@@ -37,8 +37,8 @@ export type Run
 
 ## Loads CodeQL SARIF results from a file path.
 ## Returns a collection of Result items.
-## Example: codeql.Load('results.sarif')
-export function Load(path : string) : object => provider('codeql', path)
+## Example: analysis-codeql.Load('results.sarif')
+export function Load(path : string) : object => provider('analysis-codeql', path)
 
 ## Predicates for filtering results by severity
 export predicate isError(Result) = Result.Severity:eq('error')

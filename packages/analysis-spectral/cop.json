@@ -1,5 +1,5 @@
 {
-  "name": "spectral",
+  "name": "analysis-spectral",
   "version": "0.1.0",
   "description": "Run Spectral OpenAPI linter and expose diagnostics",
   "title": "Spectral Integration",

@@ -3,7 +3,7 @@
 
 import code-analysis
 
-let data = provider('checkov', nic)
+let data = provider('analysis-checkov', nic)
 
 export function diagnostics() => data.Diagnostics
 export let checks = data.Diagnostics

@@ -3,7 +3,7 @@
 
 import code-analysis
 
-let data = provider('semgrep', nic)
+let data = provider('analysis-semgrep', nic)
 
 export function diagnostics() => data.Diagnostics
 export let checks = data.Diagnostics

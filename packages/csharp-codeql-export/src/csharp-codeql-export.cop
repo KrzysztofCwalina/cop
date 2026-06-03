@@ -1,6 +1,6 @@
 # CodeQL Export Package v1.0
 # Provides functions for building CodeQL .ql query files programmatically.
-# Import with: import codeql-export
+# Import with: import csharp-codeql-export
 
 ## Builds a complete CodeQL query string.
 ## Parameters:

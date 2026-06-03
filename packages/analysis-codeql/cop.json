@@ -1,5 +1,5 @@
 {
-  "name": "codeql",
+  "name": "analysis-codeql",
   "version": "1.0.0",
   "description": "Query CodeQL analysis results (SARIF) as cop collections",
   "title": "CodeQL Data Provider",

@@ -1,9 +1,9 @@
 # Sample: Query CodeQL SARIF results
 # Prerequisites: Run `codeql database analyze` with --format=sarif-latest first
-import codeql
+import analysis-codeql
 
 # Load results from a SARIF file
-let results = codeql.Load('results.sarif')
+let results = analysis-codeql.Load('results.sarif')
 
 # Filter to errors only
 let errors = results:isError

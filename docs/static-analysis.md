@@ -380,10 +380,10 @@ Cop can run external analysis tools (like Ruff, ESLint, or any tool that produce
 | `typescript-tsc` | TypeScript | Type errors | `npm install typescript` |
 | `csharp-stylecop` | [StyleCop](https://github.com/DotNetAnalyzers/StyleCopAnalyzers) | C# style/naming | StyleCop NuGet + `dotnet` |
 | `csharp-format` | dotnet format | C# formatting | `dotnet` SDK |
-| `semgrep` | [Semgrep](https://semgrep.dev/) | Security patterns (any language) | `pip install semgrep` |
-| `trivy` | [Trivy](https://trivy.dev/) | Vulnerabilities + misconfig | `trivy` binary |
-| `checkov` | [Checkov](https://www.checkov.io/) | IaC security (Terraform, etc.) | `pip install checkov` |
-| `spectral` | [Spectral](https://stoplight.io/spectral) | OpenAPI linting | `npm install @stoplight/spectral-cli` |
+| `analysis-semgrep` | [Semgrep](https://semgrep.dev/) | Security patterns (any language) | `pip install semgrep` |
+| `analysis-trivy` | [Trivy](https://trivy.dev/) | Vulnerabilities + misconfig | `trivy` binary |
+| `analysis-checkov` | [Checkov](https://www.checkov.io/) | IaC security (Terraform, etc.) | `pip install checkov` |
+| `analysis-spectral` | [Spectral](https://stoplight.io/spectral) | OpenAPI linting | `npm install @stoplight/spectral-cli` |
 
 ### Running an Analyzer
 
@@ -392,8 +392,8 @@ cop python-ruff -t path/to/project          # Python lint
 cop python-mypy -t path/to/project          # Python type check
 cop javascript-eslint -t path/to/project    # JS/TS lint
 cop csharp-stylecop -t path/to/project      # C# style
-cop semgrep -t path/to/project              # Security scan
-cop trivy -t path/to/project                # Vulnerability scan
+cop analysis-semgrep -t path/to/project      # Security scan
+cop analysis-trivy -t path/to/project        # Vulnerability scan
 ```
 
 All produce the same unified output format:

@@ -91,5 +91,5 @@ Each package includes samples in its `samples/` directory showing real-world usa
 | [find-get-operations](../packages/typespec-http/samples/find-get-operations.cop) | Find HTTP GET operations |
 | [http-server](../packages/http/samples/http-server.cop) | Simple HTTP server |
 | [http-client](../packages/http/samples/http-client.cop) | HTTP client with API calls |
-| [query-results](../packages/codeql/samples/query-results.cop) | Query CodeQL SARIF results |
-| [generate-query](../packages/codeql-export/samples/generate-query.cop) | Generate a CodeQL query |
+| [query-results](../packages/analysis-codeql/samples/query-results.cop) | Query CodeQL SARIF results |
+| [generate-query](../packages/csharp-codeql-export/samples/generate-query.cop) | Generate a CodeQL query |

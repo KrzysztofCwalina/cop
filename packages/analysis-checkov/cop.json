@@ -1,12 +1,13 @@
 {
-  "name": "semgrep",
+  "name": "analysis-checkov",
   "version": "0.1.0",
-  "description": "Run Semgrep and expose findings as cop diagnostics",
-  "title": "Semgrep Integration",
+  "description": "Run Checkov IaC security scanner",
+  "title": "Checkov Integration",
   "tags": [
     "security",
-    "semgrep",
-    "patterns",
+    "iac",
+    "checkov",
+    "terraform",
     "static-analysis"
   ],
   "provider": "python",

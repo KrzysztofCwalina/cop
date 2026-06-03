@@ -4,14 +4,14 @@ Cop provides two packages for integrating with [CodeQL](https://codeql.github.co
 
 | Package | Purpose |
 |---------|---------|
-| `codeql` | Read CodeQL analysis results (SARIF) as cop collections |
-| `codeql-export` | Programmatically build and save `.ql` query files |
+| `analysis-codeql` | Read CodeQL analysis results (SARIF) as cop collections |
+| `csharp-codeql-export` | Programmatically build and save `.ql` query files |
 
 ---
 
-## Package: `codeql` — Query CodeQL Results
+## Package: `analysis-codeql` — Query CodeQL Results
 
-The `codeql` package reads SARIF output from `codeql database analyze` and exposes findings as typed cop collections.
+The `analysis-codeql` package reads SARIF output from `codeql database analyze` and exposes findings as typed cop collections.
 
 ### Prerequisites
 
@@ -28,10 +28,10 @@ The `codeql` package reads SARIF output from `codeql database analyze` and expos
 ### Usage
 
 ```cop
-import codeql
+import analysis-codeql
 
 # Load results from a SARIF file
-let results = codeql.Load('results.sarif')
+let results = analysis-codeql.Load('results.sarif')
 
 # Filter to errors only
 let errors = results:isError
@@ -49,8 +49,8 @@ When SARIF files exist in the target directory, collections are auto-populated:
 
 | Collection | Type | Description |
 |-----------|------|-------------|
-| `codeql.Results` | `Result` | All analysis findings |
-| `codeql.Rules` | `Rule` | Rule definitions from the SARIF |
+| `analysis-codeql.Results` | `Result` | All analysis findings |
+| `analysis-codeql.Rules` | `Rule` | Rule definitions from the SARIF |
 
 ### Types
 
@@ -87,29 +87,29 @@ isRecommendation(Result) # Severity is 'recommendation'
 
 ---
 
-## Package: `codeql-export` — Build CodeQL Queries
+## Package: `csharp-codeql-export` — Build CodeQL Queries
 
-The `codeql-export` package provides functions for constructing CodeQL `.ql` query files programmatically from cop.
+The `csharp-codeql-export` package provides functions for constructing CodeQL `.ql` query files programmatically from cop.
 
 ### Usage
 
 ```cop
-import codeql-export
+import csharp-codeql-export
 
 # Build a query that finds public abstract classes
-let query = codeql-export.qlQuery(
+let query = csharp-codeql-export.qlQuery(
   'Find public abstract classes',
   'Classes that are both public and abstract',
-  codeql-export.qlFrom('c', 'Class'),
-  codeql-export.qlAnd(
-    codeql-export.qlModifier('c', 'public'),
-    codeql-export.qlModifier('c', 'abstract')
+  csharp-codeql-export.qlFrom('c', 'Class'),
+  csharp-codeql-export.qlAnd(
+    csharp-codeql-export.qlModifier('c', 'public'),
+    csharp-codeql-export.qlModifier('c', 'abstract')
   ),
   'c, "Class " + c.getName() + " is public and abstract"'
 )
 
 # Save to a .ql file
-function MAIN() = { codeql-export.qlSave('codeql/public-abstract.ql', query) }
+function MAIN() = { csharp-codeql-export.qlSave('codeql/public-abstract.ql', query) }
 ```
 
 This generates a complete `.ql` file:
@@ -173,32 +173,32 @@ select c, "Class " + c.getName() + " is public and abstract"
 ### Example: Multiple Queries
 
 ```cop
-import codeql-export
+import csharp-codeql-export
 
 # Query 1: Find classes with no documentation
-let undocumented = codeql-export.qlQuery(
+let undocumented = csharp-codeql-export.qlQuery(
   'Undocumented public classes',
   'Public classes missing Javadoc/XML documentation',
-  codeql-export.qlFrom('c', 'Class'),
-  codeql-export.qlAnd(
-    codeql-export.qlModifier('c', 'public'),
-    codeql-export.qlNot('c.getDoc().hasBody()')
+  csharp-codeql-export.qlFrom('c', 'Class'),
+  csharp-codeql-export.qlAnd(
+    csharp-codeql-export.qlModifier('c', 'public'),
+    csharp-codeql-export.qlNot('c.getDoc().hasBody()')
   ),
   'c, "Class " + c.getName() + " has no documentation"'
 )
 
 # Query 2: Find methods with too many parameters
-let tooManyParams = codeql-export.qlQuery(
+let tooManyParams = csharp-codeql-export.qlQuery(
   'Methods with too many parameters',
   'Methods with more than 5 parameters',
-  codeql-export.qlFrom('m', 'Method'),
+  csharp-codeql-export.qlFrom('m', 'Method'),
   'm.getNumberOfParameters() > 5',
   'm, "Method " + m.getName() + " has " + m.getNumberOfParameters() + " parameters"'
 )
 
 function MAIN() = {
-  codeql-export.qlSave('codeql/undocumented.ql', undocumented)
-  codeql-export.qlSave('codeql/too-many-params.ql', tooManyParams)
+  csharp-codeql-export.qlSave('codeql/undocumented.ql', undocumented)
+  csharp-codeql-export.qlSave('codeql/too-many-params.ql', tooManyParams)
 }
 ```
 
@@ -209,23 +209,23 @@ function MAIN() = {
 A typical workflow combining both packages:
 
 1. **Write checks in cop** (using the `code` provider for fast local analysis)
-2. **Export key checks to CodeQL** (using `codeql-export` for CI/CD integration)
-3. **Query CodeQL results in cop** (using `codeql` to analyze/report on findings)
+2. **Export key checks to CodeQL** (using `csharp-codeql-export` for CI/CD integration)
+3. **Query CodeQL results in cop** (using `analysis-codeql` to analyze/report on findings)
 
 ```cop
-import codeql
-import codeql-export
+import analysis-codeql
+import csharp-codeql-export
 
 # Read existing CodeQL results
-let results = codeql.Load('results.sarif')
+let results = analysis-codeql.Load('results.sarif')
 let critical = results:isError
 
 # Generate a new query for something CodeQL doesn't check
-let customQuery = codeql-export.qlQuery(
+let customQuery = csharp-codeql-export.qlQuery(
   'Find singleton patterns',
   'Classes using the singleton anti-pattern',
-  codeql-export.qlFrom('c', 'Class'),
-  codeql-export.qlExists(
+  csharp-codeql-export.qlFrom('c', 'Class'),
+  csharp-codeql-export.qlExists(
     'Field f',
     'f.getDeclaringType() = c and f.isStatic() and f.getType() = c'
   ),
@@ -234,6 +234,6 @@ let customQuery = codeql-export.qlQuery(
 
 function MAIN() = {
   print('Critical CodeQL findings: {critical.count}')
-  codeql-export.qlSave('codeql/singletons.ql', customQuery)
+  csharp-codeql-export.qlSave('codeql/singletons.ql', customQuery)
 }
 ```

@@ -1,5 +1,5 @@
 # Sample: Generate a CodeQL query that finds public abstract classes
-import codeql-export
+import csharp-codeql-export
 
 let publicAbstract = qlQuery(
   'Find public abstract classes',
