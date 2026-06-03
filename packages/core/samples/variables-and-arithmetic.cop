@@ -1,6 +1,6 @@
 let x = 10
 let y = 3
-let sum = x + y
+let total = x + y
 let product = x * y
 
-print('Sum: {sum}, Product: {product}')
+print('Sum: {total}, Product: {product}')

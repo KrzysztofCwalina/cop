@@ -8,9 +8,7 @@ function complete(string) =>
         messages = [{ role = 'user', content = string }]
     })
 
-function handle(Request:Uri:equals('/chat')) =>
-    Request.Body:text:complete.Body:text:ok
-
-function handle(Request) => notFound
+function handle(Request) =>
+    Request.Uri:equals('/chat') ? Request.Body:text:complete.Body:text:ok : notFound
 
 async foreach requests() => handle => responses()

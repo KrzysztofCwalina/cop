@@ -5,7 +5,7 @@
 import csharp-checks
 
 # A function that wraps a type name with prefix and suffix
-function wrap(Type, prefix: String, suffix: String) => '{prefix}{item.Name}{suffix}'
+function wrap(Type, prefix: string, suffix: string) => '{prefix}{item.Name}{suffix}'
 
 # Partial application: bind prefix, get a closure waiting for suffix
 let bracket = wrap('[')

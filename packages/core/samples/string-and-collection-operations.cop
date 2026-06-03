@@ -1,7 +1,7 @@
 let names = ['Alice' 'Bob' 'Charlie' 'Diana']
-let count = names.Count
-let first = names.First
+let nameCount = names.Count
+let firstName = names.First
 
-print('{count} people, first is {first}')
+print('{nameCount} people, first is {firstName}')
 
 command main = foreach names => 'Hello, {item}!'

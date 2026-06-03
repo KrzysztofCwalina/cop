@@ -1,0 +1,13 @@
+# Cross-language code analysis.
+# Uses the generic 'code' package to write rules that apply to C#, Python, and JS.
+# Run with: cop run
+import code
+
+# Predicate: method has more than 50 statements
+predicate longMethod(Method) => Method.Statements.Count > 50
+
+# Predicate: type has any long method
+predicate hasLongMethod(Type) => Type.Methods:any(longMethod)
+
+# Works across all languages — flags any type with overly long methods
+command main = foreach Code.Types:hasLongMethod => print('{item.Name} in {item.File.Path} has a method with too many statements')

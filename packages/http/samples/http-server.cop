@@ -1,9 +1,6 @@
 import http
 
-function handle(Request:Uri:equals('/hello')) => ok({ message: 'Hello' })
-function handle(Request) => notFound
-
-# Handle network errors — log and swallow
-function handle(Error) => print(Error.Message)
+function handle(Request) =>
+    Request.Uri:equals('/hello') ? ok({ message: 'Hello' }) : notFound
 
 async foreach requests() => handle => responses()

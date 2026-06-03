@@ -5,9 +5,6 @@
 # Run with: cop run STATISTICS
 import csharp-checks
 
-# Predicate that checks if the /s flag was passed on the command line
-predicate printStats(Program) => Program.Args:contains('/s')
-
 # Individual counting commands
 command TYPE-COUNT = print('{Code.Types.Count} types')
 command NAMESPACE-COUNT = print('{Code.Files.Count} files')
@@ -16,7 +13,5 @@ command MEMBER-COUNT = print('{Members.Count} members')
 # Chain commands with & to compose a single STATISTICS command
 command STATISTICS = TYPE-COUNT & NAMESPACE-COUNT & MEMBER-COUNT
 
-# Combine a foreach listing with a conditional count summary using &
-command LIST-TYPES = foreach Types => print('{item.Name}') & printStats? TYPE-COUNT
-command LIST-NAMESPACES = foreach Files => print('{item.Namespace}') & printStats? NAMESPACE-COUNT
-command LIST-MEMBERS = foreach Members => print('{item.Name}') & printStats? MEMBER-COUNT
+# Combine a foreach listing with a count summary
+command LIST-TYPES = foreach Types => print('{item.Name}') & TYPE-COUNT

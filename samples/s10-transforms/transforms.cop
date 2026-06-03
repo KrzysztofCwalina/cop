@@ -17,4 +17,4 @@ predicate methodSummary(Type) => Type.Methods.Select('{Method.Name}').text(', ')
 predicate hasManyMethods(Type) => Type.Methods.Count > 3
 
 # Combine transforms in output
-command PUBLIC-METHODS = foreach PublicMethods:hasManyMethods => print('{item.Name} ({item.Methods.Count}): {item.Methods.Where(Method:isPublic).Select('{Method.Name}').text(', ')}')
+command PUBLIC-METHODS = foreach PublicMethods:hasManyMethods => print('{item.Name} ({item.Methods.Count} methods)')

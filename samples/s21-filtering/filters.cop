@@ -1,0 +1,23 @@
+# Filtering and subset patterns.
+# Demonstrates the ':' filter operator, negation, property filters, and collection ops.
+# Run with: cop run
+import code
+
+# Chain predicates to narrow results (each : is AND)
+predicate client(Type) => Type.Name:endsWith('Client')
+let PublicClients = Code.Types:client:isPublic
+
+# Negate with !
+let InternalTypes = Code.Types:!isPublic
+
+# Use built-in predicates directly on properties
+let LongNames = Code.Types:Name:startsWith('Azure')
+
+# Concatenation with +
+let combined = PublicClients + InternalTypes
+
+# Test sub-collections
+predicate hasPublicCtor(Type) => Type.Constructors:any(isPublic)
+predicate noMethods(Type) => Type.Methods:empty
+
+command main = foreach PublicClients:!hasPublicCtor => print('{item.Name} is a public client without a public constructor')
