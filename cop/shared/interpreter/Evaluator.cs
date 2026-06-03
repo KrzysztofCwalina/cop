@@ -948,6 +948,14 @@ public sealed class Evaluator
                 };
                 if (methodName is not null)
                 {
+                    // Built-in :in([...]) membership test
+                    if (methodName == "in" && call.Args.Count == 1)
+                    {
+                        var listVal = Eval(call.Args[0], env);
+                        if (listVal is CopList list)
+                            return CopBool.Of(EvalInMembership(subject, list));
+                    }
+
                     // Evaluate args with item bound to subject (for template interpolation)
                     var argEnv = env.Extend();
                     argEnv.Define("item", subject);
@@ -1013,6 +1021,14 @@ public sealed class Evaluator
                 };
                 if (methodName is not null)
                 {
+                    // Built-in :in([...]) membership test
+                    if (methodName == "in" && call.Args.Count == 1)
+                    {
+                        var listVal = Eval(call.Args[0], env);
+                        if (listVal is CopList list)
+                            return EvalInMembership(subject, list);
+                    }
+
                     var argEnv = env.Extend();
                     argEnv.Define("item", subject);
                     var args = call.Args.Select(a => Eval(a, argEnv)).ToList();
@@ -1075,6 +1091,22 @@ public sealed class Evaluator
         CopNull => true,
         _ => false
     };
+
+    private static bool EvalInMembership(CopValue subject, CopList list)
+    {
+        var subjectStr = subject is CopString cs ? cs.Value
+            : subject is CopNull ? ""
+            : subject?.Display() ?? "";
+        foreach (var item in list.Items)
+        {
+            var itemStr = item is CopString s ? s.Value
+                : item is CopNull ? ""
+                : item?.Display() ?? "";
+            if (subjectStr.Equals(itemStr, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
 
     private static CopValue GetFieldOnValue(CopValue value, string fieldName) => value switch
     {

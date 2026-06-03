@@ -173,10 +173,12 @@ public sealed class Binder
 
         if (!_currentScope.Declare(symbol))
         {
-            // Function overloading: Cop allows multiple predicates with same name (different guards)
-            // Only report as duplicate if it's not a function
+            // Predicate overloading: Cop allows multiple predicates with same name (different guards).
+            // Commands and regular functions must not be duplicated.
             var existing = _currentScope.ResolveLocal(decl.Name);
-            if (existing is not FunctionSymbol)
+            if (existing is not FunctionSymbol existingFn
+                || existingFn.CallableKind != CallableKind.Predicate
+                || callableKind != CallableKind.Predicate)
                 ReportDuplicate(decl.Name, decl.Line);
         }
 
@@ -443,7 +445,7 @@ public sealed class Binder
     private void ReportDuplicate(string name, int line)
     {
         _result.ReportDiagnostic(
-            DiagnosticSeverity.Warning,
+            DiagnosticSeverity.Error,
             $"Duplicate declaration '{name}'",
             line,
             _filePath);

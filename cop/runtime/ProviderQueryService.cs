@@ -95,9 +95,9 @@ public class ProviderQueryService
             _warnings.Add($"Error querying provider '{providerName}' for collection '{collectionName}' at path '{absolutePath}': {ex.Message}");
         }
 
-        var result = new List<object>();
-        _cache[key] = result;
-        return result;
+        // Don't cache — the provider may not have returned this collection due to a transient issue.
+        // The next call will retry the query.
+        return new List<object>();
     }
 
     /// <summary>

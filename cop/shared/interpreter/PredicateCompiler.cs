@@ -153,6 +153,20 @@ public static class PredicateCompiler
             return new ComparisonFilter(propertyContext, op.Value, numVal.Value);
         }
 
+        // Membership test: property:in([...])
+        if (methodName == "in" && args.Count == 1 && args[0] is Ast.ListExpr listLit)
+        {
+            var values = new List<string>();
+            foreach (var elem in listLit.Elements)
+            {
+                if (elem is Ast.LiteralExpr { Value: string sv })
+                    values.Add(sv);
+                else
+                    return null;
+            }
+            return new InFilter(propertyContext, values);
+        }
+
         return null;
     }
 

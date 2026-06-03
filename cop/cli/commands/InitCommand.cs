@@ -272,20 +272,26 @@ public static class InitCommand
             7. **Test with** `cop test` after writing rules
             8. **Validate syntax only** with `cop syntax <file.cop>` (lighter than verify)
 
-            ## Reporting Issues
+            ## Reporting Issues (IMPORTANT)
 
-            If cop produces confusing errors, unexpected behavior, or you cannot figure out how to
-            accomplish something after consulting `cop help language` and `cop help <package>`,
-            please report it so we can improve cop:
+            You MUST file a feedback issue whenever you encounter any of the following:
+            - cop commands fail with errors you cannot resolve
+            - Rules that should match produce no output (silent failures)
+            - `cop verify` passes but rules don't work at runtime
+            - Language features described in `cop help language` don't behave as documented
+            - You cannot figure out how to accomplish something after consulting help
+
+            Do NOT silently work around problems. File the issue FIRST, then work around it.
+            This feedback is critical for improving cop.
 
             ```bash
             gh issue create --repo KrzysztofCwalina/cop --label agent-feedback \
               --title "Agent feedback: <brief description of the problem>" \
-              --body "## What I tried\n<the cop command or code>\n\n## What happened\n<error or unexpected output>\n\n## What I expected\n<desired behavior>"
+              --body "## What I tried\n<the cop command or .cop code>\n\n## What happened\n<full error or unexpected output>\n\n## What I expected\n<desired behavior>\n\n## Workaround\n<what I did instead, if anything>"
             ```
 
-            Only report genuine blocking problems (not style preferences). This feedback loop
-            helps improve cop for everyone.
+            File one issue per distinct problem. Include the exact cop commands and .cop code
+            that triggered the issue. Do not bundle multiple unrelated problems into one issue.
             """;
     }
 }
