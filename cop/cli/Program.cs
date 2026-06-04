@@ -113,26 +113,7 @@ if (!knownVerbs.Contains(args[0]) && !args[0].StartsWith('-') && !args[0].Starts
         return RunCommand.Execute(firstArg, args.Length > 1 ? args[1..] : null);
     }
 
-    // 3. Existing directory containing .cop files → run from that directory
-    var dirPath = Path.GetFullPath(firstArg.TrimEnd('/', '\\'));
-    if (Directory.Exists(dirPath) && Directory.GetFiles(dirPath, "*.cop", SearchOption.AllDirectories).Length > 0)
-    {
-        string? copTarget = null;
-        string? copFormat = null;
-        string? copCommands = null;
-        bool copDiag = diag;
-        var remaining = args.Length > 1 ? args[1..] : Array.Empty<string>();
-        for (int i = 0; i < remaining.Length; i++)
-        {
-            if (remaining[i] == "-t" && i + 1 < remaining.Length) copTarget = remaining[++i];
-            else if (remaining[i] == "-f" && i + 1 < remaining.Length) copFormat = remaining[++i];
-            else if (remaining[i] == "-c" && i + 1 < remaining.Length) copCommands = remaining[++i];
-            else if (remaining[i] == "-d") copDiag = true;
-        }
-        return RunCommand.ExecuteDirectory(dirPath, copTarget, copFormat, copCommands, copDiag);
-    }
-
-    // 4. Check if local .cop files define a command with this name
+    // 3. Check if local .cop files define a command with this name
     var cwd = Directory.GetCurrentDirectory();
     var localCopFiles = Directory.GetFiles(cwd, "*.cop", SearchOption.TopDirectoryOnly);
     if (localCopFiles.Length > 0 && IsLocalCommand(firstArg, localCopFiles))
@@ -140,7 +121,7 @@ if (!knownVerbs.Contains(args[0]) && !args[0].StartsWith('-') && !args[0].Starts
         return RunCommand.Execute(firstArg, args.Length > 1 ? args[1..] : null);
     }
 
-    // 5. Otherwise → treat all non-switch args as package names
+    // 4. Otherwise → treat all non-switch args as package names
     var packages = args.TakeWhile(a => !a.StartsWith('-') && !a.StartsWith('/')).ToArray();
     var remainingArgs = args.Skip(packages.Length).ToArray();
 

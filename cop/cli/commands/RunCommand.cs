@@ -183,28 +183,6 @@ public static class RunCommand
         return 0;
     }
 
-    /// <summary>
-    /// Runs all .cop files in a directory as scripts. Used when the user passes a directory path
-    /// (e.g., "cop cop-checks/ -t .").
-    /// </summary>
-    public static int ExecuteDirectory(string scriptsDir, string? target = null, string? format = null, string? commands = null, bool diag = false)
-    {
-        string rootPath = !string.IsNullOrEmpty(target) ? Path.GetFullPath(target) : scriptsDir;
-
-        string[]? commandFilter = null;
-        if (!string.IsNullOrEmpty(commands))
-            commandFilter = commands.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-        Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(ColorDiagLine(msg)) : null;
-
-        // Auto-restore missing imports before execution
-        AutoRestoreImports(scriptsDir, diagLog);
-
-        var result = Engine.Run(scriptsDir, rootPath, commandFilter: commandFilter, diagLog: diagLog, additionalFeedPaths: FindFeedPathsFromCwd());
-
-        return HandleResult(result, format, rootPath);
-    }
-
     public static int Execute(string? command, string[]? programArgs = null, string? target = null, string? format = null, string? commands = null, bool diag = false)
     {
         if (command != null && IsUri(command))
@@ -213,16 +191,14 @@ public static class RunCommand
         string? commandName = null;
         string scriptsDir;
         string rootPath;
-        string[]? scopedFiles = null;
 
         if (command != null && command.EndsWith(".cop", StringComparison.OrdinalIgnoreCase))
         {
-            // .cop file mode: scope execution to just this file
+            // .cop file mode: use file's directory as scriptsDir, load all .cop files there
             var spec = new FileInfo(command);
             if (!spec.Exists) { Console.Error.WriteLine($"Error: File '{spec.FullName}' not found"); return 1; }
             scriptsDir = spec.DirectoryName ?? Directory.GetCurrentDirectory();
             rootPath = scriptsDir;
-            scopedFiles = [spec.FullName];
 
             // First extra arg is the command name (if not a switch)
             if (programArgs is { Length: > 0 } && !programArgs[0].StartsWith('/') && !programArgs[0].StartsWith('-'))
@@ -274,7 +250,7 @@ public static class RunCommand
             // Streaming not yet reimplemented — fall through to normal execution
         }
 
-        var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog, additionalFeedPaths: FindFeedPathsFromCwd(), scriptFiles: scopedFiles);
+        var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog, additionalFeedPaths: FindFeedPathsFromCwd());
 
         return HandleResult(result, format, rootPath);
     }
