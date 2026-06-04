@@ -66,4 +66,4 @@ Use this template to build your own streaming provider:
 2. Implement `SinkProvider` and override `Name` + `WriteAsync()`
 3. Define types and typed source/sink bindings in your `.cop` package
 
-See [Provider Guide](../../docs/provider-guide.md) for full documentation.
+See [Extensibility Guide](../../docs/extensibility.md) for full documentation.

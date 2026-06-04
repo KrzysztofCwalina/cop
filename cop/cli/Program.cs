@@ -17,7 +17,7 @@ if (diag)
 // Known verbs (subcommands) — anything else is treated as a program to run
 var knownVerbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 {
-    "test", "syntax", "verify", "lock", "unlock", "help", "package", "repl", "init", "update"
+    "test", "syntax", "verify", "lock", "unlock", "help", "package", "repl", "init", "update", "vscode"
 };
 
 // Bare invocation (no arguments): look for local .cop files to run or show getting-started
@@ -35,15 +35,13 @@ if (args.Length == 1 && (args[0] == "-h" || args[0] == "-help" || args[0] == "--
         Usage:
           cop <program>                      Run a package, local command, or .cop file
           cop package list                   Browse available packages
-          cop package commands <package>     Show what a package exports
           cop help language                  Full language reference
           cop help <package>                 Package documentation
           cop init                           Generate agent instruction files
           cop update                         Update cop to the latest release
+          cop vscode                         Install VS Code extension
           cop test [<file>]                  Run tests
-          cop verify [<path>]               Verify program correctness (syntax, imports, types)
-          cop syntax <path>                  Validate .cop file syntax
-          cop lock/unlock <files>            Tamper protection
+          cop verify [<path>]                Verify program correctness
           cop repl                           Interactive REPL
 
         Options:
@@ -74,6 +72,12 @@ if (args[0] == "init")
 if (args[0] == "update")
 {
     return UpdateCommand.Execute();
+}
+
+// cop vscode — install VS Code extension
+if (args[0] == "vscode")
+{
+    return VscodeCommand.Execute();
 }
 
 // If first arg is not a known verb and not a switch, figure out what to run
@@ -150,7 +154,7 @@ var rootCommand = new RootCommand
         Quick reference:
           cop <program>                    Run a package, local command, or .cop file
           cop package list                 Browse available packages
-          cop package commands <package>   Show what a package exports
+          cop help <package>               Package documentation
           cop test [<file>]               Run tests
           cop repl                        Interactive REPL
           cop <command> -h for details

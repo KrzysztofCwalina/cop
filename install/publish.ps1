@@ -196,5 +196,12 @@ foreach ($rid in $Runtimes) {
     Write-Host "  -> $zipPath"
 }
 
+# Package VS Code extension as a zip for release
+$vscodeDir = Join-Path $RepoRoot "install\vscode-cop"
+$vscodeZip = Join-Path $OutputBase "cop-vscode.zip"
+if (Test-Path $vscodeZip) { Remove-Item -Force $vscodeZip }
+[System.IO.Compression.ZipFile]::CreateFromDirectory($vscodeDir, $vscodeZip, [System.IO.Compression.CompressionLevel]::Optimal, $false)
+Write-Host "  -> $vscodeZip (VS Code extension)"
+
 Write-Host "`nDone! Published for: $($Runtimes -join ', ')"
 Write-Host "To publish for a single platform: .\publish.ps1 -Runtimes win-x64"

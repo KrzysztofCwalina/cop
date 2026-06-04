@@ -25,23 +25,48 @@ public static class HelpCommand
 
     public static int Execute(string? file)
     {
-        // Handle special subcommands
-        if (file != null)
+        // Bare "cop help" with no argument — show general help
+        if (file == null)
         {
-            if (file.Equals("language", StringComparison.OrdinalIgnoreCase) ||
-                file.Equals("lang", StringComparison.OrdinalIgnoreCase))
-            {
-                return ExecuteLanguageHelp();
-            }
+            Console.WriteLine("""
+                cop — a general-purpose scripting language
 
-            // If the argument doesn't end in .cop and isn't a file path, treat as package name
-            if (!file.EndsWith(".cop", StringComparison.OrdinalIgnoreCase) && !File.Exists(file))
-            {
-                return ExecutePackageHelp(file);
-            }
+                Usage:
+                  cop <program>                      Run a package, local command, or .cop file
+                  cop package list                   Browse available packages
+                  cop help language                  Full language reference
+                  cop help <package>                 Package documentation
+                  cop init                           Generate agent instruction files
+                  cop update                         Update cop to the latest release
+                  cop vscode                         Install VS Code extension
+                  cop test [<file>]                  Run tests
+                  cop verify [<path>]                Verify program correctness
+                  cop repl                           Interactive REPL
+
+                Options:
+                  -t <dir>      Target directory
+                  -c <commands> Filter to specific commands (comma-separated)
+                  -f <format>   Output format: text or json
+                  -h            Show help
+                  -v            Show version
+                """);
+            return 0;
         }
 
-        // Original behavior: list commands in .cop files
+        // Handle special subcommands
+        if (file.Equals("language", StringComparison.OrdinalIgnoreCase) ||
+            file.Equals("lang", StringComparison.OrdinalIgnoreCase))
+        {
+            return ExecuteLanguageHelp();
+        }
+
+        // If the argument doesn't end in .cop and isn't a file path, treat as package name
+        if (!file.EndsWith(".cop", StringComparison.OrdinalIgnoreCase) && !File.Exists(file))
+        {
+            return ExecutePackageHelp(file);
+        }
+
+        // Explicit file: list commands in that .cop file
         return ExecuteCommandList(file);
     }
 

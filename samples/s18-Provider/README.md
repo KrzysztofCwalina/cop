@@ -58,4 +58,4 @@ Use this template as a starting point for your own provider:
 4. Update `package/*.md` metadata and `package/src/*.cop` type definitions
 5. Build and distribute the `package/` directory
 
-See [Provider Guide](../../docs/provider-guide.md) for full documentation.
+See [Extensibility Guide](../../docs/extensibility.md) for full documentation.

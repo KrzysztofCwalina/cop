@@ -219,19 +219,19 @@ See [Testing with Agent Cop](testing-with-cop.md) for a full guide on writing te
 
 ## cop help
 
-Show help for the Cop language, a package, or list commands in a `.cop` file.
+Show help for the Cop language or a package.
 
 ```bash
+cop help                  # General usage help
 cop help language         # Full language reference
 cop help <package>        # Package documentation (types, functions, samples)
-cop help [<file>]         # List commands defined in a .cop program
 ```
 
 | Argument | Description |
 |----------|-------------|
+| *(none)* | Print general usage help (same as `cop -h`) |
 | `language` | Print the full Cop language reference (syntax, types, operators, patterns) |
 | `<package>` | Print documentation for a package — exports, types, predicates, functions, and samples |
-| `<file>` | `.cop` file to inspect for commands. When omitted, scans current directory. |
 
 ### Examples
 
@@ -245,24 +245,6 @@ Show documentation for the `code` package:
 
 ```bash
 cop help code
-```
-
-Show documentation for the `code-analysis` package:
-
-```bash
-cop help code-analysis
-```
-
-List all named entry-point functions in the current directory:
-
-```bash
-cop help
-```
-
-List named entry-point functions in a specific file:
-
-```bash
-cop help checks.cop
 ```
 
 ### Package help resolution
@@ -356,21 +338,21 @@ Unlock all locked files:
 cop unlock
 ```
 
-## cop syntax
+## cop verify
 
-Validate `.cop` file syntax without executing.
+Verify `.cop` program correctness without executing. Checks syntax, imports, name binding, types, and arity.
 
 ```bash
-cop syntax <path>
+cop verify [<path>]
 ```
 
 | Argument | Description |
 |----------|-------------|
-| `<path>` | `.cop` file or directory to validate |
+| `<path>` | `.cop` file or directory to verify. When omitted, verifies all `.cop` files in the current directory. |
 
 ```bash
-cop syntax checks.cop
-cop syntax src/
+cop verify checks.cop
+cop verify src/
 ```
 
 ## cop repl
@@ -381,7 +363,23 @@ Launch an interactive REPL session. Loads `.cop` files from the current director
 cop repl
 ```
 
-See [Working with the REPL](working-with-repl.md) for a full walkthrough.
+See [Working with the REPL](repl.md) for a full walkthrough.
+
+## cop update
+
+Self-update cop to the latest release from GitHub. Detects your platform automatically and replaces the current binary.
+
+```bash
+cop update
+```
+
+## cop vscode
+
+Download and install the Cop VS Code extension (syntax highlighting and IntelliSense for `.cop` files). Downloads from the latest GitHub release and installs to `~/.vscode/extensions/`.
+
+```bash
+cop vscode
+```
 
 ## cop package
 
@@ -509,4 +507,17 @@ cop package feed <action>
 cop package feed list
 cop package feed add <url>
 cop package feed remove <url>
+```
+
+## CI Integration
+
+```yaml
+# GitHub Actions
+- name: Install cop
+  run: |
+    curl -L https://github.com/KrzysztofCwalina/cop/releases/latest/download/cop-linux-x64.zip -o cop.zip
+    unzip cop.zip && chmod +x cop && mv cop /usr/local/bin/
+
+- name: Run checks
+  run: cop
 ```
