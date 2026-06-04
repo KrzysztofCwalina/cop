@@ -494,21 +494,26 @@ The grammar defines a **general-purpose functional language**. All constructs ar
 programming concepts: functions, predicates, types, enums, let-bindings, and expressions.
 There are no domain-specific keywords or constructs.
 
-### Uppercase function convention
-Functions with side effects use ALL-UPPERCASE names. The parser enforces this by allowing
-statement-block bodies (`= { ... }`) only for uppercase function names. For lowercase function
-names, `{ }` after `=` is always parsed as an object literal expression body. Examples:
+### Commands (side-effect blocks)
+Commands use ALL-UPPERCASE names and the `command` keyword. They execute statements (side effects):
 ```cop
-function MAIN() = {
+command MAIN = {
     foreach items => print(item.Name)
 }
 
-function RUN-CHECKS() = {
+command RUN-CHECKS = {
     let errors = validate()
     print(errors)
 }
 
-function PRINT-HELLO() = print('hello')    # expression body also valid for uppercase
+command PRINT-HELLO = print('hello')       # single-expression body also valid
+```
+
+Note: The legacy `function MAIN() = { ... }` syntax is still parsed (treated as a command internally)
+but `command` is the preferred modern form.
+
+For lowercase function names, `{ }` after `=` is always parsed as an object literal expression body:
+```cop
 function makeObj() = { name: 'foo' }       # lowercase: { } is object literal
 ```
 

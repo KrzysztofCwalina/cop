@@ -1,3 +1,3 @@
 # Python Pylint Integration
 
-Runs pylint and exposes findings as cop diagnostics.
+Runs pylint and exposes findings as cop violations.

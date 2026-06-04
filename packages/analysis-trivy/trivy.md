@@ -1,1 +1,1 @@
-Runs Trivy and exposes findings as cop diagnostics.
+Runs Trivy and exposes findings as cop violations.

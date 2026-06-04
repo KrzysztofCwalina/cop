@@ -1,12 +1,14 @@
-# Checkov integration — runs Checkov and produces cop diagnostics
+# Checkov integration — runs Checkov and produces cop Violations
 # Prerequisites: Checkov must be installed
 
 import code-analysis
 
 let data = provider('analysis-checkov', nic)
 
-## Returns the Checkov diagnostics collection
-export function diagnostics() : [Diagnostic] => data.Diagnostics
-export let checkov-checks = data.Diagnostics
+## Returns the Checkov violations collection.
+export function diagnostics() : [Violation] => data.Violations
 
-command MAIN = foreach checkov-checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'
+## All Checkov violations as a collection.
+export let checkov-checks = data.Violations
+
+command MAIN = CHECK(checkov-checks)

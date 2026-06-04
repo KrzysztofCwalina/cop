@@ -1,5 +1,5 @@
 """
-Cop provider that runs Trivy and exposes vulnerability and misconfiguration findings.
+Cop provider that runs Trivy and exposes vulnerability and misconfiguration findings as violations.
 """
 
 import json
@@ -16,20 +16,17 @@ def get_schema():
     return {
         'types': [
             {
-                'name': 'Diagnostic',
+                'name': 'Violation',
                 'properties': [
-                    {'name': 'FilePath'},
+                    {'name': 'File'},
                     {'name': 'Line', 'type': 'int'},
-                    {'name': 'Column', 'type': 'int'},
-                    {'name': 'EndLine', 'type': 'int'},
-                    {'name': 'EndColumn', 'type': 'int'},
-                    {'name': 'RuleId'},
-                    {'name': 'Message'},
                     {'name': 'Severity'},
+                    {'name': 'Message'},
+                    {'name': 'Source'},
                 ],
             }
         ],
-        'collections': [{'name': 'Diagnostics', 'itemType': 'Diagnostic'}],
+        'collections': [{'name': 'Violations', 'itemType': 'Violation'}],
     }
 
 
@@ -82,10 +79,10 @@ def query(params):
 
         output = (result.stdout or '').strip()
         if not output:
-            return {'Diagnostics': []}
+            return {'Violations': []}
 
         trivy_results = json.loads(output)
-        diagnostics = []
+        violations = []
 
         for item in trivy_results.get('Results') or []:
             file_path = normalize_relative_path(item.get('Target') or '', root_path)
@@ -93,39 +90,36 @@ def query(params):
                 continue
 
             for vulnerability in item.get('Vulnerabilities') or []:
-                diagnostics.append({
-                    'FilePath': file_path,
+                rule_id = vulnerability.get('VulnerabilityID') or ''
+                message = build_vulnerability_message(vulnerability)
+                violations.append({
+                    'File': file_path,
                     'Line': 0,
-                    'Column': 0,
-                    'EndLine': 0,
-                    'EndColumn': 0,
-                    'RuleId': vulnerability.get('VulnerabilityID') or '',
-                    'Message': build_vulnerability_message(vulnerability),
                     'Severity': map_severity(vulnerability.get('Severity')),
+                    'Message': f'{rule_id}: {message}' if rule_id else message,
+                    'Source': 'trivy',
                 })
 
             for misconfiguration in item.get('Misconfigurations') or []:
                 metadata = misconfiguration.get('CauseMetadata') or {}
                 line = int(metadata.get('StartLine') or 0)
-                end_line = int(metadata.get('EndLine') or line)
-                diagnostics.append({
-                    'FilePath': file_path,
+                rule_id = misconfiguration.get('ID') or misconfiguration.get('AVDID') or ''
+                message = misconfiguration.get('Title') or misconfiguration.get('Message') or ''
+                violations.append({
+                    'File': file_path,
                     'Line': line,
-                    'Column': 0,
-                    'EndLine': end_line,
-                    'EndColumn': 0,
-                    'RuleId': misconfiguration.get('ID') or misconfiguration.get('AVDID') or '',
-                    'Message': misconfiguration.get('Title') or misconfiguration.get('Message') or '',
                     'Severity': map_severity(misconfiguration.get('Severity')),
+                    'Message': f'{rule_id}: {message}' if rule_id else message,
+                    'Source': 'trivy',
                 })
 
-        return {'Diagnostics': diagnostics}
+        return {'Violations': violations}
     except FileNotFoundError:
         sys.stderr.write('Error: trivy not found. Install Trivy to use this package.\n')
-        return {'Diagnostics': []}
+        return {'Violations': []}
     except Exception as error:
         sys.stderr.write(f'Error running trivy: {error}\n')
-        return {'Diagnostics': []}
+        return {'Violations': []}
 
 
 define_provider(schema=get_schema, query=query)

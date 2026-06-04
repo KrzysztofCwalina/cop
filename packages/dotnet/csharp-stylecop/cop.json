@@ -1,7 +1,7 @@
 {
   "name": "csharp-stylecop",
   "version": "0.1.0",
-  "description": "Run StyleCop analyzers via dotnet build and expose diagnostics",
+  "description": "Run StyleCop analyzers via dotnet build and expose violations",
   "title": "C# StyleCop Integration",
   "tags": [
     "csharp",

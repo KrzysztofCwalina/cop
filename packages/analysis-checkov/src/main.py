@@ -1,5 +1,5 @@
 """
-Cop provider that runs Checkov and exposes IaC security findings.
+Cop provider that runs Checkov and exposes IaC security findings as violations.
 """
 
 import json
@@ -16,20 +16,17 @@ def get_schema():
     return {
         'types': [
             {
-                'name': 'Diagnostic',
+                'name': 'Violation',
                 'properties': [
-                    {'name': 'FilePath'},
+                    {'name': 'File'},
                     {'name': 'Line', 'type': 'int'},
-                    {'name': 'Column', 'type': 'int'},
-                    {'name': 'EndLine', 'type': 'int'},
-                    {'name': 'EndColumn', 'type': 'int'},
-                    {'name': 'RuleId'},
-                    {'name': 'Message'},
                     {'name': 'Severity'},
+                    {'name': 'Message'},
+                    {'name': 'Source'},
                 ],
             }
         ],
-        'collections': [{'name': 'Diagnostics', 'itemType': 'Diagnostic'}],
+        'collections': [{'name': 'Violations', 'itemType': 'Violation'}],
     }
 
 
@@ -68,10 +65,10 @@ def query(params):
 
         output = (result.stdout or '').strip()
         if not output:
-            return {'Diagnostics': []}
+            return {'Violations': []}
 
         checkov_results = json.loads(output)
-        diagnostics = []
+        violations = []
 
         # checkov returns a dict for single check type, or a list for multiple
         result_groups = checkov_results if isinstance(checkov_results, list) else [checkov_results]
@@ -84,25 +81,23 @@ def query(params):
 
                 line_range = item.get('file_line_range') or []
                 line = int(line_range[0]) if line_range else 0
-                end_line = int(line_range[-1]) if line_range else line
-                diagnostics.append({
-                    'FilePath': file_path,
+                rule_id = item.get('check_id') or ''
+                message = item.get('check_name') or ''
+                violations.append({
+                    'File': file_path,
                     'Line': line,
-                    'Column': 0,
-                    'EndLine': end_line,
-                    'EndColumn': 0,
-                    'RuleId': item.get('check_id') or '',
-                    'Message': item.get('check_name') or '',
                     'Severity': 'warning',
+                    'Message': f'{rule_id}: {message}' if rule_id else message,
+                    'Source': 'checkov',
                 })
 
-        return {'Diagnostics': diagnostics}
+        return {'Violations': violations}
     except FileNotFoundError:
         sys.stderr.write('Error: checkov not found. Install Checkov to use this package.\n')
-        return {'Diagnostics': []}
+        return {'Violations': []}
     except Exception as error:
         sys.stderr.write(f'Error running checkov: {error}\n')
-        return {'Diagnostics': []}
+        return {'Violations': []}
 
 
 define_provider(schema=get_schema, query=query)

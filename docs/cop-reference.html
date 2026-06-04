@@ -249,8 +249,8 @@ const packages = {
       {
         "name": "diagnostics",
         "params": "",
-        "returns": "[Diagnostic]",
-        "desc": "Returns the Checkov diagnostics collection",
+        "returns": "[Violation]",
+        "desc": "Returns the Checkov violations collection.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-checkov/src/analysis-checkov.cop#L9"
       }
     ],
@@ -268,54 +268,9 @@ const packages = {
     ],
     "collections": [],
     "types": {
-      "Result": {
-        "desc": "A CodeQL analysis result (alert/finding)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-codeql/src/analysis-codeql.cop#L13",
-        "props": [
-          {
-            "name": "RuleId",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "Message",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "Severity",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "FilePath",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "StartLine",
-            "type": "int",
-            "desc": ""
-          },
-          {
-            "name": "EndLine",
-            "type": "int",
-            "desc": ""
-          },
-          {
-            "name": "StartColumn",
-            "type": "int",
-            "desc": ""
-          },
-          {
-            "name": "EndColumn",
-            "type": "int",
-            "desc": ""
-          }
-        ]
-      },
       "Rule": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-codeql/src/analysis-codeql.cop#L24",
+        "desc": "A CodeQL rule definition",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-codeql/src/analysis-codeql.cop#L20",
         "props": [
           {
             "name": "Id",
@@ -350,7 +305,7 @@ const packages = {
         ]
       },
       "Run": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-codeql/src/analysis-codeql.cop#L33",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-codeql/src/analysis-codeql.cop#L29",
         "props": [
           {
             "name": "Tool",
@@ -370,39 +325,14 @@ const packages = {
         ]
       }
     },
-    "predicates": [
-      {
-        "name": "isError",
-        "appliesTo": "Result",
-        "desc": "Predicates for filtering results by severity",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-codeql/src/analysis-codeql.cop#L44"
-      },
-      {
-        "name": "isWarning",
-        "appliesTo": "Result",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-codeql/src/analysis-codeql.cop#L45"
-      },
-      {
-        "name": "isNote",
-        "appliesTo": "Result",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-codeql/src/analysis-codeql.cop#L46"
-      },
-      {
-        "name": "isRecommendation",
-        "appliesTo": "Result",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-codeql/src/analysis-codeql.cop#L47"
-      }
-    ],
+    "predicates": [],
     "functions": [
       {
         "name": "Load",
         "params": "path: string",
         "returns": "object",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-codeql/src/analysis-codeql.cop#L41"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-codeql/src/analysis-codeql.cop#L37"
       }
     ],
     "checks": [],
@@ -424,8 +354,8 @@ const packages = {
       {
         "name": "diagnostics",
         "params": "",
-        "returns": "[Diagnostic]",
-        "desc": "Returns the Semgrep diagnostics collection",
+        "returns": "[Violation]",
+        "desc": "Returns the Semgrep violations collection.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-semgrep/src/analysis-semgrep.cop#L9"
       }
     ],
@@ -444,15 +374,7 @@ const packages = {
     "collections": [],
     "types": {},
     "predicates": [],
-    "functions": [
-      {
-        "name": "diagnostics",
-        "params": "",
-        "returns": "[Diagnostic]",
-        "desc": "Returns the Spectral diagnostics collection",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-spectral/src/analysis-spectral.cop#L9"
-      }
-    ],
+    "functions": [],
     "checks": [],
     "commands": []
   },
@@ -472,8 +394,8 @@ const packages = {
       {
         "name": "diagnostics",
         "params": "",
-        "returns": "[Diagnostic]",
-        "desc": "Returns the Trivy diagnostics collection",
+        "returns": "[Violation]",
+        "desc": "Returns the Trivy violations collection.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-trivy/src/analysis-trivy.cop#L9"
       }
     ],
@@ -2766,7 +2688,7 @@ const packages = {
     "samples": [
       {
         "title": "Run format",
-        "code": "import csharp-format\n\n# Run dotnet format and report diagnostics\nCHECK csharp-format-checks"
+        "code": "import csharp-format\n\n# Run dotnet format and report violations\nCHECK csharp-format-checks"
       }
     ],
     "collections": [],
@@ -2774,11 +2696,18 @@ const packages = {
     "predicates": [],
     "functions": [
       {
+        "name": "violations",
+        "params": "",
+        "returns": "[Violation]",
+        "desc": "Returns the dotnet format violations collection",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-format/src/csharp-format.cop#L9"
+      },
+      {
         "name": "diagnostics",
         "params": "",
-        "returns": "[Diagnostic]",
-        "desc": "Returns the dotnet format diagnostics collection",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-format/src/csharp-format.cop#L9"
+        "returns": "[Violation]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-format/src/csharp-format.cop#L10"
       }
     ],
     "checks": [],
@@ -3067,7 +2996,7 @@ const packages = {
   },
   "csharp-stylecop": {
     "label": "csharp-stylecop",
-    "overview": "Run StyleCop analyzers via dotnet build and expose diagnostics",
+    "overview": "Run StyleCop analyzers via dotnet build and expose violations",
     "samples": [
       {
         "title": "Run stylecop",
@@ -3079,11 +3008,18 @@ const packages = {
     "predicates": [],
     "functions": [
       {
+        "name": "violations",
+        "params": "",
+        "returns": "[Violation]",
+        "desc": "Returns the StyleCop violations collection",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-stylecop/src/csharp-stylecop.cop#L9"
+      },
+      {
         "name": "diagnostics",
         "params": "",
-        "returns": "[Diagnostic]",
-        "desc": "Returns the StyleCop diagnostics collection",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-stylecop/src/csharp-stylecop.cop#L9"
+        "returns": "[Violation]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-stylecop/src/csharp-stylecop.cop#L10"
       }
     ],
     "checks": [],
@@ -3501,11 +3437,11 @@ const packages = {
   },
   "javascript-biome": {
     "label": "javascript-biome",
-    "overview": "Run Biome and expose diagnostics",
+    "overview": "Run Biome and expose violations",
     "samples": [
       {
         "title": "Run biome",
-        "code": "import javascript-biome\n\n# Run Biome linting and report diagnostics\nCHECK biome-checks"
+        "code": "import javascript-biome\n\n# Run Biome linting and report violations\nCHECK biome-checks"
       }
     ],
     "collections": [],
@@ -3513,11 +3449,18 @@ const packages = {
     "predicates": [],
     "functions": [
       {
+        "name": "violations",
+        "params": "",
+        "returns": "[Violation]",
+        "desc": "Returns the Biome violations collection",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-biome/src/javascript-biome.cop#L9"
+      },
+      {
         "name": "diagnostics",
         "params": "",
-        "returns": "[Diagnostic]",
-        "desc": "Returns the Biome diagnostics collection",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-biome/src/javascript-biome.cop#L9"
+        "returns": "[Violation]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-biome/src/javascript-biome.cop#L10"
       }
     ],
     "checks": [],
@@ -3541,11 +3484,11 @@ const packages = {
   },
   "javascript-eslint": {
     "label": "javascript-eslint",
-    "overview": "Run ESLint and expose diagnostics",
+    "overview": "Run ESLint and expose violations",
     "samples": [
       {
         "title": "Run eslint",
-        "code": "import javascript-eslint\n\n# Run ESLint and report diagnostics\nCHECK eslint-checks"
+        "code": "import javascript-eslint\n\n# Run ESLint and report violations\nCHECK eslint-checks"
       }
     ],
     "collections": [],
@@ -3553,11 +3496,18 @@ const packages = {
     "predicates": [],
     "functions": [
       {
+        "name": "violations",
+        "params": "",
+        "returns": "[Violation]",
+        "desc": "Returns the ESLint violations collection",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-eslint/src/javascript-eslint.cop#L9"
+      },
+      {
         "name": "diagnostics",
         "params": "",
-        "returns": "[Diagnostic]",
-        "desc": "Returns the ESLint diagnostics collection",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-eslint/src/javascript-eslint.cop#L9"
+        "returns": "[Violation]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-eslint/src/javascript-eslint.cop#L10"
       }
     ],
     "checks": [],
@@ -3959,8 +3909,8 @@ const packages = {
       {
         "name": "diagnostics",
         "params": "",
-        "returns": "[Diagnostic]",
-        "desc": "Returns all bandit diagnostics.",
+        "returns": "[Violation]",
+        "desc": "Returns all bandit violations.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-bandit/src/python-bandit.cop#L10"
       }
     ],
@@ -4150,8 +4100,8 @@ const packages = {
       {
         "name": "diagnostics",
         "params": "",
-        "returns": "[Diagnostic]",
-        "desc": "Returns all mypy diagnostics.",
+        "returns": "[Violation]",
+        "desc": "Returns all mypy violations.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-mypy/src/python-mypy.cop#L10"
       }
     ],
@@ -4174,8 +4124,8 @@ const packages = {
       {
         "name": "diagnostics",
         "params": "",
-        "returns": "[Diagnostic]",
-        "desc": "Returns all pylint diagnostics.",
+        "returns": "[Violation]",
+        "desc": "Returns all pylint violations.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-pylint/src/python-pylint.cop#L10"
       }
     ],
@@ -4198,8 +4148,8 @@ const packages = {
       {
         "name": "diagnostics",
         "params": "",
-        "returns": "[Diagnostic]",
-        "desc": "Returns all ruff diagnostics.",
+        "returns": "[Violation]",
+        "desc": "Returns all ruff violations.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-ruff/src/python-ruff.cop#L10"
       }
     ],
@@ -4235,11 +4185,11 @@ const packages = {
   },
   "typescript-tsc": {
     "label": "typescript-tsc",
-    "overview": "Run TypeScript compiler and expose diagnostics",
+    "overview": "Run TypeScript compiler and expose violations",
     "samples": [
       {
         "title": "Run tsc",
-        "code": "import typescript-tsc\n\n# Run TypeScript compiler checks and report diagnostics\nCHECK tsc-checks"
+        "code": "import typescript-tsc\n\n# Run TypeScript compiler checks and report violations\nCHECK tsc-checks"
       }
     ],
     "collections": [],
@@ -4247,11 +4197,18 @@ const packages = {
     "predicates": [],
     "functions": [
       {
+        "name": "violations",
+        "params": "",
+        "returns": "[Violation]",
+        "desc": "Returns the TypeScript compiler violations collection",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/typescript-tsc/src/typescript-tsc.cop#L9"
+      },
+      {
         "name": "diagnostics",
         "params": "",
-        "returns": "[Diagnostic]",
-        "desc": "Returns the TypeScript compiler diagnostics collection",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/typescript-tsc/src/typescript-tsc.cop#L9"
+        "returns": "[Violation]",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/typescript-tsc/src/typescript-tsc.cop#L10"
       }
     ],
     "checks": [],

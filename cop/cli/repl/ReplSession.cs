@@ -96,18 +96,16 @@ public class ReplSession
 
         Console.WriteLine($"""
 
-        {c}       ██ ██{r}
-        {b}   ▄██████████████▄      {c}Agent Cop{r} {d}v{versionStr}{r}
-        {b} ▀██████████████████████▀ {d}Static analysis for the AI era{r}
-        {b}       ▐██{r}●{b}██▌{r}
-        {c}    ▄████████▄{b} ████{r}      {d}Working on{r} {dirName}/{fileNames}
-        {c}   ██████████████{b}▐██{r}
-        {c}   ██████████████{b}▐██{r}     {d}Type{r} help! {d}for commands{r}
-        {c}   ██████████████{b}▐██{r}
-        {c}    ▀████████▀{b}▐████{r}
-        {b}        ██▌▐██▌{r}
-        {b}       ████ ████{r}
-        {b}       ████ ████{r}
+        {b}          ▄███▄              {c}Agent Cop{r} {d}v{versionStr}{r}
+        {b}       ▄████████▄{r}
+        {b}    ██████████████████       {d}Static analysis for the AI era{r}
+        {b}        ▐██{r}●{b}██▌{r}
+        {b}     {c}▄██████▄{b} ▄████{r}       {d}Working on{r} {dirName}/{fileNames}
+        {b}    {c}████████████{b}▐████{r}
+        {b}    {c}████████████{b}▐████{r}      {d}Type{r} help! {d}for commands{r}
+        {b}     {c}▀██████▀{b}▐██████{r}
+        {b}       ████████████{r}
+        {b}       ████  ████{r}
 
         """);
     }

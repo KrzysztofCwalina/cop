@@ -112,7 +112,7 @@ import code-analysis
 # We allow var — remove that check entirely
 let my-checks = csharp-checks - var-declarations
 
-function MAIN() = { CHECK(my-checks) }
+command MAIN = CHECK(my-checks)
 ```
 
 Now `cop cop.cop` will skip the `var-declarations` check. You can subtract multiple:
@@ -124,7 +124,7 @@ import code-analysis
 # Our style: allow var, allow tabs, don't require file headers
 let my-checks = csharp-checks - var-declarations - no-tabs - file-header-required
 
-function MAIN() = { CHECK(my-checks) }
+command MAIN = CHECK(my-checks)
 ```
 
 ### Excluding a Group of Checks
@@ -138,7 +138,7 @@ import code-analysis
 # Only run correctness and FDG checks — skip all style checks
 let my-checks = csharp-correctness-checks + fdg-checks
 
-function MAIN() = { CHECK(my-checks) }
+command MAIN = CHECK(my-checks)
 ```
 
 ### Excluding Individual Violations by Path
@@ -156,13 +156,13 @@ let var-declarations = Statements:isVarDeclaration:!isTestFile
 
 ### Zero-Arg Invocation with Config
 
-Once you have a `cop.cop` file that imports packages and defines `MAIN()`, you can just run:
+Once you have a `cop.cop` file that imports packages and defines `MAIN`, you can just run:
 
 ```bash
 cop cop.cop
 ```
 
-Example `cop.cop` that customizes checks and provides a `MAIN` function:
+Example `cop.cop` that customizes checks and provides a `MAIN` command:
 
 ```ruby
 import csharp-checks
@@ -171,7 +171,7 @@ import code-analysis
 # Our style: allow var, skip style checks
 let my-checks = csharp-correctness-checks + fdg-checks - var-declarations
 
-function MAIN() = { CHECK(my-checks) }
+command MAIN = CHECK(my-checks)
 ```
 
 ---
@@ -261,7 +261,7 @@ export let no-hardcoded-urls = Statements:isHardcodedUrl
 
 let all-checks = my-checks + no-hardcoded-urls
 
-function MAIN() = { CHECK(all-checks) }
+command MAIN = CHECK(all-checks)
 ```
 
 ---
@@ -297,7 +297,7 @@ predicate usesDateTimeNow(Statement) => Statement.Kind == 'call'
 export let datetime-now = Statements:usesDateTimeNow
     :toError('Use DateTimeOffset.UtcNow instead of DateTime.Now')
 
-function MAIN() = { CHECK(datetime-now) }
+command MAIN = CHECK(datetime-now)
 ```
 
 4. From now on, `cop` catches this pattern before it reaches code review.
@@ -414,7 +414,7 @@ import python-checks
 import code-analysis
 
 # Combine ruff findings with native cop checks
-let all-checks = checks + python-checks
+let all-checks = ruff-checks + python-checks
 
 command MAIN = CHECK(all-checks)
 ```
@@ -423,12 +423,12 @@ Or filter the external results:
 
 ```ruby
 import python-ruff
+import code-analysis
 
-# Only show errors (not warnings)
-predicate isError(item) => item.Severity == 'error'
+# Only show errors from ruff
+let ruff-errors = ruff-checks : item.Severity == 'error'
 
-command MAIN = foreach diagnostics():isError
-    => '{item.FilePath}({item.Line}): {item.RuleId}: {item.Message}'
+command MAIN = CHECK(ruff-errors)
 ```
 
 ### Performance

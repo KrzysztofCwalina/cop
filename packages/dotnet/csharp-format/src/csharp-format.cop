@@ -1,12 +1,13 @@
-# dotnet format integration — runs dotnet format and produces cop diagnostics
+# dotnet format integration — runs dotnet format and produces cop violations
 # Prerequisites: dotnet format must be installed
 
 import code-analysis
 
 let data = provider('csharp-format', nic)
 
-## Returns the dotnet format diagnostics collection
-export function diagnostics() : [Diagnostic] => data.Diagnostics
-export let csharp-format-checks = data.Diagnostics
+## Returns the dotnet format violations collection
+export function violations() : [Violation] => data.Violations
+export function diagnostics() : [Violation] => data.Violations
+export let csharp-format-checks = data.Violations
 
-command MAIN = foreach csharp-format-checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'
+command MAIN = CHECK(csharp-format-checks)

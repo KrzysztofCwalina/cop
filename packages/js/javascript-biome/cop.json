@@ -1,7 +1,7 @@
 {
   "name": "javascript-biome",
   "version": "0.1.0",
-  "description": "Run Biome and expose diagnostics",
+  "description": "Run Biome and expose violations",
   "title": "Biome Integration",
   "authors": "cop-team",
   "tags": [

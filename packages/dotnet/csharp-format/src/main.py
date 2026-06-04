@@ -1,5 +1,5 @@
 """
-Cop provider that runs dotnet format and exposes formatting diagnostics.
+Cop provider that runs dotnet format and exposes formatting violations.
 """
 
 import json
@@ -18,20 +18,17 @@ def get_schema():
     return {
         'types': [
             {
-                'name': 'Diagnostic',
+                'name': 'Violation',
                 'properties': [
-                    {'name': 'FilePath'},
+                    {'name': 'File'},
                     {'name': 'Line', 'type': 'int'},
-                    {'name': 'Column', 'type': 'int'},
-                    {'name': 'EndLine', 'type': 'int'},
-                    {'name': 'EndColumn', 'type': 'int'},
-                    {'name': 'RuleId'},
-                    {'name': 'Message'},
                     {'name': 'Severity'},
+                    {'name': 'Message'},
+                    {'name': 'Source'},
                 ],
             }
         ],
-        'collections': [{'name': 'Diagnostics', 'itemType': 'Diagnostic'}],
+        'collections': [{'name': 'Violations', 'itemType': 'Violation'}],
     }
 
 
@@ -79,7 +76,7 @@ def query(params):
                 if filename.lower().endswith('.json'):
                     report_files.append(os.path.join(current_directory, filename))
 
-        diagnostics = []
+        violations = []
         for report_file in report_files:
             with open(report_file, 'r', encoding='utf-8') as handle:
                 report_entries = get_report_entries(json.load(handle))
@@ -91,25 +88,23 @@ def query(params):
 
                 for change in entry.get('FileChanges') or []:
                     line = int(change.get('LineNumber') or 0)
-                    column = int(change.get('CharNumber') or 0)
-                    diagnostics.append({
-                        'FilePath': file_path,
+                    rule_id = change.get('DiagnosticId') or 'IDE0055'
+                    message = change.get('FormatDescription') or 'Formatting violation'
+                    violations.append({
+                        'File': file_path,
                         'Line': line,
-                        'Column': column,
-                        'EndLine': line,
-                        'EndColumn': column,
-                        'RuleId': change.get('DiagnosticId') or 'IDE0055',
-                        'Message': change.get('FormatDescription') or 'Formatting violation',
                         'Severity': 'warning',
+                        'Message': f'{rule_id}: {message}',
+                        'Source': 'dotnet-format',
                     })
 
-        return {'Diagnostics': diagnostics}
+        return {'Violations': violations}
     except FileNotFoundError:
         sys.stderr.write('Error: dotnet not found. Install the .NET SDK.\n')
-        return {'Diagnostics': []}
+        return {'Violations': []}
     except Exception as error:
         sys.stderr.write(f'Error running dotnet format: {error}\n')
-        return {'Diagnostics': []}
+        return {'Violations': []}
     finally:
         shutil.rmtree(report_directory, ignore_errors=True)
 

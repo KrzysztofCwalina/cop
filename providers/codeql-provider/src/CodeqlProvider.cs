@@ -18,24 +18,21 @@ public class CodeqlProvider : DataProvider
         {
             Collections =
             [
-                new ProviderCollectionSchema { Name = "Results", ItemType = "Result" },
+                new ProviderCollectionSchema { Name = "Violations", ItemType = "Violation" },
                 new ProviderCollectionSchema { Name = "Rules", ItemType = "Rule" }
             ],
             Types =
             [
                 new ProviderTypeSchema
                 {
-                    Name = "Result",
+                    Name = "Violation",
                     Properties =
                     [
-                        new ProviderPropertySchema { Name = "RuleId" },
-                        new ProviderPropertySchema { Name = "Message" },
+                        new ProviderPropertySchema { Name = "File" },
+                        new ProviderPropertySchema { Name = "Line", Type = "int" },
                         new ProviderPropertySchema { Name = "Severity" },
-                        new ProviderPropertySchema { Name = "FilePath" },
-                        new ProviderPropertySchema { Name = "StartLine", Type = "int" },
-                        new ProviderPropertySchema { Name = "EndLine", Type = "int" },
-                        new ProviderPropertySchema { Name = "StartColumn", Type = "int" },
-                        new ProviderPropertySchema { Name = "EndColumn", Type = "int" }
+                        new ProviderPropertySchema { Name = "Message" },
+                        new ProviderPropertySchema { Name = "Source" }
                     ]
                 },
                 new ProviderTypeSchema
@@ -59,7 +56,7 @@ public class CodeqlProvider : DataProvider
     public override object? Query(ProviderQuery query)
     {
         // Auto-discover SARIF files in the root path
-        var results = new List<object>();
+        var violations = new List<object>();
         var rules = new List<object>();
 
         if (!string.IsNullOrEmpty(query.RootPath) && Directory.Exists(query.RootPath))
@@ -67,13 +64,13 @@ public class CodeqlProvider : DataProvider
             var sarifFiles = Directory.GetFiles(query.RootPath, "*.sarif", SearchOption.TopDirectoryOnly);
             foreach (var file in sarifFiles)
             {
-                LoadSarifFile(file, results, rules);
+                LoadSarifFile(file, violations, rules);
             }
         }
 
         return new Dictionary<string, List<object>>
         {
-            ["Results"] = results,
+            ["Violations"] = violations,
             ["Rules"] = rules
         };
     }
@@ -82,21 +79,18 @@ public class CodeqlProvider : DataProvider
     {
         ClrTypeMappings = new Dictionary<Type, string>
         {
-            [typeof(CodeqlResult)] = "Result",
+            [typeof(CodeqlViolation)] = "Violation",
             [typeof(CodeqlRule)] = "Rule"
         },
         Accessors = new Dictionary<string, Dictionary<string, Func<object, object?>>>
         {
-            ["Result"] = new()
+            ["Violation"] = new()
             {
-                ["RuleId"] = o => ((CodeqlResult)o).RuleId,
-                ["Message"] = o => ((CodeqlResult)o).Message,
-                ["Severity"] = o => ((CodeqlResult)o).Severity,
-                ["FilePath"] = o => ((CodeqlResult)o).FilePath,
-                ["StartLine"] = o => ((CodeqlResult)o).StartLine,
-                ["EndLine"] = o => ((CodeqlResult)o).EndLine,
-                ["StartColumn"] = o => ((CodeqlResult)o).StartColumn,
-                ["EndColumn"] = o => ((CodeqlResult)o).EndColumn
+                ["File"] = o => ((CodeqlViolation)o).File,
+                ["Line"] = o => ((CodeqlViolation)o).Line,
+                ["Severity"] = o => ((CodeqlViolation)o).Severity,
+                ["Message"] = o => ((CodeqlViolation)o).Message,
+                ["Source"] = o => ((CodeqlViolation)o).Source
             },
             ["Rule"] = new()
             {
@@ -110,7 +104,7 @@ public class CodeqlProvider : DataProvider
         }
     };
 
-    private static void LoadSarifFile(string filePath, List<object> results, List<object> rules)
+    private static void LoadSarifFile(string filePath, List<object> violations, List<object> rules)
     {
         try
         {
@@ -183,14 +177,18 @@ public class CodeqlProvider : DataProvider
                         {
                             "error" => "error",
                             "warning" => "warning",
-                            "note" => "note",
-                            "none" => "recommendation",
+                            "note" => "info",
+                            "none" => "info",
                             _ => severity
                         };
                     }
 
-                    var filePath2 = "";
-                    int startLine = 0, endLine = 0, startCol = 0, endCol = 0;
+                    // Map note/recommendation to info for Violation compatibility
+                    if (severity is "note" or "recommendation")
+                        severity = "info";
+
+                    var file = "";
+                    int startLine = 0;
 
                     if (result.TryGetProperty("locations", out var locs))
                     {
@@ -200,21 +198,20 @@ public class CodeqlProvider : DataProvider
                             {
                                 if (physLoc.TryGetProperty("artifactLocation", out var artLoc) &&
                                     artLoc.TryGetProperty("uri", out var uri))
-                                    filePath2 = uri.GetString() ?? "";
+                                    file = uri.GetString() ?? "";
 
                                 if (physLoc.TryGetProperty("region", out var region))
                                 {
                                     startLine = region.TryGetProperty("startLine", out var sl) ? sl.GetInt32() : 0;
-                                    endLine = region.TryGetProperty("endLine", out var el) ? el.GetInt32() : startLine;
-                                    startCol = region.TryGetProperty("startColumn", out var sc) ? sc.GetInt32() : 0;
-                                    endCol = region.TryGetProperty("endColumn", out var ec) ? ec.GetInt32() : 0;
                                 }
                             }
                             break; // only use first location
                         }
                     }
 
-                    results.Add(new CodeqlResult(ruleId, message, severity, filePath2, startLine, endLine, startCol, endCol));
+                    // Combine RuleId into Message
+                    var fullMessage = string.IsNullOrEmpty(ruleId) ? message : $"{ruleId}: {message}";
+                    violations.Add(new CodeqlViolation(file, startLine, severity, fullMessage, "codeql"));
                 }
             }
         }
@@ -227,16 +224,13 @@ public class CodeqlProvider : DataProvider
     public override string ToString() => "CodeqlProvider";
 }
 
-/// <summary>CodeQL analysis result (alert/finding from SARIF)</summary>
-public record CodeqlResult(
-    string RuleId,
-    string Message,
+/// <summary>CodeQL analysis violation (mapped from SARIF finding)</summary>
+public record CodeqlViolation(
+    string File,
+    int Line,
     string Severity,
-    string FilePath,
-    int StartLine,
-    int EndLine,
-    int StartColumn,
-    int EndColumn);
+    string Message,
+    string Source);
 
 /// <summary>CodeQL rule definition from SARIF</summary>
 public record CodeqlRule(

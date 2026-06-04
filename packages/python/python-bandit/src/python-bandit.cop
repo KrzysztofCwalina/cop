@@ -1,4 +1,4 @@
-# Bandit security scanner integration — runs bandit and produces cop diagnostics
+# Bandit security scanner integration — runs bandit and produces cop Violations
 # Prerequisites: bandit must be installed (pip install bandit)
 # Usage: import python-bandit
 
@@ -6,10 +6,10 @@ import code-analysis
 
 let data = provider('python-bandit', nic)
 
-## Returns all bandit diagnostics.
-export function diagnostics() : [Diagnostic] => data.Diagnostics
+## Returns all bandit violations.
+export function diagnostics() : [Violation] => data.Violations
 
-## All bandit security checks as a collection.
-export let bandit-checks = data.Diagnostics
+## All bandit security violations as a collection.
+export let bandit-checks = data.Violations
 
-command MAIN = foreach bandit-checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'
+command MAIN = CHECK(bandit-checks)

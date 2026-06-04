@@ -1,12 +1,14 @@
-# Semgrep integration — runs Semgrep and produces cop diagnostics
+# Semgrep integration — runs Semgrep and produces cop Violations
 # Prerequisites: Semgrep must be installed
 
 import code-analysis
 
 let data = provider('analysis-semgrep', nic)
 
-## Returns the Semgrep diagnostics collection
-export function diagnostics() : [Diagnostic] => data.Diagnostics
-export let semgrep-checks = data.Diagnostics
+## Returns the Semgrep violations collection.
+export function diagnostics() : [Violation] => data.Violations
 
-command MAIN = foreach semgrep-checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'
+## All Semgrep violations as a collection.
+export let semgrep-checks = data.Violations
+
+command MAIN = CHECK(semgrep-checks)

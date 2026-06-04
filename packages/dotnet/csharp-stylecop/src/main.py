@@ -1,5 +1,5 @@
 """
-Cop provider that runs StyleCop analyzers via dotnet build and exposes diagnostics.
+Cop provider that runs StyleCop analyzers via dotnet build and exposes violations.
 """
 
 import os
@@ -20,20 +20,17 @@ def get_schema():
     return {
         'types': [
             {
-                'name': 'Diagnostic',
+                'name': 'Violation',
                 'properties': [
-                    {'name': 'FilePath'},
+                    {'name': 'File'},
                     {'name': 'Line', 'type': 'int'},
-                    {'name': 'Column', 'type': 'int'},
-                    {'name': 'EndLine', 'type': 'int'},
-                    {'name': 'EndColumn', 'type': 'int'},
-                    {'name': 'RuleId'},
-                    {'name': 'Message'},
                     {'name': 'Severity'},
+                    {'name': 'Message'},
+                    {'name': 'Source'},
                 ],
             }
         ],
-        'collections': [{'name': 'Diagnostics', 'itemType': 'Diagnostic'}],
+        'collections': [{'name': 'Violations', 'itemType': 'Violation'}],
     }
 
 
@@ -76,7 +73,7 @@ def query(params):
         )
 
         output = '\n'.join(part for part in [result.stdout, result.stderr] if part)
-        diagnostics = []
+        violations = []
 
         for raw_line in output.splitlines():
             match = DIAGNOSTIC_PATTERN.match(raw_line.strip())
@@ -91,24 +88,21 @@ def query(params):
             if not file_path or is_excluded(file_path, excluded_directories):
                 continue
 
-            diagnostics.append({
-                'FilePath': file_path,
+            violations.append({
+                'File': file_path,
                 'Line': int(line),
-                'Column': int(column),
-                'EndLine': int(line),
-                'EndColumn': int(column),
-                'RuleId': rule_id,
-                'Message': message,
                 'Severity': severity.lower(),
+                'Message': f'{rule_id}: {message}',
+                'Source': 'stylecop',
             })
 
-        return {'Diagnostics': diagnostics}
+        return {'Violations': violations}
     except FileNotFoundError:
         sys.stderr.write('Error: dotnet not found. Install the .NET SDK.\n')
-        return {'Diagnostics': []}
+        return {'Violations': []}
     except Exception as error:
         sys.stderr.write(f'Error running dotnet build: {error}\n')
-        return {'Diagnostics': []}
+        return {'Violations': []}
 
 
 define_provider(schema=get_schema, query=query)

@@ -8,20 +8,17 @@ function getSchema() {
   return {
     types: [
       {
-        name: 'Diagnostic',
+        name: 'Violation',
         properties: [
-          { name: 'FilePath' },
+          { name: 'File' },
           { name: 'Line', type: 'int' },
-          { name: 'Column', type: 'int' },
-          { name: 'EndLine', type: 'int' },
-          { name: 'EndColumn', type: 'int' },
-          { name: 'RuleId' },
-          { name: 'Message' },
           { name: 'Severity' },
+          { name: 'Message' },
+          { name: 'Source' },
         ],
       },
     ],
-    collections: [{ name: 'Diagnostics', itemType: 'Diagnostic' }],
+    collections: [{ name: 'Violations', itemType: 'Violation' }],
   };
 }
 
@@ -115,15 +112,15 @@ defineProvider({
     const result = runCommand(commands, rootPath);
     if (!result) {
       process.stderr.write('Biome not found. Install with: npm install @biomejs/biome\n');
-      return { Diagnostics: [] };
+      return { Violations: [] };
     }
 
     const output = `${result.stdout || ''}${result.stderr || ''}`.trim();
     if (!output) {
-      return { Diagnostics: [] };
+      return { Violations: [] };
     }
 
-    const diagnostics = [];
+    const violations = [];
     const lines = output.split(/\r?\n/);
     const annotationPattern = /^::(error|warning)\s+(.+?)::(.*)$/;
 
@@ -140,18 +137,17 @@ defineProvider({
         continue;
       }
 
-      diagnostics.push({
-        FilePath: filePath,
+      const ruleId = properties.title || properties.category || 'biome';
+      const message = decodeGitHubCommandValue(match[3]);
+      violations.push({
+        File: filePath,
         Line: Number.parseInt(properties.line || '0', 10) || 0,
-        Column: Number.parseInt(properties.col || properties.column || '0', 10) || 0,
-        EndLine: Number.parseInt(properties.endLine || properties.line || '0', 10) || 0,
-        EndColumn: Number.parseInt(properties.endColumn || properties.col || properties.column || '0', 10) || 0,
-        RuleId: properties.title || properties.category || 'biome',
-        Message: decodeGitHubCommandValue(match[3]),
         Severity: severity,
+        Message: `${ruleId}: ${message}`,
+        Source: 'biome',
       });
     }
 
-    return { Diagnostics: diagnostics };
+    return { Violations: violations };
   },
 });

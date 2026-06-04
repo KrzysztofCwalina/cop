@@ -1,12 +1,13 @@
-# TypeScript compiler integration — runs tsc and produces cop diagnostics
+# TypeScript compiler integration — runs tsc and produces cop violations
 # Prerequisites: typescript must be installed (npm install typescript)
 
 import code-analysis
 
 let data = provider('typescript-tsc', nic)
 
-## Returns the TypeScript compiler diagnostics collection
-export function diagnostics() : [Diagnostic] => data.Diagnostics
-export let tsc-checks = data.Diagnostics
+## Returns the TypeScript compiler violations collection
+export function violations() : [Violation] => data.Violations
+export function diagnostics() : [Violation] => data.Violations
+export let tsc-checks = data.Violations
 
-command MAIN = foreach tsc-checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'
+command MAIN = CHECK(tsc-checks)

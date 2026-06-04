@@ -1,1 +1,1 @@
-Runs Semgrep and exposes findings as cop diagnostics.
+Runs Semgrep and exposes findings as cop violations.

@@ -684,7 +684,7 @@ An external analyzer package is just a Python (or Node.js) provider that:
 
 1. Runs the external tool as a subprocess
 2. Parses its structured output (JSON, SARIF, etc.)
-3. Returns the results as a typed collection (e.g., `Diagnostics`)
+3. Returns the results as a typed collection (e.g., `Violations`)
 
 ```
 ┌──────────────┐       ┌──────────────┐       ┌──────────────┐
@@ -703,7 +703,7 @@ The `python-ruff` package demonstrates the pattern:
   "name": "python-ruff",
   "version": "1.0.0",
   "title": "Ruff Python Linter",
-  "description": "Runs ruff and exposes diagnostics",
+  "description": "Runs ruff and exposes violations",
   "provider": "python",
   "providerEntry": "src/main.py"
 }
@@ -720,18 +720,17 @@ def get_schema():
     return {
         "types": [
             {
-                "name": "Diagnostic",
+                "name": "Violation",
                 "properties": [
-                    {"name": "FilePath"},
+                    {"name": "File"},
                     {"name": "Line", "type": "int"},
-                    {"name": "Column", "type": "int"},
-                    {"name": "RuleId"},
-                    {"name": "Message"},
                     {"name": "Severity"},
+                    {"name": "Message"},
+                    {"name": "Source"},
                 ],
             }
         ],
-        "collections": [{"name": "Diagnostics", "itemType": "Diagnostic"}],
+        "collections": [{"name": "Violations", "itemType": "Violation"}],
     }
 
 def query(params):
@@ -744,10 +743,10 @@ def query(params):
     )
 
     if result.returncode not in (0, 1):
-        return {"Diagnostics": []}
+        return {"Violations": []}
 
     ruff_results = json.loads(result.stdout)
-    diagnostics = []
+    violations = []
 
     for item in ruff_results:
         file_path = item.get("filename", "")
@@ -758,16 +757,15 @@ def query(params):
         severity = "error" if rule_code.startswith("E") else "warning"
         location = item.get("location", {})
 
-        diagnostics.append({
-            "FilePath": file_path.replace("\\", "/"),
+        violations.append({
+            "File": file_path.replace("\\", "/"),
             "Line": location.get("row", 0),
-            "Column": location.get("column", 0),
-            "RuleId": rule_code,
-            "Message": item.get("message", ""),
             "Severity": severity,
+            "Message": f"{rule_code}: {item.get('message', '')}",
+            "Source": "ruff",
         })
 
-    return {"Diagnostics": diagnostics}
+    return {"Violations": violations}
 
 define_provider(schema=get_schema, query=query)
 ```
@@ -778,11 +776,9 @@ import code-analysis
 
 let data = provider('python-ruff', nic)
 
-export function diagnostics() => data.Diagnostics
-export let checks = data.Diagnostics
+export let ruff-checks = data.Violations
 
-command MAIN = foreach checks
-    => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'
+command MAIN = CHECK(ruff-checks)
 ```
 
 ### Running It
@@ -802,7 +798,7 @@ To wrap a different tool, follow the same pattern:
 
 1. **Create the package directory** with `cop.json` declaring `"provider": "python"` (or `"node"`)
 2. **Write the provider script** that:
-   - Defines a schema with a `Diagnostic` (or similar) type
+   - Defines a schema with a `Violation` type (File, Line, Severity, Message, Source)
    - Runs the tool via `subprocess.run` with JSON/structured output
    - Parses the output and maps it to your schema
 3. **Write the `.cop` file** that exports the collection and defines a `command MAIN`
@@ -812,7 +808,8 @@ Key considerations:
 - **Use `encoding="utf-8"`** in subprocess calls (avoids encoding errors on Windows)
 - **Use structured output** from the tool (JSON, SARIF) — don't parse human-readable text
 - **Map severity** to `"error"`, `"warning"`, or `"info"` for consistency
-- **Use relative paths** in `FilePath` for portable output
+- **Use relative paths** in `File` for portable output
+- **Add `Source`** — the tool name (e.g., `"ruff"`, `"eslint"`) for filtering
 - **Handle tool not installed** gracefully (return empty collection, log to stderr)
 
 ### Composing Multiple Analyzers
@@ -823,7 +820,7 @@ import python-checks
 import code-analysis
 
 # All findings from both ruff and native cop checks
-let all-checks = checks + python-checks
+let all-checks = ruff-checks + python-checks
 
 command MAIN = CHECK(all-checks)
 ```
@@ -866,19 +863,18 @@ Sent once at load time. Provider must return its type and collection definitions
 {
   "types": [
     {
-      "name": "Diagnostic",
+      "name": "Violation",
       "properties": [
-        {"name": "FilePath"},
+        {"name": "File"},
         {"name": "Line", "type": "int"},
-        {"name": "Column", "type": "int"},
-        {"name": "RuleId"},
+        {"name": "Severity"},
         {"name": "Message"},
-        {"name": "Severity"}
+        {"name": "Source"}
       ]
     }
   ],
   "collections": [
-    {"name": "Diagnostics", "itemType": "Diagnostic"}
+    {"name": "Violations", "itemType": "Violation"}
   ]
 }
 ```
@@ -893,7 +889,7 @@ Sent when the engine needs collection data.
   "method": "query",
   "params": {
     "rootPath": "/path/to/project",
-    "requestedCollections": ["Diagnostics"],
+    "requestedCollections": ["Violations"],
     "excludedDirectories": [".git", "node_modules", "bin"]
   }
 }
@@ -902,14 +898,13 @@ Sent when the engine needs collection data.
 **Response:**
 ```json
 {
-  "Diagnostics": [
+  "Violations": [
     {
-      "FilePath": "src/app.js",
+      "File": "src/app.js",
       "Line": 10,
-      "Column": 5,
-      "RuleId": "no-unused-vars",
-      "Message": "'x' is defined but never used",
-      "Severity": "warning"
+      "Severity": "warning",
+      "Message": "no-unused-vars: 'x' is defined but never used",
+      "Source": "eslint"
     }
   ]
 }

@@ -1,5 +1,5 @@
 """
-Cop provider that runs pylint and exposes diagnostics.
+Cop provider that runs pylint and exposes violations.
 
 Requires 'pylint' to be installed.
 Runs 'pylint --output-format=json --recursive=y .' on the project directory.
@@ -19,20 +19,17 @@ def get_schema():
     return {
         "types": [
             {
-                "name": "Diagnostic",
+                "name": "Violation",
                 "properties": [
-                    {"name": "FilePath"},
+                    {"name": "File"},
                     {"name": "Line", "type": "int"},
-                    {"name": "Column", "type": "int"},
-                    {"name": "EndLine", "type": "int"},
-                    {"name": "EndColumn", "type": "int"},
-                    {"name": "RuleId"},
-                    {"name": "Message"},
                     {"name": "Severity"},
+                    {"name": "Message"},
+                    {"name": "Source"},
                 ],
             }
         ],
-        "collections": [{"name": "Diagnostics", "itemType": "Diagnostic"}],
+        "collections": [{"name": "Violations", "itemType": "Violation"}],
     }
 
 
@@ -68,10 +65,10 @@ def query(params):
 
         output = result.stdout.strip()
         if not output:
-            return {"Diagnostics": []}
+            return {"Violations": []}
 
         pylint_results = json.loads(output)
-        diagnostics = []
+        violations = []
         severity_map = {
             "fatal": "error",
             "error": "error",
@@ -86,25 +83,24 @@ def query(params):
             if is_excluded(file_path, excluded_dirs):
                 continue
 
-            diagnostics.append({
-                "FilePath": file_path,
+            rule_id = item.get("message-id", "")
+            message = item.get("message", "")
+            violations.append({
+                "File": file_path,
                 "Line": item.get("line", 0),
-                "Column": item.get("column", 0),
-                "EndLine": 0,
-                "EndColumn": 0,
-                "RuleId": item.get("message-id", ""),
-                "Message": item.get("message", ""),
                 "Severity": severity_map.get(item.get("type", "").lower(), "info"),
+                "Message": f"{rule_id}: {message}" if rule_id else message,
+                "Source": "pylint",
             })
 
-        return {"Diagnostics": diagnostics}
+        return {"Violations": violations}
 
     except FileNotFoundError:
         sys.stderr.write("Error: pylint not found. Install with: pip install pylint\n")
-        return {"Diagnostics": []}
+        return {"Violations": []}
     except Exception as e:
         sys.stderr.write(f"Error running pylint: {e}\n")
-        return {"Diagnostics": []}
+        return {"Violations": []}
 
 
 define_provider(schema=get_schema, query=query)

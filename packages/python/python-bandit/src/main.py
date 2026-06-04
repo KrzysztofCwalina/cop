@@ -1,5 +1,5 @@
 """
-Cop provider that runs bandit and exposes diagnostics.
+Cop provider that runs bandit and exposes violations.
 
 Requires 'bandit' to be installed.
 Runs 'bandit -r . -f json --quiet' on the project directory.
@@ -19,20 +19,17 @@ def get_schema():
     return {
         "types": [
             {
-                "name": "Diagnostic",
+                "name": "Violation",
                 "properties": [
-                    {"name": "FilePath"},
+                    {"name": "File"},
                     {"name": "Line", "type": "int"},
-                    {"name": "Column", "type": "int"},
-                    {"name": "EndLine", "type": "int"},
-                    {"name": "EndColumn", "type": "int"},
-                    {"name": "RuleId"},
-                    {"name": "Message"},
                     {"name": "Severity"},
+                    {"name": "Message"},
+                    {"name": "Source"},
                 ],
             }
         ],
-        "collections": [{"name": "Diagnostics", "itemType": "Diagnostic"}],
+        "collections": [{"name": "Violations", "itemType": "Violation"}],
     }
 
 
@@ -67,14 +64,14 @@ def query(params):
         )
 
         if result.returncode not in (0, 1):
-            return {"Diagnostics": []}
+            return {"Violations": []}
 
         output = result.stdout.strip()
         if not output:
-            return {"Diagnostics": []}
+            return {"Violations": []}
 
         bandit_results = json.loads(output)
-        diagnostics = []
+        violations = []
         severity_map = {
             "HIGH": "error",
             "MEDIUM": "warning",
@@ -86,25 +83,24 @@ def query(params):
             if is_excluded(file_path, excluded_dirs):
                 continue
 
-            diagnostics.append({
-                "FilePath": file_path,
+            rule_id = item.get("test_id", "")
+            message = item.get("issue_text", "")
+            violations.append({
+                "File": file_path,
                 "Line": item.get("line_number", 0),
-                "Column": item.get("col_offset", 0),
-                "EndLine": 0,
-                "EndColumn": 0,
-                "RuleId": item.get("test_id", ""),
-                "Message": item.get("issue_text", ""),
                 "Severity": severity_map.get(item.get("issue_severity", "").upper(), "info"),
+                "Message": f"{rule_id}: {message}" if rule_id else message,
+                "Source": "bandit",
             })
 
-        return {"Diagnostics": diagnostics}
+        return {"Violations": violations}
 
     except FileNotFoundError:
         sys.stderr.write("Error: bandit not found. Install with: pip install bandit\n")
-        return {"Diagnostics": []}
+        return {"Violations": []}
     except Exception as e:
         sys.stderr.write(f"Error running bandit: {e}\n")
-        return {"Diagnostics": []}
+        return {"Violations": []}
 
 
 define_provider(schema=get_schema, query=query)

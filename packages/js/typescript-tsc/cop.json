@@ -1,7 +1,7 @@
 {
   "name": "typescript-tsc",
   "version": "0.1.0",
-  "description": "Run TypeScript compiler and expose diagnostics",
+  "description": "Run TypeScript compiler and expose violations",
   "title": "TypeScript Compiler Integration",
   "authors": "cop-team",
   "tags": [

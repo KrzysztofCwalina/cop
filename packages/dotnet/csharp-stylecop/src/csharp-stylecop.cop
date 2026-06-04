@@ -1,12 +1,13 @@
-# StyleCop integration — runs StyleCop and produces cop diagnostics
+# StyleCop integration — runs StyleCop and produces cop violations
 # Prerequisites: StyleCop must be installed
 
 import code-analysis
 
 let data = provider('csharp-stylecop', nic)
 
-## Returns the StyleCop diagnostics collection
-export function diagnostics() : [Diagnostic] => data.Diagnostics
-export let stylecop-checks = data.Diagnostics
+## Returns the StyleCop violations collection
+export function violations() : [Violation] => data.Violations
+export function diagnostics() : [Violation] => data.Violations
+export let stylecop-checks = data.Violations
 
-command MAIN = foreach stylecop-checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'
+command MAIN = CHECK(stylecop-checks)

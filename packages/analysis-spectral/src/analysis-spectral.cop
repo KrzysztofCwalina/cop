@@ -1,12 +1,11 @@
-# Spectral integration — runs Spectral and produces cop diagnostics
+# Spectral integration — runs Spectral and produces cop Violations
 # Prerequisites: Spectral must be installed
 
 import code-analysis
 
 let data = provider('analysis-spectral', nic)
 
-## Returns the Spectral diagnostics collection
-export function diagnostics() : [Diagnostic] => data.Diagnostics
-export let spectral-checks = data.Diagnostics
+## All Spectral violations as a collection.
+export let spectral-checks = data.Violations
 
-command MAIN = foreach spectral-checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'
+command MAIN = CHECK(spectral-checks)

@@ -8,20 +8,17 @@ function getSchema() {
   return {
     types: [
       {
-        name: 'Diagnostic',
+        name: 'Violation',
         properties: [
-          { name: 'FilePath' },
+          { name: 'File' },
           { name: 'Line', type: 'int' },
-          { name: 'Column', type: 'int' },
-          { name: 'EndLine', type: 'int' },
-          { name: 'EndColumn', type: 'int' },
-          { name: 'RuleId' },
-          { name: 'Message' },
           { name: 'Severity' },
+          { name: 'Message' },
+          { name: 'Source' },
         ],
       },
     ],
-    collections: [{ name: 'Diagnostics', itemType: 'Diagnostic' }],
+    collections: [{ name: 'Violations', itemType: 'Violation' }],
   };
 }
 
@@ -92,12 +89,12 @@ defineProvider({
     const result = runCommand(commands, rootPath);
     if (!result) {
       process.stderr.write('ESLint not found. Install with: npm install eslint\n');
-      return { Diagnostics: [] };
+      return { Violations: [] };
     }
 
     const output = (result.stdout || '').trim();
     if (!output) {
-      return { Diagnostics: [] };
+      return { Violations: [] };
     }
 
     let eslintResults;
@@ -105,10 +102,10 @@ defineProvider({
       eslintResults = JSON.parse(output);
     } catch (error) {
       process.stderr.write(`Error parsing ESLint output: ${error.message}\n`);
-      return { Diagnostics: [] };
+      return { Violations: [] };
     }
 
-    const diagnostics = [];
+    const violations = [];
     for (const fileResult of Array.isArray(eslintResults) ? eslintResults : []) {
       const filePath = normalizeRelativePath(fileResult.filePath || '', rootPath);
       if (!filePath || isExcluded(filePath, excludedDirectories)) {
@@ -116,19 +113,17 @@ defineProvider({
       }
 
       for (const message of fileResult.messages || []) {
-        diagnostics.push({
-          FilePath: filePath,
+        const ruleId = message.ruleId || 'parse-error';
+        violations.push({
+          File: filePath,
           Line: message.line || 0,
-          Column: message.column || 0,
-          EndLine: message.endLine || message.line || 0,
-          EndColumn: message.endColumn || message.column || 0,
-          RuleId: message.ruleId || 'parse-error',
-          Message: message.message || '',
           Severity: message.severity === 2 ? 'error' : 'warning',
+          Message: `${ruleId}: ${message.message || ''}`,
+          Source: 'eslint',
         });
       }
     }
 
-    return { Diagnostics: diagnostics };
+    return { Violations: violations };
   },
 });

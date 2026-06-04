@@ -8,20 +8,17 @@ function getSchema() {
   return {
     types: [
       {
-        name: 'Diagnostic',
+        name: 'Violation',
         properties: [
-          { name: 'FilePath' },
+          { name: 'File' },
           { name: 'Line', type: 'int' },
-          { name: 'Column', type: 'int' },
-          { name: 'EndLine', type: 'int' },
-          { name: 'EndColumn', type: 'int' },
-          { name: 'RuleId' },
-          { name: 'Message' },
           { name: 'Severity' },
+          { name: 'Message' },
+          { name: 'Source' },
         ],
       },
     ],
-    collections: [{ name: 'Diagnostics', itemType: 'Diagnostic' }],
+    collections: [{ name: 'Violations', itemType: 'Violation' }],
   };
 }
 
@@ -110,12 +107,12 @@ defineProvider({
     const result = runSpectral(rootPath);
     if (!result) {
       process.stderr.write('Spectral not found. Install with: npm install @stoplight/spectral-cli\n');
-      return { Diagnostics: [] };
+      return { Violations: [] };
     }
 
     const output = (result.stdout || '').trim();
     if (!output) {
-      return { Diagnostics: [] };
+      return { Violations: [] };
     }
 
     let spectralResults;
@@ -123,10 +120,10 @@ defineProvider({
       spectralResults = JSON.parse(output);
     } catch (error) {
       process.stderr.write(`Error parsing Spectral output: ${error.message}\n`);
-      return { Diagnostics: [] };
+      return { Violations: [] };
     }
 
-    const diagnostics = [];
+    const violations = [];
     for (const item of Array.isArray(spectralResults) ? spectralResults : []) {
       const filePath = normalizeRelativePath(item.source || '', rootPath);
       if (!filePath || isExcluded(filePath, excludedDirectories)) {
@@ -135,19 +132,17 @@ defineProvider({
 
       const start = (((item || {}).range || {}).start) || {};
       const line = Number.isInteger(start.line) ? start.line + 1 : 0;
-      const column = Number.isInteger(start.character) ? start.character + 1 : 0;
-      diagnostics.push({
-        FilePath: filePath,
+      const ruleId = item.code || '';
+      const message = item.message || '';
+      violations.push({
+        File: filePath,
         Line: line,
-        Column: column,
-        EndLine: line,
-        EndColumn: column,
-        RuleId: item.code || '',
-        Message: item.message || '',
         Severity: mapSeverity(item.severity),
+        Message: ruleId ? `${ruleId}: ${message}` : message,
+        Source: 'spectral',
       });
     }
 
-    return { Diagnostics: diagnostics };
+    return { Violations: violations };
   },
 });

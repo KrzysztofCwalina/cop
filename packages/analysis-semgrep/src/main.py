@@ -1,5 +1,5 @@
 """
-Cop provider that runs Semgrep and exposes findings as diagnostics.
+Cop provider that runs Semgrep and exposes findings as violations.
 """
 
 import json
@@ -16,20 +16,17 @@ def get_schema():
     return {
         'types': [
             {
-                'name': 'Diagnostic',
+                'name': 'Violation',
                 'properties': [
-                    {'name': 'FilePath'},
+                    {'name': 'File'},
                     {'name': 'Line', 'type': 'int'},
-                    {'name': 'Column', 'type': 'int'},
-                    {'name': 'EndLine', 'type': 'int'},
-                    {'name': 'EndColumn', 'type': 'int'},
-                    {'name': 'RuleId'},
-                    {'name': 'Message'},
                     {'name': 'Severity'},
+                    {'name': 'Message'},
+                    {'name': 'Source'},
                 ],
             }
         ],
-        'collections': [{'name': 'Diagnostics', 'itemType': 'Diagnostic'}],
+        'collections': [{'name': 'Violations', 'itemType': 'Violation'}],
     }
 
 
@@ -73,10 +70,10 @@ def query(params):
 
         output = (result.stdout or '').strip()
         if not output:
-            return {'Diagnostics': []}
+            return {'Violations': []}
 
         semgrep_results = json.loads(output)
-        diagnostics = []
+        violations = []
 
         for item in semgrep_results.get('results') or []:
             file_path = normalize_relative_path(item.get('path') or '', root_path)
@@ -84,26 +81,24 @@ def query(params):
                 continue
 
             start = item.get('start') or {}
-            end = item.get('end') or {}
             extra = item.get('extra') or {}
-            diagnostics.append({
-                'FilePath': file_path,
+            rule_id = item.get('check_id') or ''
+            message = extra.get('message') or ''
+            violations.append({
+                'File': file_path,
                 'Line': int(start.get('line') or 0),
-                'Column': int(start.get('col') or 0),
-                'EndLine': int(end.get('line') or start.get('line') or 0),
-                'EndColumn': int(end.get('col') or start.get('col') or 0),
-                'RuleId': item.get('check_id') or '',
-                'Message': extra.get('message') or '',
                 'Severity': normalize_severity(extra.get('severity')),
+                'Message': f'{rule_id}: {message}' if rule_id else message,
+                'Source': 'semgrep',
             })
 
-        return {'Diagnostics': diagnostics}
+        return {'Violations': violations}
     except FileNotFoundError:
         sys.stderr.write('Error: semgrep not found. Install Semgrep to use this package.\n')
-        return {'Diagnostics': []}
+        return {'Violations': []}
     except Exception as error:
         sys.stderr.write(f'Error running semgrep: {error}\n')
-        return {'Diagnostics': []}
+        return {'Violations': []}
 
 
 define_provider(schema=get_schema, query=query)

@@ -1,1 +1,1 @@
-Runs Checkov and exposes findings as cop diagnostics.
+Runs Checkov and exposes findings as cop violations.

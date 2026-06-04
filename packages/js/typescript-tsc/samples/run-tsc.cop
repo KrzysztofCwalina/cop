@@ -1,4 +1,4 @@
 import typescript-tsc
 
-# Run TypeScript compiler checks and report diagnostics
+# Run TypeScript compiler checks and report violations
 CHECK tsc-checks

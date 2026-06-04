@@ -1,7 +1,7 @@
 {
   "name": "javascript-eslint",
   "version": "0.1.0",
-  "description": "Run ESLint and expose diagnostics",
+  "description": "Run ESLint and expose violations",
   "title": "ESLint Integration",
   "authors": "cop-team",
   "tags": [

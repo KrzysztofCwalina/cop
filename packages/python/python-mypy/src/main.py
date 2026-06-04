@@ -1,5 +1,5 @@
 """
-Cop provider that runs mypy and exposes diagnostics.
+Cop provider that runs mypy and exposes violations.
 
 Requires 'mypy' to be installed.
 Runs 'mypy . --output json' on the project directory.
@@ -19,20 +19,17 @@ def get_schema():
     return {
         "types": [
             {
-                "name": "Diagnostic",
+                "name": "Violation",
                 "properties": [
-                    {"name": "FilePath"},
+                    {"name": "File"},
                     {"name": "Line", "type": "int"},
-                    {"name": "Column", "type": "int"},
-                    {"name": "EndLine", "type": "int"},
-                    {"name": "EndColumn", "type": "int"},
-                    {"name": "RuleId"},
-                    {"name": "Message"},
                     {"name": "Severity"},
+                    {"name": "Message"},
+                    {"name": "Source"},
                 ],
             }
         ],
-        "collections": [{"name": "Diagnostics", "itemType": "Diagnostic"}],
+        "collections": [{"name": "Violations", "itemType": "Violation"}],
     }
 
 
@@ -68,16 +65,16 @@ def query(params):
 
         if result.returncode == 2 and not result.stdout.strip():
             sys.stderr.write(result.stderr or '')
-            return {"Diagnostics": []}
+            return {"Violations": []}
 
         if result.returncode not in (0, 1, 2):
-            return {"Diagnostics": []}
+            return {"Violations": []}
 
         output = result.stdout.strip()
         if not output:
-            return {"Diagnostics": []}
+            return {"Violations": []}
 
-        diagnostics = []
+        violations = []
 
         for line in output.splitlines():
             line = line.strip()
@@ -94,25 +91,24 @@ def query(params):
                 continue
 
             severity = item.get("severity", "error")
-            diagnostics.append({
-                "FilePath": file_path,
+            rule_id = item.get("code", "")
+            message = item.get("message", "")
+            violations.append({
+                "File": file_path,
                 "Line": item.get("line", 0),
-                "Column": item.get("column", 0),
-                "EndLine": 0,
-                "EndColumn": 0,
-                "RuleId": item.get("code", ""),
-                "Message": item.get("message", ""),
                 "Severity": "info" if severity == "note" else "error",
+                "Message": f"{rule_id}: {message}" if rule_id else message,
+                "Source": "mypy",
             })
 
-        return {"Diagnostics": diagnostics}
+        return {"Violations": violations}
 
     except FileNotFoundError:
         sys.stderr.write("Error: mypy not found. Install with: pip install mypy\n")
-        return {"Diagnostics": []}
+        return {"Violations": []}
     except Exception as e:
         sys.stderr.write(f"Error running mypy: {e}\n")
-        return {"Diagnostics": []}
+        return {"Violations": []}
 
 
 define_provider(schema=get_schema, query=query)

@@ -29,18 +29,13 @@ The `analysis-codeql` package reads SARIF output from `codeql database analyze` 
 
 ```cop
 import analysis-codeql
+import code-analysis
 
 # Load results from a SARIF file
 let results = analysis-codeql.Load('results.sarif')
 
-# Filter to errors only
-let errors = results:isError
-
-# Filter to warnings in a specific file
-let authWarnings = results:isWarning
-  Result.FilePath:ct('auth')
-
-function MAIN() = { errors }
+# All CodeQL violations are available via codeql-checks
+command MAIN = CHECK(codeql-checks)
 ```
 
 ### Collections
@@ -49,22 +44,19 @@ When SARIF files exist in the target directory, collections are auto-populated:
 
 | Collection | Type | Description |
 |-----------|------|-------------|
-| `analysis-codeql.Results` | `Result` | All analysis findings |
+| `analysis-codeql.Violations` | `Violation` | All analysis findings |
 | `analysis-codeql.Rules` | `Rule` | Rule definitions from the SARIF |
 
 ### Types
 
-**Result**
+**Violation** (from `code-analysis` package)
 | Property | Type | Description |
 |----------|------|-------------|
-| `RuleId` | string | CodeQL rule identifier (e.g., `cs/sql-injection`) |
-| `Message` | string | Human-readable finding message |
-| `Severity` | string | `error`, `warning`, `note`, or `recommendation` |
-| `FilePath` | string | Relative file path of the finding |
-| `StartLine` | int | Start line number |
-| `EndLine` | int | End line number |
-| `StartColumn` | int | Start column |
-| `EndColumn` | int | End column |
+| `File` | string | Relative file path of the finding |
+| `Line` | int | Line number |
+| `Severity` | string | `error`, `warning`, or `info` |
+| `Message` | string | Finding message (includes rule ID prefix, e.g., `cs/sql-injection: ...`) |
+| `Source` | string | Tool name (`codeql`) |
 
 **Rule**
 | Property | Type | Description |
@@ -75,15 +67,6 @@ When SARIF files exist in the target directory, collections are auto-populated:
 | `Severity` | string | Default severity level |
 | `Tags` | string | Comma-separated tags (e.g., `security, correctness`) |
 | `Precision` | string | Precision level (e.g., `high`, `medium`) |
-
-### Built-in Predicates
-
-```cop
-isError(Result)          # Severity is 'error'
-isWarning(Result)        # Severity is 'warning'
-isNote(Result)           # Severity is 'note'
-isRecommendation(Result) # Severity is 'recommendation'
-```
 
 ---
 
@@ -109,7 +92,7 @@ let query = csharp-codeql-export.qlQuery(
 )
 
 # Save to a .ql file
-function MAIN() = { csharp-codeql-export.qlSave('codeql/public-abstract.ql', query) }
+command MAIN = csharp-codeql-export.qlSave('codeql/public-abstract.ql', query)
 ```
 
 This generates a complete `.ql` file:
@@ -196,7 +179,7 @@ let tooManyParams = csharp-codeql-export.qlQuery(
   'm, "Method " + m.getName() + " has " + m.getNumberOfParameters() + " parameters"'
 )
 
-function MAIN() = {
+command MAIN = {
   csharp-codeql-export.qlSave('codeql/undocumented.ql', undocumented)
   csharp-codeql-export.qlSave('codeql/too-many-params.ql', tooManyParams)
 }
@@ -232,7 +215,7 @@ let customQuery = csharp-codeql-export.qlQuery(
   'c, "Class " + c.getName() + " appears to be a singleton"'
 )
 
-function MAIN() = {
+command MAIN = {
   print('Critical CodeQL findings: {critical.count}')
   csharp-codeql-export.qlSave('codeql/singletons.ql', customQuery)
 }

@@ -1,4 +1,4 @@
 import javascript-eslint
 
-# Run ESLint and report diagnostics
+# Run ESLint and report violations
 CHECK eslint-checks

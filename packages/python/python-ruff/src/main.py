@@ -1,5 +1,5 @@
 """
-Cop provider that runs Ruff (Python linter) and exposes diagnostics.
+Cop provider that runs Ruff (Python linter) and exposes violations.
 
 Requires 'ruff' to be installed (pip install ruff).
 Runs 'ruff check --output-format=json' on the project directory.
@@ -19,20 +19,17 @@ def get_schema():
     return {
         "types": [
             {
-                "name": "Diagnostic",
+                "name": "Violation",
                 "properties": [
-                    {"name": "FilePath"},
+                    {"name": "File"},
                     {"name": "Line", "type": "int"},
-                    {"name": "Column", "type": "int"},
-                    {"name": "EndLine", "type": "int"},
-                    {"name": "EndColumn", "type": "int"},
-                    {"name": "RuleId"},
-                    {"name": "Message"},
                     {"name": "Severity"},
+                    {"name": "Message"},
+                    {"name": "Source"},
                 ],
             }
         ],
-        "collections": [{"name": "Diagnostics", "itemType": "Diagnostic"}],
+        "collections": [{"name": "Violations", "itemType": "Violation"}],
     }
 
 
@@ -51,14 +48,14 @@ def query(params):
 
         # ruff exits with code 1 when there are violations (not an error)
         if result.returncode not in (0, 1):
-            return {"Diagnostics": []}
+            return {"Violations": []}
 
         output = result.stdout.strip()
         if not output:
-            return {"Diagnostics": []}
+            return {"Violations": []}
 
         ruff_results = json.loads(output)
-        diagnostics = []
+        violations = []
 
         for item in ruff_results:
             file_path = item.get("filename", "")
@@ -70,30 +67,26 @@ def query(params):
                 continue
 
             location = item.get("location", {})
-            end_location = item.get("end_location", {})
-
             rule_code = item.get("code", "")
+            message = item.get("message", "")
             severity = "error" if rule_code.startswith("E") else "warning"
 
-            diagnostics.append({
-                "FilePath": file_path,
+            violations.append({
+                "File": file_path,
                 "Line": location.get("row", 0),
-                "Column": location.get("column", 0),
-                "EndLine": end_location.get("row", 0),
-                "EndColumn": end_location.get("column", 0),
-                "RuleId": rule_code,
-                "Message": item.get("message", ""),
                 "Severity": severity,
+                "Message": f"{rule_code}: {message}" if rule_code else message,
+                "Source": "ruff",
             })
 
-        return {"Diagnostics": diagnostics}
+        return {"Violations": violations}
 
     except FileNotFoundError:
         sys.stderr.write("Error: ruff not found. Install with: pip install ruff\n")
-        return {"Diagnostics": []}
+        return {"Violations": []}
     except Exception as e:
         sys.stderr.write(f"Error running ruff: {e}\n")
-        return {"Diagnostics": []}
+        return {"Violations": []}
 
 
 define_provider(schema=get_schema, query=query)

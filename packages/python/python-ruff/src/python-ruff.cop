@@ -6,10 +6,10 @@ import code-analysis
 
 let data = provider('python-ruff', nic)
 
-## Returns all ruff diagnostics.
-export function diagnostics() : [Diagnostic] => data.Diagnostics
+## Returns all ruff violations.
+export function diagnostics() : [Violation] => data.Violations
 
-## All ruff lint diagnostics as a collection.
-export let ruff-checks = data.Diagnostics
+## All ruff lint violations as a collection.
+export let ruff-checks = data.Violations
 
-command MAIN = foreach ruff-checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'
+command MAIN = CHECK(ruff-checks)

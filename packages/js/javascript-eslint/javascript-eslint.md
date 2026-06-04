@@ -1,1 +1,1 @@
-Runs ESLint and exposes lint findings as cop diagnostics.
+Runs ESLint and exposes lint findings as cop violations.

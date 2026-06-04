@@ -8,20 +8,17 @@ function getSchema() {
   return {
     types: [
       {
-        name: 'Diagnostic',
+        name: 'Violation',
         properties: [
-          { name: 'FilePath' },
+          { name: 'File' },
           { name: 'Line', type: 'int' },
-          { name: 'Column', type: 'int' },
-          { name: 'EndLine', type: 'int' },
-          { name: 'EndColumn', type: 'int' },
-          { name: 'RuleId' },
-          { name: 'Message' },
           { name: 'Severity' },
+          { name: 'Message' },
+          { name: 'Source' },
         ],
       },
     ],
-    collections: [{ name: 'Diagnostics', itemType: 'Diagnostic' }],
+    collections: [{ name: 'Violations', itemType: 'Violation' }],
   };
 }
 
@@ -92,15 +89,15 @@ defineProvider({
     const result = runCommand(commands, rootPath);
     if (!result) {
       process.stderr.write('TypeScript compiler not found. Install with: npm install typescript\n');
-      return { Diagnostics: [] };
+      return { Violations: [] };
     }
 
     const output = `${result.stdout || ''}${result.stderr || ''}`.trim();
     if (!output) {
-      return { Diagnostics: [] };
+      return { Violations: [] };
     }
 
-    const diagnostics = [];
+    const violations = [];
     const diagnosticPattern = /^(.+?)\((\d+),(\d+)\): (error|warning) (TS\d+): (.+)$/;
     const projectErrorPattern = /^(error|warning) (TS\d+): (.+)$/;
 
@@ -112,34 +109,30 @@ defineProvider({
           continue;
         }
 
-        diagnostics.push({
-          FilePath: filePath,
+        const ruleId = match[5];
+        violations.push({
+          File: filePath,
           Line: Number.parseInt(match[2], 10) || 0,
-          Column: Number.parseInt(match[3], 10) || 0,
-          EndLine: 0,
-          EndColumn: 0,
-          RuleId: match[5],
-          Message: match[6],
           Severity: match[4],
+          Message: `${ruleId}: ${match[6]}`,
+          Source: 'tsc',
         });
         continue;
       }
 
       const projectMatch = line.match(projectErrorPattern);
       if (projectMatch) {
-        diagnostics.push({
-          FilePath: 'tsconfig.json',
+        const ruleId = projectMatch[2];
+        violations.push({
+          File: 'tsconfig.json',
           Line: 0,
-          Column: 0,
-          EndLine: 0,
-          EndColumn: 0,
-          RuleId: projectMatch[2],
-          Message: projectMatch[3],
           Severity: projectMatch[1],
+          Message: `${ruleId}: ${projectMatch[3]}`,
+          Source: 'tsc',
         });
       }
     }
 
-    return { Diagnostics: diagnostics };
+    return { Violations: violations };
   },
 });

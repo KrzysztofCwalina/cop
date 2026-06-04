@@ -1,1 +1,1 @@
-Runs dotnet format and exposes findings as cop diagnostics.
+Runs dotnet format and exposes findings as cop violations.

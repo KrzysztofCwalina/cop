@@ -1,5 +1,5 @@
 # CodeQL Data Provider v1.0
-# Reads CodeQL analysis results (SARIF format) and exposes them as cop collections.
+# Reads CodeQL analysis results (SARIF format) and exposes them as cop Violations.
 # Import with: import analysis-codeql
 #
 # Prerequisites:
@@ -9,16 +9,12 @@
 #
 # The provider reads SARIF files from the target directory or a configured path.
 
-## A CodeQL analysis result (alert/finding)
-export type Result
-  RuleId : string
-  Message : string
-  Severity : string
-  FilePath : string
-  StartLine : int
-  EndLine : int
-  StartColumn : int
-  EndColumn : int
+import code-analysis
+
+let data = provider('analysis-codeql', nic)
+
+## All CodeQL violations as a collection.
+export let codeql-checks = data.Violations
 
 ## A CodeQL rule definition
 export type Rule
@@ -40,8 +36,4 @@ export type Run
 ## Example: analysis-codeql.Load('results.sarif')
 export function Load(path : string) : object => provider('analysis-codeql', path)
 
-## Predicates for filtering results by severity
-export predicate isError(Result) = Result.Severity:eq('error')
-export predicate isWarning(Result) = Result.Severity:eq('warning')
-export predicate isNote(Result) = Result.Severity:eq('note')
-export predicate isRecommendation(Result) = Result.Severity:eq('recommendation')
+command MAIN = CHECK(codeql-checks)
