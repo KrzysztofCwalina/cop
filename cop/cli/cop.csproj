@@ -10,6 +10,7 @@
     <SelfContained>false</SelfContained>
     <AssemblyName>cop</AssemblyName>
     <Version>2026.6.4.1</Version>
+    <ApplicationIcon>resources\cop.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>

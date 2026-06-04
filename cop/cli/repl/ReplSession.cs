@@ -83,11 +83,28 @@ public class ReplSession
 
     private void PrintBanner()
     {
+        var version = typeof(ReplSession).Assembly.GetName().Version;
+        var versionStr = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "dev";
         var dirName = Path.GetFileName(_scriptsDir);
         var files = Directory.GetFiles(_scriptsDir, "*.cop", SearchOption.TopDirectoryOnly);
         var fileNames = string.Join(", ", files.Select(Path.GetFileName));
-        Console.WriteLine($"\x1b[36mcop\x1b[0m working on {dirName}/{fileNames}");
-        Console.WriteLine();
+
+        const string cyan = "\x1b[36m";
+        const string blue = "\x1b[34m";
+        const string dim = "\x1b[2m";
+        const string reset = "\x1b[0m";
+
+        Console.WriteLine($@"
+{blue}        .-""-.        {reset}
+{blue}       / .--. \       {cyan}  Agent Cop{reset} v{versionStr}
+{blue}      | (({dim}oo{blue})) |      {reset}
+{blue}       \ `--' /       {dim}  Static analysis for the AI era{reset}
+{blue}      .-`(  )'--.     {reset}
+{blue}     /  {dim}||{blue}  {dim}||{blue}   \    {reset}  Working on {dirName}/{fileNames}
+{blue}    |   {dim}||{blue}  {dim}||{blue}    |   {reset}
+{blue}    '._{dim}//{blue}__\_{blue}._.'   {dim}  Type help! for commands{reset}
+{blue}       {dim}(/    \){reset}
+");
     }
 
     /// <summary>
