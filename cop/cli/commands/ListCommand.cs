@@ -120,7 +120,7 @@ public static class ListCommand
 
         if (lets.Count > 0)
         {
-            Console.WriteLine("Lets:");
+            Console.WriteLine("Checks:");
             foreach (var (name, doc) in lets)
             {
                 if (!string.IsNullOrEmpty(doc))

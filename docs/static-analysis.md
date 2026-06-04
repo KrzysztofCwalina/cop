@@ -75,7 +75,7 @@ This lists every individual check and group in the package:
 ```
 csharp-checks — C# checks: correctness, style, and Framework Design Guidelines
 
-Lets:
+Checks:
   var-declarations                     Disallow implicit typing with var — use explicit types
   dynamic-declarations                 Disallow dynamic typing
   thread-sleep-calls                   Use Task.Delay instead of blocking Thread.Sleep
@@ -88,8 +88,8 @@ Groups:
   csharp-checks                        All C# checks combined
 ```
 
-- **Lets** are individual checks — each one looks for a specific pattern and reports violations. You can run or exclude any of them by name (e.g., `-c var-declarations` or `csharp-checks - var-declarations`).
-- **Groups** combine multiple lets into a named set. You can run just a group (e.g., `-c fdg-checks`) or use groups when composing custom check sets.
+- **Checks** are individual rules — each one looks for a specific pattern and reports violations. You can run or exclude any of them by name (e.g., `-c var-declarations` or `csharp-checks - var-declarations`).
+- **Groups** combine multiple checks into a named set. You can run just a group (e.g., `-c fdg-checks`) or use groups when composing custom check sets.
 
 To see all packages available in your configured feeds:
 
