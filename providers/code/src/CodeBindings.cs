@@ -147,6 +147,7 @@ public static class CodeBindings
                 ["Ancestors"] = o => (object)((StatementInfo)o).GetAncestors(),
                 ["Condition"] = o => ((StatementInfo)o).Condition,
                 ["Expression"] = o => ((StatementInfo)o).Expression,
+                ["CopIgnore"] = o => ((StatementInfo)o).CopIgnore,
             },
             ["Line"] = new()
             {
@@ -155,6 +156,7 @@ public static class CodeBindings
                 ["Kind"] = o => ((LineInfo)o).Kind,
                 ["File"] = o => ((LineInfo)o).File,
                 ["Source"] = o => ((LineInfo)o).Source,
+                ["CopIgnore"] = o => ((LineInfo)o).CopIgnore,
             },
             ["File"] = new()
             {
@@ -213,18 +215,35 @@ public static class CodeBindings
             ["Lines"] = doc =>
             {
                 var file = (SourceFile)doc;
-                return file.Lines.Select((text, i) =>
+                var result = new List<object>();
+                string pendingCopIgnore = "";
+                for (int i = 0; i < file.Lines.Count; i++)
                 {
+                    var text = file.Lines[i];
                     var lineNum = i + 1;
                     var kind = file.CommentLines.Contains(lineNum) ? "comment"
                              : string.IsNullOrWhiteSpace(text) ? "blank"
                              : "code";
-                    return (object)new LineInfo(text, lineNum)
+                    var lineInfo = new LineInfo(text, lineNum)
                     {
                         File = file,
-                        Kind = kind
+                        Kind = kind,
+                        CopIgnore = pendingCopIgnore
                     };
-                }).ToList();
+                    result.Add(lineInfo);
+
+                    // Detect cop-ignore: in comment lines — applies to NEXT line
+                    pendingCopIgnore = "";
+                    if (kind == "comment")
+                    {
+                        var idx = text.IndexOf("cop-ignore:", StringComparison.Ordinal);
+                        if (idx >= 0)
+                        {
+                            pendingCopIgnore = text[(idx + "cop-ignore:".Length)..].Trim();
+                        }
+                    }
+                }
+                return result;
             },
             ["Files"] = doc => [(object)(SourceFile)doc],
             ["Members"] = doc => ((SourceFile)doc).Types.SelectMany(t =>

@@ -55,7 +55,18 @@ public static class CodeCollectionBuilder
                 var normalizedFile = sourceFile with { Path = relativePath };
 
                 for (int i = 0; i < normalizedFile.Statements.Count; i++)
+                {
                     normalizedFile.Statements[i].File = normalizedFile;
+                    // Populate CopIgnore from comment on previous line
+                    var stmtLine = normalizedFile.Statements[i].Line;
+                    if (stmtLine >= 2 && normalizedFile.CommentLines.Contains(stmtLine - 1))
+                    {
+                        var prevLineText = normalizedFile.Lines[stmtLine - 2]; // 0-indexed
+                        var idx = prevLineText.IndexOf("cop-ignore:", StringComparison.Ordinal);
+                        if (idx >= 0)
+                            normalizedFile.Statements[i].CopIgnore = prevLineText[(idx + "cop-ignore:".Length)..].Trim();
+                    }
+                }
 
                 for (int i = 0; i < normalizedFile.Types.Count; i++)
                     normalizedFile.Types[i] = normalizedFile.Types[i] with { File = normalizedFile };

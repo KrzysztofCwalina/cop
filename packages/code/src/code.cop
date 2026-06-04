@@ -119,7 +119,8 @@ export type Statement = {
     Children : [Statement],
     Ancestors : [Statement],
     Condition : string?,
-    Expression : string?
+    Expression : string?,
+    CopIgnore : string
 }
 
 export type Call = Statement & {
@@ -190,7 +191,8 @@ export type Line = {
     Number : int,
     Kind : LineKind,
     File : File?,
-    Source : string
+    Source : string,
+    CopIgnore : string
 }
 
 export predicate isComment(Line) => Line.Kind == comment

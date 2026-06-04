@@ -207,6 +207,33 @@ let my-var-check = Statements:isVarDeclaration:!isTestFile
     :toError('Do not use \'var\'')
 ```
 
+### Option 5: Suppress Individual Violations In-Source (`cop-ignore`)
+
+To suppress a specific violation instance without removing the check entirely, add a `cop-ignore` comment on the line immediately **above** the violation, in your language's comment syntax:
+
+```csharp
+// cop-ignore: var-declarations
+var client = new BlobClient(connectionString);  // this line is not flagged
+var other = new Other();                        // this line IS flagged (no cop-ignore above)
+```
+
+```python
+# cop-ignore: bare-except-clauses
+except:
+    pass  # suppressed
+```
+
+```javascript
+// cop-ignore: console-calls
+console.log("debug info");  // suppressed
+```
+
+**Rules:**
+- The `cop-ignore` comment must be on its own line, directly above the line to suppress
+- You must specify the check name (e.g., `cop-ignore: var-declarations`)
+- Only suppresses the immediately next line — not a block
+- Works with any language that has comments (the providers detect `cop-ignore:` in comment text)
+
 ---
 
 ## Adding Your Own Checks

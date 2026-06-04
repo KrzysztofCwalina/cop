@@ -12,22 +12,24 @@ export type Violation = {
     Message : string,
     File : string,
     Line : int,
-    Source : string
+    Source : string,
+    CopIgnore : string
 }
 
 ## A type that has a source location (file path and line number).
 export type TextFilePosition = {
   filePath : (item: T) => string,
-  line : (item: T) => int
+  line : (item: T) => int,
+  copIgnore : (item: T) => string
 }
 
 # Trait conformances — map TextFilePosition properties for each type
-export type Statement : TextFilePosition = { filePath => item.File.Path, line => item.Line }
-export type Type : TextFilePosition = { filePath => item.File.Path, line => item.Line }
-export type Api : TextFilePosition = { filePath => item.File.Path, line => item.Line }
-export type Line : TextFilePosition = { filePath => item.File.Path, line => item.Number }
-export type Region : TextFilePosition = { filePath => item.File.Path, line => item.StartLine }
-export type Folder : TextFilePosition = { filePath => item.Path, line => 0 }
+export type Statement : TextFilePosition = { filePath => item.File.Path, line => item.Line, copIgnore => item.CopIgnore }
+export type Type : TextFilePosition = { filePath => item.File.Path, line => item.Line, copIgnore => '' }
+export type Api : TextFilePosition = { filePath => item.File.Path, line => item.Line, copIgnore => '' }
+export type Line : TextFilePosition = { filePath => item.File.Path, line => item.Number, copIgnore => item.CopIgnore }
+export type Region : TextFilePosition = { filePath => item.File.Path, line => item.StartLine, copIgnore => '' }
+export type Folder : TextFilePosition = { filePath => item.Path, line => 0, copIgnore => '' }
 
 # Generic violation functions — dispatch via TextFilePosition trait
 export function toError(TextFilePosition, message: string) : Violation => Violation {
@@ -35,7 +37,8 @@ export function toError(TextFilePosition, message: string) : Violation => Violat
     Message = message,
     File = item.filePath,
     Line = item.line,
-    Source = item.Source
+    Source = item.Source,
+    CopIgnore = item.copIgnore
 }
 
 export function toWarning(TextFilePosition, message: string) : Violation => Violation {
@@ -43,7 +46,8 @@ export function toWarning(TextFilePosition, message: string) : Violation => Viol
     Message = message,
     File = item.filePath,
     Line = item.line,
-    Source = item.Source
+    Source = item.Source,
+    CopIgnore = item.copIgnore
 }
 
 export function toInfo(TextFilePosition, message: string) : Violation => Violation {
@@ -51,12 +55,15 @@ export function toInfo(TextFilePosition, message: string) : Violation => Violati
     Message = message,
     File = item.filePath,
     Line = item.line,
-    Source = item.Source
+    Source = item.Source,
+    CopIgnore = item.copIgnore
 }
 
 
 # Parameterized check command — users invoke via RUN CHECK(violations)
-export command CHECK(violations) = foreach violations => '{item.File@dim}({item.Line@dim}): {item.Severity}: {item.Message}'
+# Filters out violations on lines with cop-ignore comments
+export predicate isNotIgnored(Violation) => Violation.CopIgnore == ''
+export command CHECK(violations) = foreach violations:isNotIgnored => '{item.File@dim}({item.Line@dim}): {item.Severity}: {item.Message}'
 
 
 # Common predicates
