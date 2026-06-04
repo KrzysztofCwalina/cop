@@ -2,7 +2,7 @@
 
 # Agent Cop
 
-**Agent Cop** is a lightweight static analysis tool. You express code quality requirements as rules in a purpose-built DSL, and cop.exe enforces them deterministically — in CI, in your editor, or from the command line.
+**Agent Cop** is a companion to coding agents — it lets you express code quality requirements as enforcable static analysis rules, stopping code slop before it lands. You can describe requirements in plain English, and your coding agent writes formal rules in Agent Cop DSL. These formal requirement rules can be run deterministically, e.g. in CI.
 
 <br clear="left" />
 
@@ -12,7 +12,11 @@ Coding agents produce code at machine speed. Without deterministic enforcement, 
 
 ## The Solution
 
-Write enforceable rules in Agent Cop's DSL and run them with `cop.exe`. Rule violations block PRs and feed back to your coding agent automatically, just like compiler errors.
+Use Agent Cop (cop.exe) to develop and execute static analysis rules. The workflow:
+
+1. **Teach your coding agent about Agent Cop** — run `cop init` in your repo's root
+2. **Create enforcable rules** — tell the agent what you want to enforce
+3. **Run cop.exe** — rule violations block PRs and feed back to your agent automatically
 
 ## Installation
 
@@ -20,9 +24,19 @@ Download `cop.exe` from the [releases](https://github.com/KrzysztofCwalina/cop/r
 
 ## Quick Start
 
-### 1. Create Rules
+### 1. Initialize Agent Context
 
-You can write rules manually or use your coding agent — not only for the application code you're writing, but also for the rules themselves. Just ask:
+Run `cop init` in the root folder of your repo.
+
+```bash
+cop init
+```
+
+This generates instruction files (`.github/copilot-instructions.md`, `AGENTS.md`) that teach your coding agent[s] how to write cop rules. Commit them to your repo.
+
+### 2. Ask the Agent to Write Rules
+
+With context in place, just ask:
 
 > "Write a cop rule that flags any method longer than 50 statements"
 
@@ -32,9 +46,7 @@ You can write rules manually or use your coding agent — not only for the appli
 
 > "Create a cop rule that blocks dependencies from Foo.dll to Bar.dll"
 
-To enable your coding agent to write rules, run `cop init` in your repo's root. This generates instruction files (`.github/copilot-instructions.md`, `AGENTS.md`) that teach the agent how to write cop rules. Commit them to your repo.
-
-Here's what a rule for "method longer than 50 statements" looks like:
+The agent reads the instruction files setup using `cop init`, which tell it how to use cop.exe to write and execute rules. Here's what the generated rule for "method longer than 50 statements" might look like:
 
 ```ruby
 import code
@@ -46,13 +58,13 @@ let violations = Code.Methods:tooLong
 CHECK(violations)
 ```
 
-### 2. Run the Rules
+### 3. Run the Rules
 
 Ask the agent to run cop checks:
 
 > "Run cop checks and fix any violations"
 
-Or run them yourself:
+The agent will execute something like:
 
 ```bash
 cop <rules_source.cop>
