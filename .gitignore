@@ -15,5 +15,9 @@ Thumbs.db
 # NuGet
 *.nupkg
 
+# Python
+__pycache__/
+*.pyc
+
 # Debug symbols (not needed in packages)
 *.pdb
