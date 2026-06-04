@@ -6,38 +6,71 @@ Agent Cop ships with built-in check packages that enforce conventions out of the
 
 ## Running Built-In Checks
 
-Run `cop` with one or more check packages:
+By default, cop analyzes the **current working directory** — it scans all source files in the directory tree. Run `cop` from your repository root with one or more check packages:
 
 ```bash
-cop csharp-checks                        # C# naming, style, FDG, error handling
-cop python-checks                        # Python conventions
-cop javascript-checks                    # JS/TS conventions
-cop csharp-checks javascript-checks      # multiple languages at once
-cop csharp-checks -t src/                # analyze a specific directory
-cop csharp-checks -c interface-prefix    # run only a specific check
+cop csharp-checks
 ```
 
-Packages are auto-downloaded from the default feed on first use. No setup required.
-
-Output uses the standard `file(line): severity: message` format:
+This scans all C# files under the current directory and reports violations:
 
 ```
-src/Services/BlobService.cs(42): error: Do not use 'var' for client
+src/Services/BlobService.cs(42): error: Do not use 'var' — use explicit types
 src/Services/BlobService.cs(88): warning: Do not swallow Exception — rethrow or catch specific type
 src/Utils/Helpers.cs(15): warning: SA1633: File should begin with a header comment
+
+3 violation(s) found.
 ```
 
-Exit code 1 if violations found, 0 if clean — suitable for CI.
+Each line shows the **file path**, **line number**, **severity** (error/warning/info), and a **message** explaining what's wrong.
+
+### Targeting a Specific Directory
+
+Use `-t` to analyze a different directory than the current one:
+
+```bash
+cop csharp-checks -t src/              # only check files under src/
+cop python-checks -t backend/          # only check backend/ code
+```
+
+### Running Multiple Packages
+
+You can run several check packages in one command:
+
+```bash
+cop csharp-checks javascript-checks    # check both C# and JS/TS
+```
+
+### Running a Single Check
+
+Use `-c` to run only specific checks from a package:
+
+```bash
+cop csharp-checks -c interface-prefix              # just the interface naming check
+cop csharp-checks -c interface-prefix,no-tabs      # two specific checks
+```
+
+### Exit Codes
+
+| Code | Meaning |
+|---|---|
+| 0 | No violations found |
+| 1 | Violations found |
+| 2 | Configuration error (missing package, parse error) |
+
+Packages are auto-downloaded from the default feed on first use. No installation or setup required beyond having `cop` on your PATH.
 
 ---
 
 ## Inspecting What a Package Checks
 
-Use `cop package commands` to see every check in a package:
+Before running checks, you may want to see exactly what rules a package enforces. Use `cop package commands`:
 
 ```bash
 cop package commands csharp-checks
 ```
+
+This lists every individual check and group in the package:
 
 ```
 csharp-checks — C# checks: correctness, style, and Framework Design Guidelines
@@ -55,7 +88,8 @@ Groups:
   csharp-checks                        All C# checks combined
 ```
 
-Each "Let" is an individual check you can include or exclude by name. Groups combine multiple checks and can also be used for selective runs.
+- **Lets** are individual checks — each one looks for a specific pattern and reports violations. You can run or exclude any of them by name (e.g., `-c var-declarations` or `csharp-checks - var-declarations`).
+- **Groups** combine multiple lets into a named set. You can run just a group (e.g., `-c fdg-checks`) or use groups when composing custom check sets.
 
 To see all packages available in your configured feeds:
 
@@ -109,9 +143,19 @@ cop package list
 
 ## Excluding Checks and Violations
 
-When a package flags something you don't care about, create a `.cop` file in your repo to customize which checks run.
+When a package flags something you don't care about, you have several options to customize what runs.
 
-### Excluding Individual Checks
+### Option 1: Filter from the Command Line
+
+The simplest approach — no files to create. Use `-c` to run only checks you want:
+
+```bash
+cop csharp-checks -c interface-prefix,type-name-casing    # run ONLY these two checks
+```
+
+### Option 2: Create a `.cop` File that Excludes Checks
+
+For persistent customization, create a `.cop` file (e.g., `cop-checks/main.cop`) that imports a package and subtracts the checks you don't want:
 
 ```ruby
 import csharp-checks
@@ -123,18 +167,21 @@ let my-checks = csharp-checks - var-declarations
 command MAIN = CHECK(my-checks)
 ```
 
-Run with `cop my-checks.cop`. The `-` operator subtracts checks from a set. You can subtract multiple:
+Run with `cop cop-checks/main.cop`. The `-` operator removes checks from a set. You can subtract multiple:
 
 ```ruby
+import csharp-checks
+import code-analysis
+
 # Our style: allow var, allow tabs, don't require file headers
 let my-checks = csharp-checks - var-declarations - no-tabs - file-header-required
 
 command MAIN = CHECK(my-checks)
 ```
 
-### Running Only Specific Groups
+### Option 3: Include Only Specific Groups
 
-Packages organize checks into groups. You can include only the groups you want:
+Packages organize checks into named groups. You can compose a custom set from just the groups you want:
 
 ```ruby
 import csharp-checks
@@ -146,9 +193,9 @@ let my-checks = csharp-correctness-checks + fdg-checks
 command MAIN = CHECK(my-checks)
 ```
 
-### Excluding by Path
+### Option 4: Exclude by File Path
 
-Use inline path filters to exclude specific directories from a check:
+Use predicates to skip violations in specific directories:
 
 ```ruby
 import csharp-checks
@@ -158,14 +205,6 @@ import code-analysis
 predicate isTestFile(Statement) => Statement.File.Path:contains('/test/')
 let my-var-check = Statements:isVarDeclaration:!isTestFile
     :toError('Do not use \'var\'')
-```
-
-### Running a Subset of Checks via CLI
-
-You can also filter checks from the command line without writing a `.cop` file:
-
-```bash
-cop csharp-checks -c interface-prefix,type-name-casing    # run only these checks
 ```
 
 ---
