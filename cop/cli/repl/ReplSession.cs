@@ -96,19 +96,18 @@ public class ReplSession
 
         Console.WriteLine($"""
 
-        {b}        {c}o o{r}
-        {b}    .=~~~~~~~=.          {c}Agent Cop{r} {d}v{versionStr}{r}
-        {b}   /=============\~       {d}Static analysis for the AI era{r}
-        {b}        \ {b}(o '){r}
-        {b}     {c}.-------.{b} /\{r}       {d}Working on{r} {dirName}/{fileNames}
-        {b}    {c}/  .---.  \{b} .\{r}
-        {b}   {c}| | z=sol | |{b} |{r}      {d}Type{r} help! {d}for commands{r}
-        {b}   {c}|  '-----'  |{b}[]{r}
-        {b}    {c}\         /{b} /|{r}
-        {b}     {c}'-------'{b}/ |{r}
-        {b}        |__|  |{r}
-        {b}       _/  \_/{r}
-        {b}      (__)(__){r}
+        {c}       ██ ██{r}
+        {b}   ▄██████████████▄      {c}Agent Cop{r} {d}v{versionStr}{r}
+        {b} ▀██████████████████████▀ {d}Static analysis for the AI era{r}
+        {b}       ▐██{r}●{b}██▌{r}
+        {c}    ▄████████▄{b} ████{r}      {d}Working on{r} {dirName}/{fileNames}
+        {c}   ██████████████{b}▐██{r}
+        {c}   ██████████████{b}▐██{r}     {d}Type{r} help! {d}for commands{r}
+        {c}   ██████████████{b}▐██{r}
+        {c}    ▀████████▀{b}▐████{r}
+        {b}        ██▌▐██▌{r}
+        {b}       ████ ████{r}
+        {b}       ████ ████{r}
 
         """);
     }
