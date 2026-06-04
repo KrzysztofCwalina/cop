@@ -253,10 +253,10 @@ import code-analysis
 let my-checks = csharp-checks - var-declarations
 
 # Add our own project-specific checks
-predicate hardcodedUrl(Statement) => Statement.Kind == 'declaration'
+predicate isHardcodedUrl(Statement) => Statement.Kind == 'declaration'
     && Statement.Source:contains('http://')
 ## Do not hardcode URLs — use configuration
-export let no-hardcoded-urls = Statements:hardcodedUrl
+export let no-hardcoded-urls = Statements:isHardcodedUrl
     :toWarning('Do not hardcode URLs — use configuration')
 
 let all-checks = my-checks + no-hardcoded-urls

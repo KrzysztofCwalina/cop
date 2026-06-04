@@ -2,20 +2,20 @@ import python-library-checks
 import code-analysis
 
 # Baseline: stub files in api/ directory
-predicate baselineApi(Api) => isPublicApi && Api.File.Path:matches('[/\\]api[/\\]')
+predicate isBaselineApi(Api) => isPublicApi && Api.File.Path:matches('[/\\]api[/\\]')
 # Source: everything NOT in api/
-predicate sourceApi(Api) => isPublicApi && !Api.File.Path:matches('[/\\]api[/\\]')
+predicate isSourceApi(Api) => isPublicApi && !Api.File.Path:matches('[/\\]api[/\\]')
 
 # Build lookup lists from current source and baseline
-let baselineSignatures = Code.Api:isPython:baselineApi.Select(item.Signature)
-let currentSignatures = Code.Api:isPython:sourceApi.Select(item.Signature)
+let baselineSignatures = Code.Api:isPython:isBaselineApi.Select(item.Signature)
+let currentSignatures = Code.Api:isPython:isSourceApi.Select(item.Signature)
 
 # Diff predicates
-predicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)
-predicate addedApi(Api) => sourceApi && !Api.Signature:in(baselineSignatures)
+predicate isRemovedApi(Api) => isBaselineApi && !Api.Signature:in(currentSignatures)
+predicate isAddedApi(Api) => isSourceApi && !Api.Signature:in(baselineSignatures)
 
 # Report results
-export let api-removed = Code.Api:removedApi
+export let api-removed = Code.Api:isRemovedApi
     :toError('API REMOVED (breaking): {item.Signature}')
-export let api-added = Code.Api:addedApi
+export let api-added = Code.Api:isAddedApi
     :toInfo('API ADDED: {item.Signature}')

@@ -6,7 +6,7 @@ import typespec-http
 # Equivalent to TypeSpec's put-path-even-segments linter rule:
 # HTTP PUT operations should have a path with an even number of segments.
 
-predicate evenSegments(HttpOperation) => HttpOperation.Path:matches('^((/[^/]+){2})+$')
+predicate hasEvenSegments(HttpOperation) => HttpOperation.Path:matches('^((/[^/]+){2})+$')
 
-let put-odd-segments = Operations:isPut:!evenSegments
+let put-odd-segments = Operations:isPut:!hasEvenSegments
 command MAIN = foreach put-odd-segments => print('{warning:@yellow-bold} PUT {item.Name} ({item.Path}) has odd number of path segments')

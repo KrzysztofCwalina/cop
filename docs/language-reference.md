@@ -250,7 +250,7 @@ Each member is assigned a power of 2 automatically (Public=1, Private=2, Protect
 
 ```ruby
 predicate isPublic(Type) => Type.Modifiers:isSet(Public)
-predicate notAbstract(Type) => Type.Modifiers:isClear(Abstract)
+predicate isNotAbstract(Type) => Type.Modifiers:isClear(Abstract)
 ```
 
 | Predicate | Meaning |
@@ -359,31 +359,31 @@ Any global returning a list can serve as a source. Sinks are provider-registered
 A predicate is a named boolean expression that operates on a typed item. Predicates are the primary mechanism for creating subsets:
 
 ```ruby
-predicate client(Type) => Type.Name:endsWith('Client')
-predicate publicAsync(Method) => Method:isPublic && Method:isAsync
+predicate isClient(Type) => Type.Name:endsWith('Client')
+predicate isPublicAsync(Method) => Method:isPublic && Method:isAsync
 predicate usesVar(Statement) => Statement.Keywords:contains('var')
 ```
 
 Predicates compose by reference:
 
 ```ruby
-predicate optionsType(Parameter) => Parameter.Type.Name:endsWith('Options')
-predicate hasOptions(Constructor) => Constructor.Parameters:any(optionsType)
-predicate missingOptions(Type) => Type.Constructors:none(hasOptions)
+predicate isOptionsType(Parameter) => Parameter.Type.Name:endsWith('Options')
+predicate hasOptions(Constructor) => Constructor.Parameters:any(isOptionsType)
+predicate isMissingOptions(Type) => Type.Constructors:none(hasOptions)
 ```
 
 **Subset predicates** — a predicate over a list name creates a named subset. The predicate’s body filters are AND-combined with the base list:
 
 ```ruby
-predicate Clients(Types) => client && !isAbstract
+predicate Clients(Types) => isClient && !isAbstract
 ```
 
-This declares `Clients` as a subset of `Types` where `client` is true and `isAbstract` is false.
+This declares `Clients` as a subset of `Types` where `isClient` is true and `isAbstract` is false.
 
 **Narrowing predicates** — a predicate can narrow items to a more specific type using `: NarrowedType`:
 
 ```ruby
-predicate call(Statement) : Call => Statement.Kind == 'call'
+predicate isCall(Statement) : Call => Statement.Kind == 'call'
 ```
 
 When applied as a filter, items are narrowed to `Call` (a superset of Statement’s properties).
@@ -393,9 +393,9 @@ When applied as a filter, items are narrowed to `Call` (a superset of Statement�
 Append `:constraint` to the parameter type to create predicate overloads constrained by another predicate. The constraint is any predicate — language names like `csharp` and `python` are just predicates that match by file language:
 
 ```ruby
-predicate client(Type) => Type.Name:endsWith('Client')
-predicate client(Type:isCSharp) => Type.Name:endsWith('Client')
-predicate client(Type:isPython) => Type.Name:endsWith('_client')
+predicate isClient(Type) => Type.Name:endsWith('Client')
+predicate isClient(Type:isCSharp) => Type.Name:endsWith('Client')
+predicate isClient(Type:isPython) => Type.Name:endsWith('_client')
 ```
 
 Resolution order:
@@ -406,8 +406,8 @@ Resolution order:
 Constraints are not limited to languages — any predicate can be used:
 
 ```ruby
-predicate sealed(Type:isCSharp) => Type:isSealed
-predicate sealed(Type:isPython) => Type.Decorators:any(Decorator:contains('final'))
+predicate isSealed(Type:isCSharp) => Type:isSealed
+predicate isSealed(Type:isPython) => Type.Decorators:any(Decorator:contains('final'))
 ```
 
 ### Functions
@@ -815,7 +815,7 @@ let words = ['Get' 'Set'] + ['Create'] # → ['Get' 'Set' 'Create']
 The `+` operator also concatenates strings, including property values and literals:
 
 ```ruby
-predicate test(Statement) => Types.MethodNames:contains(Statement.MemberName + 'Async')
+predicate hasAsyncName(Statement) => Types.MethodNames:contains(Statement.MemberName + 'Async')
 ```
 
 #### Collection Flattening (Property Access on Lists)
@@ -890,8 +890,8 @@ Use `:any()`, `:none()`, and `:all()` to test sub-collections within predicates:
 
 ```ruby
 predicate hasPublicCtor(Type) => Type.Constructors:any(isPublic)
-predicate noMethods(Type) => Type.Methods:none(isPublic)
-predicate allAbstract(Type) => Type.Methods:all(isAbstract)
+predicate hasNoPublicMethods(Type) => Type.Methods:none(isPublic)
+predicate isAllAbstract(Type) => Type.Methods:all(isAbstract)
 ```
 
 #### Inline Expressions
@@ -1031,11 +1031,11 @@ Running `cop STATISTICS` executes both functions in order.
 Use `predicate? command` to conditionally execute a command — a degenerate ternary where the command is skipped when the condition is false:
 
 ```ruby
-predicate showStats(Program) => Program.Args:contains('/s')
-function LIST-TYPES() = { foreach Types => '{item.Name}' & showStats? TYPE-COUNT }
+predicate shouldShowStats(Program) => Program.Args:contains('/s')
+function LIST-TYPES() = { foreach Types => '{item.Name}' & shouldShowStats? TYPE-COUNT }
 ```
 
-The `?` operator reads as: "if showStats is true, run TYPE-COUNT." For complex conditions, use parentheses:
+The `?` operator reads as: "if shouldShowStats is true, run TYPE-COUNT." For complex conditions, use parentheses:
 
 ```ruby
 function LIST-TYPES() = { foreach Types => '{item.Name}' & (hasCode && showStats)? TYPE-COUNT }
@@ -1248,7 +1248,7 @@ items:isError
 items:!isError
 
 # In predicate body
-predicate failed(Item) => isError
+predicate hasFailed(Item) => isError
 ```
 
 ### Error Handling in Pipelines
@@ -1292,7 +1292,7 @@ Sink behavior for errors:
 FAIL('types must be sealed') foreach Types:!isSealed
 
 # Expression position (terminates during evaluation)
-predicate route(Request) =>
+predicate isRoute(Request) =>
     Request.Method == 'GET'  ? getHandler(Request)
   | Request.Method == 'POST' ? postHandler(Request)
   | FAIL('unsupported method')
@@ -1308,7 +1308,7 @@ Output: `FATAL: file(line): message`
 
 ```ruby
 # This is a single-line comment
-predicate client(Type) => Type.Name:endsWith('Client')  # also valid at end of line
+predicate isClient(Type) => Type.Name:endsWith('Client')  # also valid at end of line
 ```
 
 ### Multi-line comment

@@ -38,10 +38,10 @@ For example, an architect who wants "don't use console calls — use proper logg
 import code
 import code-analysis
 
-predicate consoleCall(Statement:python) =>
+predicate isConsoleCall(Statement:python) =>
     Statement.Kind == 'call' && Statement.MemberName == 'print'
 
-let violations = Code.Statements:consoleCall
+let violations = Code.Statements:isConsoleCall
     :toError('Use logging module instead of print()')
 
 command CHECK-CONSOLE = CHECK(violations)
@@ -57,10 +57,10 @@ import code-layering
 let ui-projects   = ['MyApp.Web' 'MyApp.Api']
 let data-projects = ['MyApp.Data' 'MyApp.EF']
 
-predicate uiReferencesData(Project) =>
+predicate isUiReferencingData(Project) =>
     Project.Name:in(ui-projects) && Project.References:containsAny(data-projects)
 
-let violations = Code.Projects:uiReferencesData
+let violations = Code.Projects:isUiReferencingData
     :toError('UI must not reference Data directly')
 
 command CHECK-ARCH = CHECK(violations)

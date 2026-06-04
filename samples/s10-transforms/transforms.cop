@@ -1,20 +1,24 @@
 # Demonstrates list transforms: Where, Select, text, First, Count.
-# Transforms use .camelCase() syntax and return new lists or values.
-# Run with: cop run PUBLIC-METHODS
+# Transforms use .Method() syntax and return new lists or values.
+# Run with: cop run MAIN
 import code
 
 # .Where(predicate) — filter a sub-list to matching items
-let PublicMethods = Code.Types.Where(Type.Methods:any(Method:isPublic))
-
-# .First / .Last / .Single — access specific list elements
-predicate hasConstructor(Type) => Type.Constructors.First != nic
-
-# .Select(template) — project each item into a string value
-# .text(template) — format each item with template, join into one string
-predicate methodSummary(Type) => Type.Methods.Select('{Method.Name}').text(', '):!empty
+let PublicTypes = Code.Types.Where(Type:isPublic)
 
 # .Count — number of items in a list
 predicate hasManyMethods(Type) => Type.Methods.Count > 3
 
-# Combine transforms in output
-command PUBLIC-METHODS = foreach PublicMethods:hasManyMethods => print('{item.Name} ({item.Methods.Count} methods)')
+# .Select(template) — project each item into a string
+# .text(separator) — join all items into a single string
+let MethodNames = Code.Types:hasManyMethods
+    .Select('{item.Name}: {item.Methods.Select(Method.Name).text(", ")}')
+
+# .First — access the first element
+let FirstPublicType = PublicTypes.First
+
+# Output: show transform results
+command MAIN =
+    print('Public types: {PublicTypes.Count}') &
+    print('First public type: {FirstPublicType.Name}') &
+    foreach MethodNames => print('{item}')

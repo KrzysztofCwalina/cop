@@ -602,7 +602,7 @@ Namespaces can be hierarchical (dot-separated):
 namespace validation.rules
 
 type NamingViolation = { ... }
-predicate tooShort(string) => Length < 3
+predicate isTooShort(string) => Length < 3
 ```
 
 These are referenced as `validation.rules.NamingViolation` when fully qualified, or just `NamingViolation` if the namespace is in scope.
@@ -927,7 +927,7 @@ export function CHECK() = { ... }
 
 # Internal — only visible within the package:
 type InternalHelper = { ... }
-predicate helper(Violation) => ...
+predicate isHelper(Violation) => ...
 ```
 
 Only `export`-marked declarations are accessible to importing code. Everything else is package-internal.
@@ -973,7 +973,7 @@ Operational errors represent external failures that code cannot prevent: network
 let result = error('connection timeout')
 
 # Conditional error
-predicate handle(Request) => Request.Body == nic ? error('missing body') | process(Request)
+predicate isHandled(Request) => Request.Body == nic ? error('missing body') | process(Request)
 ```
 
 **Key properties:**
@@ -1020,7 +1020,7 @@ foreach items:isError => 'Failed: {item.Message}'
 FAIL('public types must be sealed') foreach Types:isPublic:!isSealed
 
 # In expression position: terminate during evaluation
-predicate validate(Request) => Request.Method == 'DELETE' ? FAIL('DELETE not supported') | process(Request)
+predicate isValid(Request) => Request.Method == 'DELETE' ? FAIL('DELETE not supported') | process(Request)
 ```
 
 Output format: `FATAL: file(line): message`

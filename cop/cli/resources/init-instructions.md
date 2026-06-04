@@ -149,12 +149,12 @@ import csharp
 predicate isTooLong(Method) => Method.Statements.count() > 50
 
 # Flag types with no documentation
-predicate undocumented(Type) => Type.Documented == false && Type:isPublic
+predicate isUndocumented(Type) => Type.Documented == false && Type:isPublic
 
 let longMethods = Code.Methods:isTooLong
     :toWarning('Method {item.Name} exceeds 50 statements ({item.Statements.count()})')
 
-let undocTypes = Code.Types:undocumented
+let undocTypes = Code.Types:isUndocumented
     :toWarning('Public type {item.Name} is not documented')
 
 command MAIN = CHECK(longMethods + undocTypes)
@@ -238,9 +238,9 @@ command MAIN = CHECK(all-violations)
 import csharp-checks
 import code-analysis
 
-predicate badName(Type) => Type.Name:startsWith('_')
+predicate hasBadName(Type) => Type.Name:startsWith('_')
 
-export let naming-violations = csharp.Types:badName
+export let naming-violations = csharp.Types:hasBadName
     :toError('{item.Name} must not start with underscore')
 ```
 

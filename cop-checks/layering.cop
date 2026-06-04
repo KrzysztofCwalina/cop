@@ -17,9 +17,9 @@ let provider-projects = [
     'cop-provider'
 ]
 
-predicate runtimeReferencesProvider(Project) =>
+predicate isRuntimeReferencingProvider(Project) =>
     Project.Name:in(runtime-projects)
     && Project.References:containsAny(provider-projects)
 
-export let layering-violations = csharp.Projects:runtimeReferencesProvider
+export let layering-violations = csharp.Projects:isRuntimeReferencingProvider
     :toError('{item.Name} must not reference providers other than filesystem-provider')

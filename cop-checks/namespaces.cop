@@ -3,9 +3,9 @@
 import csharp-checks
 import code-analysis
 
-predicate inTestProject(Type) => Type.File.Path:startsWith('tests/') || Type.File.Path:startsWith('samples/')
+predicate isInTestProject(Type) => Type.File.Path:startsWith('tests/') || Type.File.Path:startsWith('samples/')
 predicate hasNamespace(Type) => Type.File.Namespace.Length:greaterThan(0)
-predicate missingNamespace(Type) => !hasNamespace && !inTestProject
+predicate isMissingNamespace(Type) => !hasNamespace && !isInTestProject
 
-export let types-without-namespace = csharp.Types:missingNamespace
+export let types-without-namespace = csharp.Types:isMissingNamespace
     :toError('{item.Name} in {item.File.Path} must be in a namespace')

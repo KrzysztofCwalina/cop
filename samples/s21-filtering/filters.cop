@@ -4,8 +4,8 @@
 import code
 
 # Chain predicates to narrow results (each : is AND)
-predicate client(Type) => Type.Name:endsWith('Client')
-let PublicClients = Code.Types:client:isPublic
+predicate isClient(Type) => Type.Name:endsWith('Client')
+let PublicClients = Code.Types:isClient:isPublic
 
 # Negate with !
 let InternalTypes = Code.Types:!isPublic
@@ -18,6 +18,6 @@ let combined = PublicClients + InternalTypes
 
 # Test sub-collections
 predicate hasPublicCtor(Type) => Type.Constructors:any(isPublic)
-predicate noMethods(Type) => Type.Methods:empty
+predicate hasNoMethods(Type) => Type.Methods:empty
 
 command MAIN = foreach PublicClients:!hasPublicCtor => print('{item.Name} is a public client without a public constructor')
