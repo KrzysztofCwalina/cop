@@ -15,7 +15,7 @@ Coding agents produce code at machine speed. Without deterministic enforcement, 
 Use Agent Cop (cop.exe) to develop and execute static analysis rules. The workflow:
 
 1. **Teach your coding agent about Agent Cop** — run `cop init` in your repo's root
-2. **Create enforcable rules** — tell the agent what you want to enforce
+2. **Create enforcable rules** — write rules in the DSL (manually or with your coding agent)
 3. **Run cop.exe** — rule violations block PRs and feed back to your agent automatically
 
 ## Installation
