@@ -1752,7 +1752,7 @@ const packages = {
     "samples": [
       {
         "title": "Enforce layering rules",
-        "code": "import code-layering\n\nlet ui-projects = ['MyApp.Web' 'MyApp.Api']\nlet data-projects = ['MyApp.Data' 'MyApp.EF']\n\npredicate uiRefsData(Project) =>\n    Project.Name:in(ui-projects)\n    && Project.References:containsAny(data-projects)\n\nlet violations = Projects:uiRefsData\n    :toError('UI must not reference Data directly')\n\nCHECK violations"
+        "code": "import code-layering\n\nlet ui-projects = ['MyApp.Web' 'MyApp.Api']\nlet data-projects = ['MyApp.Data' 'MyApp.EF']\n\npredicate isUiRefsData(Project) =>\n    Project.Name:in(ui-projects)\n    && Project.References:containsAny(data-projects)\n\nlet violations = Projects:isUiRefsData\n    :toError('UI must not reference Data directly')\n\nCHECK violations"
       }
     ],
     "collections": [],
@@ -3035,7 +3035,7 @@ const packages = {
     "samples": [
       {
         "title": "Api diff",
-        "code": "import csharp-library-checks\nimport code-analysis\n\n# Baseline: C# stub files in api/ directory\npredicate baselineApi(Api) => publicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')\n# Source: everything NOT in api/\npredicate sourceApi(Api) => publicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')\n\n# Build lookup lists from current source and baseline\nlet baselineSignatures = Code.Api:isCSharp:baselineApi.Select(item.Signature)\nlet currentSignatures = Code.Api:isCSharp:sourceApi.Select(item.Signature)\n\n# Diff predicates\npredicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)\npredicate addedApi(Api) => sourceApi && !Api.Signature:in(baselineSignatures)\n\n# Report results\nexport let api-removed = Code.Api:removedApi\n    :toError('API REMOVED (breaking): {item.Signature}')\nexport let api-added = Code.Api:addedApi\n    :toInfo('API ADDED: {item.Signature}')"
+        "code": "import csharp-library-checks\nimport code-analysis\n\n# Baseline: C# stub files in api/ directory\npredicate isBaselineApi(Api) => publicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')\n# Source: everything NOT in api/\npredicate isSourceApi(Api) => publicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')\n\n# Build lookup lists from current source and baseline\nlet baselineSignatures = Code.Api:isCSharp:isBaselineApi.Select(item.Signature)\nlet currentSignatures = Code.Api:isCSharp:isSourceApi.Select(item.Signature)\n\n# Diff predicates\npredicate isRemovedApi(Api) => isBaselineApi && !Api.Signature:in(currentSignatures)\npredicate isAddedApi(Api) => isSourceApi && !Api.Signature:in(baselineSignatures)\n\n# Report results\nexport let api-removed = Code.Api:isRemovedApi\n    :toError('API REMOVED (breaking): {item.Signature}')\nexport let api-added = Code.Api:isAddedApi\n    :toInfo('API ADDED: {item.Signature}')"
       },
       {
         "title": "Api listing",
@@ -3688,7 +3688,7 @@ const packages = {
     "samples": [
       {
         "title": "Api diff",
-        "code": "import javascript-library-checks\nimport code-analysis\n\n# Baseline: stub files in api/ directory\npredicate baselineApi(Api) => isPublicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')\n# Source: everything NOT in api/\npredicate sourceApi(Api) => isPublicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')\n\n# Build lookup lists from current source and baseline\nlet baselineSignatures = Code.Api:isJavaScript:baselineApi.Select(item.Signature)\nlet currentSignatures = Code.Api:isJavaScript:sourceApi.Select(item.Signature)\n\n# Diff predicates\npredicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)\npredicate addedApi(Api) => sourceApi && !Api.Signature:in(baselineSignatures)\n\n# Report results\nexport let api-removed = Code.Api:removedApi\n    :toError('API REMOVED (breaking): {item.Signature}')\nexport let api-added = Code.Api:addedApi\n    :toInfo('API ADDED: {item.Signature}')"
+        "code": "import javascript-library-checks\nimport code-analysis\n\n# Baseline: stub files in api/ directory\npredicate isBaselineApi(Api) => isPublicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')\n# Source: everything NOT in api/\npredicate isSourceApi(Api) => isPublicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')\n\n# Build lookup lists from current source and baseline\nlet baselineSignatures = Code.Api:isJavaScript:isBaselineApi.Select(item.Signature)\nlet currentSignatures = Code.Api:isJavaScript:isSourceApi.Select(item.Signature)\n\n# Diff predicates\npredicate isRemovedApi(Api) => isBaselineApi && !Api.Signature:in(currentSignatures)\npredicate isAddedApi(Api) => isSourceApi && !Api.Signature:in(baselineSignatures)\n\n# Report results\nexport let api-removed = Code.Api:isRemovedApi\n    :toError('API REMOVED (breaking): {item.Signature}')\nexport let api-added = Code.Api:isAddedApi\n    :toInfo('API ADDED: {item.Signature}')"
       },
       {
         "title": "Api listing",
@@ -4120,7 +4120,7 @@ const packages = {
     "samples": [
       {
         "title": "Api diff",
-        "code": "import python-library-checks\nimport code-analysis\n\n# Baseline: stub files in api/ directory\npredicate baselineApi(Api) => isPublicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')\n# Source: everything NOT in api/\npredicate sourceApi(Api) => isPublicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')\n\n# Build lookup lists from current source and baseline\nlet baselineSignatures = Code.Api:isPython:baselineApi.Select(item.Signature)\nlet currentSignatures = Code.Api:isPython:sourceApi.Select(item.Signature)\n\n# Diff predicates\npredicate removedApi(Api) => baselineApi && !Api.Signature:in(currentSignatures)\npredicate addedApi(Api) => sourceApi && !Api.Signature:in(baselineSignatures)\n\n# Report results\nexport let api-removed = Code.Api:removedApi\n    :toError('API REMOVED (breaking): {item.Signature}')\nexport let api-added = Code.Api:addedApi\n    :toInfo('API ADDED: {item.Signature}')"
+        "code": "import python-library-checks\nimport code-analysis\n\n# Baseline: stub files in api/ directory\npredicate isBaselineApi(Api) => isPublicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')\n# Source: everything NOT in api/\npredicate isSourceApi(Api) => isPublicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')\n\n# Build lookup lists from current source and baseline\nlet baselineSignatures = Code.Api:isPython:isBaselineApi.Select(item.Signature)\nlet currentSignatures = Code.Api:isPython:isSourceApi.Select(item.Signature)\n\n# Diff predicates\npredicate isRemovedApi(Api) => isBaselineApi && !Api.Signature:in(currentSignatures)\npredicate isAddedApi(Api) => isSourceApi && !Api.Signature:in(baselineSignatures)\n\n# Report results\nexport let api-removed = Code.Api:isRemovedApi\n    :toError('API REMOVED (breaking): {item.Signature}')\nexport let api-added = Code.Api:isAddedApi\n    :toInfo('API ADDED: {item.Signature}')"
       },
       {
         "title": "Api listing",
