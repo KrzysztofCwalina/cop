@@ -107,8 +107,7 @@ cop vscode
 - [Language Grammar](docs/cop-grammar.md) — formal EBNF grammar specification
 - [CLI Reference](docs/cli-reference.md) — all commands and options
 - [Static Analysis with Cop](docs/static-analysis.md) — writing source code checks
-- [Testing with Cop](docs/testing-with-cop.md) — writing and running tests
-- [Testing](docs/testing.md) — test keyword and test framework
+- [Testing Cop Rules](docs/testing.md) — writing and running tests for your `.cop` programs
 - [Extensibility](docs/extensibility.md) — writing providers and wrapping external tools
 - [Packaging](docs/packaging.md) — creating, publishing, and restoring packages
 - [Working with the REPL](docs/repl.md) — interactive development and prototyping
