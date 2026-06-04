@@ -9,3 +9,5 @@ predicate hasTodo(Line) => Line.Text:contains('TODO')
 
 let todos = Code.Lines:isComment:hasTodo
     :toWarning('TODO found: {item.Source}')
+
+command MAIN = CHECK(todos)
