@@ -2,7 +2,7 @@
 
 # Agent Cop
 
-**Agent Cop** is a companion to coding agents — it lets you express code quality requirements as enforcable static analysis rules, stopping code slop before it lands. You can describe requirements in plain English, and your coding agent writes formal rules in Agent Cop DSL. These formal requirement rules can be run deterministically, e.g. in CI.
+**Agent Cop** lets you express code quality requirements as enforceable static analysis rules in a purpose-built DSL, stopping code slop before it lands. These rules run deterministically — in CI, in your editor, or from the command line.
 
 <br clear="left" />
 
@@ -34,9 +34,9 @@ cop init
 
 This generates instruction files (`.github/copilot-instructions.md`, `AGENTS.md`) that teach your coding agent[s] how to write cop rules. Commit them to your repo.
 
-### 2. Ask the Agent to Write Rules
+### 2. Create Rules
 
-With context in place, just ask:
+You can create rules manually or use your coding agent — not only for the app you're writing, but also for the rules themselves. Just ask:
 
 > "Write a cop rule that flags any method longer than 50 statements"
 
