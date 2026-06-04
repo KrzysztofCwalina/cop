@@ -1,41 +1,20 @@
 # Static Analysis with Agent Cop
 
-Agent Cop is designed for coding agents to write and maintain custom static analysis rules. You describe conventions in plain English, the agent writes `.cop` rules, and those rules run deterministically in CI — catching violations before they reach code review.
+Agent Cop ships with built-in check packages that enforce conventions out of the box. You run them with a single command, inspect what they check, exclude what doesn't apply, and optionally add your own project-specific rules.
 
-The workflow has three phases: start with built-in check packages, exclude what doesn't apply, then ask your coding agent to encode project-specific conventions as custom rules.
+---
 
-## Setting Up for Agents
+## Running Built-In Checks
 
-Before asking an agent to write rules, set up agent context:
-
-```bash
-cop init
-```
-
-This generates instruction files that agents auto-discover:
-- `.github/copilot-instructions.md` — for GitHub Copilot
-- `AGENTS.md` — for Claude Code
-
-The files teach the agent the Cop language and point it to help commands:
-
-```bash
-cop help language        # Full language reference (syntax, types, operators)
-cop help <package>       # Package documentation (types, functions, examples)
-cop package list         # List all available packages
-```
-
-Commit these files so every contributor's agent has context automatically.
-
-## Running Checks
-
-Run `cop` in your repository with one or more check packages:
+Run `cop` with one or more check packages:
 
 ```bash
 cop csharp-checks                        # C# naming, style, FDG, error handling
 cop python-checks                        # Python conventions
+cop javascript-checks                    # JS/TS conventions
 cop csharp-checks javascript-checks      # multiple languages at once
 cop csharp-checks -t src/                # analyze a specific directory
-cop csharp-checks -c interface-prefix    # run only specific checks
+cop csharp-checks -c interface-prefix    # run only a specific check
 ```
 
 Packages are auto-downloaded from the default feed on first use. No setup required.
@@ -48,7 +27,11 @@ src/Services/BlobService.cs(88): warning: Do not swallow Exception — rethrow o
 src/Utils/Helpers.cs(15): warning: SA1633: File should begin with a header comment
 ```
 
-### Discovering What a Package Checks
+Exit code 1 if violations found, 0 if clean — suitable for CI.
+
+---
+
+## Inspecting What a Package Checks
 
 Use `cop package commands` to see every check in a package:
 
@@ -59,11 +42,10 @@ cop package commands csharp-checks
 ```
 csharp-checks — C# checks: correctness, style, and Framework Design Guidelines
 
-Checks:
+Lets:
   var-declarations                     Disallow implicit typing with var — use explicit types
   dynamic-declarations                 Disallow dynamic typing
   thread-sleep-calls                   Use Task.Delay instead of blocking Thread.Sleep
-  configure-await-true-calls           ConfigureAwait(true) is the default...
   ...
 
 Groups:
@@ -73,7 +55,7 @@ Groups:
   csharp-checks                        All C# checks combined
 ```
 
-### Available Packages
+Each "Let" is an individual check you can include or exclude by name. Groups combine multiple checks and can also be used for selective runs.
 
 To see all packages available in your configured feeds:
 
@@ -81,29 +63,55 @@ To see all packages available in your configured feeds:
 cop package list
 ```
 
-Some commonly used check packages:
+---
+
+## Available Check Packages
+
+### Language Checks (general conventions)
 
 | Package | What it checks |
 |---|---|
 | `csharp-checks` | C# conventions: naming, formatting, documentation, error handling, FDG |
-| `csharp-library-checks` | Library API design: sealed clients, method conventions, patterns |
-| `csharp-library-azure-checks` | Azure SDK for .NET conventions |
-| `python-checks` | Python conventions: print, bare except, eval, naming, docstrings |
+| `python-checks` | Python conventions: print, bare except, eval, naming, docstrings, idioms |
+| `javascript-checks` | JS/TS conventions: console, eval, var, debugger, swallowed exceptions |
+
+### Library Design Checks
+
+| Package | What it checks |
+|---|---|
+| `csharp-library-checks` | C# library API design: sealed clients, async patterns, cancellation |
 | `python-library-checks` | Python library patterns: naming, kwargs, LRO, paging |
-| `python-library-azure-checks` | Azure SDK for Python conventions |
-| `javascript-checks` | JS/TS conventions: console, eval, var, debugger |
 | `javascript-library-checks` | JS/TS library patterns: verbs, cancellation, pagination |
+
+### Azure SDK Checks
+
+| Package | What it checks |
+|---|---|
+| `csharp-library-azure-checks` | Azure SDK for .NET conventions |
+| `python-library-azure-checks` | Azure SDK for Python conventions |
 | `javascript-library-azure-checks` | Azure SDK for JS conventions |
+
+### Snippet and Documentation Checks
+
+| Package | What it checks |
+|---|---|
+| `csharp-snippets-checks` | C# snippet/docs sync: missing docs, orphaned refs, stale content |
+| `javascript-snippets-checks` | JS/TS snippet/docs sync |
+| `python-snippets-checks` | Python snippet/docs sync |
+
+### Test Checks
+
+| Package | What it checks |
+|---|---|
+| `test-nunit-checks` | NUnit testing patterns and conventions |
 
 ---
 
 ## Excluding Checks and Violations
 
-When a package flags something you don't care about, create a `.cop` file in your repo root to exclude it.
+When a package flags something you don't care about, create a `.cop` file in your repo to customize which checks run.
 
-### Excluding Entire Checks
-
-Create `cop.cop` in your repository:
+### Excluding Individual Checks
 
 ```ruby
 import csharp-checks
@@ -115,21 +123,18 @@ let my-checks = csharp-checks - var-declarations
 command MAIN = CHECK(my-checks)
 ```
 
-Now `cop cop.cop` will skip the `var-declarations` check. You can subtract multiple:
+Run with `cop my-checks.cop`. The `-` operator subtracts checks from a set. You can subtract multiple:
 
 ```ruby
-import csharp-checks
-import code-analysis
-
 # Our style: allow var, allow tabs, don't require file headers
 let my-checks = csharp-checks - var-declarations - no-tabs - file-header-required
 
 command MAIN = CHECK(my-checks)
 ```
 
-### Excluding a Group of Checks
+### Running Only Specific Groups
 
-Packages organize checks into groups. You can redefine the collection to include only the groups you want:
+Packages organize checks into groups. You can include only the groups you want:
 
 ```ruby
 import csharp-checks
@@ -141,44 +146,33 @@ let my-checks = csharp-correctness-checks + fdg-checks
 command MAIN = CHECK(my-checks)
 ```
 
-### Excluding Individual Violations by Path
+### Excluding by Path
 
 Use inline path filters to exclude specific directories from a check:
 
 ```ruby
 import csharp-checks
+import code-analysis
 
 # Don't flag var usage in test code
 predicate isTestFile(Statement) => Statement.File.Path:contains('/test/')
-let var-declarations = Statements:isVarDeclaration:!isTestFile
+let my-var-check = Statements:isVarDeclaration:!isTestFile
     :toError('Do not use \'var\'')
 ```
 
-### Zero-Arg Invocation with Config
+### Running a Subset of Checks via CLI
 
-Once you have a `cop.cop` file that imports packages and defines `MAIN`, you can just run:
+You can also filter checks from the command line without writing a `.cop` file:
 
 ```bash
-cop cop.cop
-```
-
-Example `cop.cop` that customizes checks and provides a `MAIN` command:
-
-```ruby
-import csharp-checks
-import code-analysis
-
-# Our style: allow var, skip style checks
-let my-checks = csharp-correctness-checks + fdg-checks - var-declarations
-
-command MAIN = CHECK(my-checks)
+cop csharp-checks -c interface-prefix,type-name-casing    # run only these checks
 ```
 
 ---
 
 ## Adding Your Own Checks
 
-Beyond excluding built-in checks, you can add project-specific rules. Add them to your `cop.cop` file or create separate `.cop` files in the same directory.
+Beyond built-in checks, you can add project-specific rules. Create `.cop` files in a `cop-checks/` folder:
 
 ### Anatomy of a Check
 
@@ -201,46 +195,47 @@ export let datetime-now = Statements:usesDateTime
 
 The `##` comment above the `export let` becomes the check's description (shown in `cop package commands`).
 
-### The Data Model
+### Organizing Checks in a Folder
 
-Cop parses every source file and provides four collections:
+Place all checks in a `cop-checks/` folder with a `main.cop` entry point:
 
-| Collection | Item Type | What it contains |
-|---|---|---|
-| `Code.Types` | `Type` | Classes, structs, interfaces, enums |
-| `Code.Statements` | `Statement` | Calls, declarations, error handlers |
-| `Code.Lines` | `Line` | Raw source lines (text + metadata) |
-| `Code.Files` | `File` | Source files |
+```
+cop-checks/
+  main.cop           # Composes all checks and runs them
+  naming.cop         # One check per file
+  layering.cop       # Dependency layering rules
+  no-interfaces.cop  # "No new interfaces" check
+```
 
-When you import a language package (e.g., `import csharp`), its `Statements`, `Types`, `Lines` collections are pre-filtered to that language.
-
-### Severity Functions
-
-| Function | When to use |
-|---|---|
-| `:toError('msg')` | Bug or correctness issue — must fix |
-| `:toWarning('msg')` | Convention violation — should fix |
-| `:toInfo('msg')` | Informational — consider fixing |
-
-### Combining Checks
-
-Group your checks with `+` and export the group:
+Each file exports its violations:
 
 ```ruby
+# naming.cop
 import csharp
 import code-analysis
 
-predicate usesDateTime(Statement) => Statement.Kind == 'call'
-    && Statement.TypeName == 'DateTime' && Statement.MemberName == 'Now'
-predicate usesThread(Statement) => Statement.Kind == 'call'
-    && Statement.TypeName == 'Thread' && Statement.MemberName == 'Sleep'
+predicate hasBadName(Type) => Type.Name:startsWith('_')
 
-export let datetime-now = Statements:usesDateTime
-    :toError('Use DateTimeOffset.UtcNow instead of DateTime.Now')
-export let thread-sleep = Statements:usesThread
-    :toError('Use Task.Delay instead of Thread.Sleep')
+export let naming-violations = csharp.Types:hasBadName
+    :toError('{item.Name} must not start with underscore')
+```
 
-export let my-project-checks = datetime-now + thread-sleep
+And `main.cop` composes them:
+
+```ruby
+# main.cop
+export let all-violations =
+    naming-violations +
+    layering-violations +
+    no-new-interfaces
+
+command MAIN = CHECK(all-violations)
+```
+
+Run with:
+
+```bash
+cop cop-checks/main.cop -t .
 ```
 
 ### Mixing Built-In and Custom Checks
@@ -264,11 +259,33 @@ let all-checks = my-checks + no-hardcoded-urls
 command MAIN = CHECK(all-checks)
 ```
 
+### The Data Model
+
+Cop parses every source file and provides these collections:
+
+| Collection | Item Type | What it contains |
+|---|---|---|
+| `Code.Types` | `Type` | Classes, structs, interfaces, enums |
+| `Code.Methods` | `Method` | Methods and functions |
+| `Code.Statements` | `Statement` | Calls, declarations, error handlers |
+| `Code.Lines` | `Line` | Raw source lines (text + metadata) |
+| `Code.Files` | `File` | Source files |
+
+When you import a language package (e.g., `import csharp`), its collections are pre-filtered to that language.
+
+### Severity Functions
+
+| Function | When to use |
+|---|---|
+| `:toError('msg')` | Bug or correctness issue — must fix |
+| `:toWarning('msg')` | Convention violation — should fix |
+| `:toInfo('msg')` | Informational — consider fixing |
+
 ---
 
 ## Writing Rules with a Coding Agent
 
-Once `cop init` is set up (see [Setting Up for Agents](#setting-up-for-agents) above), you can ask the agent to write rules directly:
+Once `cop init` is set up (see README), you can ask your coding agent to write rules:
 
 > "Write a cop rule that flags any method longer than 50 statements"
 
@@ -284,88 +301,14 @@ When a coding agent makes a change you don't like, ask it to encode that feedbac
 
 1. Agent produces code with a pattern you dislike (e.g., uses `DateTime.Now`)
 2. You say: **"Add a self-check that flags DateTime.Now — we use DateTimeOffset.UtcNow here"**
-3. Agent adds a check to your `cop.cop` file:
-
-```ruby
-import csharp
-import code-analysis
-
-predicate usesDateTimeNow(Statement) => Statement.Kind == 'call'
-    && Statement.TypeName == 'DateTime' && Statement.MemberName == 'Now'
-
-## Use DateTimeOffset.UtcNow instead of DateTime.Now
-export let datetime-now = Statements:usesDateTimeNow
-    :toError('Use DateTimeOffset.UtcNow instead of DateTime.Now')
-
-command MAIN = CHECK(datetime-now)
-```
-
-4. From now on, `cop` catches this pattern before it reaches code review.
-
-### What Makes a Good Self-Check Prompt
-
-Tell the agent:
-- **What** the pattern is (specific type/method/keyword)
-- **Why** it's wrong (so the message is helpful)
-- **What** to do instead (so the fix is clear)
-
-Examples:
-
-> "Add a self-check that we never use `Console.WriteLine` in the `src/` directory — we use our Logger class"
-
-> "Add a self-check that all public methods in `*Client` classes must be async"
-
-> "Add a self-check that no file in `src/Core/` imports from `src/Infrastructure/` — we enforce layering"
-
-### Self-Check as CI Gate
-
-Once checks live in your `cop-checks/` folder, they run in CI like any other check:
-
-```yaml
-- name: Run cop checks
-  run: cop csharp-checks
-  # Exits 1 if violations found — blocks merge
-```
-
-The coding agent's own changes are now checked against the rules before the PR merges. The repo's conventions are enforced automatically, not just through review comments.
-
----
-
-## CI Integration
-
-### Exit Codes
-
-| Code | Meaning |
-|---|---|
-| 0 | No violations found |
-| 1 | Violations found |
-| 2 | Configuration error (missing package, parse error) |
-
-### GitHub Actions
-
-```yaml
-- name: Install cop
-  run: |
-    curl -sL https://github.com/.../cop-linux-x64.zip -o cop.zip
-    unzip cop.zip -d /usr/local/bin
-
-- name: Run checks
-  run: cop csharp-checks
-```
-
-### Azure DevOps
-
-```yaml
-- script: cop csharp-checks
-  displayName: 'Run cop checks'
-  failOnStderr: false
-```
+3. Agent adds a check to your `cop-checks/` folder
+4. From now on, `cop` catches this pattern before it reaches code review
 
 ---
 
 ## Running External Analyzers
 
-Cop can run external analysis tools (like Ruff, ESLint, or any tool that produces structured output) and present their results in the same unified format as native checks. This lets you combine results from multiple tools into a single report, filter them with `.cop` predicates, or compose them with your own custom rules.
+Cop can run external analysis tools and present their results in the same unified format as native checks.
 
 ### Available External Analyzer Packages
 
@@ -392,21 +335,12 @@ cop python-ruff -t path/to/project          # Python lint
 cop python-mypy -t path/to/project          # Python type check
 cop javascript-eslint -t path/to/project    # JS/TS lint
 cop csharp-stylecop -t path/to/project      # C# style
-cop analysis-semgrep -t path/to/project      # Security scan
-cop analysis-trivy -t path/to/project        # Vulnerability scan
+cop analysis-semgrep -t path/to/project     # Security scan
 ```
 
-All produce the same unified output format:
-
-```
-src/app.py(1): warning: F401: `os` imported but unused
-src/app.py(9): error: E711: Comparison to `None` should be `cond is None`
-tests/test_main.py(15): warning: F841: Local variable `result` is assigned to but never used
-```
+All produce the same unified output format.
 
 ### Combining External and Native Checks
-
-You can import external analyzer results into a `.cop` file and combine them with native checks or your own rules:
 
 ```ruby
 import python-ruff
@@ -419,27 +353,43 @@ let all-checks = ruff-checks + python-checks
 command MAIN = CHECK(all-checks)
 ```
 
-Or filter the external results:
+---
 
-```ruby
-import python-ruff
-import code-analysis
+## CI Integration
 
-# Only show errors from ruff
-let ruff-errors = ruff-checks : item.Severity == 'error'
+### Exit Codes
 
-command MAIN = CHECK(ruff-errors)
+| Code | Meaning |
+|---|---|
+| 0 | No violations found |
+| 1 | Violations found |
+| 2 | Configuration error (missing package, parse error) |
+
+### GitHub Actions
+
+```yaml
+- name: Install cop
+  run: |
+    curl -sL https://github.com/.../cop-linux-x64.zip -o cop.zip
+    unzip cop.zip -d /usr/local/bin
+
+- name: Run checks
+  run: cop cop-checks/main.cop -t .
 ```
 
-### Performance
+### Azure DevOps
 
-External analyzer packages delegate the heavy work to purpose-built tools. For example, `python-ruff` runs Ruff (written in Rust) under the hood — it processes the entire Azure SDK for Python repo (55,000+ files, 52,000+ findings) in about 20 seconds.
+```yaml
+- script: cop cop-checks/main.cop -t .
+  displayName: 'Run cop checks'
+  failOnStderr: false
+```
 
 ---
 
 ## Further Reading
 
 - [Language Reference](language-reference.md) — full DSL syntax
-- [Code Package Reference](packages/code.md) — Type, Statement, Line, File properties
-- [Testing with Cop](testing-with-cop.md) — ASSERT and test mode
+- [Testing Cop Rules](testing.md) — writing and running tests for your `.cop` programs
 - [Extensibility](extensibility.md) — adding providers and external analyzers
+- [Package Reference](https://krzysztofcwalina.github.io/cop/reference.html) — types, predicates, and checks
