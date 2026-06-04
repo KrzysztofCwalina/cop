@@ -1,0 +1,4 @@
+import csharp-stylecop
+
+# Run StyleCop analysis and report violations
+CHECK stylecop-checks

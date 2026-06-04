@@ -1,0 +1,4 @@
+import analysis-spectral
+
+# Run Spectral API linting and report violations
+CHECK spectral-checks

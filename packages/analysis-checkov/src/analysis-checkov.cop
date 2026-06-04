@@ -5,7 +5,8 @@ import code-analysis
 
 let data = provider('analysis-checkov', nic)
 
-export function diagnostics() => data.Diagnostics
-export let checks = data.Diagnostics
+## Returns the Checkov diagnostics collection
+export function diagnostics() : [Diagnostic] => data.Diagnostics
+export let checkov-checks = data.Diagnostics
 
-command main = foreach checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'
+command main = foreach checkov-checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'

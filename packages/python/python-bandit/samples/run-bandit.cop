@@ -1,0 +1,4 @@
+import python-bandit
+
+# Run Bandit security scanner and report findings
+CHECK bandit-checks

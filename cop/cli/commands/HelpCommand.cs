@@ -195,27 +195,28 @@ public static class HelpCommand
     {
         bool color = ConsoleMarkdown.UseColor;
 
-        // Title
-        if (color)
-            Console.WriteLine($"{ConsoleMarkdown.Bold}{ConsoleMarkdown.Cyan}{packageName}{ConsoleMarkdown.Reset}");
-        else
-            Console.WriteLine(packageName);
-        Console.WriteLine();
-
-        // Read README.md if present — render through markdown formatter
-        var readmePath = Path.Combine(packageDir, "README.md");
-        if (File.Exists(readmePath))
+        // Title and description
+        string? description = null;
+        var manifestPath = Path.Combine(packageDir, $"{packageName}.md");
+        if (File.Exists(manifestPath))
         {
-            var readme = File.ReadAllText(readmePath).Trim();
-            // Skip the first line if it's just "# package-name"
-            var lines = readme.Split('\n');
-            int startLine = 0;
-            if (lines.Length > 0 && lines[0].TrimStart().StartsWith($"# {packageName}", StringComparison.OrdinalIgnoreCase))
-                startLine = 1;
-            var readmeBody = string.Join('\n', lines.Skip(startLine));
-            ConsoleMarkdown.WriteMarkdown(readmeBody.Trim());
-            Console.WriteLine();
+            description = ExtractFrontmatterField(File.ReadAllText(manifestPath), "description");
         }
+
+        if (color)
+        {
+            Console.Write($"{ConsoleMarkdown.Bold}{ConsoleMarkdown.Cyan}{packageName}{ConsoleMarkdown.Reset}");
+            if (description != null)
+                Console.Write($"  {ConsoleMarkdown.Gray}{description}{ConsoleMarkdown.Reset}");
+        }
+        else
+        {
+            Console.Write(packageName);
+            if (description != null)
+                Console.Write($"  {description}");
+        }
+        Console.WriteLine();
+        Console.WriteLine();
 
         // Parse .cop source files for exports
         var srcDir = Path.Combine(packageDir, "src");
@@ -238,6 +239,7 @@ public static class HelpCommand
         var commands = new List<(string Name, string? Doc)>();
         var enums = new List<(string Name, string? Doc, string Members)>();
         var flags = new List<(string Name, string? Doc, string Members)>();
+        var lets = new List<(string Name, string? Doc, string? TypeStr)>();
 
         foreach (var copFile in copFiles)
         {
@@ -286,6 +288,12 @@ public static class HelpCommand
                             var flagMembers = string.Join(" | ", fld.Members);
                             flags.Add((fld.Name, fld.DocComment, flagMembers));
                             break;
+
+                        case LetDecl ld when ld.IsExported:
+                            var letType = ld.TypeAnnotation != null
+                                ? FormatTypeRef(ld.TypeAnnotation, false) : null;
+                            lets.Add((ld.Name, ld.DocComment, letType));
+                            break;
                     }
                 }
             }
@@ -295,7 +303,97 @@ public static class HelpCommand
             }
         }
 
-        // Print exports with colorization
+        // Print samples first if available
+        var samplesDir = Path.Combine(packageDir, "samples");
+        if (Directory.Exists(samplesDir))
+        {
+            var sampleFiles = Directory.GetFiles(samplesDir, "*.cop", SearchOption.TopDirectoryOnly);
+            if (sampleFiles.Length > 0)
+            {
+                ConsoleMarkdown.WriteHeader("Samples");
+                Console.WriteLine();
+                foreach (var sampleFile in sampleFiles)
+                {
+                    var sampleName = Path.GetFileNameWithoutExtension(sampleFile);
+                    ConsoleMarkdown.WriteHeader(sampleName, 3);
+                    Console.WriteLine();
+                    var sampleContent = File.ReadAllText(sampleFile).TrimEnd();
+                    WriteCopSource(sampleContent);
+                    Console.WriteLine();
+                    Console.WriteLine();
+                }
+            }
+        }
+
+        // Print exports
+        if (lets.Count > 0)
+        {
+            ConsoleMarkdown.WriteHeader("Collections");
+            Console.WriteLine();
+            foreach (var (name, doc, typeStr) in lets)
+            {
+                Console.Write("  ");
+                if (color)
+                    Console.Write($"{ConsoleMarkdown.Bold}{name}{ConsoleMarkdown.Reset}");
+                else
+                    Console.Write(name);
+                if (typeStr != null) ConsoleMarkdown.WriteTypeAnnotation(typeStr);
+                if (doc != null) { Console.Write("    "); ConsoleMarkdown.WriteDocComment(doc); }
+                Console.WriteLine();
+            }
+            Console.WriteLine();
+        }
+
+        if (functions.Count > 0)
+        {
+            ConsoleMarkdown.WriteHeader("Functions");
+            Console.WriteLine();
+            foreach (var (name, doc, sig) in functions)
+            {
+                Console.Write("  ");
+                WriteColoredSignature(sig);
+                if (doc != null) { Console.Write("    "); ConsoleMarkdown.WriteDocComment(doc); }
+                Console.WriteLine();
+            }
+            Console.WriteLine();
+        }
+
+        if (predicates.Count > 0)
+        {
+            ConsoleMarkdown.WriteHeader("Predicates");
+            Console.WriteLine();
+            foreach (var (name, doc, paramType) in predicates)
+            {
+                Console.Write("  ");
+                ConsoleMarkdown.WriteKeywordName("predicate", $"{name}({paramType})");
+                if (doc != null) { Console.Write("    "); ConsoleMarkdown.WriteDocComment(doc); }
+                Console.WriteLine();
+            }
+            Console.WriteLine();
+        }
+
+        if (types.Count > 0)
+        {
+            ConsoleMarkdown.WriteHeader("Types");
+            Console.WriteLine();
+            foreach (var (name, doc, props) in types)
+            {
+                if (doc != null)
+                {
+                    Console.Write("  ");
+                    ConsoleMarkdown.WriteDocComment(doc);
+                    Console.WriteLine();
+                }
+                Console.Write("  ");
+                ConsoleMarkdown.WriteKeywordName("type", name);
+                Console.WriteLine(" = {");
+                foreach (var prop in props)
+                    WritePropertyLine("    " + prop.TrimStart());
+                Console.WriteLine("  }");
+                Console.WriteLine();
+            }
+        }
+
         if (enums.Count > 0)
         {
             ConsoleMarkdown.WriteHeader("Enums");
@@ -326,56 +424,6 @@ public static class HelpCommand
             Console.WriteLine();
         }
 
-        if (types.Count > 0)
-        {
-            ConsoleMarkdown.WriteHeader("Types");
-            Console.WriteLine();
-            foreach (var (name, doc, props) in types)
-            {
-                if (doc != null)
-                {
-                    Console.Write("  ");
-                    ConsoleMarkdown.WriteDocComment(doc);
-                    Console.WriteLine();
-                }
-                Console.Write("  ");
-                ConsoleMarkdown.WriteKeywordName("type", name);
-                Console.WriteLine(" = {");
-                foreach (var prop in props)
-                    WritePropertyLine("    " + prop.TrimStart());
-                Console.WriteLine("  }");
-                Console.WriteLine();
-            }
-        }
-
-        if (predicates.Count > 0)
-        {
-            ConsoleMarkdown.WriteHeader("Predicates");
-            Console.WriteLine();
-            foreach (var (name, doc, paramType) in predicates)
-            {
-                Console.Write("  ");
-                ConsoleMarkdown.WriteKeywordName("predicate", $"{name}({paramType})");
-                if (doc != null) { Console.Write("    "); ConsoleMarkdown.WriteDocComment(doc); }
-                Console.WriteLine();
-            }
-            Console.WriteLine();
-        }
-
-        if (functions.Count > 0)
-        {
-            ConsoleMarkdown.WriteHeader("Functions");
-            Console.WriteLine();
-            foreach (var (name, doc, sig) in functions)
-            {
-                Console.Write("  ");
-                WriteColoredSignature(sig);
-                if (doc != null) { Console.Write("    "); ConsoleMarkdown.WriteDocComment(doc); }
-                Console.WriteLine();
-            }
-            Console.WriteLine();
-        }
-
         if (commands.Count > 0)
         {
             ConsoleMarkdown.WriteHeader("Commands");
@@ -391,28 +439,6 @@ public static class HelpCommand
                 Console.WriteLine();
             }
             Console.WriteLine();
-        }
-
-        // Print samples if available
-        var samplesDir = Path.Combine(packageDir, "samples");
-        if (Directory.Exists(samplesDir))
-        {
-            var sampleFiles = Directory.GetFiles(samplesDir, "*.cop", SearchOption.TopDirectoryOnly);
-            if (sampleFiles.Length > 0)
-            {
-                ConsoleMarkdown.WriteHeader("Samples");
-                Console.WriteLine();
-                foreach (var sampleFile in sampleFiles)
-                {
-                    var sampleName = Path.GetFileNameWithoutExtension(sampleFile);
-                    ConsoleMarkdown.WriteHeader(sampleName, 3);
-                    Console.WriteLine();
-                    var sampleContent = File.ReadAllText(sampleFile).TrimEnd();
-                    WriteCopSource(sampleContent);
-                    Console.WriteLine();
-                    Console.WriteLine();
-                }
-            }
         }
 
         return 0;
@@ -527,6 +553,25 @@ public static class HelpCommand
             WriteCopLine(line);
             Console.WriteLine();
         }
+    }
+
+    private static string? ExtractFrontmatterField(string content, string field)
+    {
+        if (!content.StartsWith("---"))
+            return null;
+        var endIdx = content.IndexOf("\n---", 3, StringComparison.Ordinal);
+        if (endIdx < 0) return null;
+        var frontmatter = content[3..endIdx];
+        foreach (var line in frontmatter.Split('\n'))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.StartsWith($"{field}:", StringComparison.OrdinalIgnoreCase))
+            {
+                var value = trimmed[($"{field}:".Length)..].Trim();
+                return value.Length > 0 ? value : null;
+            }
+        }
+        return null;
     }
 
     private static void WriteCopLine(string line)

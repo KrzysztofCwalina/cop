@@ -5,7 +5,8 @@ import code-analysis
 
 let data = provider('csharp-stylecop', nic)
 
-export function diagnostics() => data.Diagnostics
-export let checks = data.Diagnostics
+## Returns the StyleCop diagnostics collection
+export function diagnostics() : [Diagnostic] => data.Diagnostics
+export let stylecop-checks = data.Diagnostics
 
-command main = foreach checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'
+command main = foreach stylecop-checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'

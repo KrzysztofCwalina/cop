@@ -1,0 +1,4 @@
+import csharp
+
+# List all public types in the C# codebase
+command main = foreach csharp.types():isPublic => '{Type.Name} ({Type.Kind})'

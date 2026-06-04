@@ -1,0 +1,4 @@
+import analysis-semgrep
+
+# Run Semgrep static analysis and report findings
+CHECK semgrep-checks

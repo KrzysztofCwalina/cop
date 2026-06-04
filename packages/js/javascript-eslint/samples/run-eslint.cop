@@ -1,0 +1,4 @@
+import javascript-eslint
+
+# Run ESLint and report diagnostics
+CHECK eslint-checks

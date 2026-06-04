@@ -1,0 +1,4 @@
+import javascript-biome
+
+# Run Biome linting and report diagnostics
+CHECK biome-checks

@@ -1,0 +1,4 @@
+import csharp-format
+
+# Run dotnet format and report diagnostics
+CHECK csharp-format-checks

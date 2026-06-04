@@ -1,0 +1,4 @@
+import python-snippets-checks
+
+# Verify Python code snippets are in sync with documentation
+CHECK python-snippets-checks

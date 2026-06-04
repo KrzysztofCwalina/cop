@@ -7,9 +7,9 @@ import code-analysis
 let data = provider('python-pylint', nic)
 
 ## Returns all pylint diagnostics.
-export function diagnostics() => data.Diagnostics
+export function diagnostics() : [Diagnostic] => data.Diagnostics
 
-## All pylint checks as a collection (can be combined with other checks).
-export let checks = data.Diagnostics
+## All pylint diagnostics as a collection.
+export let pylint-checks = data.Diagnostics
 
-command main = foreach checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'
+command main = foreach pylint-checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'

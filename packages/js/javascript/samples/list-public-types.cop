@@ -1,0 +1,4 @@
+import javascript
+
+# List all public types in the JavaScript/TypeScript codebase
+command main = foreach javascript.types():isPublic => '{Type.Name} ({Type.Kind})'

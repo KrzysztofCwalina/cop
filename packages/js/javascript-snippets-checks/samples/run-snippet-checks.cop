@@ -1,0 +1,4 @@
+import javascript-snippets-checks
+
+# Verify JavaScript code snippets are in sync with documentation
+CHECK javascript-snippets-checks

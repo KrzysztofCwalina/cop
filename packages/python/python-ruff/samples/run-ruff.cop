@@ -1,0 +1,4 @@
+import python-ruff
+
+# Run Ruff linter and report diagnostics
+CHECK ruff-checks

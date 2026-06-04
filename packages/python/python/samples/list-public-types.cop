@@ -1,0 +1,4 @@
+import python
+
+# List all public types in the Python codebase
+command main = foreach python.types():isPublic => '{Type.Name} ({Type.Kind})'

@@ -1,0 +1,4 @@
+import csharp-snippets-checks
+
+# Verify C# code snippets are in sync with documentation
+CHECK csharp-snippets-checks

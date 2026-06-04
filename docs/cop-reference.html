@@ -148,14 +148,16 @@ const categories = [
   {
     "name": "Core",
     "packages": [
-      "checkov",
+      "analysis-checkov",
+      "analysis-codeql",
+      "analysis-semgrep",
+      "analysis-spectral",
+      "analysis-trivy",
       "core",
+      "csharp-codeql-export",
       "files",
       "json",
-      "markdown",
-      "semgrep",
-      "spectral",
-      "trivy"
+      "markdown"
     ]
   },
   {
@@ -163,9 +165,7 @@ const categories = [
     "packages": [
       "code",
       "code-analysis",
-      "code-layering",
-      "codeql",
-      "codeql-export"
+      "code-layering"
     ]
   },
   {
@@ -233,10 +233,15 @@ const categories = [
 ];
 
 const packages = {
-  "checkov": {
-    "label": "checkov",
+  "analysis-checkov": {
+    "label": "analysis-checkov",
     "overview": "Run Checkov IaC security scanner",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Run checkov",
+        "code": "import analysis-checkov\n\n# Run Checkov security checks and report violations\nCHECK checkov-checks"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -244,9 +249,232 @@ const packages = {
       {
         "name": "diagnostics",
         "params": "",
-        "returns": "",
+        "returns": "[Diagnostic]",
+        "desc": "Returns the Checkov diagnostics collection",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-checkov/src/analysis-checkov.cop#L9"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
+  "analysis-codeql": {
+    "label": "analysis-codeql",
+    "overview": "Query CodeQL analysis results (SARIF) as cop collections",
+    "samples": [
+      {
+        "title": "Query results",
+        "code": "# Sample: Query CodeQL SARIF results\n# Prerequisites: Run `codeql database analyze` with --format=sarif-latest first\nimport analysis-codeql\n\n# Load results from a SARIF file\nlet results = analysis-codeql.Load('results.sarif')\n\n# Filter to errors only\nlet errors = results:isError\n\n# Show all high-severity findings\ncommand main = errors"
+      }
+    ],
+    "collections": [],
+    "types": {
+      "Result": {
+        "desc": "A CodeQL analysis result (alert/finding)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-codeql/src/analysis-codeql.cop#L13",
+        "props": [
+          {
+            "name": "RuleId",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Message",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Severity",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "FilePath",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "StartLine",
+            "type": "int",
+            "desc": ""
+          },
+          {
+            "name": "EndLine",
+            "type": "int",
+            "desc": ""
+          },
+          {
+            "name": "StartColumn",
+            "type": "int",
+            "desc": ""
+          },
+          {
+            "name": "EndColumn",
+            "type": "int",
+            "desc": ""
+          }
+        ]
+      },
+      "Rule": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-codeql/src/analysis-codeql.cop#L24",
+        "props": [
+          {
+            "name": "Id",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Name",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Description",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Severity",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Tags",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Precision",
+            "type": "string",
+            "desc": ""
+          }
+        ]
+      },
+      "Run": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-codeql/src/analysis-codeql.cop#L33",
+        "props": [
+          {
+            "name": "Tool",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Version",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "ResultCount",
+            "type": "int",
+            "desc": ""
+          }
+        ]
+      }
+    },
+    "predicates": [
+      {
+        "name": "isError",
+        "appliesTo": "Result",
+        "desc": "Predicates for filtering results by severity",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-codeql/src/analysis-codeql.cop#L44"
+      },
+      {
+        "name": "isWarning",
+        "appliesTo": "Result",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/checkov/src/checkov.cop#L8"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-codeql/src/analysis-codeql.cop#L45"
+      },
+      {
+        "name": "isNote",
+        "appliesTo": "Result",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-codeql/src/analysis-codeql.cop#L46"
+      },
+      {
+        "name": "isRecommendation",
+        "appliesTo": "Result",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-codeql/src/analysis-codeql.cop#L47"
+      }
+    ],
+    "functions": [
+      {
+        "name": "Load",
+        "params": "path: string",
+        "returns": "object",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-codeql/src/analysis-codeql.cop#L41"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
+  "analysis-semgrep": {
+    "label": "analysis-semgrep",
+    "overview": "Run Semgrep and expose findings as cop diagnostics",
+    "samples": [
+      {
+        "title": "Run semgrep",
+        "code": "import analysis-semgrep\n\n# Run Semgrep static analysis and report findings\nCHECK semgrep-checks"
+      }
+    ],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [
+      {
+        "name": "diagnostics",
+        "params": "",
+        "returns": "[Diagnostic]",
+        "desc": "Returns the Semgrep diagnostics collection",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-semgrep/src/analysis-semgrep.cop#L9"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
+  "analysis-spectral": {
+    "label": "analysis-spectral",
+    "overview": "Run Spectral OpenAPI linter and expose diagnostics",
+    "samples": [
+      {
+        "title": "Run spectral",
+        "code": "import analysis-spectral\n\n# Run Spectral API linting and report violations\nCHECK spectral-checks"
+      }
+    ],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [
+      {
+        "name": "diagnostics",
+        "params": "",
+        "returns": "[Diagnostic]",
+        "desc": "Returns the Spectral diagnostics collection",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-spectral/src/analysis-spectral.cop#L9"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
+  "analysis-trivy": {
+    "label": "analysis-trivy",
+    "overview": "Run Trivy vulnerability scanner and expose findings",
+    "samples": [
+      {
+        "title": "Run trivy",
+        "code": "import analysis-trivy\n\n# Run Trivy vulnerability scanner and report findings\nCHECK trivy-checks"
+      }
+    ],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [
+      {
+        "name": "diagnostics",
+        "params": "",
+        "returns": "[Diagnostic]",
+        "desc": "Returns the Trivy diagnostics collection",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-trivy/src/analysis-trivy.cop#L9"
       }
     ],
     "checks": [],
@@ -1619,269 +1847,15 @@ const packages = {
     "checks": [],
     "commands": []
   },
-  "codeql": {
-    "label": "codeql",
-    "overview": "Query CodeQL analysis results (SARIF) as cop collections",
-    "samples": [
-      {
-        "title": "Query results",
-        "code": "# Sample: Query CodeQL SARIF results\n# Prerequisites: Run `codeql database analyze` with --format=sarif-latest first\nimport codeql\n\n# Load results from a SARIF file\nlet results = codeql.Load('results.sarif')\n\n# Filter to errors only\nlet errors = results:isError\n\n# Show all high-severity findings\ncommand main = errors"
-      }
-    ],
-    "collections": [],
-    "types": {
-      "Result": {
-        "desc": "A CodeQL analysis result (alert/finding)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql/src/codeql.cop#L13",
-        "props": [
-          {
-            "name": "RuleId",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "Message",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "Severity",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "FilePath",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "StartLine",
-            "type": "int",
-            "desc": ""
-          },
-          {
-            "name": "EndLine",
-            "type": "int",
-            "desc": ""
-          },
-          {
-            "name": "StartColumn",
-            "type": "int",
-            "desc": ""
-          },
-          {
-            "name": "EndColumn",
-            "type": "int",
-            "desc": ""
-          }
-        ]
-      },
-      "Rule": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql/src/codeql.cop#L24",
-        "props": [
-          {
-            "name": "Id",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "Name",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "Description",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "Severity",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "Tags",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "Precision",
-            "type": "string",
-            "desc": ""
-          }
-        ]
-      },
-      "Run": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql/src/codeql.cop#L33",
-        "props": [
-          {
-            "name": "Tool",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "Version",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "ResultCount",
-            "type": "int",
-            "desc": ""
-          }
-        ]
-      }
-    },
-    "predicates": [
-      {
-        "name": "isError",
-        "appliesTo": "Result",
-        "desc": "Predicates for filtering results by severity",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql/src/codeql.cop#L44"
-      },
-      {
-        "name": "isWarning",
-        "appliesTo": "Result",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql/src/codeql.cop#L45"
-      },
-      {
-        "name": "isNote",
-        "appliesTo": "Result",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql/src/codeql.cop#L46"
-      },
-      {
-        "name": "isRecommendation",
-        "appliesTo": "Result",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql/src/codeql.cop#L47"
-      }
-    ],
-    "functions": [
-      {
-        "name": "Load",
-        "params": "path: string",
-        "returns": "object",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql/src/codeql.cop#L41"
-      }
-    ],
-    "checks": [],
-    "commands": []
-  },
-  "codeql-export": {
-    "label": "codeql-export",
-    "overview": "Build and export CodeQL .ql query files programmatically from cop",
-    "samples": [
-      {
-        "title": "Generate query",
-        "code": "# Sample: Generate a CodeQL query that finds public abstract classes\nimport codeql-export\n\nlet publicAbstract = qlQuery(\n  'Find public abstract classes',\n  'Finds classes that are both public and abstract',\n  qlFrom('c', 'Class'),\n  qlAnd(\n    qlModifier('c', 'public'),\n    qlModifier('c', 'abstract')\n  ),\n  'c, \"Class \" + c.getName() + \" is public and abstract\"'\n)\n\ncommand main = save('codeql/public-abstract-classes.ql', publicAbstract)"
-      }
-    ],
-    "collections": [],
-    "types": {},
-    "predicates": [],
-    "functions": [
-      {
-        "name": "qlQuery",
-        "params": "name: string, description: string, from: string, where: string, select: string",
-        "returns": "string",
-        "desc": "Builds a complete CodeQL query string.\nParameters:\n  name - query name (used in @name metadata)\n  description - query description (used in @description metadata)\n  from - from clause (e.g., 'Class c')\n  where - where clause (e.g., 'c.isPublic()')\n  select - select clause (e.g., 'c, c.getName()')\nReturns a formatted .ql file content string.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L13"
-      },
-      {
-        "name": "qlQueryAll",
-        "params": "name: string, description: string, from: string, select: string",
-        "returns": "string",
-        "desc": "Builds a CodeQL query with no where clause (selects all matching).\nParameters:\n  name - query name\n  description - query description\n  from - from clause\n  select - select clause",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L22"
-      },
-      {
-        "name": "qlFrom",
-        "params": "variable: string, qlType: string",
-        "returns": "string",
-        "desc": "Builds a CodeQL 'from' clause for a single variable.\nExample: qlFrom('c', 'Class') => 'Class c'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L27"
-      },
-      {
-        "name": "qlFrom2",
-        "params": "var1: string, type1: string, var2: string, type2: string",
-        "returns": "string",
-        "desc": "Builds a CodeQL 'from' clause for two variables (join).\nExample: qlFrom2('c', 'Class', 'm', 'Method') => 'Class c, Method m'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L31"
-      },
-      {
-        "name": "qlAnd",
-        "params": "left: string, right: string",
-        "returns": "string",
-        "desc": "Combines two where conditions with 'and'.\nExample: qlAnd('c.isPublic()', 'c.isAbstract()') => 'c.isPublic() and\\n  c.isAbstract()'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L35"
-      },
-      {
-        "name": "qlOr",
-        "params": "left: string, right: string",
-        "returns": "string",
-        "desc": "Combines two where conditions with 'or'.\nExample: qlOr('c.isPublic()', 'c.isProtected()') => '(c.isPublic() or c.isProtected())'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L39"
-      },
-      {
-        "name": "qlNot",
-        "params": "condition: string",
-        "returns": "string",
-        "desc": "Negates a where condition.\nExample: qlNot('c.isPublic()') => 'not c.isPublic()'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L43"
-      },
-      {
-        "name": "qlNameMatches",
-        "params": "variable: string, pattern: string",
-        "returns": "string",
-        "desc": "Builds a name-matching where condition using regexp.\nExample: qlNameMatches('c', 'Get.*') => 'c.getName().regexpMatch(\"Get.*\")'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L47"
-      },
-      {
-        "name": "qlNameStartsWith",
-        "params": "variable: string, prefix: string",
-        "returns": "string",
-        "desc": "Builds a name starts-with condition.\nExample: qlNameStartsWith('c', 'Base') => 'c.getName().indexOf(\"Base\") = 0'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L51"
-      },
-      {
-        "name": "qlNameContains",
-        "params": "variable: string, substring: string",
-        "returns": "string",
-        "desc": "Builds a name contains condition.\nExample: qlNameContains('c', 'Helper') => 'c.getName().matches(\"%Helper%\")'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L55"
-      },
-      {
-        "name": "qlModifier",
-        "params": "variable: string, modifier: string",
-        "returns": "string",
-        "desc": "Builds a modifier predicate call.\nPass modifier with capital first letter (CodeQL predicate suffix).\nExample: qlModifier('c', 'Public') => 'c.isPublic()'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L60"
-      },
-      {
-        "name": "qlExists",
-        "params": "declaration: string, condition: string",
-        "returns": "string",
-        "desc": "Builds an 'exists' subquery.\nExample: qlExists('Method m', 'm.getDeclaringType() = c') => 'exists(Method m | m.getDeclaringType() = c)'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L64"
-      },
-      {
-        "name": "qlSave",
-        "params": "path: string, content: string",
-        "returns": "",
-        "desc": "Writes a query string to a .ql file.\nExample: qlSave('queries/my-query.ql', queryString)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/codeql-export/src/codeql-export.cop#L68"
-      }
-    ],
-    "checks": [],
-    "commands": []
-  },
   "cop": {
     "label": "cop",
     "overview": "Structural analysis of .cop source files — types, predicates, functions, imports",
-    "samples": [],
+    "samples": [
+      {
+        "title": "List types",
+        "code": "import cop\n\n# List all types defined in .cop files\ncommand main = foreach cop.types() => '{Type.Name} ({Type.File.Path})'"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -1928,11 +1902,11 @@ const packages = {
       },
       {
         "title": "String and collection operations",
-        "code": "let names = ['Alice' 'Bob' 'Charlie' 'Diana']\nlet count = names.Count\nlet first = names.First\n\nprint('{count} people, first is {first}')\n\ncommand main = foreach names => 'Hello, {item}!'"
+        "code": "let names = ['Alice' 'Bob' 'Charlie' 'Diana']\nlet nameCount = names.Count\nlet firstName = names.First\n\nprint('{nameCount} people, first is {firstName}')\n\ncommand main = foreach names => 'Hello, {item}!'"
       },
       {
         "title": "Variables and arithmetic",
-        "code": "let x = 10\nlet y = 3\nlet sum = x + y\nlet product = x * y\n\nprint('Sum: {sum}, Product: {product}')"
+        "code": "let x = 10\nlet y = 3\nlet total = x + y\nlet product = x * y\n\nprint('Sum: {total}, Product: {product}')"
       }
     ],
     "collections": [],
@@ -2573,7 +2547,12 @@ const packages = {
   "csharp": {
     "label": "csharp",
     "overview": "C# source code parser and analyzer",
-    "samples": [],
+    "samples": [
+      {
+        "title": "List public types",
+        "code": "import csharp\n\n# List all public types in the C# codebase\ncommand main = foreach csharp.types():isPublic => '{Type.Name} ({Type.Kind})'"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -2673,10 +2652,123 @@ const packages = {
     "checks": [],
     "commands": []
   },
+  "csharp-codeql-export": {
+    "label": "csharp-codeql-export",
+    "overview": "Build and export CodeQL .ql query files programmatically from cop",
+    "samples": [
+      {
+        "title": "Generate query",
+        "code": "# Sample: Generate a CodeQL query that finds public abstract classes\nimport csharp-codeql-export\n\nlet publicAbstract = qlQuery(\n  'Find public abstract classes',\n  'Finds classes that are both public and abstract',\n  qlFrom('c', 'Class'),\n  qlAnd(\n    qlModifier('c', 'public'),\n    qlModifier('c', 'abstract')\n  ),\n  'c, \"Class \" + c.getName() + \" is public and abstract\"'\n)\n\ncommand main = save('codeql/public-abstract-classes.ql', publicAbstract)"
+      }
+    ],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [
+      {
+        "name": "qlQuery",
+        "params": "name: string, description: string, from: string, where: string, select: string",
+        "returns": "string",
+        "desc": "Builds a complete CodeQL query string.\nParameters:\n  name - query name (used in @name metadata)\n  description - query description (used in @description metadata)\n  from - from clause (e.g., 'Class c')\n  where - where clause (e.g., 'c.isPublic()')\n  select - select clause (e.g., 'c, c.getName()')\nReturns a formatted .ql file content string.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L13"
+      },
+      {
+        "name": "qlQueryAll",
+        "params": "name: string, description: string, from: string, select: string",
+        "returns": "string",
+        "desc": "Builds a CodeQL query with no where clause (selects all matching).\nParameters:\n  name - query name\n  description - query description\n  from - from clause\n  select - select clause",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L22"
+      },
+      {
+        "name": "qlFrom",
+        "params": "variable: string, qlType: string",
+        "returns": "string",
+        "desc": "Builds a CodeQL 'from' clause for a single variable.\nExample: qlFrom('c', 'Class') => 'Class c'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L27"
+      },
+      {
+        "name": "qlFrom2",
+        "params": "var1: string, type1: string, var2: string, type2: string",
+        "returns": "string",
+        "desc": "Builds a CodeQL 'from' clause for two variables (join).\nExample: qlFrom2('c', 'Class', 'm', 'Method') => 'Class c, Method m'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L31"
+      },
+      {
+        "name": "qlAnd",
+        "params": "left: string, right: string",
+        "returns": "string",
+        "desc": "Combines two where conditions with 'and'.\nExample: qlAnd('c.isPublic()', 'c.isAbstract()') => 'c.isPublic() and\\n  c.isAbstract()'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L35"
+      },
+      {
+        "name": "qlOr",
+        "params": "left: string, right: string",
+        "returns": "string",
+        "desc": "Combines two where conditions with 'or'.\nExample: qlOr('c.isPublic()', 'c.isProtected()') => '(c.isPublic() or c.isProtected())'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L39"
+      },
+      {
+        "name": "qlNot",
+        "params": "condition: string",
+        "returns": "string",
+        "desc": "Negates a where condition.\nExample: qlNot('c.isPublic()') => 'not c.isPublic()'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L43"
+      },
+      {
+        "name": "qlNameMatches",
+        "params": "variable: string, pattern: string",
+        "returns": "string",
+        "desc": "Builds a name-matching where condition using regexp.\nExample: qlNameMatches('c', 'Get.*') => 'c.getName().regexpMatch(\"Get.*\")'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L47"
+      },
+      {
+        "name": "qlNameStartsWith",
+        "params": "variable: string, prefix: string",
+        "returns": "string",
+        "desc": "Builds a name starts-with condition.\nExample: qlNameStartsWith('c', 'Base') => 'c.getName().indexOf(\"Base\") = 0'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L51"
+      },
+      {
+        "name": "qlNameContains",
+        "params": "variable: string, substring: string",
+        "returns": "string",
+        "desc": "Builds a name contains condition.\nExample: qlNameContains('c', 'Helper') => 'c.getName().matches(\"%Helper%\")'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L55"
+      },
+      {
+        "name": "qlModifier",
+        "params": "variable: string, modifier: string",
+        "returns": "string",
+        "desc": "Builds a modifier predicate call.\nPass modifier with capital first letter (CodeQL predicate suffix).\nExample: qlModifier('c', 'Public') => 'c.isPublic()'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L60"
+      },
+      {
+        "name": "qlExists",
+        "params": "declaration: string, condition: string",
+        "returns": "string",
+        "desc": "Builds an 'exists' subquery.\nExample: qlExists('Method m', 'm.getDeclaringType() = c') => 'exists(Method m | m.getDeclaringType() = c)'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L64"
+      },
+      {
+        "name": "qlSave",
+        "params": "path: string, content: string",
+        "returns": "",
+        "desc": "Writes a query string to a .ql file.\nExample: qlSave('queries/my-query.ql', queryString)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L68"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
   "csharp-format": {
     "label": "csharp-format",
     "overview": "Run dotnet format and expose formatting violations",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Run format",
+        "code": "import csharp-format\n\n# Run dotnet format and report diagnostics\nCHECK csharp-format-checks"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -2684,9 +2776,9 @@ const packages = {
       {
         "name": "diagnostics",
         "params": "",
-        "returns": "",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-format/src/csharp-format.cop#L8"
+        "returns": "[Diagnostic]",
+        "desc": "Returns the dotnet format diagnostics collection",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-format/src/csharp-format.cop#L9"
       }
     ],
     "checks": [],
@@ -2960,7 +3052,12 @@ const packages = {
   "csharp-snippets-checks": {
     "label": "csharp-snippets-checks",
     "overview": "Validates that C# code snippets in #region blocks match markdown documentation references",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Run snippet checks",
+        "code": "import csharp-snippets-checks\n\n# Verify C# code snippets are in sync with documentation\nCHECK csharp-snippets-checks"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -2971,7 +3068,12 @@ const packages = {
   "csharp-stylecop": {
     "label": "csharp-stylecop",
     "overview": "Run StyleCop analyzers via dotnet build and expose diagnostics",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Run stylecop",
+        "code": "import csharp-stylecop\n\n# Run StyleCop analysis and report violations\nCHECK stylecop-checks"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -2979,9 +3081,9 @@ const packages = {
       {
         "name": "diagnostics",
         "params": "",
-        "returns": "",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-stylecop/src/csharp-stylecop.cop#L8"
+        "returns": "[Diagnostic]",
+        "desc": "Returns the StyleCop diagnostics collection",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-stylecop/src/csharp-stylecop.cop#L9"
       }
     ],
     "checks": [],
@@ -2990,7 +3092,12 @@ const packages = {
   "files": {
     "label": "files",
     "overview": "Type definitions for filesystem structural and temporal analysis",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Find files",
+        "code": "import files\n\n# Find empty folders and large files\nlet large-files = files.files():where(File.Size > 1000000)\n\ncommand main =\n    foreach files.folders():empty => 'Empty: {Folder.Path}' |\n    foreach large-files => 'Large: {File.Path} ({File.Size} bytes)'"
+      }
+    ],
     "collections": [],
     "types": {
       "Folder": {
@@ -3158,11 +3265,11 @@ const packages = {
     "samples": [
       {
         "title": "Http client",
-        "code": "import http\n\nfunction complete(string) =>\n    http.Post('https://api.example.com/v1/completions', {\n        Content-Type: 'application/json'\n    }, {\n        model = 'gpt-4o',\n        messages = [{ role = 'user', content = string }]\n    })\n\nfunction handle(Request:Uri:equals('/chat')) =>\n    Request.Body:text:complete.Body:text:ok\n\nfunction handle(Request) => notFound\n\nasync foreach requests() => handle => responses()"
+        "code": "import http\n\nfunction complete(string) =>\n    http.Post('https://api.example.com/v1/completions', {\n        Content-Type: 'application/json'\n    }, {\n        model = 'gpt-4o',\n        messages = [{ role = 'user', content = string }]\n    })\n\nfunction handle(Request) =>\n    Request.Uri:equals('/chat') ? Request.Body:text:complete.Body:text:ok : notFound\n\nasync foreach requests() => handle => responses()"
       },
       {
         "title": "Http server",
-        "code": "import http\n\nfunction handle(Request:Uri:equals('/hello')) => ok({ message: 'Hello' })\nfunction handle(Request) => notFound\n\n# Handle network errors — log and swallow\nfunction handle(Error) => print(Error.Message)\n\nasync foreach requests() => handle => responses()"
+        "code": "import http\n\nfunction handle(Request) =>\n    Request.Uri:equals('/hello') ? ok({ message: 'Hello' }) : notFound\n\nasync foreach requests() => handle => responses()"
       }
     ],
     "collections": [],
@@ -3329,7 +3436,12 @@ const packages = {
   "javascript": {
     "label": "javascript",
     "overview": "JavaScript/TypeScript source code parser and analyzer",
-    "samples": [],
+    "samples": [
+      {
+        "title": "List public types",
+        "code": "import javascript\n\n# List all public types in the JavaScript/TypeScript codebase\ncommand main = foreach javascript.types():isPublic => '{Type.Name} ({Type.Kind})'"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -3390,7 +3502,12 @@ const packages = {
   "javascript-biome": {
     "label": "javascript-biome",
     "overview": "Run Biome and expose diagnostics",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Run biome",
+        "code": "import javascript-biome\n\n# Run Biome linting and report diagnostics\nCHECK biome-checks"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -3398,9 +3515,9 @@ const packages = {
       {
         "name": "diagnostics",
         "params": "",
-        "returns": "",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-biome/src/javascript-biome.cop#L8"
+        "returns": "[Diagnostic]",
+        "desc": "Returns the Biome diagnostics collection",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-biome/src/javascript-biome.cop#L9"
       }
     ],
     "checks": [],
@@ -3425,7 +3542,12 @@ const packages = {
   "javascript-eslint": {
     "label": "javascript-eslint",
     "overview": "Run ESLint and expose diagnostics",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Run eslint",
+        "code": "import javascript-eslint\n\n# Run ESLint and report diagnostics\nCHECK eslint-checks"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -3433,9 +3555,9 @@ const packages = {
       {
         "name": "diagnostics",
         "params": "",
-        "returns": "",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-eslint/src/javascript-eslint.cop#L8"
+        "returns": "[Diagnostic]",
+        "desc": "Returns the ESLint diagnostics collection",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-eslint/src/javascript-eslint.cop#L9"
       }
     ],
     "checks": [],
@@ -3583,7 +3705,12 @@ const packages = {
   "javascript-snippets-checks": {
     "label": "javascript-snippets-checks",
     "overview": "Validates that JavaScript/TypeScript code snippets in // [START/END] blocks match markdown documentation references",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Run snippet checks",
+        "code": "import javascript-snippets-checks\n\n# Verify JavaScript code snippets are in sync with documentation\nCHECK javascript-snippets-checks"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -3753,7 +3880,12 @@ const packages = {
   "python": {
     "label": "python",
     "overview": "Python source code parser and analyzer",
-    "samples": [],
+    "samples": [
+      {
+        "title": "List public types",
+        "code": "import python\n\n# List all public types in the Python codebase\ncommand main = foreach python.types():isPublic => '{Type.Name} ({Type.Kind})'"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -3814,7 +3946,12 @@ const packages = {
   "python-bandit": {
     "label": "python-bandit",
     "overview": "Run bandit security scanner and expose diagnostics",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Run bandit",
+        "code": "import python-bandit\n\n# Run Bandit security scanner and report findings\nCHECK bandit-checks"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -3822,7 +3959,7 @@ const packages = {
       {
         "name": "diagnostics",
         "params": "",
-        "returns": "",
+        "returns": "[Diagnostic]",
         "desc": "Returns all bandit diagnostics.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-bandit/src/python-bandit.cop#L10"
       }
@@ -4000,7 +4137,12 @@ const packages = {
   "python-mypy": {
     "label": "python-mypy",
     "overview": "Run mypy type checker and expose diagnostics",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Run mypy",
+        "code": "import python-mypy\n\n# Run mypy type checker and report diagnostics\nCHECK mypy-checks"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -4008,7 +4150,7 @@ const packages = {
       {
         "name": "diagnostics",
         "params": "",
-        "returns": "",
+        "returns": "[Diagnostic]",
         "desc": "Returns all mypy diagnostics.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-mypy/src/python-mypy.cop#L10"
       }
@@ -4019,7 +4161,12 @@ const packages = {
   "python-pylint": {
     "label": "python-pylint",
     "overview": "Run pylint and expose diagnostics",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Run pylint",
+        "code": "import python-pylint\n\n# Run Pylint and report diagnostics\nCHECK pylint-checks"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -4027,7 +4174,7 @@ const packages = {
       {
         "name": "diagnostics",
         "params": "",
-        "returns": "",
+        "returns": "[Diagnostic]",
         "desc": "Returns all pylint diagnostics.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-pylint/src/python-pylint.cop#L10"
       }
@@ -4038,7 +4185,12 @@ const packages = {
   "python-ruff": {
     "label": "python-ruff",
     "overview": "Run Ruff linter and expose diagnostics as cop Violations",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Run ruff",
+        "code": "import python-ruff\n\n# Run Ruff linter and report diagnostics\nCHECK ruff-checks"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -4046,7 +4198,7 @@ const packages = {
       {
         "name": "diagnostics",
         "params": "",
-        "returns": "",
+        "returns": "[Diagnostic]",
         "desc": "Returns all ruff diagnostics.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-ruff/src/python-ruff.cop#L10"
       }
@@ -4057,49 +4209,16 @@ const packages = {
   "python-snippets-checks": {
     "label": "python-snippets-checks",
     "overview": "Validates that Python code snippets in # [START/END] blocks match markdown documentation references",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Run snippet checks",
+        "code": "import python-snippets-checks\n\n# Verify Python code snippets are in sync with documentation\nCHECK python-snippets-checks"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
     "functions": [],
-    "checks": [],
-    "commands": []
-  },
-  "semgrep": {
-    "label": "semgrep",
-    "overview": "Run Semgrep and expose findings as cop diagnostics",
-    "samples": [],
-    "collections": [],
-    "types": {},
-    "predicates": [],
-    "functions": [
-      {
-        "name": "diagnostics",
-        "params": "",
-        "returns": "",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/semgrep/src/semgrep.cop#L8"
-      }
-    ],
-    "checks": [],
-    "commands": []
-  },
-  "spectral": {
-    "label": "spectral",
-    "overview": "Run Spectral OpenAPI linter and expose diagnostics",
-    "samples": [],
-    "collections": [],
-    "types": {},
-    "predicates": [],
-    "functions": [
-      {
-        "name": "diagnostics",
-        "params": "",
-        "returns": "",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/spectral/src/spectral.cop#L8"
-      }
-    ],
     "checks": [],
     "commands": []
   },
@@ -4114,29 +4233,15 @@ const packages = {
     "checks": [],
     "commands": []
   },
-  "trivy": {
-    "label": "trivy",
-    "overview": "Run Trivy vulnerability scanner and expose findings",
-    "samples": [],
-    "collections": [],
-    "types": {},
-    "predicates": [],
-    "functions": [
-      {
-        "name": "diagnostics",
-        "params": "",
-        "returns": "",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/trivy/src/trivy.cop#L8"
-      }
-    ],
-    "checks": [],
-    "commands": []
-  },
   "typescript-tsc": {
     "label": "typescript-tsc",
     "overview": "Run TypeScript compiler and expose diagnostics",
-    "samples": [],
+    "samples": [
+      {
+        "title": "Run tsc",
+        "code": "import typescript-tsc\n\n# Run TypeScript compiler checks and report diagnostics\nCHECK tsc-checks"
+      }
+    ],
     "collections": [],
     "types": {},
     "predicates": [],
@@ -4144,9 +4249,9 @@ const packages = {
       {
         "name": "diagnostics",
         "params": "",
-        "returns": "",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/typescript-tsc/src/typescript-tsc.cop#L8"
+        "returns": "[Diagnostic]",
+        "desc": "Returns the TypeScript compiler diagnostics collection",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/typescript-tsc/src/typescript-tsc.cop#L9"
       }
     ],
     "checks": [],

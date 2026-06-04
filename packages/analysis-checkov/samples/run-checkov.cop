@@ -1,0 +1,4 @@
+import analysis-checkov
+
+# Run Checkov security checks and report violations
+CHECK checkov-checks

@@ -1,0 +1,4 @@
+import python-mypy
+
+# Run mypy type checker and report diagnostics
+CHECK mypy-checks

@@ -1,0 +1,4 @@
+import cop
+
+# List all types defined in .cop files
+command main = foreach cop.types() => '{Type.Name} ({Type.File.Path})'

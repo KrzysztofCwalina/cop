@@ -5,7 +5,8 @@ import code-analysis
 
 let data = provider('csharp-format', nic)
 
-export function diagnostics() => data.Diagnostics
-export let checks = data.Diagnostics
+## Returns the dotnet format diagnostics collection
+export function diagnostics() : [Diagnostic] => data.Diagnostics
+export let csharp-format-checks = data.Diagnostics
 
-command main = foreach checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'
+command main = foreach csharp-format-checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'

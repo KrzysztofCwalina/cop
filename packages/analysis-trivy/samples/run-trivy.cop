@@ -1,0 +1,4 @@
+import analysis-trivy
+
+# Run Trivy vulnerability scanner and report findings
+CHECK trivy-checks
