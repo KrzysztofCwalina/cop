@@ -89,7 +89,7 @@ All cop check files live in `cop-checks/` at the repository root. Structure:
 - **One check per file** — each `.cop` file defines a single focused check
 - **Each file exports a `let` with its violations** — e.g., `export let naming-violations = ...`
 - **`main.cop` composes all checks** — concatenates violation lists from each file with `+` and runs `CHECK(all-violations)`
-- **Run all checks with** `cop cop-checks/ -t .` from the repo root
+- **Run all checks with** `cop cop-checks/main.cop -t .` from the repo root
 
 When adding a new self-check, create a new `.cop` file in `cop-checks/`, export a violation let, and add it to the `+` expression in `main.cop`.
 

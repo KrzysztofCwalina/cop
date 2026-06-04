@@ -219,7 +219,7 @@ cop-checks/
 1. **One check per file** — each `.cop` file defines a single focused check
 2. **Each file exports a `let` with its violations** — e.g., `export let naming-violations = ...`
 3. **`main.cop` composes all checks** — imports violation lists from each file and runs `CHECK(all)`
-4. **Run all checks with** `cop cop-checks/ -t .` from the repo root
+4. **Run all checks with** `cop cop-checks/main.cop -t .` from the repo root
 
 ### Example `main.cop`:
 
