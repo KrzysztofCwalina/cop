@@ -419,6 +419,8 @@ public class PackageExtractor
         if (dirName == "cop") return "Cop";
         if (dirName.StartsWith("typespec")) return "TypeSpec";
         if (dirName == "http") return "Misc";
+        if (dirName.StartsWith("analysis-")) return "Misc";
+        if (dirName.StartsWith("csharp-codeql")) return "Misc";
 
         if (manifest?.Language != null)
         {
