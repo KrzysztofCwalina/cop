@@ -64,16 +64,16 @@ Ask the agent to run cop checks:
 
 > "Run cop checks and fix any violations"
 
-The agent will execute something like:
+The agent will execute:
 
 ```bash
-cop <rules_source.cop>
+cop cop-checks/main.cop -t .
 ```
 
 By default, cop analyzes the current working directory. Use `-t` to target a different folder:
 
 ```bash
-cop <rules_source.cop> -t src/
+cop cop-checks/main.cop -t src/
 ```
 
 Exit code 1 if violations found, 0 if clean — suitable for CI. Agents see these errors and fix them automatically, just like compiler errors.
