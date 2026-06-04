@@ -1,6 +1,8 @@
-# Agent Cop
+<p align="center">
+  <img src="docs/mascot.png" alt="Agent Cop mascot" width="200" />
+</p>
 
-<img src="docs/mascot.png" alt="Agent Cop mascot" width="180" align="right" />
+# Agent Cop
 
 **Agent Cop** lets you express code quality requirements as enforcable static analysis rules — stopping code slop before it lands. You can use it to describe what what requirements you have in plain English, and your coding agent writes formal rules in Agent Cop DSL. These formal requirement rules can be run deterministically, e.g. in CI.
 
