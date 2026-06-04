@@ -439,6 +439,7 @@ public sealed class Evaluator
             CopObject co when co.HasField(member) => co.GetField(member),
             CopDynamicObject dyn when dyn.HasField(member) => dyn.GetField(member),
             CopProviderProxy proxy when proxy.HasField(member) => proxy.GetField(member),
+            CopMergedCodebase merged when merged.HasField(member) => merged.GetField(member),
             _ => null
         };
     }
@@ -459,6 +460,7 @@ public sealed class Evaluator
             CopObject co => co.GetField(mem.Member),
             CopDynamicObject dyn => dyn.GetField(mem.Member),
             CopProviderProxy proxy => proxy.GetField(mem.Member),
+            CopMergedCodebase merged => merged.GetField(mem.Member),
             CopList list => EvalListMember(list, mem.Member, mem.Line),
             CopLazyCollection lazy => EvalLazyMember(lazy, mem.Member, mem.Line),
             CopString str => EvalStringMember(str, mem.Member, mem.Line),
@@ -1129,13 +1131,34 @@ public sealed class Evaluator
 
         var funcEnv = func.Closure.Extend();
 
-        // Bind parameters
-        for (int i = 0; i < func.Declaration.Params.Count && i < args.Count; i++)
-            funcEnv.Define(func.Declaration.Params[i].Name, args[i]);
+        // Check if last parameter is a param array (collection-typed)
+        var paramCount = func.Declaration.Params.Count;
+        bool hasParamArray = paramCount > 0 &&
+            func.Declaration.Params[^1].Type is { IsCollection: true } &&
+            args.Count >= paramCount;
 
-        // If fewer args than params, bind remaining to null
-        for (int i = args.Count; i < func.Declaration.Params.Count; i++)
-            funcEnv.Define(func.Declaration.Params[i].Name, CopNull.Instance);
+        // Bind parameters
+        if (hasParamArray)
+        {
+            // Bind all params except the last normally
+            for (int i = 0; i < paramCount - 1 && i < args.Count; i++)
+                funcEnv.Define(func.Declaration.Params[i].Name, args[i]);
+
+            // Collect remaining args into the last param as a CopList
+            var paramArrayItems = new List<CopValue>();
+            for (int i = paramCount - 1; i < args.Count; i++)
+                paramArrayItems.Add(args[i]);
+            funcEnv.Define(func.Declaration.Params[^1].Name, new CopList(paramArrayItems));
+        }
+        else
+        {
+            for (int i = 0; i < paramCount && i < args.Count; i++)
+                funcEnv.Define(func.Declaration.Params[i].Name, args[i]);
+
+            // If fewer args than params, bind remaining to null
+            for (int i = args.Count; i < paramCount; i++)
+                funcEnv.Define(func.Declaration.Params[i].Name, CopNull.Instance);
+        }
 
         // Bind "item" to first argument (Cop convention: item references the context object)
         if (args.Count > 0)

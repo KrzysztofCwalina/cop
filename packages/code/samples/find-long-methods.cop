@@ -1,3 +1,4 @@
+import code
 import csharp
 import python
 import javascript
@@ -5,8 +6,8 @@ import javascript
 # Language-independent predicate works on any Method regardless of source language
 predicate isLong(Method) => Method.Statements.count() > 50
 
-# Combine all types from all languages
-let allTypes = csharp.types() + python.types() + javascript.types()
+# Create a unified codebase from all three language providers
+let cb = code.codebase('csharp', 'python', 'javascript')
 
-command MAIN = foreach allTypes => '{Type.Name} ({Type.File.Language})':Methods:isLong
+command MAIN = foreach cb.Types => '{Type.Name} ({Type.File.Language})':Methods:isLong
     => '  {Method.Name} ({Method.Statements.count()} statements)'

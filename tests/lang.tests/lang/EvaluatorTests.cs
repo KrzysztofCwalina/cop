@@ -1034,4 +1034,61 @@ command main = quadruple(3)";
         Assert.That(result, Is.InstanceOf<CopInt>());
         Assert.That(((CopInt)result).Value, Is.EqualTo(12));
     }
+
+    // ========================================================================
+    // Param Arrays
+    // ========================================================================
+
+    [Test]
+    public void ParamArray_CollectsExtraArgsIntoList()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var source = @"
+function total(items : [int]) : int = items.count()
+command main = total(1, 2, 3)";
+        var result = Eval(source, ffi);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(3));
+    }
+
+    [Test]
+    public void ParamArray_SingleArgBecomesListOfOne()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var source = @"
+function total(items : [int]) : int = items.count()
+command main = total(42)";
+        var result = Eval(source, ffi);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void ParamArray_WithLeadingFixedParams()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var source = @"
+function countNames(prefix : string, names : [string]) : int = names.count()
+command main = countNames('Hello', 'Alice', 'Bob', 'Charlie')";
+        var result = Eval(source, ffi);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(3));
+    }
+
+    [Test]
+    public void ParamArray_ExactArityStillWorks()
+    {
+        // When args.Count == params.Count and last param is [T], the single arg still becomes a list
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var source = @"
+function wrap(items : [string]) : int = items.count()
+command main = wrap('only')";
+        var result = Eval(source, ffi);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(1));
+    }
 }

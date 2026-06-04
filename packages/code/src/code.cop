@@ -233,6 +233,11 @@ export type Codebase = {
     Projects : [Project]
 }
 
+## Creates a merged codebase from multiple language providers.
+## Pass provider names as arguments: code.codebase('csharp', 'python', 'javascript')
+## The returned Codebase lazily merges Types, Statements, Lines, etc. from all specified providers.
+export function codebase(providers : [string]) : Codebase = intrinsic
+
 # Language filter predicates
 export predicate isCSharp(Type) => Type.File.Language == csharp
 export predicate isCSharp(Statement) => Statement.File.Language == csharp

@@ -1,12 +1,13 @@
+import code
 import csharp
 import python
 import javascript
 
-# All types from all languages use the same unified schema
-let allTypes = csharp.types() + python.types() + javascript.types()
+# Create a unified codebase from all three language providers
+let cb = code.codebase('csharp', 'python', 'javascript')
 
 # Group and count by language - demonstrates language-independent querying
 command MAIN = 
-    foreach allTypes:isCSharp => 'C# types: {collection.count()}' |
-    foreach allTypes:isPython => 'Python types: {collection.count()}' |
-    foreach allTypes:isJavaScript => 'JavaScript types: {collection.count()}'
+    foreach cb.Types:isCSharp => 'C# types: {collection.count()}' |
+    foreach cb.Types:isPython => 'Python types: {collection.count()}' |
+    foreach cb.Types:isJavaScript => 'JavaScript types: {collection.count()}'

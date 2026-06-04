@@ -15,12 +15,16 @@ public static class TypeValidator
     /// </summary>
     public static void ValidateArguments(FunctionDecl decl, IReadOnlyList<CopValue> args, TypeRegistry? registry = null)
     {
-        // Arity check: too many arguments
+        // Arity check: too many arguments (unless last param is a collection = param array)
         if (args.Count > decl.Params.Count && decl.Params.Count > 0)
         {
-            throw new CopEvaluationException(
-                $"'{decl.Name}' expects {decl.Params.Count} argument(s), got {args.Count}",
-                decl.Line);
+            var lastParam = decl.Params[^1];
+            if (lastParam.Type is null || !lastParam.Type.IsCollection)
+            {
+                throw new CopEvaluationException(
+                    $"'{decl.Name}' expects {decl.Params.Count} argument(s), got {args.Count}",
+                    decl.Line);
+            }
         }
 
         // For generic functions, infer bindings and validate with substituted types
@@ -31,10 +35,15 @@ public static class TypeValidator
         }
 
         // Non-generic: standard parameter type checks
+        var isParamArray = decl.Params.Count > 0 && decl.Params[^1].Type is { IsCollection: true };
         for (int i = 0; i < args.Count && i < decl.Params.Count; i++)
         {
             var param = decl.Params[i];
             if (param.Type is null) continue; // untyped parameter — no check
+
+            // Skip type check for last param when acting as param array (individual args will be collected)
+            if (isParamArray && i == decl.Params.Count - 1 && args.Count >= decl.Params.Count)
+                continue;
 
             var arg = ForceValue(args[i]);
             if (!IsCompatible(arg, param.Type, registry))

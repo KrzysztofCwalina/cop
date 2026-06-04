@@ -1,8 +1,9 @@
+import code
 import csharp
 import python
 import javascript
 
-# Combine types from all three language providers into one collection
-let allTypes = csharp.types() + python.types() + javascript.types()
+# Create a unified codebase from all three language providers
+let cb = code.codebase('csharp', 'python', 'javascript')
 
-command MAIN = foreach allTypes:isPublic => '{Type.Name} ({Type.Kind}) - {Type.File.Language}'
+command MAIN = foreach cb.Types:isPublic => '{Type.Name} ({Type.Kind}) - {Type.File.Language}'

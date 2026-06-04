@@ -397,10 +397,18 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
                 }
             }
 
-            // Try matching by arity
+            // Try matching by arity (including param array: last param is collection-typed)
             foreach (var overload in _overloads)
             {
                 if (overload.Arity == args.Count)
+                    return evaluator.CallUserFunction(overload, args);
+            }
+
+            // Try matching overloads with param array (more args than params)
+            foreach (var overload in _overloads)
+            {
+                if (args.Count > overload.Arity && overload.Arity > 0 &&
+                    overload.Declaration.Params[^1].Type is { IsCollection: true })
                     return evaluator.CallUserFunction(overload, args);
             }
         }
@@ -529,5 +537,59 @@ public sealed class CopProviderProxy : CopValue
     }
 
     public override string Display() => $"<provider {ProviderName}>";
+    public override string ToString() => Display();
+}
+
+/// <summary>
+/// A merged codebase that lazily concatenates collections from multiple providers.
+/// Created by code.codebase('csharp', 'python', ...) to provide a unified view.
+/// </summary>
+public sealed class CopMergedCodebase : CopValue
+{
+    private readonly string[] _providerNames;
+    private readonly Environment _env;
+    private readonly Dictionary<string, CopValue> _cache = new(StringComparer.Ordinal);
+
+    public CopMergedCodebase(string[] providerNames, Environment env)
+    {
+        _providerNames = providerNames;
+        _env = env;
+    }
+
+    public bool HasField(string name)
+    {
+        foreach (var provider in _providerNames)
+        {
+            if (_env.TryLookup($"{provider}.{name}", out var val) && val is not CopList { Items.Count: 0 })
+                return true;
+        }
+        return false;
+    }
+
+    public CopValue GetField(string name)
+    {
+        if (_cache.TryGetValue(name, out var cached))
+            return cached;
+
+        var merged = new List<CopValue>();
+        foreach (var provider in _providerNames)
+        {
+            if (_env.TryLookup($"{provider}.{name}", out var val))
+            {
+                if (val is CopThunk thunk)
+                    val = thunk.Force();
+                if (val is CopList list)
+                    merged.AddRange(list.Items);
+                else if (val is CopLazyCollection lazy)
+                    merged.AddRange(lazy.Enumerate());
+            }
+        }
+
+        var result = (CopValue)new CopList(merged);
+        _cache[name] = result;
+        return result;
+    }
+
+    public override string Display() => $"<codebase [{string.Join(", ", _providerNames)}]>";
     public override string ToString() => Display();
 }
