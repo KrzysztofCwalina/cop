@@ -89,22 +89,28 @@ public class ReplSession
         var files = Directory.GetFiles(_scriptsDir, "*.cop", SearchOption.TopDirectoryOnly);
         var fileNames = string.Join(", ", files.Select(Path.GetFileName));
 
-        const string cyan = "\x1b[36m";
-        const string blue = "\x1b[34m";
-        const string dim = "\x1b[2m";
-        const string reset = "\x1b[0m";
+        const string b = "\x1b[34m";   // blue (body/hat)
+        const string c = "\x1b[96m";   // bright cyan (magnifying glass)
+        const string d = "\x1b[2m";    // dim
+        const string r = "\x1b[0m";    // reset
 
-        Console.WriteLine($@"
-{blue}        .-""-.        {reset}
-{blue}       / .--. \       {cyan}  Agent Cop{reset} v{versionStr}
-{blue}      | (({dim}oo{blue})) |      {reset}
-{blue}       \ `--' /       {dim}  Static analysis for the AI era{reset}
-{blue}      .-`(  )'--.     {reset}
-{blue}     /  {dim}||{blue}  {dim}||{blue}   \    {reset}  Working on {dirName}/{fileNames}
-{blue}    |   {dim}||{blue}  {dim}||{blue}    |   {reset}
-{blue}    '._{dim}//{blue}__\_{blue}._.'   {dim}  Type help! for commands{reset}
-{blue}       {dim}(/    \){reset}
-");
+        Console.WriteLine($"""
+
+        {b}        {c}o o{r}
+        {b}    .=~~~~~~~=.          {c}Agent Cop{r} {d}v{versionStr}{r}
+        {b}   /=============\~       {d}Static analysis for the AI era{r}
+        {b}        \ {b}(o '){r}
+        {b}     {c}.-------.{b} /\{r}       {d}Working on{r} {dirName}/{fileNames}
+        {b}    {c}/  .---.  \{b} .\{r}
+        {b}   {c}| | z=sol | |{b} |{r}      {d}Type{r} help! {d}for commands{r}
+        {b}   {c}|  '-----'  |{b}[]{r}
+        {b}    {c}\         /{b} /|{r}
+        {b}     {c}'-------'{b}/ |{r}
+        {b}        |__|  |{r}
+        {b}       _/  \_/{r}
+        {b}      (__)(__){r}
+
+        """);
     }
 
     /// <summary>
