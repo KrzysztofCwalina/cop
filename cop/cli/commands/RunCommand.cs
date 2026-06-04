@@ -183,6 +183,28 @@ public static class RunCommand
         return 0;
     }
 
+    /// <summary>
+    /// Runs all .cop files in a directory as scripts. Used when the user passes a directory path
+    /// (e.g., "cop cop-checks/ -t .").
+    /// </summary>
+    public static int ExecuteDirectory(string scriptsDir, string? target = null, string? format = null, string? commands = null, bool diag = false)
+    {
+        string rootPath = !string.IsNullOrEmpty(target) ? Path.GetFullPath(target) : scriptsDir;
+
+        string[]? commandFilter = null;
+        if (!string.IsNullOrEmpty(commands))
+            commandFilter = commands.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(ColorDiagLine(msg)) : null;
+
+        // Auto-restore missing imports before execution
+        AutoRestoreImports(scriptsDir, diagLog);
+
+        var result = Engine.Run(scriptsDir, rootPath, commandFilter: commandFilter, diagLog: diagLog, additionalFeedPaths: FindFeedPathsFromCwd());
+
+        return HandleResult(result, format, rootPath);
+    }
+
     public static int Execute(string? command, string[]? programArgs = null, string? target = null, string? format = null, string? commands = null, bool diag = false)
     {
         if (command != null && IsUri(command))
