@@ -1,0 +1,14 @@
+# Filesystem analysis: find large files and empty folders.
+# Demonstrates the files package with predicates and filtering.
+# Run with: cop run
+import files
+
+predicate isLarge(File) => File.Size > 1000000
+predicate isOld(File) => File.MinutesSinceModified > 43200
+
+let largeFiles = files.files():isLarge
+let staleFiles = files.files():isOld
+
+command main =
+    foreach largeFiles => '{item.Path} ({item.Size} bytes)' |
+    foreach staleFiles => 'Stale: {item.Path}'
