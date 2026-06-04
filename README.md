@@ -93,7 +93,7 @@ You can see details of packages, including usage samples, with `cop help <packag
 
 ## VS Code Extension
 
-For syntax highlighting, install the VS Code extension:
+For syntax highlighting of `.cop` files, install the VS Code extension:
 
 ```bash
 cop vscode
