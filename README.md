@@ -113,5 +113,5 @@ cop vscode
 - [Packaging](docs/packaging.md) — creating, publishing, and restoring packages
 - [Working with the REPL](docs/repl.md) — interactive development and prototyping
 - [CodeQL Integration](docs/codeql.md) — using cop with CodeQL
-- [Package Reference](https://krzysztofcwalina.github.io/cop/cop-reference.html) — types, predicates, and checks
+- [Package Reference](https://krzysztofcwalina.github.io/cop/reference.html) — types, predicates, and checks
 - [Why Agent Cop](docs/why-agent-cop.md) — product strategy and rationale

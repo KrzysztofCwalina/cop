@@ -1,11 +1,11 @@
 using CopDocs;
 
-// copdocs - generates docs/cop-reference.html from package .cop files
+// copdocs - generates docs/reference.html from package .cop files
 //
 // Usage: copdocs <package-dir>... [--output <path>] [--overrides <path>]
 //
 // Each <package-dir> is scanned recursively for packages (dirs with a manifest .md).
-// --output defaults to docs/cop-reference.html relative to the first package root.
+// --output defaults to docs/reference.html relative to the first package root.
 // --overrides points to a JSON file with supplementary metadata (overviews, samples, etc.)
 
 var packageDirs = new List<string>();
@@ -32,7 +32,7 @@ if (packageDirs.Count == 0)
     Console.Error.WriteLine();
     Console.Error.WriteLine("  <package-dir>  One or more directories to scan for packages.");
     Console.Error.WriteLine("                 A package is a directory with a <name>.md manifest and src/*.cop files.");
-    Console.Error.WriteLine("  --output       Output HTML file path (default: docs/cop-reference.html)");
+    Console.Error.WriteLine("  --output       Output HTML file path (default: docs/reference.html)");
     Console.Error.WriteLine("  --overrides    JSON file with supplementary metadata (overviews, samples, descriptions)");
     return 1;
 }
@@ -154,7 +154,7 @@ foreach (var catName in categoryOrder)
 }
 
 // Determine output path
-outputPath ??= "docs/cop-reference.html";
+outputPath ??= "docs/reference.html";
 outputPath = Path.GetFullPath(outputPath);
 Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
 

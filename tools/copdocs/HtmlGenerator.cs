@@ -4,7 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 
 /// <summary>
-/// Generates the cop-reference.html file from extracted package data.
+/// Generates the reference.html file from extracted package data.
 /// </summary>
 public class HtmlGenerator
 {
