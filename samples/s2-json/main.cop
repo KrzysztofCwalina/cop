@@ -16,4 +16,4 @@ let Persons : [Person] = json.Parse('data.json')
 predicate canVote(Person) => Person.age >= 18
 let Voters = Persons:canVote
 
-command main = foreach Voters => print('{item.name}')
+command MAIN = foreach Voters => print('{item.name}')

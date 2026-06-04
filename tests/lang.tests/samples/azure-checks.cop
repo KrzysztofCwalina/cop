@@ -15,13 +15,13 @@ predicate inheritsClientOptions(Type) => Type:inheritsFrom('ClientOptions') || T
 predicate missingBaseClass(Type) => !inheritsClientOptions
 
 ## Azure clients must accept TokenCredential for authentication
-command tokenCredentialRule = foreach Clients:isCSharp:missingTokenCredential => '{warning:@yellow} {item.Name} must accept TokenCredential'
+command TOKEN-CREDENTIAL-RULE = foreach Clients:isCSharp:missingTokenCredential => '{warning:@yellow} {item.Name} must accept TokenCredential'
 
 ## Client types must provide a protected parameterless constructor for mocking
-command mockingConstructorRule = foreach Clients:isCSharp:missingMockingConstructor => '{warning:@yellow} {item.Name} must provide a protected parameterless constructor'
+command MOCKING-CONSTRUCTOR-RULE = foreach Clients:isCSharp:missingMockingConstructor => '{warning:@yellow} {item.Name} must provide a protected parameterless constructor'
 
 ## Options types must inherit from ClientOptions or ClientPipelineOptions
-command optionsBaseClassRule = foreach Types:isCSharp:clientOptionsType:missingBaseClass => '{warning:@yellow} {item.Name} must inherit from ClientOptions or ClientPipelineOptions'
+command OPTIONS-BASE-CLASS-RULE = foreach Types:isCSharp:clientOptionsType:missingBaseClass => '{warning:@yellow} {item.Name} must inherit from ClientOptions or ClientPipelineOptions'
 
 RUN tokenCredentialRule()
 RUN mockingConstructorRule()

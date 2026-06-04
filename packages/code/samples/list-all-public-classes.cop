@@ -5,4 +5,4 @@ import javascript
 # Combine types from all three language providers into one collection
 let allTypes = csharp.types() + python.types() + javascript.types()
 
-command main = foreach allTypes:isPublic => '{Type.Name} ({Type.Kind}) - {Type.File.Language}'
+command MAIN = foreach allTypes:isPublic => '{Type.Name} ({Type.Kind}) - {Type.File.Language}'

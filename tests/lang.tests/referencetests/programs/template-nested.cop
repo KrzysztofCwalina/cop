@@ -3,4 +3,4 @@
 # @expect output-contains: methods
 
 import csharp-checks
-command main = foreach csharp.Types:isSealed => '{item.Name} has {item.Methods.Count} methods'
+command MAIN = foreach csharp.Types:isSealed => '{item.Name} has {item.Methods.Count} methods'

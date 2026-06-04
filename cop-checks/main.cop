@@ -8,4 +8,4 @@ export let all-violations =
     layering-violations +
     no-aspnet-in-cli
 
-command main = CHECK(all-violations)
+command MAIN = CHECK(all-violations)

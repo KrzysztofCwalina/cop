@@ -4,4 +4,4 @@
 import csharp-checks
 let badNames = ['Bad', 'Evil', 'Wrong']
 predicate hasBadPrefix(Type) => Type.Name:startsWith(badNames)
-command main = foreach csharp.Types:hasBadPrefix => '{item.Name}'
+command MAIN = foreach csharp.Types:hasBadPrefix => '{item.Name}'

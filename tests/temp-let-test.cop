@@ -1,4 +1,4 @@
 import code
 let typeNames = csharp.Types.Select(item.Name)
 let count = typeNames.Count
-command show = print('count: {count}')
+command SHOW = print('count: {count}')

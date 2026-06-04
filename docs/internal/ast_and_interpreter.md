@@ -343,7 +343,7 @@ These concepts currently pollute the core parser/evaluator and must move to the 
 1. **No domain-specific keywords in the grammar** — `collection`, `feed`, `run`, `sink`, `provider` are identifiers, not keywords
 2. **Predicates are functions** — a predicate is `fn name(x: T) -> bool = body`; the "narrowing" behavior is a binder concern
 3. **Collections are typed values** — `let files : [File] = expr`; no special `collection` declaration needed
-4. **Commands are statement blocks** — `command main = { ... }`; execution semantics in runtime, not parser
+4. **Commands are statement blocks** — `command MAIN = { ... }`; execution semantics in runtime, not parser
 5. **Single call dispatch** — all function calls (user-defined, intrinsic, foreign) go through one path
 6. **Explicit FFI boundary** — the evaluator doesn't know about `DataObject`, providers, or sinks; it calls registered foreign functions
 7. **Proper lexical scoping** — environment chain, not a global dictionary of type-keyed slots

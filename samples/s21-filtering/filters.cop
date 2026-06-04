@@ -20,4 +20,4 @@ let combined = PublicClients + InternalTypes
 predicate hasPublicCtor(Type) => Type.Constructors:any(isPublic)
 predicate noMethods(Type) => Type.Methods:empty
 
-command main = foreach PublicClients:!hasPublicCtor => print('{item.Name} is a public client without a public constructor')
+command MAIN = foreach PublicClients:!hasPublicCtor => print('{item.Name} is a public client without a public constructor')

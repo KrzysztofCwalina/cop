@@ -209,4 +209,4 @@ export function toApiLine(Api) => ApiLine {
     Line = item.Line
 }
 
-command main = CHECK(csharp-library-checks)
+command MAIN = CHECK(csharp-library-checks)

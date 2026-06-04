@@ -3,4 +3,4 @@
 
 import csharp-checks
 predicate nameContains(Type) => Type.Name:contains('oodCl')
-command main = foreach csharp.Types:nameContains => '{item.Name}'
+command MAIN = foreach csharp.Types:nameContains => '{item.Name}'

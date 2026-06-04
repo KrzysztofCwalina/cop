@@ -3,4 +3,4 @@
 
 import csharp-checks
 predicate nameStartsZZZ(Type) => Type.Name:startsWith('ZZZ')
-command main = foreach csharp.Types:nameStartsZZZ => '{item.Name}'
+command MAIN = foreach csharp.Types:nameStartsZZZ => '{item.Name}'

@@ -10,4 +10,4 @@ predicate usesVar(Statement) => Statement.Keywords:contains('var')
 let StatementsUsingVar = Code.Statements:usesVar
 
 # print an error for each matching statement, with file path and line number
-command main = foreach StatementsUsingVar => print('ERROR: {item.File.Path}:{item.Line} uses \'var\'')
+command MAIN = foreach StatementsUsingVar => print('ERROR: {item.File.Path}:{item.Line} uses \'var\'')

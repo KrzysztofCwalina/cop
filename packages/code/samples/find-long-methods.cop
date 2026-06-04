@@ -8,5 +8,5 @@ predicate isLong(Method) => Method.Statements.count() > 50
 # Combine all types from all languages
 let allTypes = csharp.types() + python.types() + javascript.types()
 
-command main = foreach allTypes => '{Type.Name} ({Type.File.Language})':Methods:isLong
+command MAIN = foreach allTypes => '{Type.Name} ({Type.File.Language})':Methods:isLong
     => '  {Method.Name} ({Method.Statements.count()} statements)'

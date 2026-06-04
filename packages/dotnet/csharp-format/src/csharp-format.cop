@@ -9,4 +9,4 @@ let data = provider('csharp-format', nic)
 export function diagnostics() : [Diagnostic] => data.Diagnostics
 export let csharp-format-checks = data.Diagnostics
 
-command main = foreach csharp-format-checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'
+command MAIN = foreach csharp-format-checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'

@@ -12,7 +12,7 @@ Runs the [Ruff](https://docs.astral.sh/ruff/) Python linter and exposes its diag
 ```cop
 import python-ruff
 
-command main = CHECK(python-ruff.checks())
+command MAIN = CHECK(python-ruff.checks())
 ```
 
 Combine with custom cop rules:
@@ -21,7 +21,7 @@ Combine with custom cop rules:
 import python-ruff
 import python-checks
 
-command main = CHECK(python-ruff.checks() + python-checks)
+command MAIN = CHECK(python-ruff.checks() + python-checks)
 ```
 
 ## How it works
@@ -34,4 +34,4 @@ command main = CHECK(python-ruff.checks() + python-checks)
 ## Exported
 
 - `checks() : [Violation]` — all ruff diagnostics as Violations
-- `command main` — runs CHECK on all ruff violations
+- `command MAIN` — runs CHECK on all ruff violations

@@ -130,4 +130,4 @@ export function toApiLine(Api) => ApiLine {
     Line = item.Line
 }
 
-command main = CHECK(javascript-library-checks)
+command MAIN = CHECK(javascript-library-checks)

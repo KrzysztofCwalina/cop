@@ -3,6 +3,6 @@ import files
 # Find empty folders and large files
 let large-files = files.files():where(File.Size > 1000000)
 
-command main =
+command MAIN =
     foreach files.folders():empty => 'Empty: {Folder.Path}' |
     foreach large-files => 'Large: {File.Path} ({File.Size} bytes)'

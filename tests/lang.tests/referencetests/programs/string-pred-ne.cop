@@ -4,4 +4,4 @@
 
 import csharp-checks
 predicate nameNotPlaceholder(Type) => Type.Name:notEquals('Placeholder')
-command main = foreach csharp.Types:nameNotPlaceholder => '{item.Name}'
+command MAIN = foreach csharp.Types:nameNotPlaceholder => '{item.Name}'

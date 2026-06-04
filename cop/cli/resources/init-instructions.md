@@ -73,7 +73,7 @@ CHECK violations
 | `type` | Object shape definition | `type Foo = { Name : string }` |
 | `enum` | Extensible enum | `enum Severity = error \| warning` |
 | `flags` | Bit flag constants | `flags Mod = Public \| Static` |
-| `command` | Named runnable entry point | `command main = CHECK(violations)` |
+| `command` | Named runnable entry point | `command MAIN = CHECK(violations)` |
 | `foreach` | Iterate and output | `foreach items => '{item.Name}'` |
 | `test` | Test assertion | `test x = assert(expr)` |
 | `export` | Make visible to importers | `export predicate ...` |
@@ -157,7 +157,7 @@ let longMethods = Code.Methods:isTooLong
 let undocTypes = Code.Types:undocumented
     :toWarning('Public type {item.Name} is not documented')
 
-command main = CHECK(longMethods + undocTypes)
+command MAIN = CHECK(longMethods + undocTypes)
 ```
 
 ## Testing
@@ -229,7 +229,7 @@ export let all-violations =
     layering-violations +
     no-new-interfaces
 
-command main = CHECK(all-violations)
+command MAIN = CHECK(all-violations)
 ```
 
 ### Example single check file (`naming.cop`):

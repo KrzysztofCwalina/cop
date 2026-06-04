@@ -12,4 +12,4 @@ let publicAbstract = qlQuery(
   'c, "Class " + c.getName() + " is public and abstract"'
 )
 
-command main = save('codeql/public-abstract-classes.ql', publicAbstract)
+command MAIN = save('codeql/public-abstract-classes.ql', publicAbstract)

@@ -2,4 +2,4 @@
 # @expect output-contains: sealed: GoodClient
 
 import csharp-checks
-command main = foreach csharp.Types:isSealed => 'sealed: {item.Name}'
+command MAIN = foreach csharp.Types:isSealed => 'sealed: {item.Name}'

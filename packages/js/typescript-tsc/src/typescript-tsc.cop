@@ -9,4 +9,4 @@ let data = provider('typescript-tsc', nic)
 export function diagnostics() : [Diagnostic] => data.Diagnostics
 export let tsc-checks = data.Diagnostics
 
-command main = foreach tsc-checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'
+command MAIN = foreach tsc-checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'

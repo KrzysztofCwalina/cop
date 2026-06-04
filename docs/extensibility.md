@@ -248,7 +248,7 @@ let data = provider('python-ruff', nic)
 export function diagnostics() => data.Diagnostics
 export let checks = data.Diagnostics
 
-command main = foreach checks
+command MAIN = foreach checks
     => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'
 ```
 
@@ -272,7 +272,7 @@ To wrap a different tool, follow the same pattern:
    - Defines a schema with a `Diagnostic` (or similar) type
    - Runs the tool via `subprocess.run` with JSON/structured output
    - Parses the output and maps it to your schema
-3. **Write the `.cop` file** that exports the collection and defines a `command main`
+3. **Write the `.cop` file** that exports the collection and defines a `command MAIN`
 
 Key considerations:
 
@@ -292,7 +292,7 @@ import code-analysis
 # All findings from both ruff and native cop checks
 let all-checks = checks + python-checks
 
-command main = CHECK(all-checks)
+command MAIN = CHECK(all-checks)
 ```
 
 ### Performance at Scale

@@ -98,8 +98,8 @@ Write tests with `ASSERT` and `ASSERT_EMPTY`, run them with `cop test`:
 ```ruby
 import csharp
 
-command test-has-types = ASSERT(csharp.Types)
-command test-no-var = ASSERT_EMPTY(csharp.Statements:varDeclaration)
+command TEST-HAS-TYPES = ASSERT(csharp.Types)
+command TEST-NO-VAR = ASSERT_EMPTY(csharp.Statements:varDeclaration)
 ```
 
 ```bash

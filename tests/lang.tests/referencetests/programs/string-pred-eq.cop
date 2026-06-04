@@ -3,4 +3,4 @@
 
 import csharp-checks
 predicate nameIsGoodClient(Type) => Type.Name:equals('GoodClient')
-command main = foreach csharp.Types:nameIsGoodClient => '{item.Name}'
+command MAIN = foreach csharp.Types:nameIsGoodClient => '{item.Name}'

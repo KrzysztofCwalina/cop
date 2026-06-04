@@ -3,4 +3,4 @@
 
 import csharp-checks
 function getTypeName(Type) => Type.Name
-command main = foreach csharp.Types => '{item.Name}'
+command MAIN = foreach csharp.Types => '{item.Name}'

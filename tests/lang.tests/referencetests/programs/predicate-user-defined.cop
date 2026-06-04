@@ -3,4 +3,4 @@
 
 import csharp-checks
 predicate isSealdGood(Type) => isSealed && Type.Name:startsWith('Good')
-command main = foreach csharp.Types:isSealdGood => '{item.Name}'
+command MAIN = foreach csharp.Types:isSealdGood => '{item.Name}'

@@ -263,7 +263,7 @@ const packages = {
     "samples": [
       {
         "title": "Query results",
-        "code": "# Sample: Query CodeQL SARIF results\n# Prerequisites: Run `codeql database analyze` with --format=sarif-latest first\nimport analysis-codeql\n\n# Load results from a SARIF file\nlet results = analysis-codeql.Load('results.sarif')\n\n# Filter to errors only\nlet errors = results:isError\n\n# Show all high-severity findings\ncommand main = errors"
+        "code": "# Sample: Query CodeQL SARIF results\n# Prerequisites: Run `codeql database analyze` with --format=sarif-latest first\nimport analysis-codeql\n\n# Load results from a SARIF file\nlet results = analysis-codeql.Load('results.sarif')\n\n# Filter to errors only\nlet errors = results:isError\n\n# Show all high-severity findings\ncommand MAIN = errors"
       }
     ],
     "collections": [],
@@ -486,15 +486,15 @@ const packages = {
     "samples": [
       {
         "title": "Count by language",
-        "code": "import csharp\nimport python\nimport javascript\n\n# All types from all languages use the same unified schema\nlet allTypes = csharp.types() + python.types() + javascript.types()\n\n# Group and count by language - demonstrates language-independent querying\ncommand main = \n    foreach allTypes:isCSharp => 'C# types: {collection.count()}' |\n    foreach allTypes:isPython => 'Python types: {collection.count()}' |\n    foreach allTypes:isJavaScript => 'JavaScript types: {collection.count()}'"
+        "code": "import csharp\nimport python\nimport javascript\n\n# All types from all languages use the same unified schema\nlet allTypes = csharp.types() + python.types() + javascript.types()\n\n# Group and count by language - demonstrates language-independent querying\ncommand MAIN = \n    foreach allTypes:isCSharp => 'C# types: {collection.count()}' |\n    foreach allTypes:isPython => 'Python types: {collection.count()}' |\n    foreach allTypes:isJavaScript => 'JavaScript types: {collection.count()}'"
       },
       {
         "title": "Find long methods",
-        "code": "import csharp\nimport python\nimport javascript\n\n# Language-independent predicate works on any Method regardless of source language\npredicate isLong(Method) => Method.Statements.count() > 50\n\n# Combine all types from all languages\nlet allTypes = csharp.types() + python.types() + javascript.types()\n\ncommand main = foreach allTypes => '{Type.Name} ({Type.File.Language})':Methods:isLong\n    => '  {Method.Name} ({Method.Statements.count()} statements)'"
+        "code": "import csharp\nimport python\nimport javascript\n\n# Language-independent predicate works on any Method regardless of source language\npredicate isLong(Method) => Method.Statements.count() > 50\n\n# Combine all types from all languages\nlet allTypes = csharp.types() + python.types() + javascript.types()\n\ncommand MAIN = foreach allTypes => '{Type.Name} ({Type.File.Language})':Methods:isLong\n    => '  {Method.Name} ({Method.Statements.count()} statements)'"
       },
       {
         "title": "List all public classes",
-        "code": "import csharp\nimport python\nimport javascript\n\n# Combine types from all three language providers into one collection\nlet allTypes = csharp.types() + python.types() + javascript.types()\n\ncommand main = foreach allTypes:isPublic => '{Type.Name} ({Type.Kind}) - {Type.File.Language}'"
+        "code": "import csharp\nimport python\nimport javascript\n\n# Combine types from all three language providers into one collection\nlet allTypes = csharp.types() + python.types() + javascript.types()\n\ncommand MAIN = foreach allTypes:isPublic => '{Type.Name} ({Type.Kind}) - {Type.File.Language}'"
       }
     ],
     "collections": [],
@@ -1853,7 +1853,7 @@ const packages = {
     "samples": [
       {
         "title": "List types",
-        "code": "import cop\n\n# List all types defined in .cop files\ncommand main = foreach cop.types() => '{Type.Name} ({Type.File.Path})'"
+        "code": "import cop\n\n# List all types defined in .cop files\ncommand MAIN = foreach cop.types() => '{Type.Name} ({Type.File.Path})'"
       }
     ],
     "collections": [],
@@ -1902,7 +1902,7 @@ const packages = {
       },
       {
         "title": "String and collection operations",
-        "code": "let names = ['Alice' 'Bob' 'Charlie' 'Diana']\nlet nameCount = names.Count\nlet firstName = names.First\n\nprint('{nameCount} people, first is {firstName}')\n\ncommand main = foreach names => 'Hello, {item}!'"
+        "code": "let names = ['Alice' 'Bob' 'Charlie' 'Diana']\nlet nameCount = names.Count\nlet firstName = names.First\n\nprint('{nameCount} people, first is {firstName}')\n\ncommand MAIN = foreach names => 'Hello, {item}!'"
       },
       {
         "title": "Variables and arithmetic",
@@ -2550,7 +2550,7 @@ const packages = {
     "samples": [
       {
         "title": "List public types",
-        "code": "import csharp\n\n# List all public types in the C# codebase\ncommand main = foreach csharp.types():isPublic => '{Type.Name} ({Type.Kind})'"
+        "code": "import csharp\n\n# List all public types in the C# codebase\ncommand MAIN = foreach csharp.types():isPublic => '{Type.Name} ({Type.Kind})'"
       }
     ],
     "collections": [],
@@ -2658,7 +2658,7 @@ const packages = {
     "samples": [
       {
         "title": "Generate query",
-        "code": "# Sample: Generate a CodeQL query that finds public abstract classes\nimport csharp-codeql-export\n\nlet publicAbstract = qlQuery(\n  'Find public abstract classes',\n  'Finds classes that are both public and abstract',\n  qlFrom('c', 'Class'),\n  qlAnd(\n    qlModifier('c', 'public'),\n    qlModifier('c', 'abstract')\n  ),\n  'c, \"Class \" + c.getName() + \" is public and abstract\"'\n)\n\ncommand main = save('codeql/public-abstract-classes.ql', publicAbstract)"
+        "code": "# Sample: Generate a CodeQL query that finds public abstract classes\nimport csharp-codeql-export\n\nlet publicAbstract = qlQuery(\n  'Find public abstract classes',\n  'Finds classes that are both public and abstract',\n  qlFrom('c', 'Class'),\n  qlAnd(\n    qlModifier('c', 'public'),\n    qlModifier('c', 'abstract')\n  ),\n  'c, \"Class \" + c.getName() + \" is public and abstract\"'\n)\n\ncommand MAIN = save('codeql/public-abstract-classes.ql', publicAbstract)"
       }
     ],
     "collections": [],
@@ -2806,7 +2806,7 @@ const packages = {
     "samples": [
       {
         "title": "Check client conventions",
-        "code": "import csharp-library-checks\n\n# Find all client types\ncommand main = foreach Clients\n    => '{item.Name}'\n\n# Run all client checks\nCHECK csharp-library-checks"
+        "code": "import csharp-library-checks\n\n# Find all client types\ncommand MAIN = foreach Clients\n    => '{item.Name}'\n\n# Run all client checks\nCHECK csharp-library-checks"
       }
     ],
     "collections": [],
@@ -3095,7 +3095,7 @@ const packages = {
     "samples": [
       {
         "title": "Find files",
-        "code": "import files\n\n# Find empty folders and large files\nlet large-files = files.files():where(File.Size > 1000000)\n\ncommand main =\n    foreach files.folders():empty => 'Empty: {Folder.Path}' |\n    foreach large-files => 'Large: {File.Path} ({File.Size} bytes)'"
+        "code": "import files\n\n# Find empty folders and large files\nlet large-files = files.files():where(File.Size > 1000000)\n\ncommand MAIN =\n    foreach files.folders():empty => 'Empty: {Folder.Path}' |\n    foreach large-files => 'Large: {File.Path} ({File.Size} bytes)'"
       }
     ],
     "collections": [],
@@ -3439,7 +3439,7 @@ const packages = {
     "samples": [
       {
         "title": "List public types",
-        "code": "import javascript\n\n# List all public types in the JavaScript/TypeScript codebase\ncommand main = foreach javascript.types():isPublic => '{Type.Name} ({Type.Kind})'"
+        "code": "import javascript\n\n# List all public types in the JavaScript/TypeScript codebase\ncommand MAIN = foreach javascript.types():isPublic => '{Type.Name} ({Type.Kind})'"
       }
     ],
     "collections": [],
@@ -3585,7 +3585,7 @@ const packages = {
     "samples": [
       {
         "title": "Check client conventions",
-        "code": "import javascript-library-checks\n\ncommand main = foreach Clients\n    => '{item.Name}'\n\nCHECK js-client-checks"
+        "code": "import javascript-library-checks\n\ncommand MAIN = foreach Clients\n    => '{item.Name}'\n\nCHECK js-client-checks"
       }
     ],
     "collections": [],
@@ -3724,7 +3724,7 @@ const packages = {
     "samples": [
       {
         "title": "Load and query json data",
-        "code": "import json\n\ntype Config = { name: string, enabled: bool }\n\nlet configs: [Config] = json.Parse('settings.json')\n\ncommand main = foreach configs:enabled\n    => '{item.name} is active'"
+        "code": "import json\n\ntype Config = { name: string, enabled: bool }\n\nlet configs: [Config] = json.Parse('settings.json')\n\ncommand MAIN = foreach configs:enabled\n    => '{item.name} is active'"
       }
     ],
     "collections": [],
@@ -3748,7 +3748,7 @@ const packages = {
     "samples": [
       {
         "title": "Check for broken links",
-        "code": "import markdown\n\npredicate isBroken(Link) =>\n    Link.Url:startsWith('http')\n    && Link.Text:empty\n\ncommand main = foreach links():isBroken\n    => 'Missing link text: {item.Url}'"
+        "code": "import markdown\n\npredicate isBroken(Link) =>\n    Link.Url:startsWith('http')\n    && Link.Text:empty\n\ncommand MAIN = foreach links():isBroken\n    => 'Missing link text: {item.Url}'"
       }
     ],
     "collections": [],
@@ -3883,7 +3883,7 @@ const packages = {
     "samples": [
       {
         "title": "List public types",
-        "code": "import python\n\n# List all public types in the Python codebase\ncommand main = foreach python.types():isPublic => '{Type.Name} ({Type.Kind})'"
+        "code": "import python\n\n# List all public types in the Python codebase\ncommand MAIN = foreach python.types():isPublic => '{Type.Name} ({Type.Kind})'"
       }
     ],
     "collections": [],
@@ -4005,7 +4005,7 @@ const packages = {
     "samples": [
       {
         "title": "Check client conventions",
-        "code": "import python-library-checks\n\ncommand main = foreach Clients\n    => '{Type.Name}'\n\nCHECK python-client-checks"
+        "code": "import python-library-checks\n\ncommand MAIN = foreach Clients\n    => '{Type.Name}'\n\nCHECK python-client-checks"
       }
     ],
     "collections": [],
@@ -4263,7 +4263,7 @@ const packages = {
     "samples": [
       {
         "title": "List all models",
-        "code": "import typespec\n\nlet tsp = provider('typespec', nic)\nlet Models = tsp.Models\n\ncommand main = foreach Models\n    => '{item.Name} ({item.Properties.Count} props)'"
+        "code": "import typespec\n\nlet tsp = provider('typespec', nic)\nlet Models = tsp.Models\n\ncommand MAIN = foreach Models\n    => '{item.Name} ({item.Properties.Count} props)'"
       }
     ],
     "collections": [],
@@ -4545,7 +4545,7 @@ const packages = {
     "samples": [
       {
         "title": "Find get operations",
-        "code": "import typespec-http\n\ncommand main = foreach operations()\n    => '{item.Path} — {item.Name}'"
+        "code": "import typespec-http\n\ncommand MAIN = foreach operations()\n    => '{item.Path} — {item.Name}'"
       }
     ],
     "collections": [],

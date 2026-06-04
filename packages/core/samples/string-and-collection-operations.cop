@@ -4,4 +4,4 @@ let firstName = names.First
 
 print('{nameCount} people, first is {firstName}')
 
-command main = foreach names => 'Hello, {item}!'
+command MAIN = foreach names => 'Hello, {item}!'

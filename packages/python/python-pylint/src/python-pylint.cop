@@ -12,4 +12,4 @@ export function diagnostics() : [Diagnostic] => data.Diagnostics
 ## All pylint diagnostics as a collection.
 export let pylint-checks = data.Diagnostics
 
-command main = foreach pylint-checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'
+command MAIN = foreach pylint-checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'

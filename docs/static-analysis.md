@@ -416,7 +416,7 @@ import code-analysis
 # Combine ruff findings with native cop checks
 let all-checks = checks + python-checks
 
-command main = CHECK(all-checks)
+command MAIN = CHECK(all-checks)
 ```
 
 Or filter the external results:
@@ -427,7 +427,7 @@ import python-ruff
 # Only show errors (not warnings)
 predicate isError(item) => item.Severity == 'error'
 
-command main = foreach diagnostics():isError
+command MAIN = foreach diagnostics():isError
     => '{item.FilePath}({item.Line}): {item.RuleId}: {item.Message}'
 ```
 

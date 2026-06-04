@@ -3,4 +3,4 @@
 
 import csharp-checks
 predicate wrongField(Type) => Type.FakeField:equals('x')
-command main = foreach csharp.Types:wrongField => '{item.Name}'
+command MAIN = foreach csharp.Types:wrongField => '{item.Name}'

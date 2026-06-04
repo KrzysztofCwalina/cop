@@ -13,4 +13,4 @@ predicate printUsage(Statement:isPython) => Statement.Kind == 'call'
 
 # Single collection works across both languages
 let PrintStatements = Code.Statements:printUsage
-command main = foreach PrintStatements => print('{item.File.Path}:{item.Line} uses print')
+command MAIN = foreach PrintStatements => print('{item.File.Path}:{item.Line} uses print')

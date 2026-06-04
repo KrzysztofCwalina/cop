@@ -2,4 +2,4 @@
 # @expect output-contains: GoodClient
 
 import csharp-checks
-command main = foreach csharp.Types:isPublic => '{item.Name}'
+command MAIN = foreach csharp.Types:isPublic => '{item.Name}'

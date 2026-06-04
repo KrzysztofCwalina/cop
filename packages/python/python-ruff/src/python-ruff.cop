@@ -12,4 +12,4 @@ export function diagnostics() : [Diagnostic] => data.Diagnostics
 ## All ruff lint diagnostics as a collection.
 export let ruff-checks = data.Diagnostics
 
-command main = foreach ruff-checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'
+command MAIN = foreach ruff-checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'

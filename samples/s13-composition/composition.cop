@@ -11,4 +11,4 @@ predicate entryPoint(Method) => Method:isPublic && Method:isStatic && Method:ret
 predicate hasEntryPoint(Type) => Type.Methods:any(entryPoint)
 let EntryPointTypes = Code.Types:hasEntryPoint
 
-command main = foreach EntryPointTypes => print('{item.Name} has public static void methods')
+command MAIN = foreach EntryPointTypes => print('{item.Name} has public static void methods')

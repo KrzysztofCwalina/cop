@@ -3,4 +3,4 @@
 
 import csharp-checks
 predicate hasMethods(Type) => Type.Methods.Count > 0
-command main = foreach csharp.Types:hasMethods => '{item.Name}'
+command MAIN = foreach csharp.Types:hasMethods => '{item.Name}'

@@ -108,4 +108,4 @@ predicate isEnumLike(Type) => Type.Kind == 'Class' && isEnumBase
 ## All Azure Python client library checks combined
 export let python-library-azure-checks = client-needs-credential + client-needs-api-version + method-snake-case + type-pascal-case + delete-returns-none + no-raise-with-traceback + no-legacy-typing + no-asyncio-sleep + no-log-exceptions-above-debug + missing-tracing-decorator
 
-command main = CHECK(python-library-azure-checks)
+command MAIN = CHECK(python-library-azure-checks)

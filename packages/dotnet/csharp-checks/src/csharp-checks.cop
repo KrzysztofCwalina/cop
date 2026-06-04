@@ -597,4 +597,4 @@ export let fdg-checks = fdg-naming + fdg-type-design + fdg-member-design + fdg-e
 ## All C# checks combined
 export let csharp-checks = csharp-correctness-checks + csharp-style-checks + fdg-checks
 
-command main = CHECK(csharp-checks)
+command MAIN = CHECK(csharp-checks)

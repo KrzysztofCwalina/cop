@@ -59,4 +59,4 @@ export let snippet-stale-content = snippetFences:hasSource:!isContentMatchingSou
 ## All snippet checks combined
 export let python-snippets-checks = snippet-missing-docs + snippet-orphaned-ref + snippet-duplicate-name + snippet-stale-content
 
-command main = CHECK(python-snippets-checks)
+command MAIN = CHECK(python-snippets-checks)

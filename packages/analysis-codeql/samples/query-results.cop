@@ -9,4 +9,4 @@ let results = analysis-codeql.Load('results.sarif')
 let errors = results:isError
 
 # Show all high-severity findings
-command main = errors
+command MAIN = errors

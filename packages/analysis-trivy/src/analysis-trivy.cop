@@ -9,4 +9,4 @@ let data = provider('analysis-trivy', nic)
 export function diagnostics() : [Diagnostic] => data.Diagnostics
 export let trivy-checks = data.Diagnostics
 
-command main = foreach trivy-checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'
+command MAIN = foreach trivy-checks => '{item.FilePath}({item.Line}): {item.Severity}: {item.RuleId}: {item.Message}'

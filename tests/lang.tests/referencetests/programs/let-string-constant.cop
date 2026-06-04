@@ -4,4 +4,4 @@
 import csharp-checks
 let prefix = 'Good'
 predicate startsWithPrefix(Type) => Type.Name:startsWith(prefix)
-command main = foreach csharp.Types:startsWithPrefix => '{item.Name}'
+command MAIN = foreach csharp.Types:startsWithPrefix => '{item.Name}'

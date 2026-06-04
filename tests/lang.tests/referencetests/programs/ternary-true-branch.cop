@@ -3,4 +3,4 @@
 
 import csharp-checks
 predicate sealedLabel(Type) => isSealed ? true | false
-command main = foreach csharp.Types:sealedLabel => '{item.Name}'
+command MAIN = foreach csharp.Types:sealedLabel => '{item.Name}'

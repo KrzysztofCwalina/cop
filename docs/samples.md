@@ -8,10 +8,10 @@ These are standalone examples in `samples/` demonstrating language features and 
 
 | Sample | Description |
 |--------|-------------|
-| [s1-helloworld](../samples/s1-helloworld/rules.cop) | Basic code analysis rule: flags C# statements that use 'var' |
-| [s2-json](../samples/s2-json/young.cop) | JSON parsing with custom type definitions |
-| [s3-files](../samples/s3-files/young.cop) | File system analysis and querying |
-| [s4-lister](../samples/s4-lister/lister.cop) | Command composition with the & operator |
+| [s1-helloworld](../samples/s1-helloworld/main.cop) | Basic code analysis rule: flags C# statements that use 'var' |
+| [s2-json](../samples/s2-json/main.cop) | JSON parsing with custom type definitions |
+| [s3-files](../samples/s3-files/main.cop) | File system analysis and querying |
+| [s4-lister](../samples/s4-lister/main.cop) | Command composition with the & operator |
 | [s5-namedcommands](../samples/s5-namedcommands/commands.cop) | Named commands for reusable operations |
 | [s6-strings](../samples/s6-strings/strings.cop) | String handling and single-quote strings |
 | [s7-typespec](../samples/s7-typespec/checks.cop) | Domain-specific analysis using TypeSpec/HTTP API |

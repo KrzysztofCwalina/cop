@@ -12,4 +12,4 @@ let Clients = Code.Types:client:!options
 # Further narrowing: public clients that are not sealed
 let UnsealedClients = Clients:!isSealed:isPublic
 
-command main = foreach UnsealedClients => print('{item.Name} should be sealed')
+command MAIN = foreach UnsealedClients => print('{item.Name} should be sealed')

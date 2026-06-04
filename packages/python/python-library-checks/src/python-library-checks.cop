@@ -182,4 +182,4 @@ export function toApiLine(Api) => ApiLine {
     Line = item.Line
 }
 
-command main = CHECK(python-library-checks)
+command MAIN = CHECK(python-library-checks)
