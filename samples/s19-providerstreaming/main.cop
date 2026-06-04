@@ -1,14 +1,7 @@
 # Demonstrates consuming the ticker streaming provider.
-# With the package installed, you would write: import ticker
-# Here we inline the type and source binding for standalone demonstration.
-
-import core
-
-# Tick type (exported by the ticker package)
-type Tick = { Sequence : int, Timestamp : string, Message : string }
-
-# source() connects to the streaming provider's event stream
-let Ticks : [Tick] = source('ticker', nic)
+# The feed declaration tells cop where to find the ticker package.
+feed '.'
+import ticker
 
 # Filter: only process ticks with a message
 predicate hasMessage(Tick) => Tick.Message:!empty

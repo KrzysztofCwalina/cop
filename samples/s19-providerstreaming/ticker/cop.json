@@ -1,0 +1,6 @@
+{
+  "name": "ticker",
+  "version": "1.0.0",
+  "description": "Streaming provider sample — emits Tick events via source/sink pattern",
+  "provider": "dotnet"
+}

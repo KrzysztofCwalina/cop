@@ -86,6 +86,18 @@ public static class VerifyCommand
 
         // Phase 2: Import resolution
         var feedPaths = FindFeedPaths(scriptsDir);
+
+        // Also extract feed paths declared in source files (feed 'path')
+        foreach (var (_, filePath, source) in modules)
+        {
+            var fileDir = Path.GetDirectoryName(filePath) ?? scriptsDir;
+            foreach (var fp in ModuleLoader.ExtractFeedPaths(source, fileDir))
+            {
+                if (!feedPaths.Contains(fp))
+                    feedPaths.Add(fp);
+            }
+        }
+
         var moduleLoader = new ModuleLoader(feedPaths);
         var imports = new HashSet<string>(StringComparer.Ordinal);
 
