@@ -1,0 +1,26 @@
+# Demonstrates calling a custom data provider.
+# The 'sample' provider reads .widget files and exposes a Widgets collection.
+# Run with: cop use-widgets.cop -t <directory-with-widget-files>
+
+type Widget = {
+    Name : string,
+    Category : string,
+    Size : int,
+    FilePath : string
+}
+
+type SampleData = {
+    Widgets : [Widget]
+}
+
+let db : SampleData = provider('sample', nic)
+let Widgets = db.Widgets
+
+# Define predicates to filter widgets
+predicate isLarge(Widget) => Widget.Size > 100
+predicate isUncategorized(Widget) => Widget.Category:equals('uncategorized')
+
+# List all widgets and highlight large ones
+command MAIN =
+    foreach Widgets => '{item.Name} ({item.Category}) size={item.Size}' |
+    foreach Widgets:isLarge => '  [LARGE] {item.Name}: {item.Size} bytes'

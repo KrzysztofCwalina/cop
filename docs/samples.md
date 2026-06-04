@@ -24,7 +24,7 @@ These are standalone examples in `samples/` demonstrating language features and 
 | [s14-inlineexpressions](../samples/s14-inlineexpressions/checks.cop) | Inline expressions and predicate composition |
 | [s15-httpserver](../samples/s15-httpserver/server.cop) | HTTP server using the push-provider pipeline |
 | [s17-currying](../samples/s17-currying/currying.cop) | Partial application (currying) |
-| [s18-Provider](../samples/s18-Provider/package/src/sample.cop) | Custom data provider package |
+| [s18-Provider](../samples/s18-Provider/package/samples/use-widgets.cop) | Custom data provider package (see also [sample.cop](../samples/s18-Provider/package/src/sample.cop)) |
 | [s19-providerstreaming](../samples/s19-providerstreaming/package/src/ticker.cop) | Streaming provider with source/sink pattern |
 | [s20-crosslanguage](../samples/s20-crosslanguage/checks.cop) | Cross-language code analysis |
 | [s21-filtering](../samples/s21-filtering/filters.cop) | Filtering and subset patterns |

@@ -1,4 +1,6 @@
 # Simple HTTP server using the push-provider pipeline.
+# Demonstrates flexibility of Agent Cop.
+# None of this is built-into the language, but powerful extensibility model allows even such scenarios.
 # Listens on port 5000 and responds to incoming requests.
 # Run with: cop run
 # Stop with: Ctrl+C
