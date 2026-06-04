@@ -102,9 +102,8 @@ cop vscode
 ## Resources
 
 - [Samples](docs/samples.md) — all runnable examples in this repo
+- [Package Reference](https://krzysztofcwalina.github.io/cop/reference.html) — types, predicates, and checks
 - [Language Reference](docs/language-reference.md) — full DSL syntax
-- [Language Design](docs/language-design.md) — philosophy and design decisions
-- [Language Grammar](docs/cop-grammar.md) — formal EBNF grammar specification
 - [CLI Reference](docs/cli-reference.md) — all commands and options
 - [Static Analysis with Cop](docs/static-analysis.md) — writing source code checks
 - [Testing Cop Rules](docs/testing.md) — writing and running tests for your `.cop` programs
@@ -112,5 +111,6 @@ cop vscode
 - [Packaging](docs/packaging.md) — creating, publishing, and restoring packages
 - [Working with the REPL](docs/repl.md) — interactive development and prototyping
 - [CodeQL Integration](docs/codeql.md) — using cop with CodeQL
-- [Package Reference](https://krzysztofcwalina.github.io/cop/reference.html) — types, predicates, and checks
+- [Language Design](docs/language-design.md) — philosophy and design decisions
+- [Language Grammar](docs/cop-grammar.md) — formal EBNF grammar specification
 - [Why Agent Cop](docs/why-agent-cop.md) — product strategy and rationale
