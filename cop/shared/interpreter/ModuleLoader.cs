@@ -15,7 +15,7 @@ public sealed class ModuleLoader
     private readonly List<string> _errors = [];
     private readonly List<CopDiagnostic> _diagnostics = [];
     private readonly List<(string Dir, string PackageName)> _providerPackages = [];
-    private readonly List<(LetDecl Decl, string FilePath)> _deferredLetBindings = [];
+    private readonly List<(LetDecl Decl, string FilePath, Environment ModuleEnv)> _deferredLetBindings = [];
     private readonly List<ModuleNode> _loadedModules = [];
 
     public IReadOnlyList<string> Errors => _errors;
@@ -158,22 +158,28 @@ public sealed class ModuleLoader
 
     private void RegisterExportedDeclarations(ModuleNode module, string filePath, Evaluator evaluator)
     {
+        // Each module gets its own scope for non-exported let bindings.
+        // This prevents name collisions (e.g., multiple packages defining 'let cb = ...').
+        var moduleEnv = evaluator.GlobalEnvironment.Extend();
+
         foreach (var decl in module.Declarations)
         {
             switch (decl)
             {
                 case FunctionDecl fd when fd.IsExported:
-                    var func = new CopFunction(fd, evaluator.GlobalEnvironment);
+                    // Functions capture the module env so they can access module-local lets
+                    var func = new CopFunction(fd, moduleEnv);
                     RegisterFunctionWithOverloading(evaluator.GlobalEnvironment, fd.Name, func);
                     break;
 
                 case LetDecl ld:
-                    // Defer all let bindings (they may depend on provider data)
-                    _deferredLetBindings.Add((ld, filePath));
+                    // Defer all let bindings (they may depend on provider data).
+                    // Track which module env they belong to.
+                    _deferredLetBindings.Add((ld, filePath, moduleEnv));
                     break;
 
                 case CommandDecl cd when cd.IsExported:
-                    var cmdCallable = new CopCommandFunction(cd, evaluator.GlobalEnvironment);
+                    var cmdCallable = new CopCommandFunction(cd, moduleEnv);
                     evaluator.GlobalEnvironment.Define(cd.Name, cmdCallable);
                     break;
 
@@ -194,16 +200,24 @@ public sealed class ModuleLoader
     /// Evaluate all deferred let bindings from imported packages.
     /// Call AFTER provider data has been registered.
     /// Uses lazy thunks to handle cross-file references regardless of file order.
+    /// Non-exported lets go only in their module scope; exported lets also go in global.
     /// </summary>
     public void EvalDeferredLetBindings(Evaluator evaluator, List<string> errors)
     {
-        foreach (var (ld, filePath) in _deferredLetBindings)
+        foreach (var (ld, filePath, moduleEnv) in _deferredLetBindings)
         {
             try
             {
                 var capturedLd = ld;
-                var thunk = new CopThunk(() => evaluator.Eval(capturedLd.Value, evaluator.GlobalEnvironment));
-                evaluator.GlobalEnvironment.Define(ld.Name, thunk);
+                var capturedModuleEnv = moduleEnv;
+                var thunk = new CopThunk(() => evaluator.Eval(capturedLd.Value, capturedModuleEnv));
+
+                // Always register in the module env (for module-local access)
+                moduleEnv.Define(ld.Name, thunk);
+
+                // Exported lets are also visible globally
+                if (ld.IsExported)
+                    evaluator.GlobalEnvironment.Define(ld.Name, thunk);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
