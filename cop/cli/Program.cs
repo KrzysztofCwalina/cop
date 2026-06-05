@@ -64,6 +64,15 @@ if (args[0] == "help")
 // cop init — generate agent instruction files
 if (args[0] == "init")
 {
+    var knownInitOptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "--force", "--al", "--ag" };
+    foreach (var arg in args.Skip(1))
+    {
+        if (arg.StartsWith('-') && !knownInitOptions.Contains(arg))
+        {
+            Console.Error.WriteLine($"Unknown option '{arg}'. Known options: --force, --al, --ag");
+            return 1;
+        }
+    }
     bool force = args.Contains("--force");
     bool localHook = args.Contains("--al");
     bool globalHook = args.Contains("--ag");
