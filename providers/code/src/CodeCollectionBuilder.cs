@@ -25,6 +25,27 @@ public static class CodeCollectionBuilder
         var filePaths = new List<string>();
         CollectSourceFiles(rootPath, parsers, excluded, filePaths);
 
+        // Retry once after a short delay if 0 files found but directory exists and is non-empty.
+        // This handles transient IO issues (antivirus, indexer, file locks) on Windows.
+        if (filePaths.Count == 0 && Directory.Exists(rootPath))
+        {
+            try
+            {
+                var hasAnyFiles = Directory.EnumerateFileSystemEntries(rootPath).Any();
+                if (hasAnyFiles)
+                {
+                    Thread.Sleep(500);
+                    CollectSourceFiles(rootPath, parsers, excluded, filePaths);
+                    if (filePaths.Count == 0)
+                    {
+                        Console.Error.WriteLine($"Error: Provider scan found 0 source files in '{rootPath}' after retry. " +
+                            $"This may indicate a transient filesystem issue. Results are unreliable.");
+                    }
+                }
+            }
+            catch { /* ignore retry errors — the original empty result stands */ }
+        }
+
         var parseErrors = new System.Collections.Concurrent.ConcurrentBag<string>();
         var sourceFiles = new System.Collections.Concurrent.ConcurrentBag<SourceFile>();
         Parallel.ForEach(filePaths,
@@ -150,7 +171,7 @@ public static class CodeCollectionBuilder
         ["Projects"] = "Project",
     };
 
-    private static void CollectSourceFiles(string dir, SourceParserRegistry parsers, IReadOnlySet<string>? excluded, List<string> result)
+    private static void CollectSourceFiles(string dir, SourceParserRegistry parsers, IReadOnlySet<string>? excluded, List<string> result, bool isRoot = true)
     {
         try
         {
@@ -165,10 +186,10 @@ public static class CodeCollectionBuilder
             {
                 var dirName = Path.GetFileName(subDir);
                 if (excluded is not null && excluded.Contains(dirName)) continue;
-                CollectSourceFiles(subDir, parsers, excluded, result);
+                CollectSourceFiles(subDir, parsers, excluded, result, isRoot: false);
             }
         }
-        catch (UnauthorizedAccessException) { }
-        catch (IOException) { }
+        catch (UnauthorizedAccessException) when (!isRoot) { }
+        catch (IOException) when (!isRoot) { }
     }
 }

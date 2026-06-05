@@ -485,8 +485,9 @@ public static class RunCommand
             }
         }
 
-        // Exit non-zero when output was produced (violations found)
-        return result.Outputs.Count > 0 || result.HasParseErrors ? 1 : 0;
+        // Exit non-zero when output was produced (violations found) or when warnings indicate unreliable results
+        bool hasUnreliableWarnings = result.Warnings is { Count: > 0 } && result.Warnings.Any(w => w.StartsWith("Error:"));
+        return result.Outputs.Count > 0 || result.HasParseErrors || hasUnreliableWarnings ? 1 : 0;
     }
 
     private static void WriteOutputsAsJson(List<PrintOutput> outputs)
