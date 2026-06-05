@@ -4,5 +4,5 @@ import files
 let large-files = files.files():where(File.Size > 1000000)
 
 command MAIN =
-    foreach files.folders():empty => 'Empty: {Folder.Path}' |
-    foreach large-files => 'Large: {File.Path} ({File.Size} bytes)'
+    foreach files.folders():empty => 'Empty: {item.Path}' |
+    foreach large-files => 'Large: {item.Path} ({item.Size} bytes)'

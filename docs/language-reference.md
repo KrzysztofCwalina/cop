@@ -198,7 +198,7 @@ The `cop package restore` command reads `feed` and `import` declarations, downlo
 
 ```ruby
 export predicate isClient(Type) => Type.Name:endsWith('Client')
-export let Clients = Code.Types:isClient
+export let Clients = csharp.types():isClient
 export function LIST-CLIENTS() = { foreach Clients => '{item.Name}' }
 export type ClientInfo = { Name : string, Path : string }
 export function clientInfo(Type) => ClientInfo { Name = Type.Name, Path = Type.File.Path }
@@ -833,9 +833,9 @@ predicate hasAsyncVariant(Statement) =>
 `.Select()` projects each item into a new value using `item` as the element variable. `.Text()` formats each item and joins with newlines:
 
 ```ruby
-let names = Code.Types.Select(item.Name)
-let nameLengths = Code.Types.Select(item.Name.Length)
-let summary = Code.Types:client.Text('{item.Name} — {item.File.Path}')
+let names = csharp.types().Select(item.Name)
+let nameLengths = csharp.types().Select(item.Name.Length)
+let summary = csharp.types():client.Text('{item.Name} — {item.File.Path}')
 ```
 
 #### Sorting

@@ -1,4 +1,4 @@
 import csharp
 
 # List all public types in the C# codebase
-command MAIN = foreach csharp.types():isPublic => '{Type.Name} ({Type.Kind})'
+command MAIN = foreach csharp.types():isPublic => '{item.Name} ({item.Kind})'

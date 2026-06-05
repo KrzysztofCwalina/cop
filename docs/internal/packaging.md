@@ -117,11 +117,12 @@ CLI commands for managing feeds:
 A `.cop` file imports a package by name:
 
 ```cop
+import csharp
 import code-analysis
 import files
 
-foreach Code.Types
-    '{Type.Name}'
+command main = foreach csharp.types()
+    => '{item.Name}'
 ```
 
 Import statements must appear at the top of the file, after any `feed` declarations and before any type definitions, predicates, or commands.
@@ -158,10 +159,11 @@ Here is the complete sequence, step by step, starting from a fresh machine where
 - The user has created `C:\myproject\foo.cop`:
 
 ```cop
+import csharp
 import code-analysis
 
-foreach Code.Types
-    '{Type.Name} has {Type.Methods.count} methods'
+command main = foreach csharp.types()
+    => '{item.Name} has {item.Methods.Count} methods'
 ```
 
 The user runs: `cop foo.cop`

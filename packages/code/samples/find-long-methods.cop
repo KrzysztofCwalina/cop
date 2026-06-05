@@ -9,5 +9,5 @@ predicate isLong(Method) => Method.Statements.count() > 50
 # Create a unified codebase from all three language providers
 let cb = code.codebase('csharp', 'python', 'javascript')
 
-command MAIN = foreach cb.Types => '{Type.Name} ({Type.File.Language})':Methods:isLong
-    => '  {Method.Name} ({Method.Statements.count()} statements)'
+command MAIN = foreach cb.Types => '{item.Name} ({item.File.Language})':Methods:isLong
+    => '  {item.Name} ({item.Statements.count()} statements)'

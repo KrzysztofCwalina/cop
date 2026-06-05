@@ -1,10 +1,11 @@
 import code
+import csharp
 import code-analysis
 
 predicate isTooLarge(Type) =>
     Type.Methods.Count:greaterThan(20)
 
-let violations = Types:isTooLarge
+let violations = csharp.types():isTooLarge
     :toWarning('Type {item.Name} has too many methods')
 
-CHECK violations
+command main = CHECK violations
