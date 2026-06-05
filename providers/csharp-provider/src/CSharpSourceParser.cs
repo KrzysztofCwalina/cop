@@ -331,14 +331,17 @@ public class CSharpSourceParser : ISourceParser
 
     /// <summary>
     /// Extract a statement body — handles both block and single-statement (non-block) bodies.
+    /// When results IS the parent's _children list, pass null for parent to avoid double-adding.
     /// </summary>
     private static void ExtractStatementBody(StatementSyntax body, List<StatementInfo> results,
         bool isInMethod, MethodDeclaration? method, StatementInfo? parent)
     {
+        // Don't pass parent here — results IS parent._children, so ExtractStatement's
+        // results.Add() already builds the tree. Passing parent would cause double-add.
         if (body is BlockSyntax block)
-            ExtractStatements(block, results, isInMethod, method, parent);
+            ExtractStatements(block, results, isInMethod, method, parent: null);
         else
-            ExtractStatement(body, results, isInMethod, method, parent);
+            ExtractStatement(body, results, isInMethod, method, parent: null);
     }
 
     private static void ExtractStatement(StatementSyntax stmt, List<StatementInfo> results,

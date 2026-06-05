@@ -138,6 +138,14 @@ function Test-ZipUnixPermissions([string]$ZipPath) {
     return $entryIndex
 }
 
+# Build the csharp-provider DLL (and copy to packages/dotnet/csharp/lib/)
+# This must happen before publishing cop.exe so the release includes a compatible provider.
+if (-not $SkipBuild) {
+    Write-Host "Building csharp-provider..."
+    dotnet build "$RepoRoot\providers\csharp-provider\csharp-provider.csproj" -c Release
+    if ($LASTEXITCODE -ne 0) { throw "csharp-provider build failed" }
+}
+
 foreach ($rid in $Runtimes) {
     $outDir = Join-Path $OutputBase $rid
     if (-not $SkipBuild) {

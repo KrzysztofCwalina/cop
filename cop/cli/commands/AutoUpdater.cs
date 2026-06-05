@@ -113,6 +113,7 @@ static class AutoUpdater
 
             if (success)
             {
+                InvalidateCachedProviders();
                 Console.Error.WriteLine($"Updated. New version takes effect on next run.");
                 WriteState(stateFile, new UpdateState { LastCheck = DateTime.UtcNow, LatestTag = latestTag });
             }
@@ -391,5 +392,31 @@ static class AutoUpdater
     {
         public DateTime? LastCheck { get; init; }
         public string? LatestTag { get; init; }
+    }
+
+    /// <summary>
+    /// After cop.exe is updated, cached provider DLLs compiled against the old version
+    /// will cause TypeLoadException. Clear them so they're re-downloaded from feeds.
+    /// </summary>
+    static void InvalidateCachedProviders()
+    {
+        try
+        {
+            var packagesDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ".cop", "packages");
+            if (!Directory.Exists(packagesDir)) return;
+
+            foreach (var pkgDir in Directory.GetDirectories(packagesDir))
+            {
+                var libDir = Path.Combine(pkgDir, "lib");
+                if (Directory.Exists(libDir))
+                {
+                    try { Directory.Delete(libDir, recursive: true); }
+                    catch { }
+                }
+            }
+        }
+        catch { }
     }
 }

@@ -125,7 +125,19 @@ public static class ProviderLoader
                 detail = ex.InnerException?.Message ?? $"{ex.GetType().Name} (no detail)";
             if (ex.InnerException != null && !string.IsNullOrWhiteSpace(ex.InnerException.Message) && !detail.Contains(ex.InnerException.Message))
                 detail += $" -> {ex.InnerException.Message}";
-            errors.Add($"Failed to load provider '{metadata.Name}': {detail}");
+
+            // TypeLoadException typically means a stale cached DLL compiled against an older cop.exe.
+            // Clear the lib/ directory so it's re-downloaded on next run.
+            if (ex is TypeLoadException || ex.InnerException is TypeLoadException)
+            {
+                var libDir = Path.Combine(packageDir, "lib");
+                try { Directory.Delete(libDir, recursive: true); } catch { }
+                errors.Add($"Failed to load provider '{metadata.Name}': incompatible cached DLL (deleted). Please re-run the command.");
+            }
+            else
+            {
+                errors.Add($"Failed to load provider '{metadata.Name}': {detail}");
+            }
             return null;
         }
     }

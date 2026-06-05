@@ -82,6 +82,17 @@ Always commit the regenerated `docs/reference.html` alongside the package change
 
 - **NEVER discard, revert, or unstage changes you did not make.** If you see uncommitted or untracked files you don't recognize, ask the user before touching them — they may be the user's own work. Assume all changes in the working tree are intentional until told otherwise.
 
+## Mandatory Functional Testing
+
+**NEVER declare a feature done or publish a release without a successful end-to-end functional test.**
+
+- Unit tests passing is NOT sufficient. You MUST run the actual `cop` command against real input and verify correct output.
+- For new provider features (new properties, predicates): write a small `.cop` file that uses the feature, run it against a real target directory with known content, and verify the output matches expectations.
+- For new language features: write a `.cop` snippet exercising the feature and confirm it runs without errors and produces expected results.
+- If filesystem interference prevents testing (antivirus, file locks), find another target directory or wait — do NOT skip the test.
+- If you cannot successfully run a functional test, **tell the user explicitly** that the feature is untested and should not be shipped.
+- Passing `cop verify` only proves syntax/type correctness — it does NOT prove runtime behavior works.
+
 ## cop-checks/ Convention
 
 All cop check files live in `cop-checks/` at the repository root. Structure:

@@ -1272,12 +1272,15 @@ public class CopParser
 
     private Expression ParseDottedPath(string path, int line)
     {
-        // Parse "item.Name" or "x.y.z" into a MemberExpr chain
+        // Parse "item.Name" or "x.y.z" into a MemberExpr chain.
+        // Trailing "()" on a segment is stripped (e.g., "item.Children.count()" → member "count").
         var segments = path.Split('.');
         Expression expr = new IdentifierExpr(segments[0].Trim(), line);
         for (int i = 1; i < segments.Length; i++)
         {
             var seg = segments[i].Trim();
+            if (seg.EndsWith("()"))
+                seg = seg[..^2];
             if (seg.Length > 0)
                 expr = new MemberExpr(expr, seg, line);
         }
