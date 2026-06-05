@@ -412,11 +412,11 @@ const packages = {
       },
       {
         "title": "Find long methods",
-        "code": "import code\nimport csharp\nimport python\nimport javascript\n\n# Language-independent predicate works on any Method regardless of source language\npredicate isLong(Method) => Method.Statements.count() > 50\n\n# Create a unified codebase from all three language providers\nlet cb = code.codebase('csharp', 'python', 'javascript')\n\ncommand MAIN = foreach cb.Types => '{Type.Name} ({Type.File.Language})':Methods:isLong\n    => '  {Method.Name} ({Method.Statements.count()} statements)'"
+        "code": "import code\nimport csharp\nimport python\nimport javascript\n\n# Language-independent predicate works on any Method regardless of source language\npredicate isLong(Method) => Method.Statements.count() > 50\n\n# Create a unified codebase from all three language providers\nlet cb = code.codebase('csharp', 'python', 'javascript')\n\ncommand MAIN = foreach cb.Types => '{item.Name} ({item.File.Language})':Methods:isLong\n    => '  {item.Name} ({item.Statements.count()} statements)'"
       },
       {
         "title": "List all public classes",
-        "code": "import code\nimport csharp\nimport python\nimport javascript\n\n# Create a unified codebase from all three language providers\nlet cb = code.codebase('csharp', 'python', 'javascript')\n\ncommand MAIN = foreach cb.Types:isPublic => '{Type.Name} ({Type.Kind}) - {Type.File.Language}'"
+        "code": "import code\nimport csharp\nimport python\nimport javascript\n\n# Create a unified codebase from all three language providers\nlet cb = code.codebase('csharp', 'python', 'javascript')\n\ncommand MAIN = foreach cb.Types:isPublic => '{item.Name} ({item.Kind}) - {item.File.Language}'"
       }
     ],
     "collections": [],
@@ -1490,7 +1490,7 @@ const packages = {
     "samples": [
       {
         "title": "Create a simple check",
-        "code": "import code\nimport code-analysis\n\npredicate isTooLarge(Type) =>\n    Type.Methods.Count:greaterThan(20)\n\nlet violations = Types:isTooLarge\n    :toWarning('Type {item.Name} has too many methods')\n\nCHECK violations"
+        "code": "import code\nimport csharp\nimport code-analysis\n\npredicate isTooLarge(Type) =>\n    Type.Methods.Count:greaterThan(20)\n\nlet violations = csharp.types():isTooLarge\n    :toWarning('Type {item.Name} has too many methods')\n\ncommand main = CHECK violations"
       }
     ],
     "collections": [],
@@ -1840,7 +1840,7 @@ const packages = {
     "samples": [
       {
         "title": "List types",
-        "code": "import cop\n\n# List all types defined in .cop files\ncommand MAIN = foreach cop.types() => '{Type.Name} ({Type.File.Path})'"
+        "code": "import cop\n\n# List all types defined in .cop files\ncommand MAIN = foreach cop.types() => '{item.Name} ({item.File.Path})'"
       }
     ],
     "collections": [],
@@ -2537,7 +2537,7 @@ const packages = {
     "samples": [
       {
         "title": "List public types",
-        "code": "import csharp\n\n# List all public types in the C# codebase\ncommand MAIN = foreach csharp.types():isPublic => '{Type.Name} ({Type.Kind})'"
+        "code": "import csharp\n\n# List all public types in the C# codebase\ncommand MAIN = foreach csharp.types():isPublic => '{item.Name} ({item.Kind})'"
       }
     ],
     "collections": [],
@@ -3096,7 +3096,7 @@ const packages = {
     "samples": [
       {
         "title": "Find files",
-        "code": "import files\n\n# Find empty folders and large files\nlet large-files = files.files():where(File.Size > 1000000)\n\ncommand MAIN =\n    foreach files.folders():empty => 'Empty: {Folder.Path}' |\n    foreach large-files => 'Large: {File.Path} ({File.Size} bytes)'"
+        "code": "import files\n\n# Find empty folders and large files\nlet large-files = files.files():where(File.Size > 1000000)\n\ncommand MAIN =\n    foreach files.folders():empty => 'Empty: {item.Path}' |\n    foreach large-files => 'Large: {item.Path} ({item.Size} bytes)'"
       }
     ],
     "collections": [],
@@ -3440,7 +3440,7 @@ const packages = {
     "samples": [
       {
         "title": "List public types",
-        "code": "import javascript\n\n# List all public types in the JavaScript/TypeScript codebase\ncommand MAIN = foreach javascript.types():isPublic => '{Type.Name} ({Type.Kind})'"
+        "code": "import javascript\n\n# List all public types in the JavaScript/TypeScript codebase\ncommand MAIN = foreach javascript.types():isPublic => '{item.Name} ({item.Kind})'"
       }
     ],
     "collections": [],
@@ -3898,7 +3898,7 @@ const packages = {
     "samples": [
       {
         "title": "List public types",
-        "code": "import python\n\n# List all public types in the Python codebase\ncommand MAIN = foreach python.types():isPublic => '{Type.Name} ({Type.Kind})'"
+        "code": "import python\n\n# List all public types in the Python codebase\ncommand MAIN = foreach python.types():isPublic => '{item.Name} ({item.Kind})'"
       }
     ],
     "collections": [],
@@ -4020,7 +4020,7 @@ const packages = {
     "samples": [
       {
         "title": "Check client conventions",
-        "code": "import python-library-checks\n\ncommand MAIN = foreach Clients\n    => '{Type.Name}'\n\nCHECK python-client-checks"
+        "code": "import python-library-checks\n\ncommand MAIN = foreach Clients\n    => '{item.Name}'\n\nCHECK python-client-checks"
       }
     ],
     "collections": [],
@@ -4285,7 +4285,7 @@ const packages = {
     "samples": [
       {
         "title": "List all models",
-        "code": "import typespec\n\nlet tsp = provider('typespec', nic)\nlet Models = tsp.Models\n\ncommand MAIN = foreach Models\n    => '{item.Name} ({item.Properties.Count} props)'"
+        "code": "import typespec\n\nlet tsp = provider('typespec', nic)\nlet Models = tsp.Models\n\ncommand MAIN = foreach Models\n    => '{item.Name} ({item.Properties.count()} props)'"
       }
     ],
     "collections": [],
