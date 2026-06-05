@@ -55,7 +55,10 @@ public static class Engine
             return new EngineResult([], [], [$"Scripts directory not found: {scriptsDir}"]);
 
         var scriptFilePaths = scriptFiles ?? Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
-        Array.Sort(scriptFilePaths, StringComparer.Ordinal);
+        // Only sort when discovering files ourselves. When scriptFiles is explicitly provided,
+        // respect the caller's order (e.g., target file placed last for command priority).
+        if (scriptFiles is null)
+            Array.Sort(scriptFilePaths, StringComparer.Ordinal);
         if (scriptFilePaths.Length == 0)
             return new EngineResult([], [], []);
 
@@ -672,7 +675,8 @@ public static class Engine
         string rootPath,
         List<string> rules,
         string[]? programArgs = null,
-        Action<string>? diagLog = null)
+        Action<string>? diagLog = null,
+        string[]? additionalScriptFiles = null)
     {
         rootPath = Path.GetFullPath(rootPath);
 
@@ -710,6 +714,10 @@ public static class Engine
             if (!found)
                 fatalErrors.Add($"Package '{packageName}' not found in any feed");
         }
+
+        // Include additional script files (e.g., user-global checks)
+        if (additionalScriptFiles is { Length: > 0 })
+            modules.AddRange(ParseModules(additionalScriptFiles, parseErrors));
 
         if (fatalErrors.Count > 0)
             return new EngineResult([], parseErrors, fatalErrors);

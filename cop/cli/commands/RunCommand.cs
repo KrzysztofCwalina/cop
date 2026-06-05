@@ -251,6 +251,9 @@ public static class RunCommand
         // Auto-restore missing imports before execution
         AutoRestoreImports(scriptsDir, diagLog);
 
+        // Discover user-global check files (~/.cop/checks/) to include alongside project checks
+        var userCheckFiles = GetUserCheckFiles(diagLog);
+
         // Try streaming mode (auto-detect or by command name)
         try
         {
@@ -270,7 +273,40 @@ public static class RunCommand
             // Streaming not yet reimplemented — fall through to normal execution
         }
 
-        var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog, additionalFeedPaths: FindFeedPathsFromCwd());
+        // Include user-global checks if present
+        string[]? allScriptFiles = null;
+        if (userCheckFiles.Length > 0)
+        {
+            var projectFiles = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
+            // In single-file mode, ensure the target file is loaded LAST so its commands
+            // take priority over same-named commands in sibling files.
+            if (scopeToFile != null)
+            {
+                var sorted = projectFiles
+                    .Where(f => !string.Equals(Path.GetFullPath(f), Path.GetFullPath(scopeToFile), StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(f => f, StringComparer.Ordinal)
+                    .Append(scopeToFile)
+                    .ToArray();
+                allScriptFiles = [.. sorted, .. userCheckFiles];
+            }
+            else
+            {
+                allScriptFiles = [.. projectFiles, .. userCheckFiles];
+            }
+            AutoRestoreImports(UserChecksDirectory, diagLog);
+        }
+        else if (scopeToFile != null)
+        {
+            // Single-file mode without user checks: load all files but put target file last
+            var projectFiles = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
+            allScriptFiles = projectFiles
+                .Where(f => !string.Equals(Path.GetFullPath(f), Path.GetFullPath(scopeToFile), StringComparison.OrdinalIgnoreCase))
+                .OrderBy(f => f, StringComparer.Ordinal)
+                .Append(scopeToFile)
+                .ToArray();
+        }
+
+        var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog, additionalFeedPaths: FindFeedPathsFromCwd(), scriptFiles: allScriptFiles);
 
         return HandleResult(result, format, rootPath);
     }
@@ -324,7 +360,10 @@ public static class RunCommand
         // Convert rules filter
         var rulesList = rules?.ToList() ?? [];
 
-        var result = Engine.RunProject(feedPaths, [.. packages], rootPath, rulesList, diagLog: diagLog);
+        // Include user-global check files
+        var userCheckFiles = GetUserCheckFiles(diagLog);
+
+        var result = Engine.RunProject(feedPaths, [.. packages], rootPath, rulesList, diagLog: diagLog, additionalScriptFiles: userCheckFiles.Length > 0 ? userCheckFiles : null);
 
         return HandleResult(result, format, rootPath);
     }
@@ -536,6 +575,34 @@ public static class RunCommand
             Console.Error.WriteLine($"Error parsing '{filePath}': {ex.Message}");
             return [];
         }
+    }
+
+    /// <summary>
+    /// Well-known directory for user-global check files.
+    /// </summary>
+    internal static string UserChecksDirectory =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cop", "checks");
+
+    /// <summary>
+    /// Discovers .cop files in ~/.cop/checks/ for user-global checks.
+    /// Returns empty array if the directory doesn't exist, if in CI, or if opted out.
+    /// </summary>
+    private static string[] GetUserCheckFiles(Action<string>? diagLog)
+    {
+        // Skip in CI environments
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CI")))
+            return [];
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("COP_NO_USER_CHECKS")))
+            return [];
+
+        var checksDir = UserChecksDirectory;
+        if (!Directory.Exists(checksDir))
+            return [];
+
+        var files = Directory.GetFiles(checksDir, "*.cop", SearchOption.AllDirectories);
+        if (files.Length > 0)
+            diagLog?.Invoke($"[diag] Including {files.Length} user check file(s) from {checksDir}");
+        return files;
     }
 
     /// <summary>
