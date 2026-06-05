@@ -1,6 +1,0 @@
-import code
-import csharp
-
-let cb = code.codebase('csharp')
-
-foreach cb.Statements => 'Kind={item.Kind} Braced={item.Braced} Line={item.Line}'
