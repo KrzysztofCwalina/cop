@@ -672,12 +672,41 @@ public static class RunCommand
 
                     if (files.Count == 0) { Console.Error.WriteLine(" no files"); continue; }
 
+                    // Write to temp directory first, then atomically move into place.
+                    // This prevents concurrent cop processes from reading partially-written packages.
                     var pkgDir = Path.Combine(cachePath, pkgName);
-                    foreach (var (relativePath, content) in files)
+                    var tempDir = Path.Combine(cachePath, $".{pkgName}.tmp.{Environment.ProcessId}");
+                    try
                     {
-                        var destPath = ValidatePackagePath(relativePath, pkgDir);
-                        Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
-                        File.WriteAllBytes(destPath, content);
+                        if (Directory.Exists(tempDir))
+                            Directory.Delete(tempDir, recursive: true);
+                        foreach (var (relativePath, content) in files)
+                        {
+                            var destPath = ValidatePackagePath(relativePath, tempDir);
+                            Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
+                            File.WriteAllBytes(destPath, content);
+                        }
+
+                        // Atomic move — if another process already created the directory, use theirs
+                        if (!Directory.Exists(pkgDir))
+                        {
+                            try { Directory.Move(tempDir, pkgDir); }
+                            catch (IOException) when (Directory.Exists(pkgDir))
+                            {
+                                // Another process beat us — that's fine, use theirs
+                                try { Directory.Delete(tempDir, recursive: true); } catch { }
+                            }
+                        }
+                        else
+                        {
+                            try { Directory.Delete(tempDir, recursive: true); } catch { }
+                        }
+                    }
+                    catch
+                    {
+                        // Clean up temp dir on any failure
+                        try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); } catch { }
+                        throw;
                     }
 
                     Console.Error.WriteLine(" ok");
@@ -807,12 +836,39 @@ public static class RunCommand
 
                     if (files.Count == 0) { Console.Error.WriteLine(" no files"); continue; }
 
+                    // Write to temp directory first, then atomically move into place.
+                    // This prevents concurrent cop processes from reading partially-written packages.
                     var pkgDir = Path.Combine(cachePath, pkgName);
-                    foreach (var (relativePath, content) in files)
+                    var tempDir = Path.Combine(cachePath, $".{pkgName}.tmp.{Environment.ProcessId}");
+                    try
                     {
-                        var destPath = ValidatePackagePath(relativePath, pkgDir);
-                        Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
-                        await File.WriteAllBytesAsync(destPath, content);
+                        if (Directory.Exists(tempDir))
+                            Directory.Delete(tempDir, recursive: true);
+                        foreach (var (relativePath, content) in files)
+                        {
+                            var destPath = ValidatePackagePath(relativePath, tempDir);
+                            Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
+                            await File.WriteAllBytesAsync(destPath, content);
+                        }
+
+                        // Atomic move — if another process already created the directory, use theirs
+                        if (!Directory.Exists(pkgDir))
+                        {
+                            try { Directory.Move(tempDir, pkgDir); }
+                            catch (IOException) when (Directory.Exists(pkgDir))
+                            {
+                                try { Directory.Delete(tempDir, recursive: true); } catch { }
+                            }
+                        }
+                        else
+                        {
+                            try { Directory.Delete(tempDir, recursive: true); } catch { }
+                        }
+                    }
+                    catch
+                    {
+                        try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); } catch { }
+                        throw;
                     }
 
                     Console.Error.WriteLine(" ok");

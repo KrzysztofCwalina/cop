@@ -14,6 +14,12 @@ if (diag)
     Console.Error.WriteLine($"[diag] Process startup: {clrStartupMs}ms");
 }
 
+// Auto-update check (skipped for update/help/version commands and diagnostics)
+if (!ShouldSkipAutoUpdate(args))
+{
+    AutoUpdater.TryAutoUpdate();
+}
+
 // Known verbs (subcommands) — anything else is treated as a program to run
 var knownVerbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 {
@@ -301,4 +307,23 @@ static int ExecuteDefault()
     }
 
     return 0;
+}
+
+/// <summary>
+/// Commands that should not trigger auto-update (too quick, or handle updates themselves).
+/// </summary>
+static bool ShouldSkipAutoUpdate(string[] args)
+{
+    if (args.Length == 0) return false;
+    var first = args[0];
+
+    // Skip for help/version flags
+    if (first is "-h" or "-help" or "--help" or "-v" or "--version")
+        return true;
+
+    // Skip for the update command itself and other quick info commands
+    if (first is "update" or "help")
+        return true;
+
+    return false;
 }
