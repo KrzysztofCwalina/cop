@@ -112,6 +112,7 @@ export type Statement = {
     Rethrows : bool,
     Generic : bool,
     ErrorHandler : bool,
+    Braced : bool,
     File : File?,
     Source : string,
     Method : Method?,
@@ -182,6 +183,7 @@ export predicate isCall(Statement) : Call => Statement.Kind == call
 export predicate isDeclaration(Statement) : Declaration => Statement.Kind == declaration
 export predicate isErrorHandler(Statement) : ErrorHandler => Statement.ErrorHandler == true
 export predicate isAttribute(Statement) : Attribute => Statement.Kind == attribute
+export predicate isControlFlow(Statement) => Statement.Kind == if || Statement.Kind == else || Statement.Kind == for || Statement.Kind == foreach || Statement.Kind == while
 
 # ErrorHandler predicates
 export predicate isGeneric(ErrorHandler) => ErrorHandler.Generic == true

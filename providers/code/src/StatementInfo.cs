@@ -20,6 +20,7 @@ public class StatementInfo(
     public bool HasRethrow { get; init; }
     public bool IsErrorHandler { get; init; }
     public bool IsGenericErrorHandler { get; init; }
+    public bool IsBraced { get; init; }
     public string CopIgnore { get; set; } = "";
     public string Source => $"{File?.Path}:{MemberName}";
 

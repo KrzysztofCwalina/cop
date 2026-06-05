@@ -147,6 +147,7 @@ public static class CodeBindings
                 ["Ancestors"] = o => (object)((StatementInfo)o).GetAncestors(),
                 ["Condition"] = o => ((StatementInfo)o).Condition,
                 ["Expression"] = o => ((StatementInfo)o).Expression,
+                ["Braced"] = o => (object)((StatementInfo)o).IsBraced,
                 ["CopIgnore"] = o => ((StatementInfo)o).CopIgnore,
             },
             ["Line"] = new()

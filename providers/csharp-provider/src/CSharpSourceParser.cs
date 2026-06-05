@@ -408,7 +408,11 @@ public class CSharpSourceParser : ISourceParser
             {
                 var feInfo = new StatementInfo("foreach", [], forEach.Type.ToString(),
                     forEach.Identifier.Text, [], line, isInMethod)
-                    { Method = method, Parent = parent, Condition = forEach.Expression.ToString() };
+                {
+                    Method = method, Parent = parent,
+                    Condition = forEach.Expression.ToString(),
+                    IsBraced = forEach.Statement is BlockSyntax
+                };
                 results.Add(feInfo);
                 parent?._children.Add(feInfo);
                 ExtractStatementBody(forEach.Statement, feInfo._children, isInMethod, method, feInfo);
@@ -444,7 +448,8 @@ public class CSharpSourceParser : ISourceParser
                 var ifInfo = new StatementInfo("if", [], null, null, [], line, isInMethod)
                 {
                     Method = method, Parent = parent,
-                    Condition = ifStmt.Condition.ToString()
+                    Condition = ifStmt.Condition.ToString(),
+                    IsBraced = ifStmt.Statement is BlockSyntax
                 };
                 results.Add(ifInfo);
                 parent?._children.Add(ifInfo);
@@ -454,7 +459,10 @@ public class CSharpSourceParser : ISourceParser
                     // else is a child of the if-statement so that statements inside else
                     // have the if (with its Condition) as an ancestor — enables guard checks
                     var elseInfo = new StatementInfo("else", [], null, null, [], LineOf(ifStmt.Else), isInMethod)
-                        { Method = method, Parent = ifInfo };
+                    {
+                        Method = method, Parent = ifInfo,
+                        IsBraced = ifStmt.Else.Statement is BlockSyntax
+                    };
                     results.Add(elseInfo);
                     ifInfo._children.Add(elseInfo);
                     ExtractStatementBody(ifStmt.Else.Statement, elseInfo._children, isInMethod, method, elseInfo);
@@ -466,7 +474,8 @@ public class CSharpSourceParser : ISourceParser
                 var whileInfo = new StatementInfo("while", [], null, null, [], line, isInMethod)
                 {
                     Method = method, Parent = parent,
-                    Condition = ws.Condition.ToString()
+                    Condition = ws.Condition.ToString(),
+                    IsBraced = ws.Statement is BlockSyntax
                 };
                 results.Add(whileInfo);
                 parent?._children.Add(whileInfo);
@@ -478,7 +487,8 @@ public class CSharpSourceParser : ISourceParser
                 var forInfo = new StatementInfo("for", [], null, null, [], line, isInMethod)
                 {
                     Method = method, Parent = parent,
-                    Condition = fs.Condition?.ToString()
+                    Condition = fs.Condition?.ToString(),
+                    IsBraced = fs.Statement is BlockSyntax
                 };
                 results.Add(forInfo);
                 parent?._children.Add(forInfo);

@@ -71,6 +71,7 @@ public static class CodeSchema
                     Opt("TypeName"), Opt("MemberName"),
                     Coll("Arguments"), Prop("Line", "int"),
                     Bool("InMethod"), Bool("Rethrows"), Bool("Generic"), Bool("ErrorHandler"),
+                    Bool("Braced"),
                     Opt("File", "File"), Prop("Source"),
                     Opt("Method", "Method"), Opt("Parent", "Statement"),
                     Coll("Children", "Statement"), Coll("Ancestors", "Statement"),
