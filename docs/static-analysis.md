@@ -211,18 +211,21 @@ let my-var-check = Statements:isVarDeclaration:!isTestFile
 
 To suppress a specific violation instance without removing the check entirely, add a `cop-ignore` comment on the line immediately **above** the violation, in your language's comment syntax:
 
+**C#:**
 ```csharp
 // cop-ignore: var-declarations
 var client = new BlobClient(connectionString);  // this line is not flagged
 var other = new Other();                        // this line IS flagged (no cop-ignore above)
 ```
 
+**Python:**
 ```python
 # cop-ignore: bare-except-clauses
 except:
     pass  # suppressed
 ```
 
+**JavaScript:**
 ```javascript
 // cop-ignore: console-calls
 console.log("debug info");  // suppressed
