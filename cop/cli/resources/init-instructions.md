@@ -1,295 +1,147 @@
-# Cop Language Instructions
+# Cop — Writing and Running Checks
 
-This project uses **Cop** — a data processing language for writing static analysis rules, code checks, and report generation. Cop files use the `.cop` extension.
+This project uses **Cop** for static analysis checks. All checks live in `cop-checks/` at the repo root.
 
-## Quick Reference
-
-### Running Cop
+## How to Run Checks
 
 ```bash
-cop <file.cop>           # Run a .cop file
-cop <package-name>       # Run a package by name
-cop                      # Run all .cop files in current directory
-cop verify               # Verify program correctness (no execution)
-cop test                 # Run tests
-cop repl                 # Interactive REPL
+cop cop-checks/main.cop -t .       # Run all checks against the repo
+cop verify cop-checks/              # Verify check files are correct (no execution)
 ```
 
-### Getting Detailed Help
+**Always run `cop verify` after writing or editing .cop files** to catch syntax/type errors before execution.
 
-```bash
-cop help language        # Full language reference (syntax, types, operators)
-cop help <package>       # Package documentation (types, functions, examples)
-cop package list         # List all available packages
-```
-
-**Always run `cop help language` before writing cop code** to get the full syntax reference.
-When using a package, run `cop help <package-name>` to see its types and API.
-
-## Language Overview
-
-Cop is a declarative data processing language. The core pattern for writing rules is:
+## How Checks Are Organized
 
 ```
-import → define predicates → filter collections → produce output
+cop-checks/
+  main.cop              # Composes all checks → CHECK(all-violations)
+  naming.cop            # One focused check per file
+  layering.cop          # Another check
+  ...
 ```
 
-### Key Syntax Rules
+Rules:
+- **One check per file** — each file defines a single focused rule
+- **Each file exports a violation list** — `export let my-violations = ...`
+- **Only `main.cop` has a command** — `command MAIN = CHECK(all-violations)`
+- **Never put `command` in individual check files**
+
+## Canonical Check File Template
+
+```cop
+# <Brief description of what this check enforces>
+
+import csharp-checks    # or: import code
+import code-analysis
+
+predicate isViolating(Type) => <condition>
+
+export let my-violations = csharp.Types:isViolating
+    :toError('<message about {item.Name} in {item.File.Path}>')
+```
+
+## Canonical `main.cop` Template
+
+```cop
+# Run all checks: cop cop-checks/main.cop -t .
+
+export let all-violations =
+    check-a-violations +
+    check-b-violations +
+    check-c-violations
+
+command MAIN = CHECK(all-violations)
+```
+
+## Complete Real-World Example
+
+**`cop-checks/namespaces.cop`** — ensures all types are in namespaces:
+
+```cop
+# All C# types must be in namespaces
+
+import csharp-checks
+import code-analysis
+
+predicate isInTestProject(Type) => Type.File.Path:startsWith('tests/')
+predicate hasNamespace(Type) => Type.File.Namespace.Length:greaterThan(0)
+predicate isMissingNamespace(Type) => !hasNamespace && !isInTestProject
+
+export let types-without-namespace = csharp.Types:isMissingNamespace
+    :toError('{item.Name} in {item.File.Path} must be in a namespace')
+```
+
+**`cop-checks/layering.cop`** — enforces dependency rules:
+
+```cop
+# Runtime must not reference providers
+
+import csharp-checks
+import code-analysis
+import code-layering
+
+let runtime-projects = ['runtime']
+let provider-projects = ['code', 'csharp-provider', 'python-provider']
+
+predicate isRuntimeReferencingProvider(Project) =>
+    Project.Name:in(runtime-projects)
+    && Project.References:containsAny(provider-projects)
+
+export let layering-violations = csharp.Projects:isRuntimeReferencingProvider
+    :toError('{item.Name} must not reference providers')
+```
+
+## DO NOT — Critical Rules
+
+- **DO NOT use `foreach` to print violations.** Never write `foreach violations => '{item.Message}'`. Always use `CHECK(violations)`.
+- **DO NOT put `command MAIN` in individual check files.** Only `main.cop` has the command.
+- **DO NOT manually iterate violations.** The pattern is always: filter → `:toError()` → `CHECK()`.
+
+## Key Syntax
 
 - Strings use **single quotes**: `'hello'`
-- String interpolation: `'{item.Name} has {item.Count} methods'`
-- Styled output: `'{text@dim}'`, `'{text@red}'`
-- Comments: `#` for line comments, `##` for doc comments
-- No semicolons, no braces for blocks (except object literals)
+- Interpolation: `'{item.Name} has {item.Count} methods'`
+- Filter with colon: `collection:predicate` (e.g., `Types:isPublic`)
+- Chain filters: `Types:isPublic:hasNoTests`
+- Combine violations: `list-a + list-b`
+- Violation levels: `:toError('...')`, `:toWarning('...')`, `:toInfo('...')`
+- Comments: `#` (no multi-line comments)
+- Predicates are camelCase, types are PascalCase, commands are UPPERCASE
 
-### Core Pattern: Writing a Check
+## Getting More Help
 
-```cop
-import code
-import code-analysis
-
-# 1. Define a predicate (boolean filter)
-predicate isTooLong(Method) => Method.Statements.count() > 50
-
-# 2. Filter a collection
-let longMethods = Code.Methods:isTooLong
-
-# 3. Produce violations
-let violations = longMethods:toWarning('Method {item.Name} has too many statements')
-
-# 4. Output them
-CHECK violations
+```bash
+cop help language           # Full language reference
+cop help <package-name>     # Package API docs (types, fields, functions)
+cop package list            # List available packages
 ```
 
-### Declarations
-
-| Keyword | Purpose | Example |
-|---------|---------|---------|
-| `import` | Import a package | `import code` |
-| `feed` | Declare package source | `feed 'github.com/owner/repo'` |
-| `let` | Declare a named value/list | `let Clients = Types:isClient` |
-| `predicate` | Boolean filter on items | `predicate isPublic(Type) => ...` |
-| `function` | Transform or compute | `function name(T) => expr` |
-| `type` | Object shape definition | `type Foo = { Name : string }` |
-| `enum` | Extensible enum | `enum Severity = error \| warning` |
-| `flags` | Bit flag constants | `flags Mod = Public \| Static` |
-| `command` | Named runnable entry point | `command MAIN = CHECK(violations)` |
-| `foreach` | Iterate and output | `foreach items => '{item.Name}'` |
-| `test` | Test assertion | `test x = assert(expr)` |
-| `export` | Make visible to importers | `export predicate ...` |
-
-### Filtering with `:`
-
-The colon operator filters collections or pipes values through functions:
-
-```cop
-Types:isClient                    # filter Types where isClient is true
-Types:isClient:isPublic           # chained AND filters
-Statements:Kind:equals('call')    # field predicate
-someValue:myFunction              # pipe value through function
-```
-
-### Common String Predicates
-
-```cop
-Name:startsWith('Get')
-Name:endsWith('Client')
-Name:contains('Test')
-Name:equals('Main')
-Name:matches('.*Service$')        # regex
-```
-
-### Collection Operations
-
-```cop
-items.Count                       # number of items
-items.Select(item.Name)           # project to list of names
-items.Where(item.Age > 18)        # filter with expression
-items.OrderBy(item.Name)          # sort
-items:any(predicate)              # true if any match
-items:all(predicate)              # true if all match
-items:none(predicate)             # true if none match
-items:count(predicate)            # count matching
-```
-
-### Producing Violations (with code-analysis package)
-
-```cop
-import code-analysis
-
-# Convert filtered items to violations:
-let v = filteredItems:toError('message with {item.Name}')
-let w = filteredItems:toWarning('message')
-let i = filteredItems:toInfo('message')
-
-# Output violations:
-CHECK v
-```
+**Run `cop help language` before writing cop code** for the full syntax reference.
+When using a package, run `cop help <package-name>` to see its types and API.
 
 ## Common Packages
 
 | Package | Provides | Key Collections |
 |---------|----------|-----------------|
 | `code` | Source code analysis | Types, Methods, Statements, Lines, Files |
-| `code-analysis` | Violation type + CHECK | Violation, toError, toWarning, toInfo |
+| `code-analysis` | Violation type + CHECK | toError, toWarning, toInfo |
+| `code-layering` | Dependency rules | containsAny, in |
 | `files` | Filesystem analysis | Folders, Files |
-| `csharp` | C# language provider | csharp.types(), csharp.statements() |
-| `python` | Python language provider | python.types(), python.statements() |
-| `javascript` | JS/TS language provider | javascript.types(), javascript.statements() |
-
-## Example: Complete Rule File
-
-```cop
-feed 'github.com/KrzysztofCwalina/cop'
-import code
-import code-analysis
-import csharp
-
-# Flag methods longer than 50 statements
-predicate isTooLong(Method) => Method.Statements.count() > 50
-
-# Flag types with no documentation
-predicate isUndocumented(Type) => Type.Documented == false && Type:isPublic
-
-let longMethods = Code.Methods:isTooLong
-    :toWarning('Method {item.Name} exceeds 50 statements ({item.Statements.count()})')
-
-let undocTypes = Code.Types:isUndocumented
-    :toWarning('Public type {item.Name} is not documented')
-
-command MAIN = CHECK(longMethods + undocTypes)
-```
-
-## Testing
-
-```cop
-import code
-
-test has-types = assert(Code.Types.Count > 0)
-test no-long-methods = assert(Code.Methods:isTooLong.Count == 0)
-test has-public = assert(Code.Types:isPublic.Count > 0, 'Expected public types')
-```
-
-Run with: `cop test`
-
-## Verifying Rules
-
-After writing or modifying `.cop` files, always verify correctness:
-
-```bash
-cop verify                # Verify all .cop files in current directory
-cop verify <file.cop>     # Verify a specific file
-cop verify <directory>    # Verify all .cop files in a directory
-```
-
-`cop verify` performs full static analysis without executing:
-- Syntax validation (parse errors with source context)
-- Import resolution (are all packages available?)
-- Name binding (are all identifiers defined?)
-- Type checking (do referenced types and fields exist?)
-
-If verification fails, fix the reported errors before running the program.
-
-## Tips for Agents
-
-1. **Always start with** `cop help language` to get the full syntax reference
-2. **Check package APIs** with `cop help <package-name>` before using a package
-3. **Use single quotes** for all strings (not double quotes)
-4. **Use `{item.Prop}`** for string interpolation in templates
-5. **Predicates are camelCase**, types are PascalCase, commands are UPPERCASE
-6. **After writing rules, run `cop verify`** to check for errors before execution
-7. **Test with** `cop test` after writing rules
-8. **Validate syntax only** with `cop syntax <file.cop>` (lighter than verify)
-9. **Run cop on demand** when the user asks you to run cop or check the code: `cop cop-checks/main.cop -t .`
-
-## Critical: DO NOT Do These Things
-
-- **DO NOT use `foreach` to manually print violations.** Never write `foreach violations => '{item.Message}'`. This bypasses the structured output format and exit code mechanism. Always use `CHECK(violations)`.
-- **DO NOT define `command MAIN` in individual check files.** Only `main.cop` should have a command. Individual check files ONLY export violation lists via `export let`.
-- **DO NOT aggregate violations and then iterate them manually.** The correct pattern is always: collect violations → `CHECK(violations)`.
-
-### Correct Pattern (ALWAYS use this):
-
-```cop
-# In individual check files: export a let, nothing else
-export let my-violations = items:predicate
-    :toError('message about {item.Name}')
-
-# In main.cop only: compose and CHECK
-export let all-violations = my-violations + other-violations
-command MAIN = CHECK(all-violations)
-```
-
-### WRONG (never do this):
-
-```cop
-# WRONG: manual foreach to print violations
-foreach violations => '{item.Message}'
-
-# WRONG: command in an individual check file
-command MAIN = foreach violations => '{item.Message}'
-```
-
-## Project Convention: `cop-checks/` Folder
-
-All cop check files MUST live in a folder named exactly `cop-checks/` (not `checks/`) at the repository root. Follow this structure:
-
-```
-cop-checks/
-  main.cop           # Composes all checks and runs them
-  naming.cop         # One check per file — e.g., naming conventions
-  layering.cop       # Dependency layering rules
-  no-interfaces.cop  # "No new interfaces" check
-  ...
-```
-
-### Rules for `cop-checks/`:
-
-1. **One check per file** — each `.cop` file defines a single focused check
-2. **Each file exports a `let` with its violations** — e.g., `export let naming-violations = ...`
-3. **`main.cop` composes all checks** — imports violation lists from each file and runs `CHECK(all)`
-4. **Run all checks with** `cop cop-checks/main.cop -t .` from the repo root
-
-### Example `main.cop`:
-
-```cop
-export let all-violations =
-    naming-violations +
-    layering-violations +
-    no-new-interfaces
-
-command MAIN = CHECK(all-violations)
-```
-
-### Example single check file (`naming.cop`):
-
-```cop
-import csharp-checks
-import code-analysis
-
-predicate hasBadName(Type) => Type.Name:startsWith('_')
-
-export let naming-violations = csharp.Types:hasBadName
-    :toError('{item.Name} must not start with underscore')
-```
+| `csharp-checks` | C# language provider | csharp.Types, csharp.Projects, csharp.Methods |
 
 ## Reporting Issues (IMPORTANT)
 
-You MUST file a feedback issue whenever you encounter any of the following:
+File a feedback issue whenever you encounter:
 - cop commands fail with errors you cannot resolve
-- Rules that should match produce no output (silent failures)
-- `cop verify` passes but rules don't work at runtime
-- Language features described in `cop help language` don't behave as documented
+- Rules produce no output when they should (silent failures)
+- `cop verify` passes but runtime doesn't work as expected
 - You cannot figure out how to accomplish something after consulting help
 
 Do NOT silently work around problems. File the issue FIRST, then work around it.
-This feedback is critical for improving cop.
 
 ```bash
 gh issue create --repo KrzysztofCwalina/cop --label agent-feedback \
-  --title "Agent feedback: <brief description of the problem>" \
-  --body "## What I tried\n<the cop command or .cop code>\n\n## What happened\n<full error or unexpected output>\n\n## What I expected\n<desired behavior>\n\n## Workaround\n<what I did instead, if anything>"
+  --title "Agent feedback: <brief description>" \
+  --body "## What I tried\n<cop code or command>\n\n## What happened\n<error or unexpected output>\n\n## What I expected\n<desired behavior>"
 ```
-
-File one issue per distinct problem. Include the exact cop commands and .cop code
-that triggered the issue. Do not bundle multiple unrelated problems into one issue.
