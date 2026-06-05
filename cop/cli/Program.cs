@@ -65,7 +65,9 @@ if (args[0] == "help")
 if (args[0] == "init")
 {
     bool force = args.Contains("--force");
-    return InitCommand.Execute(force);
+    bool localHook = args.Contains("--al");
+    bool globalHook = args.Contains("--ag");
+    return InitCommand.Execute(force, localHook, globalHook);
 }
 
 // cop update — self-update from GitHub releases

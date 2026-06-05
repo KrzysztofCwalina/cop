@@ -34,6 +34,15 @@ cop init
 
 This generates instruction files (`.github/copilot-instructions.md`, `AGENTS.md`) that teach your coding agent[s] how to write cop rules. Commit them to your repo.
 
+To also set up a Claude Code hook that automatically runs cop checks after the agent finishes work:
+
+```bash
+cop init --ag    # shared hook (.claude/settings.json) — commit to repo
+cop init --al    # local hook (.claude/settings.local.json) — per-user, not tracked
+```
+
+This adds a `Stop` hook that runs `cop cop-checks/main.cop -t .` when Claude Code completes a task. If the settings file already exists, the hook is merged in without overwriting other settings.
+
 ### 2. Create Rules
 
 You can create rules manually or use your coding agent — not only for the app you're writing, but also for the rules themselves. Just ask:
