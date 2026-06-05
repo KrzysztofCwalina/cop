@@ -203,7 +203,7 @@ If verification fails, fix the reported errors before running the program.
 
 ## Project Convention: `cop-checks/` Folder
 
-All cop check files MUST live in a `cop-checks/` folder at the repository root. Follow this structure:
+All cop check files MUST live in a folder named exactly `cop-checks/` (not `checks/`) at the repository root. Follow this structure:
 
 ```
 cop-checks/
