@@ -183,10 +183,14 @@ public static class RunCommand
         return 0;
     }
 
-    public static int Execute(string? command, string[]? programArgs = null, string? target = null, string? format = null, string? commands = null, bool diag = false)
+    public static int Execute(string? command, string[]? programArgs = null, string? target = null, string? format = null, string? commands = null, bool diag = false, bool onlyIfModified = false)
     {
         if (command != null && IsUri(command))
             return ExecuteFromUri(command, programArgs, target, format, commands, diag);
+
+        // -om: skip analysis if no files modified in git working tree
+        if (onlyIfModified && !HasModifiedFiles(target ?? Directory.GetCurrentDirectory()))
+            return 0;
 
         string? commandName = null;
         string scriptsDir;
@@ -275,9 +279,14 @@ public static class RunCommand
     /// Runs named packages against the target directory (merged from cop check).
     /// Packages are auto-restored from configured GitHub feeds if not found locally.
     /// </summary>
-    public static int ExecutePackages(string[] packages, string? target = null, string[]? rules = null, string? format = null, bool diag = false)
+    public static int ExecutePackages(string[] packages, string? target = null, string[]? rules = null, string? format = null, bool diag = false, bool onlyIfModified = false)
     {
         string rootPath = target != null ? Path.GetFullPath(target) : Directory.GetCurrentDirectory();
+
+        // -om: skip analysis if no files modified in git working tree
+        if (onlyIfModified && !HasModifiedFiles(rootPath))
+            return 0;
+
         Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(ColorDiagLine(msg)) : null;
 
         // Discover feed paths from both rootPath and CWD (includes global cache)
@@ -525,6 +534,35 @@ public static class RunCommand
         {
             Console.Error.WriteLine($"Error parsing '{filePath}': {ex.Message}");
             return [];
+        }
+    }
+
+    /// <summary>
+    /// Checks if the working tree has modified files using git status.
+    /// Returns true if files are modified or if git is unavailable (safe fallback).
+    /// </summary>
+    private static bool HasModifiedFiles(string workingDir)
+    {
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo("git", "status --porcelain")
+            {
+                WorkingDirectory = workingDir,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var proc = System.Diagnostics.Process.Start(psi);
+            if (proc == null) return true;
+            var output = proc.StandardOutput.ReadToEnd();
+            proc.WaitForExit(5000);
+            if (proc.ExitCode != 0) return true;
+            return !string.IsNullOrWhiteSpace(output);
+        }
+        catch
+        {
+            return true; // git not available → assume modified
         }
     }
 

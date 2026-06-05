@@ -63,6 +63,21 @@ public static class InitCommand
             filesCreated++;
         }
 
+        // Generate .claude/commands/cop.md (Claude Code /cop skill)
+        var claudeCommandsDir = Path.Combine(cwd, ".claude", "commands");
+        var copCommandPath = Path.Combine(claudeCommandsDir, "cop.md");
+        if (File.Exists(copCommandPath) && !force)
+        {
+            Console.Error.WriteLine($"Skipped: {GetRelativePath(cwd, copCommandPath)} already exists (use --force to overwrite)");
+        }
+        else
+        {
+            Directory.CreateDirectory(claudeCommandsDir);
+            File.WriteAllText(copCommandPath, GetCopCommandContent());
+            Console.WriteLine($"{(force && File.Exists(copCommandPath) ? "Updated" : "Created")}: {GetRelativePath(cwd, copCommandPath)}");
+            filesCreated++;
+        }
+
         // Generate Claude Code hook settings
         if (localHook)
         {
@@ -255,7 +270,7 @@ public static class InitCommand
             ["hooks"] = new JsonArray(new JsonObject
             {
                 ["type"] = "command",
-                ["command"] = "cop cop-checks/main.cop -t ."
+                ["command"] = "cop cop-checks/main.cop -t . -om"
             })
         };
 
@@ -295,5 +310,23 @@ public static class InitCommand
             throw new InvalidOperationException("Embedded resource 'Cop.Cli.InitInstructions.md' not found.");
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
+    }
+
+    private static string GetCopCommandContent()
+    {
+        return """
+            Run cop static analysis on this repository.
+
+            Execute the following command:
+            ```
+            cop cop-checks/main.cop -t .
+            ```
+
+            This runs all cop checks defined in `cop-checks/main.cop` against the repository root.
+            If there are violations, fix them before continuing.
+
+            If `cop-checks/` doesn't exist, tell the user they need to create cop check files first.
+            Run `cop help language` for the full language reference if you need to write or fix cop rules.
+            """.Replace("            ", "");
     }
 }

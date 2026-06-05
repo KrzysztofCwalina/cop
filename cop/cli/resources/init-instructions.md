@@ -200,6 +200,7 @@ If verification fails, fix the reported errors before running the program.
 6. **After writing rules, run `cop verify`** to check for errors before execution
 7. **Test with** `cop test` after writing rules
 8. **Validate syntax only** with `cop syntax <file.cop>` (lighter than verify)
+9. **Run cop on demand** when the user asks you to run cop or check the code: `cop cop-checks/main.cop -t .`
 
 ## Critical: DO NOT Do These Things
 
