@@ -176,6 +176,25 @@ public static class InitCommand
         // Print success with full path and content
         Console.WriteLine($"Wrote: {fullPath}");
         Console.WriteLine(File.ReadAllText(settingsPath));
+
+        // Verify cop is in PATH (hook will fail silently if it's not)
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo("cop", "-v")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            var proc = System.Diagnostics.Process.Start(psi);
+            proc?.WaitForExit(5000);
+        }
+        catch
+        {
+            Console.Error.WriteLine("Warning: 'cop' not found in PATH. The hook will fail unless cop is accessible.");
+        }
+
         Console.WriteLine($"Verify in Claude Code: type /hooks then select Stop");
         return 1;
     }
@@ -236,8 +255,7 @@ public static class InitCommand
             ["hooks"] = new JsonArray(new JsonObject
             {
                 ["type"] = "command",
-                ["command"] = "cop cop-checks/main.cop -t .",
-                ["timeout"] = 120
+                ["command"] = "cop cop-checks/main.cop -t ."
             })
         };
 

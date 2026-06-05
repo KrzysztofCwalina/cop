@@ -201,6 +201,34 @@ If verification fails, fix the reported errors before running the program.
 7. **Test with** `cop test` after writing rules
 8. **Validate syntax only** with `cop syntax <file.cop>` (lighter than verify)
 
+## Critical: DO NOT Do These Things
+
+- **DO NOT use `foreach` to manually print violations.** Never write `foreach violations => '{item.Message}'`. This bypasses the structured output format and exit code mechanism. Always use `CHECK(violations)`.
+- **DO NOT define `command MAIN` in individual check files.** Only `main.cop` should have a command. Individual check files ONLY export violation lists via `export let`.
+- **DO NOT aggregate violations and then iterate them manually.** The correct pattern is always: collect violations → `CHECK(violations)`.
+
+### Correct Pattern (ALWAYS use this):
+
+```cop
+# In individual check files: export a let, nothing else
+export let my-violations = items:predicate
+    :toError('message about {item.Name}')
+
+# In main.cop only: compose and CHECK
+export let all-violations = my-violations + other-violations
+command MAIN = CHECK(all-violations)
+```
+
+### WRONG (never do this):
+
+```cop
+# WRONG: manual foreach to print violations
+foreach violations => '{item.Message}'
+
+# WRONG: command in an individual check file
+command MAIN = foreach violations => '{item.Message}'
+```
+
 ## Project Convention: `cop-checks/` Folder
 
 All cop check files MUST live in a folder named exactly `cop-checks/` (not `checks/`) at the repository root. Follow this structure:

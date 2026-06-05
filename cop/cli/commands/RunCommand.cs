@@ -192,6 +192,8 @@ public static class RunCommand
         string scriptsDir;
         string rootPath;
 
+        string? scopeToFile = null;
+
         if (command != null && command.EndsWith(".cop", StringComparison.OrdinalIgnoreCase))
         {
             // .cop file mode: use file's directory as scriptsDir, load all .cop files there
@@ -199,6 +201,7 @@ public static class RunCommand
             if (!spec.Exists) { Console.Error.WriteLine($"Error: File '{spec.FullName}' not found"); return 1; }
             scriptsDir = spec.DirectoryName ?? Directory.GetCurrentDirectory();
             rootPath = scriptsDir;
+            scopeToFile = spec.FullName;
 
             // First extra arg is the command name (if not a switch)
             if (programArgs is { Length: > 0 } && !programArgs[0].StartsWith('/') && !programArgs[0].StartsWith('-'))
@@ -225,6 +228,19 @@ public static class RunCommand
         string[]? commandFilter = null;
         if (!string.IsNullOrEmpty(commands))
             commandFilter = commands.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        // When a specific .cop file is named, scope commands to that file only
+        if (scopeToFile != null && commandFilter == null && commandName == null)
+        {
+            var fileCommands = GetCommandNamesFromFile(scopeToFile);
+            if (fileCommands.Length > 0)
+                commandFilter = fileCommands;
+            else
+            {
+                Console.Error.WriteLine($"Error: No commands defined in '{command}'");
+                return 1;
+            }
+        }
 
         Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(ColorDiagLine(msg)) : null;
 
@@ -460,10 +476,7 @@ public static class RunCommand
             }
         }
 
-        // Command mode: output is informational, exit 0
-        if (result.IsCommandMode)
-            return 0;
-
+        // Exit non-zero when output was produced (violations found)
         return result.Outputs.Count > 0 || result.HasParseErrors ? 1 : 0;
     }
 
@@ -490,6 +503,29 @@ public static class RunCommand
             return $"{magenta}{msg}{reset}";
         // [diag] and everything else
         return $"{gray}{msg}{reset}";
+    }
+
+    /// <summary>
+    /// Extracts command names defined in a specific .cop file (for single-file scoping).
+    /// Commands are desugared to uppercase FunctionDecl by the parser.
+    /// </summary>
+    private static string[] GetCommandNamesFromFile(string filePath)
+    {
+        try
+        {
+            var source = File.ReadAllText(filePath);
+            var module = Cop.Lang.Parser.CopParser.Parse(source, filePath);
+            return module.Declarations
+                .OfType<Cop.Lang.Ast.FunctionDecl>()
+                .Where(f => f.Name.Length > 0 && f.Name == f.Name.ToUpperInvariant())
+                .Select(c => c.Name)
+                .ToArray();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error parsing '{filePath}': {ex.Message}");
+            return [];
+        }
     }
 
     /// <summary>
