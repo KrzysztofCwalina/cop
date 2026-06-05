@@ -373,6 +373,74 @@ Self-update cop to the latest release from GitHub. Detects your platform automat
 cop update
 ```
 
+### Auto-Update
+
+Cop automatically checks for updates once every 24 hours. When a newer release is detected, it downloads and installs the update silently. The new version takes effect on the next run.
+
+Auto-update is skipped for quick commands (`-h`, `-v`, `help`, `update`) and in CI environments.
+
+| Environment Variable | Effect |
+|---------------------|--------|
+| `COP_NO_AUTO_UPDATE=1` | Disable auto-update entirely |
+| `CI=true` | Auto-update is skipped |
+
+## User Checks
+
+Personal `.cop` check files that run automatically alongside project checks. Place them in `~/.cop/checks/` and they'll be included in every cop run — no repo modification needed.
+
+This is useful for:
+- Personal coding rules you want across all your repos
+- Augmenting team rules with your own checks
+- Working on repos you don't own (no need to commit personal rules)
+
+### Directory Layout
+
+```
+~/.cop/checks/
+├── my-naming-rules.cop           # Global — runs on ALL repos
+├── my-style.cop                  # Global
+├── azure-sdk-for-net/            # Only when in azure-sdk-for-net repo
+│   └── sdk-conventions.cop
+└── my-project/                   # Only when in my-project repo
+    └── extra-checks.cop
+```
+
+- **Top-level** `*.cop` files are global — they run on every repo.
+- **Subdirectory** `*.cop` files are repo-specific — they only run when the current repo name matches the subdirectory name.
+
+### Repo Name Matching
+
+Cop determines the current repo name by:
+1. Git remote origin URL (extracts the repo name, e.g., `github.com/org/my-repo` → `my-repo`)
+2. Git root directory name (fallback)
+3. Current working directory name (fallback)
+
+### Example
+
+Create a personal check that ensures all public C# types have XML doc comments:
+
+```cop
+# ~/.cop/checks/require-docs.cop
+import csharp-checks
+import code-analysis
+
+predicate needsDocs(Type) => Type.IsPublic && Type.DocComment.Length == 0
+
+export let missing-docs = csharp.Types:needsDocs
+    :toWarning('{item.Name} in {item.File.Path} is public but has no doc comment')
+```
+
+Now `cop` will include this check in every run, alongside whatever checks the repo defines.
+
+### Opt-out
+
+| Environment Variable | Effect |
+|---------------------|--------|
+| `COP_NO_USER_CHECKS=1` | Disable user checks |
+| `CI=true` | User checks are skipped automatically |
+
+User checks are always skipped in CI environments (`CI`, `GITHUB_ACTIONS`, `TF_BUILD`).
+
 ## cop vscode
 
 Download and install the Cop VS Code extension (syntax highlighting and IntelliSense for `.cop` files). Downloads from the latest GitHub release and installs to `~/.vscode/extensions/`.

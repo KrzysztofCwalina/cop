@@ -584,13 +584,19 @@ public static class RunCommand
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cop", "checks");
 
     /// <summary>
-    /// Discovers .cop files in ~/.cop/checks/ for user-global checks.
+    /// Discovers .cop files in ~/.cop/checks/ for user checks (hierarchical).
+    /// - Top-level *.cop files are global (apply to all repos).
+    /// - Subdirectory *.cop files are repo-specific (only when repo name matches).
     /// Returns empty array if the directory doesn't exist, if in CI, or if opted out.
     /// </summary>
     private static string[] GetUserCheckFiles(Action<string>? diagLog)
     {
         // Skip in CI environments
         if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CI")))
+            return [];
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("GITHUB_ACTIONS")))
+            return [];
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("TF_BUILD")))
             return [];
         if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("COP_NO_USER_CHECKS")))
             return [];
@@ -599,10 +605,108 @@ public static class RunCommand
         if (!Directory.Exists(checksDir))
             return [];
 
-        var files = Directory.GetFiles(checksDir, "*.cop", SearchOption.AllDirectories);
-        if (files.Length > 0)
-            diagLog?.Invoke($"[diag] Including {files.Length} user check file(s) from {checksDir}");
-        return files;
+        var files = new List<string>();
+
+        // 1. Top-level *.cop files are global (apply to all repos)
+        files.AddRange(Directory.GetFiles(checksDir, "*.cop", SearchOption.TopDirectoryOnly));
+
+        // 2. Repo-specific subdirectory (only if repo name matches)
+        var repoName = GetCurrentRepoName();
+        if (repoName != null)
+        {
+            var repoDir = Path.Combine(checksDir, repoName);
+            if (Directory.Exists(repoDir))
+            {
+                files.AddRange(Directory.GetFiles(repoDir, "*.cop", SearchOption.AllDirectories));
+                diagLog?.Invoke($"[diag] Including repo-specific user checks from {repoDir}");
+            }
+        }
+
+        if (files.Count > 0)
+            diagLog?.Invoke($"[diag] Including {files.Count} user check file(s) from {checksDir}");
+        return files.ToArray();
+    }
+
+    /// <summary>
+    /// Determines the current repository name for matching user check subdirectories.
+    /// Resolution order: git remote origin URL → git root dir name → CWD name.
+    /// </summary>
+    private static string? _cachedRepoName;
+    private static bool _repoNameResolved;
+    private static string? GetCurrentRepoName()
+    {
+        if (_repoNameResolved)
+            return _cachedRepoName;
+        _repoNameResolved = true;
+
+        // Try git remote origin URL
+        _cachedRepoName = TryGetRepoNameFromGitRemote()
+            ?? TryGetRepoNameFromGitRoot()
+            ?? GetDirectoryName(Directory.GetCurrentDirectory());
+        return _cachedRepoName;
+    }
+
+    private static string? TryGetRepoNameFromGitRemote()
+    {
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo("git", "remote get-url origin")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var proc = System.Diagnostics.Process.Start(psi);
+            if (proc == null) return null;
+            var output = proc.StandardOutput.ReadToEnd().Trim();
+            proc.WaitForExit(3000);
+            if (proc.ExitCode != 0 || string.IsNullOrEmpty(output)) return null;
+
+            // Parse repo name from URL: https://github.com/org/repo.git → repo
+            // Also handles: git@github.com:org/repo.git
+            var name = output.TrimEnd('/');
+            if (name.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+                name = name[..^4];
+            var lastSlash = name.LastIndexOf('/');
+            var lastColon = name.LastIndexOf(':');
+            var sep = Math.Max(lastSlash, lastColon);
+            return sep >= 0 ? name[(sep + 1)..] : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? TryGetRepoNameFromGitRoot()
+    {
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo("git", "rev-parse --show-toplevel")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var proc = System.Diagnostics.Process.Start(psi);
+            if (proc == null) return null;
+            var output = proc.StandardOutput.ReadToEnd().Trim();
+            proc.WaitForExit(3000);
+            if (proc.ExitCode != 0 || string.IsNullOrEmpty(output)) return null;
+            return GetDirectoryName(output);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? GetDirectoryName(string path)
+    {
+        var name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        return string.IsNullOrEmpty(name) ? null : name;
     }
 
     /// <summary>
