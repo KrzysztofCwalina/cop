@@ -25,21 +25,26 @@ public static class CodeCollectionBuilder
         var filePaths = new List<string>();
         CollectSourceFiles(rootPath, parsers, excluded, filePaths);
 
-        // Retry once after a short delay if 0 files found but directory exists and is non-empty.
-        // This handles transient IO issues (antivirus, indexer, file locks) on Windows.
+        // Retry with exponential backoff if 0 files found but directory is non-empty.
+        // Handles transient filesystem filter driver interference (antivirus, indexer) on Windows.
         if (filePaths.Count == 0 && Directory.Exists(rootPath))
         {
             try
             {
-                var hasAnyFiles = Directory.EnumerateFileSystemEntries(rootPath).Any();
-                if (hasAnyFiles)
+                var hasAnyEntries = Directory.EnumerateFileSystemEntries(rootPath).Any();
+                if (hasAnyEntries)
                 {
-                    Thread.Sleep(500);
-                    CollectSourceFiles(rootPath, parsers, excluded, filePaths);
+                    int[] retryDelaysMs = [200, 1000, 3000];
+                    foreach (var delay in retryDelaysMs)
+                    {
+                        Thread.Sleep(delay);
+                        CollectSourceFiles(rootPath, parsers, excluded, filePaths);
+                        if (filePaths.Count > 0) break;
+                    }
                     if (filePaths.Count == 0)
                     {
-                        Console.Error.WriteLine($"Error: Provider scan found 0 source files in '{rootPath}' after retry. " +
-                            $"This may indicate a transient filesystem issue. Results are unreliable.");
+                        Console.Error.WriteLine($"Error: Provider scan found 0 source files in '{rootPath}' after 3 retries. " +
+                            $"This likely indicates filesystem interference (antivirus, file locks). Results are unreliable.");
                     }
                 }
             }
@@ -171,25 +176,55 @@ public static class CodeCollectionBuilder
         ["Projects"] = "Project",
     };
 
-    private static void CollectSourceFiles(string dir, SourceParserRegistry parsers, IReadOnlySet<string>? excluded, List<string> result, bool isRoot = true)
+    private static void CollectSourceFiles(string rootDir, SourceParserRegistry parsers, IReadOnlySet<string>? excluded, List<string> result, bool isRoot = true)
     {
+        // Use EnumerateFiles with AllDirectories for a single enumeration handle.
+        // This is more resilient to transient filesystem filter driver interference on Windows
+        // (antivirus, indexer) compared to per-directory GetFiles + GetDirectories recursion.
         try
         {
-            foreach (var file in Directory.GetFiles(dir))
+            foreach (var file in Directory.EnumerateFiles(rootDir, "*", new EnumerationOptions
             {
+                RecurseSubdirectories = true,
+                IgnoreInaccessible = !isRoot,  // propagate root errors, skip subdirectory errors
+                AttributesToSkip = FileAttributes.System
+            }))
+            {
+                // Check excluded directories in the path
+                if (excluded is not null)
+                {
+                    var relativePath = file.AsSpan(rootDir.Length);
+                    if (IsInExcludedDirectory(relativePath, excluded))
+                        continue;
+                }
+
                 var ext = Path.GetExtension(file);
                 if (parsers.GetParser(ext) != null)
                     result.Add(file);
             }
-
-            foreach (var subDir in Directory.GetDirectories(dir))
-            {
-                var dirName = Path.GetFileName(subDir);
-                if (excluded is not null && excluded.Contains(dirName)) continue;
-                CollectSourceFiles(subDir, parsers, excluded, result, isRoot: false);
-            }
         }
         catch (UnauthorizedAccessException) when (!isRoot) { }
         catch (IOException) when (!isRoot) { }
+    }
+
+    private static bool IsInExcludedDirectory(ReadOnlySpan<char> relativePath, IReadOnlySet<string> excluded)
+    {
+        // Check each path segment against excluded set
+        var pathStr = relativePath.ToString();
+        var start = 0;
+        for (int i = 0; i <= pathStr.Length; i++)
+        {
+            if (i == pathStr.Length || pathStr[i] == Path.DirectorySeparatorChar || pathStr[i] == Path.AltDirectorySeparatorChar)
+            {
+                if (i > start)
+                {
+                    var segment = pathStr.Substring(start, i - start);
+                    if (excluded.Contains(segment))
+                        return true;
+                }
+                start = i + 1;
+            }
+        }
+        return false;
     }
 }

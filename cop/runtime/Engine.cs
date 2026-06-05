@@ -501,14 +501,17 @@ public static class Engine
         if (schema.Collections.Count == 0)
             return;
 
+        // Skip when dict is empty — means provider returned null (schema-only, data comes from external providers)
+        if (collections.Count == 0)
+            return;
+
         // Check if ALL collections returned 0 items
         int totalItems = 0;
         foreach (var (_, items) in collections)
             totalItems += items.Count;
 
-        if (totalItems == 0 && collections.Count > 0)
+        if (totalItems == 0)
         {
-            // This is printed to stderr and causes non-zero exit via the warnings path.
             // A provider that returns 0 items means checks cannot produce reliable results.
             warnings.Add($"Error: Provider '{providerName}' returned 0 items across all collections. " +
                 $"This likely indicates a transient filesystem issue (antivirus, file locks). " +
