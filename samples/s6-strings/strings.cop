@@ -1,17 +1,16 @@
 # Single-quote strings
-print('Hello from Cop!')
-
 # Triple-quote multi-line strings (raw, auto-indent stripped)
-print(
-    '''
-    =============================
-      Welcome to Cop
-    =============================
-    '''
-)
-
 # {text@style} for colored output
-print('{Hello @red} {World@green}!')
-
 # Escaped \@ for literal @ in output
-print('Contact: admin@example.com')
+
+command MAIN =
+    print('Hello from Cop!') &
+    print(
+        '''
+        =============================
+          Welcome to Cop
+        =============================
+        '''
+    ) &
+    print('{Hello @red} {World@green}!') &
+    print('Contact: admin@example.com')
