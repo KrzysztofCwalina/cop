@@ -46,16 +46,18 @@ You can create rules manually or use your coding agent — not only for the app 
 
 > "Create a cop rule that blocks dependencies from Foo.dll to Bar.dll"
 
-The agent reads the instruction files setup using `cop init`, which tell it how to use cop.exe to write and execute rules. Here's what the generated rule for "method longer than 50 statements" might look like:
+The agent reads the instruction files setup using `cop init`, which tell it how to use cop.exe to write and execute rules. Here's what the generated rule for "types with too many methods" might look like:
 
 ```ruby
-import code
+import csharp
+import code-analysis
 
-predicate tooLong(Method) => Method.Statements > 50
+predicate tooManyMethods(Type) => Type.Methods.Count > 20
 
-let violations = Code.Methods:tooLong
+let violations = types():tooManyMethods
+    :toWarning('Type {item.Name} has too many methods')
 
-CHECK(violations)
+CHECK violations
 ```
 
 ### 3. Run the Rules
