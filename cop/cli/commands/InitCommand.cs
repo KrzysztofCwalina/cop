@@ -65,9 +65,17 @@ public static class InitCommand
 
         // Generate Claude Code hook settings
         if (localHook)
-            filesCreated += GenerateClaudeHook(cwd, "settings.local.json", force);
+        {
+            int result = GenerateClaudeHook(cwd, "settings.local.json", force);
+            if (result < 0) return 1;
+            filesCreated += result;
+        }
         if (globalHook)
-            filesCreated += GenerateClaudeHook(cwd, "settings.json", force);
+        {
+            int result = GenerateClaudeHook(cwd, "settings.json", force);
+            if (result < 0) return 1;
+            filesCreated += result;
+        }
 
         if (filesCreated > 0)
             Console.WriteLine($"\n{filesCreated} file(s) created. Agents will now discover cop language context automatically.");
@@ -81,56 +89,95 @@ public static class InitCommand
     {
         var claudeDir = Path.Combine(cwd, ".claude");
         var settingsPath = Path.Combine(claudeDir, fileName);
+        var fullPath = Path.GetFullPath(settingsPath);
 
-        if (File.Exists(settingsPath) && !force)
+        JsonObject root;
+
+        if (File.Exists(settingsPath))
         {
-            // Merge hook into existing file
+            // Always merge into existing file — never overwrite
+            string existingJson;
             try
             {
-                var existingJson = File.ReadAllText(settingsPath);
-                var root = JsonNode.Parse(existingJson)?.AsObject() ?? new JsonObject();
-                if (HasCopStopHook(root))
-                {
-                    Console.Error.WriteLine($"Skipped: {GetRelativePath(cwd, settingsPath)} already has cop Stop hook");
-                    return 0;
-                }
-                MergeStopHook(root);
-                WriteJson(settingsPath, root);
-                Console.WriteLine($"Updated: {GetRelativePath(cwd, settingsPath)} (added cop Stop hook)");
-                return 1;
+                existingJson = File.ReadAllText(settingsPath);
             }
-            catch (JsonException)
+            catch (Exception ex)
             {
-                Console.Error.WriteLine($"Skipped: {GetRelativePath(cwd, settingsPath)} has invalid JSON (use --force to overwrite)");
+                Console.Error.WriteLine($"Error: Cannot read {fullPath}: {ex.Message}");
+                return -1;
+            }
+
+            try
+            {
+                root = JsonNode.Parse(existingJson)?.AsObject()
+                    ?? throw new JsonException("File is not a JSON object");
+            }
+            catch (JsonException ex)
+            {
+                Console.Error.WriteLine($"Error: {fullPath} contains invalid JSON: {ex.Message}");
+                return -1;
+            }
+
+            if (HasCopStopHook(root) && !force)
+            {
+                Console.Error.WriteLine($"Skipped: {fullPath} already has cop Stop hook (use --force to replace)");
                 return 0;
             }
-        }
-        else if (File.Exists(settingsPath) && force)
-        {
-            // Force overwrite: parse and merge, or create fresh
-            try
-            {
-                var existingJson = File.ReadAllText(settingsPath);
-                var root = JsonNode.Parse(existingJson)?.AsObject() ?? new JsonObject();
-                MergeStopHook(root);
-                WriteJson(settingsPath, root);
-            }
-            catch (JsonException)
-            {
-                Directory.CreateDirectory(claudeDir);
-                WriteJson(settingsPath, CreateFreshHookSettings());
-            }
-            Console.WriteLine($"Updated: {GetRelativePath(cwd, settingsPath)}");
-            return 1;
+
+            // Remove existing cop hook if forcing
+            if (HasCopStopHook(root) && force)
+                RemoveCopStopHook(root);
+
+            MergeStopHook(root);
         }
         else
         {
             // Create fresh
-            Directory.CreateDirectory(claudeDir);
-            WriteJson(settingsPath, CreateFreshHookSettings());
-            Console.WriteLine($"Created: {GetRelativePath(cwd, settingsPath)}");
-            return 1;
+            try
+            {
+                Directory.CreateDirectory(claudeDir);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Error: Cannot create directory {claudeDir}: {ex.Message}");
+                return -1;
+            }
+            root = CreateFreshHookSettings();
         }
+
+        // Write file
+        try
+        {
+            WriteJson(settingsPath, root);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error: Cannot write {fullPath}: {ex.Message}");
+            return -1;
+        }
+
+        // Verify the write by reading back
+        try
+        {
+            var written = File.ReadAllText(settingsPath);
+            var verified = JsonNode.Parse(written)?.AsObject();
+            if (verified == null || verified["hooks"] is not JsonObject)
+            {
+                Console.Error.WriteLine($"Error: Verification failed — {fullPath} does not contain valid hooks JSON after write");
+                return -1;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error: Verification failed — cannot read back {fullPath}: {ex.Message}");
+            return -1;
+        }
+
+        // Print success with full path and content
+        Console.WriteLine($"Wrote: {fullPath}");
+        Console.WriteLine(File.ReadAllText(settingsPath));
+        Console.WriteLine($"Verify in Claude Code: type /hooks then select Stop");
+        return 1;
     }
 
     private static bool HasCopStopHook(JsonObject root)
@@ -150,6 +197,29 @@ public static class InitCommand
             }
         }
         return false;
+    }
+
+    private static void RemoveCopStopHook(JsonObject root)
+    {
+        if (root["hooks"] is not JsonObject hooks) return;
+        if (hooks["Stop"] is not JsonArray stopArray) return;
+        for (int i = stopArray.Count - 1; i >= 0; i--)
+        {
+            if (stopArray[i] is not JsonObject entryObj) continue;
+            if (entryObj["hooks"] is not JsonArray innerHooks) continue;
+            foreach (var hook in innerHooks)
+            {
+                if (hook is not JsonObject hookObj) continue;
+                var command = hookObj["command"]?.GetValue<string>();
+                if (command != null && command.Contains("cop cop-checks/main.cop"))
+                {
+                    stopArray.RemoveAt(i);
+                    break;
+                }
+            }
+        }
+        if (stopArray.Count == 0)
+            hooks.Remove("Stop");
     }
 
     private static void MergeStopHook(JsonObject root)
