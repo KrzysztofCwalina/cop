@@ -154,10 +154,10 @@ export predicate isHigh(item) => item.Score > 10
         bridge.LoadSource(@"
 predicate localHigh(item) => item.Score > 10
 command main = {
-    let importedCount = items:isHigh.Count
-    let localCount = items:localHigh.Count
-    print(importedCount)
-    print(localCount)
+    let imported = items:isHigh
+    let local = items:localHigh
+    print(imported.Count)
+    print(local.Count)
 }", "<test>");
         bridge.RunCommand("main");
 

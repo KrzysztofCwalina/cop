@@ -166,10 +166,13 @@ public sealed class ModuleLoader
         {
             switch (decl)
             {
-                case FunctionDecl fd when fd.IsExported:
-                    // Functions capture the module env so they can access module-local lets
+                case FunctionDecl fd:
+                    // ALL functions/predicates go into moduleEnv (for use by module-internal let bindings).
+                    // Exported ones are ALSO registered in globalEnv for external access.
                     var func = new CopFunction(fd, moduleEnv);
-                    RegisterFunctionWithOverloading(evaluator.GlobalEnvironment, fd.Name, func);
+                    moduleEnv.Define(fd.Name, func);
+                    if (fd.IsExported)
+                        RegisterFunctionWithOverloading(evaluator.GlobalEnvironment, fd.Name, func);
                     break;
 
                 case LetDecl ld:
