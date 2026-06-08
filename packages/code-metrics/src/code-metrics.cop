@@ -1,0 +1,32 @@
+# Code Metrics Package v1.0
+# Computes aggregate code quality metrics from violations and outputs as JSON.
+# Import with: import code-metrics
+
+import code
+import code-analysis
+
+## Computes aggregate metrics from violations and a codebase, outputs as JSON.
+## Usage: METRICS(violations, cb) where violations is [Violation] and cb is a Codebase.
+## Output is a JSON object with total counts, severity breakdown, LOC, and per-KLOC rates.
+export command METRICS(violations, codebase) = {
+    let total = violations.Count
+    let errors = violations:count((v) => v.Severity == 'error')
+    let warnings = violations:count((v) => v.Severity == 'warning')
+    let info = violations:count((v) => v.Severity == 'info')
+    let loc = code.linesOfCode(codebase)
+    let slopPerKloc = loc > 0 ? total * 1000 / loc : 0
+    let errorsPerKloc = loc > 0 ? errors * 1000 / loc : 0
+    let warningsPerKloc = loc > 0 ? warnings * 1000 / loc : 0
+    let infoPerKloc = loc > 0 ? info * 1000 / loc : 0
+    print('{')
+    print('  "totalViolations": {total},')
+    print('  "errors": {errors},')
+    print('  "warnings": {warnings},')
+    print('  "info": {info},')
+    print('  "linesOfCode": {loc},')
+    print('  "slopPerKloc": {slopPerKloc},')
+    print('  "errorsPerKloc": {errorsPerKloc},')
+    print('  "warningsPerKloc": {warningsPerKloc},')
+    print('  "infoPerKloc": {infoPerKloc}')
+    print('}')
+}

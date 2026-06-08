@@ -1,0 +1,8 @@
+{
+  "name": "code-metrics",
+  "version": "1.0.0",
+  "description": "Computes aggregate code quality metrics (slop score) from violations and outputs as JSON",
+  "title": "Code Metrics",
+  "authors": "cop-team",
+  "tags": ["metrics", "analysis", "json", "slop"]
+}
