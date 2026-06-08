@@ -285,11 +285,8 @@ public static class Engine
                 continue;
 
             queryService.RegisterProvider(loaded.PackageName, loaded.Instance, loaded.Schema);
-            var collections = QueryProviderCollections(loaded.Instance, loaded.Schema, query, errors);
-            diagLog?.Invoke($"[diag] Provider '{loaded.PackageName}' returned {collections.Count} collections: {string.Join(", ", collections.Select(c => $"{c.Key}({c.Value.Count})"))}");
-            WarnIfProviderEmpty(loaded.PackageName, collections, loaded.Schema, warnings);
             var runtimeBindings = loaded.Instance.GetRuntimeBindings();
-            RegisterProviderCollections(bridge.Evaluator.GlobalEnvironment, loaded.PackageName, collections, loaded.Schema, runtimeBindings);
+            RegisterLazyProviderCollections(bridge.Evaluator.GlobalEnvironment, loaded.PackageName, loaded.Instance, loaded.Schema, query, errors, warnings, runtimeBindings, diagLog);
         }
 
         foreach (var builtinProvider in _builtinProviders)
@@ -573,6 +570,59 @@ public static class Engine
         }
 
         // Register a provider proxy so "filesystem.Folders" member-access syntax works
+        env.Define(providerName, new CopProviderProxy(providerName, env));
+    }
+
+    /// <summary>
+    /// Registers lazy collections for a provider. Data is not loaded until a collection
+    /// is first accessed, avoiding expensive provider queries (e.g., Roslyn parsing)
+    /// for unused providers.
+    /// </summary>
+    private static void RegisterLazyProviderCollections(
+        Cop.Lang.Interpreter.Environment env, string providerName,
+        DataProvider provider, ProviderSchema schema, ProviderQuery query,
+        List<string> errors, List<string> warnings,
+        RuntimeBindings? bindings, Action<string>? diagLog)
+    {
+        // Shared lazy: all collections for this provider are loaded together on first access
+        var lazyData = new Lazy<Dictionary<string, List<object>>>(() =>
+        {
+            var collections = QueryProviderCollections(provider, schema, query, errors);
+            diagLog?.Invoke($"[diag] Provider '{providerName}' returned {collections.Count} collections: {string.Join(", ", collections.Select(c => $"{c.Key}({c.Value.Count})"))}");
+            WarnIfProviderEmpty(providerName, collections, schema, warnings);
+            return collections;
+        }, LazyThreadSafetyMode.ExecutionAndPublication);
+
+        var typeSchemas = schema.Types.ToDictionary(t => t.Name, StringComparer.Ordinal);
+        var collectionItemTypes = schema.Collections.ToDictionary(c => c.Name, c => c.ItemType, StringComparer.Ordinal);
+
+        foreach (var collection in schema.Collections)
+        {
+            var collName = collection.Name;
+            var lazy = new CopLazyCollection(() =>
+            {
+                var allCollections = lazyData.Value;
+                if (!allCollections.TryGetValue(collName, out var items) || items.Count == 0)
+                    return [];
+
+                IDynamicObjectAdapter adapter = DataObjectAdapter.Instance;
+                if (collectionItemTypes.TryGetValue(collName, out var itemType))
+                {
+                    if (items[0] is RecordView && typeSchemas.TryGetValue(itemType, out var typeSchema))
+                        adapter = new RecordViewAdapter(typeSchema.Properties, typeName: itemType);
+                    else if (items[0] is not DataObject && bindings?.Accessors is not null &&
+                             bindings.Accessors.TryGetValue(itemType, out var accessors))
+                        adapter = new ClrObjectAdapter(accessors, typeName: itemType,
+                            allAccessors: bindings.Accessors, clrTypeMappings: bindings.ClrTypeMappings);
+                }
+
+                return items.Select(item => (CopValue)new CopDynamicObject(item, adapter));
+            });
+
+            env.Define($"{providerName}.{collName}", lazy);
+            env.Define(collName, lazy);
+        }
+
         env.Define(providerName, new CopProviderProxy(providerName, env));
     }
 

@@ -85,13 +85,24 @@ public sealed class CopList : CopValue
 
 /// <summary>
 /// Lazy collection — items are produced on demand.
-/// Uses a factory function so the collection can be re-enumerated.
+/// Uses a factory function with memoization — the factory runs at most once,
+/// and subsequent calls return the cached result.
 /// </summary>
 public sealed class CopLazyCollection : CopValue
 {
-    private readonly Func<IEnumerable<CopValue>> _factory;
+    private Func<IEnumerable<CopValue>>? _factory;
+    private List<CopValue>? _cached;
+
     public CopLazyCollection(Func<IEnumerable<CopValue>> factory) => _factory = factory;
-    public IEnumerable<CopValue> Enumerate() => _factory();
+
+    public IEnumerable<CopValue> Enumerate()
+    {
+        if (_cached is not null) return _cached;
+        _cached = _factory!().ToList();
+        _factory = null; // release closure for GC
+        return _cached;
+    }
+
     public override string Display() => "[...]";
     public override string ToString() => Display();
 }
