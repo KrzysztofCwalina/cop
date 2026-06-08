@@ -277,33 +277,25 @@ public static class RunCommand
         string[]? allScriptFiles = null;
         if (userCheckFiles.Length > 0)
         {
-            var projectFiles = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
-            // In single-file mode, ensure the target file is loaded LAST so its commands
-            // take priority over same-named commands in sibling files.
             if (scopeToFile != null)
             {
-                var sorted = projectFiles
-                    .Where(f => !string.Equals(Path.GetFullPath(f), Path.GetFullPath(scopeToFile), StringComparison.OrdinalIgnoreCase))
-                    .OrderBy(f => f, StringComparer.Ordinal)
-                    .Append(scopeToFile)
-                    .ToArray();
-                allScriptFiles = [.. sorted, .. userCheckFiles];
+                // Single-file mode with user checks: load only the target file + user checks.
+                // No need to load all sibling .cop files — they would trigger unnecessary provider loading.
+                allScriptFiles = [scopeToFile, .. userCheckFiles];
             }
             else
             {
+                var projectFiles = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
                 allScriptFiles = [.. projectFiles, .. userCheckFiles];
             }
             AutoRestoreImports(UserChecksDirectory, diagLog);
         }
         else if (scopeToFile != null)
         {
-            // Single-file mode without user checks: load all files but put target file last
-            var projectFiles = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
-            allScriptFiles = projectFiles
-                .Where(f => !string.Equals(Path.GetFullPath(f), Path.GetFullPath(scopeToFile), StringComparison.OrdinalIgnoreCase))
-                .OrderBy(f => f, StringComparer.Ordinal)
-                .Append(scopeToFile)
-                .ToArray();
+            // Single-file mode without user checks: load ONLY the specified file.
+            // Loading all sibling .cop files would trigger transitive import resolution
+            // for every package in the directory tree, loading unnecessary providers.
+            allScriptFiles = [scopeToFile];
         }
 
         var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog, additionalFeedPaths: FindFeedPathsFromCwd(), scriptFiles: allScriptFiles);

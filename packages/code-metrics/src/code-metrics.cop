@@ -13,7 +13,7 @@ export command METRICS(violations, codebase) = {
     let errors = violations:count((v) => v.Severity == 'error')
     let warnings = violations:count((v) => v.Severity == 'warning')
     let info = violations:count((v) => v.Severity == 'info')
-    let loc = code.linesOfCode(codebase)
+    let loc = codebase.Lines:count((line) => line.Kind == 'code')
     let slopPerKloc = loc > 0 ? total * 1000 / loc : 0
     let errorsPerKloc = loc > 0 ? errors * 1000 / loc : 0
     let warningsPerKloc = loc > 0 ? warnings * 1000 / loc : 0
