@@ -57,7 +57,7 @@ public static class FilterEvaluator
             StringOp.StartsWith => s.StartsWith(sf.Value, StringComparison.OrdinalIgnoreCase),
             StringOp.EndsWith => s.EndsWith(sf.Value, StringComparison.OrdinalIgnoreCase),
             StringOp.Contains => s.Contains(sf.Value, StringComparison.OrdinalIgnoreCase),
-            StringOp.Matches => Regex.IsMatch(s, sf.Value, RegexOptions.IgnoreCase),
+            StringOp.Matches => RegexCache.IsMatch(s, sf.Value, RegexOptions.IgnoreCase),
             StringOp.Same => NormalizeIdentifier(s) == NormalizeIdentifier(sf.Value),
             _ => throw new ArgumentException($"Unknown string operation: {sf.Op}")
         };
@@ -170,8 +170,19 @@ public static class FilterEvaluator
 
     /// <summary>
     /// Normalize an identifier for convention-insensitive comparison (sm predicate).
-    /// Strips underscores, hyphens, and lowercases everything.
+    /// Strips underscores, hyphens, and lowercases everything in a single pass.
     /// </summary>
-    private static string NormalizeIdentifier(string s) =>
-        s.Replace("_", "").Replace("-", "").ToLowerInvariant();
+    private static string NormalizeIdentifier(string s)
+    {
+        var len = s.Length;
+        var chars = len <= 128 ? stackalloc char[len] : new char[len];
+        int pos = 0;
+        for (int i = 0; i < len; i++)
+        {
+            var c = s[i];
+            if (c != '_' && c != '-')
+                chars[pos++] = char.ToLowerInvariant(c);
+        }
+        return new string(chars[..pos]);
+    }
 }

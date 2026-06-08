@@ -1,3 +1,5 @@
+using Cop.Core;
+
 namespace Cop.Lang.Interpreter;
 
 /// <summary>
@@ -282,10 +284,9 @@ public static class StandardLibrary
         ffi.Register("concat", (args, env) =>
         {
             if (args.Count < 2) return args.Count > 0 ? args[0] : CopNull.Instance;
-            var left = CoerceToEnumerable(args[0]).ToList();
-            var right = CoerceToEnumerable(args[1]).ToList();
-            left.AddRange(right);
-            return new CopList(left);
+            var left = CoerceToEnumerable(args[0]);
+            var right = CoerceToEnumerable(args[1]);
+            return new CopList(left.Concat(right).ToList());
         });
 
         // push: collection.push(item) — append to end
@@ -311,8 +312,9 @@ public static class StandardLibrary
         {
             if (args.Count == 0) return new CopList([]);
             var items = CoerceToEnumerable(args[0]).ToList();
-            if (items.Count == 0) return new CopList([]);
-            return new CopList(items.Take(items.Count - 1).ToList());
+            if (items.Count <= 1) return new CopList([]);
+            items.RemoveAt(items.Count - 1);
+            return new CopList(items);
         });
 
         // elementAt: collection.elementAt(index) — item at zero-based index
@@ -539,7 +541,7 @@ public static class StandardLibrary
             var pattern = args[1].Display();
             try
             {
-                return CopBool.Of(System.Text.RegularExpressions.Regex.IsMatch(str, pattern));
+                return CopBool.Of(RegexCache.IsMatch(str, pattern));
             }
             catch
             {
@@ -624,6 +626,6 @@ public static class StandardLibrary
         // Simple wildcard: * matches any segment content
         var regexPattern = "^" + System.Text.RegularExpressions.Regex.Escape(normalizedPattern)
             .Replace("\\*", "[^/]*") + "$";
-        return System.Text.RegularExpressions.Regex.IsMatch(normalized, regexPattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return RegexCache.IsMatch(normalized, regexPattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     }
 }

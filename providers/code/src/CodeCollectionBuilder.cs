@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Cop.Core;
 using Cop.Lang;
 using Cop.Providers.SourceModel;
@@ -51,6 +52,35 @@ public static class CodeCollectionBuilder
             catch { /* ignore retry errors — the original empty result stands */ }
         }
 
+        // Compute cache fingerprint from file stats (fast: just stat calls, no file reading)
+        var fingerprint = ComputeFingerprint(rootPath, filePaths);
+        var cachePath = GetCachePath(rootPath);
+        var cachedFiles = SourceCacheSerializer.TryLoad(cachePath, fingerprint);
+
+        List<SourceFile> sorted;
+        if (cachedFiles != null)
+        {
+            // Cache hit: re-read raw text for each file and re-link references
+            sorted = RestoreFromCache(cachedFiles, rootPath, filePaths);
+        }
+        else
+        {
+            // Cache miss: parse all files
+            sorted = ParseAllFiles(filePaths, rootPath, parsers);
+
+            // Save to cache for next run
+            try { SourceCacheSerializer.Save(cachePath, fingerprint, sorted); }
+            catch { /* cache save failure is non-fatal */ }
+        }
+
+        return ExtractCollections(sorted, query.Collection, query.CollectionFilters);
+    }
+
+    /// <summary>
+    /// Parses all discovered source files in parallel. Used on cache miss.
+    /// </summary>
+    private static List<SourceFile> ParseAllFiles(List<string> filePaths, string rootPath, SourceParserRegistry parsers)
+    {
         var parseErrors = new System.Collections.Concurrent.ConcurrentBag<string>();
         var sourceFiles = new System.Collections.Concurrent.ConcurrentBag<SourceFile>();
         Parallel.ForEach(filePaths,
@@ -79,24 +109,7 @@ public static class CodeCollectionBuilder
 
                 var relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
                 var normalizedFile = sourceFile with { Path = relativePath };
-
-                for (int i = 0; i < normalizedFile.Statements.Count; i++)
-                {
-                    normalizedFile.Statements[i].File = normalizedFile;
-                    // Populate CopIgnore from comment on previous line
-                    var stmtLine = normalizedFile.Statements[i].Line;
-                    if (stmtLine >= 2 && normalizedFile.CommentLines.Contains(stmtLine - 1))
-                    {
-                        var prevLineText = normalizedFile.Lines[stmtLine - 2]; // 0-indexed
-                        var idx = prevLineText.IndexOf("cop-ignore:", StringComparison.Ordinal);
-                        if (idx >= 0)
-                            normalizedFile.Statements[i].CopIgnore = prevLineText[(idx + "cop-ignore:".Length)..].Trim();
-                    }
-                }
-
-                for (int i = 0; i < normalizedFile.Types.Count; i++)
-                    normalizedFile.Types[i] = normalizedFile.Types[i] with { File = normalizedFile };
-
+                LinkReferences(normalizedFile);
                 sourceFiles.Add(normalizedFile);
             });
 
@@ -106,8 +119,91 @@ public static class CodeCollectionBuilder
                 Console.Error.WriteLine(err);
         }
 
-        var sorted = sourceFiles.OrderBy(f => f.Path, StringComparer.Ordinal).ToList();
-        return ExtractCollections(sorted, query.Collection, query.CollectionFilters);
+        return sourceFiles.OrderBy(f => f.Path, StringComparer.Ordinal).ToList();
+    }
+
+    /// <summary>
+    /// Restores source files from cache, re-linking references.
+    /// RawText is included in the cache, so no file re-reading needed.
+    /// </summary>
+    private static List<SourceFile> RestoreFromCache(List<SourceFile> cachedFiles, string rootPath, List<string> filePaths)
+    {
+        foreach (var file in cachedFiles)
+            LinkReferences(file);
+        return cachedFiles;
+    }
+
+    /// <summary>
+    /// Links File/CopIgnore references on types and statements after construction/cache load.
+    /// </summary>
+    private static void LinkReferences(SourceFile file)
+    {
+        for (int i = 0; i < file.Statements.Count; i++)
+        {
+            file.Statements[i].File = file;
+            var stmtLine = file.Statements[i].Line;
+            if (stmtLine >= 2 && file.CommentLines.Contains(stmtLine - 1))
+            {
+                var prevLineText = file.Lines[stmtLine - 2]; // 0-indexed
+                var idx = prevLineText.IndexOf("cop-ignore:", StringComparison.Ordinal);
+                if (idx >= 0)
+                    file.Statements[i].CopIgnore = prevLineText[(idx + "cop-ignore:".Length)..].Trim();
+            }
+        }
+
+        for (int i = 0; i < file.Types.Count; i++)
+            file.Types[i] = file.Types[i] with { File = file };
+
+        for (int i = 0; i < file.Regions.Count; i++)
+        {
+            if (file.Regions[i].File is null)
+                file.Regions[i] = file.Regions[i] with { File = file };
+        }
+    }
+
+    /// <summary>
+    /// Computes a fingerprint from file stats (paths, sizes, modification times).
+    /// This is fast — only stat calls, no file reading.
+    /// </summary>
+    private static byte[] ComputeFingerprint(string rootPath, List<string> filePaths)
+    {
+        using var sha = SHA256.Create();
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        // Sort for deterministic fingerprint regardless of discovery order
+        var sorted = filePaths.OrderBy(p => p, StringComparer.Ordinal);
+        foreach (var path in sorted)
+        {
+            var relative = Path.GetRelativePath(rootPath, path);
+            writer.Write(relative);
+            try
+            {
+                var info = new FileInfo(path);
+                writer.Write(info.Length);
+                writer.Write(info.LastWriteTimeUtc.Ticks);
+            }
+            catch
+            {
+                writer.Write(0L);
+                writer.Write(0L);
+            }
+        }
+        writer.Flush();
+        return sha.ComputeHash(ms.ToArray());
+    }
+
+    /// <summary>
+    /// Gets the cache file path for a given root directory.
+    /// </summary>
+    private static string GetCachePath(string rootPath)
+    {
+        var hash = Convert.ToHexStringLower(
+            SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(rootPath)));
+        var cacheDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".cop", "cache");
+        return Path.Combine(cacheDir, $"source-{hash[..16]}.bin");
     }
 
     /// <summary>

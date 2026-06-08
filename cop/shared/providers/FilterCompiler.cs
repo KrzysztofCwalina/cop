@@ -78,9 +78,8 @@ public static class FilterCompiler
                 StringOp.Contains => value.Contains(sf.Value, StringComparison.OrdinalIgnoreCase),
                 StringOp.Equals => value.Equals(sf.Value, StringComparison.OrdinalIgnoreCase),
                 StringOp.Same => NormalizeIdentifier(value) == NormalizeIdentifier(sf.Value),
-                StringOp.Matches => System.Text.RegularExpressions.Regex.IsMatch(
-                    value, sf.Value, System.Text.RegularExpressions.RegexOptions.None,
-                    TimeSpan.FromSeconds(1)),
+                StringOp.Matches => RegexCache.IsMatch(
+                    value, sf.Value, System.Text.RegularExpressions.RegexOptions.None),
                 _ => true
             };
         };
@@ -282,6 +281,17 @@ public static class FilterCompiler
         };
     }
 
-    private static string NormalizeIdentifier(string s) =>
-        s.Replace("_", "").Replace("-", "").ToLowerInvariant();
+    private static string NormalizeIdentifier(string s)
+    {
+        var len = s.Length;
+        var chars = len <= 128 ? stackalloc char[len] : new char[len];
+        int pos = 0;
+        for (int i = 0; i < len; i++)
+        {
+            var c = s[i];
+            if (c != '_' && c != '-')
+                chars[pos++] = char.ToLowerInvariant(c);
+        }
+        return new string(chars[..pos]);
+    }
 }

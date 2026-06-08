@@ -24,15 +24,15 @@ public class CSharpSourceParser : ISourceParser
             .Where(u => !string.IsNullOrWhiteSpace(u))
             .ToList();
 
-        // Extract namespace
+        // Single-pass: extract namespace and top-level types in one traversal
         string? ns = null;
-        var nsDecl = root.DescendantNodes().OfType<BaseNamespaceDeclarationSyntax>().FirstOrDefault();
-        if (nsDecl != null) ns = nsDecl.Name.ToString();
-
         foreach (var node in root.DescendantNodes())
         {
             switch (node)
             {
+                case BaseNamespaceDeclarationSyntax nsDecl when ns is null:
+                    ns = nsDecl.Name.ToString();
+                    break;
                 case ClassDeclarationSyntax or StructDeclarationSyntax
                     or InterfaceDeclarationSyntax or RecordDeclarationSyntax:
                     if (node.Parent is not TypeDeclarationSyntax)
