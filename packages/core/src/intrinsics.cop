@@ -5,9 +5,8 @@
 
 ## Returns a dynamic object accessor for the named provider.
 ## Properties on the returned object query the provider's collections.
-## The options argument is JSON-serialized and passed to the provider.
-## Pass nic for default, or a string/object with provider-specific configuration.
-## Example: provider('csharp', nic) or provider('csharp', 'lib/MyLib.dll')
+## Pass a path string for explicit target, or omit for default target directory.
+## Example: provider('csharp') or provider('csharp', 'lib/MyLib.dll')
 export function provider(name : string, options : object) : object => intrinsic
 
 ## Returns an async streaming collection from the named provider.

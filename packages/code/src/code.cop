@@ -18,6 +18,7 @@ export type Type = {
     Kind : TypeKind,
     Modifiers : int,
     BaseTypes : [string],
+    Interfaces : [string],
     Constructors : [Method],
     Methods : [Method],
     MethodNames : [string],
@@ -121,7 +122,8 @@ export type Statement = {
     Ancestors : [Statement],
     Condition : string?,
     Expression : string?,
-    CopIgnore : string
+    CopIgnore : string,
+    ConstructedTypeInterfaces : [string]
 }
 
 export type Call = Statement & {
@@ -194,7 +196,9 @@ export type Line = {
     Kind : LineKind,
     File : File?,
     Source : string,
-    CopIgnore : string
+    CopIgnore : string,
+    PreviousText : string,
+    NextText : string
 }
 
 export predicate isComment(Line) => Line.Kind == comment
@@ -218,13 +222,19 @@ export type File = {
     Types : [Type]
 }
 
+export type ProjectProperty = {
+    Name : string,
+    Value : string
+}
+
 export type Project = {
     Name : string,
     Path : string,
     Language : Language?,
     References : [string],
     Packages : [string],
-    Frameworks : [string]
+    Frameworks : [string],
+    Properties : [ProjectProperty]
 }
 
 export type Codebase = {
@@ -236,11 +246,6 @@ export type Codebase = {
     Regions : [Region],
     Projects : [Project]
 }
-
-## Creates a merged codebase from multiple language providers.
-## Pass provider names as arguments: code.codebase('csharp', 'python', 'javascript')
-## The returned Codebase lazily merges Types, Statements, Lines, etc. from all specified providers.
-export function codebase(providers : [string]) : Codebase = intrinsic
 
 # Language filter predicates
 export predicate isCSharp(Type) => Type.File.Language == csharp

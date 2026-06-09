@@ -3,7 +3,7 @@
 
 import code-analysis
 
-let data = provider('analysis-trivy', nic)
+let data = provider('analysis-trivy')
 
 ## Returns the Trivy violations collection.
 export function diagnostics() : [Violation] => data.Violations

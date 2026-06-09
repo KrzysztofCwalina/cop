@@ -14,6 +14,16 @@ public class CSharpSourceParser : ISourceParser
     public override SourceFile? Parse(string filePath, string sourceText)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceText);
+        return ParseWithSemantics(filePath, sourceText, tree, model: null);
+    }
+
+    /// <summary>
+    /// Parses a C# file using a pre-built syntax tree and optional semantic model.
+    /// When a semantic model is provided, type resolution uses Roslyn's semantic APIs
+    /// instead of string-based heuristics.
+    /// </summary>
+    public SourceFile? ParseWithSemantics(string filePath, string sourceText, SyntaxTree tree, SemanticModel? model)
+    {
         var root = tree.GetCompilationUnitRoot();
 
         var types = new List<TypeDeclaration>();
@@ -72,6 +82,13 @@ public class CSharpSourceParser : ISourceParser
             }
         }
 
+        // Enrich with semantic information when model is available
+        if (model != null)
+        {
+            try { EnrichWithSemantics(tree, model, types, allStatements); }
+            catch { /* graceful degradation — syntax data still valid */ }
+        }
+
         return new SourceFile(filePath, "csharp", types, allStatements, sourceText)
         {
             Usings = usings,
@@ -79,6 +96,112 @@ public class CSharpSourceParser : ISourceParser
             Regions = ExtractRegions(root, sourceText),
             CommentLines = ExtractCommentLines(root, sourceText)
         };
+    }
+
+    /// <summary>
+    /// Enriches already-extracted types and statements with semantic information from the model.
+    /// Called after syntax extraction to add interface lists and accurate type resolution.
+    /// </summary>
+    private static void EnrichWithSemantics(SyntaxTree tree, SemanticModel model, List<TypeDeclaration> types, List<StatementInfo> allStatements)
+    {
+        var root = tree.GetCompilationUnitRoot();
+
+        // Build lookup maps by line number for fast matching
+        var typesByLine = new Dictionary<int, TypeDeclaration>();
+        foreach (var t in types)
+            typesByLine[t.Line] = t;
+
+        // Enrich type declarations with interface information
+        foreach (var node in root.DescendantNodes().OfType<TypeDeclarationSyntax>())
+        {
+            var line = node.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+            if (typesByLine.TryGetValue(line, out var typeDecl))
+            {
+                try
+                {
+                    var symbol = model.GetDeclaredSymbol(node);
+                    if (symbol is INamedTypeSymbol namedType)
+                    {
+                        typeDecl.Interfaces = namedType.AllInterfaces
+                            .Select(i => i.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat))
+                            .ToList();
+                    }
+                }
+                catch { /* graceful degradation if semantic resolution fails */ }
+            }
+        }
+
+        // Enrich object-creation statements with constructed type interfaces
+        var stmtsByLine = new Dictionary<int, List<StatementInfo>>();
+        foreach (var s in allStatements)
+        {
+            if (!stmtsByLine.TryGetValue(s.Line, out var list))
+            {
+                list = [];
+                stmtsByLine[s.Line] = list;
+            }
+            list.Add(s);
+        }
+
+        foreach (var node in root.DescendantNodes())
+        {
+            if (node is ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax)
+            {
+                var line = node.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+                if (stmtsByLine.TryGetValue(line, out var stmts))
+                {
+                    try
+                    {
+                        var typeInfo = model.GetTypeInfo(node);
+                        if (typeInfo.Type is INamedTypeSymbol createdType)
+                        {
+                            var interfaces = createdType.AllInterfaces
+                                .Select(i => i.Name)
+                                .ToList();
+
+                            // Match to the statement that has a "new" kind or contains this type
+                            foreach (var stmt in stmts)
+                            {
+                                if (stmt.Kind == "new" || stmt.Kind == "call")
+                                {
+                                    stmt.ConstructedTypeInterfaces = interfaces;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    catch { /* graceful degradation */ }
+                }
+            }
+            // Resolve method call type names from semantic model
+            else if (node is InvocationExpressionSyntax invocation)
+            {
+                var line = node.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+                if (stmtsByLine.TryGetValue(line, out var stmts))
+                {
+                    try
+                    {
+                        var symbolInfo = model.GetSymbolInfo(invocation);
+                        if (symbolInfo.Symbol is IMethodSymbol methodSymbol)
+                        {
+                            var containingType = methodSymbol.ContainingType?.Name;
+                            if (containingType != null)
+                            {
+                                foreach (var stmt in stmts)
+                                {
+                                    if (stmt.Kind == "call" || stmt.Kind == "await")
+                                    {
+                                        stmt.TypeName = containingType;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+                }
+            }
+        }
     }
 
     private static void FlattenTypeStatements(TypeDeclaration type, List<StatementInfo> allStatements)

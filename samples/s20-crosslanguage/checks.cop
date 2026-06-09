@@ -1,7 +1,10 @@
 # Cross-language code analysis.
-# Uses the generic 'code' package to write rules that apply to C#, Python, and JS.
+# Uses explicit providers to write rules that apply to C#, Python, and JS.
 # Run with: cop run
 import code
+import csharp
+
+let cb : Codebase = provider('csharp')
 
 # Predicate: method has more than 50 statements
 predicate isLong(Method) => Method.Statements.Count > 50
@@ -9,5 +12,5 @@ predicate isLong(Method) => Method.Statements.Count > 50
 # Predicate: type has any long method
 predicate hasLongMethod(Type) => Type.Methods:any(isLong)
 
-# Works across all languages — flags any type with overly long methods
-command MAIN = foreach Code.Types:hasLongMethod => print('{item.Name} in {item.File.Path} has a method with too many statements')
+# Use explicit provider — flags types with overly long methods
+command MAIN = foreach cb.Types:hasLongMethod => print('{item.Name} in {item.File.Path} has a method with too many statements')

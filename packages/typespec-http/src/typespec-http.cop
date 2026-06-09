@@ -48,7 +48,7 @@ export type HttpService = {
 }
 
 # Provides TypeSpec HTTP protocol graph data
-let tsp = provider('typespec-http', nic)
+let tsp = provider('typespec-http')
 
 ## Returns all HTTP operations defined in the TypeSpec project.
 export function operations() : [HttpOperation] => tsp.Operations

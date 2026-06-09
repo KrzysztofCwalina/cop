@@ -2,12 +2,15 @@
 # Multiple :filters are AND-combined to produce smaller subsets.
 # Use :! to negate a predicate.
 import code
+import csharp
+
+let cb : Codebase = provider('csharp')
 
 predicate isClient(Type) => Type.Name:endsWith('Client')
 predicate isOptions(Type) => Type.Name:endsWith('Options')
 
 # Chain predicates: clients that are NOT options types
-let Clients = Code.Types:isClient:!isOptions
+let Clients = cb.Types:isClient:!isOptions
 
 # Further narrowing: public clients that are not sealed
 let UnsealedClients = Clients:!isSealed:isPublic

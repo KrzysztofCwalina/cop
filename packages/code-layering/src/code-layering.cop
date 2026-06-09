@@ -94,14 +94,14 @@ export predicate isNotInLayer(Project) => !Project.Name:in(all-known-projects)
 #   predicate isNotInLayer(Project) => !Project.Name:in(all-known-projects)
 #
 #   # Produce violations
-#   export let layer-violations = Code.Projects:presentationReferencesData
+#   export let layer-violations = csharp.projects():presentationReferencesData
 #       :toError('Presentation project {item.Name} must not reference Data layer directly')
-#       + Code.Projects:dataReferencesPresentation
+#       + csharp.projects():dataReferencesPresentation
 #       :toError('Data project {item.Name} must not reference Presentation layer')
-#       + Code.Projects:businessReferencesPresentation
+#       + csharp.projects():businessReferencesPresentation
 #       :toError('Business project {item.Name} must not reference Presentation layer')
 #
-#   export let uncategorized = Code.Projects:isNotInLayer
+#   export let uncategorized = csharp.projects():isNotInLayer
 #       :toWarning('Project {item.Name} is not assigned to any architectural layer')
 #
 #   CHECK code-layering => layer-violations + uncategorized

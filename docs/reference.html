@@ -159,7 +159,8 @@ const categories = [
     "packages": [
       "code",
       "code-analysis",
-      "code-layering"
+      "code-layering",
+      "code-metrics"
     ]
   },
   {
@@ -408,15 +409,15 @@ const packages = {
     "samples": [
       {
         "title": "Count by language",
-        "code": "import code\nimport csharp\nimport python\nimport javascript\n\n# Create a unified codebase from all three language providers\nlet cb = code.codebase('csharp', 'python', 'javascript')\n\n# Group and count by language - demonstrates language-independent querying\ncommand MAIN = \n    foreach cb.Types:isCSharp => 'C# types: {collection.count()}' |\n    foreach cb.Types:isPython => 'Python types: {collection.count()}' |\n    foreach cb.Types:isJavaScript => 'JavaScript types: {collection.count()}'"
+        "code": "import code\nimport csharp\nimport python\nimport javascript\n\n# Use explicit provider proxies — each accesses its own collections\nlet cs : Codebase = provider('csharp')\nlet py : Codebase = provider('python')\nlet js : Codebase = provider('javascript')\n\n# Count types per language using explicit provider access\ncommand MAIN = \n    foreach cs.Types => 'C# types: {collection.count()}' |\n    foreach py.Types => 'Python types: {collection.count()}' |\n    foreach js.Types => 'JavaScript types: {collection.count()}'"
       },
       {
         "title": "Find long methods",
-        "code": "import code\nimport csharp\nimport python\nimport javascript\n\n# Language-independent predicate works on any Method regardless of source language\npredicate isLong(Method) => Method.Statements.count() > 50\n\n# Create a unified codebase from all three language providers\nlet cb = code.codebase('csharp', 'python', 'javascript')\n\ncommand MAIN = foreach cb.Types => '{Type.Name} ({Type.File.Language})':Methods:isLong\n    => '  {Method.Name} ({Method.Statements.count()} statements)'"
+        "code": "import code\nimport csharp\n\n# Language-independent predicate works on any Method regardless of source language\npredicate isLong(Method) => Method.Statements.count() > 50\n\n# Use explicit provider proxy\nlet cb : Codebase = provider('csharp')\n\ncommand MAIN = foreach cb.Types => '{item.Name} ({item.File.Language})':Methods:isLong\n    => '  {item.Name} ({item.Statements.count()} statements)'"
       },
       {
         "title": "List all public classes",
-        "code": "import code\nimport csharp\nimport python\nimport javascript\n\n# Create a unified codebase from all three language providers\nlet cb = code.codebase('csharp', 'python', 'javascript')\n\ncommand MAIN = foreach cb.Types:isPublic => '{Type.Name} ({Type.Kind}) - {Type.File.Language}'"
+        "code": "import code\nimport csharp\n\n# Use explicit provider proxy\nlet cb : Codebase = provider('csharp')\n\ncommand MAIN = foreach cb.Types:isPublic => '{item.Name} ({item.Kind}) - {item.File.Language}'"
       }
     ],
     "collections": [],
@@ -473,6 +474,11 @@ const packages = {
           },
           {
             "name": "BaseTypes",
+            "type": "[string]",
+            "desc": ""
+          },
+          {
+            "name": "Interfaces",
             "type": "[string]",
             "desc": ""
           },
@@ -549,7 +555,7 @@ const packages = {
         ]
       },
       "Method": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L37",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L38",
         "props": [
           {
             "name": "Name",
@@ -599,12 +605,12 @@ const packages = {
         ]
       },
       "Constructor": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L49",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L50",
         "baseType": "Method",
         "props": []
       },
       "Field": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L51",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L52",
         "props": [
           {
             "name": "Name",
@@ -629,7 +635,7 @@ const packages = {
         ]
       },
       "Property": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L58",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L59",
         "props": [
           {
             "name": "Name",
@@ -674,7 +680,7 @@ const packages = {
         ]
       },
       "Event": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L69",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L70",
         "props": [
           {
             "name": "Name",
@@ -699,7 +705,7 @@ const packages = {
         ]
       },
       "Api": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L76",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L77",
         "props": [
           {
             "name": "Kind",
@@ -739,7 +745,7 @@ const packages = {
         ]
       },
       "Parameter": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L86",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L87",
         "props": [
           {
             "name": "Name",
@@ -779,7 +785,7 @@ const packages = {
         ]
       },
       "TypeReference": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L96",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L97",
         "props": [
           {
             "name": "Name",
@@ -809,7 +815,7 @@ const packages = {
         ]
       },
       "Statement": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L104",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L105",
         "props": [
           {
             "name": "Kind",
@@ -862,6 +868,11 @@ const packages = {
             "desc": ""
           },
           {
+            "name": "Braced",
+            "type": "bool",
+            "desc": ""
+          },
+          {
             "name": "File",
             "type": "File?",
             "desc": ""
@@ -900,31 +911,41 @@ const packages = {
             "name": "Expression",
             "type": "string?",
             "desc": ""
+          },
+          {
+            "name": "CopIgnore",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "ConstructedTypeInterfaces",
+            "type": "[string]",
+            "desc": ""
           }
         ]
       },
       "Call": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L125",
-        "baseType": "Statement",
-        "props": []
-      },
-      "Declaration": {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L129",
         "baseType": "Statement",
         "props": []
       },
-      "ErrorHandler": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L131",
-        "baseType": "Statement",
-        "props": []
-      },
-      "Attribute": {
+      "Declaration": {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L133",
         "baseType": "Statement",
         "props": []
       },
+      "ErrorHandler": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L135",
+        "baseType": "Statement",
+        "props": []
+      },
+      "Attribute": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L137",
+        "baseType": "Statement",
+        "props": []
+      },
       "Line": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L188",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L193",
         "props": [
           {
             "name": "Text",
@@ -950,11 +971,26 @@ const packages = {
             "name": "Source",
             "type": "string",
             "desc": ""
+          },
+          {
+            "name": "CopIgnore",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "PreviousText",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "NextText",
+            "type": "string",
+            "desc": ""
           }
         ]
       },
       "Region": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L199",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L207",
         "props": [
           {
             "name": "Name",
@@ -994,7 +1030,7 @@ const packages = {
         ]
       },
       "File": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L209",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L217",
         "props": [
           {
             "name": "Path",
@@ -1023,8 +1059,23 @@ const packages = {
           }
         ]
       },
+      "ProjectProperty": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L225",
+        "props": [
+          {
+            "name": "Name",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Value",
+            "type": "string",
+            "desc": ""
+          }
+        ]
+      },
       "Project": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L217",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L230",
         "props": [
           {
             "name": "Name",
@@ -1055,11 +1106,16 @@ const packages = {
             "name": "Frameworks",
             "type": "[string]",
             "desc": ""
+          },
+          {
+            "name": "Properties",
+            "type": "[ProjectProperty]",
+            "desc": ""
           }
         ]
       },
       "Codebase": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L226",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L240",
         "props": [
           {
             "name": "Files",
@@ -1104,373 +1160,370 @@ const packages = {
         "name": "isPublic",
         "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L136"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L140"
       },
       {
         "name": "isSealed",
         "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L137"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L141"
       },
       {
         "name": "isAbstract",
         "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L138"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L142"
       },
       {
         "name": "isStatic",
         "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L139"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L143"
       },
       {
         "name": "isDocumented",
         "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L140"
-      },
-      {
-        "name": "isPublic",
-        "appliesTo": "Method",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L142"
-      },
-      {
-        "name": "isProtected",
-        "appliesTo": "Method",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L143"
-      },
-      {
-        "name": "isPrivate",
-        "appliesTo": "Method",
-        "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L144"
       },
       {
-        "name": "isInternal",
-        "appliesTo": "Method",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L145"
-      },
-      {
-        "name": "isAsync",
+        "name": "isPublic",
         "appliesTo": "Method",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L146"
       },
       {
-        "name": "isStatic",
+        "name": "isProtected",
         "appliesTo": "Method",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L147"
       },
       {
-        "name": "isAbstract",
+        "name": "isPrivate",
         "appliesTo": "Method",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L148"
       },
       {
-        "name": "isVirtual",
+        "name": "isInternal",
         "appliesTo": "Method",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L149"
       },
       {
-        "name": "isOverride",
+        "name": "isAsync",
         "appliesTo": "Method",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L150"
       },
       {
-        "name": "isDocumented",
+        "name": "isStatic",
         "appliesTo": "Method",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L151"
       },
       {
-        "name": "isPublic",
-        "appliesTo": "Field",
+        "name": "isAbstract",
+        "appliesTo": "Method",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L152"
+      },
+      {
+        "name": "isVirtual",
+        "appliesTo": "Method",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L153"
       },
       {
-        "name": "isPrivate",
-        "appliesTo": "Field",
+        "name": "isOverride",
+        "appliesTo": "Method",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L154"
       },
       {
-        "name": "isProtected",
-        "appliesTo": "Field",
+        "name": "isDocumented",
+        "appliesTo": "Method",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L155"
       },
       {
-        "name": "isInternal",
-        "appliesTo": "Field",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L156"
-      },
-      {
-        "name": "isStatic",
+        "name": "isPublic",
         "appliesTo": "Field",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L157"
       },
       {
-        "name": "isReadonly",
+        "name": "isPrivate",
         "appliesTo": "Field",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L158"
       },
       {
-        "name": "isConst",
+        "name": "isProtected",
         "appliesTo": "Field",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L159"
       },
       {
-        "name": "isPublic",
-        "appliesTo": "Property",
+        "name": "isInternal",
+        "appliesTo": "Field",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L160"
+      },
+      {
+        "name": "isStatic",
+        "appliesTo": "Field",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L161"
       },
       {
-        "name": "isProtected",
-        "appliesTo": "Property",
+        "name": "isReadonly",
+        "appliesTo": "Field",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L162"
       },
       {
-        "name": "isPrivate",
-        "appliesTo": "Property",
+        "name": "isConst",
+        "appliesTo": "Field",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L163"
       },
       {
-        "name": "isInternal",
-        "appliesTo": "Property",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L164"
-      },
-      {
-        "name": "isStatic",
+        "name": "isPublic",
         "appliesTo": "Property",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L165"
       },
       {
-        "name": "isAbstract",
+        "name": "isProtected",
         "appliesTo": "Property",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L166"
       },
       {
-        "name": "isVirtual",
+        "name": "isPrivate",
         "appliesTo": "Property",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L167"
       },
       {
-        "name": "isOverride",
+        "name": "isInternal",
         "appliesTo": "Property",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L168"
       },
       {
-        "name": "hasGetter",
+        "name": "isStatic",
         "appliesTo": "Property",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L169"
       },
       {
-        "name": "hasSetter",
+        "name": "isAbstract",
         "appliesTo": "Property",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L170"
       },
       {
-        "name": "isDocumented",
+        "name": "isVirtual",
         "appliesTo": "Property",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L171"
       },
       {
-        "name": "isPublic",
-        "appliesTo": "Event",
+        "name": "isOverride",
+        "appliesTo": "Property",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L172"
+      },
+      {
+        "name": "hasGetter",
+        "appliesTo": "Property",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L173"
       },
       {
-        "name": "isProtected",
-        "appliesTo": "Event",
+        "name": "hasSetter",
+        "appliesTo": "Property",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L174"
       },
       {
-        "name": "isPrivate",
-        "appliesTo": "Event",
+        "name": "isDocumented",
+        "appliesTo": "Property",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L175"
       },
       {
-        "name": "isInternal",
-        "appliesTo": "Event",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L176"
-      },
-      {
-        "name": "isStatic",
+        "name": "isPublic",
         "appliesTo": "Event",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L177"
       },
       {
+        "name": "isProtected",
+        "appliesTo": "Event",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L178"
+      },
+      {
+        "name": "isPrivate",
+        "appliesTo": "Event",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L179"
+      },
+      {
+        "name": "isInternal",
+        "appliesTo": "Event",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L180"
+      },
+      {
+        "name": "isStatic",
+        "appliesTo": "Event",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L181"
+      },
+      {
         "name": "isCall",
         "appliesTo": "Statement",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L180"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L184"
       },
       {
         "name": "isDeclaration",
         "appliesTo": "Statement",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L181"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L185"
       },
       {
         "name": "isErrorHandler",
         "appliesTo": "Statement",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L182"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L186"
       },
       {
         "name": "isAttribute",
         "appliesTo": "Statement",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L183"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L187"
+      },
+      {
+        "name": "isControlFlow",
+        "appliesTo": "Statement",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L188"
       },
       {
         "name": "isGeneric",
         "appliesTo": "ErrorHandler",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L186"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L191"
       },
       {
         "name": "isComment",
         "appliesTo": "Line",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L196"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L204"
       },
       {
         "name": "isBlank",
         "appliesTo": "Line",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L197"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L205"
       },
       {
         "name": "isCSharp",
         "appliesTo": "Type",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L242"
-      },
-      {
-        "name": "isCSharp",
-        "appliesTo": "Statement",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L243"
-      },
-      {
-        "name": "isCSharp",
-        "appliesTo": "Line",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L244"
-      },
-      {
-        "name": "isCSharp",
-        "appliesTo": "Region",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L245"
-      },
-      {
-        "name": "isCSharp",
-        "appliesTo": "Api",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L246"
-      },
-      {
-        "name": "isPython",
-        "appliesTo": "Type",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L248"
-      },
-      {
-        "name": "isPython",
-        "appliesTo": "Statement",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L249"
-      },
-      {
-        "name": "isPython",
-        "appliesTo": "Line",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L250"
-      },
-      {
-        "name": "isPython",
-        "appliesTo": "Region",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L251"
       },
       {
+        "name": "isCSharp",
+        "appliesTo": "Statement",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L252"
+      },
+      {
+        "name": "isCSharp",
+        "appliesTo": "Line",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L253"
+      },
+      {
+        "name": "isCSharp",
+        "appliesTo": "Region",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L254"
+      },
+      {
+        "name": "isCSharp",
+        "appliesTo": "Api",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L255"
+      },
+      {
+        "name": "isPython",
+        "appliesTo": "Type",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L257"
+      },
+      {
+        "name": "isPython",
+        "appliesTo": "Statement",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L258"
+      },
+      {
+        "name": "isPython",
+        "appliesTo": "Line",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L259"
+      },
+      {
+        "name": "isPython",
+        "appliesTo": "Region",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L260"
+      },
+      {
         "name": "isPython",
         "appliesTo": "Api",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L252"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L261"
       },
       {
         "name": "isJavaScript",
         "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L254"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L263"
       },
       {
         "name": "isJavaScript",
         "appliesTo": "Statement",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L255"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L264"
       },
       {
         "name": "isJavaScript",
         "appliesTo": "Line",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L256"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L265"
       },
       {
         "name": "isJavaScript",
         "appliesTo": "Region",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L257"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L266"
       },
       {
         "name": "isJavaScript",
         "appliesTo": "Api",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L258"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L267"
       }
     ],
-    "functions": [
-      {
-        "name": "codebase",
-        "params": "providers: [string]",
-        "returns": "Codebase",
-        "appliesTo": "[string]",
-        "desc": "Creates a merged codebase from multiple language providers.\nPass provider names as arguments: code.codebase('csharp', 'python', 'javascript')\nThe returned Codebase lazily merges Types, Statements, Lines, etc. from all specified providers.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L239"
-      }
-    ],
+    "functions": [],
     "checks": [],
     "commands": []
   },
@@ -1480,24 +1533,22 @@ const packages = {
     "samples": [
       {
         "title": "Create a simple check",
-        "code": "import code\nimport code-analysis\n\npredicate isTooLarge(Type) =>\n    Type.Methods.Count:greaterThan(20)\n\nlet violations = Types:isTooLarge\n    :toWarning('Type {item.Name} has too many methods')\n\nCHECK violations"
+        "code": "import code\nimport csharp\nimport code-analysis\n\nlet cb : Codebase = provider('csharp')\n\npredicate isTooLarge(Type) =>\n    Type.Methods.Count:greaterThan(20)\n\nlet violations = cb.Types:isTooLarge\n    :toWarning('Type {item.Name} has too many methods')\n\ncommand main = CHECK violations"
       }
     ],
     "collections": [],
-    "enums": [
-      {
-        "name": "Severity",
-        "values": "error|warning|info",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L8"
-      }
-    ],
     "types": {
       "Violation": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L10",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L8",
         "props": [
           {
             "name": "Severity",
-            "type": "Severity",
+            "type": "float",
+            "desc": ""
+          },
+          {
+            "name": "Certainty",
+            "type": "float",
             "desc": ""
           },
           {
@@ -1519,12 +1570,17 @@ const packages = {
             "name": "Source",
             "type": "string",
             "desc": ""
+          },
+          {
+            "name": "CopIgnore",
+            "type": "string",
+            "desc": ""
           }
         ]
       },
       "TextFilePosition": {
         "desc": "A type that has a source location (file path and line number).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L19",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L25",
         "isTrait": true,
         "props": [
           {
@@ -1536,11 +1592,16 @@ const packages = {
             "name": "line",
             "type": "(item: T) => int",
             "desc": ""
+          },
+          {
+            "name": "copIgnore",
+            "type": "(item: T) => string",
+            "desc": ""
           }
         ]
       },
       "Statement": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L25",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L32",
         "baseType": "TextFilePosition",
         "props": [
           {
@@ -1550,13 +1611,18 @@ const packages = {
           },
           {
             "name": "line",
+            "type": "computed",
+            "desc": ""
+          },
+          {
+            "name": "copIgnore",
             "type": "computed",
             "desc": ""
           }
         ]
       },
       "Type": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L26",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L33",
         "baseType": "TextFilePosition",
         "props": [
           {
@@ -1566,13 +1632,18 @@ const packages = {
           },
           {
             "name": "line",
+            "type": "computed",
+            "desc": ""
+          },
+          {
+            "name": "copIgnore",
             "type": "computed",
             "desc": ""
           }
         ]
       },
       "Api": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L27",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L34",
         "baseType": "TextFilePosition",
         "props": [
           {
@@ -1582,13 +1653,18 @@ const packages = {
           },
           {
             "name": "line",
+            "type": "computed",
+            "desc": ""
+          },
+          {
+            "name": "copIgnore",
             "type": "computed",
             "desc": ""
           }
         ]
       },
       "Line": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L28",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L35",
         "baseType": "TextFilePosition",
         "props": [
           {
@@ -1598,13 +1674,18 @@ const packages = {
           },
           {
             "name": "line",
+            "type": "computed",
+            "desc": ""
+          },
+          {
+            "name": "copIgnore",
             "type": "computed",
             "desc": ""
           }
         ]
       },
       "Region": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L29",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L36",
         "baseType": "TextFilePosition",
         "props": [
           {
@@ -1614,13 +1695,18 @@ const packages = {
           },
           {
             "name": "line",
+            "type": "computed",
+            "desc": ""
+          },
+          {
+            "name": "copIgnore",
             "type": "computed",
             "desc": ""
           }
         ]
       },
       "Folder": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L30",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L37",
         "baseType": "TextFilePosition",
         "props": [
           {
@@ -1630,6 +1716,11 @@ const packages = {
           },
           {
             "name": "line",
+            "type": "computed",
+            "desc": ""
+          },
+          {
+            "name": "copIgnore",
             "type": "computed",
             "desc": ""
           }
@@ -1638,33 +1729,60 @@ const packages = {
     },
     "predicates": [
       {
+        "name": "isNotIgnored",
+        "appliesTo": "Violation",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L99"
+      },
+      {
         "name": "isSyncWhenAsyncExists",
         "appliesTo": "Statement",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L65"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L106"
       }
     ],
     "functions": [
       {
+        "name": "severityLabel",
+        "params": "Violation: Violation",
+        "returns": "string",
+        "desc": "Maps numeric severity to a display label.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L19"
+      },
+      {
         "name": "toError",
         "params": "TextFilePosition: TextFilePosition, message: string",
         "returns": "Violation",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L33"
+        "desc": "Creates an error-severity violation (Severity = 1.0).",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L42"
       },
       {
         "name": "toWarning",
         "params": "TextFilePosition: TextFilePosition, message: string",
         "returns": "Violation",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L41"
+        "desc": "Creates a warning-severity violation (Severity = 0.5).",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L53"
       },
       {
         "name": "toInfo",
         "params": "TextFilePosition: TextFilePosition, message: string",
         "returns": "Violation",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L49"
+        "desc": "Creates an info-severity violation (Severity = 0.2).",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L64"
+      },
+      {
+        "name": "toViolation",
+        "params": "TextFilePosition: TextFilePosition, message: string, severity: float, certainty: float",
+        "returns": "Violation",
+        "desc": "Creates a violation with explicit severity and certainty.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L75"
+      },
+      {
+        "name": "withSeverity",
+        "params": "Violation: Violation, s: float",
+        "returns": "Violation",
+        "desc": "Re-stamps an existing violation with a new severity (for weight adjustment).",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L86"
       }
     ],
     "checks": [],
@@ -1673,7 +1791,7 @@ const packages = {
         "name": "CHECK",
         "params": "violations",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L59"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-analysis/src/code-analysis.cop#L100"
       }
     ]
   },
@@ -1778,13 +1896,44 @@ const packages = {
     "checks": [],
     "commands": []
   },
+  "code-metrics": {
+    "label": "code-metrics",
+    "overview": "Computes aggregate code quality metrics (slop score) from violations and outputs as JSON",
+    "samples": [
+      {
+        "title": "Compute metrics",
+        "code": "import code\nimport csharp\nimport code-analysis\nimport code-metrics\n\nlet cb : Codebase = provider('csharp')\n\n# Use the built-in curated slop collection\ncommand main = METRICS(slop, cb.Lines)"
+      },
+      {
+        "title": "Custom slop",
+        "code": "import code\nimport csharp\nimport csharp-checks\nimport code-analysis\nimport code-metrics\n\nlet cb : Codebase = provider('csharp')\n\n# Start with built-in slop and customize:\n# - Filter out generated code\n# - Add a custom rule with chosen severity\n# - Override weight for an existing rule\n\npredicate isSourceViolation(Violation) => Violation.File:contains('Generated') == false\npredicate isSourceLine(Line) => Line.File.Path:contains('Generated') == false\n\n# Add custom rule: flag methods with more than 50 statements\npredicate isTooLong(Method) => Method.Statements.count() > 50\nlet long-methods = cb.Types:Methods:isTooLong\n    :toViolation('Method {item.Name} has {item.Statements.count()} statements', 0.7, 0.9)\n\n# Combine: curated slop (filtered) + custom rule\nlet my-slop = slop:isSourceViolation + long-methods\n\ncommand main = METRICS(my-slop, cb.Lines:isSourceLine)"
+      },
+      {
+        "title": "Exclude generated",
+        "code": "import code\nimport csharp\nimport code-analysis\nimport code-metrics\n\nlet cb : Codebase = provider('csharp')\n\n# Exclude generated code — adjust the path pattern to match your convention\npredicate isSourceLine(Line) => Line.File.Path:contains('Generated') == false\npredicate isSourceViolation(Violation) => Violation.File:contains('Generated') == false\n\nlet source-lines = cb.Lines:isSourceLine\nlet source-violations = slop:isSourceViolation\n\ncommand main = METRICS(source-violations, source-lines)"
+      }
+    ],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [],
+    "checks": [],
+    "commands": [
+      {
+        "name": "METRICS",
+        "params": "violations, lines",
+        "desc": "Computes aggregate metrics from violations and lines, outputs as JSON.\nUsage: METRICS(violations, lines) where violations is [Violation] and lines is [Line].\nOutput is a JSON object with total counts, severity breakdown, LOC, and per-KLOC rates.\nweightedScore = sum of all violation severities. weightedSlopPerKloc = weightedScore * 1000 / LOC.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code-metrics/src/code-metrics.cop#L13"
+      }
+    ]
+  },
   "cop": {
     "label": "cop",
     "overview": "Structural analysis of .cop source files — types, predicates, functions, imports",
     "samples": [
       {
         "title": "List types",
-        "code": "import cop\n\n# List all types defined in .cop files\ncommand MAIN = foreach cop.types() => '{Type.Name} ({Type.File.Path})'"
+        "code": "import cop\n\n# List all types defined in .cop files\ncommand MAIN = foreach cop.types() => '{item.Name} ({item.File.Path})'"
       }
     ],
     "collections": [],
@@ -1844,7 +1993,7 @@ const packages = {
     "types": {
       "InterpolatedString": {
         "desc": "A template bound to data, ready to be resolved into a string.\nItems is the collection of data to format, Template is the {Property} interpolation pattern,\nand Separator is the string used to join results (defaults to newline).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L72",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L71",
         "baseType": "object",
         "props": [
           {
@@ -1866,7 +2015,7 @@ const packages = {
       },
       "Error": {
         "desc": "Represents an operational error flowing through a pipeline.\nErrors are not code bugs (use fail() for those). They represent external failures\nthat code cannot prevent: network timeouts, I/O failures, malformed input.\nUse isError predicate to detect errors in pipeline items.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L94",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L93",
         "baseType": "object",
         "props": [
           {
@@ -1893,7 +2042,7 @@ const packages = {
       },
       "Program": {
         "desc": "Represents the running program's context.\nProvides access to command-line arguments passed to the cop invocation.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L124",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L123",
         "baseType": "object",
         "props": [
           {
@@ -2078,7 +2227,7 @@ const packages = {
         "name": "isError",
         "appliesTo": "object",
         "desc": "Returns true if the current item is an Error value.\nWorks as a bare predicate or as a filter: items:isError\nExample: predicate handleError(item:isError) => print('{item.Message}')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L104"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L103"
       },
       {
         "name": "text",
@@ -2098,57 +2247,57 @@ const packages = {
         "name": "provider",
         "params": "name: string, options: object",
         "returns": "object",
-        "desc": "Returns a dynamic object accessor for the named provider.\nProperties on the returned object query the provider's collections.\nThe options argument is JSON-serialized and passed to the provider.\nPass nic for default, or a string/object with provider-specific configuration.\nExample: provider('csharp', nic) or provider('csharp', 'lib/MyLib.dll')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L11"
+        "desc": "Returns a dynamic object accessor for the named provider.\nProperties on the returned object query the provider's collections.\nPass a path string for explicit target, or omit for default target directory.\nExample: provider('csharp') or provider('csharp', 'lib/MyLib.dll')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L10"
       },
       {
         "name": "source",
         "params": "name: string, options: object",
         "returns": "[object]",
         "desc": "Returns an async streaming collection from the named provider.\nThe options argument is JSON-serialized and passed to the provider.\nPass nic for default, or a string/object with provider-specific configuration.\nUse a typed annotation to declare the item type produced by the stream:\n  let req : [Request] = source('http', nic)\n  export function requests() : [Request] => req",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L19"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L18"
       },
       {
         "name": "sink",
         "params": "name: string, options: object",
         "returns": "[object]",
         "desc": "Returns an async output collection for the named streaming provider.\nItems pushed into the sink are delivered to the provider's output channel.\nThe options argument is JSON-serialized and passed to the provider.\nPass nic for default, or a string/object with provider-specific configuration.\n  let resp : [Response] = sink('http', nic)\n  export function responses() : [Response] => resp",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L27"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L26"
       },
       {
         "name": "read",
         "params": "path: string",
         "returns": "string",
         "desc": "Reads the content of a file at the given path (sandboxed to project root).\nReturns the file content as a string.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L33"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L32"
       },
       {
         "name": "print",
         "params": "message: object",
         "returns": "",
         "desc": "Prints a message to the output.\nUsed standalone: print('hello {Name}')\nUsed in pipeline: foreach Types => print('{item.Name}')\nThe template supports {Property} interpolation and {@style} formatting.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L39"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L38"
       },
       {
         "name": "save",
         "params": "path: string, content: string",
         "returns": "",
         "desc": "Saves content to a file at the specified path.\nUsed in pipeline: foreach Types:isPublic => save('api.txt', '{item.Name}')\nCreates or appends to the file with the rendered template output.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L44"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L43"
       },
       {
         "name": "debug",
         "params": "message: object",
         "returns": "",
         "desc": "Outputs a diagnostic message to the debug log (--diag flag).\nSame template semantics as print but only visible when diagnostics are enabled.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L48"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L47"
       },
       {
         "name": "assert",
         "params": "condition: bool, description: string",
         "returns": "",
         "desc": "Asserts that a condition is true. Fails the test run if false.\nUsed in tests: assert(Types:isPublic.Count > 0, 'should have public types')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L52"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L51"
       },
       {
         "name": "reduce",
@@ -2156,7 +2305,7 @@ const packages = {
         "returns": "A",
         "appliesTo": "[T]",
         "desc": "Reduces a collection to a single value using an accumulator function.\nThe accumulator takes (acc, item) and returns the new accumulator value.\nExample: [1,2,3]:reduce((acc, item) => acc + item, 0)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L59"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L58"
       },
       {
         "name": "concat",
@@ -2164,56 +2313,56 @@ const packages = {
         "returns": "[T]",
         "appliesTo": "[T]",
         "desc": "Returns a new collection combining both collections.\nExample: let merged = listA:concat(listB)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L64"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L63"
       },
       {
         "name": "text",
         "params": "",
         "returns": "string",
         "desc": "Converts an integer to its decimal text representation.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L79"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L78"
       },
       {
         "name": "text",
         "params": "",
         "returns": "string",
         "desc": "Decodes a byte array as UTF-8 text.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L82"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L81"
       },
       {
         "name": "text",
         "params": "InterpolatedString: InterpolatedString",
         "returns": "string",
         "desc": "Converts an InterpolatedString to text by resolving the Template against each item\nin Items using {Property} interpolation, then joining results with Separator.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L86"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L85"
       },
       {
         "name": "error",
         "params": "message: string",
         "returns": "Error",
         "desc": "Creates an Error value with the given message string.\nExample: error('connection timeout')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L108"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L107"
       },
       {
         "name": "fail",
         "params": "message: string",
         "returns": "",
         "desc": "Terminates execution immediately with a fatal diagnostic.\nUse for programmer assertions — situations that should never occur.\nCan be used standalone: fail('invariant violated')\nOr in pipeline: foreach Items:badCondition => fail('{item.Name} is invalid')",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L114"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L113"
       },
       {
         "name": "program",
         "params": "",
         "returns": "Program",
         "desc": "Returns the current program context.\nProvides access to command-line arguments passed to the cop invocation.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L120"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L119"
       },
       {
         "name": "pathMatches",
         "params": "path: string, pattern: string",
         "returns": "bool",
         "desc": "Glob-matches a file path against a pattern.\nSupports **, *, ? wildcards. Returns true if the path matches.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L130"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/src/intrinsics.cop#L129"
       },
       {
         "name": "sum",
@@ -2481,7 +2630,7 @@ const packages = {
     "samples": [
       {
         "title": "List public types",
-        "code": "import csharp\n\n# List all public types in the C# codebase\ncommand MAIN = foreach csharp.types():isPublic => '{Type.Name} ({Type.Kind})'"
+        "code": "import code\nimport csharp\n\nlet cb : Codebase = provider('csharp')\n\n# List all public types in the C# codebase\ncommand MAIN = foreach cb.Types:isPublic => '{item.Name} ({item.Kind})'"
       }
     ],
     "collections": [],
@@ -2564,19 +2713,19 @@ const packages = {
         "name": "isSyncBlockingCall",
         "appliesTo": "Statement",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L42"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L37"
       },
       {
         "name": "isInAsyncMethod",
         "appliesTo": "Statement",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L46"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L41"
       },
       {
         "name": "isInSyncMethod",
         "appliesTo": "Statement",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L49"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L44"
       }
     ],
     "functions": [],
@@ -2973,11 +3122,11 @@ const packages = {
     "samples": [
       {
         "title": "Api diff",
-        "code": "import csharp-library-checks\nimport code-analysis\n\n# Baseline: C# stub files in api/ directory\npredicate isBaselineApi(Api) => publicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')\n# Source: everything NOT in api/\npredicate isSourceApi(Api) => publicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')\n\n# Build lookup lists from current source and baseline\nlet baselineSignatures = Code.Api:isCSharp:isBaselineApi.Select(item.Signature)\nlet currentSignatures = Code.Api:isCSharp:isSourceApi.Select(item.Signature)\n\n# Diff predicates\npredicate isRemovedApi(Api) => isBaselineApi && !Api.Signature:in(currentSignatures)\npredicate isAddedApi(Api) => isSourceApi && !Api.Signature:in(baselineSignatures)\n\n# Report results\nexport let api-removed = Code.Api:isRemovedApi\n    :toError('API REMOVED (breaking): {item.Signature}')\nexport let api-added = Code.Api:isAddedApi\n    :toInfo('API ADDED: {item.Signature}')"
+        "code": "import code\nimport csharp-library-checks\nimport code-analysis\n\nlet cb : Codebase = provider('csharp')\n\n# Baseline: C# stub files in api/ directory\npredicate isBaselineApi(Api) => publicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')\n# Source: everything NOT in api/\npredicate isSourceApi(Api) => publicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')\n\n# Build lookup lists from current source and baseline\nlet baselineSignatures = cb.Api:isBaselineApi.Select(item.Signature)\nlet currentSignatures = cb.Api:isSourceApi.Select(item.Signature)\n\n# Diff predicates\npredicate isRemovedApi(Api) => isBaselineApi && !Api.Signature:in(currentSignatures)\npredicate isAddedApi(Api) => isSourceApi && !Api.Signature:in(baselineSignatures)\n\n# Report results\nexport let api-removed = cb.Api:isRemovedApi\n    :toError('API REMOVED (breaking): {item.Signature}')\nexport let api-added = cb.Api:isAddedApi\n    :toInfo('API ADDED: {item.Signature}')"
       },
       {
         "title": "Api listing",
-        "code": "import csharp-library-checks\n\n# print API surface as C# stubs\nexport command api-listing = foreach Code.Api:isCSharp:publicApi => '{item.ApiAsText}'\n\n# save API surface to a file\nlet apiText = Code.Api:isCSharp:publicApi.text('{item.ApiAsText}')\nexport command save-api = save('api-surface.txt', apiText)"
+        "code": "import code\nimport csharp-library-checks\n\nlet cb : Codebase = provider('csharp')\n\n# print API surface as C# stubs\nexport command api-listing = foreach cb.Api:publicApi => '{item.ApiAsText}'\n\n# save API surface to a file\nlet apiText = cb.Api:publicApi.text('{item.ApiAsText}')\nexport command save-api = save('api-surface.txt', apiText)"
       }
     ],
     "collections": [],
@@ -3040,7 +3189,7 @@ const packages = {
     "samples": [
       {
         "title": "Find files",
-        "code": "import files\n\n# Find empty folders and large files\nlet large-files = files.files():where(File.Size > 1000000)\n\ncommand MAIN =\n    foreach files.folders():empty => 'Empty: {Folder.Path}' |\n    foreach large-files => 'Large: {File.Path} ({File.Size} bytes)'"
+        "code": "import files\n\n# Find empty folders and large files\nlet large-files = files.files():where(File.Size > 1000000)\n\ncommand MAIN =\n    foreach files.folders():empty => 'Empty: {item.Path}' |\n    foreach large-files => 'Large: {item.Path} ({item.Size} bytes)'"
       }
     ],
     "collections": [],
@@ -3384,7 +3533,7 @@ const packages = {
     "samples": [
       {
         "title": "List public types",
-        "code": "import javascript\n\n# List all public types in the JavaScript/TypeScript codebase\ncommand MAIN = foreach javascript.types():isPublic => '{Type.Name} ({Type.Kind})'"
+        "code": "import javascript\n\n# List all public types in the JavaScript/TypeScript codebase\ncommand MAIN = foreach javascript.types():isPublic => '{item.Name} ({item.Kind})'"
       }
     ],
     "collections": [],
@@ -3550,7 +3699,7 @@ const packages = {
     "collections": [],
     "types": {
       "ApiLine": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L115",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L116",
         "props": [
           {
             "name": "Text",
@@ -3590,43 +3739,43 @@ const packages = {
         "name": "isClient",
         "appliesTo": "Type",
         "desc": "Client Library Design Rules",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L36"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L37"
       },
       {
         "name": "Clients",
         "appliesTo": "Types",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L37"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L38"
       },
       {
         "name": "isPublicApi",
         "appliesTo": "Api",
         "desc": "Public API Surface Predicates",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L106"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L107"
       },
       {
         "name": "isApiType",
         "appliesTo": "Api",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L109"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L110"
       },
       {
         "name": "isApiMethod",
         "appliesTo": "Api",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L110"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L111"
       },
       {
         "name": "isApiProperty",
         "appliesTo": "Api",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L111"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L112"
       },
       {
         "name": "isApiCtor",
         "appliesTo": "Api",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L112"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L113"
       }
     ],
     "functions": [
@@ -3635,7 +3784,7 @@ const packages = {
         "params": "Api: Api",
         "returns": "",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L124"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L125"
       }
     ],
     "checks": [],
@@ -3647,11 +3796,11 @@ const packages = {
     "samples": [
       {
         "title": "Api diff",
-        "code": "import javascript-library-checks\nimport code-analysis\n\n# Baseline: stub files in api/ directory\npredicate isBaselineApi(Api) => isPublicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')\n# Source: everything NOT in api/\npredicate isSourceApi(Api) => isPublicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')\n\n# Build lookup lists from current source and baseline\nlet baselineSignatures = Code.Api:isJavaScript:isBaselineApi.Select(item.Signature)\nlet currentSignatures = Code.Api:isJavaScript:isSourceApi.Select(item.Signature)\n\n# Diff predicates\npredicate isRemovedApi(Api) => isBaselineApi && !Api.Signature:in(currentSignatures)\npredicate isAddedApi(Api) => isSourceApi && !Api.Signature:in(baselineSignatures)\n\n# Report results\nexport let api-removed = Code.Api:isRemovedApi\n    :toError('API REMOVED (breaking): {item.Signature}')\nexport let api-added = Code.Api:isAddedApi\n    :toInfo('API ADDED: {item.Signature}')"
+        "code": "import code\nimport javascript-library-checks\nimport code-analysis\n\nlet cb : Codebase = provider('javascript')\n\n# Baseline: stub files in api/ directory\npredicate isBaselineApi(Api) => isPublicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')\n# Source: everything NOT in api/\npredicate isSourceApi(Api) => isPublicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')\n\n# Build lookup lists from current source and baseline\nlet baselineSignatures = cb.Api:isBaselineApi.Select(item.Signature)\nlet currentSignatures = cb.Api:isSourceApi.Select(item.Signature)\n\n# Diff predicates\npredicate isRemovedApi(Api) => isBaselineApi && !Api.Signature:in(currentSignatures)\npredicate isAddedApi(Api) => isSourceApi && !Api.Signature:in(baselineSignatures)\n\n# Report results\nexport let api-removed = cb.Api:isRemovedApi\n    :toError('API REMOVED (breaking): {item.Signature}')\nexport let api-added = cb.Api:isAddedApi\n    :toInfo('API ADDED: {item.Signature}')"
       },
       {
         "title": "Api listing",
-        "code": "import javascript-library-checks\n\n# print API surface\nexport command api-listing = foreach Code.Api:isJavaScript:isPublicApi => '{item.Signature}'\n\n# save API surface to a file\nlet apiText = Code.Api:isJavaScript:isPublicApi.text('{item.Signature}')\nexport command save-api = save('api-surface.txt', apiText)"
+        "code": "import code\nimport javascript-library-checks\n\nlet cb : Codebase = provider('javascript')\n\n# print API surface\nexport command api-listing = foreach cb.Api:isPublicApi => '{item.Signature}'\n\n# save API surface to a file\nlet apiText = cb.Api:isPublicApi.text('{item.Signature}')\nexport command save-api = save('api-surface.txt', apiText)"
       }
     ],
     "collections": [],
@@ -3842,7 +3991,7 @@ const packages = {
     "samples": [
       {
         "title": "List public types",
-        "code": "import python\n\n# List all public types in the Python codebase\ncommand MAIN = foreach python.types():isPublic => '{Type.Name} ({Type.Kind})'"
+        "code": "import python\n\n# List all public types in the Python codebase\ncommand MAIN = foreach python.types():isPublic => '{item.Name} ({item.Kind})'"
       }
     ],
     "collections": [],
@@ -3964,7 +4113,7 @@ const packages = {
     "samples": [
       {
         "title": "Check client conventions",
-        "code": "import python-library-checks\n\ncommand MAIN = foreach Clients\n    => '{Type.Name}'\n\nCHECK python-client-checks"
+        "code": "import python-library-checks\n\ncommand MAIN = foreach Clients\n    => '{item.Name}'\n\nCHECK python-client-checks"
       }
     ],
     "collections": [],
@@ -4079,11 +4228,11 @@ const packages = {
     "samples": [
       {
         "title": "Api diff",
-        "code": "import python-library-checks\nimport code-analysis\n\n# Baseline: stub files in api/ directory\npredicate isBaselineApi(Api) => isPublicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')\n# Source: everything NOT in api/\npredicate isSourceApi(Api) => isPublicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')\n\n# Build lookup lists from current source and baseline\nlet baselineSignatures = Code.Api:isPython:isBaselineApi.Select(item.Signature)\nlet currentSignatures = Code.Api:isPython:isSourceApi.Select(item.Signature)\n\n# Diff predicates\npredicate isRemovedApi(Api) => isBaselineApi && !Api.Signature:in(currentSignatures)\npredicate isAddedApi(Api) => isSourceApi && !Api.Signature:in(baselineSignatures)\n\n# Report results\nexport let api-removed = Code.Api:isRemovedApi\n    :toError('API REMOVED (breaking): {item.Signature}')\nexport let api-added = Code.Api:isAddedApi\n    :toInfo('API ADDED: {item.Signature}')"
+        "code": "import code\nimport python-library-checks\nimport code-analysis\n\nlet cb : Codebase = provider('python')\n\n# Baseline: stub files in api/ directory\npredicate isBaselineApi(Api) => isPublicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')\n# Source: everything NOT in api/\npredicate isSourceApi(Api) => isPublicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')\n\n# Build lookup lists from current source and baseline\nlet baselineSignatures = cb.Api:isBaselineApi.Select(item.Signature)\nlet currentSignatures = cb.Api:isSourceApi.Select(item.Signature)\n\n# Diff predicates\npredicate isRemovedApi(Api) => isBaselineApi && !Api.Signature:in(currentSignatures)\npredicate isAddedApi(Api) => isSourceApi && !Api.Signature:in(baselineSignatures)\n\n# Report results\nexport let api-removed = cb.Api:isRemovedApi\n    :toError('API REMOVED (breaking): {item.Signature}')\nexport let api-added = cb.Api:isAddedApi\n    :toInfo('API ADDED: {item.Signature}')"
       },
       {
         "title": "Api listing",
-        "code": "import python-library-checks\n\n# print API surface\nexport command api-listing = foreach Code.Api:isPython:isPublicApi => '{item.Signature}'\n\n# save API surface to a file\nlet apiText = Code.Api:isPython:isPublicApi.text('{item.Signature}')\nexport command save-api = save('api-surface.txt', apiText)"
+        "code": "import code\nimport python-library-checks\n\nlet cb : Codebase = provider('python')\n\n# print API surface\nexport command api-listing = foreach cb.Api:isPublicApi => '{item.Signature}'\n\n# save API surface to a file\nlet apiText = cb.Api:isPublicApi.text('{item.Signature}')\nexport command save-api = save('api-surface.txt', apiText)"
       }
     ],
     "collections": [],
@@ -4229,7 +4378,7 @@ const packages = {
     "samples": [
       {
         "title": "List all models",
-        "code": "import typespec\n\nlet tsp = provider('typespec', nic)\nlet Models = tsp.Models\n\ncommand MAIN = foreach Models\n    => '{item.Name} ({item.Properties.Count} props)'"
+        "code": "import typespec\n\nlet tsp = provider('typespec')\nlet Models = tsp.Models\n\ncommand MAIN = foreach Models\n    => '{item.Name} ({item.Properties.count()} props)'"
       }
     ],
     "collections": [],

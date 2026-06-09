@@ -1,8 +1,11 @@
+import code
 import csharp-library-checks
 
+let cb : Codebase = provider('csharp')
+
 # print API surface as C# stubs
-export command api-listing = foreach Code.Api:isCSharp:publicApi => '{item.ApiAsText}'
+export command api-listing = foreach cb.Api:publicApi => '{item.ApiAsText}'
 
 # save API surface to a file
-let apiText = Code.Api:isCSharp:publicApi.text('{item.ApiAsText}')
+let apiText = cb.Api:publicApi.text('{item.ApiAsText}')
 export command save-api = save('api-surface.txt', apiText)

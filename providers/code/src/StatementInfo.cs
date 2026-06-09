@@ -11,7 +11,7 @@ public class StatementInfo(
 {
     public string Kind { get; } = kind;
     public List<string> Keywords { get; } = keywords;
-    public string? TypeName { get; } = typeName;
+    public string? TypeName { get; set; } = typeName;
     public string? MemberName { get; } = memberName;
     public List<string> Arguments { get; } = arguments;
     public int Line { get; } = line;
@@ -30,6 +30,13 @@ public class StatementInfo(
     public IReadOnlyList<StatementInfo> Children => _children;
     public string? Condition { get; init; }
     public string? Expression { get; init; }
+
+    /// <summary>
+    /// For 'call' statements representing object creation (new X()),
+    /// this contains all interfaces the constructed type implements (resolved via semantic analysis).
+    /// Empty for non-creation statements or when semantic analysis is unavailable.
+    /// </summary>
+    public List<string> ConstructedTypeInterfaces { get; set; } = [];
 
     public List<StatementInfo> _children = [];
 

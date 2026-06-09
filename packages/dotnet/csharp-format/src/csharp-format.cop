@@ -3,7 +3,7 @@
 
 import code-analysis
 
-let data = provider('csharp-format', nic)
+let data = provider('csharp-format')
 
 ## Returns the dotnet format violations collection
 export function violations() : [Violation] => data.Violations

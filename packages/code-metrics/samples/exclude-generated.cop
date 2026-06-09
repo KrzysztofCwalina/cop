@@ -1,0 +1,15 @@
+import code
+import csharp
+import code-analysis
+import code-metrics
+
+let cb : Codebase = provider('csharp')
+
+# Exclude generated code — adjust the path pattern to match your convention
+predicate isSourceLine(Line) => Line.File.Path:contains('Generated') == false
+predicate isSourceViolation(Violation) => Violation.File:contains('Generated') == false
+
+let source-lines = cb.Lines:isSourceLine
+let source-violations = slop:isSourceViolation
+
+command main = METRICS(source-violations, source-lines)

@@ -23,8 +23,18 @@ public record TypeDeclaration(
     public List<FieldDeclaration> Fields { get; init; } = [];
     public List<PropertyDeclaration> Properties { get; init; } = [];
     public List<EventDeclaration> Events { get; init; } = [];
+
+    /// <summary>
+    /// All interfaces this type implements (including inherited), resolved via semantic analysis.
+    /// Empty if semantic analysis is unavailable.
+    /// </summary>
+    public List<string> Interfaces { get; set; } = [];
+
     public string Source => Name;
 
     public bool InheritsFrom(string name) =>
         BaseTypes.Any(b => b == name || b.EndsWith("." + name));
+
+    public bool Implements(string interfaceName) =>
+        Interfaces.Any(i => i == interfaceName || i.EndsWith("." + interfaceName));
 }

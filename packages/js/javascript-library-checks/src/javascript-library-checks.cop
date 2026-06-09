@@ -1,5 +1,6 @@
 # Library and client library design definitions for JavaScript/TypeScript
 
+import javascript
 import javascript-checks
 import code-analysis
 
@@ -7,24 +8,24 @@ import code-analysis
 
 ## Do not use default exports — use named exports only
 predicate isDefaultExport(Line) => Line.Text:matches('^export\\s+default\\s')
-export let no-default-exports = Code.Lines:isJavaScript:isDefaultExport
+export let no-default-exports = javascript.lines():isDefaultExport
     :toError('Do not use default exports — use named exports')
 
 ## Do not import Promise from external libraries (use native Promise)
 predicate isImportingBluebird(Line) => Line.Text:matches('from\\s+[\'"]bluebird[\'"]')
     || Line.Text:matches('require\\([\'"]bluebird[\'"]\\)')
-export let no-external-promises = Code.Lines:isJavaScript:isImportingBluebird
+export let no-external-promises = javascript.lines():isImportingBluebird
     :toError('Use native Promise — do not import from bluebird or other polyfill libraries')
 
 ## Do not use const enums (problematic for consumers)
 predicate isConstEnumDeclaration(Line) => Line.Text:matches('^\\s*(export\\s+)?const\\s+enum\\s')
-export let no-const-enums = Code.Lines:isJavaScript:isConstEnumDeclaration
+export let no-const-enums = javascript.lines():isConstEnumDeclaration
     :toWarning('Do not use const enum — use regular enum instead')
 
 ## Do not reference window global — use self for cross-platform compatibility
 predicate hasWindowReference(Line) => Line.Text:matches('\\bwindow\\.')
     && !Line.Text:matches('//') && !Line.Text:matches('\\*')
-export let no-window-reference = Code.Lines:isJavaScript:hasWindowReference
+export let no-window-reference = javascript.lines():hasWindowReference
     :toError('Do not use window — use self for cross-platform compatibility')
 
 ## Combined library design checks

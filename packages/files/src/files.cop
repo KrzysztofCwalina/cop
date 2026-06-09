@@ -30,7 +30,7 @@ export type Filesystem = {
 }
 
 # Provides filesystem data via the built-in filesystem provider
-let disk : Filesystem = provider('filesystem', nic)
+let disk : Filesystem = provider('filesystem')
 
 ## Returns all folders in the project directory tree.
 export function folders() : [Folder] => disk.Folders

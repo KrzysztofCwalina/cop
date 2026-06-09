@@ -3,7 +3,7 @@
 
 import code-analysis
 
-let data = provider('csharp-stylecop', nic)
+let data = provider('csharp-stylecop')
 
 ## Returns the StyleCop violations collection
 export function violations() : [Violation] => data.Violations

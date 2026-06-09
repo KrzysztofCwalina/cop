@@ -4,7 +4,7 @@
 
 import code-analysis
 
-let data = provider('python-pylint', nic)
+let data = provider('python-pylint')
 
 ## Returns all pylint violations.
 export function diagnostics() : [Violation] => data.Violations

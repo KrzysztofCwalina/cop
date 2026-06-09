@@ -513,94 +513,26 @@ public sealed class CopProviderProxy : CopValue
 
     public bool HasField(string name)
     {
-        // Check qualified name first (provider.Collection), then bare name
-        if (_env.TryLookup($"{ProviderName}.{name}", out _)) return true;
-        if (_env.TryLookup(name, out _)) return true;
-        return false;
+        // Only check qualified name (provider.Collection) — no bare-name fallback
+        return _env.TryLookup($"{ProviderName}.{name}", out _);
     }
 
     public CopValue GetField(string name)
     {
-        // Try qualified name first (e.g., "code.Types")
+        // Only use qualified name (e.g., "csharp.Types") — no bare-name fallback
         if (_env.TryLookup($"{ProviderName}.{name}", out var qualified))
         {
-            // Skip empty placeholder collections — fall through to bare name
-            if (qualified is not CopList { Items.Count: 0 })
-                return qualified;
-        }
-        // Then try bare name (e.g., "Types")
-        if (_env.TryLookup(name, out var bare))
-        {
-            // Force thunks eagerly — catches self-referencing cycles
-            // (e.g., `let Operations = tsp.Operations` where tsp is this proxy)
-            if (bare is CopThunk thunk)
+            // Force thunks eagerly
+            if (qualified is CopThunk thunk)
             {
                 try { return thunk.Force(); }
-                catch (CopEvaluationException) { /* recursive thunk → skip bare */ }
+                catch (CopEvaluationException) { return CopNull.Instance; }
             }
-            else
-            {
-                return bare;
-            }
+            return qualified;
         }
-        // Return qualified even if empty (rather than null) if bare also not found
-        return qualified ?? CopNull.Instance;
+        return CopNull.Instance;
     }
 
     public override string Display() => $"<provider {ProviderName}>";
-    public override string ToString() => Display();
-}
-
-/// <summary>
-/// A merged codebase that lazily concatenates collections from multiple providers.
-/// Created by code.codebase('csharp', 'python', ...) to provide a unified view.
-/// </summary>
-public sealed class CopMergedCodebase : CopValue
-{
-    private readonly string[] _providerNames;
-    private readonly Environment _env;
-    private readonly Dictionary<string, CopValue> _cache = new(StringComparer.Ordinal);
-
-    public CopMergedCodebase(string[] providerNames, Environment env)
-    {
-        _providerNames = providerNames;
-        _env = env;
-    }
-
-    public bool HasField(string name)
-    {
-        foreach (var provider in _providerNames)
-        {
-            if (_env.TryLookup($"{provider}.{name}", out var val) && val is not CopList { Items.Count: 0 })
-                return true;
-        }
-        return false;
-    }
-
-    public CopValue GetField(string name)
-    {
-        if (_cache.TryGetValue(name, out var cached))
-            return cached;
-
-        var merged = new List<CopValue>();
-        foreach (var provider in _providerNames)
-        {
-            if (_env.TryLookup($"{provider}.{name}", out var val))
-            {
-                if (val is CopThunk thunk)
-                    val = thunk.Force();
-                if (val is CopList list)
-                    merged.AddRange(list.Items);
-                else if (val is CopLazyCollection lazy)
-                    merged.AddRange(lazy.Enumerate());
-            }
-        }
-
-        var result = (CopValue)new CopList(merged);
-        _cache[name] = result;
-        return result;
-    }
-
-    public override string Display() => $"<codebase [{string.Join(", ", _providerNames)}]>";
     public override string ToString() => Display();
 }

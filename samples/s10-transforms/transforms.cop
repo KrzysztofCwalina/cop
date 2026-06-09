@@ -4,15 +4,17 @@
 import csharp
 import code
 
+let cb : Codebase = provider('csharp')
+
 # .Where(predicate) — filter a sub-list to matching items
-let PublicTypes = Code.Types:isPublic
+let PublicTypes = cb.Types:isPublic
 
 # .Count — number of items in a list
 predicate hasManyMethods(Type) => Type.Methods.Count > 3
 
 # .Select(template) — project each item into a string
 # .text(separator) — join all items into a single string
-let MethodNames = Code.Types:hasManyMethods
+let MethodNames = cb.Types:hasManyMethods
     .Select('{item.Name}: {item.Methods.Select(item.Name).text(", ")}')
 
 # .First — access the first element

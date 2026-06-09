@@ -21,19 +21,19 @@ public static class CSharpProjectDiscovery
 
         // First pass: build a map of normalized path → project name
         var pathToName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var projects = new List<(string Name, string RelativePath, List<string> RefPaths, List<string> Packages, List<string> Frameworks)>();
+        var projects = new List<(string Name, string RelativePath, List<string> RefPaths, List<string> Packages, List<string> Frameworks, Dictionary<string, string> Properties)>();
 
         foreach (var csprojPath in csprojPaths)
         {
-            var (name, refPaths, packages, frameworks) = ParseCsproj(csprojPath);
+            var (name, refPaths, packages, frameworks, properties) = ParseCsproj(csprojPath);
             var relativePath = Path.GetRelativePath(rootPath, csprojPath).Replace('\\', '/');
             pathToName[Path.GetFullPath(csprojPath)] = name;
-            projects.Add((name, relativePath, refPaths, packages, frameworks));
+            projects.Add((name, relativePath, refPaths, packages, frameworks, properties));
         }
 
         // Second pass: resolve ProjectReference paths to project names
         var result = new List<ProjectInfo>();
-        foreach (var (name, relativePath, refPaths, packages, frameworks) in projects)
+        foreach (var (name, relativePath, refPaths, packages, frameworks, properties) in projects)
         {
             var references = new List<string>();
             var csprojDir = Path.GetDirectoryName(Path.Combine(rootPath, relativePath.Replace('/', '\\'))) ?? rootPath;
@@ -47,23 +47,49 @@ public static class CSharpProjectDiscovery
                     references.Add(Path.GetFileNameWithoutExtension(refPath));
             }
 
-            result.Add(new ProjectInfo(name, relativePath, "csharp", references, packages, frameworks));
+            result.Add(new ProjectInfo(name, relativePath, "csharp", references, packages, frameworks)
+            {
+                Properties = properties
+            });
         }
 
         return result;
     }
 
-    private static (string Name, List<string> RefPaths, List<string> Packages, List<string> Frameworks) ParseCsproj(string csprojPath)
+    /// <summary>
+    /// Property names to extract from PropertyGroup elements.
+    /// </summary>
+    private static readonly HashSet<string> PropertyNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "OutputType", "TargetFramework", "TargetFrameworks",
+        "IsTestProject", "IsPackable", "RootNamespace",
+        "Nullable", "ImplicitUsings", "LangVersion",
+    };
+
+    private static (string Name, List<string> RefPaths, List<string> Packages, List<string> Frameworks, Dictionary<string, string> Properties) ParseCsproj(string csprojPath)
     {
         string name = Path.GetFileNameWithoutExtension(csprojPath);
         var refPaths = new List<string>();
         var packages = new List<string>();
         var frameworks = new List<string>();
+        var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         try
         {
             var doc = XDocument.Load(csprojPath);
             var ns = doc.Root?.Name.Namespace ?? XNamespace.None;
+
+            // Extract properties from PropertyGroup elements
+            foreach (var propGroup in doc.Root?.Elements(ns + "PropertyGroup") ?? [])
+            {
+                foreach (var el in propGroup.Elements())
+                {
+                    var elName = el.Name.LocalName;
+                    var elValue = el.Value;
+                    if (!string.IsNullOrWhiteSpace(elValue) && PropertyNames.Contains(elName))
+                        properties[elName] = elValue.Trim();
+                }
+            }
 
             // Try to get AssemblyName; fall back to filename
             var assemblyName = doc.Root?.Descendants(ns + "AssemblyName").FirstOrDefault()?.Value;
@@ -99,7 +125,7 @@ public static class CSharpProjectDiscovery
             // Malformed csproj — return what we have
         }
 
-        return (name, refPaths, packages, frameworks);
+        return (name, refPaths, packages, frameworks, properties);
     }
 
     private static void CollectCsprojFiles(string dir, IReadOnlySet<string>? excluded, List<string> result)

@@ -18,6 +18,11 @@ public record SourceFile(
     public List<RegionInfo> Regions { get; init; } = [];
 
     /// <summary>
+    /// Project names that contain this file. Set by the provider after project discovery.
+    /// </summary>
+    public List<string> Projects { get; set; } = [];
+
+    /// <summary>
     /// Line numbers (1-based) that are comment lines, populated by source parsers.
     /// </summary>
     public HashSet<int> CommentLines { get; init; } = [];

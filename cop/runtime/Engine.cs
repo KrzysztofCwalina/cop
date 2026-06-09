@@ -323,37 +323,6 @@ public static class Engine
             return new CopProviderProxy(providerName, env);
         });
 
-        // Register codebase intrinsic: merges collections from multiple providers
-        bridge.RegisterFunction("codebase", (args, env) =>
-        {
-            if (args.Count == 0)
-                throw new CopEvaluationException("codebase() requires at least one provider name", 0);
-
-            // Collect provider names from the args (param array passes a CopList)
-            var providerNames = new List<string>();
-            foreach (var arg in args)
-            {
-                if (arg is CopList list)
-                {
-                    foreach (var item in list.Items)
-                        providerNames.Add(item.Display());
-                }
-                else if (arg is not CopNull)
-                {
-                    providerNames.Add(arg.Display());
-                }
-            }
-
-            // Validate all provider names are loaded
-            foreach (var name in providerNames)
-            {
-                if (!env.TryLookup($"{name}.Types", out _))
-                    throw new CopEvaluationException($"Provider '{name}' is not loaded. Import the provider package first.", 0);
-            }
-
-            return new CopMergedCodebase(providerNames.ToArray(), env);
-        });
-
         // Phase 2: Evaluate let bindings (now that provider data is available)
         // First: deferred let bindings from imported packages
         moduleLoader.EvalDeferredLetBindings(bridge.Evaluator, errors);

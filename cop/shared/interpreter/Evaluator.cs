@@ -439,7 +439,6 @@ public sealed class Evaluator
             CopObject co when co.HasField(member) => co.GetField(member),
             CopDynamicObject dyn when dyn.HasField(member) => dyn.GetField(member),
             CopProviderProxy proxy when proxy.HasField(member) => proxy.GetField(member),
-            CopMergedCodebase merged when merged.HasField(member) => merged.GetField(member),
             _ => null
         };
     }
@@ -460,7 +459,6 @@ public sealed class Evaluator
             CopObject co => co.GetField(mem.Member),
             CopDynamicObject dyn => dyn.GetField(mem.Member),
             CopProviderProxy proxy => proxy.GetField(mem.Member),
-            CopMergedCodebase merged => merged.GetField(mem.Member),
             CopList list => EvalListMember(list, mem.Member, mem.Line),
             CopLazyCollection lazy => EvalLazyMember(lazy, mem.Member, mem.Line),
             CopString str => EvalStringMember(str, mem.Member, mem.Line),

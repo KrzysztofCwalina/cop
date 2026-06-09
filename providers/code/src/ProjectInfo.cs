@@ -16,4 +16,9 @@ public record ProjectInfo(
     /// <summary>Backward-compatible constructor for providers compiled against older cop versions.</summary>
     public ProjectInfo(string name, string path, string? language, List<string> references)
         : this(name, path, language, references, [], []) { }
+
+    /// <summary>
+    /// Key-value properties from the project file (e.g., OutputType, IsTestProject, TargetFramework).
+    /// </summary>
+    public Dictionary<string, string> Properties { get; init; } = [];
 }

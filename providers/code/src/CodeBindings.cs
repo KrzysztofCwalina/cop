@@ -29,6 +29,7 @@ public static class CodeBindings
                 [typeof(EventDeclaration)] = "Event",
                 [typeof(RegionInfo)] = "Region",
                 [typeof(ProjectInfo)] = "Project",
+                [typeof(ProjectProperty)] = "ProjectProperty",
             },
             Accessors = BuildAccessors(),
             CollectionExtractors = BuildExtractors(),
@@ -44,6 +45,7 @@ public static class CodeBindings
                 ["Api"] = o => ((ApiEntry)o).Signature,
                 ["File"] = o => ((SourceFile)o).Path,
                 ["Project"] = o => ((ProjectInfo)o).Name,
+                ["ProjectProperty"] = o => $"{((ProjectProperty)o).Name}={((ProjectProperty)o).Value}",
             },
         };
     }
@@ -62,6 +64,7 @@ public static class CodeBindings
                 ["NestedTypes"] = o => (object)((TypeDeclaration)o).NestedTypes,
                 ["EnumValues"] = o => (object)((TypeDeclaration)o).EnumValues,
                 ["BaseTypes"] = o => (object)((TypeDeclaration)o).BaseTypes,
+                ["Interfaces"] = o => (object)((TypeDeclaration)o).Interfaces,
                 ["Decorators"] = o => (object)((TypeDeclaration)o).Decorators,
                 ["Line"] = o => (object)((TypeDeclaration)o).Line,
                 ["MethodNames"] = o => (object)((TypeDeclaration)o).Methods.Select(m => m.Name).ToList(),
@@ -149,6 +152,7 @@ public static class CodeBindings
                 ["Expression"] = o => ((StatementInfo)o).Expression,
                 ["Braced"] = o => (object)((StatementInfo)o).IsBraced,
                 ["CopIgnore"] = o => ((StatementInfo)o).CopIgnore,
+                ["ConstructedTypeInterfaces"] = o => (object)((StatementInfo)o).ConstructedTypeInterfaces,
             },
             ["Line"] = new()
             {
@@ -158,6 +162,8 @@ public static class CodeBindings
                 ["File"] = o => ((LineInfo)o).File,
                 ["Source"] = o => ((LineInfo)o).Source,
                 ["CopIgnore"] = o => ((LineInfo)o).CopIgnore,
+                ["PreviousText"] = o => ((LineInfo)o).PreviousText,
+                ["NextText"] = o => ((LineInfo)o).NextText,
             },
             ["File"] = new()
             {
@@ -166,6 +172,7 @@ public static class CodeBindings
                 ["Namespace"] = o => ((SourceFile)o).Namespace,
                 ["Usings"] = o => (object)((SourceFile)o).Usings,
                 ["Types"] = o => (object)((SourceFile)o).Types,
+                ["Projects"] = o => (object)((SourceFile)o).Projects,
             },
             ["Member"] = new()
             {
@@ -202,6 +209,13 @@ public static class CodeBindings
                 ["References"] = o => (object)((ProjectInfo)o).References,
                 ["Packages"] = o => (object)((ProjectInfo)o).Packages,
                 ["Frameworks"] = o => (object)((ProjectInfo)o).Frameworks,
+                ["Properties"] = o => (object)((ProjectInfo)o).Properties
+                    .Select(kv => new ProjectProperty(kv.Key, kv.Value)).ToList(),
+            },
+            ["ProjectProperty"] = new()
+            {
+                ["Name"] = o => ((ProjectProperty)o).Name,
+                ["Value"] = o => ((ProjectProperty)o).Value,
             },
         };
     }
@@ -229,7 +243,9 @@ public static class CodeBindings
                     {
                         File = file,
                         Kind = kind,
-                        CopIgnore = pendingCopIgnore
+                        CopIgnore = pendingCopIgnore,
+                        PreviousText = i > 0 ? file.Lines[i - 1] : "",
+                        NextText = i < file.Lines.Count - 1 ? file.Lines[i + 1] : ""
                     };
                     result.Add(lineInfo);
 

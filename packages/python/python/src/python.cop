@@ -1,7 +1,7 @@
 # Python source language provider
 import code
 
-let cb : Codebase = provider('python', nic)
+let cb : Codebase = provider('python')
 
 ## Returns all types (classes) in the Python codebase.
 export function types() : [Type] => cb.Types

@@ -3,11 +3,6 @@
 import csharp
 import code-analysis
 
-let md : Codebase = provider('markdown', nic)
-let xml : Codebase = provider('xml', nic)
-let mdLines = md.Lines
-let xmlLines = xml.Lines
-
 ## Correctness Checks
 
 # Typing
@@ -82,6 +77,10 @@ export let console-calls = statements():isConsoleCall
 predicate isCatchingBaseException(Statement) => Statement.ErrorHandler == true
     && Statement.Generic == true
 
+# Empty catch — catches base Exception and does nothing (no statements in catch body)
+predicate isEmptyCatch(Statement) => Statement.ErrorHandler == true
+    && Statement.Generic == true && !Statement.Rethrows && Statement.Children.count() == 0
+
 predicate isSwallowingBaseException(Statement) => Statement.ErrorHandler == true
     && Statement.Generic == true && !Statement.Rethrows
 
@@ -92,6 +91,10 @@ export let base-exception-catches = statements():isCatchingBaseException
 ## Do not swallow base exceptions — always rethrow
 export let swallowed-exceptions = statements():isSwallowingBaseException
     :toWarning('Do not swallow Exception — rethrow or catch a specific type')
+
+## Empty catch — catches base Exception and does absolutely nothing
+export let empty-catches = statements():isEmptyCatch
+    :toError('Empty catch block swallows all exceptions silently')
 
 # Banned APIs
 
@@ -134,32 +137,22 @@ export let uninstantiated-internal = types():isInternalNonAbstract
 
 # CA2000: IDisposable not in using statement
 predicate isUsingStatement(Statement) => Statement.Kind == 'using'
-predicate isNewCallNotInUsing(Statement) => Statement.Kind == 'call'
-    && Statement.Expression != nic && Statement.Expression:matches('new\s+')
+predicate isDisposableNew(Statement) => Statement.Kind == 'call'
+    && Statement.MemberName == nic && Statement.TypeName != nic
+    && Statement.ConstructedTypeInterfaces:contains('IDisposable')
     && !Statement.Ancestors:any(isUsingStatement)
 
-## CA2000: Dispose objects before losing scope (heuristic)
-export let undisposed-new = statements():isNewCallNotInUsing
-    :toWarning('CA2000: New object may not be disposed — consider using a \'using\' statement')
+## CA2000: Dispose objects before losing scope
+export let undisposed-new = statements():isDisposableNew
+    :toWarning('CA2000: {item.TypeName} implements IDisposable but is not in a using statement')
 
 # Project files
 
-# README: Should not contain 'Install-Package' (use 'dotnet add package')
-predicate isReadmeInstallPackage(Line) => Line.File.Path:matches('README') && Line.Text:matches('Install-Package')
-
-# .csproj: PackageReference should not have Version attribute (CPM compliance)
-predicate hasPackageRefWithVersion(Line) => Line.File.Path:matches('\\.csproj$') && Line.Text:matches('PackageReference.*Version\s*=')
-
-## README: Should not use Install-Package (use dotnet add package)
-export let readme-install-package = mdLines:isReadmeInstallPackage
-    :toWarning('Use \'dotnet add package\' instead of \'Install-Package\' in README')
-
-## CPM compliance: PackageReference should not have Version attribute
-export let cpm-compliance = xmlLines:hasPackageRefWithVersion
-    :toWarning('PackageReference should not specify Version (use Central Package Management)')
+# TODO: readme-install-package and cpm-compliance checks require a text/line provider
+# for .md and .csproj files. Removed broken provider('markdown')/provider('xml') fallbacks.
 
 ## Combined correctness checks
-export let csharp-correctness-checks = var-declarations + dynamic-declarations + thread-sleep-calls + console-calls + base-exception-catches + swallowed-exceptions + configure-await-true-calls + sync-over-async-calls + bare-task-completion-sources + sync-wait-in-async + uri-tostring + type-name-is-keyword + uninstantiated-internal + undisposed-new + readme-install-package + cpm-compliance
+export let csharp-correctness-checks = var-declarations + dynamic-declarations + thread-sleep-calls + console-calls + base-exception-catches + swallowed-exceptions + configure-await-true-calls + sync-over-async-calls + bare-task-completion-sources + sync-wait-in-async + uri-tostring + type-name-is-keyword + uninstantiated-internal + undisposed-new
 
 ## Style Checks (StyleCop)
 
@@ -215,14 +208,8 @@ predicate hasTrailingWhitespace(Line) => Line.Text:matches('[ \t]+$')
 # SA1106: Code must not contain empty statements (stray semicolons)
 predicate isEmptyStatement(Line) => Line.Text:matches('^\s*;\s*$')
 
-# SA1120: Comments must contain text (not just //)
-predicate isEmptyComment(Line) => Line.Text:matches('//\s*$')
-
 # SA1122: Use string.Empty for empty strings in comparisons
 predicate hasEmptyStringLiteral(Line) => Line.Text:matches('(==|!=)\s*""') || Line.Text:matches('""\s*(==|!=)')
-
-# SA1206: Declaration keywords must follow order (access, static, other)
-predicate hasWrongModifierOrder(Line) => Line.Text:matches('^\s*(static|sealed|abstract|virtual|override|readonly)\s+(public|private|protected|internal)\s')
 
 ## SA1005: Single-line comment must begin with a space after //
 export let comment-spacing = lines():isCommentMissingSpace
@@ -240,32 +227,18 @@ export let no-trailing-whitespace = lines():hasTrailingWhitespace
 export let no-empty-statements = lines():isEmptyStatement
     :toWarning('SA1106: Remove empty statement')
 
-## SA1120: Comments must contain text
-export let no-empty-comments = lines():isEmptyComment
-    :toWarning('SA1120: Comment must contain text')
-
 ## SA1122: Use string.Empty instead of ""
 export let use-string-empty = lines():hasEmptyStringLiteral
     :toWarning('SA1122: Use string.Empty instead of ""')
 
-## SA1206: Declaration keywords must follow order
-export let modifier-order = lines():hasWrongModifierOrder
-    :toWarning('SA1206: Access modifier should come before other modifiers')
-
 # Braces
 
-# SA1500: Braces must not be on the same line as the preceding statement
-predicate hasBraceNotOnOwnLine(Line) => Line.Text:matches('(if|else|for|foreach|while|do|try|catch|finally|switch|lock|using)\s*\(.*\)\s*\{') || Line.Text:matches('(else|try|catch|finally|do)\s*\{')
-
 # SA1503: Braces must not be omitted from control flow
-predicate isMissingBraces(Line) => Line.Text:matches('^\s*(if|else if|for|foreach|while)\s*\(.*\)\s*[^{;\s]') || Line.Text:matches('^\s*else\s+[^{i]')
-
-## SA1500: Braces must be on their own line (Allman style)
-export let braces-on-own-line = lines():hasBraceNotOnOwnLine
-    :toWarning('SA1500: Opening brace should be on its own line')
+predicate isMissingBraces(Statement) => Statement.Braced == false
+    && (Statement.Kind == 'if' || Statement.Kind == 'else' || Statement.Kind == 'for' || Statement.Kind == 'foreach' || Statement.Kind == 'while')
 
 ## SA1503: Braces must not be omitted
-export let required-braces = lines():isMissingBraces
+export let required-braces = statements():isMissingBraces
     :toWarning('SA1503: Braces must not be omitted from control flow statement')
 
 # Documentation
@@ -292,8 +265,8 @@ export let public-property-documented = types():hasUndocumentedPublicProperty
 
 # Fields
 
-# SA1401: Fields should be private (non-const public fields are bad)
-predicate isPublicNonConstField(Field) => Field:isPublic && Field:!isConst
+# SA1401: Fields should be private (non-const, non-static-readonly public fields are bad)
+predicate isPublicNonConstField(Field) => Field:isPublic && Field:!isConst && !(Field:isStatic && Field:isReadonly)
 predicate hasPublicField(Type) => Type.Fields:any(isPublicNonConstField)
 
 # .editorconfig naming: private fields should start with _
@@ -308,8 +281,8 @@ predicate hasStaticFieldNamingViolation(Type) => Type.Fields:any(isStaticFieldMi
 predicate isConstFieldNotPascalCase(Field) => Field:isConst && !Field.Name:matches('^[A-Z]')
 predicate hasConstNamingViolation(Type) => Type.Fields:any(isConstFieldNotPascalCase)
 
-## SA1401: Fields should be private
-export let no-public-fields = types():hasPublicField
+## SA1401: Fields should be private (only on public/protected types — internal structs with public fields are a valid perf pattern)
+export let no-public-fields = types():isPublic:hasPublicField
     :toWarning('SA1401: {item.Name} has a public non-const field; use a property instead')
 
 ## .editorconfig naming: private field underscore prefix
@@ -325,7 +298,7 @@ export let const-naming = types():hasConstNamingViolation
     :toWarning('{item.Name} has a constant that should be PascalCase')
 
 ## Combined style checks
-export let csharp-style-checks = interface-prefix + type-name-casing + method-name-casing + single-type-per-file + comment-spacing + no-tabs + no-trailing-whitespace + no-empty-statements + no-empty-comments + use-string-empty + modifier-order + file-header-required + public-documented + public-method-documented + no-public-fields + private-field-naming + static-field-naming + const-naming + braces-on-own-line + required-braces + public-property-documented
+export let csharp-style-checks = interface-prefix + type-name-casing + method-name-casing + single-type-per-file + comment-spacing + no-tabs + no-trailing-whitespace + no-empty-statements + use-string-empty + file-header-required + public-documented + public-method-documented + no-public-fields + private-field-naming + static-field-naming + const-naming + required-braces + public-property-documented
 
 ## Framework Design Guidelines — Naming
 

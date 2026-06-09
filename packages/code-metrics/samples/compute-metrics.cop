@@ -3,14 +3,7 @@ import csharp
 import code-analysis
 import code-metrics
 
-# Create a codebase from the C# provider
-let cb = code.codebase('csharp')
+let cb : Codebase = provider('csharp')
 
-# Define a simple check: flag methods longer than 50 statements
-predicate isTooLong(Method) => Method.Statements.count() > 50
-
-let violations = csharp.types():Methods:isTooLong
-    :toWarning('Method {item.Name} has too many statements ({item.Statements.count()})')
-
-# Output the metrics as JSON
-command main = METRICS(violations, cb)
+# Use the built-in curated slop collection
+command main = METRICS(slop, cb.Lines)

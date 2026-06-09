@@ -1,5 +1,8 @@
+import code
 import csharp-library-checks
 import code-analysis
+
+let cb : Codebase = provider('csharp')
 
 # Baseline: C# stub files in api/ directory
 predicate isBaselineApi(Api) => publicApi && Api.File.Path:matches('[/\\]api[/\\]')
@@ -7,15 +10,15 @@ predicate isBaselineApi(Api) => publicApi && Api.File.Path:matches('[/\\]api[/\\
 predicate isSourceApi(Api) => publicApi && !Api.File.Path:matches('[/\\]api[/\\]')
 
 # Build lookup lists from current source and baseline
-let baselineSignatures = Code.Api:isCSharp:isBaselineApi.Select(item.Signature)
-let currentSignatures = Code.Api:isCSharp:isSourceApi.Select(item.Signature)
+let baselineSignatures = cb.Api:isBaselineApi.Select(item.Signature)
+let currentSignatures = cb.Api:isSourceApi.Select(item.Signature)
 
 # Diff predicates
 predicate isRemovedApi(Api) => isBaselineApi && !Api.Signature:in(currentSignatures)
 predicate isAddedApi(Api) => isSourceApi && !Api.Signature:in(baselineSignatures)
 
 # Report results
-export let api-removed = Code.Api:isRemovedApi
+export let api-removed = cb.Api:isRemovedApi
     :toError('API REMOVED (breaking): {item.Signature}')
-export let api-added = Code.Api:isAddedApi
+export let api-added = cb.Api:isAddedApi
     :toInfo('API ADDED: {item.Signature}')

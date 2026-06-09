@@ -11,7 +11,7 @@ namespace Cop.Providers;
 public class CodeSchemaProvider : DataProvider
 {
 
-    public override ReadOnlyMemory<byte> GetSchema() => CodeSchema.GetJson();
+    public override ReadOnlyMemory<byte> GetSchema() => CodeSchema.GetTypesOnlyJson();
 
     public override RuntimeBindings? GetRuntimeBindings() => CodeBindings.Build();
 

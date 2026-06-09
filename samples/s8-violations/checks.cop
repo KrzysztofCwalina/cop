@@ -3,11 +3,14 @@
 # Run with: cop run todos
 import code-analysis
 import csharp
+import code
+
+let cb : Codebase = provider('csharp')
 
 ## TODO comments should be resolved before merging
 predicate hasTodo(Line) => Line.Text:contains('TODO')
 
-let todos = Code.Lines:isComment:hasTodo
+let todos = cb.Lines:isComment:hasTodo
     :toWarning('TODO found: {item.Source}')
 
 command MAIN = CHECK(todos)

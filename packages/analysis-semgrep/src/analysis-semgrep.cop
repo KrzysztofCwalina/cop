@@ -3,7 +3,7 @@
 
 import code-analysis
 
-let data = provider('analysis-semgrep', nic)
+let data = provider('analysis-semgrep')
 
 ## Returns the Semgrep violations collection.
 export function diagnostics() : [Violation] => data.Violations

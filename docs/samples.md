@@ -50,6 +50,8 @@ Each package includes samples in its `samples/` directory showing real-world usa
 | [list-all-public-classes](../packages/code/samples/list-all-public-classes.cop) | List all public classes |
 | [create-a-simple-check](../packages/code-analysis/samples/create-a-simple-check.cop) | Create a simple CHECK violation |
 | [compute-metrics](../packages/code-metrics/samples/compute-metrics.cop) | Compute aggregate slop metrics as JSON |
+| [exclude-generated](../packages/code-metrics/samples/exclude-generated.cop) | Compute metrics excluding generated code |
+| [custom-slop](../packages/code-metrics/samples/custom-slop.cop) | Customize slop rules and weights |
 | [enforce-layering-rules](../packages/code-layering/samples/enforce-layering-rules.cop) | Enforce dependency layering rules |
 
 ### C# (.NET)

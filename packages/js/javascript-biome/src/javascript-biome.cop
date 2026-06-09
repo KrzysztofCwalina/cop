@@ -3,7 +3,7 @@
 
 import code-analysis
 
-let data = provider('javascript-biome', nic)
+let data = provider('javascript-biome')
 
 ## Returns the Biome violations collection
 export function violations() : [Violation] => data.Violations

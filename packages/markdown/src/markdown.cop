@@ -48,7 +48,7 @@ export type MarkdownContent = {
 }
 
 # Provides markdown content via the built-in markdown provider
-let md : MarkdownContent = provider('markdown', nic)
+let md : MarkdownContent = provider('markdown')
 
 ## Returns all headings found in markdown files.
 export function headings() : [Heading] => md.Headings

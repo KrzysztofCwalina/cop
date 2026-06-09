@@ -3,7 +3,7 @@
 
 import code-analysis
 
-let data = provider('analysis-spectral', nic)
+let data = provider('analysis-spectral')
 
 ## All Spectral violations as a collection.
 export let spectral-checks = data.Violations

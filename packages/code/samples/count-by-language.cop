@@ -3,11 +3,13 @@ import csharp
 import python
 import javascript
 
-# Create a unified codebase from all three language providers
-let cb = code.codebase('csharp', 'python', 'javascript')
+# Use explicit provider proxies — each accesses its own collections
+let cs : Codebase = provider('csharp')
+let py : Codebase = provider('python')
+let js : Codebase = provider('javascript')
 
-# Group and count by language - demonstrates language-independent querying
+# Count types per language using explicit provider access
 command MAIN = 
-    foreach cb.Types:isCSharp => 'C# types: {collection.count()}' |
-    foreach cb.Types:isPython => 'Python types: {collection.count()}' |
-    foreach cb.Types:isJavaScript => 'JavaScript types: {collection.count()}'
+    foreach cs.Types => 'C# types: {collection.count()}' |
+    foreach py.Types => 'Python types: {collection.count()}' |
+    foreach js.Types => 'JavaScript types: {collection.count()}'

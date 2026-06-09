@@ -1,7 +1,7 @@
 # C# source language provider
 import code
 
-let cb : Codebase = provider('csharp', nic)
+let cb : Codebase = provider('csharp')
 
 ## Returns all types (classes, structs, interfaces, enums) in the C# codebase.
 export function types() : [Type] => cb.Types

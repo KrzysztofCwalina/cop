@@ -1,8 +1,11 @@
+import code
 import javascript-library-checks
 
+let cb : Codebase = provider('javascript')
+
 # print API surface
-export command api-listing = foreach Code.Api:isJavaScript:isPublicApi => '{item.Signature}'
+export command api-listing = foreach cb.Api:isPublicApi => '{item.Signature}'
 
 # save API surface to a file
-let apiText = Code.Api:isJavaScript:isPublicApi.text('{item.Signature}')
+let apiText = cb.Api:isPublicApi.text('{item.Signature}')
 export command save-api = save('api-surface.txt', apiText)

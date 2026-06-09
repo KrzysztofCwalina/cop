@@ -4,7 +4,7 @@
 
 import code-analysis
 
-let data = provider('python-mypy', nic)
+let data = provider('python-mypy')
 
 ## Returns all mypy violations.
 export function diagnostics() : [Violation] => data.Violations

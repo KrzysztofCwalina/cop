@@ -2,9 +2,12 @@
 # save only runs when explicitly invoked: cop run EXPORT-API
 # Output files are relative to the codebase root.
 import code
+import csharp
+
+let cb : Codebase = provider('csharp')
 
 # Export public type names to a text file
-command EXPORT-API = foreach Code.Types:isPublic => save('api-surface.txt', '{item.Name}')
+command EXPORT-API = foreach cb.Types:isPublic => save('api-surface.txt', '{item.Name}')
 
 # Export as CSV with multiple fields
-command EXPORT-CSV = foreach Code.Types:isPublic => save('types.csv', '{item.Name},{item.Methods.Count},{item.File.Path}')
+command EXPORT-CSV = foreach cb.Types:isPublic => save('types.csv', '{item.Name},{item.Methods.Count},{item.File.Path}')

@@ -11,7 +11,7 @@
 
 import code-analysis
 
-let data = provider('analysis-codeql', nic)
+let data = provider('analysis-codeql')
 
 ## All CodeQL violations as a collection.
 export let codeql-checks = data.Violations

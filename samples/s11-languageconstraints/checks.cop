@@ -2,6 +2,9 @@
 # The same predicate name dispatches differently per source language.
 # Constraints use :language syntax on the parameter type.
 import code
+import csharp
+
+let cb : Codebase = provider('csharp')
 
 # C# print detection — Console.WriteLine, Console.Write
 predicate isPrintUsage(Statement:isCSharp) => Statement.Kind == 'call'
@@ -11,6 +14,6 @@ predicate isPrintUsage(Statement:isCSharp) => Statement.Kind == 'call'
 predicate isPrintUsage(Statement:isPython) => Statement.Kind == 'call'
     && Statement.MemberName == 'print'
 
-# Single collection works across both languages
-let PrintStatements = Code.Statements:isPrintUsage
+# Use explicit provider
+let PrintStatements = cb.Statements:isPrintUsage
 command MAIN = foreach PrintStatements => print('{item.File.Path}:{item.Line} uses print')

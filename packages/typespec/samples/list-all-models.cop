@@ -1,6 +1,6 @@
 import typespec
 
-let tsp = provider('typespec', nic)
+let tsp = provider('typespec')
 let Models = tsp.Models
 
 command MAIN = foreach Models

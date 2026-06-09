@@ -2,6 +2,9 @@
 # Use :any(), :none(), :all() with inline conditions.
 # Inline conditions use the singular form: Constructor, Parameter, Method, etc.
 import code
+import csharp
+
+let cb : Codebase = provider('csharp')
 
 # Define building-block predicates
 predicate isClient(Type) => Type.Name:endsWith('Client')
@@ -13,7 +16,7 @@ predicate hasOptions(Type) => Type.Constructors:any(Constructor.Parameters:any(i
 # Negate: find clients missing the options constructor
 predicate missingOptions(Type) => Type:!hasOptions
 
-let Clients = Code.Types:isClient
+let Clients = cb.Types:isClient
 let NeedsOptions = Clients:missingOptions
 
 command MAIN = foreach NeedsOptions => print('{item.Name} needs an Options constructor parameter')

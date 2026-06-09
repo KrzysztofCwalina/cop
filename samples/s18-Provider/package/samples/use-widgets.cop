@@ -13,7 +13,7 @@ type SampleData = {
     Widgets : [Widget]
 }
 
-let db : SampleData = provider('sample', nic)
+let db : SampleData = provider('sample')
 let Widgets = db.Widgets
 
 # Define predicates to filter widgets

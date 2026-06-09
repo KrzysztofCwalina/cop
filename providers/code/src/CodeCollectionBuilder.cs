@@ -272,7 +272,7 @@ public static class CodeCollectionBuilder
         ["Projects"] = "Project",
     };
 
-    private static void CollectSourceFiles(string rootDir, SourceParserRegistry parsers, IReadOnlySet<string>? excluded, List<string> result, bool isRoot = true)
+    public static void CollectSourceFiles(string rootDir, SourceParserRegistry parsers, IReadOnlySet<string>? excluded, List<string> result, bool isRoot = true)
     {
         // Use EnumerateFiles with AllDirectories for a single enumeration handle.
         // This is more resilient to transient filesystem filter driver interference on Windows

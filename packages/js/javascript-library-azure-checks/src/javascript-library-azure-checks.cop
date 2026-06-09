@@ -1,5 +1,6 @@
 # Azure-specific client library definitions for JavaScript/TypeScript
 
+import javascript
 import javascript-library-checks
 import code-analysis
 
@@ -30,7 +31,7 @@ predicate hasCopyrightHeader(Line) => Line.Number == 1
     && Line.Text:contains('Copyright')
 predicate isMissingCopyright(File) => File.Lines.Count > 0
     && File.Lines:!any(hasCopyrightHeader)
-export let copyright-header = Code.Lines:isJavaScript:isMissingCopyright
+export let copyright-header = javascript.lines():isMissingCopyright
     :toWarning('Source file is missing a copyright header comment')
 
 # Azure Core imports: clients should use @azure/core-client
@@ -45,7 +46,7 @@ predicate isThrowingCustomError(Statement) => Statement.Kind == 'throw'
     && Statement.TypeName != 'RangeError'
     && Statement.TypeName != 'RestError'
     && !Statement.TypeName:endsWith('Error')
-export let error-handling = Code.Statements:isJavaScript:isThrowingCustomError
+export let error-handling = javascript.statements():isThrowingCustomError
     :toError('Only throw Error, TypeError, RangeError, or RestError — do not throw custom non-Error types')
 
 ## Azure clients should not use console for logging — use @azure/logger

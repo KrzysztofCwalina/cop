@@ -3,15 +3,17 @@
 # so multiple actions run as a single composed command.
 # Run with: cop run LIST-TYPES
 # Run with: cop run STATISTICS
-import csharp-checks
+import csharp
+import code
+
+let cb : Codebase = provider('csharp')
 
 # Individual counting commands
-command TYPE-COUNT = print('{Code.Types.Count} types')
-command NAMESPACE-COUNT = print('{Code.Files.Count} files')
-command MEMBER-COUNT = print('{Members.Count} members')
+command TYPE-COUNT = print('{cb.Types.Count} types')
+command FILE-COUNT = print('{cb.Files.Count} files')
 
 # Chain commands with & to compose a single STATISTICS command
-command STATISTICS = TYPE-COUNT & NAMESPACE-COUNT & MEMBER-COUNT
+command STATISTICS = TYPE-COUNT & FILE-COUNT
 
 # Combine a foreach listing with a count summary
-command LIST-TYPES = foreach Types => print('{item.Name}') & TYPE-COUNT
+command LIST-TYPES = foreach cb.Types => print('{item.Name}') & TYPE-COUNT

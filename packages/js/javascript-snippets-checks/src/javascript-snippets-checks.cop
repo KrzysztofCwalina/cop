@@ -3,6 +3,7 @@
 import code
 import markdown
 import code-analysis
+import javascript
 import javascript-checks
 
 # Snippet identification
@@ -14,7 +15,7 @@ predicate isSnippetRegion(Region) => Region.Name:startsWith('Snippet:')
 predicate isSnippetFence(FenceBlock) => FenceBlock.Tag:startsWith('Snippet:')
 
 # Cached collections of snippet regions and fences
-let snippetRegions = Code.Regions:isJavaScript:isSnippetRegion
+let snippetRegions = javascript.regions():isSnippetRegion
 let snippetFences  = fenceBlocks():markdown:isSnippetFence
 
 # Cross-collection matching
