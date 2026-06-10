@@ -11,6 +11,7 @@
     "async"
   ],
   "language": "JavaScript",
-  "provider": "clr",
-  "providerEntry": "Cop.Providers.JavaScriptProvider"
+  "dependencies": [
+    "javascript"
+  ]
 }

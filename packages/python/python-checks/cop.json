@@ -13,6 +13,7 @@
     "documentation"
   ],
   "language": "Python",
-  "provider": "clr",
-  "providerEntry": "Cop.Providers.PythonProvider"
+  "dependencies": [
+    "python"
+  ]
 }
