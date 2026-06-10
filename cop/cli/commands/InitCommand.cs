@@ -10,97 +10,118 @@ namespace Cop.Cli.Commands;
 
 public static class InitCommand
 {
+    private const string SectionStart = "<!-- BEGIN COP INSTRUCTIONS -->";
+    private const string SectionEnd = "<!-- END COP INSTRUCTIONS -->";
+
     public static Command Create()
     {
-        var forceOption = new Option<bool>("--force", "Overwrite existing instruction files");
         var localHookOption = new Option<bool>("--al", "Generate local Claude Code hook (.claude/settings.local.json)");
         var globalHookOption = new Option<bool>("--ag", "Generate shared Claude Code hook (.claude/settings.json)");
         var command = new Command("init", "Generate agent instruction files for writing cop rules")
         {
-            forceOption,
             localHookOption,
             globalHookOption
         };
 
         command.SetAction(ctx => Execute(
-            ctx.GetValue(forceOption),
             ctx.GetValue(localHookOption),
             ctx.GetValue(globalHookOption)));
 
         return command;
     }
 
-    public static int Execute(bool force = false, bool localHook = false, bool globalHook = false)
+    public static int Execute(bool localHook = false, bool globalHook = false)
     {
         var cwd = Directory.GetCurrentDirectory();
-        int filesCreated = 0;
+        int filesUpdated = 0;
 
-        // Generate .github/copilot-instructions.md
+        // Generate .github/copilot-instructions.md (merge cop section)
         var githubDir = Path.Combine(cwd, ".github");
         var copilotPath = Path.Combine(githubDir, "copilot-instructions.md");
-        if (File.Exists(copilotPath) && !force)
-        {
-            Console.Error.WriteLine($"Skipped: {GetRelativePath(cwd, copilotPath)} already exists (use --force to overwrite)");
-        }
-        else
-        {
-            Directory.CreateDirectory(githubDir);
-            File.WriteAllText(copilotPath, GetInstructionContent());
-            Console.WriteLine($"{(force && File.Exists(copilotPath) ? "Updated" : "Created")}: {GetRelativePath(cwd, copilotPath)}");
-            filesCreated++;
-        }
+        Directory.CreateDirectory(githubDir);
+        var copilotResult = MergeCopSection(copilotPath);
+        Console.WriteLine($"{copilotResult}: {GetRelativePath(cwd, copilotPath)}");
+        filesUpdated++;
 
-        // Generate AGENTS.md
+        // Generate AGENTS.md (merge cop section)
         var agentsPath = Path.Combine(cwd, "AGENTS.md");
-        if (File.Exists(agentsPath) && !force)
-        {
-            Console.Error.WriteLine($"Skipped: AGENTS.md already exists (use --force to overwrite)");
-        }
-        else
-        {
-            File.WriteAllText(agentsPath, GetInstructionContent());
-            Console.WriteLine($"{(force && File.Exists(agentsPath) ? "Updated" : "Created")}: AGENTS.md");
-            filesCreated++;
-        }
+        var agentsResult = MergeCopSection(agentsPath);
+        Console.WriteLine($"{agentsResult}: AGENTS.md");
+        filesUpdated++;
 
-        // Generate .claude/commands/cop.md (Claude Code /cop skill)
+        // Generate .claude/commands/cop.md (cop-specific file, always write)
         var claudeCommandsDir = Path.Combine(cwd, ".claude", "commands");
         var copCommandPath = Path.Combine(claudeCommandsDir, "cop.md");
-        if (File.Exists(copCommandPath) && !force)
-        {
-            Console.Error.WriteLine($"Skipped: {GetRelativePath(cwd, copCommandPath)} already exists (use --force to overwrite)");
-        }
-        else
-        {
-            Directory.CreateDirectory(claudeCommandsDir);
-            File.WriteAllText(copCommandPath, GetCopCommandContent());
-            Console.WriteLine($"{(force && File.Exists(copCommandPath) ? "Updated" : "Created")}: {GetRelativePath(cwd, copCommandPath)}");
-            filesCreated++;
-        }
+        Directory.CreateDirectory(claudeCommandsDir);
+        File.WriteAllText(copCommandPath, GetCopCommandContent());
+        Console.WriteLine($"Updated: {GetRelativePath(cwd, copCommandPath)}");
+        filesUpdated++;
 
         // Generate Claude Code hook settings
         if (localHook)
         {
-            int result = GenerateClaudeHook(cwd, "settings.local.json", force);
+            int result = GenerateClaudeHook(cwd, "settings.local.json");
             if (result < 0) return 1;
-            filesCreated += result;
+            filesUpdated += result;
         }
         if (globalHook)
         {
-            int result = GenerateClaudeHook(cwd, "settings.json", force);
+            int result = GenerateClaudeHook(cwd, "settings.json");
             if (result < 0) return 1;
-            filesCreated += result;
+            filesUpdated += result;
         }
 
-        if (filesCreated > 0)
-            Console.WriteLine($"\n{filesCreated} file(s) created. Agents will now discover cop language context automatically.");
-        else
-            Console.WriteLine("\nNo files created (all already exist). Use --force to overwrite.");
+        Console.WriteLine($"\n{filesUpdated} file(s) updated. Agents will now discover cop language context automatically.");
 
         return 0;
     }
 
-    private static int GenerateClaudeHook(string cwd, string fileName, bool force)
+    /// <summary>
+    /// Merges the cop instruction section into a markdown file.
+    /// If the file doesn't exist, creates it with the cop section.
+    /// If the file exists but has no cop section, appends it.
+    /// If the file exists and already has the cop section, updates it in-place.
+    /// Returns a status string: "Created", "Updated", or "Up-to-date".
+    /// </summary>
+    private static string MergeCopSection(string filePath)
+    {
+        var wrappedContent = $"{SectionStart}\n{GetInstructionContent()}\n{SectionEnd}\n";
+
+        if (!File.Exists(filePath))
+        {
+            File.WriteAllText(filePath, wrappedContent);
+            return "Created";
+        }
+
+        var existing = File.ReadAllText(filePath);
+        var startIdx = existing.IndexOf(SectionStart, StringComparison.Ordinal);
+        var endIdx = existing.IndexOf(SectionEnd, StringComparison.Ordinal);
+
+        if (startIdx >= 0 && endIdx > startIdx)
+        {
+            // Replace existing section (include the end marker + trailing newline)
+            var endOfSection = endIdx + SectionEnd.Length;
+            if (endOfSection < existing.Length && existing[endOfSection] == '\n')
+                endOfSection++;
+
+            var before = existing[..startIdx];
+            var after = existing[endOfSection..];
+            var merged = before + wrappedContent + after;
+
+            if (merged == existing)
+                return "Up-to-date";
+
+            File.WriteAllText(filePath, merged);
+            return "Updated";
+        }
+
+        // No existing section — append with a blank line separator
+        var separator = existing.Length > 0 && !existing.EndsWith("\n\n") ? "\n" : "";
+        File.WriteAllText(filePath, existing + separator + wrappedContent);
+        return "Updated";
+    }
+
+    private static int GenerateClaudeHook(string cwd, string fileName)
     {
         var claudeDir = Path.Combine(cwd, ".claude");
         var settingsPath = Path.Combine(claudeDir, fileName);
@@ -133,14 +154,8 @@ public static class InitCommand
                 return -1;
             }
 
-            if (HasCopStopHook(root) && !force)
-            {
-                Console.Error.WriteLine($"Skipped: {fullPath} already has cop Stop hook (use --force to replace)");
-                return 0;
-            }
-
-            // Remove existing cop hook if forcing
-            if (HasCopStopHook(root) && force)
+            // Remove existing cop hook and re-add (ensures it's up-to-date)
+            if (HasCopStopHook(root))
                 RemoveCopStopHook(root);
 
             MergeStopHook(root);

@@ -71,19 +71,18 @@ if (args[0] == "help")
 // cop init — generate agent instruction files
 if (args[0] == "init")
 {
-    var knownInitOptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "--force", "--al", "--ag" };
+    var knownInitOptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "--al", "--ag" };
     foreach (var arg in args.Skip(1))
     {
         if (arg.StartsWith('-') && !knownInitOptions.Contains(arg))
         {
-            Console.Error.WriteLine($"Unknown option '{arg}'. Known options: --force, --al, --ag");
+            Console.Error.WriteLine($"Unknown option '{arg}'. Known options: --al, --ag");
             return 1;
         }
     }
-    bool force = args.Contains("--force");
     bool localHook = args.Contains("--al");
     bool globalHook = args.Contains("--ag");
-    return InitCommand.Execute(force, localHook, globalHook);
+    return InitCommand.Execute(localHook, globalHook);
 }
 
 // cop update — self-update from GitHub releases
