@@ -168,6 +168,7 @@ const categories = [
     "packages": [
       "csharp",
       "csharp-checks",
+      "csharp-codeql-export",
       "csharp-format",
       "csharp-library-azure-checks",
       "csharp-library-checks",
@@ -227,7 +228,6 @@ const categories = [
       "analysis-semgrep",
       "analysis-spectral",
       "analysis-trivy",
-      "csharp-codeql-export",
       "http"
     ]
   }
@@ -252,7 +252,7 @@ const packages = {
         "params": "",
         "returns": "[Violation]",
         "desc": "Returns the Checkov violations collection.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-checkov/src/analysis-checkov.cop#L9"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis/analysis-checkov/src/analysis-checkov.cop#L9"
       }
     ],
     "checks": [],
@@ -271,7 +271,7 @@ const packages = {
     "types": {
       "Rule": {
         "desc": "A CodeQL rule definition",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-codeql/src/analysis-codeql.cop#L20",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis/analysis-codeql/src/analysis-codeql.cop#L20",
         "props": [
           {
             "name": "Id",
@@ -306,7 +306,7 @@ const packages = {
         ]
       },
       "Run": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-codeql/src/analysis-codeql.cop#L29",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis/analysis-codeql/src/analysis-codeql.cop#L29",
         "props": [
           {
             "name": "Tool",
@@ -333,7 +333,7 @@ const packages = {
         "params": "path: string",
         "returns": "object",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-codeql/src/analysis-codeql.cop#L37"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis/analysis-codeql/src/analysis-codeql.cop#L37"
       }
     ],
     "checks": [],
@@ -357,7 +357,7 @@ const packages = {
         "params": "",
         "returns": "[Violation]",
         "desc": "Returns the Semgrep violations collection.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-semgrep/src/analysis-semgrep.cop#L9"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis/analysis-semgrep/src/analysis-semgrep.cop#L9"
       }
     ],
     "checks": [],
@@ -397,7 +397,7 @@ const packages = {
         "params": "",
         "returns": "[Violation]",
         "desc": "Returns the Trivy violations collection.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis-trivy/src/analysis-trivy.cop#L9"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis/analysis-trivy/src/analysis-trivy.cop#L9"
       }
     ],
     "checks": [],
@@ -1942,7 +1942,7 @@ const packages = {
     "samples": [
       {
         "title": "List types",
-        "code": "import cop\n\n# List all types defined in .cop files\ncommand MAIN = foreach cop.types() => '{item.Name} ({item.File.Path})'"
+        "code": "import cop\n\n# List all types defined in .cop files\nlet cb = cop.parse()\ncommand MAIN = foreach cb.Types => '{item.Name} ({item.File.Path})'"
       }
     ],
     "collections": [],
@@ -1950,32 +1950,18 @@ const packages = {
     "predicates": [],
     "functions": [
       {
-        "name": "types",
+        "name": "parse",
         "params": "",
-        "returns": "[Type]",
-        "desc": "Returns all types defined in .cop source files.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/cop/src/cop.cop#L13"
+        "returns": "Codebase",
+        "desc": "Parses .cop source files in the target directory and returns a Codebase.\nExample: let cb = cop.parse()",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/cop/src/cop.cop#L12"
       },
       {
-        "name": "statements",
-        "params": "",
-        "returns": "[Statement]",
-        "desc": "Returns all statements in .cop source files.",
+        "name": "parse",
+        "params": "path: string",
+        "returns": "Codebase",
+        "desc": "Parses .cop source files in the specified directory and returns a Codebase.\nExample: let cb = cop.parse('/path/to/project')",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/cop/src/cop.cop#L16"
-      },
-      {
-        "name": "lines",
-        "params": "",
-        "returns": "[Line]",
-        "desc": "Returns all source lines in .cop source files.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/cop/src/cop.cop#L19"
-      },
-      {
-        "name": "files",
-        "params": "",
-        "returns": "[File]",
-        "desc": "Returns all .cop source files.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/cop/src/cop.cop#L22"
       }
     ],
     "checks": [],
@@ -2639,7 +2625,7 @@ const packages = {
     "samples": [
       {
         "title": "List public types",
-        "code": "import code\nimport csharp\n\nlet cb : Codebase = provider('csharp')\n\n# List all public types in the C# codebase\ncommand MAIN = foreach cb.Types:isPublic => '{item.Name} ({item.Kind})'"
+        "code": "import code\nimport csharp\n\nlet cb = csharp.parse()\n\n# List all public types in the C# codebase\ncommand MAIN = foreach cb.Types:isPublic => '{item.Name} ({item.Kind})'"
       }
     ],
     "collections": [],
@@ -2724,91 +2710,91 @@ const packages = {
         "params": "name: string, description: string, from: string, where: string, select: string",
         "returns": "string",
         "desc": "Builds a complete CodeQL query string.\nParameters:\n  name - query name (used in @name metadata)\n  description - query description (used in @description metadata)\n  from - from clause (e.g., 'Class c')\n  where - where clause (e.g., 'c.isPublic()')\n  select - select clause (e.g., 'c, c.getName()')\nReturns a formatted .ql file content string.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L13"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-codeql-export/src/csharp-codeql-export.cop#L13"
       },
       {
         "name": "qlQueryAll",
         "params": "name: string, description: string, from: string, select: string",
         "returns": "string",
         "desc": "Builds a CodeQL query with no where clause (selects all matching).\nParameters:\n  name - query name\n  description - query description\n  from - from clause\n  select - select clause",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L22"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-codeql-export/src/csharp-codeql-export.cop#L22"
       },
       {
         "name": "qlFrom",
         "params": "variable: string, qlType: string",
         "returns": "string",
         "desc": "Builds a CodeQL 'from' clause for a single variable.\nExample: qlFrom('c', 'Class') => 'Class c'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L27"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-codeql-export/src/csharp-codeql-export.cop#L27"
       },
       {
         "name": "qlFrom2",
         "params": "var1: string, type1: string, var2: string, type2: string",
         "returns": "string",
         "desc": "Builds a CodeQL 'from' clause for two variables (join).\nExample: qlFrom2('c', 'Class', 'm', 'Method') => 'Class c, Method m'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L31"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-codeql-export/src/csharp-codeql-export.cop#L31"
       },
       {
         "name": "qlAnd",
         "params": "left: string, right: string",
         "returns": "string",
         "desc": "Combines two where conditions with 'and'.\nExample: qlAnd('c.isPublic()', 'c.isAbstract()') => 'c.isPublic() and\\n  c.isAbstract()'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L35"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-codeql-export/src/csharp-codeql-export.cop#L35"
       },
       {
         "name": "qlOr",
         "params": "left: string, right: string",
         "returns": "string",
         "desc": "Combines two where conditions with 'or'.\nExample: qlOr('c.isPublic()', 'c.isProtected()') => '(c.isPublic() or c.isProtected())'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L39"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-codeql-export/src/csharp-codeql-export.cop#L39"
       },
       {
         "name": "qlNot",
         "params": "condition: string",
         "returns": "string",
         "desc": "Negates a where condition.\nExample: qlNot('c.isPublic()') => 'not c.isPublic()'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L43"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-codeql-export/src/csharp-codeql-export.cop#L43"
       },
       {
         "name": "qlNameMatches",
         "params": "variable: string, pattern: string",
         "returns": "string",
         "desc": "Builds a name-matching where condition using regexp.\nExample: qlNameMatches('c', 'Get.*') => 'c.getName().regexpMatch(\"Get.*\")'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L47"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-codeql-export/src/csharp-codeql-export.cop#L47"
       },
       {
         "name": "qlNameStartsWith",
         "params": "variable: string, prefix: string",
         "returns": "string",
         "desc": "Builds a name starts-with condition.\nExample: qlNameStartsWith('c', 'Base') => 'c.getName().indexOf(\"Base\") = 0'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L51"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-codeql-export/src/csharp-codeql-export.cop#L51"
       },
       {
         "name": "qlNameContains",
         "params": "variable: string, substring: string",
         "returns": "string",
         "desc": "Builds a name contains condition.\nExample: qlNameContains('c', 'Helper') => 'c.getName().matches(\"%Helper%\")'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L55"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-codeql-export/src/csharp-codeql-export.cop#L55"
       },
       {
         "name": "qlModifier",
         "params": "variable: string, modifier: string",
         "returns": "string",
         "desc": "Builds a modifier predicate call.\nPass modifier with capital first letter (CodeQL predicate suffix).\nExample: qlModifier('c', 'Public') => 'c.isPublic()'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L60"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-codeql-export/src/csharp-codeql-export.cop#L60"
       },
       {
         "name": "qlExists",
         "params": "declaration: string, condition: string",
         "returns": "string",
         "desc": "Builds an 'exists' subquery.\nExample: qlExists('Method m', 'm.getDeclaringType() = c') => 'exists(Method m | m.getDeclaringType() = c)'",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L64"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-codeql-export/src/csharp-codeql-export.cop#L64"
       },
       {
         "name": "qlSave",
         "params": "path: string, content: string",
         "returns": "",
         "desc": "Writes a query string to a .ql file.\nExample: qlSave('queries/my-query.ql', queryString)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/csharp-codeql-export/src/csharp-codeql-export.cop#L68"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-codeql-export/src/csharp-codeql-export.cop#L68"
       }
     ],
     "checks": [],
@@ -3345,17 +3331,17 @@ const packages = {
       {
         "name": "HttpMethod",
         "values": "GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L16"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/http/src/http.cop#L16"
       },
       {
         "name": "ContentType",
         "values": "application/json|text/plain|text/html|application/xml|multipart/form-data|application/octet-stream",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L17"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/http/src/http.cop#L17"
       }
     ],
     "types": {
       "Header": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L20",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/http/src/http.cop#L20",
         "props": [
           {
             "name": "Name",
@@ -3370,7 +3356,7 @@ const packages = {
         ]
       },
       "Response": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L26",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/http/src/http.cop#L26",
         "props": [
           {
             "name": "StatusCode",
@@ -3395,7 +3381,7 @@ const packages = {
         ]
       },
       "Request": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L34",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/http/src/http.cop#L34",
         "props": [
           {
             "name": "Method",
@@ -3432,70 +3418,70 @@ const packages = {
         "params": "",
         "returns": "[Request]",
         "desc": "Returns the stream of incoming HTTP requests.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L11"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/http/src/http.cop#L11"
       },
       {
         "name": "responses",
         "params": "",
         "returns": "[Response]",
         "desc": "Returns the HTTP response sink for writing responses.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L14"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/http/src/http.cop#L14"
       },
       {
         "name": "ok",
         "params": "",
         "returns": "",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L43"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/http/src/http.cop#L43"
       },
       {
         "name": "ok",
         "params": "Request: Request, body: string",
         "returns": "",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L50"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/http/src/http.cop#L50"
       },
       {
         "name": "ok",
         "params": "Request: Request",
         "returns": "",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L57"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/http/src/http.cop#L57"
       },
       {
         "name": "notFound",
         "params": "Request: Request",
         "returns": "",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L64"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/http/src/http.cop#L64"
       },
       {
         "name": "created",
         "params": "Request: Request",
         "returns": "",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L71"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/http/src/http.cop#L71"
       },
       {
         "name": "badRequest",
         "params": "Request: Request",
         "returns": "",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L78"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/http/src/http.cop#L78"
       },
       {
         "name": "serverError",
         "params": "Request: Request",
         "returns": "",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L85"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/http/src/http.cop#L85"
       },
       {
         "name": "serverError",
         "params": "Error: Error",
         "returns": "",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/http/src/http.cop#L92"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/http/src/http.cop#L92"
       }
     ],
     "checks": [],
@@ -3507,7 +3493,7 @@ const packages = {
     "samples": [
       {
         "title": "List public types",
-        "code": "import javascript\n\n# List all public types in the JavaScript/TypeScript codebase\ncommand MAIN = foreach javascript.types():isPublic => '{item.Name} ({item.Kind})'"
+        "code": "import javascript\n\nlet cb = javascript.parse()\n\n# List all public types in the JavaScript/TypeScript codebase\ncommand MAIN = foreach cb.Types:isPublic => '{item.Name} ({item.Kind})'"
       }
     ],
     "collections": [],
@@ -3930,7 +3916,7 @@ const packages = {
     "samples": [
       {
         "title": "List public types",
-        "code": "import python\n\n# List all public types in the Python codebase\ncommand MAIN = foreach python.types():isPublic => '{item.Name} ({item.Kind})'"
+        "code": "import python\n\nlet cb = python.parse()\n\n# List all public types in the Python codebase\ncommand MAIN = foreach cb.Types:isPublic => '{item.Name} ({item.Kind})'"
       }
     ],
     "collections": [],
@@ -4288,7 +4274,7 @@ const packages = {
     "collections": [],
     "types": {
       "TspDecorator": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec/src/typespec.cop#L3",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec/src/typespec.cop#L3",
         "props": [
           {
             "name": "Name",
@@ -4303,7 +4289,7 @@ const packages = {
         ]
       },
       "TspProperty": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec/src/typespec.cop#L8",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec/src/typespec.cop#L8",
         "props": [
           {
             "name": "Name",
@@ -4333,7 +4319,7 @@ const packages = {
         ]
       },
       "TspModel": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec/src/typespec.cop#L16",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec/src/typespec.cop#L16",
         "props": [
           {
             "name": "Name",
@@ -4363,7 +4349,7 @@ const packages = {
         ]
       },
       "TspOperation": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec/src/typespec.cop#L24",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec/src/typespec.cop#L24",
         "props": [
           {
             "name": "Name",
@@ -4398,7 +4384,7 @@ const packages = {
         ]
       },
       "TspInterface": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec/src/typespec.cop#L33",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec/src/typespec.cop#L33",
         "props": [
           {
             "name": "Name",
@@ -4423,7 +4409,7 @@ const packages = {
         ]
       },
       "TspEnumMember": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec/src/typespec.cop#L40",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec/src/typespec.cop#L40",
         "props": [
           {
             "name": "Name",
@@ -4443,7 +4429,7 @@ const packages = {
         ]
       },
       "TspEnum": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec/src/typespec.cop#L46",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec/src/typespec.cop#L46",
         "props": [
           {
             "name": "Name",
@@ -4468,7 +4454,7 @@ const packages = {
         ]
       },
       "TspUnionVariant": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec/src/typespec.cop#L53",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec/src/typespec.cop#L53",
         "props": [
           {
             "name": "Name",
@@ -4483,7 +4469,7 @@ const packages = {
         ]
       },
       "TspUnion": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec/src/typespec.cop#L58",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec/src/typespec.cop#L58",
         "props": [
           {
             "name": "Name",
@@ -4508,7 +4494,7 @@ const packages = {
         ]
       },
       "TspScalar": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec/src/typespec.cop#L65",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec/src/typespec.cop#L65",
         "props": [
           {
             "name": "Name",
@@ -4533,7 +4519,7 @@ const packages = {
         ]
       },
       "TspNamespace": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec/src/typespec.cop#L72",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec/src/typespec.cop#L72",
         "props": [
           {
             "name": "Name",
@@ -4572,22 +4558,22 @@ const packages = {
       {
         "name": "HttpVerb",
         "values": "get|put|post|patch|delete|head",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L3"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec-http/src/typespec-http.cop#L3"
       },
       {
         "name": "HttpStatusCode",
         "values": "200|201|204|304|default",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L4"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec-http/src/typespec-http.cop#L4"
       },
       {
         "name": "HttpParameterLocation",
         "values": "path|query|header|body|cookie",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L5"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec-http/src/typespec-http.cop#L5"
       }
     ],
     "types": {
       "TspDecorator": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L7",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec-http/src/typespec-http.cop#L7",
         "props": [
           {
             "name": "Name",
@@ -4602,7 +4588,7 @@ const packages = {
         ]
       },
       "HttpParameter": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L12",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec-http/src/typespec-http.cop#L12",
         "props": [
           {
             "name": "Name",
@@ -4632,7 +4618,7 @@ const packages = {
         ]
       },
       "HttpHeader": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L20",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec-http/src/typespec-http.cop#L20",
         "props": [
           {
             "name": "Name",
@@ -4647,7 +4633,7 @@ const packages = {
         ]
       },
       "HttpResponse": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L25",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec-http/src/typespec-http.cop#L25",
         "props": [
           {
             "name": "StatusCode",
@@ -4672,7 +4658,7 @@ const packages = {
         ]
       },
       "HttpOperation": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L32",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec-http/src/typespec-http.cop#L32",
         "props": [
           {
             "name": "Name",
@@ -4717,7 +4703,7 @@ const packages = {
         ]
       },
       "HttpService": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L43",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec-http/src/typespec-http.cop#L43",
         "props": [
           {
             "name": "Name",
@@ -4747,31 +4733,31 @@ const packages = {
         "name": "isGet",
         "appliesTo": "HttpOperation",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L60"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec-http/src/typespec-http.cop#L60"
       },
       {
         "name": "isPut",
         "appliesTo": "HttpOperation",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L61"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec-http/src/typespec-http.cop#L61"
       },
       {
         "name": "isPost",
         "appliesTo": "HttpOperation",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L62"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec-http/src/typespec-http.cop#L62"
       },
       {
         "name": "isPatch",
         "appliesTo": "HttpOperation",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L63"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec-http/src/typespec-http.cop#L63"
       },
       {
         "name": "isDelete",
         "appliesTo": "HttpOperation",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L64"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec-http/src/typespec-http.cop#L64"
       }
     ],
     "functions": [
@@ -4780,14 +4766,14 @@ const packages = {
         "params": "",
         "returns": "[HttpOperation]",
         "desc": "Returns all HTTP operations defined in the TypeSpec project.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L54"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec-http/src/typespec-http.cop#L54"
       },
       {
         "name": "services",
         "params": "",
         "returns": "[HttpService]",
         "desc": "Returns all HTTP services defined in the TypeSpec project.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/typespec-http/src/typespec-http.cop#L57"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec-http/src/typespec-http.cop#L57"
       }
     ],
     "checks": [],
