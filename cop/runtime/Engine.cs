@@ -414,7 +414,28 @@ public static class Engine
             }
         }
 
+        // Check for "Command not found" errors and enhance with exported member listing
         errors.AddRange(bridge.Errors);
+        var notFoundErrors = errors.Where(e => e.Contains("not found") && e.Contains("Command")).ToList();
+        if (notFoundErrors.Count > 0)
+        {
+            var exportedMembers = GetExportedMembers(modules);
+            if (exportedMembers.Count > 0)
+            {
+                foreach (var nfe in notFoundErrors)
+                    errors.Remove(nfe);
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine("Package has no 'command main'. Exported members:");
+                foreach (var member in exportedMembers)
+                    sb.AppendLine($"  {member}");
+                errors.Add(sb.ToString().TrimEnd());
+            }
+        }
+        else
+        {
+            // No command-not-found — just add bridge errors normally
+            // (already added above, so no-op for the else case)
+        }
 
         // Collect structured diagnostics from module loader
         var diagnostics = new List<CopDiagnostic>();
@@ -683,6 +704,33 @@ public static class Engine
 
     private static string NormalizeCommandName(string name)
         => string.IsNullOrWhiteSpace(name) ? name : name.ToUpperInvariant();
+
+    private static List<string> GetExportedMembers(List<ParsedModule> modules)
+    {
+        var members = new List<string>();
+        foreach (var mod in modules)
+        {
+            foreach (var decl in mod.Module.Declarations)
+            {
+                if (decl is FunctionDecl fd && fd.IsExported && !string.Equals(fd.Name, "MAIN", StringComparison.OrdinalIgnoreCase))
+                {
+                    var paramsStr = string.Join(", ", fd.Params.Select(p =>
+                        p.Type is not null ? $"{p.Name} : {FormatTypeRef(p.Type)}" : p.Name));
+                    var returnStr = fd.ReturnType is not null ? $" : {FormatTypeRef(fd.ReturnType)}" : "";
+                    members.Add($"{fd.Name}({paramsStr}){returnStr}");
+                }
+                else if (decl is LetDecl ld && ld.IsExported)
+                {
+                    var typeStr = ld.TypeAnnotation is not null ? $" : {FormatTypeRef(ld.TypeAnnotation)}" : "";
+                    members.Add($"{ld.Name}{typeStr}");
+                }
+            }
+        }
+        return members;
+    }
+
+    private static string FormatTypeRef(TypeRef t) =>
+        t.IsCollection ? $"[{t.Name}]" : t.Name;
 
     private static PrintOutput CreatePrintOutput(string text)
     {
