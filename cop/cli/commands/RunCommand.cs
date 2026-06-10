@@ -911,8 +911,10 @@ public static class RunCommand
                     downloaded.Add(pkgName);
                     restored = true;
 
-                    // Parse .cop files to discover transitive imports
-                    foreach (var (relPath, _) in files.Where(f => f.Key.EndsWith(".cop", StringComparison.OrdinalIgnoreCase)))
+                    // Parse src/ .cop files to discover transitive imports (skip samples/)
+                    foreach (var (relPath, _) in files.Where(f =>
+                        f.Key.EndsWith(".cop", StringComparison.OrdinalIgnoreCase) &&
+                        f.Key.StartsWith("src/", StringComparison.OrdinalIgnoreCase)))
                     {
                         var filePath = Path.Combine(pkgDir, relPath);
                         try
@@ -1073,8 +1075,10 @@ public static class RunCommand
                     downloaded.Add(pkgName);
                     restored = true;
 
-                    // Parse .cop files to discover transitive imports
-                    foreach (var (relPath, _) in files.Where(f => f.Key.EndsWith(".cop", StringComparison.OrdinalIgnoreCase)))
+                    // Parse src/ .cop files to discover transitive imports (skip samples/)
+                    foreach (var (relPath, _) in files.Where(f =>
+                        f.Key.EndsWith(".cop", StringComparison.OrdinalIgnoreCase) &&
+                        f.Key.StartsWith("src/", StringComparison.OrdinalIgnoreCase)))
                     {
                         var filePath = Path.Combine(pkgDir, relPath);
                         try

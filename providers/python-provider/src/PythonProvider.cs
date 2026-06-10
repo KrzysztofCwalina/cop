@@ -17,7 +17,6 @@ public class PythonProvider : DataProvider
     {
         var parsers = new SourceParserRegistry();
         parsers.Register(new PythonSourceParser());
-        parsers.Register(new TextFileParser());
         var collections = CodeCollectionBuilder.CollectAndParse(parsers, query);
 
         // Discover projects from pyproject.toml/setup.py

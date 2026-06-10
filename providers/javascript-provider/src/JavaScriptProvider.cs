@@ -17,7 +17,6 @@ public class JavaScriptProvider : DataProvider
     {
         var parsers = new SourceParserRegistry();
         parsers.Register(new JavaScriptSourceParser());
-        parsers.Register(new TextFileParser());
         var collections = CodeCollectionBuilder.CollectAndParse(parsers, query);
 
         // Discover projects from package.json
