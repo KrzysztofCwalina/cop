@@ -13,8 +13,5 @@
     "naming",
     "design"
   ],
-  "language": "C#",
-  "provider": "clr",
-  "providerEntry": "Cop.Providers.CSharpProvider",
-  "providerAssembly": "csharp-provider.dll"
+  "language": "C#"
 }
