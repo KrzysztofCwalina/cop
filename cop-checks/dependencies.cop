@@ -1,10 +1,7 @@
 # Dependency checks for the cop project itself
 
-import csharp
-import code-analysis
-
 predicate hasAspNet(Project) => Project.Path:contains('cop/cli') && Project.Frameworks:contains('Microsoft.AspNetCore.App')
 
 ## ASP.NET FrameworkReference breaks single-file publish (adds aspnetcorev2_inprocess.dll)
-export let no-aspnet-in-cli = csharp.projects():hasAspNet
+export let no-aspnet-in-cli = Projects:hasAspNet
     :toError('Project {item.Name} has FrameworkReference to Microsoft.AspNetCore.App which breaks single-file publish')

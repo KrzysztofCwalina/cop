@@ -292,10 +292,12 @@ public static class RunCommand
         }
         else if (scopeToFile != null)
         {
-            // Single-file mode without user checks: load ONLY the specified file.
-            // Loading all sibling .cop files would trigger transitive import resolution
-            // for every package in the directory tree, loading unnecessary providers.
-            allScriptFiles = [scopeToFile];
+            // Load all .cop files in the same directory as the specified file.
+            // This enables the cop-checks/ pattern where main.cop imports providers
+            // and other files define checks that use the shared environment.
+            var siblingFiles = Directory.GetFiles(scriptsDir, "*.cop");
+            Array.Sort(siblingFiles, StringComparer.Ordinal);
+            allScriptFiles = siblingFiles;
         }
 
         // Resolve -p provider packages to directories

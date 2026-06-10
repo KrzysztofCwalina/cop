@@ -1,11 +1,8 @@
 # Intrinsics must be in intrinsics.cop
 
-import cop
-import code-analysis
-
 predicate isStrayIntrinsic(Statement) => Statement.Kind == 'declaration'
     && Statement.Keywords:contains('intrinsic')
     && !Statement.File.Path:endsWith('intrinsics.cop')
 
-export let intrinsics-in-wrong-file = cop.Statements:isStrayIntrinsic
+export let intrinsics-in-wrong-file = Statements:isStrayIntrinsic
     :toError('Intrinsic declaration must be in intrinsics.cop, not {item.File.Path}')
