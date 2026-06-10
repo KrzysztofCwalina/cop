@@ -11,6 +11,7 @@ Options:
 | Option | Description |
 |--------|-------------|
 | `-t <dir>` | Target directory |
+| `-p <provider>` | Load a data provider (can be repeated: `-p csharp -p python`) |
 | `-c <commands>` | Filter to specific named functions (comma-separated) |
 | `-f <format>` | Output format: `text` (default) or `json` |
 | `-d` | Diagnostic mode (timing, traces, debug output to stderr) |
@@ -103,6 +104,14 @@ Run a remote `.cop` file from a URL:
 
 ```bash
 cop https://raw.githubusercontent.com/owner/repo/main/checks.cop
+```
+
+Load data providers to supply code collections:
+
+```bash
+cop csharp-checks -t src/ -p csharp
+cop code-metrics -t . -p csharp -p python
+cop csharp-checks python-checks -t . -p csharp -p python
 ```
 
 Output as JSON:

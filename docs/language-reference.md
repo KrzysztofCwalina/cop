@@ -1130,7 +1130,7 @@ let status = 'OK'
 PRINT('{status@green}: all checks passed')
 ```
 
-PRINT honors styled interpolated strings — use `{text@style}` for colored/styled output.
+PRINT honors styled interpolated strings — use `{text@style}` for colored/styled output. Expressions with member access can also be styled: `{item.Name@dim}` evaluates the expression and renders the result with the style applied.
 
 ### SAVE
 
