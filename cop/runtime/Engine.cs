@@ -425,7 +425,7 @@ public static class Engine
                 foreach (var nfe in notFoundErrors)
                     errors.Remove(nfe);
                 var sb = new System.Text.StringBuilder();
-                sb.AppendLine("Package has no 'command main'. Exported members:");
+                sb.AppendLine("Package has no 'command main'. Exported functions:");
                 foreach (var member in exportedMembers)
                     sb.AppendLine($"  {member}");
                 errors.Add(sb.ToString().TrimEnd());
