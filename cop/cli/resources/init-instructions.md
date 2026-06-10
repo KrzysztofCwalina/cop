@@ -5,11 +5,21 @@ This project uses **Cop** for static analysis checks. All checks live in `cop-ch
 ## How to Run Checks
 
 ```bash
-cop cop-checks/main.cop -t .       # Run all checks against the repo
-cop verify cop-checks/              # Verify check files are correct (no execution)
+cop cop-checks/main.cop -t . -p csharp       # Run checks on C# code
+cop cop-checks/main.cop -t . -p python       # Run checks on Python code
+cop cop-checks/main.cop -t . -p csharp -p python  # Multi-language repo
+cop verify cop-checks/                        # Verify check files are correct (no execution)
 ```
 
 **Always run `cop verify` after writing or editing .cop files** to catch syntax/type errors before execution.
+
+### Running Packages Directly
+
+```bash
+cop csharp-checks -t .                  # Run the csharp-checks package
+cop csharp-checks python-checks -t .    # Run multiple packages
+cop code-metrics -t . -p csharp -p python  # Compute slop metrics across languages
+```
 
 ## How Checks Are Organized
 
@@ -32,19 +42,19 @@ Rules:
 ```cop
 # <Brief description of what this check enforces>
 
-import csharp-checks    # or: import code
+import code
 import code-analysis
 
 predicate isViolating(Type) => <condition>
 
-export let my-violations = csharp.Types:isViolating
-    :toError('<message about {item.Name} in {item.File.Path}>')
+export let my-violations = Types:isViolating
+    :toError('<message about {item.Name}>')
 ```
 
 ## Canonical `main.cop` Template
 
 ```cop
-# Run all checks: cop cop-checks/main.cop -t .
+# Run all checks: cop cop-checks/main.cop -t . -p csharp
 
 export let all-violations =
     check-a-violations +
@@ -61,14 +71,14 @@ command MAIN = CHECK(all-violations)
 ```cop
 # All C# types must be in namespaces
 
-import csharp-checks
+import code
 import code-analysis
 
 predicate isInTestProject(Type) => Type.File.Path:startsWith('tests/')
 predicate hasNamespace(Type) => Type.File.Namespace.Length:greaterThan(0)
 predicate isMissingNamespace(Type) => !hasNamespace && !isInTestProject
 
-export let types-without-namespace = csharp.Types:isMissingNamespace
+export let types-without-namespace = Types:isMissingNamespace
     :toError('{item.Name} in {item.File.Path} must be in a namespace')
 ```
 
@@ -77,7 +87,7 @@ export let types-without-namespace = csharp.Types:isMissingNamespace
 ```cop
 # Runtime must not reference providers
 
-import csharp-checks
+import code
 import code-analysis
 import code-layering
 
@@ -88,7 +98,7 @@ predicate isRuntimeReferencingProvider(Project) =>
     Project.Name:in(runtime-projects)
     && Project.References:containsAny(provider-projects)
 
-export let layering-violations = csharp.Projects:isRuntimeReferencingProvider
+export let layering-violations = Projects:isRuntimeReferencingProvider
     :toError('{item.Name} must not reference providers')
 ```
 
@@ -102,12 +112,33 @@ export let layering-violations = csharp.Projects:isRuntimeReferencingProvider
 
 - Strings use **single quotes**: `'hello'`
 - Interpolation: `'{item.Name} has {item.Count} methods'`
+- Styled interpolation: `'{item.File@dim}({item.Line@dim}): {item.Message}'`
 - Filter with colon: `collection:predicate` (e.g., `Types:isPublic`)
 - Chain filters: `Types:isPublic:hasNoTests`
 - Combine violations: `list-a + list-b`
 - Violation levels: `:toError('...')`, `:toWarning('...')`, `:toInfo('...')`
 - Comments: `#` (no multi-line comments)
 - Predicates are camelCase, types are PascalCase, commands are UPPERCASE
+
+## Providers and Ambient Collections
+
+Providers supply data collections (Types, Statements, Lines, Files, etc.) from source code. Load them with `-p`:
+
+```bash
+cop my-checks.cop -t . -p csharp          # C# code analysis
+cop my-checks.cop -t . -p python          # Python code analysis
+cop my-checks.cop -t . -p javascript      # JavaScript/TypeScript analysis
+cop my-checks.cop -t . -p csharp -p python -p javascript  # All languages
+```
+
+Once loaded, providers fill **ambient collections** you can use directly in .cop files:
+- `Types` — all types from all loaded providers
+- `Statements` — all statements
+- `Lines` — all source lines
+- `Files` — all source files
+- `Projects` — all projects
+
+For multi-language repos, use multiple `-p` flags — collections merge automatically.
 
 ## Getting More Help
 
@@ -122,13 +153,16 @@ When using a package, run `cop help <package-name>` to see its types and API.
 
 ## Common Packages
 
-| Package | Provides | Key Collections |
-|---------|----------|-----------------|
-| `code` | Source code analysis | Types, Methods, Statements, Lines, Files |
+| Package | Provides | Usage |
+|---------|----------|-------|
+| `code` | Source code types | Types, Statements, Lines, Files, Methods |
 | `code-analysis` | Violation type + CHECK | toError, toWarning, toInfo |
+| `code-metrics` | Slop metrics (JSON) | METRICS(violations, lines) |
 | `code-layering` | Dependency rules | containsAny, in |
+| `csharp-checks` | C# conventions | Run with: `cop csharp-checks -t .` |
+| `python-checks` | Python conventions | Run with: `cop python-checks -t .` |
+| `javascript-checks` | JS/TS conventions | Run with: `cop javascript-checks -t .` |
 | `files` | Filesystem analysis | Folders, Files |
-| `csharp-checks` | C# language provider | csharp.Types, csharp.Projects, csharp.Methods |
 
 ## Reporting Issues (IMPORTANT)
 
