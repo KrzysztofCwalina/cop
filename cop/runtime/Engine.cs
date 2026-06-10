@@ -190,7 +190,8 @@ public static class Engine
         string[]? programArgs,
         string[]? commandFilter,
         Action<string>? diagLog,
-        List<(string Dir, PackageMetadata Meta)>? topLevelProviderPackages)
+        List<(string Dir, PackageMetadata Meta)>? topLevelProviderPackages,
+        Dictionary<string, List<ParsedModule>>? packageModuleMap = null)
     {
         var outputs = new List<PrintOutput>();
         var warnings = new List<string>();
@@ -360,9 +361,39 @@ public static class Engine
         else
             diagLog?.Invoke("[diag] After registration, 'Folders' NOT FOUND in env");
 
+        // When multiple top-level packages are specified, register each package's 'command main'
+        // under a package-qualified alias so all can be run in sequence.
+        // Note: the parser converts `command foo` to FunctionDecl with name uppercased to "FOO".
+        if (packageModuleMap is { Count: > 1 })
+        {
+            foreach (var (pkgName, pkgModules) in packageModuleMap)
+            {
+                bool found = false;
+                foreach (var mod in pkgModules)
+                {
+                    var mainFunc = mod.Module.Declarations
+                        .OfType<FunctionDecl>()
+                        .FirstOrDefault(fd => string.Equals(fd.Name, "MAIN", StringComparison.OrdinalIgnoreCase));
+                    if (mainFunc is not null)
+                    {
+                        var qualifiedName = NormalizeCommandName(pkgName);
+                        var cmdFunc = new CopFunction(mainFunc, bridge.Evaluator.GlobalEnvironment);
+                        bridge.Evaluator.GlobalEnvironment.Define(qualifiedName, cmdFunc);
+                        diagLog?.Invoke($"[diag] Registered package command '{qualifiedName}' from {pkgName}");
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found)
+                    diagLog?.Invoke($"[diag] No 'command main' found in package '{pkgName}'");
+            }
+        }
+
         var commandsToRun = commandFilter is { Length: > 0 }
             ? commandFilter.Select(NormalizeCommandName).Distinct(StringComparer.Ordinal).ToList()
-            : new List<string> { commandName ?? "main" };
+            : packageModuleMap is { Count: > 1 }
+                ? packageModuleMap.Keys.Select(NormalizeCommandName).ToList()
+                : new List<string> { commandName ?? "main" };
 
         foreach (var command in commandsToRun)
         {
@@ -729,6 +760,7 @@ public static class Engine
         var fatalErrors = new List<string>();
         var modules = new List<ParsedModule>();
         var providerPackages = new List<(string Dir, PackageMetadata Meta)>();
+        var packageModuleMap = new Dictionary<string, List<ParsedModule>>(StringComparer.OrdinalIgnoreCase);
         var normalizedFeedPaths = feedPaths
             .Select(Path.GetFullPath)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -748,7 +780,9 @@ public static class Engine
                 {
                     var copFiles = Directory.GetFiles(srcDir, "*.cop");
                     Array.Sort(copFiles, StringComparer.Ordinal);
-                    modules.AddRange(ParseModules(copFiles, parseErrors));
+                    var parsed = ParseModules(copFiles, parseErrors);
+                    modules.AddRange(parsed);
+                    packageModuleMap[packageName] = parsed;
                 }
 
                 DetectProviderPackage(Path.Combine(packageDir, "src"), packageName, normalizedFeedPaths, providerPackages, parseErrors);
@@ -803,7 +837,8 @@ public static class Engine
             programArgs,
             rules.Count > 0 ? [.. rules] : null,
             diagLog: diagLog,
-            topLevelProviderPackages: providerPackages);
+            topLevelProviderPackages: providerPackages,
+            packageModuleMap: packageModuleMap.Count > 1 ? packageModuleMap : null);
     }
 
     /// <summary>
