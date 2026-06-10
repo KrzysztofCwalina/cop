@@ -1,4 +1,6 @@
 import python
 
+let cb = python.parse()
+
 # List all public types in the Python codebase
-command MAIN = foreach python.types():isPublic => '{item.Name} ({item.Kind})'
+command MAIN = foreach cb.Types:isPublic => '{item.Name} ({item.Kind})'

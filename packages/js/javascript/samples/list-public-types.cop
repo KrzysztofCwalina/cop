@@ -1,4 +1,6 @@
 import javascript
 
+let cb = javascript.parse()
+
 # List all public types in the JavaScript/TypeScript codebase
-command MAIN = foreach javascript.types():isPublic => '{item.Name} ({item.Kind})'
+command MAIN = foreach cb.Types:isPublic => '{item.Name} ({item.Kind})'
