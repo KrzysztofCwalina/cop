@@ -3,20 +3,14 @@
 # the standard code analysis collections (Types, Statements, Lines, Files).
 #
 # Usage: import cop
-# Then use cop.types(), cop.lines(), cop.files(), etc.
+# Then use cop.parse() to get the Codebase, or ambient collections with -p cop.
 
 import code
 
-let cb : Codebase = provider('cop')
+## Parses .cop source files in the target directory and returns a Codebase.
+## Example: let cb = cop.parse()
+export function parse() : Codebase => provider('cop')
 
-## Returns all types defined in .cop source files.
-export function types() : [Type] => cb.Types
-
-## Returns all statements in .cop source files.
-export function statements() : [Statement] => cb.Statements
-
-## Returns all source lines in .cop source files.
-export function lines() : [Line] => cb.Lines
-
-## Returns all .cop source files.
-export function files() : [File] => cb.Files
+## Parses .cop source files in the specified directory and returns a Codebase.
+## Example: let cb = cop.parse('/path/to/project')
+export function parse(path : string) : Codebase => provider('cop', path)

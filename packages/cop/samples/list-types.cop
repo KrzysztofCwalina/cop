@@ -1,4 +1,5 @@
 import cop
 
 # List all types defined in .cop files
-command MAIN = foreach cop.types() => '{item.Name} ({item.File.Path})'
+let cb = cop.parse()
+command MAIN = foreach cb.Types => '{item.Name} ({item.File.Path})'
