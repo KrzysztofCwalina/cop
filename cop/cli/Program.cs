@@ -192,10 +192,10 @@ var defaultHelp = rootCommand.Options.FirstOrDefault(o => o is HelpOption);
 if (defaultHelp != null) rootCommand.Options.Remove(defaultHelp);
 rootCommand.Options.Add(new HelpOption("-h"));
 
-// Replace built-in --version with -v
+// Replace built-in --version with -v/--version
 var defaultVersion = rootCommand.Options.FirstOrDefault(o => o is VersionOption);
 if (defaultVersion != null) rootCommand.Options.Remove(defaultVersion);
-rootCommand.Options.Add(new VersionOption("-v"));
+rootCommand.Options.Add(new VersionOption("-v", "--version"));
 
 rootCommand.Add(TestCommand.Create());
 rootCommand.Add(SyntaxCommand.Create());
