@@ -715,7 +715,10 @@ public sealed class Evaluator
                     break;
                 case ExpressionPart ep:
                     var val = Eval(ep.Expr, env);
-                    sb.Append(val.Display());
+                    if (ep.Format is not null)
+                        sb.Append($"{{{val.Display()}@{ep.Format}}}");
+                    else
+                        sb.Append(val.Display());
                     break;
             }
         }

@@ -1239,11 +1239,24 @@ public class CopParser
                 }
 
                 // Check for style syntax: {text@style} — literal text with styling
+                // vs expression with styling: {expr.path@style}
                 if (inner.Contains('@'))
                 {
-                    // {text@style} renders the text before @ as literal styled text
-                    var textPart = inner.Split('@')[0];
-                    parts.Add(new TextPart(textPart));
+                    var atIndex = inner.IndexOf('@');
+                    var exprPart = inner[..atIndex];
+                    var stylePart = inner[(atIndex + 1)..];
+
+                    if (exprPart.Contains('.'))
+                    {
+                        // Dotted path → expression with styling (e.g., {item.File@dim})
+                        var expr = ParseDottedPath(exprPart, line);
+                        parts.Add(new ExpressionPart(expr, stylePart));
+                    }
+                    else
+                    {
+                        // Simple word → literal styled text (e.g., {Hello@red})
+                        parts.Add(new TextPart(exprPart));
+                    }
                 }
                 else
                 {
