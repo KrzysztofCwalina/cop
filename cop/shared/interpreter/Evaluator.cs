@@ -83,10 +83,20 @@ public sealed class Evaluator
         {
             if (decl is LetDecl ld)
             {
-                var capturedLd = ld;
-                var capturedEnv = _globalEnv;
-                var thunk = new CopThunk(() => Eval(capturedLd.Value, capturedEnv));
-                _globalEnv.Define(ld.Name, thunk);
+                // If this let shadows a function/callable with the same name, evaluate eagerly
+                // to avoid self-referencing thunk (e.g., let codebase = codebase(csharp))
+                if (_globalEnv.TryLookup(ld.Name, out var existing) && existing is ICopCallable)
+                {
+                    var value = Eval(ld.Value, _globalEnv);
+                    _globalEnv.Define(ld.Name, value);
+                }
+                else
+                {
+                    var capturedLd = ld;
+                    var capturedEnv = _globalEnv;
+                    var thunk = new CopThunk(() => Eval(capturedLd.Value, capturedEnv));
+                    _globalEnv.Define(ld.Name, thunk);
+                }
             }
         }
     }

@@ -367,7 +367,7 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
 
     public CopValue Invoke(IReadOnlyList<CopValue> args, Evaluator evaluator, Environment env)
     {
-        // Try to find matching overload by first parameter type
+        // Try to find matching overload by first parameter type (for predicates)
         if (args.Count > 0)
         {
             var subject = args[0];
@@ -407,15 +407,18 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
                     }
                 }
             }
+        }
 
-            // Try matching by arity (including param array: last param is collection-typed)
-            foreach (var overload in _overloads)
-            {
-                if (overload.Arity == args.Count)
-                    return evaluator.CallUserFunction(overload, args);
-            }
+        // Try matching by arity
+        foreach (var overload in _overloads)
+        {
+            if (overload.Arity == args.Count)
+                return evaluator.CallUserFunction(overload, args);
+        }
 
-            // Try matching overloads with param array (more args than params)
+        // Try matching overloads with param array (more args than params)
+        if (args.Count > 0)
+        {
             foreach (var overload in _overloads)
             {
                 if (args.Count > overload.Arity && overload.Arity > 0 &&

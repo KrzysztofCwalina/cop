@@ -39,6 +39,15 @@ public sealed class Scope
     }
 
     /// <summary>
+    /// Declare a symbol, replacing any existing symbol with the same name.
+    /// Used for let-shadowing of imported functions.
+    /// </summary>
+    public void DeclareOrReplace(Symbol symbol)
+    {
+        _symbols[symbol.Name] = symbol;
+    }
+
+    /// <summary>
     /// Look up a symbol by name, walking the parent chain.
     /// Returns null if the name is not found in any enclosing scope.
     /// </summary>

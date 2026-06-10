@@ -61,22 +61,21 @@ Create `my-checks.cop` — this demonstrates analyzing a mixed-language codebase
 import csharp
 import python
 import javascript
-import code
 import code-analysis
 import code-metrics
 
 # Create a unified codebase from all language providers
-let cb = codebase(csharp, python, javascript)
+let codebase = codebase(csharp, python, javascript)
 
 # Custom rule: flag types with too many methods (god classes)
 predicate hasTooManyMethods(Type) => Type.Methods.count() > 20
-let large-types = cb.Types:hasTooManyMethods
+let large-types = codebase.Types:hasTooManyMethods
     :toViolation('Type {item.Name} has {item.Methods.count()} methods', 0.6, 0.95)
 
 # Combine with built-in slop
 let my-slop = slop + large-types
 
-command main = METRICS(my-slop, cb.Lines)
+command main = METRICS(my-slop, codebase.Lines)
 ```
 
 **Run:**
@@ -106,13 +105,12 @@ Use `CHECK` to see specific violations:
 
 ```cop
 import csharp
-import code
 import code-analysis
 
-let cb = codebase(csharp)
+let codebase = codebase(csharp)
 
 predicate hasTooManyMethods(Type) => Type.Methods.count() > 20
-let large-types = cb.Types:hasTooManyMethods
+let large-types = codebase.Types:hasTooManyMethods
     :toViolation('Type {item.Name} has {item.Methods.count()} methods', 0.6, 0.95)
 
 command main = CHECK(large-types)

@@ -6,5 +6,5 @@ import code
 export function parse() : Codebase => provider('python')
 
 ## Parses Python source files in the specified directory and returns a Codebase.
-## Example: let cb = python.parseFrom('/path/to/project')
-export function parseFrom(path : string) : Codebase => provider('python', path)
+## Example: let cb = python.parse('/path/to/project')
+export function parse(path : string) : Codebase => provider('python', path)

@@ -173,13 +173,28 @@ public sealed class Binder
 
         if (!_currentScope.Declare(symbol))
         {
-            // Predicate overloading: Cop allows multiple predicates with same name (different guards).
-            // Commands and regular functions must not be duplicated.
+            // Overloading rules:
+            // 1. Predicates: always allowed (dispatched by input type/guard)
+            // 2. Functions: allowed if different arity (parameter count)
+            // 3. Commands: never allowed
             var existing = _currentScope.ResolveLocal(decl.Name);
-            if (existing is not FunctionSymbol existingFn
-                || existingFn.CallableKind != CallableKind.Predicate
-                || callableKind != CallableKind.Predicate)
+            if (existing is FunctionSymbol existingFn
+                && existingFn.CallableKind == CallableKind.Predicate
+                && callableKind == CallableKind.Predicate)
+            {
+                // Predicate overloading — always OK
+            }
+            else if (existing is FunctionSymbol existingFunc
+                && callableKind == CallableKind.Function
+                && existingFunc.CallableKind == CallableKind.Function
+                && existingFunc.Parameters.Count != symbol.Parameters.Count)
+            {
+                // Function overloading by arity — OK
+            }
+            else
+            {
                 ReportDuplicate(decl.Name, decl.Line);
+            }
         }
 
         _result.RecordResolution(decl, symbol);
@@ -194,7 +209,14 @@ public sealed class Binder
         };
 
         if (!_currentScope.Declare(symbol))
-            ReportDuplicate(decl.Name, decl.Line);
+        {
+            // Allow let to shadow an imported function (common pattern: let codebase = codebase(...))
+            var existing = _currentScope.ResolveLocal(decl.Name);
+            if (existing is FunctionSymbol)
+                _currentScope.DeclareOrReplace(symbol);
+            else
+                ReportDuplicate(decl.Name, decl.Line);
+        }
 
         _result.RecordResolution(decl, symbol);
     }

@@ -6,5 +6,5 @@ import code
 export function parse() : Codebase => provider('javascript')
 
 ## Parses JavaScript/TypeScript source files in the specified directory and returns a Codebase.
-## Example: let cb = javascript.parseFrom('/path/to/project')
-export function parseFrom(path : string) : Codebase => provider('javascript', path)
+## Example: let cb = javascript.parse('/path/to/project')
+export function parse(path : string) : Codebase => provider('javascript', path)
