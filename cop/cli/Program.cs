@@ -52,6 +52,7 @@ if (args.Length == 1 && (args[0] == "-h" || args[0] == "-help" || args[0] == "--
 
         Options:
           -t <dir>      Target directory
+          -p <provider> Load a provider package (multiple allowed)
           -c <commands> Filter to specific commands (comma-separated)
           -f <format>   Output format: text or json
           -h            Show help
@@ -105,12 +106,13 @@ if (!knownVerbs.Contains(args[0]) && !args[0].StartsWith('-') && !args[0].Starts
     // 1. Explicit .cop file → run it directly
     if (firstArg.EndsWith(".cop", StringComparison.OrdinalIgnoreCase))
     {
-        // Extract known flags (-t, -f, -d, -c, -om) from remaining args
+        // Extract known flags (-t, -f, -d, -c, -om, -p) from remaining args
         string? copTarget = null;
         string? copFormat = null;
         string? copCommands = null;
         bool copDiag = diag;
         bool copOnlyIfModified = false;
+        var copProviders = new List<string>();
         var programArgs = new List<string>();
         var remaining = args.Length > 1 ? args[1..] : Array.Empty<string>();
         for (int i = 0; i < remaining.Length; i++)
@@ -118,11 +120,12 @@ if (!knownVerbs.Contains(args[0]) && !args[0].StartsWith('-') && !args[0].Starts
             if (remaining[i] == "-t" && i + 1 < remaining.Length) copTarget = remaining[++i];
             else if (remaining[i] == "-f" && i + 1 < remaining.Length) copFormat = remaining[++i];
             else if (remaining[i] == "-c" && i + 1 < remaining.Length) copCommands = remaining[++i];
+            else if (remaining[i] == "-p" && i + 1 < remaining.Length) copProviders.Add(remaining[++i]);
             else if (remaining[i] == "-d") copDiag = true;
             else if (remaining[i] == "-om") copOnlyIfModified = true;
             else programArgs.Add(remaining[i]);
         }
-        return RunCommand.Execute(firstArg, programArgs.Count > 0 ? programArgs.ToArray() : null, copTarget, copFormat, copCommands, copDiag, copOnlyIfModified);
+        return RunCommand.Execute(firstArg, programArgs.Count > 0 ? programArgs.ToArray() : null, copTarget, copFormat, copCommands, copDiag, copOnlyIfModified, copProviders.Count > 0 ? copProviders.ToArray() : null);
     }
 
     // 2. URL → run remotely
@@ -150,11 +153,13 @@ if (!knownVerbs.Contains(args[0]) && !args[0].StartsWith('-') && !args[0].Starts
     string? format = "text";
     bool isDiag = diag;
     bool isOnlyIfModified = false;
+    var pkgProviders = new List<string>();
     for (int i = 0; i < remainingArgs.Length; i++)
     {
         if (remainingArgs[i] == "-t" && i + 1 < remainingArgs.Length) target = remainingArgs[++i];
         else if (remainingArgs[i] == "-c" && i + 1 < remainingArgs.Length) rules = remainingArgs[++i];
         else if (remainingArgs[i] == "-f" && i + 1 < remainingArgs.Length) format = remainingArgs[++i];
+        else if (remainingArgs[i] == "-p" && i + 1 < remainingArgs.Length) pkgProviders.Add(remainingArgs[++i]);
         else if (remainingArgs[i] == "-d") isDiag = true;
         else if (remainingArgs[i] == "-om") isOnlyIfModified = true;
     }
@@ -164,7 +169,7 @@ if (!knownVerbs.Contains(args[0]) && !args[0].StartsWith('-') && !args[0].Starts
     if (!string.IsNullOrEmpty(rules))
         rulesFilter = rules.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-    return RunCommand.ExecutePackages(packages, rootPath, rulesFilter, format, isDiag, isOnlyIfModified);
+    return RunCommand.ExecutePackages(packages, rootPath, rulesFilter, format, isDiag, isOnlyIfModified, pkgProviders.Count > 0 ? pkgProviders.ToArray() : null);
 }
 
 var rootCommand = new RootCommand

@@ -1,25 +1,10 @@
 # Python source language provider
 import code
 
-let cb : Codebase = provider('python')
+## Parses Python source files in the target directory and returns a Codebase.
+## Example: let cb = python.parse()
+export function parse() : Codebase => provider('python')
 
-## Returns all types (classes) in the Python codebase.
-export function types() : [Type] => cb.Types
-
-## Returns all statements in the Python codebase.
-export function statements() : [Statement] => cb.Statements
-
-## Returns all source lines in the Python codebase.
-export function lines() : [Line] => cb.Lines
-
-## Returns all method/function calls in the Python codebase.
-export function calls() : [Call] => cb.Calls
-
-## Returns all source files in the Python codebase.
-export function files() : [File] => cb.Files
-
-## Returns all code regions in the Python codebase.
-export function regions() : [Region] => cb.Regions
-
-## Returns all projects in the Python workspace.
-export function projects() : [Project] => cb.Projects
+## Parses Python source files in the specified directory and returns a Codebase.
+## Example: let cb = python.parseFrom('/path/to/project')
+export function parseFrom(path : string) : Codebase => provider('python', path)

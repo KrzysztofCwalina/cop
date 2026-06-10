@@ -1,6 +1,7 @@
 # Code Metrics Package v1.0
 # Computes aggregate code quality metrics from violations and outputs as JSON.
 # Import with: import code-metrics
+# Run standalone: cop code-metrics -t <dir> -p csharp
 
 import code
 import code-analysis
@@ -45,3 +46,7 @@ export let slop =
     exception-suffix:withSeverity(0.5) +
     attribute-suffix:withSeverity(0.5) +
     param-camel-case:withSeverity(0.3)
+
+## Default command: compute slop metrics using ambient Lines from loaded providers.
+## Run with: cop code-metrics -t <dir> -p csharp
+command main = METRICS(slop, Lines)

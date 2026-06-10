@@ -1526,10 +1526,10 @@ const packages = {
     "functions": [
       {
         "name": "codebase",
-        "params": "providers: [object]",
-        "returns": "object",
-        "appliesTo": "[object]",
-        "desc": "Creates a unified Codebase from one or more language providers.\nExample: let codebase = codebase(csharp, python, javascript)",
+        "params": "providers: [Codebase]",
+        "returns": "Codebase",
+        "appliesTo": "[Codebase]",
+        "desc": "Creates a unified Codebase from one or more language providers.\nExample: let cb = codebase(csharp, python, javascript)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/src/code.cop#L252"
       }
     ],
@@ -2649,65 +2649,23 @@ const packages = {
       {
         "name": "parse",
         "params": "",
-        "returns": "object",
+        "returns": "Codebase",
         "desc": "Parses C# source files in the target directory and returns a Codebase.\nExample: let cb = csharp.parse()",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L6"
       },
       {
-        "name": "load",
+        "name": "parseFrom",
         "params": "path: string",
-        "returns": "object",
-        "desc": "Loads a .NET assembly binary and returns its code model.\nExample: csharp.load('lib/MyLib.dll')",
+        "returns": "Codebase",
+        "desc": "Parses C# source files in the specified directory and returns a Codebase.\nExample: let cb = csharp.parseFrom('/path/to/project')",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L10"
       },
       {
-        "name": "types",
-        "params": "",
-        "returns": "[Type]",
-        "desc": "",
+        "name": "load",
+        "params": "path: string",
+        "returns": "Codebase",
+        "desc": "Loads a .NET assembly binary and returns its code model.\nExample: csharp.load('lib/MyLib.dll')",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L14"
-      },
-      {
-        "name": "statements",
-        "params": "",
-        "returns": "[Statement]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L15"
-      },
-      {
-        "name": "lines",
-        "params": "",
-        "returns": "[Line]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L16"
-      },
-      {
-        "name": "calls",
-        "params": "",
-        "returns": "[Call]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L17"
-      },
-      {
-        "name": "files",
-        "params": "",
-        "returns": "[File]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L18"
-      },
-      {
-        "name": "regions",
-        "params": "",
-        "returns": "[Region]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L19"
-      },
-      {
-        "name": "projects",
-        "params": "",
-        "returns": "[Project]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L20"
       }
     ],
     "checks": [],
@@ -3559,58 +3517,16 @@ const packages = {
       {
         "name": "parse",
         "params": "",
-        "returns": "object",
+        "returns": "Codebase",
         "desc": "Parses JavaScript/TypeScript source files in the target directory and returns a Codebase.\nExample: let cb = javascript.parse()",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L6"
       },
       {
-        "name": "types",
-        "params": "",
-        "returns": "[Type]",
-        "desc": "",
+        "name": "parseFrom",
+        "params": "path: string",
+        "returns": "Codebase",
+        "desc": "Parses JavaScript/TypeScript source files in the specified directory and returns a Codebase.\nExample: let cb = javascript.parseFrom('/path/to/project')",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L10"
-      },
-      {
-        "name": "statements",
-        "params": "",
-        "returns": "[Statement]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L11"
-      },
-      {
-        "name": "lines",
-        "params": "",
-        "returns": "[Line]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L12"
-      },
-      {
-        "name": "calls",
-        "params": "",
-        "returns": "[Call]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L13"
-      },
-      {
-        "name": "files",
-        "params": "",
-        "returns": "[File]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L14"
-      },
-      {
-        "name": "regions",
-        "params": "",
-        "returns": "[Region]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L15"
-      },
-      {
-        "name": "projects",
-        "params": "",
-        "returns": "[Project]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L16"
       }
     ],
     "checks": [],
@@ -4024,58 +3940,16 @@ const packages = {
       {
         "name": "parse",
         "params": "",
-        "returns": "object",
+        "returns": "Codebase",
         "desc": "Parses Python source files in the target directory and returns a Codebase.\nExample: let cb = python.parse()",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L6"
       },
       {
-        "name": "types",
-        "params": "",
-        "returns": "[Type]",
-        "desc": "",
+        "name": "parseFrom",
+        "params": "path: string",
+        "returns": "Codebase",
+        "desc": "Parses Python source files in the specified directory and returns a Codebase.\nExample: let cb = python.parseFrom('/path/to/project')",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L10"
-      },
-      {
-        "name": "statements",
-        "params": "",
-        "returns": "[Statement]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L11"
-      },
-      {
-        "name": "lines",
-        "params": "",
-        "returns": "[Line]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L12"
-      },
-      {
-        "name": "calls",
-        "params": "",
-        "returns": "[Call]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L13"
-      },
-      {
-        "name": "files",
-        "params": "",
-        "returns": "[File]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L14"
-      },
-      {
-        "name": "regions",
-        "params": "",
-        "returns": "[Region]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L15"
-      },
-      {
-        "name": "projects",
-        "params": "",
-        "returns": "[Project]",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L16"
       }
     ],
     "checks": [],

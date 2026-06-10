@@ -201,10 +201,13 @@ public static class TypeValidator
         // CopObject with matching TypeName
         if (value is CopObject obj)
         {
+            // Anonymous object literals (no TypeName) are structurally typed — compatible with any named type
+            if (obj.TypeName is null)
+                return true;
             if (string.Equals(obj.TypeName, typeName, StringComparison.OrdinalIgnoreCase))
                 return true;
             // Check trait conformance
-            if (registry is not null && obj.TypeName is not null && registry.ConformsTo(obj.TypeName, typeName))
+            if (registry is not null && registry.ConformsTo(obj.TypeName, typeName))
                 return true;
             return false;
         }
@@ -220,7 +223,16 @@ public static class TypeValidator
             return false;
         }
 
-        // CopProviderProxy matches 'object' (already handled above) but not named types
+        // CopProviderProxy matches 'object' (already handled above) and also
+        // matches Codebase since it exposes the same structural fields
+        if (value is CopProviderProxy)
+        {
+            // Provider proxies are structurally compatible with Codebase
+            if (string.Equals(typeName, "Codebase", StringComparison.OrdinalIgnoreCase))
+                return true;
+            return false;
+        }
+
         return false;
     }
 

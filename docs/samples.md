@@ -29,6 +29,16 @@ These are standalone examples in `samples/` demonstrating language features and 
 | [s20-crosslanguage](../samples/s20-crosslanguage/checks.cop) | Cross-language code analysis |
 | [s21-filtering](../samples/s21-filtering/filters.cop) | Filtering and subset patterns |
 
+## Demo Samples
+
+End-to-end demo scripts in `samples/demo/` covering the full cop workflow.
+
+| Sample | Description |
+|--------|-------------|
+| [demo-multilang](../samples/demo/demo-multilang.cop) | Multi-language codebase analysis (C# + JS) |
+| [demo-slop](../samples/demo/demo-slop.cop) | Computing aggregate slop score as JSON |
+| [demo-custom](../samples/demo/demo-custom.cop) | Adding custom rules to slop scoring |
+
 ## Package Samples
 
 Each package includes samples in its `samples/` directory showing real-world usage.

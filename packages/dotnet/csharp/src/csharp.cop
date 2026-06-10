@@ -1,31 +1,14 @@
 # C# source language provider
 import code
 
-let cb : Codebase = provider('csharp')
+## Parses C# source files in the target directory and returns a Codebase.
+## Example: let cb = csharp.parse()
+export function parse() : Codebase => provider('csharp')
 
-## Returns all types (classes, structs, interfaces, enums) in the C# codebase.
-export function types() : [Type] => cb.Types
+## Parses C# source files in the specified directory and returns a Codebase.
+## Example: let cb = csharp.parseFrom('/path/to/project')
+export function parseFrom(path : string) : Codebase => provider('csharp', path)
 
-## Returns all statements in the C# codebase.
-export function statements() : [Statement] => cb.Statements
-
-## Returns all source lines in the C# codebase.
-export function lines() : [Line] => cb.Lines
-
-## Returns all method/function calls in the C# codebase.
-export function calls() : [Call] => cb.Calls
-
-## Returns all source files in the C# codebase.
-export function files() : [File] => cb.Files
-
-## Returns all code regions in the C# codebase.
-export function regions() : [Region] => cb.Regions
-
-## Returns all projects in the C# solution.
-export function projects() : [Project] => cb.Projects
-
-## Loads a .NET assembly and returns its code model.
-## The path is relative to the project root.
-## The returned Codebase has Types, Api, Members, Lines, etc.
-## Example: csharp.Load('lib/MyLib.dll')
-export function Load(path : string) : object => provider('csharp', path)
+## Loads a .NET assembly binary and returns its code model.
+## Example: csharp.load('lib/MyLib.dll')
+export function load(path : string) : Codebase => provider('csharp', path)

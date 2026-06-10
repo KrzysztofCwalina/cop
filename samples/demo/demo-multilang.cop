@@ -1,0 +1,10 @@
+import code
+import csharp
+import javascript
+
+let cs : Codebase = provider('csharp')
+let js : Codebase = provider('javascript')
+
+command main =
+    print('C#: {cs.Types.Count} types, {cs.Files.Count} files, {cs.Lines.Count} lines') |
+    print('JS: {js.Types.Count} types, {js.Files.Count} files, {js.Lines.Count} lines')

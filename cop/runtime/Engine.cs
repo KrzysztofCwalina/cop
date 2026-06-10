@@ -44,7 +44,7 @@ public static class Engine
     /// <summary>
     /// Discovers .cop scripts and source files, then runs all commands.
     /// </summary>
-    public static EngineResult Run(string scriptsDir, string rootPath, string? commandName = null, string[]? programArgs = null, string[]? commandFilter = null, Action<string>? diagLog = null, bool assertMode = false, string[]? additionalFeedPaths = null, string[]? scriptFiles = null)
+    public static EngineResult Run(string scriptsDir, string rootPath, string? commandName = null, string[]? programArgs = null, string[]? commandFilter = null, Action<string>? diagLog = null, bool assertMode = false, string[]? additionalFeedPaths = null, string[]? scriptFiles = null, List<(string Dir, PackageMetadata Meta)>? providerPackages = null)
     {
         var totalSw = Stopwatch.StartNew();
 
@@ -77,7 +77,7 @@ public static class Engine
             programArgs,
             commandFilter,
             diagLog,
-            topLevelProviderPackages: null);
+            topLevelProviderPackages: providerPackages);
 
         diagLog?.Invoke($"[diag] Total: {totalSw.ElapsedMilliseconds}ms");
         return result;
@@ -695,7 +695,8 @@ public static class Engine
         List<string> rules,
         string[]? programArgs = null,
         Action<string>? diagLog = null,
-        string[]? additionalScriptFiles = null)
+        string[]? additionalScriptFiles = null,
+        string[]? providers = null)
     {
         rootPath = Path.GetFullPath(rootPath);
 
@@ -737,6 +738,30 @@ public static class Engine
         // Include additional script files (e.g., user-global checks)
         if (additionalScriptFiles is { Length: > 0 })
             modules.AddRange(ParseModules(additionalScriptFiles, parseErrors));
+
+        // Resolve -p provider packages
+        if (providers is { Length: > 0 })
+        {
+            foreach (var providerName in providers)
+            {
+                string? pkgDir = null;
+                foreach (var feedPath in normalizedFeedPaths)
+                {
+                    pkgDir = ImportResolver.FindPackageDir(feedPath, providerName);
+                    if (pkgDir != null) break;
+                }
+                if (pkgDir is null)
+                {
+                    fatalErrors.Add($"Provider package '{providerName}' not found in any feed");
+                    continue;
+                }
+                var metadata = PackageMetadata.TryLoadFromDirectory(pkgDir);
+                if (metadata is not null && metadata.IsProvider)
+                    providerPackages.Add((pkgDir, metadata));
+                else
+                    fatalErrors.Add($"Package '{providerName}' is not a provider (no lib/ with DLL)");
+            }
+        }
 
         if (fatalErrors.Count > 0)
             return new EngineResult([], parseErrors, fatalErrors);

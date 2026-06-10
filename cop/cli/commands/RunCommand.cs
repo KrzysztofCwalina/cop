@@ -183,7 +183,7 @@ public static class RunCommand
         return 0;
     }
 
-    public static int Execute(string? command, string[]? programArgs = null, string? target = null, string? format = null, string? commands = null, bool diag = false, bool onlyIfModified = false)
+    public static int Execute(string? command, string[]? programArgs = null, string? target = null, string? format = null, string? commands = null, bool diag = false, bool onlyIfModified = false, string[]? providers = null)
     {
         if (command != null && IsUri(command))
             return ExecuteFromUri(command, programArgs, target, format, commands, diag);
@@ -298,7 +298,40 @@ public static class RunCommand
             allScriptFiles = [scopeToFile];
         }
 
-        var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog, additionalFeedPaths: FindFeedPathsFromCwd(), scriptFiles: allScriptFiles);
+        // Resolve -p provider packages to directories
+        List<(string Dir, PackageMetadata Meta)>? providerPackages = null;
+        if (providers is { Length: > 0 })
+        {
+            providerPackages = [];
+            var providerFeedPaths = new List<string>(FindFeedPathsFromCwd());
+            var cachePath = PackageResolver.GlobalCachePath;
+            if (Directory.Exists(cachePath) && !providerFeedPaths.Contains(cachePath))
+                providerFeedPaths.Add(cachePath);
+
+            foreach (var providerName in providers)
+            {
+                string? pkgDir = null;
+                foreach (var feed in providerFeedPaths)
+                {
+                    pkgDir = ImportResolver.FindPackageDir(feed, providerName);
+                    if (pkgDir != null) break;
+                }
+                if (pkgDir is null)
+                {
+                    Console.Error.WriteLine($"Error: Provider package '{providerName}' not found. Use -p with a valid package name.");
+                    return 2;
+                }
+                var metadata = PackageMetadata.TryLoadFromDirectory(pkgDir);
+                if (metadata is null || !metadata.IsProvider)
+                {
+                    Console.Error.WriteLine($"Error: Package '{providerName}' is not a provider (no lib/ with DLL).");
+                    return 2;
+                }
+                providerPackages.Add((pkgDir, metadata));
+            }
+        }
+
+        var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog, additionalFeedPaths: FindFeedPathsFromCwd(), scriptFiles: allScriptFiles, providerPackages: providerPackages);
 
         return HandleResult(result, format, rootPath);
     }
@@ -307,7 +340,7 @@ public static class RunCommand
     /// Runs named packages against the target directory (merged from cop check).
     /// Packages are auto-restored from configured GitHub feeds if not found locally.
     /// </summary>
-    public static int ExecutePackages(string[] packages, string? target = null, string[]? rules = null, string? format = null, bool diag = false, bool onlyIfModified = false)
+    public static int ExecutePackages(string[] packages, string? target = null, string[]? rules = null, string? format = null, bool diag = false, bool onlyIfModified = false, string[]? providers = null)
     {
         string rootPath = target != null ? Path.GetFullPath(target) : Directory.GetCurrentDirectory();
 
@@ -355,7 +388,7 @@ public static class RunCommand
         // Include user-global check files
         var userCheckFiles = GetUserCheckFiles(diagLog);
 
-        var result = Engine.RunProject(feedPaths, [.. packages], rootPath, rulesList, diagLog: diagLog, additionalScriptFiles: userCheckFiles.Length > 0 ? userCheckFiles : null);
+        var result = Engine.RunProject(feedPaths, [.. packages], rootPath, rulesList, diagLog: diagLog, additionalScriptFiles: userCheckFiles.Length > 0 ? userCheckFiles : null, providers: providers);
 
         return HandleResult(result, format, rootPath);
     }

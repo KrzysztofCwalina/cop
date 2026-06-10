@@ -247,6 +247,18 @@ export type Codebase = {
     Projects : [Project]
 }
 
+## Creates a unified Codebase from one or more language providers.
+## Example: let cb = codebase(csharp, python, javascript)
+export function codebase(providers : [Codebase]) : Codebase => {
+    Types: reduce(providers, (acc, p) => acc + p.Types, []),
+    Lines: reduce(providers, (acc, p) => acc + p.Lines, []),
+    Statements: reduce(providers, (acc, p) => acc + p.Statements, []),
+    Files: reduce(providers, (acc, p) => acc + p.Files, []),
+    Calls: reduce(providers, (acc, p) => acc + p.Calls, []),
+    Regions: reduce(providers, (acc, p) => acc + p.Regions, []),
+    Projects: reduce(providers, (acc, p) => acc + p.Projects, [])
+}
+
 # Language filter predicates
 export predicate isCSharp(Type) => Type.File.Language == csharp
 export predicate isCSharp(Statement) => Statement.File.Language == csharp
