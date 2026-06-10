@@ -1,4 +1,4 @@
-# Cop Demo Script
+# Agent Cop Demo
 
 This demo shows three capabilities of cop: running existing analysis packages, computing slop scores, and writing custom analysis rules.
 
@@ -61,7 +61,6 @@ Create `my-checks.cop` — this demonstrates analyzing a mixed-language codebase
 import csharp
 import python
 import javascript
-import code-analysis
 import code-metrics
 
 # Create a unified codebase from all language providers
@@ -99,41 +98,3 @@ cop my-checks.cop -t <folder>
 }
 ```
 
-## Part 4: Viewing Individual Violations
-
-Use `CHECK` to see specific violations:
-
-```cop
-import csharp
-import code-analysis
-
-let codebase = codebase(csharp)
-
-predicate hasTooManyMethods(Type) => Type.Methods.count() > 20
-let large-types = codebase.Types:hasTooManyMethods
-    :toViolation('Type {item.Name} has {item.Methods.count()} methods', 0.6, 0.95)
-
-command main = CHECK(large-types)
-```
-
-```bash
-cop my-check.cop -t <folder>
-```
-
-**Output:**
-
-```
-src/Parser.cs(1): 0.6: Type CopParser has 91 methods
-src/TypeRegistry.cs(1): 0.6: Type TypeRegistry has 72 methods
-src/Evaluator.cs(1): 0.6: Type Evaluator has 58 methods
-```
-
-## Summary
-
-| Step | Command | What it does |
-|------|---------|-------------|
-| Run checks | `cop csharp-checks -t . -p csharp` | List individual violations |
-| Slop score | `cop code-metrics -t . -p csharp` | JSON quality metrics |
-| Custom rules | `cop my.cop -t .` | Extend with project-specific rules |
-
-Packages use `-p <provider>` to load providers. Custom programs use `codebase(csharp, python, ...)` to explicitly compose providers — no hidden magic either way.

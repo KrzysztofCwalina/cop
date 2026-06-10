@@ -251,13 +251,19 @@ public static class Engine
 
         var providerPackages = new List<(string Dir, PackageMetadata Meta)>();
         var seenProviderDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // Track provider entry points from explicit -p flags so import-detected duplicates are skipped
+        var explicitProviderEntries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         if (topLevelProviderPackages is not null)
         {
             foreach (var providerPackage in topLevelProviderPackages)
             {
                 if (seenProviderDirs.Add(providerPackage.Dir))
+                {
                     providerPackages.Add(providerPackage);
+                    if (!string.IsNullOrEmpty(providerPackage.Meta.ProviderEntry))
+                        explicitProviderEntries.Add(providerPackage.Meta.ProviderEntry);
+                }
             }
         }
 
@@ -266,7 +272,15 @@ public static class Engine
             diagLog?.Invoke($"[diag] Discovered provider package: {dir}");
             var metadata = PackageMetadata.TryLoadFromDirectory(dir);
             if (metadata is not null && metadata.IsProvider && seenProviderDirs.Add(dir))
+            {
+                // Skip if same provider entry point was already loaded from an explicit -p flag
+                if (!string.IsNullOrEmpty(metadata.ProviderEntry) && explicitProviderEntries.Contains(metadata.ProviderEntry))
+                {
+                    diagLog?.Invoke($"[diag] Skipping import-detected provider '{metadata.Name}' (entry '{metadata.ProviderEntry}' already loaded from -p flag)");
+                    continue;
+                }
                 providerPackages.Add((dir, metadata));
+            }
         }
 
         var query = new ProviderQuery
@@ -589,7 +603,18 @@ public static class Engine
             });
 
             env.Define($"{providerName}.{collName}", lazy);
-            env.Define(collName, lazy);
+
+            // Merge with existing bare collection if another provider already registered it
+            if (env.TryLookup(collName, out var existing) && existing is CopLazyCollection existingLazy)
+            {
+                var merged = new CopLazyCollection(() =>
+                    existingLazy.Enumerate().Concat(lazy.Enumerate()));
+                env.Define(collName, merged);
+            }
+            else
+            {
+                env.Define(collName, lazy);
+            }
         }
 
         env.Define(providerName, new CopProviderProxy(providerName, env));
