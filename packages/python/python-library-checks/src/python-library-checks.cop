@@ -1,7 +1,11 @@
 # Python library and client library design checks
 
 import python-checks
+import python
 import code-analysis
+
+# Helper: access parsed types from the python provider
+export function types() => python.parse().Types
 
 ## Library API Design
 

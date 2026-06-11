@@ -181,65 +181,6 @@ public static class Engine
         return feedPaths;
     }
 
-    /// <summary>
-    /// Collects external symbols from the evaluator environment and loaded modules for Binder validation.
-    /// </summary>
-    private static List<Symbol> CollectExternalSymbolsForValidation(Cop.Lang.Interpreter.Environment env, IReadOnlyList<ModuleNode> loadedModules)
-    {
-        var symbols = new List<Symbol>();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-
-        // Core primitive types
-        foreach (var name in new[] { "string", "int", "float", "bool", "byte", "bytes", "object", "T", "R", "K", "A" })
-        {
-            if (seen.Add(name))
-                symbols.Add(new TypeSymbol(name, null, []));
-        }
-
-        // Types, functions, and enums from imported modules
-        foreach (var module in loadedModules)
-        {
-            foreach (var decl in module.Declarations)
-            {
-                switch (decl)
-                {
-                    case TypeDecl td when td.IsExported:
-                        if (seen.Add(td.Name))
-                        {
-                            var props = td.Properties.Select(p =>
-                                new PropertySymbol(p.Name, p.Type, p.IsOptional)).ToList();
-                            symbols.Add(new TypeSymbol(td.Name, td.BaseType, props));
-                        }
-                        break;
-                    case EnumDecl ed when ed.IsExported:
-                        if (seen.Add(ed.Name))
-                            symbols.Add(new EnumSymbol(ed.Name, null, ed.Members.Select(m => new EnumMemberSymbol(m, ed.Name)).ToList()));
-                        break;
-                    case FunctionDecl fd when fd.IsExported:
-                        if (seen.Add(fd.Name))
-                            symbols.Add(new FunctionSymbol(fd.Name, CallableKind.Function, []));
-                        break;
-                }
-            }
-        }
-
-        // Symbols from evaluator environment (registered by packages)
-        foreach (var (name, _) in env.AllBindings())
-        {
-            if (seen.Add(name))
-                symbols.Add(new VariableSymbol(name));
-        }
-
-        // Built-in intrinsics
-        foreach (var name in new[] { "print", "PRINT", "SAVE", "FAIL", "CHECK", "ASSERT", "provider", "count", "sum", "avg", "min", "max", "first", "last", "distinct", "flatten", "join", "sort", "reverse", "take", "skip", "map", "any", "all", "none", "contains", "where", "groupBy", "format" })
-        {
-            if (seen.Add(name))
-                symbols.Add(new FunctionSymbol(name, CallableKind.External, []));
-        }
-
-        return symbols;
-    }
-
     private static EngineResult ExecuteModules(
         List<ParsedModule> modules,
         List<string> feedPaths,
@@ -292,7 +233,7 @@ public static class Engine
         // Validate user modules (same checks as 'cop verify') before execution.
         // This catches issues like enum-vs-string comparisons that would silently fail at runtime.
         // Collect external symbols excluding user-declared names (those are already in the modules being bound).
-        var userDeclaredNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var userDeclaredNames = new HashSet<string>(StringComparer.Ordinal);
         foreach (var module in modules)
             foreach (var decl in module.Module.Declarations)
             {
@@ -308,7 +249,7 @@ public static class Engine
                 };
                 if (declName != null) userDeclaredNames.Add(declName);
             }
-        var externalSymbols = CollectExternalSymbolsForValidation(bridge.Evaluator.GlobalEnvironment, moduleLoader.LoadedModules);
+        var externalSymbols = Cop.Cli.Commands.VerifyCommand.CollectExternalSymbols(bridge.Evaluator.GlobalEnvironment, moduleLoader.LoadedModules, _builtinProviders.Select(p => p.Schema));
         externalSymbols.RemoveAll(s => userDeclaredNames.Contains(s.Name));
         foreach (var module in modules)
         {
@@ -435,24 +376,29 @@ public static class Engine
         // First: deferred let bindings from imported packages
         moduleLoader.EvalDeferredLetBindings(bridge.Evaluator, errors);
 
+        // Save original callable bindings (functions from imports) before user lets.
+        // Multiple sibling modules may define `let X = X(...)` — the first module replaces
+        // the function with its result, so subsequent modules need the original callable
+        // restored temporarily when evaluating their RHS.
+        var originalCallables = new Dictionary<string, CopValue>(StringComparer.Ordinal);
+        foreach (var (name, value) in bridge.Evaluator.GlobalEnvironment.AllBindings())
+        {
+            if (value is ICopCallable)
+                originalCallables[name] = value;
+        }
+
         // Then: user module let bindings
         foreach (var module in modules)
         {
             try
             {
-                bridge.Evaluator.EvalLetBindings(module.Module);
+                bridge.Evaluator.EvalLetBindings(module.Module, originalCallables);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 errors.Add(ex.Message);
             }
         }
-
-        // Debug: check what Folders resolves to now
-        if (bridge.Evaluator.GlobalEnvironment.TryLookup("Folders", out var foldersVal))
-            diagLog?.Invoke($"[diag] After registration, 'Folders' = {foldersVal?.GetType().Name}, items={((foldersVal as CopList)?.Items.Count ?? -1)}");
-        else
-            diagLog?.Invoke("[diag] After registration, 'Folders' NOT FOUND in env");
 
         // When multiple top-level packages are specified, register each package's 'command main'
         // under a package-qualified alias so all can be run in sequence.
@@ -870,21 +816,11 @@ public static class Engine
     }
 
     /// <summary>
-    /// Finds packages/ feed paths by walking up from scriptsDir.
+    /// Finds packages/ feed paths (global cache + walking up from scriptsDir).
+    /// Delegates to PackageResolver.GetFeedPaths for consistency with verify.
     /// </summary>
-    private static List<string> FindFeedPaths(string scriptsDir)
-    {
-        var paths = new List<string>();
-        var dir = scriptsDir;
-        while (dir is not null)
-        {
-            var packagesDir = Path.Combine(dir, "packages");
-            if (Directory.Exists(packagesDir))
-                paths.Add(packagesDir);
-            dir = Path.GetDirectoryName(dir);
-        }
-        return paths;
-    }
+    private static List<string> FindFeedPaths(string scriptsDir) =>
+        Cop.Cli.Commands.PackageResolver.GetFeedPaths(scriptsDir);
 
     /// <summary>
     /// Runs packages from feeds: loads packages by name, executes selected rules.

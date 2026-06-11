@@ -251,9 +251,11 @@ public static class RunCommand
             // Load all .cop files in the same directory as the specified file.
             // This enables the cop-checks/ pattern where main.cop imports providers
             // and other files define checks that use the shared environment.
+            // Place the target file LAST so its command definitions take priority.
             var siblingFiles = Directory.GetFiles(scriptsDir, "*.cop");
             Array.Sort(siblingFiles, StringComparer.Ordinal);
-            allScriptFiles = siblingFiles;
+            var others = siblingFiles.Where(f => !string.Equals(f, scopeToFile, StringComparison.OrdinalIgnoreCase)).ToArray();
+            allScriptFiles = [.. others, scopeToFile];
         }
 
         // Resolve -p provider packages to directories

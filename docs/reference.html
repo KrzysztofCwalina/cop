@@ -151,6 +151,7 @@ const categories = [
       "core",
       "files",
       "go",
+      "java",
       "json",
       "markdown",
       "rust"
@@ -446,7 +447,7 @@ const packages = {
       },
       {
         "name": "Language",
-        "values": "csharp|python|javascript|rust|go|cop|text",
+        "values": "csharp|python|javascript|rust|go|java|cop|text",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code/src/code.cop#L14"
       },
       {
@@ -1583,6 +1584,36 @@ const packages = {
         "appliesTo": "Api",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code/src/code.cop#L291"
+      },
+      {
+        "name": "isJava",
+        "appliesTo": "Type",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code/src/code.cop#L293"
+      },
+      {
+        "name": "isJava",
+        "appliesTo": "Statement",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code/src/code.cop#L294"
+      },
+      {
+        "name": "isJava",
+        "appliesTo": "Line",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code/src/code.cop#L295"
+      },
+      {
+        "name": "isJava",
+        "appliesTo": "Region",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code/src/code.cop#L296"
+      },
+      {
+        "name": "isJava",
+        "appliesTo": "Api",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code/src/code.cop#L297"
       }
     ],
     "functions": [
@@ -2921,7 +2952,7 @@ const packages = {
     "collections": [],
     "types": {
       "ApiLine": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L194",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L197",
         "props": [
           {
             "name": "Text",
@@ -2961,169 +2992,169 @@ const packages = {
         "name": "hasBannedInternalType",
         "appliesTo": "Parameter",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L19"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L22"
       },
       {
         "name": "hasBannedParamType",
         "appliesTo": "Method",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L21"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L24"
       },
       {
         "name": "hasBannedParams",
         "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L22"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L25"
       },
       {
         "name": "hasSyncAndAsyncVariants",
         "appliesTo": "Method",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L44"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L47"
       },
       {
         "name": "isInDualModeMethod",
         "appliesTo": "Statement",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L47"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L50"
       },
       {
         "name": "isGuardedByAsyncCheck",
         "appliesTo": "Statement",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L52"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L55"
       },
       {
         "name": "hasWrongAsyncFalseInAsyncGuard",
         "appliesTo": "Statement",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L79"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L82"
       },
       {
         "name": "hasWrongAsyncTrueInSyncGuard",
         "appliesTo": "Statement",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L83"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L86"
       },
       {
         "name": "isPassingAsyncParamAsArg",
         "appliesTo": "Statement",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L95"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L98"
       },
       {
         "name": "isClient",
         "appliesTo": "Type",
         "desc": "Client Library Design",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L110"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L113"
       },
       {
         "name": "isClientOptionsType",
         "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L111"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L114"
       },
       {
         "name": "Clients",
         "appliesTo": "Types",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L112"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L115"
       },
       {
         "name": "isModel",
         "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L114"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L117"
       },
       {
         "name": "Models",
         "appliesTo": "Types",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L115"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L118"
       },
       {
         "name": "ClientOptions",
         "appliesTo": "Types",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L116"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L119"
       },
       {
         "name": "hasCollectionSuffix",
         "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L120"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L123"
       },
       {
         "name": "hasRequestSuffix",
         "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L121"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L124"
       },
       {
         "name": "hasParameterSuffix",
         "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L122"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L125"
       },
       {
         "name": "hasOptionSuffix",
         "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L123"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L126"
       },
       {
         "name": "isProtectedParameterless",
         "appliesTo": "Constructor",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L130"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L133"
       },
       {
         "name": "isMissingMockingConstructor",
         "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L135"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L138"
       },
       {
         "name": "isPublicApi",
         "appliesTo": "Api",
         "desc": "Public API Surface Predicates",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L183"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L186"
       },
       {
         "name": "isApiType",
         "appliesTo": "Api",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L186"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L189"
       },
       {
         "name": "isApiMethod",
         "appliesTo": "Api",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L187"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L190"
       },
       {
         "name": "isApiProperty",
         "appliesTo": "Api",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L188"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L191"
       },
       {
         "name": "isApiEvent",
         "appliesTo": "Api",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L189"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L192"
       },
       {
         "name": "isApiCtor",
         "appliesTo": "Api",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L190"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L193"
       },
       {
         "name": "isApiEnumValue",
         "appliesTo": "Api",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L191"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L194"
       }
     ],
     "functions": [
@@ -3132,7 +3163,7 @@ const packages = {
         "params": "Api: Api",
         "returns": "",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L203"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L206"
       }
     ],
     "checks": [],
@@ -3575,6 +3606,37 @@ const packages = {
         "returns": "",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/http/src/http.cop#L92"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
+  "java": {
+    "label": "java",
+    "overview": "Java source code parser and analyzer",
+    "samples": [
+      {
+        "title": "List public types",
+        "code": "import java\n\nlet cb = java.parse()\n\n# List all public types in the Java codebase\ncommand MAIN = foreach cb.Types:isPublic => '{item.Name} ({item.Kind})'"
+      }
+    ],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [
+      {
+        "name": "parse",
+        "params": "",
+        "returns": "Codebase",
+        "desc": "Parses Java source files in the target directory and returns a Codebase.\nExample: let cb = java.parse()",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/java/java/src/java.cop#L6"
+      },
+      {
+        "name": "parse",
+        "params": "path: string",
+        "returns": "Codebase",
+        "desc": "Parses Java source files in the specified directory and returns a Codebase.\nExample: let cb = java.parse('/path/to/project')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/java/java/src/java.cop#L10"
       }
     ],
     "checks": [],
@@ -4102,7 +4164,7 @@ const packages = {
     "collections": [],
     "types": {
       "ApiLine": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L167",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L171",
         "props": [
           {
             "name": "Text",
@@ -4142,64 +4204,71 @@ const packages = {
         "name": "isClient",
         "appliesTo": "Type",
         "desc": "Client Library Design",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L37"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L41"
       },
       {
         "name": "isAsyncClient",
         "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L38"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L42"
       },
       {
         "name": "hasBadAsyncName",
         "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L44"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L48"
       },
       {
         "name": "hasNameTooLong",
         "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L145"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L149"
       },
       {
         "name": "isPublicApi",
         "appliesTo": "Api",
         "desc": "Public API Surface Predicates",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L158"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L162"
       },
       {
         "name": "isApiType",
         "appliesTo": "Api",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L161"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L165"
       },
       {
         "name": "isApiMethod",
         "appliesTo": "Api",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L162"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L166"
       },
       {
         "name": "isApiProperty",
         "appliesTo": "Api",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L163"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L167"
       },
       {
         "name": "isApiCtor",
         "appliesTo": "Api",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L164"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L168"
       }
     ],
     "functions": [
+      {
+        "name": "types",
+        "params": "",
+        "returns": "",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L8"
+      },
       {
         "name": "toApiLine",
         "params": "Api: Api",
         "returns": "",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L176"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L180"
       }
     ],
     "checks": [],

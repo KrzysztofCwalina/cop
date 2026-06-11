@@ -77,7 +77,7 @@ public sealed class Evaluator
     /// Called after providers have registered their data.
     /// The bindings are only evaluated when first accessed.
     /// </summary>
-    public void EvalLetBindings(ModuleNode module)
+    public void EvalLetBindings(ModuleNode module, Dictionary<string, CopValue>? originalCallables = null)
     {
         foreach (var decl in module.Declarations)
         {
@@ -85,8 +85,19 @@ public sealed class Evaluator
             {
                 // If this let shadows a function/callable with the same name, evaluate eagerly
                 // to avoid self-referencing thunk (e.g., let codebase = codebase(csharp))
+                bool isCallableShadow = false;
                 if (_globalEnv.TryLookup(ld.Name, out var existing) && existing is ICopCallable)
+                    isCallableShadow = true;
+                else if (originalCallables != null && originalCallables.ContainsKey(ld.Name))
+                    isCallableShadow = true;
+
+                if (isCallableShadow)
                 {
+                    // Restore the original callable before evaluating the RHS so the call resolves correctly.
+                    // This handles the case where a previous sibling module already replaced the callable with its result.
+                    if (originalCallables != null && originalCallables.TryGetValue(ld.Name, out var originalCallable))
+                        _globalEnv.Define(ld.Name, originalCallable);
+
                     var value = Eval(ld.Value, _globalEnv);
                     _globalEnv.Define(ld.Name, value);
                 }

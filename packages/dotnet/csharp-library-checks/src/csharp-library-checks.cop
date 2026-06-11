@@ -4,6 +4,9 @@ import csharp
 import csharp-checks
 import code-analysis
 
+# Helper: access parsed types from the csharp provider
+function types() => csharp.parse().Types
+
 ## Library API Design
 
 # Public API surface

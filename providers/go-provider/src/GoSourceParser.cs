@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Cop.Providers.SourceModel;
 
 namespace Cop.Providers.SourceParsers;
@@ -10,550 +9,783 @@ public class GoSourceParser : ISourceParser
 
     public override SourceFile? Parse(string filePath, string sourceText)
     {
-        var lines = sourceText.Split('\n');
+        var lexer = new GoLexer(sourceText);
+        var tokens = lexer.Tokenize();
+        var parser = new GoParser(tokens, sourceText);
+        return parser.Parse(filePath);
+    }
+}
+
+#region Lexer
+
+internal enum GoTokenKind
+{
+    Identifier, Keyword, Punctuation, StringLiteral, NumberLiteral,
+    LineComment, BlockComment, Eof
+}
+
+internal record struct GoToken(GoTokenKind Kind, string Value, int Line, int Start, int End);
+
+internal class GoLexer(string source)
+{
+    private int _pos;
+    private int _line = 1;
+
+    private static readonly HashSet<string> Keywords =
+    [
+        "break", "case", "chan", "const", "continue", "default", "defer",
+        "else", "fallthrough", "for", "func", "go", "goto", "if", "import",
+        "interface", "map", "package", "range", "return", "select", "struct",
+        "switch", "type", "var"
+    ];
+
+    public List<GoToken> Tokenize()
+    {
+        var tokens = new List<GoToken>();
+        while (_pos < source.Length)
+        {
+            SkipWhitespace();
+            if (_pos >= source.Length) break;
+
+            char c = source[_pos];
+
+            // Comments
+            if (c == '/' && _pos + 1 < source.Length)
+            {
+                if (source[_pos + 1] == '/')
+                {
+                    tokens.Add(ReadLineComment());
+                    continue;
+                }
+                if (source[_pos + 1] == '*')
+                {
+                    tokens.Add(ReadBlockComment());
+                    continue;
+                }
+            }
+
+            // String literals
+            if (c == '"')
+            {
+                tokens.Add(ReadString());
+                continue;
+            }
+
+            // Raw string (backtick)
+            if (c == '`')
+            {
+                tokens.Add(ReadRawString());
+                continue;
+            }
+
+            // Rune literal
+            if (c == '\'')
+            {
+                tokens.Add(ReadRune());
+                continue;
+            }
+
+            // Numbers
+            if (char.IsDigit(c))
+            {
+                tokens.Add(ReadNumber());
+                continue;
+            }
+
+            // Identifiers and keywords
+            if (char.IsLetter(c) || c == '_')
+            {
+                tokens.Add(ReadIdentifierOrKeyword());
+                continue;
+            }
+
+            // Punctuation
+            tokens.Add(ReadPunctuation());
+        }
+
+        tokens.Add(new GoToken(GoTokenKind.Eof, "", _line, _pos, _pos));
+        return tokens;
+    }
+
+    private void SkipWhitespace()
+    {
+        while (_pos < source.Length)
+        {
+            char c = source[_pos];
+            if (c == '\n') { _line++; _pos++; }
+            else if (c is ' ' or '\t' or '\r') _pos++;
+            else break;
+        }
+    }
+
+    private GoToken ReadLineComment()
+    {
+        int start = _pos;
+        int line = _line;
+        while (_pos < source.Length && source[_pos] != '\n') _pos++;
+        return new GoToken(GoTokenKind.LineComment, source[start.._pos], line, start, _pos);
+    }
+
+    private GoToken ReadBlockComment()
+    {
+        int start = _pos;
+        int line = _line;
+        _pos += 2;
+        while (_pos < source.Length)
+        {
+            if (source[_pos] == '*' && _pos + 1 < source.Length && source[_pos + 1] == '/')
+            { _pos += 2; break; }
+            if (source[_pos] == '\n') _line++;
+            _pos++;
+        }
+        return new GoToken(GoTokenKind.BlockComment, source[start.._pos], line, start, _pos);
+    }
+
+    private GoToken ReadString()
+    {
+        int start = _pos;
+        int line = _line;
+        _pos++; // skip "
+        while (_pos < source.Length && source[_pos] != '"')
+        {
+            if (source[_pos] == '\\') _pos++;
+            _pos++;
+        }
+        if (_pos < source.Length) _pos++;
+        return new GoToken(GoTokenKind.StringLiteral, source[start.._pos], line, start, _pos);
+    }
+
+    private GoToken ReadRawString()
+    {
+        int start = _pos;
+        int line = _line;
+        _pos++; // skip `
+        while (_pos < source.Length && source[_pos] != '`')
+        {
+            if (source[_pos] == '\n') _line++;
+            _pos++;
+        }
+        if (_pos < source.Length) _pos++;
+        return new GoToken(GoTokenKind.StringLiteral, source[start.._pos], line, start, _pos);
+    }
+
+    private GoToken ReadRune()
+    {
+        int start = _pos;
+        int line = _line;
+        _pos++; // skip '
+        if (_pos < source.Length && source[_pos] == '\\') _pos++;
+        if (_pos < source.Length) _pos++;
+        if (_pos < source.Length && source[_pos] == '\'') _pos++;
+        return new GoToken(GoTokenKind.StringLiteral, source[start.._pos], line, start, _pos);
+    }
+
+    private GoToken ReadNumber()
+    {
+        int start = _pos;
+        int line = _line;
+        while (_pos < source.Length && (char.IsLetterOrDigit(source[_pos]) || source[_pos] is '.' or '_' or 'x' or 'X'))
+            _pos++;
+        return new GoToken(GoTokenKind.NumberLiteral, source[start.._pos], line, start, _pos);
+    }
+
+    private GoToken ReadIdentifierOrKeyword()
+    {
+        int start = _pos;
+        int line = _line;
+        while (_pos < source.Length && (char.IsLetterOrDigit(source[_pos]) || source[_pos] == '_'))
+            _pos++;
+        var value = source[start.._pos];
+        var kind = Keywords.Contains(value) ? GoTokenKind.Keyword : GoTokenKind.Identifier;
+        return new GoToken(kind, value, line, start, _pos);
+    }
+
+    private GoToken ReadPunctuation()
+    {
+        int start = _pos;
+        int line = _line;
+        if (_pos + 2 < source.Length)
+        {
+            var three = source.Substring(_pos, 3);
+            if (three is "..." or "<<=" or ">>=")
+            { _pos += 3; return new GoToken(GoTokenKind.Punctuation, three, line, start, _pos); }
+        }
+        if (_pos + 1 < source.Length)
+        {
+            var two = source.Substring(_pos, 2);
+            if (two is ":=" or "==" or "!=" or "<=" or ">=" or "&&" or "||" or "<-" or "++" or "--" or "+=" or "-=" or "*=" or "/=" or "<<" or ">>")
+            { _pos += 2; return new GoToken(GoTokenKind.Punctuation, two, line, start, _pos); }
+        }
+        _pos++;
+        return new GoToken(GoTokenKind.Punctuation, source[start.._pos], line, start, _pos);
+    }
+}
+
+#endregion
+
+#region Parser
+
+internal class GoParser(List<GoToken> tokens, string sourceText)
+{
+    private int _pos;
+
+    public SourceFile Parse(string filePath)
+    {
         var types = new List<TypeDeclaration>();
         var statements = new List<StatementInfo>();
         var usings = new List<string>();
+        string? ns = null;
 
-        int i = 0;
-        while (i < lines.Length)
+        while (!IsAtEnd())
         {
-            var trimmed = lines[i].TrimStart();
+            SkipComments();
+            if (IsAtEnd()) break;
 
-            // Skip blank lines
-            if (string.IsNullOrWhiteSpace(trimmed))
+            if (MatchKeyword("package"))
             {
-                i++;
-                continue;
+                ns = ConsumeIdentifier();
             }
-
-            // Skip line comments (not doc comments)
-            if (trimmed.StartsWith("//") && !IsDocComment(lines, i))
+            else if (CheckKeyword("import"))
             {
-                i++;
-                continue;
+                ParseImports(usings);
             }
-
-            // Skip block comments
-            if (trimmed.StartsWith("/*"))
+            else if (CheckKeyword("type"))
             {
-                i = SkipBlockComment(lines, i);
-                continue;
+                ParseTypeDecl(types, statements);
             }
-
-            // Package declaration (skip)
-            if (trimmed.StartsWith("package "))
+            else if (CheckKeyword("func"))
             {
-                i++;
-                continue;
-            }
-
-            // Import block
-            if (trimmed.StartsWith("import "))
-            {
-                i = ParseImports(lines, i, usings);
-                continue;
-            }
-
-            // Type declaration: type Name struct/interface
-            if (trimmed.StartsWith("type "))
-            {
-                var (type, nextLine) = ParseTypeDeclaration(lines, i, statements);
-                if (type != null) types.Add(type);
-                i = nextLine;
-                continue;
-            }
-
-            // Function/method: func Name(...) or func (recv) Name(...)
-            if (trimmed.StartsWith("func "))
-            {
-                var (method, receiver, nextLine) = ParseFunc(lines, i, statements);
-                if (method != null && receiver != null)
+                var method = ParseFunc(statements);
+                // Top-level funcs: add them grouped if needed
+                if (method != null && method.Value.receiver == null)
                 {
-                    // Method with receiver — attach to existing type or create impl type
-                    var existingType = types.FirstOrDefault(t => t.Name == receiver || t.Name == receiver + " (impl)");
-                    if (existingType != null)
-                    {
-                        existingType.Methods.Add(method);
-                    }
-                    else
-                    {
-                        types.Add(new TypeDeclaration(receiver + " (impl)", TypeKind.Class, Modifier.Public,
-                            [], [], [], [method], [], [], i + 1));
-                    }
+                    // Free function — could attach to a synthetic type or ignore
                 }
-                i = nextLine;
-                continue;
             }
-
-            // Top-level var/const blocks (skip structure, extract statements)
-            if (trimmed.StartsWith("var ") || trimmed.StartsWith("const "))
+            else if (CheckKeyword("var") || CheckKeyword("const"))
             {
-                if (trimmed.Contains('('))
-                {
-                    i = SkipParenBlock(lines, i);
-                }
-                else
-                {
-                    i++;
-                }
-                continue;
+                SkipVarOrConst();
             }
-
-            // Other top-level statements
-            ExtractLineStatement(trimmed, i + 1, false, statements);
-            i++;
+            else
+            {
+                Advance();
+            }
         }
 
         return new SourceFile(filePath, "go", types, statements, sourceText)
         {
+            Namespace = ns,
             Usings = usings,
             Regions = [],
-            CommentLines = ExtractCommentLines(lines)
+            CommentLines = ExtractCommentLines()
         };
     }
 
-    private static int ParseImports(string[] lines, int startLine, List<string> usings)
+    private void ParseImports(List<string> usings)
     {
-        var trimmed = lines[startLine].TrimStart();
-
-        // Single import: import "fmt"
-        var singleMatch = Regex.Match(trimmed, @"^import\s+""([^""]+)""");
-        if (singleMatch.Success)
+        Advance(); // skip 'import'
+        if (Check("("))
         {
-            usings.Add(singleMatch.Groups[1].Value);
-            return startLine + 1;
-        }
-
-        // Block import: import ( ... )
-        if (trimmed.Contains('('))
-        {
-            int i = startLine + 1;
-            while (i < lines.Length)
+            Advance();
+            while (!IsAtEnd() && !Check(")"))
             {
-                var line = lines[i].TrimStart();
-                if (line.StartsWith(")")) return i + 1;
-                var importMatch = Regex.Match(line, @"""([^""]+)""");
-                if (importMatch.Success)
-                    usings.Add(importMatch.Groups[1].Value);
-                i++;
+                SkipComments();
+                if (Check(")")) break;
+                // optional alias
+                if (Current().Kind == GoTokenKind.Identifier || Check(".") || Check("_"))
+                    Advance();
+                if (Current().Kind == GoTokenKind.StringLiteral)
+                {
+                    usings.Add(Current().Value.Trim('"'));
+                    Advance();
+                }
+                else Advance();
             }
-            return i;
+            if (Check(")")) Advance();
         }
-
-        return startLine + 1;
+        else if (Current().Kind == GoTokenKind.StringLiteral)
+        {
+            usings.Add(Current().Value.Trim('"'));
+            Advance();
+        }
     }
 
-    private static (TypeDeclaration?, int) ParseTypeDeclaration(string[] lines, int startLine, List<StatementInfo> statements)
+    private void ParseTypeDecl(List<TypeDeclaration> types, List<StatementInfo> statements)
     {
-        var trimmed = lines[startLine].TrimStart();
-        bool hasDocComment = HasDocComment(lines, startLine);
+        Advance(); // skip 'type'
 
-        // type Name struct { ... }
-        var structMatch = Regex.Match(trimmed, @"^type\s+(\w+)\s+struct\b");
-        if (structMatch.Success)
+        if (Check("("))
         {
-            string name = structMatch.Groups[1].Value;
-            var modifiers = IsExported(name) ? Modifier.Public : Modifier.Private;
-
-            if (!trimmed.Contains('{'))
+            // type ( ... )
+            Advance();
+            while (!IsAtEnd() && !Check(")"))
             {
-                // Look for opening brace on next line
-                int braceSearch = startLine + 1;
-                while (braceSearch < lines.Length && !lines[braceSearch].Contains('{'))
-                    braceSearch++;
-                if (braceSearch >= lines.Length)
-                    return (new TypeDeclaration(name, TypeKind.Struct, modifiers, [], [], [], [], [], [], startLine + 1)
-                    { HasDocComment = hasDocComment }, startLine + 1);
-
-                int braceEnd = FindClosingBrace(lines, braceSearch);
-                var fields = ParseStructFields(lines, braceSearch + 1, braceEnd);
-                return (new TypeDeclaration(name, TypeKind.Struct, modifiers, [], [], [], [], [], [], startLine + 1)
-                { HasDocComment = hasDocComment, Fields = fields }, braceEnd + 1);
+                SkipComments();
+                if (Check(")")) break;
+                var t = ParseSingleType(statements);
+                if (t != null) types.Add(t);
             }
-
-            int end = FindClosingBrace(lines, startLine);
-            var structFields = ParseStructFields(lines, startLine + 1, end);
-            return (new TypeDeclaration(name, TypeKind.Struct, modifiers, [], [], [], [], [], [], startLine + 1)
-            { HasDocComment = hasDocComment, Fields = structFields }, end + 1);
-        }
-
-        // type Name interface { ... }
-        var ifaceMatch = Regex.Match(trimmed, @"^type\s+(\w+)\s+interface\b");
-        if (ifaceMatch.Success)
-        {
-            string name = ifaceMatch.Groups[1].Value;
-            var modifiers = IsExported(name) ? Modifier.Public : Modifier.Private;
-
-            if (!trimmed.Contains('{'))
-            {
-                int braceSearch = startLine + 1;
-                while (braceSearch < lines.Length && !lines[braceSearch].Contains('{'))
-                    braceSearch++;
-                if (braceSearch >= lines.Length)
-                    return (new TypeDeclaration(name, TypeKind.Interface, modifiers, [], [], [], [], [], [], startLine + 1)
-                    { HasDocComment = hasDocComment }, startLine + 1);
-
-                int braceEnd = FindClosingBrace(lines, braceSearch);
-                var methods = ParseInterfaceMethods(lines, braceSearch + 1, braceEnd, startLine + 1);
-                return (new TypeDeclaration(name, TypeKind.Interface, modifiers, [], [], [], methods, [], [], startLine + 1)
-                { HasDocComment = hasDocComment }, braceEnd + 1);
-            }
-
-            int end = FindClosingBrace(lines, startLine);
-            var ifaceMethods = ParseInterfaceMethods(lines, startLine + 1, end, startLine + 1);
-            return (new TypeDeclaration(name, TypeKind.Interface, modifiers, [], [], [], ifaceMethods, [], [], startLine + 1)
-            { HasDocComment = hasDocComment }, end + 1);
-        }
-
-        // type Name = ... (type alias) or type Name OtherType
-        var aliasMatch = Regex.Match(trimmed, @"^type\s+(\w+)\s+");
-        if (aliasMatch.Success)
-        {
-            string name = aliasMatch.Groups[1].Value;
-            var modifiers = IsExported(name) ? Modifier.Public : Modifier.Private;
-            return (new TypeDeclaration(name, TypeKind.Class, modifiers, [], [], [], [], [], [], startLine + 1)
-            { HasDocComment = hasDocComment }, startLine + 1);
-        }
-
-        return (null, startLine + 1);
-    }
-
-    private static List<FieldDeclaration> ParseStructFields(string[] lines, int start, int end)
-    {
-        var fields = new List<FieldDeclaration>();
-        for (int i = start; i < end; i++)
-        {
-            var trimmed = lines[i].TrimStart();
-            if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("//")) continue;
-
-            // Embedded type (no field name, just a type)
-            var embeddedMatch = Regex.Match(trimmed, @"^(\*?[A-Z]\w*)\s*(?://.*)?$");
-            if (embeddedMatch.Success)
-            {
-                string typeName = embeddedMatch.Groups[1].Value;
-                var visibility = IsExported(typeName.TrimStart('*')) ? Modifier.Public : Modifier.Private;
-                fields.Add(new FieldDeclaration(typeName, new TypeReference(typeName, null, [], typeName), visibility, i + 1));
-                continue;
-            }
-
-            // Named field: Name Type `tag`
-            var fieldMatch = Regex.Match(trimmed, @"^(\w+)\s+(.+?)(?:\s+`[^`]*`)?\s*(?://.*)?$");
-            if (fieldMatch.Success)
-            {
-                string fieldName = fieldMatch.Groups[1].Value;
-                string fieldType = fieldMatch.Groups[2].Value.Trim();
-                var visibility = IsExported(fieldName) ? Modifier.Public : Modifier.Private;
-                var typeRef = new TypeReference(fieldType, null, [], fieldType);
-                fields.Add(new FieldDeclaration(fieldName, typeRef, visibility, i + 1));
-            }
-        }
-        return fields;
-    }
-
-    private static List<MethodDeclaration> ParseInterfaceMethods(string[] lines, int start, int end, int typeLine)
-    {
-        var methods = new List<MethodDeclaration>();
-        for (int i = start; i < end; i++)
-        {
-            var trimmed = lines[i].TrimStart();
-            if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("//")) continue;
-
-            // Method signature: Name(params) returnType
-            var methodMatch = Regex.Match(trimmed, @"^(\w+)\s*\(([^)]*)\)(.*)$");
-            if (methodMatch.Success)
-            {
-                string name = methodMatch.Groups[1].Value;
-                var parameters = ParseParameters(methodMatch.Groups[2].Value);
-                string retText = methodMatch.Groups[3].Value.Trim();
-                TypeReference? returnType = !string.IsNullOrWhiteSpace(retText)
-                    ? new TypeReference(retText, null, [], retText) : null;
-                var modifiers = IsExported(name) ? Modifier.Public : Modifier.Private;
-                bool hasDoc = HasDocComment(lines, i);
-                methods.Add(new MethodDeclaration(name, modifiers | Modifier.Abstract, [], returnType, parameters, i + 1)
-                { HasDocComment = hasDoc });
-            }
-        }
-        return methods;
-    }
-
-    private static (MethodDeclaration?, string?, int) ParseFunc(string[] lines, int startLine, List<StatementInfo> statements)
-    {
-        var trimmed = lines[startLine].TrimStart();
-        bool hasDocComment = HasDocComment(lines, startLine);
-
-        // Join multi-line function signature
-        string fullSig = trimmed;
-        int nextLine = startLine + 1;
-        while (!fullSig.Contains('{') && !fullSig.TrimEnd().EndsWith("}") && nextLine < lines.Length)
-        {
-            if (string.IsNullOrWhiteSpace(lines[nextLine]))
-            {
-                nextLine++;
-                break;
-            }
-            fullSig += " " + lines[nextLine].Trim();
-            nextLine++;
-        }
-
-        // Method with receiver: func (r *Type) Name(...)
-        string? receiver = null;
-        var receiverMatch = Regex.Match(fullSig, @"^func\s+\(\s*\w+\s+\*?(\w+)\s*\)\s+(\w+)\s*\(([^)]*)\)(.*)");
-        // Free function: func Name(...)
-        var funcMatch = Regex.Match(fullSig, @"^func\s+(\w+)\s*\(([^)]*)\)(.*)");
-
-        string name;
-        List<ParameterDeclaration> parameters;
-        TypeReference? returnType = null;
-
-        if (receiverMatch.Success)
-        {
-            receiver = receiverMatch.Groups[1].Value;
-            name = receiverMatch.Groups[2].Value;
-            parameters = ParseParameters(receiverMatch.Groups[3].Value);
-            var retText = receiverMatch.Groups[4].Value.Trim().TrimEnd('{').Trim();
-            if (!string.IsNullOrWhiteSpace(retText))
-                returnType = new TypeReference(retText, null, [], retText);
-        }
-        else if (funcMatch.Success)
-        {
-            name = funcMatch.Groups[1].Value;
-            parameters = ParseParameters(funcMatch.Groups[2].Value);
-            var retText = funcMatch.Groups[3].Value.Trim().TrimEnd('{').Trim();
-            if (!string.IsNullOrWhiteSpace(retText))
-                returnType = new TypeReference(retText, null, [], retText);
+            if (Check(")")) Advance();
         }
         else
         {
-            return (null, null, nextLine);
+            var t = ParseSingleType(statements);
+            if (t != null) types.Add(t);
+        }
+    }
+
+    private TypeDeclaration? ParseSingleType(List<StatementInfo> statements)
+    {
+        SkipComments();
+        bool hasDoc = HasPrecedingDocComment();
+        string name = ConsumeIdentifier();
+        if (name == "") return null;
+        int line = CurrentLine();
+
+        bool isExported = char.IsUpper(name[0]);
+        var modifiers = isExported ? Modifier.Public : Modifier.Private;
+
+        if (CheckKeyword("struct"))
+        {
+            return ParseStructType(name, modifiers, hasDoc, line);
+        }
+        else if (CheckKeyword("interface"))
+        {
+            return ParseInterfaceType(name, modifiers, hasDoc, line, statements);
+        }
+        else
+        {
+            // type alias or other
+            string aliasType = ConsumeType();
+            return new TypeDeclaration(name, TypeKind.Struct, modifiers, [], [], [], [], [], [], line)
+            { HasDocComment = hasDoc };
+        }
+    }
+
+    private TypeDeclaration ParseStructType(string name, Modifier modifiers, bool hasDoc, int line)
+    {
+        Advance(); // skip 'struct'
+        var fields = new List<FieldDeclaration>();
+        var embedded = new List<string>();
+
+        if (Check("{"))
+        {
+            Advance();
+            while (!IsAtEnd() && !Check("}"))
+            {
+                SkipComments();
+                if (Check("}")) break;
+
+                // Could be an embedded type or field(s)
+                string fieldName = "";
+                int fieldLine = CurrentLine();
+
+                if (Current().Kind == GoTokenKind.Identifier)
+                {
+                    string first = Current().Value;
+                    Advance();
+
+                    if (Current().Kind == GoTokenKind.Identifier || Check("*") || Check("[") || CheckKeyword("map") || CheckKeyword("func") || CheckKeyword("chan") || CheckKeyword("interface") || CheckKeyword("struct"))
+                    {
+                        // field Name Type
+                        fieldName = first;
+                        string fieldType = ConsumeType();
+                        bool fieldExported = char.IsUpper(fieldName[0]);
+                        fields.Add(new FieldDeclaration(fieldName,
+                            new TypeReference(fieldType, null, [], fieldType),
+                            fieldExported ? Modifier.Public : Modifier.Private, fieldLine));
+                    }
+                    else
+                    {
+                        // embedded type
+                        embedded.Add(first);
+                    }
+                }
+                else if (Check("*"))
+                {
+                    Advance();
+                    if (Current().Kind == GoTokenKind.Identifier)
+                    {
+                        embedded.Add("*" + Current().Value);
+                        Advance();
+                    }
+                }
+                else Advance();
+
+                // Skip struct tags
+                if (Current().Kind == GoTokenKind.StringLiteral) Advance();
+            }
+            if (Check("}")) Advance();
         }
 
-        var modifiers = IsExported(name) ? Modifier.Public : Modifier.Private;
+        return new TypeDeclaration(name, TypeKind.Struct, modifiers, embedded, [], [], [], [], [], line)
+        { HasDocComment = hasDoc, Fields = fields };
+    }
 
-        // Find function body
-        int braceSearchLine = startLine;
-        while (braceSearchLine < lines.Length && !lines[braceSearchLine].Contains('{'))
-            braceSearchLine++;
+    private TypeDeclaration ParseInterfaceType(string name, Modifier modifiers, bool hasDoc, int line, List<StatementInfo> statements)
+    {
+        Advance(); // skip 'interface'
+        var methods = new List<MethodDeclaration>();
+        var embedded = new List<string>();
 
-        if (braceSearchLine >= lines.Length)
-            return (new MethodDeclaration(name, modifiers, [], returnType, parameters, startLine + 1)
-            { HasDocComment = hasDocComment }, receiver, nextLine);
+        if (Check("{"))
+        {
+            Advance();
+            while (!IsAtEnd() && !Check("}"))
+            {
+                SkipComments();
+                if (Check("}")) break;
 
-        int bodyEnd = FindClosingBrace(lines, braceSearchLine);
-        nextLine = bodyEnd + 1;
+                if (Current().Kind == GoTokenKind.Identifier)
+                {
+                    string methodOrType = Current().Value;
+                    int mLine = CurrentLine();
+                    Advance();
 
-        // Extract statements from body
+                    if (Check("("))
+                    {
+                        // Method signature
+                        var parameters = ParseParamList();
+                        TypeReference? returnType = ParseReturnType();
+                        bool exported = char.IsUpper(methodOrType[0]);
+                        methods.Add(new MethodDeclaration(methodOrType,
+                            exported ? Modifier.Public : Modifier.Private, [], returnType, parameters, mLine));
+                    }
+                    else
+                    {
+                        // Embedded interface
+                        embedded.Add(methodOrType);
+                    }
+                }
+                else Advance();
+            }
+            if (Check("}")) Advance();
+        }
+
+        return new TypeDeclaration(name, TypeKind.Interface, modifiers, embedded, [], [], methods, [], [], line)
+        { HasDocComment = hasDoc };
+    }
+
+    private (MethodDeclaration? method, string? receiver)? ParseFunc(List<StatementInfo> statements)
+    {
+        bool hasDoc = HasPrecedingDocComment();
+        Advance(); // skip 'func'
+
+        string? receiver = null;
+        string? receiverType = null;
+
+        // Method receiver: func (r *Type) Name(...)
+        if (Check("("))
+        {
+            Advance();
+            if (Current().Kind == GoTokenKind.Identifier)
+            {
+                receiver = Current().Value;
+                Advance();
+            }
+            if (Check("*")) Advance();
+            if (Current().Kind == GoTokenKind.Identifier)
+            {
+                receiverType = Current().Value;
+                Advance();
+            }
+            SkipGenerics();
+            if (Check(")")) Advance();
+        }
+
+        string name = ConsumeIdentifier();
+        if (name == "") { SkipBraces(); return null; }
+        int line = CurrentLine();
+        SkipGenerics();
+
+        var parameters = ParseParamList();
+        TypeReference? returnType = ParseReturnType();
+
+        bool isExported = char.IsUpper(name[0]);
+        var modifiers = isExported ? Modifier.Public : Modifier.Private;
+
         var methodStatements = new List<StatementInfo>();
-        ExtractBodyStatements(lines, braceSearchLine + 1, bodyEnd, methodStatements);
+        if (Check("{"))
+        {
+            ParseBlock(methodStatements);
+        }
         statements.AddRange(methodStatements);
 
-        var method = new MethodDeclaration(name, modifiers, [], returnType, parameters, startLine + 1)
-        { Statements = methodStatements, HasDocComment = hasDocComment };
+        var method = new MethodDeclaration(name, modifiers, [], returnType, parameters, line)
+        { Statements = methodStatements, HasDocComment = hasDoc };
 
-        return (method, receiver, nextLine);
+        return (method, receiverType);
     }
 
-    private static void ExtractBodyStatements(string[] lines, int start, int end, List<StatementInfo> statements)
-    {
-        for (int i = start; i < end; i++)
-        {
-            var trimmed = lines[i].TrimStart();
-            if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("//")) continue;
-
-            ExtractLineStatement(trimmed, i + 1, true, statements);
-        }
-    }
-
-    private static void ExtractLineStatement(string trimmed, int lineNumber, bool isInMethod, List<StatementInfo> statements)
-    {
-        // panic(...) / log.Fatal(...)
-        if (trimmed.StartsWith("panic(") || Regex.IsMatch(trimmed, @"\bpanic\("))
-        {
-            statements.Add(new StatementInfo("throw", [], null, "panic", [], lineNumber, isInMethod));
-            return;
-        }
-
-        // defer statement
-        if (trimmed.StartsWith("defer "))
-        {
-            var deferCallMatch = Regex.Match(trimmed, @"^defer\s+(?:(\w[\w.]*?)\.)?(\w+)\s*\(");
-            if (deferCallMatch.Success)
-            {
-                string? typeName = deferCallMatch.Groups[1].Success ? deferCallMatch.Groups[1].Value : null;
-                string memberName = deferCallMatch.Groups[2].Value;
-                statements.Add(new StatementInfo("call", ["defer"], typeName, memberName, [], lineNumber, isInMethod));
-            }
-            return;
-        }
-
-        // go statement (goroutine)
-        if (trimmed.StartsWith("go "))
-        {
-            var goCallMatch = Regex.Match(trimmed, @"^go\s+(?:(\w[\w.]*?)\.)?(\w+)\s*\(");
-            if (goCallMatch.Success)
-            {
-                string? typeName = goCallMatch.Groups[1].Success ? goCallMatch.Groups[1].Value : null;
-                string memberName = goCallMatch.Groups[2].Value;
-                statements.Add(new StatementInfo("call", ["go"], typeName, memberName, [], lineNumber, isInMethod));
-            }
-            return;
-        }
-
-        // Method call: expr.Method(...)
-        var methodCallMatch = Regex.Match(trimmed, @"(?:(\w[\w.]*?)\.)?(\w+)\s*\(");
-        if (methodCallMatch.Success)
-        {
-            string? typeName = methodCallMatch.Groups[1].Success ? methodCallMatch.Groups[1].Value : null;
-            string memberName = methodCallMatch.Groups[2].Value;
-
-            // Skip keywords that look like calls
-            if (memberName is "if" or "for" or "switch" or "select" or "func" or "return"
-                or "range" or "go" or "defer" or "type" or "var" or "const" or "make" or "len"
-                or "cap" or "append" or "copy" or "delete" or "close" or "new")
-                return;
-
-            statements.Add(new StatementInfo("call", [], typeName, memberName, [], lineNumber, isInMethod));
-        }
-    }
-
-    private static List<ParameterDeclaration> ParseParameters(string paramString)
+    private List<ParameterDeclaration> ParseParamList()
     {
         var parameters = new List<ParameterDeclaration>();
-        if (string.IsNullOrWhiteSpace(paramString)) return parameters;
-
-        foreach (var part in SplitParameters(paramString))
+        if (!Check("(")) return parameters;
+        Advance();
+        var names = new List<string>();
+        while (!IsAtEnd() && !Check(")"))
         {
-            var trimmed = part.Trim();
-            if (string.IsNullOrWhiteSpace(trimmed)) continue;
+            SkipComments();
+            if (Check(")")) break;
 
-            // Go params: name type or name1, name2 type
-            var paramMatch = Regex.Match(trimmed, @"^(\w+)\s+(.+)$");
-            if (paramMatch.Success)
+            if (Check("..."))
             {
-                string name = paramMatch.Groups[1].Value;
-                string typeText = paramMatch.Groups[2].Value.Trim();
-                bool isVariadic = typeText.StartsWith("...");
-                if (isVariadic) typeText = typeText[3..];
-                var typeRef = new TypeReference(typeText, null, [], typeText);
-                parameters.Add(new ParameterDeclaration(name, typeRef, isVariadic, false, false, 0));
+                Advance();
+                string varType = ConsumeType();
+                string pName = names.Count > 0 ? names[^1] : "args";
+                if (names.Count > 0) names.RemoveAt(names.Count - 1);
+                parameters.Add(new ParameterDeclaration(pName, new TypeReference(varType, null, [], varType), true, false, false, 0));
+                if (Check(",")) Advance();
+                continue;
+            }
+
+            if (Current().Kind == GoTokenKind.Identifier)
+            {
+                string first = Current().Value;
+                Advance();
+
+                if (Check(",") || Check(")"))
+                {
+                    // Could be just a type name with no param name
+                    names.Add(first);
+                    if (Check(",")) Advance();
+                }
+                else if (Current().Kind == GoTokenKind.Identifier || Check("*") || Check("[") || CheckKeyword("map") || CheckKeyword("func") || CheckKeyword("chan") || CheckKeyword("interface") || CheckKeyword("struct") || Check("..."))
+                {
+                    // first is param name, now consume type
+                    names.Add(first);
+                    if (Check("...")) Advance();
+                    string paramType = ConsumeType();
+                    foreach (var n in names)
+                        parameters.Add(new ParameterDeclaration(n, new TypeReference(paramType, null, [], paramType), false, false, false, 0));
+                    names.Clear();
+                    if (Check(",")) Advance();
+                }
+                else
+                {
+                    names.Add(first);
+                    if (Check(",")) Advance();
+                }
             }
             else
             {
-                // Just a type (unnamed, or part of multi-name declaration)
-                parameters.Add(new ParameterDeclaration(trimmed, null, false, false, false, 0));
+                // type without name (e.g. *Type, []byte, etc.)
+                string paramType = ConsumeType();
+                foreach (var n in names)
+                    parameters.Add(new ParameterDeclaration(n, new TypeReference(paramType, null, [], paramType), false, false, false, 0));
+                names.Clear();
+                if (names.Count == 0 && paramType != "")
+                    parameters.Add(new ParameterDeclaration("", new TypeReference(paramType, null, [], paramType), false, false, false, 0));
+                if (Check(",")) Advance();
             }
         }
-
+        // If we have leftover names, they're types
+        foreach (var n in names)
+            parameters.Add(new ParameterDeclaration("", new TypeReference(n, null, [], n), false, false, false, 0));
+        if (Check(")")) Advance();
         return parameters;
     }
 
-    private static List<string> SplitParameters(string s)
+    private TypeReference? ParseReturnType()
     {
-        var result = new List<string>();
-        int depth = 0;
-        int start = 0;
-        for (int i = 0; i < s.Length; i++)
+        if (Check("("))
         {
-            if (s[i] is '(' or '[' or '{') depth++;
-            else if (s[i] is ')' or ']' or '}') depth--;
-            else if (s[i] == ',' && depth == 0)
-            {
-                result.Add(s[start..i]);
-                start = i + 1;
-            }
+            // Multiple returns
+            int start = _pos;
+            SkipParens();
+            string multi = string.Join("", tokens[start.._pos].Select(t => t.Value));
+            return new TypeReference(multi, null, [], multi);
         }
-        result.Add(s[start..]);
-        return result;
+        if (!Check("{") && !IsAtEnd() && Current().Kind is GoTokenKind.Identifier or GoTokenKind.Keyword && !CheckKeyword("func"))
+        {
+            if (Check("*")) { Advance(); }
+            string retType = ConsumeType();
+            if (retType != "") return new TypeReference(retType, null, [], retType);
+        }
+        return null;
     }
 
-    private static bool IsExported(string name) =>
-        name.Length > 0 && char.IsUpper(name[0]);
-
-    private static bool HasDocComment(string[] lines, int startLine)
+    private void ParseBlock(List<StatementInfo> statements)
     {
-        for (int i = startLine - 1; i >= 0; i--)
+        if (!Check("{")) return;
+        Advance();
+        int depth = 1;
+        while (!IsAtEnd() && depth > 0)
         {
-            var trimmed = lines[i].TrimStart();
-            if (trimmed.StartsWith("//"))
-                return true;
-            if (string.IsNullOrWhiteSpace(trimmed))
+            if (Check("{")) { depth++; Advance(); continue; }
+            if (Check("}")) { depth--; if (depth == 0) { Advance(); break; } Advance(); continue; }
+
+            // Detect panic/recover
+            if (Current().Kind == GoTokenKind.Identifier && Current().Value is "panic")
+            {
+                int stmtLine = CurrentLine();
+                Advance();
+                if (Check("(")) SkipParens();
+                statements.Add(new StatementInfo("throw", [], null, "panic", [], stmtLine, true));
                 continue;
-            break;
+            }
+            if (Current().Kind == GoTokenKind.Identifier && Current().Value is "recover")
+            {
+                int stmtLine = CurrentLine();
+                Advance();
+                if (Check("(")) SkipParens();
+                statements.Add(new StatementInfo("catch", [], null, "recover", [], stmtLine, true));
+                continue;
+            }
+
+            // Detect function calls
+            if (Current().Kind == GoTokenKind.Identifier)
+            {
+                int stmtLine = CurrentLine();
+                string memberName = Current().Value;
+                string typeName = "";
+                Advance();
+
+                // package.Func or type.Method
+                while (Check(".") && Peek().Kind == GoTokenKind.Identifier)
+                {
+                    Advance(); // skip .
+                    typeName = typeName == "" ? memberName : typeName + "." + memberName;
+                    memberName = Current().Value;
+                    Advance();
+                }
+
+                if (Check("("))
+                {
+                    statements.Add(new StatementInfo("call", [],
+                        typeName != "" ? typeName : null, memberName, [], stmtLine, true));
+                    SkipParens();
+                }
+                continue;
+            }
+
+            Advance();
+        }
+    }
+
+    private void SkipVarOrConst()
+    {
+        Advance(); // skip var/const
+        if (Check("("))
+        {
+            Advance();
+            int depth = 1;
+            while (!IsAtEnd() && depth > 0)
+            {
+                if (Check("(")) depth++;
+                if (Check(")")) { depth--; if (depth == 0) { Advance(); break; } }
+                Advance();
+            }
+        }
+        else
+        {
+            // single line
+            while (!IsAtEnd() && CurrentLine() == tokens[_pos > 0 ? _pos - 1 : 0].Line)
+                Advance();
+        }
+    }
+
+    #region Token helpers
+
+    private GoToken Current() => _pos < tokens.Count ? tokens[_pos] : tokens[^1];
+    private GoToken Peek() => _pos + 1 < tokens.Count ? tokens[_pos + 1] : tokens[^1];
+    private int CurrentLine() => Current().Line;
+    private bool IsAtEnd() => _pos >= tokens.Count || Current().Kind == GoTokenKind.Eof;
+    private void Advance() { if (!IsAtEnd()) _pos++; }
+
+    private bool Check(string value) => !IsAtEnd() && Current().Value == value;
+    private bool CheckKeyword(string kw) => !IsAtEnd() && Current().Kind == GoTokenKind.Keyword && Current().Value == kw;
+    private bool MatchKeyword(string kw) { if (CheckKeyword(kw)) { Advance(); return true; } return false; }
+
+    private string ConsumeIdentifier()
+    {
+        if (!IsAtEnd() && Current().Kind == GoTokenKind.Identifier)
+        { var v = Current().Value; Advance(); return v; }
+        return "";
+    }
+
+    private string ConsumeType()
+    {
+        int start = _pos;
+        int depth = 0;
+        while (!IsAtEnd())
+        {
+            if (Check("[") || Check("(")) { depth++; Advance(); continue; }
+            if (Check("]") || Check(")")) { if (depth == 0) break; depth--; Advance(); continue; }
+            if (Check("{") || Check("}")) break;
+            if (depth == 0 && (Check(",") || Check(";") || Check("\n"))) break;
+            // Stop at keywords that start new declarations
+            if (depth == 0 && (CheckKeyword("func") || CheckKeyword("type") || CheckKeyword("var") || CheckKeyword("const"))) break;
+            Advance();
+        }
+        if (_pos == start) return "";
+        return string.Join("", tokens[start.._pos].Select(t => t.Value));
+    }
+
+    private void SkipGenerics()
+    {
+        if (!Check("[")) return;
+        int depth = 0;
+        while (!IsAtEnd())
+        {
+            if (Check("[")) { depth++; Advance(); }
+            else if (Check("]")) { depth--; Advance(); if (depth == 0) break; }
+            else Advance();
+        }
+    }
+
+    private void SkipParens()
+    {
+        if (!Check("(")) return;
+        int depth = 0;
+        while (!IsAtEnd())
+        {
+            if (Check("(")) { depth++; Advance(); }
+            else if (Check(")")) { depth--; Advance(); if (depth == 0) break; }
+            else Advance();
+        }
+    }
+
+    private void SkipBraces()
+    {
+        if (!Check("{")) return;
+        int depth = 0;
+        while (!IsAtEnd())
+        {
+            if (Check("{")) { depth++; Advance(); }
+            else if (Check("}")) { depth--; Advance(); if (depth == 0) break; }
+            else Advance();
+        }
+    }
+
+    private void SkipComments()
+    {
+        while (!IsAtEnd() && Current().Kind is GoTokenKind.LineComment or GoTokenKind.BlockComment)
+            Advance();
+    }
+
+    private bool HasPrecedingDocComment()
+    {
+        for (int i = _pos - 1; i >= 0 && i >= _pos - 5; i--)
+        {
+            if (tokens[i].Kind == GoTokenKind.LineComment && tokens[i].Value.StartsWith("//"))
+                return true;
+            if (tokens[i].Kind == GoTokenKind.BlockComment) return true;
+            continue;
         }
         return false;
     }
 
-    private static bool IsDocComment(string[] lines, int lineIndex)
+    private HashSet<int> ExtractCommentLines()
     {
-        // In Go, a doc comment is a // comment immediately preceding a declaration
-        for (int i = lineIndex + 1; i < lines.Length; i++)
-        {
-            var next = lines[i].TrimStart();
-            if (next.StartsWith("//")) continue;
-            if (string.IsNullOrWhiteSpace(next)) return false;
-            // Next non-comment line is a declaration
-            return next.StartsWith("func ") || next.StartsWith("type ") ||
-                   next.StartsWith("var ") || next.StartsWith("const ") ||
-                   next.StartsWith("package ");
-        }
-        return false;
+        var lines = new HashSet<int>();
+        foreach (var t in tokens)
+            if (t.Kind is GoTokenKind.LineComment or GoTokenKind.BlockComment)
+                lines.Add(t.Line);
+        return lines;
     }
 
-    private static int FindClosingBrace(string[] lines, int openBraceLine)
-    {
-        int depth = 0;
-        for (int i = openBraceLine; i < lines.Length; i++)
-        {
-            foreach (char c in lines[i])
-            {
-                if (c == '{') depth++;
-                else if (c == '}')
-                {
-                    depth--;
-                    if (depth == 0) return i;
-                }
-            }
-        }
-        return lines.Length - 1;
-    }
-
-    private static int SkipBlockComment(string[] lines, int startLine)
-    {
-        for (int i = startLine; i < lines.Length; i++)
-        {
-            if (lines[i].Contains("*/"))
-                return i + 1;
-        }
-        return lines.Length;
-    }
-
-    private static int SkipParenBlock(string[] lines, int startLine)
-    {
-        int depth = 0;
-        for (int i = startLine; i < lines.Length; i++)
-        {
-            foreach (char c in lines[i])
-            {
-                if (c == '(') depth++;
-                else if (c == ')')
-                {
-                    depth--;
-                    if (depth == 0) return i + 1;
-                }
-            }
-        }
-        return lines.Length;
-    }
-
-    private static HashSet<int> ExtractCommentLines(string[] lines)
-    {
-        var commentLines = new HashSet<int>();
-        for (int i = 0; i < lines.Length; i++)
-        {
-            var trimmed = lines[i].TrimStart();
-            if (trimmed.StartsWith("//"))
-                commentLines.Add(i + 1);
-        }
-        return commentLines;
-    }
+    #endregion
 }
+
+#endregion

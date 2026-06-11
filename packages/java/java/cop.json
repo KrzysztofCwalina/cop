@@ -1,0 +1,13 @@
+{
+  "name": "java",
+  "version": "1.0.0",
+  "description": "Java source code parser and analyzer",
+  "title": "Java Source Language Provider",
+  "authors": "cop-team",
+  "tags": [
+    "java"
+  ],
+  "provider": "clr",
+  "providerEntry": "Cop.Providers.JavaProvider",
+  "providerAssembly": "java-provider.dll"
+}

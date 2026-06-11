@@ -409,11 +409,11 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
             }
         }
 
-        // Try matching by arity
-        foreach (var overload in _overloads)
+        // Try matching by arity (prefer last registered for same-arity overrides like command redefinitions)
+        for (int i = _overloads.Count - 1; i >= 0; i--)
         {
-            if (overload.Arity == args.Count)
-                return evaluator.CallUserFunction(overload, args);
+            if (_overloads[i].Arity == args.Count)
+                return evaluator.CallUserFunction(_overloads[i], args);
         }
 
         // Try matching overloads with param array (more args than params)

@@ -1,0 +1,10 @@
+# Java source language provider
+import code
+
+## Parses Java source files in the target directory and returns a Codebase.
+## Example: let cb = java.parse()
+export function parse() : Codebase => provider('java')
+
+## Parses Java source files in the specified directory and returns a Codebase.
+## Example: let cb = java.parse('/path/to/project')
+export function parse(path : string) : Codebase => provider('java', path)

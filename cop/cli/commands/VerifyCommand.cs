@@ -173,8 +173,9 @@ public static class VerifyCommand
 
     /// <summary>
     /// Collects external symbols (from imports and builtins) for the binder.
+    /// Shared between verify and execution validation paths.
     /// </summary>
-    private static List<Cop.Lang.Interpreter.Symbol> CollectExternalSymbols(Cop.Lang.Interpreter.Environment env, IReadOnlyList<ModuleNode> loadedModules)
+    internal static List<Cop.Lang.Interpreter.Symbol> CollectExternalSymbols(Cop.Lang.Interpreter.Environment env, IReadOnlyList<ModuleNode> loadedModules, IEnumerable<ProviderSchema>? providerSchemas = null)
     {
         var symbols = new List<Cop.Lang.Interpreter.Symbol>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -185,6 +186,23 @@ public static class VerifyCommand
         {
             if (seen.Add(name))
                 symbols.Add(new TypeSymbol(name, null, []));
+        }
+
+        // Types from provider schemas (e.g., Folder, File from filesystem provider)
+        if (providerSchemas != null)
+        {
+            foreach (var schema in providerSchemas)
+            {
+                foreach (var type in schema.Types)
+                {
+                    if (seen.Add(type.Name))
+                    {
+                        var props = type.Properties.Select(p =>
+                            new PropertySymbol(p.Name, new TypeRef(p.Type), p.Optional)).ToList();
+                        symbols.Add(new TypeSymbol(type.Name, type.Base, props));
+                    }
+                }
+            }
         }
 
         // Add types, functions, and enums from imported modules
@@ -204,7 +222,7 @@ public static class VerifyCommand
                         break;
                     case EnumDecl ed when ed.IsExported:
                         if (seen.Add(ed.Name))
-                            symbols.Add(new EnumSymbol(ed.Name, null, []));
+                            symbols.Add(new EnumSymbol(ed.Name, null, ed.Members.Select(m => new EnumMemberSymbol(m, ed.Name)).ToList()));
                         break;
                     case FunctionDecl fd when fd.IsExported:
                         if (seen.Add(fd.Name))

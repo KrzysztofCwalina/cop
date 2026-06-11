@@ -5,7 +5,7 @@ import code-metrics
 let codebase = codebase(csharp)
 
 # Custom rule: flag types with too many methods (god classes)
-predicate hasTooManyMethods(Type) => Type.Methods.count() > 20
+predicate hasTooManyMethods(Type) => Type.Methods.count() > 10
 let large-types = codebase.Types:hasTooManyMethods
     :toViolation('Type {item.Name} has {item.Methods.count()} methods', 0.6, 0.95)
 

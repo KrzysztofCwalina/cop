@@ -66,10 +66,10 @@ public class SampleValidationTests
 
             if (result.HasFatalErrors)
             {
-                // "Command 'main' not found" is expected for snippet-style samples
+                // Missing command is expected for snippet-style samples
                 // that demonstrate concepts without defining a runnable command
                 var realErrors = result.Errors
-                    .Where(e => !e.Contains("Command 'main' not found"))
+                    .Where(e => !e.Contains("Command 'main' not found") && !e.Contains("Package has no 'command main'"))
                     .ToList();
 
                 if (realErrors.Count > 0)

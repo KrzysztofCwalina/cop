@@ -19,7 +19,7 @@ cop/language/       Cop language (namespace Cop.Lang). Parser, interpreter,
                     evaluator, type system. General-purpose language features only.
 
 cop/runtime/        Runtime engine (namespace Cop.Providers). Engine orchestrator,
-                    source parsers (C#, Python, JavaScript, Rust, Go), provider loading
+                    source parsers (C#, Python, JavaScript, Rust, Go, Java), provider loading
                     and registration.
 
 cop/shared/         Core library (namespace Cop.Core). ObjectProvider base class,
@@ -153,3 +153,10 @@ This publishes self-contained single-file EXEs into `install/<rid>/` subfolders.
 - **`.cop` files:** single-quoted strings, `{Prop}` template interpolation, `{text@style}` for styled output, `feed` and `import` for package management
 - **Packages:** directories (not zips) under `packages/` in GitHub repos
 - **JSON:** used for package metadata (`cop.json`)
+
+## Rules for Agents
+
+- **Never use "pre-existing" as an excuse.** If you encounter failing tests, broken behavior, or bugs during your work, fix them — regardless of whether you introduced them or they existed before your changes. Do not dismiss problems as "pre-existing issues" or "not my concern."
+- **Never declare a feature done without a successful functional end-to-end test.** Unit tests passing is NOT sufficient. Run the actual `cop` command against real input and verify correct output.
+- **Never discard, revert, or unstage changes you did not make.** If you see uncommitted or untracked files you don't recognize, ask the user before touching them.
+

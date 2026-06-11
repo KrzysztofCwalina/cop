@@ -1,0 +1,6 @@
+import java
+
+let cb = java.parse()
+
+# List all public types in the Java codebase
+command MAIN = foreach cb.Types:isPublic => '{item.Name} ({item.Kind})'
