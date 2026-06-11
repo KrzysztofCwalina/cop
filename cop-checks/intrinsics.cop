@@ -1,6 +1,6 @@
 # Intrinsics must be in intrinsics.cop
 
-predicate isStrayIntrinsic(Statement) => Statement.Kind == 'declaration'
+predicate isStrayIntrinsic(Statement) => Statement.Kind == declaration
     && Statement.Keywords:contains('intrinsic')
     && !Statement.File.Path:endsWith('intrinsics.cop')
 

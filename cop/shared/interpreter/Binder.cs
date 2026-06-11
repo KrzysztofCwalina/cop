@@ -22,6 +22,12 @@ public sealed class Binder
     private Scope _currentScope = null!;
 
     /// <summary>
+    /// Parameters of the function currently being validated (Pass 3).
+    /// Used to resolve member-access type information for enum comparison checks.
+    /// </summary>
+    private IReadOnlyList<Parameter>? _currentFunctionParams;
+
+    /// <summary>
     /// Optional external symbols to pre-populate the global scope with
     /// (intrinsics, runtime-provided functions, etc.).
     /// </summary>
@@ -518,6 +524,10 @@ public sealed class Binder
         // Validate return type
         ValidateTypeRef(decl.ReturnType);
 
+        // Set parameter context for enum-vs-string comparison checks
+        var previousParams = _currentFunctionParams;
+        _currentFunctionParams = decl.Params;
+
         // Validate body expressions
         switch (decl.Body)
         {
@@ -529,6 +539,8 @@ public sealed class Binder
                     ValidateExpression(mapping.Value);
                 break;
         }
+
+        _currentFunctionParams = previousParams;
     }
 
     private void ValidateStatement(Statement stmt)
@@ -567,6 +579,7 @@ public sealed class Binder
             case BinaryExpr be:
                 ValidateExpression(be.Left);
                 ValidateExpression(be.Right);
+                ValidateEnumComparison(be);
                 break;
             case UnaryExpr ue:
                 ValidateExpression(ue.Operand);
@@ -640,6 +653,15 @@ public sealed class Binder
                         _filePath);
                 }
             }
+            else if (symbol is EnumSymbol && ce.Args.Count != 1)
+            {
+                // Enum constructors accept exactly one string argument
+                _result.ReportDiagnostic(
+                    DiagnosticSeverity.Error,
+                    $"Enum constructor '{id.Name}' expects exactly 1 argument, got {ce.Args.Count}",
+                    ce.Line,
+                    _filePath);
+            }
         }
     }
 
@@ -683,5 +705,102 @@ public sealed class Binder
                 line,
                 _filePath);
         }
+    }
+
+    // ========================================================================
+    // Enum comparison validation
+    // ========================================================================
+
+    /// <summary>
+    /// Checks whether a binary == or != expression compares an enum-typed property
+    /// to a raw string literal. If so, emits an error — the user should use an enum
+    /// member (e.g., Class) or explicit cast (e.g., TypeKind('class')).
+    /// </summary>
+    private void ValidateEnumComparison(BinaryExpr be)
+    {
+        if (be.Op is not (BinaryOp.Equal or BinaryOp.NotEqual)) return;
+
+        // Check both directions: member == literal, or literal == member
+        TryReportEnumStringMismatch(be.Left, be.Right, be.Line);
+        TryReportEnumStringMismatch(be.Right, be.Left, be.Line);
+    }
+
+    private void TryReportEnumStringMismatch(Expression possibleMember, Expression possibleLiteral, int line)
+    {
+        // The literal side must be a string literal
+        if (possibleLiteral is not LiteralExpr { Value: string })
+            return;
+
+        // The other side must be a member access (e.g., Type.Kind)
+        if (possibleMember is not MemberExpr me)
+            return;
+
+        // Try to resolve the property type of the member access
+        var enumTypeName = TryResolvePropertyEnumType(me);
+        if (enumTypeName is null)
+            return;
+
+        // We found an enum-typed property being compared to a string literal
+        _result.ReportDiagnostic(
+            DiagnosticSeverity.Error,
+            $"Cannot compare '{me.Member}' ({enumTypeName}) to a string literal. Use an enum member or explicit cast: {enumTypeName}('value')",
+            line,
+            _filePath);
+    }
+
+    /// <summary>
+    /// Given a member expression like Type.Kind, tries to resolve the declared property type.
+    /// Returns the enum type name if the property is enum-typed, null otherwise.
+    /// </summary>
+    private string? TryResolvePropertyEnumType(MemberExpr me)
+    {
+        // Resolve the object's type name
+        string? objectTypeName = null;
+
+        if (me.Object is IdentifierExpr id)
+        {
+            // Check if it's a function parameter with a type annotation
+            if (_currentFunctionParams is not null)
+            {
+                foreach (var param in _currentFunctionParams)
+                {
+                    if (param.Name == id.Name && param.Type is not null)
+                    {
+                        objectTypeName = param.Type.Name;
+                        break;
+                    }
+                }
+            }
+
+            // If not a parameter, check scope for variable with type annotation
+            if (objectTypeName is null)
+            {
+                var symbol = _currentScope.Resolve(id.Name);
+                if (symbol is VariableSymbol vs && vs.DeclaredType is not null)
+                    objectTypeName = vs.DeclaredType.Name;
+                else if (symbol is ParameterSymbol ps && ps.DeclaredType is not null)
+                    objectTypeName = ps.DeclaredType.Name;
+            }
+        }
+
+        if (objectTypeName is null) return null;
+
+        // Look up the type symbol to find the property
+        var typeSymbol = _currentScope.Resolve(objectTypeName);
+        if (typeSymbol is not TypeSymbol ts) return null;
+
+        // Find the property by name
+        foreach (var prop in ts.Properties)
+        {
+            if (prop.Name == me.Member && prop.DeclaredType is not null)
+            {
+                // Check if the property type is an enum
+                var propTypeSymbol = _currentScope.Resolve(prop.DeclaredType.Name);
+                if (propTypeSymbol is EnumSymbol)
+                    return prop.DeclaredType.Name;
+            }
+        }
+
+        return null;
     }
 }

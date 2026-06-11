@@ -172,6 +172,8 @@ public sealed class Evaluator
                 // Register enum members as string constants
                 foreach (var member in ed.Members)
                     _globalEnv.Define(member, new CopString(member));
+                // Register enum type name as a constructor: TypeKind('value') → CopString
+                _globalEnv.Define(ed.Name, new CopEnumConstructor(ed.Name));
                 break;
 
             case FlagsDecl fd2:

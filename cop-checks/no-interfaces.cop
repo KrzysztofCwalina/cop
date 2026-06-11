@@ -3,7 +3,7 @@
 
 let allowed-interfaces = ['ICopCallable']
 
-predicate isDisallowedInterface(Type:isCSharp) => Type.Kind == 'Interface'
+predicate isDisallowedInterface(Type:isCSharp) => Type.Kind == Interface
     && !allowed-interfaces:contains(Type.Name)
 
 export let no-new-interfaces = Types:isDisallowedInterface

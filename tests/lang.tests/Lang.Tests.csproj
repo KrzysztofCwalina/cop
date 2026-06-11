@@ -23,8 +23,8 @@
   <ItemGroup>
     <Content Include="samples\**\*" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="referencetests\programs\**\*.cop" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\..\packages\code\src\code.cop" Link="samples\code.cop" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\..\packages\core\src\intrinsics.cop" Link="samples\intrinsics.cop" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\packages\code\code\src\code.cop" Link="samples\code.cop" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\packages\core\core\src\intrinsics.cop" Link="samples\intrinsics.cop" CopyToOutputDirectory="PreserveNewest" />
     <Compile Remove="samples\**\*.cs" />
   </ItemGroup>
 

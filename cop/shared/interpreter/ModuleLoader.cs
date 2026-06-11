@@ -193,6 +193,8 @@ public sealed class ModuleLoader
                 case EnumDecl ed when ed.IsExported:
                     foreach (var member in ed.Members)
                         evaluator.GlobalEnvironment.Define(member, new CopString(member));
+                    // Register enum type name as a constructor: TypeKind('value') → CopString
+                    evaluator.GlobalEnvironment.Define(ed.Name, new CopEnumConstructor(ed.Name));
                     break;
 
                 case FlagsDecl fd2 when fd2.IsExported:

@@ -262,6 +262,38 @@ Flag members can always be qualified with the type name (`Modifier.Public`). To 
 
 The `code` package defines a `Modifier` flags enum, exports its members, and provides `isX` predicates for all common modifiers (see [Code Package Reference](packages/code.md)).
 
+### Enums
+
+`enum` defines an extensible set of named string constants:
+
+```ruby
+enum TypeKind = Class | Struct | Interface | Enum
+enum Language = csharp | python | javascript | cop | text
+```
+
+Enum members are available as bare identifiers when the defining package exports the enum. Compare enum-typed properties directly to members:
+
+```ruby
+predicate isClass(Type) => Type.Kind == Class
+predicate isCSharp(Type) => Type.File.Language == csharp
+```
+
+**Type-safe comparisons:** Comparing an enum-typed property to a raw string literal is an error caught by `cop verify`:
+
+```ruby
+# ERROR — use the enum member or explicit cast
+predicate isClass(Type) => Type.Kind == 'class'
+```
+
+**Explicit cast for extensibility:** Since enums are extensible (providers may return values not in the defined set), use the enum name as a constructor to cast a string:
+
+```ruby
+# OK — explicit cast wraps the string as an enum value
+predicate isCustom(Type) => Type.Kind == TypeKind('CustomKind')
+```
+
+This makes the intent clear: the developer knows the value isn't a predefined member but wants to compare it anyway.
+
 ### Let Declarations
 
 `let` declares a named list. It has several forms:
