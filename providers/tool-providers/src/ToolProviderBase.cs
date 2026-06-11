@@ -88,6 +88,7 @@ public abstract class ToolProvider : DataProvider
 
         Console.Error.Write($"  Running {fileName}...");
         var sw = Stopwatch.StartNew();
+        int maxLineLen = 0;
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start: {fileName}");
@@ -98,10 +99,14 @@ public abstract class ToolProvider : DataProvider
         {
             if (e.Data == null) return;
             stderrBuilder.AppendLine(e.Data);
-            // Show non-empty lines as progress (trimmed to keep output clean)
             var line = e.Data.TrimEnd();
             if (line.Length > 0)
-                Console.Error.Write($"\r  Running {fileName}... {Truncate(line, 60)}");
+            {
+                var msg = $"\r  Running {fileName}... {Truncate(line, 60)}";
+                // Pad with spaces to overwrite any remnant text from longer previous lines
+                if (msg.Length > maxLineLen) maxLineLen = msg.Length;
+                Console.Error.Write(msg.PadRight(maxLineLen));
+            }
         };
         process.BeginErrorReadLine();
 
@@ -110,13 +115,15 @@ public abstract class ToolProvider : DataProvider
         if (!process.WaitForExit(timeoutMs))
         {
             try { process.Kill(entireProcessTree: true); } catch { }
-            Console.Error.WriteLine($"\r  Running {fileName}... timed out after {timeoutMs / 1000}s");
+            var timeoutMsg = $"\r  Running {fileName}... timed out after {timeoutMs / 1000}s";
+            Console.Error.WriteLine(timeoutMsg.PadRight(maxLineLen));
             throw new TimeoutException($"{fileName} timed out after {timeoutMs / 1000}s");
         }
 
         stdoutTask.Wait();
         sw.Stop();
-        Console.Error.WriteLine($"\r  Running {fileName}... done ({sw.Elapsed.TotalSeconds:F1}s)          ");
+        var doneMsg = $"\r  Running {fileName}... done ({sw.Elapsed.TotalSeconds:F1}s)";
+        Console.Error.WriteLine(doneMsg.PadRight(maxLineLen));
         return (stdoutTask.Result, stderrBuilder.ToString(), process.ExitCode);
     }
 

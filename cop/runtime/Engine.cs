@@ -540,6 +540,10 @@ public static class Engine
         if (collections.Count == 0)
             return;
 
+        // Skip for analysis/tool providers — 0 violations means clean code, not a failure
+        if (schema.Collections.All(c => c.Name == "Violations" || c.ItemType == "Violation"))
+            return;
+
         // Check if ALL collections returned 0 items
         int totalItems = 0;
         foreach (var (_, items) in collections)
