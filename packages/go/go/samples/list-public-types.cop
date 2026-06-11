@@ -1,0 +1,6 @@
+import go
+
+let cb = go.parse()
+
+# List all public types in the Go codebase
+command MAIN = foreach cb.Types:isPublic => '{item.Name} ({item.Kind})'

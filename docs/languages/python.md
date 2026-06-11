@@ -1,0 +1,171 @@
+# Python Walkthrough
+
+This guide walks you through analyzing a Python project with cop — from setup to writing and running custom rules.
+
+---
+
+## 1. Install Cop
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/KrzysztofCwalina/cop/releases) and add it to your PATH.
+
+Verify the installation:
+
+```bash
+cop --version
+```
+
+---
+
+## 2. Target a Python Project
+
+Navigate to any directory containing Python source files (`.py`). Cop scans all `.py` files in the target directory tree.
+
+Example project structure:
+
+```
+src/
+  mypackage/
+    __init__.py
+    models.py
+    services.py
+pyproject.toml
+```
+
+---
+
+## 3. Write a Simple Rule
+
+Create a file called `checks.cop` in your project root:
+
+```cop
+import python
+import code
+import code-analysis
+
+let cb = python.parse()
+
+# Flag public classes without docstrings
+predicate isUndocumented(Type) => Type.Documented == false && Type:isPublic
+
+# Flag bare except clauses (catch-all exception handling)
+predicate isBareExcept(Statement) => Statement:isErrorHandler && Statement:isGeneric
+
+let undocumented = cb.Types:isUndocumented
+    :toWarning('Public class {item.Name} is missing a docstring')
+
+let bareExcepts = cb.Statements:isBareExcept
+    :toWarning('Bare except at line {item.Line} — catch a specific exception')
+
+command MAIN = CHECK(undocumented + bareExcepts)
+```
+
+---
+
+## 4. Run the Rule
+
+From your project root:
+
+```bash
+cop checks.cop -t src/
+```
+
+Example output:
+
+```
+src/mypackage/models.py: warning: Public class Order is missing a docstring
+src/mypackage/services.py: warning: Bare except at line 42 — catch a specific exception
+
+2 violation(s) found.
+```
+
+---
+
+## 5. Use Built-In Checks
+
+Cop ships with comprehensive Python check packages:
+
+```bash
+cop python-checks                          # all Python conventions
+cop python-checks -c no-print             # just the "no print" check
+cop python-library-checks                  # library API design rules
+cop python-library-azure-checks            # Azure SDK conventions
+```
+
+---
+
+## 6. Explore Further
+
+### List all classes
+
+```cop
+import python
+import code
+
+let cb = python.parse()
+command MAIN = foreach cb.Types => '{item.Name} ({item.Kind}) - {item.Methods.count()} methods'
+```
+
+### Find functions using eval()
+
+```cop
+import python
+import code-analysis
+
+let cb = python.parse()
+
+predicate isEval(Statement) => Statement.MemberName == 'eval'
+
+let violations = cb.Statements:isEval
+    :toError('Do not use eval() at line {item.Line}')
+
+command MAIN = CHECK(violations)
+```
+
+### Check for missing type hints
+
+```cop
+import python
+import code
+import code-analysis
+
+let cb = python.parse()
+
+predicate hasNoReturnType(Method) => Method.ReturnType == null && Method:isPublic
+
+let violations = cb.Types.Methods:hasNoReturnType
+    :toInfo('Public method {item.Name} has no return type annotation')
+
+command MAIN = CHECK(violations)
+```
+
+---
+
+## Available Collections
+
+The `python.parse()` function returns a `Codebase` with these collections:
+
+| Collection | Description |
+|------------|-------------|
+| `cb.Types` | All classes |
+| `cb.Statements` | Function calls, raise, except clauses |
+| `cb.Files` | Source files with import info |
+| `cb.Lines` | Every line of code (with kind: code/comment/blank) |
+| `cb.Projects` | pyproject.toml / setup.py projects with dependencies |
+
+### Python-Specific Features
+
+- **Docstring detection**: Triple-quoted docstrings are detected as documentation
+- **Decorators**: `@staticmethod`, `@abstractmethod`, etc. are captured in `Decorators`
+- **Exception handling**: `except` clauses are parsed as error handler statements with type info
+- **Async**: `async def` functions are flagged with the `Async` modifier
+- **Project discovery**: Parses `pyproject.toml` and `setup.py` for dependencies
+
+---
+
+## Tips
+
+- Use `cop verify checks.cop` to check your rule for errors before running
+- Use `-t path/` to limit analysis to a specific directory
+- Run `cop help python-checks` to see all built-in Python checks
+- Run `cop help code` to see available types and predicates
+- Combine with other providers: `import python` + `import javascript` for polyglot projects

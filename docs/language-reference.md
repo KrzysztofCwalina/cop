@@ -1143,7 +1143,7 @@ The pipe operator means **dequeue → transform → enqueue**: items are dequeue
 
 #### Language Filtering
 
-Use the language predicates (`:isCSharp`, `:isPython`, `:isJavaScript`, `:isRust`) from the `code` package to scope iteration to items from files of a specific language:
+Use the language predicates (`:isCSharp`, `:isPython`, `:isJavaScript`, `:isRust`, `:isGo`) from the `code` package to scope iteration to items from files of a specific language:
 
 ```ruby
 foreach Clients:isCSharp:!isSealed => '{error:@red} {item.Name} should be sealed'

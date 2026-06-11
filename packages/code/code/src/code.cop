@@ -11,7 +11,7 @@ export enum TypeKind = Class | Struct | Interface | Enum
 export enum StatementKind = call | declaration | import | command | attribute | throw | return | using | foreach | try | catch | if | else | while | for | switch | await
 export enum ApiKind = class | struct | interface | enum | enumvalue | ctor | method | property | event | field
 export enum LineKind = code | comment | blank
-export enum Language = csharp | python | javascript | rust | cop | text
+export enum Language = csharp | python | javascript | rust | go | cop | text
 
 export type Type = {
     Name : string,
@@ -283,3 +283,9 @@ export predicate isRust(Statement) => Statement.File.Language == rust
 export predicate isRust(Line) => Line.File.Language == rust
 export predicate isRust(Region) => Region.File.Language == rust
 export predicate isRust(Api) => Api.File.Language == rust
+
+export predicate isGo(Type) => Type.File.Language == go
+export predicate isGo(Statement) => Statement.File.Language == go
+export predicate isGo(Line) => Line.File.Language == go
+export predicate isGo(Region) => Region.File.Language == go
+export predicate isGo(Api) => Api.File.Language == go

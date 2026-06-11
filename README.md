@@ -100,7 +100,7 @@ cop javascript-checks                     # JS/TS conventions
 cop csharp-checks -t src/                 # analyze a specific directory
 ```
 
-Cop also supports **Rust** — see the [Rust Walkthrough](docs/rust-walkthrough.md) for writing custom rules against Rust codebases.
+Cop also supports **Rust** and **Go** — see the [Language Walkthroughs](docs/languages/) for getting started with any supported language.
 
 You can see all pre-built packages by executing `cop package list`.
 You can see details of packages, including usage samples, with `cop help <package_namwe>`.
@@ -120,7 +120,7 @@ cop vscode
 - [Language Reference](docs/language-reference.md) — full DSL syntax
 - [CLI Reference](docs/cli-reference.md) — all commands and options
 - [Static Analysis with Cop](docs/static-analysis.md) — writing source code checks
-- [Rust Walkthrough](docs/rust-walkthrough.md) — analyzing Rust projects with cop
+- [Language Walkthroughs](docs/languages/) — per-language guides ([C#](docs/languages/csharp.md), [Python](docs/languages/python.md), [JavaScript](docs/languages/javascript.md), [Rust](docs/languages/rust.md), [Go](docs/languages/go.md))
 - [Testing Cop Rules](docs/testing.md) — writing and running tests for your `.cop` programs
 - [Extensibility](docs/extensibility.md) — writing providers and wrapping external tools
 - [Packaging](docs/packaging.md) — creating, publishing, and restoring packages

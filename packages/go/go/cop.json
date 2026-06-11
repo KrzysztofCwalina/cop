@@ -1,0 +1,14 @@
+{
+  "name": "go",
+  "version": "1.0.0",
+  "description": "Go source code parser and analyzer",
+  "title": "Go Source Language Provider",
+  "authors": "cop-team",
+  "tags": [
+    "go",
+    "golang"
+  ],
+  "provider": "clr",
+  "providerEntry": "Cop.Providers.GoProvider",
+  "providerAssembly": "go-provider.dll"
+}

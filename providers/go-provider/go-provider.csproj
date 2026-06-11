@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Cop.Providers</RootNamespace>
+    <PublishReadyToRun>true</PublishReadyToRun>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\cop\cli\cop.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+
+  <!-- Copy provider DLL to package lib/ folder after build -->
+  <Target Name="CopyToPackageLib" AfterTargets="Build">
+    <PropertyGroup>
+      <PackageLibDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\packages\go\go\lib\'))</PackageLibDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(PackageLibDir)" />
+    <Copy SourceFiles="$(OutputPath)go-provider.dll" DestinationFolder="$(PackageLibDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(OutputPath)go-provider.deps.json" DestinationFolder="$(PackageLibDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

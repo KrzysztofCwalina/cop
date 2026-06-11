@@ -1,0 +1,10 @@
+# Go source language provider
+import code
+
+## Parses Go source files in the target directory and returns a Codebase.
+## Example: let cb = go.parse()
+export function parse() : Codebase => provider('go')
+
+## Parses Go source files in the specified directory and returns a Codebase.
+## Example: let cb = go.parse('/path/to/project')
+export function parse(path : string) : Codebase => provider('go', path)

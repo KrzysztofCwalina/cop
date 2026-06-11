@@ -150,6 +150,7 @@ const categories = [
     "packages": [
       "core",
       "files",
+      "go",
       "json",
       "markdown",
       "rust"
@@ -445,7 +446,7 @@ const packages = {
       },
       {
         "name": "Language",
-        "values": "csharp|python|javascript|rust|cop|text",
+        "values": "csharp|python|javascript|rust|go|cop|text",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code/src/code.cop#L14"
       },
       {
@@ -1552,6 +1553,36 @@ const packages = {
         "appliesTo": "Api",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code/src/code.cop#L285"
+      },
+      {
+        "name": "isGo",
+        "appliesTo": "Type",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code/src/code.cop#L287"
+      },
+      {
+        "name": "isGo",
+        "appliesTo": "Statement",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code/src/code.cop#L288"
+      },
+      {
+        "name": "isGo",
+        "appliesTo": "Line",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code/src/code.cop#L289"
+      },
+      {
+        "name": "isGo",
+        "appliesTo": "Region",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code/src/code.cop#L290"
+      },
+      {
+        "name": "isGo",
+        "appliesTo": "Api",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code/src/code.cop#L291"
       }
     ],
     "functions": [
@@ -3339,6 +3370,37 @@ const packages = {
         "returns": "[File]",
         "desc": "Returns all files in the project directory tree.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/files/src/files.cop#L39"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
+  "go": {
+    "label": "go",
+    "overview": "Go source code parser and analyzer",
+    "samples": [
+      {
+        "title": "List public types",
+        "code": "import go\n\nlet cb = go.parse()\n\n# List all public types in the Go codebase\ncommand MAIN = foreach cb.Types:isPublic => '{item.Name} ({item.Kind})'"
+      }
+    ],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [
+      {
+        "name": "parse",
+        "params": "",
+        "returns": "Codebase",
+        "desc": "Parses Go source files in the target directory and returns a Codebase.\nExample: let cb = go.parse()",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/go/go/src/go.cop#L6"
+      },
+      {
+        "name": "parse",
+        "params": "path: string",
+        "returns": "Codebase",
+        "desc": "Parses Go source files in the specified directory and returns a Codebase.\nExample: let cb = go.parse('/path/to/project')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/go/go/src/go.cop#L10"
       }
     ],
     "checks": [],
