@@ -99,7 +99,7 @@ public sealed class ModuleLoader
         foreach (var (module, path) in modules)
         {
             _loadedModules.Add(module);
-            RegisterExportedDeclarations(module, path, evaluator);
+            RegisterExportedDeclarations(module, path, evaluator, packageName);
         }
     }
 
@@ -156,7 +156,7 @@ public sealed class ModuleLoader
         return paths;
     }
 
-    private void RegisterExportedDeclarations(ModuleNode module, string filePath, Evaluator evaluator)
+    private void RegisterExportedDeclarations(ModuleNode module, string filePath, Evaluator evaluator, string packageName)
     {
         // Each module gets its own scope for non-exported let bindings.
         // This prevents name collisions (e.g., multiple packages defining 'let cb = ...').
@@ -172,7 +172,11 @@ public sealed class ModuleLoader
                     var func = new CopFunction(fd, moduleEnv);
                     moduleEnv.Define(fd.Name, func);
                     if (fd.IsExported)
+                    {
                         RegisterFunctionWithOverloading(evaluator.GlobalEnvironment, fd.Name, func);
+                        // Also register under qualified name so provider.method() syntax works
+                        RegisterFunctionWithOverloading(evaluator.GlobalEnvironment, $"{packageName}.{fd.Name}", func);
+                    }
                     break;
 
                 case LetDecl ld:

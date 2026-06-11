@@ -1,5 +1,0 @@
-import code
-import csharp
-
-let cb : Codebase = provider('csharp')
-foreach cb.Files => PRINT('{item.Path}')
