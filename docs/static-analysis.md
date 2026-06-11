@@ -1,6 +1,6 @@
 # Static Analysis with Agent Cop
 
-Agent Cop ships with built-in check packages that enforce conventions out of the box. You run them with a single command, inspect what they check, exclude what doesn't apply, and optionally add your own project-specific rules.
+Agent Cop ships with built-in check packages that enforce conventions out of the box. It supports C#, Python, JavaScript/TypeScript, and Rust codebases. You run checks with a single command, inspect what they check, exclude what doesn't apply, and optionally add your own project-specific rules.
 
 ---
 

@@ -94,10 +94,13 @@ Exit code 1 if violations found, 0 if clean — suitable for CI. Agents see thes
 Agent Cop ships with pre-built check packages for common rules. No `.cop` files needed:
 
 ```bash
-cop csharp-checks                         # naming, formatting, documentation
-cop csharp-checks csharp-library-checks   # run multiple packages
+cop csharp-checks                         # C# naming, formatting, documentation
+cop python-checks                         # Python conventions
+cop javascript-checks                     # JS/TS conventions
 cop csharp-checks -t src/                 # analyze a specific directory
 ```
+
+Cop also supports **Rust** — see the [Rust Walkthrough](docs/rust-walkthrough.md) for writing custom rules against Rust codebases.
 
 You can see all pre-built packages by executing `cop package list`.
 You can see details of packages, including usage samples, with `cop help <package_namwe>`.
@@ -117,6 +120,7 @@ cop vscode
 - [Language Reference](docs/language-reference.md) — full DSL syntax
 - [CLI Reference](docs/cli-reference.md) — all commands and options
 - [Static Analysis with Cop](docs/static-analysis.md) — writing source code checks
+- [Rust Walkthrough](docs/rust-walkthrough.md) — analyzing Rust projects with cop
 - [Testing Cop Rules](docs/testing.md) — writing and running tests for your `.cop` programs
 - [Extensibility](docs/extensibility.md) — writing providers and wrapping external tools
 - [Packaging](docs/packaging.md) — creating, publishing, and restoring packages

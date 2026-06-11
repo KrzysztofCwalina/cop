@@ -19,7 +19,7 @@ cop/language/       Cop language (namespace Cop.Lang). Parser, interpreter,
                     evaluator, type system. General-purpose language features only.
 
 cop/runtime/        Runtime engine (namespace Cop.Providers). Engine orchestrator,
-                    source parsers (C#, Python, JavaScript), provider loading
+                    source parsers (C#, Python, JavaScript, Rust), provider loading
                     and registration.
 
 cop/shared/         Core library (namespace Cop.Core). ObjectProvider base class,

@@ -72,7 +72,7 @@ Fields:
 | `description` | Yes | Short description (max 1000 chars). |
 | `authors` | Yes | Author name(s). |
 | `tags` | No | Array of string tags for search/discoverability. |
-| `language` | No | Primary programming language (e.g., `csharp`, `python`). |
+| `language` | No | Primary programming language (e.g., `csharp`, `python`, `rust`). |
 | `provider` | No | Set to `clr` if the package contains a .NET data provider assembly. |
 | `providerEntry` | No | Fully-qualified class name of the data provider (required when `provider` is `clr`). |
 | `providerAssembly` | No | Filename of the provider DLL (e.g., `csharp-provider.dll`). Required when `lib/` contains multiple DLLs. |

@@ -52,7 +52,7 @@ cop/cli/Program.cs(42): 1: Do not use 'var' for parser
 cop/runtime/Engine.cs(115): 1: Do not use 'var' for result
 ```
 
-Now show that cop can analyze multiple languages in one pass — C# and Python together:
+Now show that cop can analyze multiple languages in one pass — C#, Python, and Rust together:
 
 ```cop
 import csharp
