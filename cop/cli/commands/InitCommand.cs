@@ -279,13 +279,17 @@ public static class InitCommand
             root["hooks"] = hooks;
         }
 
+        // Non-blocking hook: always exits 0 so the agent can finish its turn.
+        // Violations are surfaced as informational text (agent sees them but isn't trapped).
+        // The '|| true' ensures cop tool errors or pre-existing violations don't
+        // create an infinite loop where the agent can never stop.
         var stopEntry = new JsonObject
         {
             ["matcher"] = "",
             ["hooks"] = new JsonArray(new JsonObject
             {
                 ["type"] = "command",
-                ["command"] = "cop cop-checks/main.cop -t . -om"
+                ["command"] = "cop cop-checks/main.cop -t . -om || true"
             })
         };
 
