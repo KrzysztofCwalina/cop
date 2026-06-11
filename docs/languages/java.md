@@ -91,7 +91,19 @@ public interface Repository<T> {
 
 ---
 
-## 3. Write a Simple Rule
+## 3. Set Up Agent Context
+
+Run `cop init` to generate instruction files that teach coding agents (GitHub Copilot, Claude Code) how to write cop rules in your project:
+
+```bash
+cop init
+```
+
+Commit the generated files (`.github/copilot-instructions.md`, `AGENTS.md`) to your repo.
+
+---
+
+## 4. Write a Simple Rule
 
 Create a file called `checks.cop` in your project root:
 
@@ -123,7 +135,7 @@ This rule does two things:
 
 ---
 
-## 4. Run the Rule
+## 5. Run the Rule
 
 From your project root:
 
@@ -142,7 +154,7 @@ src/main/java/com/example/User.java: warning: throw at line 32 — consider a ch
 
 ---
 
-## 5. Explore Further
+## 6. Explore Further
 
 ### List all types in your project
 
@@ -181,7 +193,7 @@ command MAIN = CHECK(violations)
 
 ---
 
-## 6. Next Steps
+## 7. Next Steps
 
 - Run `cop help java` to see all available types and functions
 - Run `cop help code` for the full code analysis API

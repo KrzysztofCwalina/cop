@@ -33,7 +33,19 @@ pyproject.toml
 
 ---
 
-## 3. Write a Simple Rule
+## 3. Set Up Agent Context
+
+Run `cop init` to generate instruction files that teach coding agents (GitHub Copilot, Claude Code) how to write cop rules in your project:
+
+```bash
+cop init
+```
+
+Commit the generated files (`.github/copilot-instructions.md`, `AGENTS.md`) to your repo.
+
+---
+
+## 4. Write a Simple Rule
 
 Create a file called `checks.cop` in your project root:
 
@@ -61,7 +73,7 @@ command MAIN = CHECK(undocumented + bareExcepts)
 
 ---
 
-## 4. Run the Rule
+## 5. Run the Rule
 
 From your project root:
 
@@ -80,7 +92,7 @@ src/mypackage/services.py: warning: Bare except at line 42 — catch a specific 
 
 ---
 
-## 5. Use Built-In Checks
+## 6. Use Built-In Checks
 
 Cop ships with comprehensive Python check packages:
 
@@ -93,7 +105,7 @@ cop python-library-azure-checks            # Azure SDK conventions
 
 ---
 
-## 6. Explore Further
+## 7. Explore Further
 
 ### List all classes
 

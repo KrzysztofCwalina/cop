@@ -81,7 +81,19 @@ func main() {
 
 ---
 
-## 3. Write a Simple Rule
+## 3. Set Up Agent Context
+
+Run `cop init` to generate instruction files that teach coding agents (GitHub Copilot, Claude Code) how to write cop rules in your project:
+
+```bash
+cop init
+```
+
+Commit the generated files (`.github/copilot-instructions.md`, `AGENTS.md`) to your repo.
+
+---
+
+## 4. Write a Simple Rule
 
 Create a file called `checks.cop` in your project root:
 
@@ -113,7 +125,7 @@ This rule checks two common Go conventions:
 
 ---
 
-## 4. Run the Rule
+## 5. Run the Rule
 
 From your project root:
 
@@ -132,7 +144,7 @@ main.go: warning: Avoid panic() at line 43 — return an error instead
 
 ---
 
-## 5. Explore Further
+## 6. Explore Further
 
 ### List all exported types
 

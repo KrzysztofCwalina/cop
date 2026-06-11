@@ -34,7 +34,19 @@ MyProject.csproj
 
 ---
 
-## 3. Write a Simple Rule
+## 3. Set Up Agent Context
+
+Run `cop init` to generate instruction files that teach coding agents (GitHub Copilot, Claude Code) how to write cop rules in your project:
+
+```bash
+cop init
+```
+
+Commit the generated files (`.github/copilot-instructions.md`, `AGENTS.md`) to your repo.
+
+---
+
+## 4. Write a Simple Rule
 
 Create a file called `checks.cop` in your project root:
 
@@ -62,7 +74,7 @@ command MAIN = CHECK(undocumented + longMethods)
 
 ---
 
-## 4. Run the Rule
+## 5. Run the Rule
 
 From your project root:
 
@@ -81,7 +93,7 @@ src/Services/UserService.cs: warning: Method ProcessBatch has 45 statements (max
 
 ---
 
-## 5. Use Built-In Checks
+## 6. Use Built-In Checks
 
 Cop ships with comprehensive C# check packages:
 
@@ -94,7 +106,7 @@ cop csharp-library-azure-checks            # Azure SDK conventions
 
 ---
 
-## 6. Explore Further
+## 7. Explore Further
 
 ### List all public classes
 

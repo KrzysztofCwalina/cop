@@ -34,7 +34,19 @@ package.json
 
 ---
 
-## 3. Write a Simple Rule
+## 3. Set Up Agent Context
+
+Run `cop init` to generate instruction files that teach coding agents (GitHub Copilot, Claude Code) how to write cop rules in your project:
+
+```bash
+cop init
+```
+
+Commit the generated files (`.github/copilot-instructions.md`, `AGENTS.md`) to your repo.
+
+---
+
+## 4. Write a Simple Rule
 
 Create a file called `checks.cop` in your project root:
 
@@ -62,7 +74,7 @@ command MAIN = CHECK(undocumented + consoleLogs)
 
 ---
 
-## 4. Run the Rule
+## 5. Run the Rule
 
 From your project root:
 
@@ -82,7 +94,7 @@ src/services/api.ts: warning: Remove console.log at line 47 — use a logger
 
 ---
 
-## 5. Use Built-In Checks
+## 6. Use Built-In Checks
 
 Cop ships with comprehensive JavaScript/TypeScript check packages:
 
@@ -95,7 +107,7 @@ cop javascript-library-azure-checks        # Azure SDK conventions
 
 ---
 
-## 6. Explore Further
+## 7. Explore Further
 
 ### List all classes and their methods
 
