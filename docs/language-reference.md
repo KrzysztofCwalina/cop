@@ -268,7 +268,7 @@ The `code` package defines a `Modifier` flags enum, exports its members, and pro
 
 ```ruby
 enum TypeKind = Class | Struct | Interface | Enum
-enum Language = csharp | python | javascript | cop | text
+enum Language = csharp | python | javascript | rust | go | java | cop | text
 ```
 
 Enum members are available as bare identifiers when the defining package exports the enum. Compare enum-typed properties directly to members:
@@ -415,7 +415,7 @@ This declares `Clients` as a subset of `Types` where `isClient` is true and `isA
 **Narrowing predicates** — a predicate can narrow items to a more specific type using `: NarrowedType`:
 
 ```ruby
-predicate isCall(Statement) : Call => Statement.Kind == 'call'
+predicate isCall(Statement) : Call => Statement.Kind == call
 ```
 
 When applied as a filter, items are narrowed to `Call` (a superset of Statement’s properties).
@@ -661,12 +661,20 @@ X | Y           # bitwise OR
 #### Comparison
 
 ```ruby
-X == "value"    # equality
-X != "value"    # inequality
+X == Y          # equality
+X != Y          # inequality
 X > 1           # greater than
 X < 10          # less than
 X >= 5          # greater than or equal
 X <= 100        # less than or equal
+```
+
+**Enum-typed comparisons:** When a property is declared with an enum type (e.g., `Kind : TypeKind`), compare it to an enum member, not a raw string:
+
+```ruby
+Type.Kind == Class              # correct — enum member
+Type.Kind == TypeKind('Class')  # correct — explicit enum cast
+Type.Kind == 'Class'            # ERROR — string literal vs enum field
 ```
 
 #### Ternary Conditional
@@ -1143,7 +1151,7 @@ The pipe operator means **dequeue → transform → enqueue**: items are dequeue
 
 #### Language Filtering
 
-Use the language predicates (`:isCSharp`, `:isPython`, `:isJavaScript`, `:isRust`, `:isGo`) from the `code` package to scope iteration to items from files of a specific language:
+Use the language predicates (`:isCSharp`, `:isPython`, `:isJavaScript`, `:isRust`, `:isGo`, `:isJava`) from the `code` package to scope iteration to items from files of a specific language:
 
 ```ruby
 foreach Clients:isCSharp:!isSealed => '{error:@red} {item.Name} should be sealed'

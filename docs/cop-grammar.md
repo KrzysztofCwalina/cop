@@ -175,6 +175,23 @@ enum_decl   = 'enum' IDENTIFIER [ ':' type_ref ] '=' enum_member { '|' enum_memb
 enum_member = IDENTIFIER | STRING_LITERAL ;
 ```
 
+Enum members are registered as string constants in the enclosing scope. The enum type name
+is also registered as a **constructor function** that converts a string to an enum value:
+
+```cop
+enum TypeKind = Class | Struct | Interface | Enum
+
+# Members are bare identifiers:
+Type.Kind == Class
+
+# Constructor for extensible values not in the predefined set:
+Type.Kind == TypeKind('CustomKind')
+```
+
+**Type safety:** Comparing an enum-typed property directly to a string literal is a
+static error (caught by both `cop verify` and runtime validation). Use the enum member
+name or the enum constructor instead.
+
 ### 3.3 Flags Declaration
 
 ```ebnf
@@ -360,7 +377,7 @@ primary_expr    = STRING_LITERAL                            (* string / interpol
                 | INT_LITERAL
                 | NUMBER_LITERAL
                 | 'true' | 'false' | 'nic'
-                | IDENTIFIER
+                | IDENTIFIER                                (* variable, enum member, or enum constructor call *)
                 | '(' expression ')'                        (* grouping *)
                 | '(' params ')' '=>' expression            (* lambda *)
                 | list_literal
@@ -373,6 +390,10 @@ object_literal  = '{' [ field_init { ( ',' | ) field_init } ] '}' ;
 
 field_init      = IDENTIFIER ( ':' | '=' ) expression ;
 ```
+
+Note: When an `IDENTIFIER` names an enum type and is followed by `(arg)`, it acts as an
+**enum constructor call** — see §3.2. This is a regular function call (`postfix_op` with `(arg_list)`)
+where the callee happens to be an enum type name.
 
 ### 5.6 Lambda Expressions
 
@@ -525,7 +546,8 @@ tokens as valid identifier tokens.
 
 ### Single namespace
 All declarations (types, functions, variables, enums) share a single namespace within a module.
-Enum members are injected into module scope alongside the enum type itself.
+Enum members are injected into module scope alongside the enum type itself. The enum type name
+doubles as a constructor function (`TypeKind('value')` → string), enabling type-safe extensibility.
 
 ### No semicolons
 Statements and declarations are separated by newlines. No semicolons are required or supported.

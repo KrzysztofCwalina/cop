@@ -1,6 +1,6 @@
 # Static Analysis with Agent Cop
 
-Agent Cop ships with built-in check packages that enforce conventions out of the box. It supports C#, Python, JavaScript/TypeScript, Rust, and Go codebases. You run checks with a single command, inspect what they check, exclude what doesn't apply, and optionally add your own project-specific rules.
+Agent Cop ships with built-in check packages that enforce conventions out of the box. It supports C#, Python, JavaScript/TypeScript, Rust, Go, and Java codebases. You run checks with a single command, inspect what they check, exclude what doesn't apply, and optionally add your own project-specific rules.
 
 ---
 
@@ -252,7 +252,7 @@ import csharp
 import code-analysis
 
 # 1. Predicate: what pattern are we looking for?
-predicate usesDateTime(Statement) => Statement.Kind == 'call'
+predicate usesDateTime(Statement) => Statement.Kind == call
     && Statement.TypeName == 'DateTime'
     && Statement.MemberName == 'Now'
 
@@ -317,7 +317,7 @@ import code-analysis
 let my-checks = csharp-checks - var-declarations
 
 # Add our own project-specific checks
-predicate isHardcodedUrl(Statement) => Statement.Kind == 'declaration'
+predicate isHardcodedUrl(Statement) => Statement.Kind == declaration
     && Statement.Source:contains('http://')
 ## Do not hardcode URLs — use configuration
 export let no-hardcoded-urls = Statements:isHardcodedUrl

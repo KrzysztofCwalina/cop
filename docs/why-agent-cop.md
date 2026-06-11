@@ -39,7 +39,7 @@ import code
 import code-analysis
 
 predicate isConsoleCall(Statement:python) =>
-    Statement.Kind == 'call' && Statement.MemberName == 'print'
+    Statement.Kind == call && Statement.MemberName == 'print'
 
 let violations = Code.Statements:isConsoleCall
     :toError('Use logging module instead of print()')
@@ -96,4 +96,4 @@ A working prototype demonstrating the core static analysis engine and DSL is ava
 
 🔗 [Agent Cop Prototype](https://github.com/KrzysztofCwalina/cop/blob/master/docs/static-analysis-with-cop.md)
 
-The prototype already supports multi-language analysis (C#, Python, JavaScript, Rust, Go), built-in check packages, custom rule authoring via DSL, and CI integration with standard exit codes.
+The prototype already supports multi-language analysis (C#, Python, JavaScript, Rust, Go, Java), built-in check packages, custom rule authoring via DSL, and CI integration with standard exit codes.

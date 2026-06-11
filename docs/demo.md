@@ -25,7 +25,7 @@ The agent creates a `.cop` file in the project's `cop-checks/` folder:
 import csharp
 import code-analysis
 
-predicate isUnsealedClass(Type) => Type.Kind == 'class' && Type.IsSealed == false
+predicate isUnsealedClass(Type) => Type.Kind == Class && Type.IsSealed == false
 
 export let unsealed-violations = csharp.Types:isUnsealedClass
     :toError('{item.Name} must be sealed')

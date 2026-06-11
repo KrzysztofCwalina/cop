@@ -200,6 +200,7 @@ If verification fails, fix the reported errors before running the program.
 6. **After writing rules, run `cop verify`** to check for errors before execution
 7. **Test with** `cop test` after writing rules
 8. **Validate syntax only** with `cop syntax <file.cop>` (lighter than verify)
+9. **Never compare enum-typed fields to string literals** — use enum members (`Class`) or explicit cast (`TypeKind('value')`)
 
 ## Project Convention: `cop-checks/` Folder
 

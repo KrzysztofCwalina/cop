@@ -128,7 +128,7 @@ Use `.Count == 0` to verify that rules catch nothing in clean code:
 ```cop
 import code
 
-predicate isVar(Statement) => Statement.Kind == 'declaration' && Statement.Keywords:contains('var')
+predicate isVar(Statement) => Statement.Kind == declaration && Statement.Keywords:contains('var')
 
 # Run against known-clean code: should find zero violations
 test clean-no-var = assert(csharp.Statements:isVar.Count == 0)

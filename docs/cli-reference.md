@@ -174,7 +174,7 @@ select t, "Avoid God classes"
 | `Modifiers:isSet(Public)` | `t.isPublic()` |
 | `Name:startsWith('X')` | `t.getName().toLowerCase().matches("x%")` |
 | `Name:endsWith('Y')` | `t.getName().toLowerCase().matches("%y")` |
-| `Kind == 'call'` | `from MethodAccess` (type narrowing) |
+| `Kind == call` | `from MethodAccess` (type narrowing) |
 | `BaseTypes:contains('IFoo')` | `exists(RefType base \| t.getABaseType() = base and ...)` |
 | Language filter `:isCSharp` | `import csharp` |
 | `toError` / `toWarning` | `@problem.severity error` / `warning` |
