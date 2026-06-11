@@ -148,6 +148,10 @@ if (-not $SkipBuild) {
     Write-Host "Building python-provider..."
     dotnet build "$RepoRoot\providers\python-provider\python-provider.csproj" -c Release
     if ($LASTEXITCODE -ne 0) { throw "python-provider build failed" }
+
+    Write-Host "Building tool-providers..."
+    dotnet build "$RepoRoot\providers\tool-providers\tool-providers.csproj" -c Release
+    if ($LASTEXITCODE -ne 0) { throw "tool-providers build failed" }
 }
 
 foreach ($rid in $Runtimes) {

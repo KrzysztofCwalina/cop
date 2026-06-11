@@ -54,6 +54,11 @@ public abstract class ToolProvider : DataProvider
             Console.Error.WriteLine($"Error: {ToolName} not found. Is it installed and on PATH?");
             return new Dictionary<string, List<object>> { ["Violations"] = [] };
         }
+        catch (TimeoutException ex)
+        {
+            Console.Error.WriteLine($"Warning: {ex.Message}");
+            return new Dictionary<string, List<object>> { ["Violations"] = [] };
+        }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Error running {ToolName}: {ex.Message}");
@@ -66,7 +71,7 @@ public abstract class ToolProvider : DataProvider
     protected abstract List<object> RunTool(string rootPath, IReadOnlySet<string> excluded);
 
     protected static (string Stdout, string Stderr, int ExitCode) RunProcess(
-        string fileName, string arguments, string workingDir, bool shell = false)
+        string fileName, string arguments, string workingDir, bool shell = false, int timeoutMs = 120_000)
     {
         var psi = new ProcessStartInfo
         {
@@ -81,14 +86,42 @@ public abstract class ToolProvider : DataProvider
             StandardErrorEncoding = Encoding.UTF8,
         };
 
+        Console.Error.Write($"  Running {fileName}...");
+        var sw = Stopwatch.StartNew();
+
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start: {fileName}");
 
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-        return (stdout, stderr, process.ExitCode);
+        // Stream stderr to console in real-time for progress visibility
+        var stderrBuilder = new StringBuilder();
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data == null) return;
+            stderrBuilder.AppendLine(e.Data);
+            // Show non-empty lines as progress (trimmed to keep output clean)
+            var line = e.Data.TrimEnd();
+            if (line.Length > 0)
+                Console.Error.Write($"\r  Running {fileName}... {Truncate(line, 60)}");
+        };
+        process.BeginErrorReadLine();
+
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+
+        if (!process.WaitForExit(timeoutMs))
+        {
+            try { process.Kill(entireProcessTree: true); } catch { }
+            Console.Error.WriteLine($"\r  Running {fileName}... timed out after {timeoutMs / 1000}s");
+            throw new TimeoutException($"{fileName} timed out after {timeoutMs / 1000}s");
+        }
+
+        stdoutTask.Wait();
+        sw.Stop();
+        Console.Error.WriteLine($"\r  Running {fileName}... done ({sw.Elapsed.TotalSeconds:F1}s)          ");
+        return (stdoutTask.Result, stderrBuilder.ToString(), process.ExitCode);
     }
+
+    private static string Truncate(string s, int max) =>
+        s.Length <= max ? s : s[..max] + "...";
 
     protected static string NormalizePath(string filePath, string rootPath)
     {
