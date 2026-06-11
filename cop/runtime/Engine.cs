@@ -343,7 +343,7 @@ public static class Engine
             queryService.RegisterProvider(builtinProvider.Name, builtinProvider.Instance, builtinProvider.Schema);
             var collections = QueryProviderCollections(builtinProvider.Instance, builtinProvider.Schema, query, errors);
             diagLog?.Invoke($"[diag] Provider '{builtinProvider.Name}' returned {collections.Count} collections: {string.Join(", ", collections.Select(c => $"{c.Key}({c.Value.Count})"))}");
-            WarnIfProviderEmpty(builtinProvider.Name, collections, builtinProvider.Schema, warnings);
+            // Built-in providers are always loaded regardless of user imports — don't fail when they return 0 items
             var runtimeBindings = builtinProvider.Instance.GetRuntimeBindings();
             RegisterProviderCollections(bridge.Evaluator.GlobalEnvironment, builtinProvider.Name, collections, builtinProvider.Schema, runtimeBindings);
         }

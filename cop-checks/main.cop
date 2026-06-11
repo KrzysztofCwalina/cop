@@ -12,6 +12,7 @@ export let all-violations =
     types-without-namespace + 
     no-new-interfaces + 
     layering-violations +
-    no-aspnet-in-cli
+    no-aspnet-in-cli +
+    no-regex
 
 command MAIN = CHECK(all-violations)
