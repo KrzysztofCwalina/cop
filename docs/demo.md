@@ -1,6 +1,6 @@
 # Agent Cop Demo
 
-This demo shows three capabilities of cop: running existing analysis packages, computing slop scores, and writing custom analysis rules.
+This demo shows three capabilities of cop: enforcing rules on agent-generated code, running multi-language analysis, and computing code slop scores.
 
 ## Prerequisites
 
@@ -9,29 +9,79 @@ This demo shows three capabilities of cop: running existing analysis packages, c
 cop --version
 ```
 
-## Part 1: Run Built-in Checks (No Code Required)
+## Part 1: Agents Adding Rules
 
-Run the `csharp-checks` package directly — no .cop file needed:
+You can ask an agent to add analysis rules to any project. This enforces coding standards on agent-generated (or human-written) code.
+
+**Prompt an agent:**
+
+> Add a rule to disallow unsealed types
+
+**Target:** `C:\demos\copdemo`
+
+The agent creates a `.cop` file in the project's `cop-checks/` folder:
+
+```cop
+import csharp
+import code-analysis
+
+predicate isUnsealedClass(Type) => Type.Kind == 'class' && Type.IsSealed == false
+
+export let unsealed-violations = csharp.Types:isUnsealedClass
+    :toError('{item.Name} must be sealed')
+```
+
+**Run:**
 
 ```bash
-cop csharp-checks -t <folder> -p csharp
+cop cop-checks/main.cop -t C:\demos\copdemo
 ```
 
-The `-p csharp` flag explicitly loads the C# provider. The package analyzes C# code and reports violations.
+The rule catches any unsealed class in the project. Agents can add, modify, or compose rules — no manual .cop authoring required.
 
-**Example output:**
+## Part 2: Multi-Language Analysis
 
-```
-src/Parser.cs(42): 1: Do not use 'var' for parser
-src/Engine.cs(115): 1: Do not use 'var' for result
-```
-
-## Part 2: Computing Slop Score
-
-The `code-metrics` package computes an aggregate slop (code quality) score as JSON:
+Run built-in checks on the cop repo — no extra flags needed:
 
 ```bash
-cop code-metrics -t <folder> -p csharp
+cop csharp-checks -t C:\git\cop
+```
+
+```
+cop/cli/Program.cs(42): 1: Do not use 'var' for parser
+cop/runtime/Engine.cs(115): 1: Do not use 'var' for result
+```
+
+Now show that cop can analyze multiple languages in one pass — C# and Python together:
+
+```cop
+import csharp
+import python
+import code-analysis
+
+# Unified codebase from both providers
+let codebase = codebase(csharp, python)
+
+# Rule: flag types with too many methods
+predicate hasTooManyMethods(Type) => Type.Methods.count() > 20
+let violations = codebase.Types:hasTooManyMethods
+    :toWarning('Type {item.Name} has {item.Methods.count()} methods (max 20)')
+
+command main = CHECK(violations)
+```
+
+```bash
+cop my-checks.cop -t C:\git\cop
+```
+
+This analyzes both C# and Python code in one pass, reporting violations from either language.
+
+## Part 3: Computing Code Slop
+
+The `code-metrics` package computes an aggregate slop (code quality) score:
+
+```bash
+cop code-metrics -t C:\git\cop -p csharp
 ```
 
 **Output:**
@@ -53,48 +103,5 @@ Key metrics:
 - **slopPerKloc** — raw violation density (violations per 1000 lines of code)
 - **weightedSlopPerKloc** — severity-weighted density (higher severity violations count more)
 
-## Part 3: Writing a Custom Rule
-
-Create `my-checks.cop` — this demonstrates analyzing a mixed-language codebase:
-
-```cop
-import csharp
-import python
-import javascript
-import code-metrics
-
-# Create a unified codebase from all language providers
-let codebase = codebase(csharp, python, javascript)
-
-# Custom rule: flag types with too many methods (god classes)
-predicate hasTooManyMethods(Type) => Type.Methods.count() > 20
-let large-types = codebase.Types:hasTooManyMethods
-    :toViolation('Type {item.Name} has {item.Methods.count()} methods', 0.6, 0.95)
-
-# Combine with built-in slop
-let my-slop = slop + large-types
-
-command main = METRICS(my-slop, codebase.Lines)
-```
-
-**Run:**
-
-```bash
-cop my-checks.cop -t <folder>
-```
-
-**Output** (scores are higher due to additional violations):
-
-```json
-{
-  "totalViolations": 126,
-  "errors": 98,
-  "warnings": 28,
-  "info": 0,
-  "weightedScore": 99.8,
-  "linesOfCode": 39503,
-  "slopPerKloc": 3.19,
-  "weightedSlopPerKloc": 2.53
-}
-```
+Lower scores indicate cleaner code. Track this over time to prevent quality regression.
 

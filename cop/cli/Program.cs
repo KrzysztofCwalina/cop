@@ -264,7 +264,6 @@ static int ExecuteDefault()
         Console.WriteLine();
         Console.WriteLine("Usage:");
         Console.WriteLine("  cop <program>          Run a package or .cop file");
-        Console.WriteLine("  cop run [<command>]    Run .cop programs");
         Console.WriteLine("  cop package list       Browse available packages");
         Console.WriteLine("  cop repl              Launch interactive REPL");
         Console.WriteLine();

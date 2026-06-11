@@ -1,5 +1,3 @@
-using System.CommandLine;
-using System.CommandLine.Parsing;
 using System.Net.Http;
 using System.Security;
 using System.Text.Json;
@@ -11,48 +9,6 @@ namespace Cop.Cli.Commands;
 
 public static class RunCommand
 {
-    public static Command Create()
-    {
-        var commandArg = new Argument<string>("command")
-        {
-            Arity = ArgumentArity.ZeroOrOne,
-            Description = "Command name, .cop file, or HTTPS URL to run"
-        };
-        var extraArgsArg = new Argument<string[]>("args")
-        {
-            Arity = ArgumentArity.ZeroOrMore,
-            Description = "Extra arguments passed to the program"
-        };
-        var targetOption = new Option<string>("-t") { Description = "Target: directory, file, or comma-separated file list to pass to the program (default: current directory)" };
-        var formatOption = new Option<string>("-f") { Description = "Output format: text (default) or json" };
-        formatOption.DefaultValueFactory = _ => "text";
-        var commandsOption = new Option<string>("-c") { Description = "Comma-separated list of commands to run (default: all)" };
-        var diagOption = new Option<bool>("-d") { Description = "Print diagnostic timing for each engine phase to stderr" };
-        var cqlOption = new Option<bool>("-cql") { Description = "Transpile .cop checks to CodeQL .ql files instead of running them" };
-        var command = new Command("run", "Run .cop programs")
-        {
-            commandArg,
-            extraArgsArg,
-            targetOption,
-            formatOption,
-            commandsOption,
-            diagOption,
-            cqlOption
-        };
-        command.SetAction(parseResult =>
-        {
-            if (parseResult.GetValue(cqlOption))
-                return ExecuteCodeQL(parseResult.GetValue(commandArg));
-            return Execute(
-                parseResult.GetValue(commandArg),
-                parseResult.GetValue(extraArgsArg),
-                parseResult.GetValue(targetOption),
-                parseResult.GetValue(formatOption),
-                parseResult.GetValue(commandsOption),
-                parseResult.GetValue(diagOption));
-        });
-        return command;
-    }
 
     /// <summary>
     /// Transpiles .cop files to CodeQL .ql files instead of executing them.
