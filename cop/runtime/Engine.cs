@@ -181,6 +181,65 @@ public static class Engine
         return feedPaths;
     }
 
+    /// <summary>
+    /// Collects external symbols from the evaluator environment and loaded modules for Binder validation.
+    /// </summary>
+    private static List<Symbol> CollectExternalSymbolsForValidation(Cop.Lang.Interpreter.Environment env, IReadOnlyList<ModuleNode> loadedModules)
+    {
+        var symbols = new List<Symbol>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        // Core primitive types
+        foreach (var name in new[] { "string", "int", "float", "bool", "byte", "bytes", "object", "T", "R", "K", "A" })
+        {
+            if (seen.Add(name))
+                symbols.Add(new TypeSymbol(name, null, []));
+        }
+
+        // Types, functions, and enums from imported modules
+        foreach (var module in loadedModules)
+        {
+            foreach (var decl in module.Declarations)
+            {
+                switch (decl)
+                {
+                    case TypeDecl td when td.IsExported:
+                        if (seen.Add(td.Name))
+                        {
+                            var props = td.Properties.Select(p =>
+                                new PropertySymbol(p.Name, p.Type, p.IsOptional)).ToList();
+                            symbols.Add(new TypeSymbol(td.Name, td.BaseType, props));
+                        }
+                        break;
+                    case EnumDecl ed when ed.IsExported:
+                        if (seen.Add(ed.Name))
+                            symbols.Add(new EnumSymbol(ed.Name, null, ed.Members.Select(m => new EnumMemberSymbol(m, ed.Name)).ToList()));
+                        break;
+                    case FunctionDecl fd when fd.IsExported:
+                        if (seen.Add(fd.Name))
+                            symbols.Add(new FunctionSymbol(fd.Name, CallableKind.Function, []));
+                        break;
+                }
+            }
+        }
+
+        // Symbols from evaluator environment (registered by packages)
+        foreach (var (name, _) in env.AllBindings())
+        {
+            if (seen.Add(name))
+                symbols.Add(new VariableSymbol(name));
+        }
+
+        // Built-in intrinsics
+        foreach (var name in new[] { "print", "PRINT", "SAVE", "FAIL", "CHECK", "ASSERT", "provider", "count", "sum", "avg", "min", "max", "first", "last", "distinct", "flatten", "join", "sort", "reverse", "take", "skip", "map", "any", "all", "none", "contains", "where", "groupBy", "format" })
+        {
+            if (seen.Add(name))
+                symbols.Add(new FunctionSymbol(name, CallableKind.External, []));
+        }
+
+        return symbols;
+    }
+
     private static EngineResult ExecuteModules(
         List<ParsedModule> modules,
         List<string> feedPaths,
@@ -229,6 +288,40 @@ public static class Engine
         }
 
         warnings.AddRange(moduleLoader.Errors);
+
+        // Validate user modules (same checks as 'cop verify') before execution.
+        // This catches issues like enum-vs-string comparisons that would silently fail at runtime.
+        // Collect external symbols excluding user-declared names (those are already in the modules being bound).
+        var userDeclaredNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var module in modules)
+            foreach (var decl in module.Module.Declarations)
+            {
+                var declName = decl switch
+                {
+                    TypeDecl td => td.Name,
+                    EnumDecl ed => ed.Name,
+                    FlagsDecl fd => fd.Name,
+                    FunctionDecl fd => fd.Name,
+                    LetDecl ld => ld.Name,
+                    CommandDecl cd => cd.Name,
+                    _ => null
+                };
+                if (declName != null) userDeclaredNames.Add(declName);
+            }
+        var externalSymbols = CollectExternalSymbolsForValidation(bridge.Evaluator.GlobalEnvironment, moduleLoader.LoadedModules);
+        externalSymbols.RemoveAll(s => userDeclaredNames.Contains(s.Name));
+        foreach (var module in modules)
+        {
+            var binder = new Binder(module.FilePath, externalSymbols);
+            var bindingResult = binder.Bind(module.Module);
+            foreach (var diag in bindingResult.Diagnostics)
+            {
+                if (diag.Severity == DiagnosticSeverity.Error)
+                    errors.Add($"{diag.FilePath ?? module.FilePath}({diag.Line}): error: {diag.Message}");
+            }
+        }
+        if (errors.Count > 0)
+            return new EngineResult(outputs, parseErrors, errors);
 
         // Build TypeRegistry for trait dispatch and computed property resolution
         var typeRegistry = new TypeRegistry();
