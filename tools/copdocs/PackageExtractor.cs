@@ -413,6 +413,9 @@ public class PackageExtractor
         if (normalized.Contains("/dotnet/")) return ".NET";
         if (normalized.Contains("/python/")) return "Python";
         if (normalized.Contains("/js/")) return "JavaScript";
+        if (normalized.Contains("/rust/")) return "Rust";
+        if (normalized.Contains("/go/")) return "Go";
+        if (normalized.Contains("/java/")) return "Java";
 
         var dirName = Path.GetFileName(packageDir);
         if (dirName.StartsWith("code")) return "Code";
@@ -429,6 +432,9 @@ public class PackageExtractor
                 "C#" or "csharp" => ".NET",
                 "Python" or "python" => "Python",
                 "JavaScript" or "javascript" or "TypeScript" or "typescript" => "JavaScript",
+                "Rust" or "rust" => "Rust",
+                "Go" or "go" or "golang" => "Go",
+                "Java" or "java" => "Java",
                 "TypeSpec" or "typespec" => "TypeSpec",
                 _ => "Core"
             };
