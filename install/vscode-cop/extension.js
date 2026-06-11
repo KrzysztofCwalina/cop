@@ -8,12 +8,12 @@ const path = require('path');
 
 // ── Dynamic package resolution ─────────────────────────────────────────────
 
-/** Cache: packageDir → { types, collections } */
+/** Cache: packageDir → { types, collections, functions } */
 const _packageCache = new Map();
 
 /**
  * Find a package directory by name, searching up from docDir for `packages/` dirs
- * and also checking `.cop/packages/`.
+ * and also checking `.cop/packages/`. Falls back to ~/.cop/packages/ (global).
  */
 function findPackageDir(docDir, packageName) {
     let dir = docDir;
@@ -31,6 +31,12 @@ function findPackageDir(docDir, packageName) {
         const parent = path.dirname(dir);
         if (parent === dir) break;
         dir = parent;
+    }
+    // Global fallback: ~/.cop/packages/{name}
+    const homeDir = process.env.USERPROFILE || process.env.HOME;
+    if (homeDir) {
+        const globalPkg = path.join(homeDir, '.cop', 'packages', packageName);
+        if (fs.existsSync(globalPkg)) return globalPkg;
     }
     return undefined;
 }
@@ -70,6 +76,7 @@ function parsePackageInfo(packageDir) {
 
     const types = {};      // typeName → { properties: [{name, type}] }
     const collections = {}; // collectionName → elementType
+    const functions = [];  // [{name, params, returnType}]
 
     // Find .cop source files in src/ or types/
     let copDir = null;
@@ -83,7 +90,7 @@ function parsePackageInfo(packageDir) {
             const files = fs.readdirSync(copDir).filter(f => f.endsWith('.cop'));
             for (const file of files) {
                 const content = fs.readFileSync(path.join(copDir, file), 'utf8');
-                parseTypesFromCop(content, types, collections);
+                parseTypesFromCop(content, types, collections, functions);
             }
         } catch { /* ignore read errors */ }
     }
@@ -105,15 +112,15 @@ function parsePackageInfo(packageDir) {
         } catch { /* ignore */ }
     }
 
-    const result = { types, collections };
+    const result = { types, collections, functions };
     _packageCache.set(packageDir, result);
     return result;
 }
 
 /**
- * Parse export type definitions and collection declarations from .cop content
+ * Parse export type definitions, collection declarations, and exported functions from .cop content
  */
-function parseTypesFromCop(content, types, collections) {
+function parseTypesFromCop(content, types, collections, functions) {
     const lines = content.split(/\r?\n/);
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
@@ -141,6 +148,16 @@ function parseTypesFromCop(content, types, collections) {
         m = line.match(/^(?:export\s+)?collection\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*\[([A-Z][a-zA-Z0-9_]*)\]/);
         if (m) {
             collections[m[1]] = m[2];
+            continue;
+        }
+
+        // export function name(...) : ReturnType => ...
+        m = line.match(/^export\s+function\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s*\(([^)]*)\)\s*(?::\s*([^\s=]+))?\s*=>/);
+        if (m && functions) {
+            const funcName = m[1];
+            const params = m[2].trim();
+            const returnType = m[3] || undefined;
+            functions.push({ name: funcName, params, returnType });
         }
     }
 }
@@ -177,6 +194,7 @@ function resolveImports(docPath, imports) {
     const docDir = path.dirname(docPath);
     const mergedTypes = {};
     const mergedCollections = {};
+    const mergedFunctions = {}; // packageName → [{name, params, returnType}]
 
     for (const pkg of imports) {
         const pkgDir = findPackageDir(docDir, pkg);
@@ -184,14 +202,13 @@ function resolveImports(docPath, imports) {
             const info = parsePackageInfo(pkgDir);
             Object.assign(mergedTypes, info.types);
             Object.assign(mergedCollections, info.collections);
-        } else {
-            // Fallback: use static PACKAGE_COLLECTIONS for packages not found on disk
-            const staticColls = STATIC_PACKAGE_COLLECTIONS[pkg];
-            if (staticColls) Object.assign(mergedCollections, staticColls);
+            if (info.functions && info.functions.length > 0) {
+                mergedFunctions[pkg] = info.functions;
+            }
         }
     }
 
-    return { types: mergedTypes, collections: mergedCollections };
+    return { types: mergedTypes, collections: mergedCollections, functions: mergedFunctions };
 }
 
 // ── Type and property definitions ──────────────────────────────────────────
@@ -746,9 +763,9 @@ const KNOWN_PACKAGES = [
     { label: 'code', detail: 'Source code structural analysis', kind: Kind.Module },
     { label: 'code-analysis', detail: 'Violation reporting framework', kind: Kind.Module },
     { label: 'code-layering', detail: 'Project dependency analysis', kind: Kind.Module },
-    { label: 'csharp', detail: 'C# coding conventions', kind: Kind.Module },
-    { label: 'python', detail: 'Python coding conventions', kind: Kind.Module },
-    { label: 'javascript', detail: 'JavaScript/TypeScript coding conventions', kind: Kind.Module },
+    { label: 'csharp', detail: 'C# source language provider', kind: Kind.Module },
+    { label: 'python', detail: 'Python source language provider', kind: Kind.Module },
+    { label: 'javascript', detail: 'JavaScript/TypeScript source language provider', kind: Kind.Module },
     { label: 'files', detail: 'Filesystem structural analysis', kind: Kind.Module },
     { label: 'json',detail: 'JSON document analysis', kind: Kind.Module },
     { label: 'markdown', detail: 'Markdown document analysis', kind: Kind.Module },
@@ -756,19 +773,6 @@ const KNOWN_PACKAGES = [
     { label: 'typespec-http', detail: 'TypeSpec HTTP analysis', kind: Kind.Module },
     { label: 'http', detail: 'HTTP request/response provider', kind: Kind.Module },
 ];
-
-// Static fallback: collections for packages not found on disk (e.g. remote-only)
-const STATIC_PACKAGE_COLLECTIONS = {
-    'code': { Types: 'Type', Statements: 'Statement', Calls: 'Statement', Lines: 'Line', Files: 'File', Members: 'Member', Api: 'Api', Regions: 'Region', Projects: 'Project' },
-    'csharp': { Types: 'Type', Statements: 'Statement', Calls: 'Statement', Lines: 'Line', Files: 'File', Members: 'Member', Api: 'Api', Regions: 'Region', Projects: 'Project' },
-    'python': { Types: 'Type', Statements: 'Statement', Calls: 'Statement', Lines: 'Line', Files: 'File', Members: 'Member', Api: 'Api', Regions: 'Region', Projects: 'Project' },
-    'javascript': { Types: 'Type', Statements: 'Statement', Calls: 'Statement', Lines: 'Line', Files: 'File', Members: 'Member', Api: 'Api', Regions: 'Region', Projects: 'Project' },
-    'code-analysis': { Types: 'Type', Statements: 'Statement', Calls: 'Statement', Lines: 'Line', Files: 'File', Members: 'Member', Api: 'Api', Regions: 'Region', Projects: 'Project' },
-    'files': { Folders: 'Folder', Files: 'File' },
-    'markdown': { Headings: 'Heading', Links: 'Link', Sections: 'Section', FenceBlocks: 'FenceBlock' },
-    'typespec': { Models: 'TspModel', Operations: 'TspOperation', Interfaces: 'TspInterface', Enums: 'TspEnum', Unions: 'TspUnion', Scalars: 'TspScalar', Namespaces: 'TspNamespace' },
-    'typespec-http': { Operations: 'HttpOperation', Services: 'HttpService' },
-};
 
 const MODIFIER_FLAGS = [
     { label: 'Public', detail: 'Modifier flag', kind: Kind.EnumMember },
@@ -856,11 +860,12 @@ function scanDocument(doc) {
     }
 
     // Resolve imported packages dynamically from disk
-    const symbols = { lets, predicates, functions, types, imports, _resolvedTypes: null, _resolvedCollections: null };
+    const symbols = { lets, predicates, functions, types, imports, _resolvedTypes: null, _resolvedCollections: null, _resolvedFunctions: null };
     if (imports.length > 0 && doc.uri && doc.uri.fsPath) {
         const resolved = resolveImports(doc.uri.fsPath, imports);
         symbols._resolvedTypes = resolved.types;
         symbols._resolvedCollections = resolved.collections;
+        symbols._resolvedFunctions = resolved.functions;
     }
 
     return symbols;
@@ -897,6 +902,20 @@ function inferExprType(expr, symbols) {
     let m = expr.match(/^runtime::(\w+)/);
     if (m) return m[1];
 
+    // Package-qualified function call: package.func() or package.func('...')
+    m = expr.match(/^([A-Za-z_][A-Za-z0-9_-]*)\.([a-zA-Z_][a-zA-Z0-9_-]*)\s*\(/);
+    if (m) {
+        const pkgName = m[1];
+        const funcName = m[2];
+        if (symbols.imports.includes(pkgName)) {
+            const pkgFuncs = symbols._resolvedFunctions && symbols._resolvedFunctions[pkgName];
+            if (pkgFuncs) {
+                const fn = pkgFuncs.find(f => f.name === funcName);
+                if (fn && fn.returnType) return fn.returnType;
+            }
+        }
+    }
+
     // X.Prop (possibly chained)
     m = expr.match(/^([A-Za-z_][A-Za-z0-9_-]*)\.(\w+)/);
     if (m) {
@@ -909,11 +928,18 @@ function inferExprType(expr, symbols) {
                 if (prop) return prop.type;
             }
         }
-        // Namespace-qualified collection: package.Collection (e.g. csharp.Types)
+        // Namespace-qualified function (no parens): package.func → return type
+        if (symbols.imports.includes(m[1])) {
+            const pkgFuncs = symbols._resolvedFunctions && symbols._resolvedFunctions[m[1]];
+            if (pkgFuncs) {
+                const fn = pkgFuncs.find(f => f.name === m[2]);
+                if (fn && fn.returnType) return fn.returnType;
+            }
+        }
+        // Namespace-qualified collection: package.Collection
         const colls = symbols._resolvedCollections;
         if (colls && colls[m[2]]) {
-            // Check if m[1] is a known package namespace
-            if (symbols.imports.includes(m[1]) || STATIC_PACKAGE_COLLECTIONS[m[1]]) {
+            if (symbols.imports.includes(m[1])) {
                 return `[${colls[m[2]]}]`;
             }
         }
@@ -939,10 +965,30 @@ function resolvePropertyChain(chain, symbols) {
 
     let currentType = resolveIdentifierType(parts[0], symbols);
     if (!currentType) {
+        // Check namespace-qualified function: package.func → return type
+        if (symbols.imports.includes(parts[0])) {
+            const pkgFuncs = symbols._resolvedFunctions && symbols._resolvedFunctions[parts[0]];
+            if (pkgFuncs) {
+                const fn = pkgFuncs.find(f => f.name === parts[1]);
+                if (fn && fn.returnType) {
+                    currentType = fn.returnType;
+                    if (parts.length === 2) return currentType;
+                    for (let i = 2; i < parts.length; i++) {
+                        const bt = stripNullable(isCollection(currentType) ? elementType(currentType) : currentType);
+                        const typeDef = lookupType(bt, symbols);
+                        if (!typeDef) return undefined;
+                        const prop = typeDef.properties.find(p => p.name === parts[i]);
+                        if (!prop) return undefined;
+                        currentType = prop.type;
+                    }
+                    return currentType;
+                }
+            }
+        }
         // Check namespace-qualified collection: package.Collection
         const colls = symbols._resolvedCollections;
         if (colls && colls[parts[1]]) {
-            if (symbols.imports.includes(parts[0]) || STATIC_PACKAGE_COLLECTIONS[parts[0]]) {
+            if (symbols.imports.includes(parts[0])) {
                 currentType = `[${colls[parts[1]]}]`;
                 if (parts.length === 2) return currentType;
                 for (let i = 2; i < parts.length; i++) {
@@ -1072,19 +1118,31 @@ function getDotCompletions(document, textBefore) {
     const items = [];
 
     // Extract the full expression chain before the dot (including path-scoped calls)
-    const exprMatch = textBefore.match(/([A-Za-z_][A-Za-z0-9_.]*(?:\('[^']*'\))?)\.\s*$/);
+    const exprMatch = textBefore.match(/([A-Za-z_][A-Za-z0-9_.]*(?:\('[^']*'\)|\(\))?)\.\s*$/);
     if (exprMatch) {
-        // Strip path arg for type resolution: "csharp.Types('path')" → "csharp.Types"
-        const fullExpr = exprMatch[1].replace(/\('[^']*'\)$/, '');
+        // Strip function call for type resolution: "csharp.parse('path')" → "csharp.parse", "csharp.parse()" → "csharp.parse"
+        const fullExpr = exprMatch[1].replace(/\('[^']*'\)$/, '').replace(/\(\)$/, '');
 
-        // Check if this is a provider namespace (e.g., "csharp." → show collections)
-        const nsColls = STATIC_PACKAGE_COLLECTIONS[fullExpr];
-        if (nsColls || symbols.imports.includes(fullExpr)) {
-            const colls = nsColls || symbols._resolvedCollections || {};
+        // Check if this is an imported package namespace (e.g., "csharp." → show its exported functions/collections)
+        if (symbols.imports.includes(fullExpr)) {
+            // Show exported functions for this package (resolved from disk)
+            const pkgFuncs = symbols._resolvedFunctions && symbols._resolvedFunctions[fullExpr];
+            if (pkgFuncs) {
+                const seen = new Set();
+                for (const fn of pkgFuncs) {
+                    if (seen.has(fn.name)) continue;
+                    seen.add(fn.name);
+                    const detail = fn.returnType ? `→ ${fn.returnType}` : 'function';
+                    items.push({ label: fn.name, detail, kind: Kind.Function });
+                }
+            }
+            // Show collections for this package (if any, resolved from disk)
+            const colls = symbols._resolvedCollections || {};
             for (const [collName, itemType] of Object.entries(colls)) {
                 items.push({ label: collName, detail: `→ [${itemType}]`, kind: Kind.Field });
             }
-            if (items.length > 0) return toItems(items);
+            // Return whatever we found (even empty) — don't fall through to generic fallback
+            return toItems(items);
         }
 
         // Resolve through the chain
