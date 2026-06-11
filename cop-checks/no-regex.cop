@@ -5,20 +5,20 @@ import code
 import code-analysis
 import csharp
 
-predicate hasRegex(Line) =>
-    Line.Text:contains('Regex') || Line.Text:contains('RegularExpressions')
+# A type is in a file that uses regex if the file imports RegularExpressions
+predicate inRegexFile(Type) =>
+    Type.File.Usings:contains('System.Text.RegularExpressions')
 
-# Exclude lines that implement the :matches() intrinsic infrastructure:
-#   - RegexCache: the compiled regex cache used by matches()
-#   - RegexOptions: parameters to the cache methods
-#   - StringOp.Matches: filter system dispatch for :matches()
-#   - Regex.Escape: glob pattern expansion in StandardLibrary
-predicate notMatchesInfra(Line) =>
-    Line.Text:contains('RegexCache') == false
-    && Line.Text:contains('RegexOptions') == false
-    && Line.Text:contains('StringOp.Matches') == false
-    && Line.Text:contains('Regex.Escape') == false
+# Exclude types in files that implement the :matches() intrinsic:
+#   - RegexCache: the compiled regex cache
+#   - FilterCompiler/FilterEvaluator: filter dispatch for :matches()
+#   - StandardLibrary: the matches() function and glob expansion
+predicate notMatchesInfra(Type) =>
+    Type.Name:contains('RegexCache') == false
+    && Type.Name:contains('FilterCompiler') == false
+    && Type.Name:contains('FilterEvaluator') == false
+    && Type.Name:contains('StandardLibrary') == false
 
-let allLines : [Line] = csharp.parse().Lines
-export let no-regex = allLines:hasRegex:notMatchesInfra
-    :toError('Regex usage not allowed (use recursive descent parsers): {item.File.Path}:{item.Number}')
+let allTypes : [Type] = csharp.parse().Types
+export let no-regex = allTypes:inRegexFile:notMatchesInfra
+    :toError('{item.Name} is in a file that imports System.Text.RegularExpressions — use recursive descent parsers: {item.File.Path}')
