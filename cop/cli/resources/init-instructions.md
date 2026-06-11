@@ -104,6 +104,7 @@ export let layering-violations = Projects:isRuntimeReferencingProvider
 
 ## DO NOT — Critical Rules
 
+- **DO NOT use text matching on Lines** when semantic Codebase elements exist. Use `Types`, `Statements`, `Methods`, `File.Usings`, `Type.Name`, `Statement.TypeName`, `Statement.MemberName` etc. instead of `Line.Text:contains(...)`. Line-level text matching is a last resort for patterns that have no semantic representation.
 - **DO NOT use `foreach` to print violations.** Never write `foreach violations => '{item.Message}'`. Always use `CHECK(violations)`.
 - **DO NOT put `command MAIN` in individual check files.** Only `main.cop` has the command.
 - **DO NOT manually iterate violations.** The pattern is always: filter → `:toError()` → `CHECK()`.
