@@ -9,15 +9,9 @@ predicate hasRegex(Line) =>
     Line.Text:contains('Regex') || Line.Text:contains('RegularExpressions')
 
 predicate notMatchesInfra(Line) =>
-    Line.File.Path:endsWith('RegexCache.cs') == false
+    Line.File.Path:contains('Filter') == false
+    && Line.File.Path:endsWith('RegexCache.cs') == false
     && Line.File.Path:endsWith('StandardLibrary.cs') == false
-    && Line.File.Path:endsWith('FilterCompiler.cs') == false
-    && Line.File.Path:endsWith('FilterEvaluator.cs') == false
-    && Line.File.Path:endsWith('FilterExpression.cs') == false
-    && Line.File.Path:endsWith('Tokenizer.cs') == false
-    && Line.File.Path:endsWith('CopParser.cs') == false
-    && Line.File.Path:contains('tests') == false
-    && Line.File.Path:contains('tools') == false
 
 let allLines : [Line] = csharp.parse().Lines
 export let no-regex = allLines:hasRegex:notMatchesInfra
