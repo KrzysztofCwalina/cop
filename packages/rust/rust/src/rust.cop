@@ -1,0 +1,10 @@
+# Rust source language provider
+import code
+
+## Parses Rust source files in the target directory and returns a Codebase.
+## Example: let cb = rust.parse()
+export function parse() : Codebase => provider('rust')
+
+## Parses Rust source files in the specified directory and returns a Codebase.
+## Example: let cb = rust.parse('/path/to/project')
+export function parse(path : string) : Codebase => provider('rust', path)

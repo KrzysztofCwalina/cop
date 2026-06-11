@@ -151,7 +151,8 @@ const categories = [
       "core",
       "files",
       "json",
-      "markdown"
+      "markdown",
+      "rust"
     ]
   },
   {
@@ -4217,6 +4218,37 @@ const packages = {
     "types": {},
     "predicates": [],
     "functions": [],
+    "checks": [],
+    "commands": []
+  },
+  "rust": {
+    "label": "rust",
+    "overview": "Rust source code parser and analyzer",
+    "samples": [
+      {
+        "title": "List public types",
+        "code": "import rust\n\nlet cb = rust.parse()\n\n# List all public types in the Rust codebase\ncommand MAIN = foreach cb.Types:isPublic => '{item.Name} ({item.Kind})'"
+      }
+    ],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [
+      {
+        "name": "parse",
+        "params": "",
+        "returns": "Codebase",
+        "desc": "Parses Rust source files in the target directory and returns a Codebase.\nExample: let cb = rust.parse()",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/rust/rust/src/rust.cop#L6"
+      },
+      {
+        "name": "parse",
+        "params": "path: string",
+        "returns": "Codebase",
+        "desc": "Parses Rust source files in the specified directory and returns a Codebase.\nExample: let cb = rust.parse('/path/to/project')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/rust/rust/src/rust.cop#L10"
+      }
+    ],
     "checks": [],
     "commands": []
   },

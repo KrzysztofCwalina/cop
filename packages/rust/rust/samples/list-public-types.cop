@@ -1,0 +1,6 @@
+import rust
+
+let cb = rust.parse()
+
+# List all public types in the Rust codebase
+command MAIN = foreach cb.Types:isPublic => '{item.Name} ({item.Kind})'

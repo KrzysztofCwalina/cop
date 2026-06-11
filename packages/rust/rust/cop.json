@@ -1,0 +1,13 @@
+{
+  "name": "rust",
+  "version": "1.0.0",
+  "description": "Rust source code parser and analyzer",
+  "title": "Rust Source Language Provider",
+  "authors": "cop-team",
+  "tags": [
+    "rust"
+  ],
+  "provider": "clr",
+  "providerEntry": "Cop.Providers.RustProvider",
+  "providerAssembly": "rust-provider.dll"
+}
