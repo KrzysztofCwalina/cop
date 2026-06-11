@@ -417,9 +417,10 @@ internal class ProviderLoadContext : AssemblyLoadContext
             return null; // falls back to default context
 
         var assemblyPath = _resolver.ResolveAssemblyToPath(assemblyName);
-        if (assemblyPath is not null)
+        if (assemblyPath is not null && File.Exists(assemblyPath))
             return LoadFromAssemblyPath(assemblyPath);
 
+        // Fall back to default context (host cop.exe) for assemblies not shipped with the provider
         return null;
     }
 }
