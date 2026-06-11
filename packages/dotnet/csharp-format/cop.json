@@ -9,7 +9,7 @@
     "formatting",
     "static-analysis"
   ],
-  "provider": "python",
-  "providerEntry": "src/main.py",
+  "provider": "clr",
+  "providerEntry": "Cop.Providers.Tools.CSharpFormatProvider",
   "authors": "cop-team"
 }

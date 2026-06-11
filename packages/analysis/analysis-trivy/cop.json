@@ -9,7 +9,7 @@
     "trivy",
     "scanning"
   ],
-  "provider": "python",
-  "providerEntry": "src/main.py",
+  "provider": "clr",
+  "providerEntry": "Cop.Providers.Tools.TrivyProvider",
   "authors": "cop-team"
 }

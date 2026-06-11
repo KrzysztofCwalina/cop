@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Cop.Providers.Tools</RootNamespace>
+    <AssemblyName>tool-providers</AssemblyName>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\cop\cli\cop.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+
+  <!-- Copy provider DLL to all tool-wrapper package lib/ folders after build -->
+  <Target Name="CopyToPackageLibs" AfterTargets="Build">
+    <PropertyGroup>
+      <PkgRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\packages\'))</PkgRoot>
+    </PropertyGroup>
+    <ItemGroup>
+      <ProviderDlls Include="$(OutputPath)tool-providers.dll" />
+      <ProviderDlls Include="$(OutputPath)tool-providers.deps.json" />
+      <TargetLibDirs Include="$(PkgRoot)dotnet\csharp-format\lib\" />
+      <TargetLibDirs Include="$(PkgRoot)dotnet\csharp-stylecop\lib\" />
+      <TargetLibDirs Include="$(PkgRoot)python\python-ruff\lib\" />
+      <TargetLibDirs Include="$(PkgRoot)python\python-pylint\lib\" />
+      <TargetLibDirs Include="$(PkgRoot)python\python-bandit\lib\" />
+      <TargetLibDirs Include="$(PkgRoot)python\python-mypy\lib\" />
+      <TargetLibDirs Include="$(PkgRoot)analysis\analysis-trivy\lib\" />
+      <TargetLibDirs Include="$(PkgRoot)analysis\analysis-checkov\lib\" />
+      <TargetLibDirs Include="$(PkgRoot)analysis\analysis-semgrep\lib\" />
+      <TargetLibDirs Include="$(PkgRoot)analysis\analysis-spectral\lib\" />
+    </ItemGroup>
+    <MakeDir Directories="@(TargetLibDirs)" />
+    <Copy SourceFiles="@(ProviderDlls)" DestinationFolder="%(TargetLibDirs.Identity)" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

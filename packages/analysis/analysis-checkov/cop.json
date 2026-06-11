@@ -10,7 +10,7 @@
     "terraform",
     "static-analysis"
   ],
-  "provider": "python",
-  "providerEntry": "src/main.py",
+  "provider": "clr",
+  "providerEntry": "Cop.Providers.Tools.CheckovProvider",
   "authors": "cop-team"
 }

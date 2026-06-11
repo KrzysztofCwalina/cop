@@ -9,7 +9,7 @@
     "api",
     "linting"
   ],
-  "provider": "node",
-  "providerEntry": "src/index.js",
+  "provider": "clr",
+  "providerEntry": "Cop.Providers.Tools.SpectralProvider",
   "authors": "cop-team"
 }

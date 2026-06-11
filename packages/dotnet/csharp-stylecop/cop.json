@@ -10,7 +10,7 @@
     "style",
     "static-analysis"
   ],
-  "provider": "python",
-  "providerEntry": "src/main.py",
+  "provider": "clr",
+  "providerEntry": "Cop.Providers.Tools.CSharpStyleCopProvider",
   "authors": "cop-team"
 }
