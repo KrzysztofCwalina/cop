@@ -689,6 +689,28 @@ public sealed class Binder
         if (name is "string" or "int" or "float" or "bool" or "byte" or "bytes" or "object") return;
 
         var symbol = _currentScope.Resolve(name);
+        if (symbol is TypeSymbol or EnumSymbol)
+            return;
+
+        // Named subset / collection reference patterns:
+        // - Plural collection names (e.g., 'Types' → 'Type' is a known type)
+        // - Numbered variants (e.g., 'Region2' → 'Region' is a known type)
+        if (symbol is null && name.Length > 1 && char.IsUpper(name[0]))
+        {
+            // Try stripping trailing 's' (Types → Type, Statements → Statement...)
+            if (name.EndsWith('s'))
+            {
+                var singular = name[..^1];
+                if (_currentScope.Resolve(singular) is TypeSymbol)
+                    return;
+                // Handle 'ies' → 'y' (e.g., Entries → Entry) — not common but safe
+            }
+            // Try stripping trailing digits (Region2 → Region)
+            var baseName = name.TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9');
+            if (baseName.Length < name.Length && _currentScope.Resolve(baseName) is TypeSymbol)
+                return;
+        }
+
         if (symbol is null)
         {
             _result.ReportDiagnostic(
