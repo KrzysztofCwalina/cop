@@ -8,10 +8,16 @@ import csharp
 predicate hasRegex(Line) =>
     Line.Text:contains('Regex') || Line.Text:contains('RegularExpressions')
 
+# Exclude lines that implement the :matches() intrinsic infrastructure:
+#   - RegexCache: the compiled regex cache used by matches()
+#   - RegexOptions: parameters to the cache methods
+#   - StringOp.Matches: filter system dispatch for :matches()
+#   - Regex.Escape: glob pattern expansion in StandardLibrary
 predicate notMatchesInfra(Line) =>
-    Line.File.Path:contains('Filter') == false
-    && Line.File.Path:endsWith('RegexCache.cs') == false
-    && Line.File.Path:endsWith('StandardLibrary.cs') == false
+    Line.Text:contains('RegexCache') == false
+    && Line.Text:contains('RegexOptions') == false
+    && Line.Text:contains('StringOp.Matches') == false
+    && Line.Text:contains('Regex.Escape') == false
 
 let allLines : [Line] = csharp.parse().Lines
 export let no-regex = allLines:hasRegex:notMatchesInfra
