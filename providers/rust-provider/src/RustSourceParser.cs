@@ -853,6 +853,10 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
         {
             if (tokens[i].Kind == RustTokenKind.DocComment) return true;
             if (tokens[i].Kind is RustTokenKind.Attribute or RustTokenKind.LineComment or RustTokenKind.BlockComment) continue;
+            // Skip visibility/modifier keywords consumed by the caller (e.g., pub, async, unsafe)
+            if (tokens[i].Kind == RustTokenKind.Keyword && tokens[i].Value is "pub" or "async" or "unsafe") continue;
+            // Skip pub(crate) parenthesized visibility
+            if (tokens[i].Kind == RustTokenKind.Punctuation && tokens[i].Value is ")" or "(" or "crate") continue;
             break;
         }
         return false;

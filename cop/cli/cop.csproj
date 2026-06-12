@@ -9,7 +9,7 @@
     <PublishReadyToRun>true</PublishReadyToRun>
     <SelfContained>false</SelfContained>
     <AssemblyName>cop</AssemblyName>
-    <Version>2026.6.11.4</Version>
+    <Version>2026.6.11.5</Version>
     <ApplicationIcon>resources\cop.ico</ApplicationIcon>
   </PropertyGroup>
 

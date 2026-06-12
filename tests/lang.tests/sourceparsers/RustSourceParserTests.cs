@@ -1,0 +1,741 @@
+using Cop.Providers.SourceModel;
+using Cop.Providers.SourceParsers;
+using NUnit.Framework;
+
+namespace Cop.Tests.Lang.SourceParsers;
+
+[TestFixture]
+public class RustSourceParserTests
+{
+    private readonly RustSourceParser _parser = new();
+
+    // ================================================================
+    // Use / imports
+    // ================================================================
+
+    [Test]
+    public void Parse_SimpleUse()
+    {
+        var result = Parse("""
+            use std::collections::HashMap;
+            use std::io;
+            """);
+        Assert.That(result.Usings, Does.Contain("std::collections::HashMap"));
+        Assert.That(result.Usings, Does.Contain("std::io"));
+    }
+
+    [Test]
+    public void Parse_GroupedUse()
+    {
+        var result = Parse("""
+            use std::collections::{HashMap, BTreeMap, HashSet};
+            """);
+        Assert.That(result.Usings, Does.Contain("std::collections::HashMap"));
+        Assert.That(result.Usings, Does.Contain("std::collections::BTreeMap"));
+        Assert.That(result.Usings, Does.Contain("std::collections::HashSet"));
+    }
+
+    [Test]
+    public void Parse_UseWithAlias()
+    {
+        var result = Parse("""
+            use std::fmt::Result as FmtResult;
+            """);
+        // Should capture the path (alias is not part of the module path)
+        Assert.That(result.Usings.Count, Is.GreaterThan(0));
+    }
+
+    [Test]
+    public void Parse_NoUse_EmptyUsings()
+    {
+        var result = Parse("""
+            fn main() {
+                println!("hello");
+            }
+            """);
+        Assert.That(result.Usings, Is.Empty);
+    }
+
+    // ================================================================
+    // Structs
+    // ================================================================
+
+    [Test]
+    public void Parse_PublicStruct()
+    {
+        var result = Parse("""
+            pub struct Config {
+                pub name: String,
+                pub timeout: u64,
+            }
+            """);
+        Assert.That(result.Types, Has.Count.EqualTo(1));
+        var t = result.Types[0];
+        Assert.That(t.Name, Is.EqualTo("Config"));
+        Assert.That(t.Kind, Is.EqualTo(TypeKind.Struct));
+        Assert.That(t.IsPublic, Is.True);
+    }
+
+    [Test]
+    public void Parse_StructFields()
+    {
+        var result = Parse("""
+            pub struct Point {
+                pub x: f64,
+                pub y: f64,
+                label: String,
+            }
+            """);
+        var t = result.Types[0];
+        Assert.That(t.Fields, Has.Count.EqualTo(3));
+        var xField = t.Fields.First(f => f.Name == "x");
+        Assert.That(xField.Type?.Name, Is.EqualTo("f64"));
+        Assert.That(xField.IsPublic, Is.True);
+        var labelField = t.Fields.First(f => f.Name == "label");
+        Assert.That(labelField.IsPublic, Is.False);
+    }
+
+    [Test]
+    public void Parse_PrivateStruct()
+    {
+        var result = Parse("""
+            struct Internal {
+                data: Vec<u8>,
+            }
+            """);
+        var t = result.Types[0];
+        Assert.That(t.Name, Is.EqualTo("Internal"));
+        Assert.That(t.IsPublic, Is.False);
+    }
+
+    [Test]
+    public void Parse_UnitStruct()
+    {
+        var result = Parse("""
+            pub struct Marker;
+            """);
+        Assert.That(result.Types, Has.Count.EqualTo(1));
+        Assert.That(result.Types[0].Name, Is.EqualTo("Marker"));
+    }
+
+    [Test]
+    public void Parse_TupleStruct()
+    {
+        var result = Parse("""
+            pub struct Wrapper(pub String, i32);
+            """);
+        Assert.That(result.Types, Has.Count.EqualTo(1));
+        Assert.That(result.Types[0].Name, Is.EqualTo("Wrapper"));
+    }
+
+    [Test]
+    public void Parse_GenericStruct()
+    {
+        var result = Parse("""
+            pub struct Container<T: Clone> {
+                inner: T,
+            }
+            """);
+        Assert.That(result.Types, Has.Count.EqualTo(1));
+        Assert.That(result.Types[0].Name, Is.EqualTo("Container"));
+    }
+
+    [Test]
+    public void Parse_StructWithWhereClause()
+    {
+        var result = Parse("""
+            pub struct Filter<T>
+            where
+                T: Send + Sync,
+            {
+                value: T,
+            }
+            """);
+        Assert.That(result.Types, Has.Count.EqualTo(1));
+        Assert.That(result.Types[0].Name, Is.EqualTo("Filter"));
+    }
+
+    // ================================================================
+    // Enums
+    // ================================================================
+
+    [Test]
+    public void Parse_SimpleEnum()
+    {
+        var result = Parse("""
+            pub enum Color {
+                Red,
+                Green,
+                Blue,
+            }
+            """);
+        Assert.That(result.Types, Has.Count.EqualTo(1));
+        var t = result.Types[0];
+        Assert.That(t.Name, Is.EqualTo("Color"));
+        Assert.That(t.Kind, Is.EqualTo(TypeKind.Enum));
+        Assert.That(t.IsPublic, Is.True);
+        Assert.That(t.EnumValues, Does.Contain("Red"));
+        Assert.That(t.EnumValues, Does.Contain("Green"));
+        Assert.That(t.EnumValues, Does.Contain("Blue"));
+    }
+
+    [Test]
+    public void Parse_EnumWithData()
+    {
+        var result = Parse("""
+            pub enum Shape {
+                Circle(f64),
+                Rectangle { width: f64, height: f64 },
+                Point,
+            }
+            """);
+        var t = result.Types[0];
+        Assert.That(t.Name, Is.EqualTo("Shape"));
+        Assert.That(t.EnumValues, Does.Contain("Circle"));
+        Assert.That(t.EnumValues, Does.Contain("Rectangle"));
+        Assert.That(t.EnumValues, Does.Contain("Point"));
+    }
+
+    [Test]
+    public void Parse_EnumWithDiscriminant()
+    {
+        var result = Parse("""
+            pub enum Status {
+                Active = 1,
+                Inactive = 0,
+            }
+            """);
+        var t = result.Types[0];
+        Assert.That(t.EnumValues, Does.Contain("Active"));
+        Assert.That(t.EnumValues, Does.Contain("Inactive"));
+    }
+
+    // ================================================================
+    // Traits
+    // ================================================================
+
+    [Test]
+    public void Parse_Trait()
+    {
+        var result = Parse("""
+            pub trait Drawable {
+                fn draw(&self);
+                fn area(&self) -> f64;
+            }
+            """);
+        Assert.That(result.Types, Has.Count.EqualTo(1));
+        var t = result.Types[0];
+        Assert.That(t.Name, Is.EqualTo("Drawable"));
+        Assert.That(t.Kind, Is.EqualTo(TypeKind.Interface));
+        Assert.That(t.Methods, Has.Count.EqualTo(2));
+        Assert.That(t.Methods.Select(m => m.Name), Does.Contain("draw"));
+        Assert.That(t.Methods.Select(m => m.Name), Does.Contain("area"));
+    }
+
+    [Test]
+    public void Parse_TraitWithSupertraits()
+    {
+        var result = Parse("""
+            pub trait Serializable: Clone + Send {
+                fn serialize(&self) -> Vec<u8>;
+            }
+            """);
+        var t = result.Types[0];
+        Assert.That(t.Name, Is.EqualTo("Serializable"));
+        Assert.That(t.BaseTypes, Does.Contain("Clone"));
+        Assert.That(t.BaseTypes, Does.Contain("Send"));
+    }
+
+    [Test]
+    public void Parse_TraitWithDefaultMethod()
+    {
+        var result = Parse("""
+            pub trait Logger {
+                fn log(&self, msg: &str);
+                fn warn(&self, msg: &str) {
+                    self.log(msg);
+                }
+            }
+            """);
+        var t = result.Types[0];
+        Assert.That(t.Methods, Has.Count.EqualTo(2));
+    }
+
+    // ================================================================
+    // Impl blocks
+    // ================================================================
+
+    [Test]
+    public void Parse_InherentImpl()
+    {
+        var result = Parse("""
+            struct Foo;
+            impl Foo {
+                pub fn new() -> Self {
+                    Foo
+                }
+                pub fn bar(&self) -> i32 {
+                    42
+                }
+            }
+            """);
+        // Should produce the struct + impl type
+        Assert.That(result.Types.Count, Is.GreaterThanOrEqualTo(2));
+        var impl = result.Types.First(t => t.Name.Contains("impl"));
+        Assert.That(impl.Constructors, Has.Count.EqualTo(1));
+        Assert.That(impl.Constructors[0].Name, Is.EqualTo("new"));
+        Assert.That(impl.Methods, Has.Count.EqualTo(1));
+        Assert.That(impl.Methods[0].Name, Is.EqualTo("bar"));
+    }
+
+    [Test]
+    public void Parse_TraitImpl()
+    {
+        var result = Parse("""
+            struct Circle { radius: f64 }
+            impl Drawable for Circle {
+                fn draw(&self) {
+                    println!("Drawing circle");
+                }
+            }
+            """);
+        var impl = result.Types.First(t => t.Name.Contains("impl"));
+        Assert.That(impl.Name, Does.Contain("Drawable"));
+        Assert.That(impl.BaseTypes, Does.Contain("Drawable"));
+    }
+
+    [Test]
+    public void Parse_ImplWithGenericAndWhereClause()
+    {
+        var result = Parse("""
+            impl<T> Container<T>
+            where
+                T: Clone + Send,
+            {
+                pub fn get(&self) -> &T {
+                    &self.inner
+                }
+            }
+            """);
+        var impl = result.Types.First(t => t.Name.Contains("impl"));
+        Assert.That(impl.Methods, Has.Count.EqualTo(1));
+        Assert.That(impl.Methods[0].Name, Is.EqualTo("get"));
+    }
+
+    // ================================================================
+    // Functions
+    // ================================================================
+
+    [Test]
+    public void Parse_FnParameters()
+    {
+        var result = Parse("""
+            struct S;
+            impl S {
+                pub fn process(&self, name: String, count: usize) -> bool {
+                    true
+                }
+            }
+            """);
+        var impl = result.Types.First(t => t.Name.Contains("impl"));
+        var m = impl.Methods.First(m => m.Name == "process");
+        // &self is skipped, so we expect name and count
+        Assert.That(m.Parameters, Has.Count.EqualTo(2));
+        Assert.That(m.Parameters[0].Name, Is.EqualTo("name"));
+        Assert.That(m.Parameters[0].Type?.Name, Is.EqualTo("String"));
+        Assert.That(m.Parameters[1].Name, Is.EqualTo("count"));
+        Assert.That(m.Parameters[1].Type?.Name, Is.EqualTo("usize"));
+    }
+
+    [Test]
+    public void Parse_FnReturnType()
+    {
+        var result = Parse("""
+            struct S;
+            impl S {
+                pub fn compute(&self) -> Vec<String> {
+                    vec![]
+                }
+            }
+            """);
+        var impl = result.Types.First(t => t.Name.Contains("impl"));
+        var m = impl.Methods.First(m => m.Name == "compute");
+        Assert.That(m.ReturnType, Is.Not.Null);
+        Assert.That(m.ReturnType!.Name, Does.Contain("Vec"));
+    }
+
+    [Test]
+    public void Parse_AsyncFn()
+    {
+        var result = Parse("""
+            struct Client;
+            impl Client {
+                pub async fn fetch(&self, url: &str) -> String {
+                    String::new()
+                }
+            }
+            """);
+        var impl = result.Types.First(t => t.Name.Contains("impl"));
+        var m = impl.Methods.First(m => m.Name == "fetch");
+        Assert.That(m.IsAsync, Is.True);
+    }
+
+    [Test]
+    public void Parse_FreeFn()
+    {
+        var result = Parse("""
+            fn add(a: i32, b: i32) -> i32 {
+                a + b
+            }
+            """);
+        // Free functions generate statements
+        var calls = result.Statements;
+        // The parser should at least not crash on free functions
+        Assert.That(result.Types, Has.Count.EqualTo(0));
+    }
+
+    // ================================================================
+    // Statements
+    // ================================================================
+
+    [Test]
+    public void Parse_MethodCalls()
+    {
+        var result = Parse("""
+            struct S;
+            impl S {
+                fn run(&self) {
+                    self.setup();
+                    self.execute();
+                    println!("done");
+                }
+            }
+            """);
+        var stmts = result.Statements.Where(s => s.Kind == "call").ToList();
+        Assert.That(stmts.Select(s => s.MemberName), Does.Contain("setup"));
+        Assert.That(stmts.Select(s => s.MemberName), Does.Contain("execute"));
+        Assert.That(stmts.Select(s => s.MemberName), Does.Contain("println!"));
+    }
+
+    [Test]
+    public void Parse_QualifiedCalls()
+    {
+        var result = Parse("""
+            struct S;
+            impl S {
+                fn run(&self) {
+                    Vec::new();
+                    HashMap::with_capacity(10);
+                }
+            }
+            """);
+        var stmts = result.Statements.Where(s => s.Kind == "call").ToList();
+        var vecNew = stmts.FirstOrDefault(s => s.MemberName == "new");
+        Assert.That(vecNew, Is.Not.Null);
+        Assert.That(vecNew!.TypeName, Is.EqualTo("Vec"));
+    }
+
+    [Test]
+    public void Parse_PanicAsThrow()
+    {
+        var result = Parse("""
+            struct S;
+            impl S {
+                fn fail(&self) {
+                    panic!("something went wrong");
+                }
+            }
+            """);
+        var throws = result.Statements.Where(s => s.Kind == "throw").ToList();
+        Assert.That(throws, Has.Count.EqualTo(1));
+        Assert.That(throws[0].MemberName, Is.EqualTo("panic"));
+    }
+
+    [Test]
+    public void Parse_TodoAndUnimplemented()
+    {
+        var result = Parse("""
+            struct S;
+            impl S {
+                fn wip(&self) {
+                    todo!();
+                }
+                fn stub(&self) {
+                    unimplemented!();
+                }
+            }
+            """);
+        var throws = result.Statements.Where(s => s.Kind == "throw").ToList();
+        Assert.That(throws, Has.Count.EqualTo(2));
+        Assert.That(throws.Select(s => s.MemberName), Does.Contain("todo"));
+        Assert.That(throws.Select(s => s.MemberName), Does.Contain("unimplemented"));
+    }
+
+    // ================================================================
+    // Doc comments
+    // ================================================================
+
+    [Test]
+    public void Parse_DocComment_OnStruct()
+    {
+        var result = Parse("""
+            /// A documented struct
+            pub struct Documented {
+                pub value: i32,
+            }
+            """);
+        Assert.That(result.Types[0].HasDocComment, Is.True);
+    }
+
+    [Test]
+    public void Parse_NoDocComment()
+    {
+        var result = Parse("""
+            pub struct Undocumented {
+                pub value: i32,
+            }
+            """);
+        Assert.That(result.Types[0].HasDocComment, Is.False);
+    }
+
+    [Test]
+    public void Parse_DocComment_OnMethod()
+    {
+        var result = Parse("""
+            pub trait Foo {
+                /// Documented method
+                fn documented(&self);
+                fn undocumented(&self);
+            }
+            """);
+        var doc = result.Types[0].Methods.First(m => m.Name == "documented");
+        var undoc = result.Types[0].Methods.First(m => m.Name == "undocumented");
+        Assert.That(doc.HasDocComment, Is.True);
+        Assert.That(undoc.HasDocComment, Is.False);
+    }
+
+    // ================================================================
+    // Attributes
+    // ================================================================
+
+    [Test]
+    public void Parse_DeriveAttribute()
+    {
+        var result = Parse("""
+            #[derive(Debug, Clone)]
+            pub struct Tagged {
+                pub name: String,
+            }
+            """);
+        var t = result.Types[0];
+        Assert.That(t.Decorators, Has.Count.GreaterThan(0));
+        Assert.That(t.Decorators[0], Does.Contain("derive"));
+    }
+
+    // ================================================================
+    // Lines and language
+    // ================================================================
+
+    [Test]
+    public void Parse_Language()
+    {
+        var result = Parse("fn main() {}");
+        Assert.That(result.Language, Is.EqualTo("rust"));
+    }
+
+    [Test]
+    public void Parse_CommentLines()
+    {
+        var result = Parse("""
+            // a comment
+            /// doc comment
+            fn main() {}
+            """);
+        Assert.That(result.CommentLines, Is.Not.Empty);
+    }
+
+    // ================================================================
+    // Edge cases
+    // ================================================================
+
+    [Test]
+    public void Parse_EmptySource()
+    {
+        var result = Parse("");
+        Assert.That(result.Types, Is.Empty);
+        Assert.That(result.Statements, Is.Empty);
+        Assert.That(result.Usings, Is.Empty);
+    }
+
+    [Test]
+    public void Parse_RawStrings()
+    {
+        var result = Parse("""
+            struct S;
+            impl S {
+                fn get_sql(&self) -> &str {
+                    r#"SELECT * FROM "users" WHERE id = 1"#
+                }
+            }
+            """);
+        // Should not crash on raw string literals
+        Assert.That(result.Types.Count, Is.GreaterThan(0));
+    }
+
+    [Test]
+    public void Parse_NestedBlockComments()
+    {
+        var result = Parse("""
+            /* outer /* inner */ still outer */
+            pub struct AfterComment;
+            """);
+        Assert.That(result.Types, Has.Count.EqualTo(1));
+        Assert.That(result.Types[0].Name, Is.EqualTo("AfterComment"));
+    }
+
+    [Test]
+    public void Parse_Lifetimes()
+    {
+        var result = Parse("""
+            pub struct Ref<'a> {
+                data: &'a str,
+            }
+            """);
+        Assert.That(result.Types, Has.Count.EqualTo(1));
+        Assert.That(result.Types[0].Name, Is.EqualTo("Ref"));
+    }
+
+    [Test]
+    public void Parse_PubCrateVisibility()
+    {
+        var result = Parse("""
+            pub(crate) struct Internal {
+                pub(crate) field: i32,
+            }
+            """);
+        Assert.That(result.Types, Has.Count.EqualTo(1));
+        Assert.That(result.Types[0].Name, Is.EqualTo("Internal"));
+    }
+
+    [Test]
+    public void Parse_UnsafeTrait()
+    {
+        var result = Parse("""
+            pub unsafe trait UnsafeMarker {
+                fn check(&self) -> bool;
+            }
+            """);
+        Assert.That(result.Types, Has.Count.EqualTo(1));
+        Assert.That(result.Types[0].Name, Is.EqualTo("UnsafeMarker"));
+        Assert.That(result.Types[0].Kind, Is.EqualTo(TypeKind.Interface));
+    }
+
+    [Test]
+    public void Parse_MultipleTypesInOneFile()
+    {
+        var result = Parse("""
+            use std::fmt;
+
+            pub struct Foo;
+            pub struct Bar;
+            pub enum Baz { A, B }
+            pub trait Qux {
+                fn method(&self);
+            }
+            """);
+        var names = result.Types.Select(t => t.Name).ToList();
+        Assert.That(names, Does.Contain("Foo"));
+        Assert.That(names, Does.Contain("Bar"));
+        Assert.That(names, Does.Contain("Baz"));
+        Assert.That(names, Does.Contain("Qux"));
+    }
+
+    [Test]
+    public void Parse_RealWorldClientPattern()
+    {
+        var result = Parse("""
+            use reqwest::Client;
+            use serde::{Deserialize, Serialize};
+
+            /// HTTP client for the Foo service.
+            #[derive(Debug, Clone)]
+            pub struct FooClient {
+                inner: Client,
+                base_url: String,
+            }
+
+            impl FooClient {
+                /// Creates a new FooClient.
+                pub fn new(base_url: &str) -> Self {
+                    FooClient {
+                        inner: Client::new(),
+                        base_url: base_url.to_string(),
+                    }
+                }
+
+                /// Lists all items.
+                pub async fn list_items(&self) -> Vec<Item> {
+                    let resp = self.inner.get(&self.base_url).send().await.unwrap();
+                    resp.json().await.unwrap()
+                }
+
+                /// Gets an item by ID.
+                pub async fn get_item(&self, id: u64) -> Item {
+                    let url = format!("{}/{}", self.base_url, id);
+                    let resp = self.inner.get(&url).send().await.unwrap();
+                    resp.json().await.unwrap()
+                }
+
+                fn internal_helper(&self) {
+                    println!("helper");
+                }
+            }
+
+            #[derive(Debug, Serialize, Deserialize)]
+            pub struct Item {
+                pub id: u64,
+                pub name: String,
+            }
+            """);
+
+        // Check usings
+        Assert.That(result.Usings, Does.Contain("reqwest::Client"));
+        Assert.That(result.Usings, Does.Contain("serde::Deserialize"));
+        Assert.That(result.Usings, Does.Contain("serde::Serialize"));
+
+        // Check struct types
+        var fooClient = result.Types.First(t => t.Name == "FooClient");
+        Assert.That(fooClient.IsPublic, Is.True);
+        Assert.That(fooClient.HasDocComment, Is.True);
+
+        var item = result.Types.First(t => t.Name == "Item");
+        Assert.That(item.Fields, Has.Count.EqualTo(2));
+
+        // Check impl
+        var impl = result.Types.First(t => t.Name.Contains("FooClient") && t.Name.Contains("impl"));
+        Assert.That(impl.Constructors, Has.Count.EqualTo(1));
+        Assert.That(impl.Constructors[0].Name, Is.EqualTo("new"));
+        Assert.That(impl.Constructors[0].HasDocComment, Is.True);
+
+        // Async methods
+        var asyncMethods = impl.Methods.Where(m => m.IsAsync).ToList();
+        Assert.That(asyncMethods, Has.Count.EqualTo(2));
+        Assert.That(asyncMethods.Select(m => m.Name), Does.Contain("list_items"));
+        Assert.That(asyncMethods.Select(m => m.Name), Does.Contain("get_item"));
+
+        // Non-public internal method
+        var helper = impl.Methods.First(m => m.Name == "internal_helper");
+        Assert.That(helper.IsPublic, Is.False);
+    }
+
+    // ================================================================
+    // Helper
+    // ================================================================
+
+    private SourceFile Parse(string source)
+    {
+        var result = _parser.Parse("test.rs", source);
+        Assert.That(result, Is.Not.Null, "Parser returned null");
+        return result!;
+    }
+}
