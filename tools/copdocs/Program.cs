@@ -118,7 +118,7 @@ if (overridesPath != null && File.Exists(overridesPath))
 
 // Extract data from all packages
 var referenceData = new ReferenceData();
-var categoryOrder = new[] { "Core", "Code", ".NET", "Python", "JavaScript", "Cop", "TypeSpec", "Misc" };
+var categoryOrder = new[] { "Core", "Code", ".NET", "Python", "JavaScript", "Rust", "Go", "Java", "Cop", "TypeSpec", "Misc" };
 var categoryPackages = categoryOrder.ToDictionary(c => c, _ => new List<string>());
 
 foreach (var (pkgDir, pkgId, category) in discoveredPackages.OrderBy(p => p.Id))
