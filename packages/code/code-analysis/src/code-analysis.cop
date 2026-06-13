@@ -11,30 +11,28 @@ export type Violation = {
     Message : string,
     File : string,
     Line : int,
-    Source : string,
-    CopIgnore : string
+    Source : string
 }
 
-## Maps numeric severity to a display label.
+## Maps numeric severity to a display label (error / warning / info), aligned with the
+## values toError (1.0), toWarning (0.5), and toInfo (0.2) set.
 export function severityLabel(Violation) : string =>
-    item.Severity >= 0.9 ? 'critical' :
     item.Severity >= 0.7 ? 'error' :
     item.Severity >= 0.4 ? 'warning' : 'info'
 
 ## A type that has a source location (file path and line number).
 export type TextFilePosition = {
   filePath : (item: T) => string,
-  line : (item: T) => int,
-  copIgnore : (item: T) => string
+  line : (item: T) => int
 }
 
 # Trait conformances — map TextFilePosition properties for each type
-export type Statement : TextFilePosition = { filePath => item.File.Path, line => item.Line, copIgnore => item.CopIgnore }
-export type Type : TextFilePosition = { filePath => item.File.Path, line => item.Line, copIgnore => '' }
-export type Api : TextFilePosition = { filePath => item.File.Path, line => item.Line, copIgnore => '' }
-export type Line : TextFilePosition = { filePath => item.File.Path, line => item.Number, copIgnore => item.CopIgnore }
-export type Region : TextFilePosition = { filePath => item.File.Path, line => item.StartLine, copIgnore => '' }
-export type Folder : TextFilePosition = { filePath => item.Path, line => 0, copIgnore => '' }
+export type Statement : TextFilePosition = { filePath => item.File.Path, line => item.Line }
+export type Type : TextFilePosition = { filePath => item.File.Path, line => item.Line }
+export type Api : TextFilePosition = { filePath => item.File.Path, line => item.Line }
+export type Line : TextFilePosition = { filePath => item.File.Path, line => item.Number }
+export type Region : TextFilePosition = { filePath => item.File.Path, line => item.StartLine }
+export type Folder : TextFilePosition = { filePath => item.Path, line => 0 }
 
 # Violation creation functions
 
@@ -45,8 +43,7 @@ export function toError(TextFilePosition, message: string) : Violation => Violat
     Message = message,
     File = item.filePath,
     Line = item.line,
-    Source = item.Source,
-    CopIgnore = item.copIgnore
+    Source = item.Source
 }
 
 ## Creates a warning-severity violation (Severity = 0.5).
@@ -56,8 +53,7 @@ export function toWarning(TextFilePosition, message: string) : Violation => Viol
     Message = message,
     File = item.filePath,
     Line = item.line,
-    Source = item.Source,
-    CopIgnore = item.copIgnore
+    Source = item.Source
 }
 
 ## Creates an info-severity violation (Severity = 0.2).
@@ -67,8 +63,7 @@ export function toInfo(TextFilePosition, message: string) : Violation => Violati
     Message = message,
     File = item.filePath,
     Line = item.line,
-    Source = item.Source,
-    CopIgnore = item.copIgnore
+    Source = item.Source
 }
 
 ## Creates a violation with explicit severity and certainty.
@@ -78,8 +73,7 @@ export function toViolation(TextFilePosition, message: string, severity: float, 
     Message = message,
     File = item.filePath,
     Line = item.line,
-    Source = item.Source,
-    CopIgnore = item.copIgnore
+    Source = item.Source
 }
 
 ## Re-stamps an existing violation with a new severity (for weight adjustment).
@@ -89,15 +83,17 @@ export function withSeverity(Violation, s: float) : Violation => Violation {
     Message = item.Message,
     File = item.File,
     Line = item.Line,
-    Source = item.Source,
-    CopIgnore = item.CopIgnore
+    Source = item.Source
 }
 
 
-# Parameterized check command — users invoke via RUN CHECK(violations)
-# Filters out violations on lines with cop-ignore comments
-export predicate isNotIgnored(Violation) => Violation.CopIgnore == ''
-export command CHECK(violations) = foreach violations:isNotIgnored => '{item.File@dim}({item.Line@dim}): {item.Severity}: {item.Message}'
+# CHECK prints each violation; the engine exits non-zero when any violations are printed.
+# CHECK does NO filtering — suppression is done by filtering the collection before CHECK
+# (e.g. Statements:isViolating:notIgnored:toError(...)).
+export function checkLine(Violation, level: string) : string =>
+    '{item.File@dim}({item.Line@dim}): {level}: {item.Message}'
+
+export command CHECK(violations) = foreach violations => checkLine(item, severityLabel(item))
 
 
 # Common predicates

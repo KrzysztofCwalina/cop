@@ -527,10 +527,7 @@ public sealed class CopProviderProxy : CopValue
         {
             // Force thunks eagerly
             if (qualified is CopThunk thunk)
-            {
-                try { return thunk.Force(); }
-                catch (CopEvaluationException) { return CopNull.Instance; }
-            }
+                return thunk.Force();
             return qualified;
         }
         return CopNull.Instance;

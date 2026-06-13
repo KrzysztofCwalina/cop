@@ -130,7 +130,8 @@ public record ForEachStatement(
     string Variable,
     Expression Collection,
     List<Statement> Body,
-    int Line = 0) : Statement(Line);
+    int Line = 0,
+    bool IsAsync = false) : Statement(Line);
 
 /// <summary>
 /// Expression used as a statement (e.g., a function call with side effects).

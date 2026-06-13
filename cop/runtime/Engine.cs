@@ -336,6 +336,20 @@ public static class Engine
             queryService.RegisterProvider(loaded.PackageName, loaded.Instance, loaded.Schema);
             var runtimeBindings = loaded.Instance.GetRuntimeBindings();
             RegisterLazyProviderCollections(bridge.Evaluator.GlobalEnvironment, loaded.PackageName, loaded.Instance, loaded.Schema, query, errors, warnings, runtimeBindings, diagLog);
+
+            // Register provider functions (e.g., http.Post) as qualified callables: <package>.<fn>.
+            // Resolved through CopProviderProxy.GetField (which looks up "<package>.<fn>" in the env).
+            var providerFunctions = loaded.Instance.GetFunctions();
+            if (providerFunctions is not null)
+            {
+                foreach (var (fnName, fn) in providerFunctions)
+                {
+                    var capturedFn = fn;
+                    var qualifiedName = $"{loaded.PackageName}.{fnName}";
+                    bridge.Evaluator.GlobalEnvironment.Define(qualifiedName,
+                        new CopExternalFunction(qualifiedName, (callArgs, _) => InvokeProviderFunction(capturedFn, callArgs)));
+                }
+            }
         }
 
         foreach (var builtinProvider in _builtinProviders)
@@ -434,6 +448,7 @@ public static class Engine
                 ? packageModuleMap.Keys.Select(NormalizeCommandName).ToList()
                 : new List<string> { commandName ?? "main" };
 
+        int? exitCode = null;
         foreach (var command in commandsToRun)
         {
             try
@@ -441,9 +456,18 @@ public static class Engine
                 diagLog?.Invoke($"[diag] Running command '{command}'");
                 var result = bridge.RunCommand(command);
                 diagLog?.Invoke($"[diag] Command '{command}' returned: {result?.GetType().Name} = {result?.Display()?.Substring(0, Math.Min(result?.Display()?.Length ?? 0, 100))}");
-                // If a command returns a collection (e.g., let-binding used as a named rule),
-                // iterate items and produce output for each.
-                CollectCollectionOutputs(result, outputs);
+
+                // If command returns an integer, use it as the exit code
+                if (result is CopInt exitInt)
+                {
+                    exitCode = exitInt.Value;
+                }
+                else
+                {
+                    // If a command returns a collection (e.g., let-binding used as a named rule),
+                    // iterate items and produce output for each.
+                    CollectCollectionOutputs(result, outputs);
+                }
                 diagLog?.Invoke($"[diag] After collect, outputs count = {outputs.Count}");
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -488,7 +512,7 @@ public static class Engine
             ? commandsToRun.Count == 1 ? commandsToRun[0] : null
             : commandName ?? "main";
 
-        return new EngineResult(outputs, parseErrors, errors, resultCommandName, fileOutputs, warnings, asserts, diagnostics);
+        return new EngineResult(outputs, parseErrors, errors, resultCommandName, fileOutputs, warnings, asserts, diagnostics, exitCode);
     }
 
     private static LanguageBridge CreateBridge(
@@ -540,6 +564,43 @@ public static class Engine
         });
 
         return new LanguageBridge(ffi);
+    }
+
+    // Invokes a provider function (from ObjectProvider.GetFunctions): marshals cop args → CLR,
+    // synchronously awaits the Task, and marshals the CLR result → CopValue.
+    private static CopValue InvokeProviderFunction(Func<List<object?>, Task<object?>> fn, IReadOnlyList<CopValue> args)
+    {
+        var clrArgs = args.Select(CopToClr).ToList();
+        var result = fn(clrArgs).GetAwaiter().GetResult();
+        return DataObjectAdapter.Marshal(result);
+    }
+
+    // Converts a CopValue to a plain CLR value for passing into a provider function.
+    private static object? CopToClr(CopValue value)
+    {
+        while (value is CopThunk thunk) value = thunk.Force();
+        return value switch
+        {
+            CopNull => null,
+            CopString s => s.Value,
+            CopInt i => i.Value,
+            CopNumber n => n.Value,
+            CopBool b => b.Value,
+            CopList l => l.Items.Select(CopToClr).ToList(),
+            CopLazyCollection lazy => lazy.Enumerate().Select(CopToClr).ToList(),
+            CopQueryable q => q.Enumerate().Select(CopToClr).ToList(),
+            CopDynamicObject d => d.Underlying,
+            CopObject o => CopObjectToDataObject(o),
+            _ => value.Display()
+        };
+    }
+
+    private static DataObject CopObjectToDataObject(CopObject obj)
+    {
+        var data = new DataObject(obj.TypeName ?? "Object");
+        foreach (var (key, val) in obj.Fields)
+            data.Set(key, CopToClr(val));
+        return data;
     }
 
     private static void RegisterProgram(LanguageBridge bridge, string[]? programArgs)
@@ -1220,7 +1281,8 @@ public record EngineResult(
     List<FileOutput>? FileOutputs = null,
     List<string>? Warnings = null,
     List<AssertResult>? Asserts = null,
-    List<CopDiagnostic>? Diagnostics = null)
+    List<CopDiagnostic>? Diagnostics = null,
+    int? ExitCode = null)
 {
     public bool HasParseErrors => ParseErrors.Count > 0;
     public bool HasFatalErrors => Errors.Count > 0;

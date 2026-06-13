@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Cop.Providers.SourceModel;
 
 namespace Cop.Providers;
@@ -71,18 +70,18 @@ public static class PythonProjectDiscovery
                 if (inProject)
                 {
                     // name = "mypackage"
-                    var nameMatch = Regex.Match(trimmed, @"^name\s*=\s*""([^""]+)""");
-                    if (nameMatch.Success)
-                        name = nameMatch.Groups[1].Value;
+                    var parsedName = ParsePyprojectName(trimmed);
+                    if (parsedName is not null)
+                        name = parsedName;
 
                     // dependencies = ["dep1", "dep2>=1.0"]
                     if (trimmed.StartsWith("dependencies"))
                     {
                         inDependencies = true;
-                        var inlineMatch = Regex.Match(trimmed, @"dependencies\s*=\s*\[(.+)\]");
-                        if (inlineMatch.Success)
+                        var inlineDependencies = ParseInlineDependencies(trimmed);
+                        if (inlineDependencies is not null)
                         {
-                            ParseDependencyList(inlineMatch.Groups[1].Value, dependencies);
+                            ParseDependencyList(inlineDependencies, dependencies);
                             inDependencies = false;
                         }
                     }
@@ -94,9 +93,9 @@ public static class PythonProjectDiscovery
                         }
                         else
                         {
-                            var depMatch = Regex.Match(trimmed, @"""([^""]+)""");
-                            if (depMatch.Success)
-                                dependencies.Add(NormalizePythonDep(depMatch.Groups[1].Value));
+                            var dependency = ParseDoubleQuotedValue(trimmed);
+                            if (dependency is not null)
+                                dependencies.Add(NormalizePythonDep(dependency));
                         }
                     }
                 }
@@ -118,16 +117,15 @@ public static class PythonProjectDiscovery
         try
         {
             var content = File.ReadAllText(filePath);
-            var nameMatch = Regex.Match(content, @"name\s*=\s*['""]([^'""]+)['""]");
-            if (!nameMatch.Success)
+            var name = ParseSetupName(content);
+            if (name is null)
                 return null;
 
-            var name = nameMatch.Groups[1].Value;
             var dependencies = new List<string>();
 
-            var depsMatch = Regex.Match(content, @"install_requires\s*=\s*\[([^\]]*)\]", RegexOptions.Singleline);
-            if (depsMatch.Success)
-                ParseDependencyList(depsMatch.Groups[1].Value, dependencies);
+            var installRequires = ParseInstallRequires(content);
+            if (installRequires is not null)
+                ParseDependencyList(installRequires, dependencies);
 
             return new ProjectInfo(name, relativePath, "python", dependencies, dependencies, []);
         }
@@ -139,9 +137,8 @@ public static class PythonProjectDiscovery
 
     private static void ParseDependencyList(string text, List<string> dependencies)
     {
-        var matches = Regex.Matches(text, @"['""]([^'""]+)['""]");
-        foreach (Match m in matches)
-            dependencies.Add(NormalizePythonDep(m.Groups[1].Value));
+        foreach (var dependency in ParseQuotedValues(text))
+            dependencies.Add(NormalizePythonDep(dependency));
     }
 
     /// <summary>
@@ -149,9 +146,161 @@ public static class PythonProjectDiscovery
     /// </summary>
     private static string NormalizePythonDep(string dep)
     {
-        var match = Regex.Match(dep, @"^([a-zA-Z0-9_\-\.]+)");
-        return match.Success ? match.Groups[1].Value : dep;
+        var length = 0;
+        while (length < dep.Length && IsDependencyNameChar(dep[length]))
+            length++;
+        return length > 0 ? dep[..length] : dep;
     }
+
+    private static string? ParsePyprojectName(string text)
+    {
+        var index = "name".Length;
+        if (!text.StartsWith("name", StringComparison.Ordinal))
+            return null;
+
+        index = SkipWhitespace(text, index);
+        if (index >= text.Length || text[index] != '=')
+            return null;
+        index++;
+        index = SkipWhitespace(text, index);
+        if (index >= text.Length || text[index] != '"')
+            return null;
+
+        return ReadUntilQuote(text, index + 1, '"', allowEitherQuote: false);
+    }
+
+    private static string? ParseInlineDependencies(string text)
+    {
+        var index = text.IndexOf("dependencies", StringComparison.Ordinal);
+        if (index < 0)
+            return null;
+
+        index += "dependencies".Length;
+        index = SkipWhitespace(text, index);
+        if (index >= text.Length || text[index] != '=')
+            return null;
+        index++;
+        index = SkipWhitespace(text, index);
+        if (index >= text.Length || text[index] != '[')
+            return null;
+
+        var end = text.LastIndexOf(']');
+        if (end <= index + 1)
+            return null;
+
+        return text[(index + 1)..end];
+    }
+
+    private static string? ParseDoubleQuotedValue(string text)
+    {
+        var start = text.IndexOf('"');
+        if (start < 0)
+            return null;
+        return ReadUntilQuote(text, start + 1, '"', allowEitherQuote: false);
+    }
+
+    private static string? ParseSetupName(string text)
+    {
+        var searchIndex = 0;
+        while (searchIndex < text.Length)
+        {
+            var index = text.IndexOf("name", searchIndex, StringComparison.Ordinal);
+            if (index < 0)
+                return null;
+
+            var valueStart = index + "name".Length;
+            valueStart = SkipWhitespace(text, valueStart);
+            if (valueStart < text.Length && text[valueStart] == '=')
+            {
+                valueStart++;
+                valueStart = SkipWhitespace(text, valueStart);
+                if (valueStart < text.Length && IsQuote(text[valueStart]))
+                {
+                    var value = ReadUntilQuote(text, valueStart + 1, text[valueStart], allowEitherQuote: true);
+                    if (value is not null)
+                        return value;
+                }
+            }
+
+            searchIndex = index + 1;
+        }
+
+        return null;
+    }
+
+    private static string? ParseInstallRequires(string text)
+    {
+        var index = text.IndexOf("install_requires", StringComparison.Ordinal);
+        if (index < 0)
+            return null;
+
+        index += "install_requires".Length;
+        index = SkipWhitespace(text, index);
+        if (index >= text.Length || text[index] != '=')
+            return null;
+        index++;
+        index = SkipWhitespace(text, index);
+        if (index >= text.Length || text[index] != '[')
+            return null;
+
+        var start = index + 1;
+        var end = text.IndexOf(']', start);
+        return end >= 0 ? text[start..end] : null;
+    }
+
+    private static IEnumerable<string> ParseQuotedValues(string text)
+    {
+        var index = 0;
+        while (index < text.Length)
+        {
+            if (!IsQuote(text[index]))
+            {
+                index++;
+                continue;
+            }
+
+            var start = index + 1;
+            var end = start;
+            while (end < text.Length && !IsQuote(text[end]))
+                end++;
+
+            if (end < text.Length && end > start)
+            {
+                yield return text[start..end];
+                index = end + 1;
+            }
+            else
+            {
+                index++;
+            }
+        }
+    }
+
+    private static string? ReadUntilQuote(string text, int start, char quote, bool allowEitherQuote)
+    {
+        var end = start;
+        while (end < text.Length && (allowEitherQuote ? !IsQuote(text[end]) : text[end] != quote))
+            end++;
+
+        return end < text.Length && end > start ? text[start..end] : null;
+    }
+
+    private static int SkipWhitespace(string text, int index)
+    {
+        while (index < text.Length && char.IsWhiteSpace(text[index]))
+            index++;
+        return index;
+    }
+
+    private static bool IsQuote(char ch) => ch is '\'' or '"';
+
+    private static bool IsDependencyNameChar(char ch) =>
+        ch is >= 'a' and <= 'z'
+            or >= 'A' and <= 'Z'
+            or >= '0' and <= '9'
+            or '_'
+            or '-'
+            or '.';
 
     private static void CollectManifests(string dir, IReadOnlySet<string>? excluded, List<string> result)
     {

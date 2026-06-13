@@ -17,10 +17,7 @@ public class ProviderQueryService
     private readonly Dictionary<string, (DataProvider Instance, ProviderSchema Schema)> _providers = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _invocationDirectory;
     private readonly IReadOnlySet<string>? _excludedDirectories;
-    private readonly List<string> _warnings = [];
     private Action<string>? _diagLog;
-
-    public IReadOnlyList<string> Warnings => _warnings;
 
     public ProviderQueryService(string invocationDirectory, IReadOnlySet<string>? excludedDirectories = null, Action<string>? diagLog = null)
     {
@@ -60,10 +57,7 @@ public class ProviderQueryService
 
         if (!_providers.TryGetValue(providerName, out var provider))
         {
-            _warnings.Add($"Provider '{providerName}' not found for path-scoped query.");
-            var empty = new List<object>();
-            _cache[key] = empty;
-            return empty;
+            throw new InvalidOperationException($"Provider '{providerName}' not found for path-scoped query.");
         }
 
         if (!Directory.Exists(absolutePath))
@@ -80,23 +74,15 @@ public class ProviderQueryService
 
         _diagLog?.Invoke($"[diag] Path-scoped query: {providerName}.{collectionName} RootPath={absolutePath}");
 
-        try
+        var (instance, schema) = provider;
+        var collections = ProviderLoader.QueryCollections(instance, schema, query);
+        if (collections.TryGetValue(collectionName, out var items))
         {
-            var (instance, schema) = provider;
-            var collections = ProviderLoader.QueryCollections(instance, schema, query);
-            if (collections.TryGetValue(collectionName, out var items))
-            {
-                _cache[key] = items;
-                return items;
-            }
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            _warnings.Add($"Error querying provider '{providerName}' for collection '{collectionName}' at path '{absolutePath}': {ex.Message}");
+            _cache[key] = items;
+            return items;
         }
 
-        // Don't cache — the provider may not have returned this collection due to a transient issue.
-        // The next call will retry the query.
+        // Collection not returned by provider — not an error, just empty
         return new List<object>();
     }
 
@@ -108,22 +94,11 @@ public class ProviderQueryService
     {
         if (!_providers.TryGetValue(providerName, out var provider))
         {
-            _warnings.Add($"Provider '{providerName}' not found.");
-            return CopNull.Instance;
+            throw new InvalidOperationException($"Provider '{providerName}' not found.");
         }
 
         var (instance, schema) = provider;
-        Dictionary<string, List<object>>? collections = null;
-
-        try
-        {
-            collections = ProviderLoader.QueryCollections(instance, schema, query);
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            _warnings.Add($"Error querying provider '{providerName}': {ex.Message}");
-            return CopNull.Instance;
-        }
+        var collections = ProviderLoader.QueryCollections(instance, schema, query);
 
         if (collections is null || collections.Count == 0)
             return new CopList([]);

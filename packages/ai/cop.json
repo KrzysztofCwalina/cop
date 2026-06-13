@@ -1,0 +1,15 @@
+{
+  "name": "ai",
+  "version": "1.0.0",
+  "description": "LLM-based code review — ai.judge(requirement, code) returns [Violation]",
+  "title": "AI Judge Provider",
+  "authors": "cop-team",
+  "tags": [
+    "ai",
+    "llm",
+    "review"
+  ],
+  "provider": "clr",
+  "providerEntry": "Cop.Providers.Ai.AiProvider",
+  "providerAssembly": "AiProvider.dll"
+}

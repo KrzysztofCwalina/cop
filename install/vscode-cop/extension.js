@@ -821,7 +821,7 @@ function elementType(t) {
 // ── Document scanner ───────────────────────────────────────────────────────
 
 function scanDocument(doc) {
-    const lets = new Map();
+    const lets = new Map();       // name → { expr, typeAnnotation? }
     const predicates = new Map();
     const functions = new Map();
     const types = new Map();
@@ -835,8 +835,9 @@ function scanDocument(doc) {
         if ((m = text.match(/^(?:export\s+)?import\s+([a-zA-Z][a-zA-Z0-9-]*)/))) {
             imports.push(m[1]);
         }
-        if ((m = text.match(/^(?:export\s+)?let\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s*=\s*(.+)/))) {
-            lets.set(m[1], m[2].trim());
+        // let name : [Type] = expr  OR  let name = expr
+        if ((m = text.match(/^(?:export\s+)?let\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s*(?::\s*(\[[^\]]+\]|[A-Za-z_][A-Za-z0-9_?]*))?\s*=\s*(.+)/))) {
+            lets.set(m[1], { expr: m[3].trim(), typeAnnotation: m[2] || null });
         }
         if ((m = text.match(/^(?:export\s+)?predicate\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s*\(([A-Z][a-zA-Z0-9_]*)/))) {
             predicates.set(m[1], m[2]);
@@ -877,8 +878,12 @@ function resolveIdentifierType(name, symbols) {
     if (name === 'Markdown') return 'MarkdownContent';
     if (TYPES[name]) return name;
 
-    const letExpr = symbols.lets.get(name);
-    if (letExpr) return inferExprType(letExpr, symbols);
+    const letEntry = symbols.lets.get(name);
+    if (letEntry) {
+        // If type annotation is present, use it directly
+        if (letEntry.typeAnnotation) return letEntry.typeAnnotation;
+        return inferExprType(letEntry.expr, symbols);
+    }
 
     // Check collections from imported packages (dynamic + static fallback)
     const colls = symbols._resolvedCollections;
@@ -945,9 +950,94 @@ function inferExprType(expr, symbols) {
         }
     }
 
-    // Bare identifier or identifier:filter:filter...
+    // Handle filter chains: split on `:` and resolve the base
+    // In cop, filtering doesn't change the type: Types:isPublic is still [Type]
     const baseName = expr.split(':')[0].trim();
+    // If the base contains a dot, resolve it as a property chain
+    if (baseName.includes('.')) {
+        return resolvePropertyChain(baseName, symbols);
+    }
     return resolveIdentifierType(baseName, symbols);
+}
+
+/**
+ * Resolve the type of a full expression chain that may include `.` and `:` operators.
+ * In cop, `:` is a filter that preserves the collection type, and `.` accesses properties.
+ * Examples:
+ *   "Types:isPublic" → [Type]
+ *   "Types:isPublic:isCSharp" → [Type]
+ *   "Type.Methods" → [Method]
+ *   "Type.Name" → string
+ */
+function resolveFullChainType(fullExpr, symbols) {
+    if (!fullExpr) return undefined;
+
+    // Split by `:` first — filtering preserves type, so we only care about the base
+    const colonParts = fullExpr.split(':');
+    const baseExpr = colonParts[0].trim();
+
+    // Resolve the base (may include dots)
+    let currentType;
+    if (baseExpr.includes('.')) {
+        currentType = resolvePropertyChain(baseExpr, symbols);
+    } else {
+        currentType = resolveIdentifierType(baseExpr, symbols);
+    }
+
+    // Filter chains (:pred) don't change the collection type
+    return currentType;
+}
+
+/**
+ * Determine what type `item` refers to at a given document position.
+ * In cop, `item` is the implicit iteration variable:
+ * - Inside a predicate body: the predicate's parameter type
+ * - Inside a function body: the function's parameter type
+ * - Inside foreach: the element type of the iterated collection
+ * - After :toError/.../filter functions: the element type of the filtered collection
+ */
+function resolveItemType(doc, position, symbols) {
+    // Walk backwards from current line looking for enclosing context
+    for (let i = position.line; i >= 0; i--) {
+        const text = doc.lineAt(i).text.trim();
+        if (text.startsWith('#')) continue;
+
+        // predicate name(Type) or predicate name(Type:constraint)
+        let m = text.match(/^(?:export\s+)?predicate\s+\w+\s*\(([A-Z][a-zA-Z0-9_]*)(?:\s*:\s*\w+)?\)/);
+        if (m) return m[1];
+
+        // function name(Type, ...) or function name(Type)
+        m = text.match(/^(?:export\s+)?function\s+\w+\s*\(([A-Z][a-zA-Z0-9_]*)/);
+        if (m) return m[1];
+
+        // foreach collection => '...' (old syntax)
+        m = text.match(/^(?:async\s+)?foreach\s+(.+?)\s*=>/);
+        if (m) {
+            const collExpr = m[1].trim();
+            const collType = resolveFullChainType(collExpr, symbols);
+            if (collType && isCollection(collType)) return elementType(collType);
+            return collType;
+        }
+
+        // Stop at another top-level declaration (don't cross boundaries)
+        if (i < position.line && /^(?:export\s+)?(?:predicate|function|command|let|type|flags|enum)\b/.test(text)) break;
+    }
+
+    // If we're in a let binding with a filter chain (e.g., let x = Types:isPublic:toError('...'))
+    // look at the current line for context
+    const currentLine = doc.lineAt(position.line).text;
+    const beforeCursor = currentLine.substring(0, position.character);
+
+    // Inside a function call argument like :toError('{item.Name}')
+    const funcCallMatch = beforeCursor.match(/([A-Za-z_][A-Za-z0-9_:.-]*):(?:toError|toWarning|toInfo|toViolation)\s*\(\s*'/);
+    if (funcCallMatch) {
+        const chainExpr = funcCallMatch[1];
+        const chainType = resolveFullChainType(chainExpr, symbols);
+        if (chainType && isCollection(chainType)) return elementType(chainType);
+        return chainType;
+    }
+
+    return undefined;
 }
 
 /** Look up a type definition from built-in TYPES, document types, or resolved package types */
@@ -1040,7 +1130,7 @@ const provider = {
 
         // 4. After `.` → properties and transforms
         if (/\.$/.test(textBefore)) {
-            return getDotCompletions(document, textBefore);
+            return getDotCompletions(document, textBefore, position);
         }
 
         // 5. After `=> ` → actions and violations
@@ -1069,15 +1159,12 @@ function getPredicateCompletions(document, textBefore) {
     const symbols = scanDocument(document);
     const items = [...UNIVERSAL_PREDICATES];
 
-    // Try to infer type from expression before the colon
-    const exprMatch = textBefore.match(/([A-Za-z_][A-Za-z0-9_.]*)\s*:\s*$/);
+    // Try to infer type from the full expression chain before the colon
+    // Match the chain before the final `:`, including previous `:` filter operators
+    const exprMatch = textBefore.match(/([A-Za-z_][A-Za-z0-9_.:()-]*)\s*:\s*$/);
     if (exprMatch) {
-        let exprType = inferExprType(exprMatch[1], symbols);
-
-        // For property chains: Code.Types:  → [Type] collection
-        if (!exprType && exprMatch[1].includes('.')) {
-            exprType = resolvePropertyChain(exprMatch[1], symbols);
-        }
+        const fullChain = exprMatch[1];
+        let exprType = resolveFullChainType(fullChain, symbols);
 
         if (exprType) {
             if (isCollection(exprType)) {
@@ -1108,25 +1195,56 @@ function getPredicateCompletions(document, textBefore) {
         items.push({ label: name, detail: `(${paramType}) — function`, kind: Kind.Function });
     }
 
+    // Also add predicates/functions from imported packages
+    if (symbols._resolvedFunctions) {
+        for (const [pkgName, funcs] of Object.entries(symbols._resolvedFunctions)) {
+            for (const fn of funcs) {
+                items.push({ label: fn.name, detail: `(${fn.params || '...'}) — ${pkgName}`, kind: Kind.Function });
+            }
+        }
+    }
+
     items.push(...BUILTIN_FUNCTIONS);
 
     return toItems(items);
 }
 
-function getDotCompletions(document, textBefore) {
+function getDotCompletions(document, textBefore, position) {
     const symbols = scanDocument(document);
     const items = [];
 
-    // Extract the full expression chain before the dot (including path-scoped calls)
-    const exprMatch = textBefore.match(/([A-Za-z_][A-Za-z0-9_.]*(?:\('[^']*'\)|\(\))?)\.\s*$/);
+    // Extract the full expression before the dot, including filter chains with `:`
+    // Match: identifier chains with `.` and `:` operators, optional function calls
+    const exprMatch = textBefore.match(/([A-Za-z_][A-Za-z0-9_.:()-]*(?:\('[^']*'\)|\(\))?)\.\s*$/);
     if (exprMatch) {
-        // Strip function call for type resolution: "csharp.parse('path')" → "csharp.parse", "csharp.parse()" → "csharp.parse"
-        const fullExpr = exprMatch[1].replace(/\('[^']*'\)$/, '').replace(/\(\)$/, '');
+        let rawExpr = exprMatch[1];
+        // Strip trailing function call syntax for resolution
+        const cleanExpr = rawExpr.replace(/\('[^']*'\)$/, '').replace(/\(\)$/, '');
+
+        // Handle `item.` — resolve to the element type in current context
+        if (cleanExpr === 'item') {
+            const pos = position || { line: getLineNumber(document, textBefore), character: textBefore.length };
+            const itemType = resolveItemType(document, pos, symbols);
+            if (itemType) {
+                const typeDef = lookupType(stripNullable(itemType), symbols);
+                if (typeDef) {
+                    for (const prop of typeDef.properties) {
+                        items.push({ label: prop.name, detail: `: ${prop.type}`, kind: Kind.Property });
+                    }
+                }
+                if (isString(itemType)) {
+                    items.push(...STRING_PROPERTIES, ...STRING_TRANSFORMS);
+                } else if (isCollection(itemType)) {
+                    items.push(...COLLECTION_PROPERTIES, ...COLLECTION_TRANSFORMS);
+                }
+                if (items.length > 0) return toItems(items);
+            }
+        }
 
         // Check if this is an imported package namespace (e.g., "csharp." → show its exported functions/collections)
-        if (symbols.imports.includes(fullExpr)) {
+        if (symbols.imports.includes(cleanExpr)) {
             // Show exported functions for this package (resolved from disk)
-            const pkgFuncs = symbols._resolvedFunctions && symbols._resolvedFunctions[fullExpr];
+            const pkgFuncs = symbols._resolvedFunctions && symbols._resolvedFunctions[cleanExpr];
             if (pkgFuncs) {
                 const seen = new Set();
                 for (const fn of pkgFuncs) {
@@ -1145,13 +1263,8 @@ function getDotCompletions(document, textBefore) {
             return toItems(items);
         }
 
-        // Resolve through the chain
-        let resolvedType;
-        if (fullExpr.includes('.')) {
-            resolvedType = resolvePropertyChain(fullExpr, symbols);
-        } else {
-            resolvedType = resolveIdentifierType(fullExpr, symbols);
-        }
+        // Resolve the full chain type (handles both `.` and `:` operators)
+        let resolvedType = resolveFullChainType(cleanExpr, symbols);
 
         if (resolvedType) {
             const bt = stripNullable(isCollection(resolvedType) ? elementType(resolvedType) : resolvedType);
@@ -1188,6 +1301,20 @@ function getDotCompletions(document, textBefore) {
     return toItems(items);
 }
 
+/** Get the 0-based line number for the cursor position from textBefore */
+function getLineNumber(document, textBefore) {
+    // We're called with the text of the current line up to cursor.
+    // The document position is the line we're currently on.
+    // Since we don't have the position directly, scan for matching line.
+    for (let i = 0; i < document.lineCount; i++) {
+        const lineText = document.lineAt(i).text;
+        if (lineText.includes(textBefore) || lineText.startsWith(textBefore)) {
+            return i;
+        }
+    }
+    return 0;
+}
+
 function getStatementCompletions(document) {
     const symbols = scanDocument(document);
     const items = [...KEYWORDS, ...ACTIONS];
@@ -1200,6 +1327,14 @@ function getStatementCompletions(document) {
         { label: 'Code', detail: 'Codebase runtime variable', kind: Kind.Variable },
         { label: 'Disk', detail: 'Filesystem runtime variable', kind: Kind.Variable },
     );
+
+    // Add ambient collections from imported packages (Types, Statements, Lines, Files, etc.)
+    const colls = symbols._resolvedCollections;
+    if (colls) {
+        for (const [collName, elType] of Object.entries(colls)) {
+            items.push({ label: collName, detail: `[${elType}] — collection`, kind: Kind.Variable });
+        }
+    }
 
     return toItems(items);
 }
@@ -1228,7 +1363,21 @@ function getGeneralCompletions(document) {
         { label: 'Code', detail: 'Codebase runtime variable', kind: Kind.Variable },
         { label: 'Disk', detail: 'Filesystem runtime variable', kind: Kind.Variable },
         { label: 'runtime', detail: 'Runtime namespace', kind: Kind.Module },
+        { label: 'item', detail: 'Current iteration variable', kind: Kind.Variable },
     );
+
+    // Add ambient collections from imported packages
+    const colls = symbols._resolvedCollections;
+    if (colls) {
+        for (const [collName, elType] of Object.entries(colls)) {
+            items.push({ label: collName, detail: `[${elType}] — collection`, kind: Kind.Variable });
+        }
+    }
+
+    // Add imported package names for namespace-qualified access
+    for (const pkg of symbols.imports) {
+        items.push({ label: pkg, detail: 'imported package', kind: Kind.Module });
+    }
 
     return toItems(items);
 }
@@ -1273,13 +1422,18 @@ const hoverProvider = {
 
         // 3. Let bindings
         if (symbols.lets.has(word)) {
-            const expr = symbols.lets.get(word);
-            const resolvedType = inferExprType(expr, symbols);
+            const letEntry = symbols.lets.get(word);
+            let resolvedType;
+            if (letEntry.typeAnnotation) {
+                resolvedType = letEntry.typeAnnotation;
+            } else {
+                resolvedType = inferExprType(letEntry.expr, symbols);
+            }
             const typeStr = resolvedType || 'unknown';
             const md = new vscode.MarkdownString();
             md.appendCodeblock(`let ${word}: ${typeStr}`, 'cop');
-            if (resolvedType && resolvedType !== expr) {
-                md.appendMarkdown(`\n\n= \`${expr}\``);
+            if (resolvedType && resolvedType !== letEntry.expr) {
+                md.appendMarkdown(`\n\n= \`${letEntry.expr}\``);
             }
             return new vscode.Hover(md);
         }
@@ -1320,7 +1474,7 @@ const hoverProvider = {
             }
         }
 
-        // 5. Runtime variables
+        // 5. Runtime variables and `item`
         if (word === 'Code') {
             return new vscode.Hover(
                 new vscode.MarkdownString().appendCodeblock('(runtime) Code: Codebase', 'cop')
@@ -1330,6 +1484,14 @@ const hoverProvider = {
             return new vscode.Hover(
                 new vscode.MarkdownString().appendCodeblock('(runtime) Disk: Filesystem', 'cop')
             );
+        }
+        if (word === 'item') {
+            const itemType = resolveItemType(document, position, symbols);
+            if (itemType) {
+                return new vscode.Hover(
+                    new vscode.MarkdownString().appendCodeblock(`(variable) item: ${itemType}`, 'cop')
+                );
+            }
         }
 
         // 6. Type names (built-in and document-defined)
@@ -1486,4 +1648,37 @@ function activate(context) {
 
 function deactivate() {}
 
-module.exports = { activate, deactivate };
+module.exports = {
+    activate,
+    deactivate,
+    // Exported for testing
+    _testing: {
+        scanDocument,
+        resolveIdentifierType,
+        inferExprType,
+        resolveFullChainType,
+        resolveItemType,
+        resolvePropertyChain,
+        lookupType,
+        getDotCompletions,
+        getPredicateCompletions,
+        getStatementCompletions,
+        getGeneralCompletions,
+        parseTypesFromCop,
+        parsePackageInfo,
+        resolveCollectionElementType,
+        isCollection,
+        isString,
+        isNumeric,
+        elementType,
+        stripNullable,
+        TYPES,
+        STRING_PREDICATES,
+        NUMERIC_PREDICATES,
+        COLLECTION_PREDICATES,
+        COLLECTION_PROPERTIES,
+        COLLECTION_TRANSFORMS,
+        STRING_PROPERTIES,
+        STRING_TRANSFORMS,
+    }
+};

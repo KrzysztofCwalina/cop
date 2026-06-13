@@ -133,6 +133,7 @@ public sealed class LanguageBridge
 
     /// <summary>
     /// Run a named command and return its result.
+    /// Catches CopEvaluationException and stores in Errors (caller must check bridge.Errors).
     /// </summary>
     public CopValue RunCommand(string name = "main")
     {

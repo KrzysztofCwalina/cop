@@ -24,13 +24,12 @@ public class ProviderQueryServiceTests
     }
 
     [Test]
-    public void Query_UnknownProvider_ReturnsEmpty()
+    public void Query_UnknownProvider_Throws()
     {
         var svc = new ProviderQueryService(_testDir);
-        var result = svc.Query("unknown", "Types", _testDir);
-        Assert.That(result, Is.Empty);
-        Assert.That(svc.Warnings, Has.Count.EqualTo(1));
-        Assert.That(svc.Warnings[0], Does.Contain("not found"));
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            svc.Query("unknown", "Types", _testDir));
+        Assert.That(ex!.Message, Does.Contain("not found"));
     }
 
     [Test]

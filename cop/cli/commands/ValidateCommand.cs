@@ -3,7 +3,6 @@ using System.CommandLine;
 using System.CommandLine.Parsing;
 using System.IO;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
 using System.Linq;
 using Cop.Core;
 using Cop.Providers;
@@ -17,6 +16,20 @@ namespace Cop.Cli.Commands;
 /// </summary>
 public static class ValidateCommand
 {
+    // True if version is exactly three dot-separated numeric parts (X.Y.Z).
+    private static bool IsSemVer3(string? version)
+    {
+        if (string.IsNullOrEmpty(version)) return false;
+        var parts = version.Split('.');
+        if (parts.Length != 3) return false;
+        foreach (var p in parts)
+        {
+            if (p.Length == 0) return false;
+            foreach (var c in p) if (c is < '0' or > '9') return false;
+        }
+        return true;
+    }
+
     /// <summary>
     /// Creates the validate command.
     /// </summary>
@@ -137,7 +150,7 @@ public static class ValidateCommand
         if (metadata != null && !string.IsNullOrWhiteSpace(metadata.Version))
         {
             // Match semver format X.Y.Z
-            versionValid = Regex.IsMatch(metadata.Version, @"^\d+\.\d+\.\d+$");
+            versionValid = IsSemVer3(metadata.Version);
         }
         results.Add(new ValidationResult(
             "Version is valid semver",

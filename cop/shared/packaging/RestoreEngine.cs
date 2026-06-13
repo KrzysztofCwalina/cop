@@ -5,7 +5,6 @@ using System.Linq;
 using System.Security;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using YamlDotNet.Serialization;
@@ -376,16 +375,28 @@ public class RestoreEngine
     {
         try
         {
-            // Simple regex-based parsing for diagnostic severity rules
-            // Pattern: dotnet_diagnostic.{id}.severity = {severity}
-            var pattern = @"dotnet_diagnostic\.([A-Z0-9]+)\s*=\s*(.+)";
-            var regex = new Regex(pattern, RegexOptions.IgnoreCase);
-
-            foreach (Match match in regex.Matches(yamlContent))
+            // Hand-written parsing for diagnostic severity rules.
+            // Equivalent to: dotnet_diagnostic.{id} = {value}  (id = [A-Za-z0-9]+, case-insensitive marker),
+            // where {value} is the remainder of the line.
+            foreach (var rawLine in yamlContent.Split('\n'))
             {
-                var id = match.Groups[1].Value.Trim();
-                var severity = match.Groups[2].Value.Trim();
+                const string marker = "dotnet_diagnostic.";
+                int idx = rawLine.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+                if (idx < 0) continue;
 
+                int p = idx + marker.Length;
+                int idStart = p;
+                while (p < rawLine.Length && rawLine[p] is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or (>= '0' and <= '9')) p++;
+                if (p == idStart) continue;
+                var id = rawLine.Substring(idStart, p - idStart).Trim();
+
+                while (p < rawLine.Length && char.IsWhiteSpace(rawLine[p])) p++;
+                if (p >= rawLine.Length || rawLine[p] != '=') continue;
+                p++;
+                while (p < rawLine.Length && char.IsWhiteSpace(rawLine[p])) p++;
+                if (p >= rawLine.Length) continue;
+
+                var severity = rawLine.Substring(p).Trim();
                 if (!diagnosticRules.ContainsKey(id))
                 {
                     diagnosticRules[id] = severity;

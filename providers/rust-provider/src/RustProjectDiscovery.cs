@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Cop.Providers.SourceModel;
 
 namespace Cop.Providers;
@@ -53,17 +52,15 @@ public static class RustProjectDiscovery
 
                 if (inPackage)
                 {
-                    var nameMatch = Regex.Match(trimmed, @"^name\s*=\s*""([^""]+)""");
-                    if (nameMatch.Success)
-                        name = nameMatch.Groups[1].Value;
+                    if (TryReadQuotedName(trimmed, out var packageName))
+                        name = packageName;
                 }
 
                 if (inDependencies)
                 {
                     // dep = "version" or dep = { version = "..." }
-                    var depMatch = Regex.Match(trimmed, @"^([a-zA-Z0-9_\-]+)\s*=");
-                    if (depMatch.Success)
-                        dependencies.Add(depMatch.Groups[1].Value);
+                    if (TryReadDependencyKey(trimmed, out var dependency))
+                        dependencies.Add(dependency);
                 }
             }
 
@@ -77,6 +74,66 @@ public static class RustProjectDiscovery
             return null;
         }
     }
+
+    private static bool TryReadQuotedName(string text, out string name)
+    {
+        name = "";
+        const string keyword = "name";
+        if (!text.StartsWith(keyword, StringComparison.Ordinal))
+            return false;
+
+        var index = keyword.Length;
+        while (index < text.Length && char.IsWhiteSpace(text[index]))
+            index++;
+
+        if (index >= text.Length || text[index] != '=')
+            return false;
+
+        index++;
+        while (index < text.Length && char.IsWhiteSpace(text[index]))
+            index++;
+
+        if (index >= text.Length || text[index] != '"')
+            return false;
+
+        index++;
+        var nameStart = index;
+        while (index < text.Length && text[index] != '"')
+            index++;
+
+        if (index == nameStart || index >= text.Length)
+            return false;
+
+        name = text[nameStart..index];
+        return true;
+    }
+
+    private static bool TryReadDependencyKey(string text, out string key)
+    {
+        key = "";
+        var index = 0;
+        while (index < text.Length && IsDependencyKeyCharacter(text[index]))
+            index++;
+
+        if (index == 0)
+            return false;
+
+        var keyEnd = index;
+        while (index < text.Length && char.IsWhiteSpace(text[index]))
+            index++;
+
+        if (index >= text.Length || text[index] != '=')
+            return false;
+
+        key = text[..keyEnd];
+        return true;
+    }
+
+    private static bool IsDependencyKeyCharacter(char ch) =>
+        (ch >= 'a' && ch <= 'z') ||
+        (ch >= 'A' && ch <= 'Z') ||
+        (ch >= '0' && ch <= '9') ||
+        ch is '_' or '-';
 
     private static void CollectManifests(string dir, IReadOnlySet<string>? excluded, List<string> result)
     {

@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace Cop.Providers.Markdown;
 
 /// <summary>
@@ -94,17 +92,50 @@ public static class MarkdownParser
         return new MarkdownDocument(headings, links, fenceBlocks, sections);
     }
 
-    private static readonly Regex LinkPattern = new(@"(?<!!)\[([^\]]+)\]\(([^)]+)\)", RegexOptions.Compiled);
-
     private static void ExtractLinks(string line, int lineNumber, List<LinkInfo> links)
     {
-        var matches = LinkPattern.Matches(line);
-        foreach (Match match in matches)
+        int index = 0;
+        while (index < line.Length)
         {
-            var text = match.Groups[1].Value;
-            var url = match.Groups[2].Value;
-            links.Add(new LinkInfo(url, text, lineNumber));
+            if (TryReadLink(line, index, out var text, out var url, out var nextIndex))
+            {
+                links.Add(new LinkInfo(url, text, lineNumber));
+                index = nextIndex;
+            }
+            else
+            {
+                index++;
+            }
         }
+    }
+
+    private static bool TryReadLink(string line, int start, out string text, out string url, out int nextIndex)
+    {
+        text = string.Empty;
+        url = string.Empty;
+        nextIndex = start;
+
+        if (line[start] != '[' || (start > 0 && line[start - 1] == '!'))
+            return false;
+
+        int textStart = start + 1;
+        int textEnd = line.IndexOf(']', textStart);
+        if (textEnd <= textStart)
+            return false;
+
+        int openParen = textEnd + 1;
+        if (openParen >= line.Length || line[openParen] != '(')
+            return false;
+
+        int urlStart = openParen + 1;
+        int urlEnd = line.IndexOf(')', urlStart);
+        if (urlEnd <= urlStart)
+            return false;
+
+        text = line[textStart..textEnd];
+        url = line[urlStart..urlEnd];
+        nextIndex = urlEnd + 1;
+        return true;
     }
 
     private static List<SectionInfo> BuildSections(List<HeadingInfo> headings, string[] lines)

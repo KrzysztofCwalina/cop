@@ -4,7 +4,6 @@ using System.CommandLine.Parsing;
 using System.Diagnostics;
 using System.IO;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
 using System.Linq;
 using Cop.Core;
 
@@ -15,6 +14,20 @@ namespace Cop.Cli.Commands;
 /// </summary>
 public static class PublishCommand
 {
+    // True if version is exactly three dot-separated numeric parts (X.Y.Z).
+    private static bool IsSemVer3(string? version)
+    {
+        if (string.IsNullOrEmpty(version)) return false;
+        var parts = version.Split('.');
+        if (parts.Length != 3) return false;
+        foreach (var p in parts)
+        {
+            if (p.Length == 0) return false;
+            foreach (var c in p) if (c is < '0' or > '9') return false;
+        }
+        return true;
+    }
+
     /// <summary>
     /// Creates the publish command.
     /// </summary>
@@ -94,7 +107,7 @@ public static class PublishCommand
         }
 
         // Step 6: Version is valid semver format (X.Y.Z)
-        if (!Regex.IsMatch(metadata.Version, @"^\d+\.\d+\.\d+$"))
+        if (!IsSemVer3(metadata.Version))
         {
             Console.Error.WriteLine($"Error: Version '{metadata.Version}' is not valid semver format (expected X.Y.Z).");
             return 1;

@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Cop.Providers.SourceModel;
 
 namespace Cop.Providers.SourceParsers;
@@ -61,8 +60,8 @@ public class PythonSourceParser : ISourceParser
                 }
                 else if (trimmed.StartsWith("from "))
                 {
-                    var match = Regex.Match(trimmed, @"^from\s+(\S+)\s+import");
-                    if (match.Success) usings.Add(match.Groups[1].Value);
+                    var moduleName = ParseFromImportModule(trimmed);
+                    if (moduleName is not null) usings.Add(moduleName);
                 }
                 else
                 {
@@ -87,12 +86,12 @@ public class PythonSourceParser : ISourceParser
 
         var decorators = CollectDecorators(lines, startLine);
 
-        var classMatch = Regex.Match(lines[startLine].TrimStart(), @"class\s+(\w+)\s*(?:\(([^)]*)\))?\s*:");
-        if (!classMatch.Success) return (null, startLine + 1);
+        var classMatch = ParseClassHeader(lines[startLine].TrimStart());
+        if (classMatch is null) return (null, startLine + 1);
 
-        string className = classMatch.Groups[1].Value;
-        var baseTypes = classMatch.Groups[2].Success
-            ? classMatch.Groups[2].Value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList()
+        string className = classMatch.Value.Name;
+        var baseTypes = classMatch.Value.BaseTypes is not null
+            ? classMatch.Value.BaseTypes.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList()
             : [];
 
         var methods = new List<MethodDeclaration>();
@@ -159,11 +158,11 @@ public class PythonSourceParser : ISourceParser
             nextLine++;
         }
 
-        var defMatch = Regex.Match(fullDef, @"def\s+(\w+)\s*\(([^)]*)\)");
-        if (!defMatch.Success) return (null, nextLine);
+        var defMatch = ParseDefHeader(fullDef);
+        if (defMatch is null) return (null, nextLine);
 
-        string methodName = defMatch.Groups[1].Value;
-        var parameters = ParseParameters(defMatch.Groups[2].Value);
+        string methodName = defMatch.Value.Name;
+        var parameters = ParseParameters(defMatch.Value.Parameters);
 
         var modifiers = Modifier.None;
         if (isAsync) modifiers |= Modifier.Async;
@@ -198,8 +197,7 @@ public class PythonSourceParser : ISourceParser
         statements.AddRange(methodStatements);
 
         string? returnType = null;
-        var retMatch = Regex.Match(fullDef, @"\)\s*->\s*(\S+)\s*:");
-        if (retMatch.Success) returnType = retMatch.Groups[1].Value;
+        returnType = ParseReturnType(fullDef);
 
         var retRef = returnType != null ? new TypeReference(returnType, null, [], returnType) : null;
         return (new MethodDeclaration(methodName, modifiers, decorators,
@@ -227,14 +225,14 @@ public class PythonSourceParser : ISourceParser
             // except clauses
             if (trimmed.StartsWith("except") && (trimmed.Length == 6 || trimmed[6] is ' ' or ':'))
             {
-                var exceptMatch = Regex.Match(trimmed, @"^except\s*(?:\(([^)]+)\)|(\w[\w.]*))?(?:\s+as\s+\w+)?\s*:");
                 string? caughtType = null;
+                var exceptMatch = ParseExceptClause(trimmed);
                 if (exceptMatch.Success)
                 {
                     // Group 1: tuple form (Foo, Bar), Group 2: single type
-                    caughtType = exceptMatch.Groups[1].Success
-                        ? exceptMatch.Groups[1].Value.Split(',')[0].Trim()
-                        : exceptMatch.Groups[2].Success ? exceptMatch.Groups[2].Value : null;
+                    caughtType = exceptMatch.TupleTypes is not null
+                        ? exceptMatch.TupleTypes.Split(',')[0].Trim()
+                        : exceptMatch.SingleType;
                 }
 
                 // Check for bare raise in the except body (same indentation level as the except block's children)
@@ -280,8 +278,7 @@ public class PythonSourceParser : ISourceParser
         // raise with type: raise SomeException(...)
         if (trimmed.StartsWith("raise "))
         {
-            var raiseMatch = Regex.Match(trimmed, @"^raise\s+(\w+)");
-            string? typeName = raiseMatch.Success ? raiseMatch.Groups[1].Value : null;
+            string? typeName = ParseRaisedType(trimmed);
             statements.Add(new StatementInfo("throw", [], typeName, null, [], lineNumber, isInMethod));
             return;
         }
@@ -293,11 +290,11 @@ public class PythonSourceParser : ISourceParser
         }
 
         // Function/method call: name(...) or module.name(...)
-        var callMatch = Regex.Match(trimmed, @"^(?:(?:await\s+)?(?:(\w[\w.]*?)\.)?)?(\w+)\s*\(");
+        var callMatch = ParseCall(trimmed);
         if (callMatch.Success)
         {
-            string? typeName = callMatch.Groups[1].Success ? callMatch.Groups[1].Value : null;
-            string memberName = callMatch.Groups[2].Value;
+            string? typeName = callMatch.TypeName;
+            string memberName = callMatch.MemberName!;
 
             // Skip control flow keywords that look like calls
             if (memberName is "if" or "for" or "while" or "with" or "elif" or "def" or "class"
@@ -305,9 +302,9 @@ public class PythonSourceParser : ISourceParser
                 return;
 
             // Extract simple arguments
-            var argsMatch = Regex.Match(trimmed, @"\(([^)]*)\)");
-            var args = argsMatch.Success && !string.IsNullOrWhiteSpace(argsMatch.Groups[1].Value)
-                ? argsMatch.Groups[1].Value.Split(',', StringSplitOptions.TrimEntries).ToList()
+            var argsText = ParseParenthesizedArguments(trimmed);
+            var args = argsText is not null && !string.IsNullOrWhiteSpace(argsText)
+                ? argsText.Split(',', StringSplitOptions.TrimEntries).ToList()
                 : new List<string>();
 
             statements.Add(new StatementInfo("call", [], typeName, memberName, args, lineNumber, isInMethod));
@@ -436,16 +433,15 @@ public class PythonSourceParser : ISourceParser
             var trimmed = lines[i].TrimStart();
             if (trimmed.StartsWith("# [START"))
             {
-                var match = Regex.Match(trimmed, @"^#\s*\[START\s+(.+?)\]");
-                if (match.Success)
-                    stack.Push((match.Groups[1].Value, i + 1));
+                var name = ParseRegionMarker(trimmed, "START");
+                if (name is not null)
+                    stack.Push((name, i + 1));
             }
             else if (trimmed.StartsWith("# [END") && stack.Count > 0)
             {
-                var match = Regex.Match(trimmed, @"^#\s*\[END\s+(.+?)\]");
-                if (match.Success)
+                var endName = ParseRegionMarker(trimmed, "END");
+                if (endName is not null)
                 {
-                    var endName = match.Groups[1].Value;
                     // Pop matching region from stack
                     var items = new List<(string Name, int Line)>();
                     while (stack.Count > 0)
@@ -472,6 +468,284 @@ public class PythonSourceParser : ISourceParser
         }
 
         return regions;
+    }
+
+    private static string? ParseFromImportModule(string text)
+    {
+        var index = "from".Length;
+        if (!text.StartsWith("from", StringComparison.Ordinal) || !HasWhitespaceAt(text, index))
+            return null;
+
+        index = SkipWhitespace(text, index);
+        var start = index;
+        while (index < text.Length && !char.IsWhiteSpace(text[index]))
+            index++;
+        if (index == start || !HasWhitespaceAt(text, index))
+            return null;
+
+        var module = text[start..index];
+        index = SkipWhitespace(text, index);
+        return StartsWithAt(text, index, "import") ? module : null;
+    }
+
+    private static (string Name, string? BaseTypes)? ParseClassHeader(string text)
+    {
+        var classIndex = text.IndexOf("class", StringComparison.Ordinal);
+        if (classIndex < 0)
+            return null;
+
+        var index = classIndex + "class".Length;
+        if (!HasWhitespaceAt(text, index))
+            return null;
+        index = SkipWhitespace(text, index);
+
+        var nameStart = index;
+        while (index < text.Length && IsWordChar(text[index]))
+            index++;
+        if (index == nameStart)
+            return null;
+
+        var name = text[nameStart..index];
+        index = SkipWhitespace(text, index);
+
+        string? baseTypes = null;
+        if (index < text.Length && text[index] == '(')
+        {
+            var baseStart = index + 1;
+            var close = text.IndexOf(')', baseStart);
+            if (close < 0)
+                return null;
+            baseTypes = text[baseStart..close];
+            index = close + 1;
+            index = SkipWhitespace(text, index);
+        }
+
+        return index < text.Length && text[index] == ':' ? (name, baseTypes) : null;
+    }
+
+    private static (string Name, string Parameters)? ParseDefHeader(string text)
+    {
+        var defIndex = text.IndexOf("def", StringComparison.Ordinal);
+        if (defIndex < 0)
+            return null;
+
+        var index = defIndex + "def".Length;
+        if (!HasWhitespaceAt(text, index))
+            return null;
+        index = SkipWhitespace(text, index);
+
+        var nameStart = index;
+        while (index < text.Length && IsWordChar(text[index]))
+            index++;
+        if (index == nameStart)
+            return null;
+
+        var name = text[nameStart..index];
+        index = SkipWhitespace(text, index);
+        if (index >= text.Length || text[index] != '(')
+            return null;
+
+        var parametersStart = index + 1;
+        var close = text.IndexOf(')', parametersStart);
+        return close >= 0 ? (name, text[parametersStart..close]) : null;
+    }
+
+    private static string? ParseReturnType(string text)
+    {
+        var searchIndex = 0;
+        while (searchIndex < text.Length)
+        {
+            var closeParen = text.IndexOf(')', searchIndex);
+            if (closeParen < 0)
+                return null;
+
+            var index = SkipWhitespace(text, closeParen + 1);
+            if (!StartsWithAt(text, index, "->"))
+            {
+                searchIndex = closeParen + 1;
+                continue;
+            }
+
+            index = SkipWhitespace(text, index + 2);
+            var typeStart = index;
+            while (index < text.Length && !char.IsWhiteSpace(text[index]))
+                index++;
+
+            for (var end = index; end > typeStart; end--)
+            {
+                var afterType = SkipWhitespace(text, end);
+                if (afterType < text.Length && text[afterType] == ':')
+                    return text[typeStart..end];
+            }
+
+            searchIndex = closeParen + 1;
+        }
+
+        return null;
+    }
+
+    private static (bool Success, string? TupleTypes, string? SingleType) ParseExceptClause(string text)
+    {
+        var index = "except".Length;
+        if (!text.StartsWith("except", StringComparison.Ordinal))
+            return (false, null, null);
+
+        index = SkipWhitespace(text, index);
+        string? tupleTypes = null;
+        string? singleType = null;
+
+        if (index < text.Length && text[index] == '(')
+        {
+            var tupleStart = index + 1;
+            var close = text.IndexOf(')', tupleStart);
+            if (close < 0 || close == tupleStart)
+                return (false, null, null);
+            tupleTypes = text[tupleStart..close];
+            index = close + 1;
+        }
+        else if (index < text.Length && IsWordChar(text[index]))
+        {
+            var typeStart = index;
+            index++;
+            while (index < text.Length && (IsWordChar(text[index]) || text[index] == '.'))
+                index++;
+            singleType = text[typeStart..index];
+        }
+
+        if (HasWhitespaceAt(text, index))
+        {
+            var asIndex = SkipWhitespace(text, index);
+            if (StartsWithAt(text, asIndex, "as") && HasWhitespaceAt(text, asIndex + "as".Length))
+            {
+                var nameIndex = SkipWhitespace(text, asIndex + "as".Length);
+                if (nameIndex >= text.Length || !IsWordChar(text[nameIndex]))
+                    return (false, null, null);
+                nameIndex++;
+                while (nameIndex < text.Length && IsWordChar(text[nameIndex]))
+                    nameIndex++;
+                index = nameIndex;
+            }
+        }
+
+        index = SkipWhitespace(text, index);
+        return index < text.Length && text[index] == ':'
+            ? (true, tupleTypes, singleType)
+            : (false, null, null);
+    }
+
+    private static string? ParseRaisedType(string text)
+    {
+        var index = "raise".Length;
+        if (!text.StartsWith("raise", StringComparison.Ordinal) || !HasWhitespaceAt(text, index))
+            return null;
+
+        index = SkipWhitespace(text, index);
+        var start = index;
+        while (index < text.Length && IsWordChar(text[index]))
+            index++;
+
+        return index > start ? text[start..index] : null;
+    }
+
+    private static (bool Success, string? TypeName, string? MemberName) ParseCall(string text)
+    {
+        var withPrefix = ParseCallCore(text, allowAwait: true);
+        return withPrefix.Success ? withPrefix : ParseCallCore(text, allowAwait: false);
+    }
+
+    private static (bool Success, string? TypeName, string? MemberName) ParseCallCore(string text, bool allowAwait)
+    {
+        var index = 0;
+        if (allowAwait && StartsWithAt(text, 0, "await") && HasWhitespaceAt(text, "await".Length))
+            index = SkipWhitespace(text, "await".Length);
+
+        var tokenStart = index;
+        if (index >= text.Length || !IsWordChar(text[index]))
+            return (false, null, null);
+
+        while (index < text.Length && (IsWordChar(text[index]) || text[index] == '.'))
+            index++;
+
+        var token = text[tokenStart..index];
+        index = SkipWhitespace(text, index);
+        if (index >= text.Length || text[index] != '(')
+            return (false, null, null);
+
+        var dot = token.LastIndexOf('.');
+        if (dot >= 0)
+        {
+            if (dot == 0 || dot == token.Length - 1)
+                return (false, null, null);
+
+            var member = token[(dot + 1)..];
+            if (!AllWordChars(member))
+                return (false, null, null);
+
+            return (true, token[..dot], member);
+        }
+
+        return AllWordChars(token) ? (true, null, token) : (false, null, null);
+    }
+
+    private static string? ParseParenthesizedArguments(string text)
+    {
+        var open = text.IndexOf('(');
+        if (open < 0)
+            return null;
+
+        var close = text.IndexOf(')', open + 1);
+        return close >= 0 ? text[(open + 1)..close] : null;
+    }
+
+    private static string? ParseRegionMarker(string text, string marker)
+    {
+        var index = 0;
+        if (index >= text.Length || text[index] != '#')
+            return null;
+        index++;
+        index = SkipWhitespace(text, index);
+
+        var prefix = "[" + marker;
+        if (!StartsWithAt(text, index, prefix))
+            return null;
+        index += prefix.Length;
+        if (!HasWhitespaceAt(text, index))
+            return null;
+        index = SkipWhitespace(text, index);
+
+        var end = text.IndexOf(']', index);
+        return end > index ? text[index..end] : null;
+    }
+
+    private static int SkipWhitespace(string text, int index)
+    {
+        while (index < text.Length && char.IsWhiteSpace(text[index]))
+            index++;
+        return index;
+    }
+
+    private static bool HasWhitespaceAt(string text, int index) =>
+        index < text.Length && char.IsWhiteSpace(text[index]);
+
+    private static bool StartsWithAt(string text, int index, string value) =>
+        index >= 0
+        && index <= text.Length - value.Length
+        && string.CompareOrdinal(text, index, value, 0, value.Length) == 0;
+
+    private static bool IsWordChar(char ch) =>
+        ch is >= 'a' and <= 'z'
+            or >= 'A' and <= 'Z'
+            or >= '0' and <= '9'
+            or '_';
+
+    private static bool AllWordChars(string text)
+    {
+        foreach (var ch in text)
+        {
+            if (!IsWordChar(ch))
+                return false;
+        }
+        return text.Length > 0;
     }
 
     private static HashSet<int> ExtractCommentLines(string[] lines)

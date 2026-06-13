@@ -2,7 +2,6 @@ using System;
 using System.CommandLine;
 using System.CommandLine.Parsing;
 using System.IO;
-using System.Text.RegularExpressions;
 
 namespace Cop.Cli.Commands;
 
@@ -21,10 +20,22 @@ public static class NewCommand
         return command;
     }
 
+    // Valid package name: starts with a lowercase letter, then lowercase letters, digits, or hyphens.
+    private static bool IsValidPackageName(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return false;
+        if (name[0] is < 'a' or > 'z') return false;
+        foreach (var c in name)
+        {
+            if (!(c is >= 'a' and <= 'z' or >= '0' and <= '9') && c != '-') return false;
+        }
+        return true;
+    }
+
     public static void Execute(string name)
     {
         // Validate package name format
-        if (!Regex.IsMatch(name, @"^[a-z][a-z0-9-]*$"))
+        if (!IsValidPackageName(name))
         {
             Console.Error.WriteLine($"Error: Package name '{name}' is invalid. Must start with lowercase letter and contain only lowercase letters, numbers, and hyphens.");
             Environment.Exit(1);

@@ -33,28 +33,29 @@ public class CSharpProvider : DataProvider
         CodeCollectionBuilder.CollectSourceFiles(rootPath, parsers, excluded, filePaths);
 
         // Retry with backoff if 0 files found (handles antivirus interference)
+        // Only retry if directory actually contains .cs files (not just other file types)
         if (filePaths.Count == 0 && Directory.Exists(rootPath))
         {
-            try
+            bool hasCsFiles = Directory.EnumerateFiles(rootPath, "*.cs", SearchOption.AllDirectories).Any();
+            if (hasCsFiles)
             {
-                if (Directory.EnumerateFileSystemEntries(rootPath).Any())
+                int[] delays = [200, 1000, 3000];
+                foreach (var delay in delays)
                 {
-                    int[] delays = [200, 1000, 3000];
-                    foreach (var delay in delays)
-                    {
-                        Thread.Sleep(delay);
-                        CodeCollectionBuilder.CollectSourceFiles(rootPath, parsers, excluded, filePaths);
-                        if (filePaths.Count > 0) break;
-                    }
-                    if (filePaths.Count == 0)
-                        Console.Error.WriteLine($"Error: Provider scan found 0 source files in '{rootPath}' after 3 retries. This likely indicates filesystem interference (antivirus, file locks). Results are unreliable.");
+                    Thread.Sleep(delay);
+                    CodeCollectionBuilder.CollectSourceFiles(rootPath, parsers, excluded, filePaths);
+                    if (filePaths.Count > 0) break;
                 }
+                if (filePaths.Count == 0)
+                    throw new InvalidOperationException(
+                        $"Provider scan found 0 source files in '{rootPath}' after 3 retries. " +
+                        "This likely indicates filesystem interference (antivirus, file locks).");
             }
-            catch { }
         }
 
         // 2. Parse syntax trees and read source text
         var syntaxTrees = new List<(SyntaxTree Tree, string FilePath, string Text)>();
+        var fileErrors = new List<string>();
         foreach (var filePath in filePaths)
         {
             if (!filePath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)) continue;
@@ -66,7 +67,19 @@ public class CSharpProvider : DataProvider
                 var tree = CSharpSyntaxTree.ParseText(text, path: filePath);
                 syntaxTrees.Add((tree, filePath, text));
             }
-            catch { }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                fileErrors.Add($"Failed to read '{filePath}': {ex.Message}");
+            }
+        }
+
+        if (fileErrors.Count > 0)
+        {
+            foreach (var err in fileErrors)
+                Console.Error.WriteLine(err);
+            if (syntaxTrees.Count == 0)
+                throw new InvalidOperationException(
+                    $"Failed to read all {fileErrors.Count} source file(s). First error: {fileErrors[0]}");
         }
 
         // 3. Create Roslyn compilation with framework + project references
@@ -85,7 +98,10 @@ public class CSharpProvider : DataProvider
         {
             SemanticModel? model = null;
             try { model = compilation.GetSemanticModel(tree); }
-            catch { }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                Console.Error.WriteLine($"Warning: Semantic analysis failed for '{filePath}': {ex.Message}");
+            }
 
             var sourceFile = parser.ParseWithSemantics(filePath, text, tree, model);
             if (sourceFile is null) continue;

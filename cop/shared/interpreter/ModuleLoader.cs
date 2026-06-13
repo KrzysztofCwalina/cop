@@ -257,7 +257,10 @@ public sealed class ModuleLoader
                 if (json.Contains("\"provider\"", StringComparison.OrdinalIgnoreCase))
                     _providerPackages.Add((packageDir, packageName));
             }
-            catch { }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                _errors.Add($"Failed to read provider metadata '{metaFile}': {ex.Message}");
+            }
         }
     }
 

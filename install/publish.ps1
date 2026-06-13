@@ -152,6 +152,10 @@ if (-not $SkipBuild) {
     Write-Host "Building tool-providers..."
     dotnet build "$RepoRoot\providers\tool-providers\tool-providers.csproj" -c Release
     if ($LASTEXITCODE -ne 0) { throw "tool-providers build failed" }
+
+    Write-Host "Building ai-provider..."
+    dotnet build "$RepoRoot\providers\ai-provider\src\AiProvider.csproj" -c Release
+    if ($LASTEXITCODE -ne 0) { throw "ai-provider build failed" }
 }
 
 foreach ($rid in $Runtimes) {

@@ -65,6 +65,7 @@ public static class RunCommand
         // Resolve imports to find imported script files
         var feedPaths = FindFeedPathsFromCwd();
         var importedFiles = new List<ScriptFile>();
+        var importErrors = new List<string>();
         foreach (var sf in scriptFiles)
         {
             foreach (var imp in sf.Imports)
@@ -82,12 +83,22 @@ public static class RunCommand
                                 var source = File.ReadAllText(impFile);
                                 importedFiles.Add(Cop.Lang.Parser.CopParser.ParseFile(source, impFile));
                             }
-                            catch { /* skip unparseable import files */ }
+                            catch (Exception ex) when (ex is not OutOfMemoryException)
+                            {
+                                importErrors.Add($"Failed to parse import file '{impFile}': {ex.Message}");
+                            }
                         }
                         break;
                     }
                 }
             }
+        }
+
+        if (importErrors.Count > 0)
+        {
+            foreach (var error in importErrors)
+                Console.Error.WriteLine(error);
+            return 2;
         }
 
         // Transpile each script file
@@ -509,7 +520,11 @@ public static class RunCommand
             }
         }
 
-        // Exit non-zero when output was produced (violations found) or when warnings indicate unreliable results
+        // Use explicit exit code from command if available (e.g., CHECK returns violation count)
+        if (result.ExitCode is not null)
+            return result.ExitCode.Value != 0 ? 1 : 0;
+
+        // Fallback: exit non-zero when output was produced or when warnings indicate unreliable results
         bool hasUnreliableWarnings = result.Warnings is { Count: > 0 } && result.Warnings.Any(w => w.StartsWith("Error:"));
         return result.Outputs.Count > 0 || result.HasParseErrors || hasUnreliableWarnings ? 1 : 0;
     }

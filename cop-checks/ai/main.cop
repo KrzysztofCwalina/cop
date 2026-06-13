@@ -1,0 +1,15 @@
+# AI self-checks — composition + entry point.
+#
+# These rules use an LLM (ai.judge) to evaluate abstract requirements that static
+# analysis cannot express. They make network calls and require ~/.cop/ai.json
+# (see packages/ai), so they are kept SEPARATE from the deterministic, network-free
+# root cop-checks/main.cop.
+#
+# Run: cop cop-checks/ai/main.cop -t . -p csharp
+
+import code-analysis
+
+export let all-ai-violations =
+    core-purity-violations
+
+command MAIN = CHECK(all-ai-violations)

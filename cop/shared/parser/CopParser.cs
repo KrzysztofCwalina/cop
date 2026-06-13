@@ -193,6 +193,16 @@ public class CopParser
         if (IsKeyword(token, "import"))
             return ParseImportDecl(line);
 
+        // async foreach (streaming command sugar)
+        if (token.Kind == TokenKind.AsyncKeyword)
+        {
+            Advance(); // consume 'async'
+            if (!Check(TokenKind.ForeachKeyword))
+                throw new ParseException("Expected 'foreach' after 'async'", _filePath, CurrentLine(),
+                    sourceLine: ParseException.GetSourceLine(_source ?? "", CurrentLine()));
+            return ParseForeachAsCommand(isExported, docComment, line, isAsync: true);
+        }
+
         // foreach (top-level command sugar)
         if (IsKeyword(token, "foreach"))
             return ParseForeachAsCommand(isExported, docComment, line);
@@ -574,10 +584,10 @@ public class CopParser
         return new FunctionDecl(upperName, parameters, null, body, isExported, null, docComment, line);
     }
 
-    private Declaration ParseForeachAsCommand(bool isExported, string? docComment, int line)
+    private Declaration ParseForeachAsCommand(bool isExported, string? docComment, int line, bool isAsync = false)
     {
         // foreach at top-level is sugar for an uppercase command function
-        var stmt = ParseForEachStatement();
+        var stmt = ParseForEachStatement(isAsync);
         var body = new BlockBody(new List<Statement> { stmt });
         return new FunctionDecl("__FOREACH__", new List<Parameter>(), null, body, isExported, null, docComment, line);
     }
@@ -662,7 +672,7 @@ public class CopParser
         return new LetStatement(name, typeAnnotation, value, line);
     }
 
-    private ForEachStatement ParseForEachStatement()
+    private ForEachStatement ParseForEachStatement(bool isAsync = false)
     {
         int line = CurrentLine();
         Advance(); // consume 'foreach'
@@ -678,7 +688,7 @@ public class CopParser
             body.Add(new ExpressionStatement(stageExpr, stageExpr.Line));
         }
 
-        return new ForEachStatement("__item__", collection, body, line);
+        return new ForEachStatement("__item__", collection, body, line, isAsync);
     }
 
     // ========================================================================

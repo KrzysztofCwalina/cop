@@ -351,12 +351,11 @@ export let no-hungarian-prefix = Types:hasHungarianPrefix
     :toWarning('FDG Naming: {item.Name} uses Hungarian C prefix — remove it')
 
 # Parameters must use camelCase (start with lowercase)
-predicate isUppercaseParam(Parameter) => Parameter.Name:matches('^[A-Z]')
-predicate hasUppercaseParam(Type) => Type.Methods.Where(isPublic).Parameters:any(isUppercaseParam)
-
-## FDG: Parameters must use camelCase
-export let param-camel-case = Types:hasUppercaseParam
-    :toWarning('FDG Naming: {item.Name} has a parameter that does not use camelCase')
+# NOTE: disabled — requires Method.Parameters sub-collection which is not yet available
+# predicate isUppercaseParam(Statement) => Statement.Kind:equals('parameter') && Statement.MemberName:matches('^[A-Z]')
+# predicate hasUppercaseParam(Type) => Type.Statements:any(isUppercaseParam)
+# export let param-camel-case = Types:hasUppercaseParam
+#     :toWarning('FDG Naming: {item.Name} has a parameter that does not use camelCase')
 
 # Boolean properties should use affirmative naming (Is/Has/Can/Should/Was/Will)
 predicate isBoolProperty(Property) => Property:isPublic && Property.Type.Name == 'bool'
@@ -377,7 +376,7 @@ export let namespace-segments = Types:hasShortNamespace
     :toInfo('FDG Naming: Namespace {item.File.Namespace} should have at least two segments (e.g., Company.Product)')
 
 ## Combined FDG naming checks
-export let fdg-naming = exception-suffix + attribute-suffix + eventargs-suffix + stream-suffix + no-hungarian-prefix + param-camel-case + bool-property-naming + namespace-segments
+export let fdg-naming = exception-suffix + attribute-suffix + eventargs-suffix + stream-suffix + no-hungarian-prefix + bool-property-naming + namespace-segments
 
 ## Framework Design Guidelines — Type Design
 

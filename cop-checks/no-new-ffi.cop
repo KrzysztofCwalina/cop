@@ -1,0 +1,28 @@
+# New runtime FFIs must be explicitly approved — the FFI surface must not grow silently.
+# Capabilities belong in .cop packages, not as new ffi.Register intrinsics in the language core.
+# (This is the guard that should have caught CHECK being moved into the runtime.)
+
+import code
+import code-analysis
+import code-layering
+
+# Approved built-in FFI names. The argument text includes the surrounding quotes.
+let approved-ffi-names = [
+    '"print"', '"debug"', '"save"', '"assert"', '"fail"', '"error"', '"read"',
+    '"pathMatches"', '"provider"', '"distinct"', '"take"', '"skip"', '"first"',
+    '"last"', '"text"', '"concat"', '"push"', '"enqueue"', '"pop"', '"elementAt"',
+    '"empty"', '"startsWith"', '"endsWith"', '"contains"', '"equals"', '"notEquals"',
+    '"matches"', '"length"', '"isSet"', '"isClear"'
+]
+
+predicate isFfiRegister(Statement) =>
+    Statement.Kind:equals('call')
+    && Statement.MemberName:equals('Register')
+    && Statement.TypeName:equals('ffi')
+
+predicate registersApprovedName(Statement) => Statement.Arguments:containsAny(approved-ffi-names)
+
+predicate isUnapprovedFfi(Statement) => isFfiRegister && !registersApprovedName
+
+export let no-new-ffi = Statements:isUnapprovedFfi
+    :toError('New runtime FFI registered without approval. The FFI surface must not grow — implement the capability as a .cop package, or get sign-off and add its name to approved-ffi-names.')

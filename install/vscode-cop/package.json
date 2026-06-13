@@ -35,5 +35,15 @@
                 "path": "./syntaxes/cop.tmLanguage.json"
             }
         ]
+    },
+    "scripts": {
+        "test": "jest --no-coverage"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "type": "commonjs",
+    "devDependencies": {
+        "jest": "^30.4.2"
     }
 }

@@ -13,6 +13,7 @@ export let all-violations =
     no-new-interfaces + 
     layering-violations +
     no-aspnet-in-cli +
+    no-new-ffi +
     no-regex
 
 command MAIN = CHECK(all-violations)

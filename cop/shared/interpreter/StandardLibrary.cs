@@ -87,7 +87,10 @@ public static class StandardLibrary
                     Directory.CreateDirectory(dir);
                 File.AppendAllText(path, content + System.Environment.NewLine);
             }
-            catch { /* silently fail for now */ }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                throw new CopEvaluationException($"save('{path}') failed: {ex.Message}");
+            }
             return CopNull.Instance;
         });
 
@@ -543,9 +546,9 @@ public static class StandardLibrary
             {
                 return CopBool.Of(RegexCache.IsMatch(str, pattern));
             }
-            catch
+            catch (Exception ex)
             {
-                return CopBool.False;
+                throw new CopEvaluationException($"Invalid regex pattern '{pattern}': {ex.Message}");
             }
         });
 

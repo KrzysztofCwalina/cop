@@ -148,6 +148,7 @@ const categories = [
   {
     "name": "Core",
     "packages": [
+      "ai",
       "core",
       "files",
       "json",
@@ -252,6 +253,17 @@ const categories = [
 ];
 
 const packages = {
+  "ai": {
+    "label": "ai",
+    "overview": "LLM-based code review — ai.judge(requirement, code) returns [Violation]",
+    "samples": [],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [],
+    "checks": [],
+    "commands": []
+  },
   "analysis-checkov": {
     "label": "analysis-checkov",
     "overview": "Run Checkov IaC security scanner",
@@ -1687,17 +1699,12 @@ const packages = {
             "name": "Source",
             "type": "string",
             "desc": ""
-          },
-          {
-            "name": "CopIgnore",
-            "type": "string",
-            "desc": ""
           }
         ]
       },
       "TextFilePosition": {
         "desc": "A type that has a source location (file path and line number).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L25",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L24",
         "isTrait": true,
         "props": [
           {
@@ -1709,15 +1716,42 @@ const packages = {
             "name": "line",
             "type": "(item: T) => int",
             "desc": ""
-          },
-          {
-            "name": "copIgnore",
-            "type": "(item: T) => string",
-            "desc": ""
           }
         ]
       },
       "Statement": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L30",
+        "baseType": "TextFilePosition",
+        "props": [
+          {
+            "name": "filePath",
+            "type": "computed",
+            "desc": ""
+          },
+          {
+            "name": "line",
+            "type": "computed",
+            "desc": ""
+          }
+        ]
+      },
+      "Type": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L31",
+        "baseType": "TextFilePosition",
+        "props": [
+          {
+            "name": "filePath",
+            "type": "computed",
+            "desc": ""
+          },
+          {
+            "name": "line",
+            "type": "computed",
+            "desc": ""
+          }
+        ]
+      },
+      "Api": {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L32",
         "baseType": "TextFilePosition",
         "props": [
@@ -1730,15 +1764,10 @@ const packages = {
             "name": "line",
             "type": "computed",
             "desc": ""
-          },
-          {
-            "name": "copIgnore",
-            "type": "computed",
-            "desc": ""
           }
         ]
       },
-      "Type": {
+      "Line": {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L33",
         "baseType": "TextFilePosition",
         "props": [
@@ -1751,15 +1780,10 @@ const packages = {
             "name": "line",
             "type": "computed",
             "desc": ""
-          },
-          {
-            "name": "copIgnore",
-            "type": "computed",
-            "desc": ""
           }
         ]
       },
-      "Api": {
+      "Region": {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L34",
         "baseType": "TextFilePosition",
         "props": [
@@ -1772,15 +1796,10 @@ const packages = {
             "name": "line",
             "type": "computed",
             "desc": ""
-          },
-          {
-            "name": "copIgnore",
-            "type": "computed",
-            "desc": ""
           }
         ]
       },
-      "Line": {
+      "Folder": {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L35",
         "baseType": "TextFilePosition",
         "props": [
@@ -1793,69 +1812,16 @@ const packages = {
             "name": "line",
             "type": "computed",
             "desc": ""
-          },
-          {
-            "name": "copIgnore",
-            "type": "computed",
-            "desc": ""
-          }
-        ]
-      },
-      "Region": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L36",
-        "baseType": "TextFilePosition",
-        "props": [
-          {
-            "name": "filePath",
-            "type": "computed",
-            "desc": ""
-          },
-          {
-            "name": "line",
-            "type": "computed",
-            "desc": ""
-          },
-          {
-            "name": "copIgnore",
-            "type": "computed",
-            "desc": ""
-          }
-        ]
-      },
-      "Folder": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L37",
-        "baseType": "TextFilePosition",
-        "props": [
-          {
-            "name": "filePath",
-            "type": "computed",
-            "desc": ""
-          },
-          {
-            "name": "line",
-            "type": "computed",
-            "desc": ""
-          },
-          {
-            "name": "copIgnore",
-            "type": "computed",
-            "desc": ""
           }
         ]
       }
     },
     "predicates": [
       {
-        "name": "isNotIgnored",
-        "appliesTo": "Violation",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L99"
-      },
-      {
         "name": "isSyncWhenAsyncExists",
         "appliesTo": "Statement",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L106"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L102"
       }
     ],
     "functions": [
@@ -1863,7 +1829,7 @@ const packages = {
         "name": "severityLabel",
         "params": "Violation: Violation",
         "returns": "string",
-        "desc": "Maps numeric severity to a display label.",
+        "desc": "Maps numeric severity to a display label (error / warning / info), aligned with the\nvalues toError (1.0), toWarning (0.5), and toInfo (0.2) set.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L19"
       },
       {
@@ -1871,35 +1837,42 @@ const packages = {
         "params": "TextFilePosition: TextFilePosition, message: string",
         "returns": "Violation",
         "desc": "Creates an error-severity violation (Severity = 1.0).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L42"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L40"
       },
       {
         "name": "toWarning",
         "params": "TextFilePosition: TextFilePosition, message: string",
         "returns": "Violation",
         "desc": "Creates a warning-severity violation (Severity = 0.5).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L53"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L50"
       },
       {
         "name": "toInfo",
         "params": "TextFilePosition: TextFilePosition, message: string",
         "returns": "Violation",
         "desc": "Creates an info-severity violation (Severity = 0.2).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L64"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L60"
       },
       {
         "name": "toViolation",
         "params": "TextFilePosition: TextFilePosition, message: string, severity: float, certainty: float",
         "returns": "Violation",
         "desc": "Creates a violation with explicit severity and certainty.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L75"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L70"
       },
       {
         "name": "withSeverity",
         "params": "Violation: Violation, s: float",
         "returns": "Violation",
         "desc": "Re-stamps an existing violation with a new severity (for weight adjustment).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L86"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L80"
+      },
+      {
+        "name": "checkLine",
+        "params": "Violation: Violation, level: string",
+        "returns": "string",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L93"
       }
     ],
     "checks": [],
@@ -1908,7 +1881,7 @@ const packages = {
         "name": "CHECK",
         "params": "violations",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L100"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-analysis/src/code-analysis.cop#L96"
       }
     ]
   },

@@ -44,26 +44,8 @@ public abstract class ToolProvider : DataProvider
         var rootPath = query.RootPath ?? Directory.GetCurrentDirectory();
         var excluded = query.ExcludedDirectories ?? new HashSet<string>();
 
-        try
-        {
-            var violations = RunTool(rootPath, excluded);
-            return new Dictionary<string, List<object>> { ["Violations"] = violations };
-        }
-        catch (FileNotFoundException)
-        {
-            Console.Error.WriteLine($"Error: {ToolName} not found. Is it installed and on PATH?");
-            return new Dictionary<string, List<object>> { ["Violations"] = [] };
-        }
-        catch (TimeoutException ex)
-        {
-            Console.Error.WriteLine($"Warning: {ex.Message}");
-            return new Dictionary<string, List<object>> { ["Violations"] = [] };
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"Error running {ToolName}: {ex.Message}");
-            return new Dictionary<string, List<object>> { ["Violations"] = [] };
-        }
+        var violations = RunTool(rootPath, excluded);
+        return new Dictionary<string, List<object>> { ["Violations"] = violations };
     }
 
     protected abstract string ToolName { get; }

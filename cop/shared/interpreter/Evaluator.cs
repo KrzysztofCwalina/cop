@@ -854,13 +854,15 @@ public sealed class Evaluator
                         if (passes) mapped.Add(item);
                     }
                 }
+                catch (CopEvaluationException ex)
+                {
+                    throw new CopEvaluationException(
+                        $"Predicate '{predName}' failed on item {itemCount}: {ex.Message}");
+                }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
-                    if (firstItem)
-                    {
-                        _traceLog?.Invoke($"[trace] EvalFilter: predicate threw on first item: {ex.Message}");
-                        firstItem = false;
-                    }
+                    throw new CopEvaluationException(
+                        $"Predicate '{predName}' failed on item {itemCount}: {ex.Message}");
                 }
             }
 
@@ -977,7 +979,7 @@ public sealed class Evaluator
                     // Built-in :in([...]) membership test
                     if (methodName == "in" && call.Args.Count == 1)
                     {
-                        var listVal = Eval(call.Args[0], env);
+                        var listVal = ForceValue(Eval(call.Args[0], env));
                         if (listVal is CopList list)
                             return CopBool.Of(EvalInMembership(subject, list));
                     }
@@ -1050,7 +1052,7 @@ public sealed class Evaluator
                     // Built-in :in([...]) membership test
                     if (methodName == "in" && call.Args.Count == 1)
                     {
-                        var listVal = Eval(call.Args[0], env);
+                        var listVal = ForceValue(Eval(call.Args[0], env));
                         if (listVal is CopList list)
                             return EvalInMembership(subject, list);
                     }

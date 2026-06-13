@@ -1,0 +1,5 @@
+{
+  "endpoint": "https://models.github.ai/inference/chat/completions",
+  "model": "openai/gpt-4.1",
+  "apiKey": "REPLACE_WITH_YOUR_TOKEN"
+}

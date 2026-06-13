@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Cop.Providers.SourceModel;
 
 namespace Cop.Providers;
@@ -42,10 +41,9 @@ public static class GoProjectDiscovery
                 var trimmed = line.Trim();
 
                 // module declaration
-                var moduleMatch = Regex.Match(trimmed, @"^module\s+(\S+)");
-                if (moduleMatch.Success)
+                if (TryReadTokenAfterKeyword(trimmed, "module", requireWhitespaceAfterToken: false, out var modulePath))
                 {
-                    moduleName = moduleMatch.Groups[1].Value;
+                    moduleName = modulePath;
                     continue;
                 }
 
@@ -62,18 +60,16 @@ public static class GoProjectDiscovery
                 }
 
                 // Single-line require
-                var singleReq = Regex.Match(trimmed, @"^require\s+(\S+)\s+");
-                if (singleReq.Success)
+                if (TryReadTokenAfterKeyword(trimmed, "require", requireWhitespaceAfterToken: true, out var dependency))
                 {
-                    dependencies.Add(singleReq.Groups[1].Value);
+                    dependencies.Add(dependency);
                     continue;
                 }
 
                 if (inRequire)
                 {
-                    var depMatch = Regex.Match(trimmed, @"^(\S+)\s+");
-                    if (depMatch.Success && !trimmed.StartsWith("//"))
-                        dependencies.Add(depMatch.Groups[1].Value);
+                    if (TryReadFirstTokenBeforeWhitespace(trimmed, out var blockDependency) && !trimmed.StartsWith("//"))
+                        dependencies.Add(blockDependency);
                 }
             }
 
@@ -89,6 +85,47 @@ public static class GoProjectDiscovery
         {
             return null;
         }
+    }
+
+    private static bool TryReadTokenAfterKeyword(string text, string keyword, bool requireWhitespaceAfterToken, out string token)
+    {
+        token = "";
+        if (!text.StartsWith(keyword, StringComparison.Ordinal))
+            return false;
+
+        var index = keyword.Length;
+        if (index >= text.Length || !char.IsWhiteSpace(text[index]))
+            return false;
+
+        while (index < text.Length && char.IsWhiteSpace(text[index]))
+            index++;
+
+        var tokenStart = index;
+        while (index < text.Length && !char.IsWhiteSpace(text[index]))
+            index++;
+
+        if (index == tokenStart)
+            return false;
+
+        if (requireWhitespaceAfterToken && (index >= text.Length || !char.IsWhiteSpace(text[index])))
+            return false;
+
+        token = text[tokenStart..index];
+        return true;
+    }
+
+    private static bool TryReadFirstTokenBeforeWhitespace(string text, out string token)
+    {
+        token = "";
+        var index = 0;
+        while (index < text.Length && !char.IsWhiteSpace(text[index]))
+            index++;
+
+        if (index == 0 || index >= text.Length)
+            return false;
+
+        token = text[..index];
+        return true;
     }
 
     private static void CollectManifests(string dir, IReadOnlySet<string>? excluded, List<string> result)
