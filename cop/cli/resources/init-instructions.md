@@ -5,56 +5,90 @@ This project uses **Cop** for static analysis checks. All checks live in `cop-ch
 ## How to Run Checks
 
 ```bash
-cop cop-checks/main.cop -t . -p csharp       # Run checks on C# code
-cop cop-checks/main.cop -t . -p python       # Run checks on Python code
-cop cop-checks/main.cop -t . -p csharp -p python  # Multi-language repo
-cop verify cop-checks/                        # Verify check files are correct (no execution)
+cop cop-checks/main.cop -t .          # Run all checks against the repo root
+cop cop-checks/main.cop -t . -c ai    # Run a specific named command (e.g. an AI command)
+cop verify cop-checks/                # Verify check files are correct (no execution)
+cop test tests/                       # Run `test` assertions
 ```
+
+**There is NO `-p` flag in this model.** `main.cop` builds the codebase itself by calling
+each language's `parse()` (see below), so checks run with just `-t <target>`.
 
 **Always run `cop verify` after writing or editing .cop files** to catch syntax/type errors before execution.
 
-### Running Packages Directly
+## The Codebase Model
 
-```bash
-cop csharp-checks -t .                  # Run the csharp-checks package
-cop csharp-checks python-checks -t .    # Run multiple packages
-cop code-metrics -t . -p csharp -p python  # Compute slop metrics across languages
+Source is obtained by calling a language package's `parse()` function, which returns a
+`Codebase`. Combine one or more with the `codebase(...)` function into a single unified
+`Codebase`, then query its collections:
+
+```cop
+import code
+import csharp
+import cop
+
+let codebase = codebase(csharp.parse(), cop.parse())
 ```
+
+A `Codebase` exposes these collections:
+- `codebase.Types` — all types
+- `codebase.Statements` — all statements
+- `codebase.Calls` — all call statements
+- `codebase.Lines` — all source lines
+- `codebase.Files` — all source files
+- `codebase.Regions` — all regions
+- `codebase.Projects` — all projects
+
+Language parsers: `csharp.parse()`, `python.parse()`, `javascript.parse()`, `cop.parse()`.
+Each also accepts a path, e.g. `csharp.parse('src/')`. For a multi-language repo, pass
+several to `codebase(...)`:
+
+```cop
+let codebase = codebase(csharp.parse(), python.parse(), javascript.parse())
+```
+
+Narrow a collection to one language with `isCSharp` / `isPython` / `isJavaScript`
+(e.g. `codebase.Types:isCSharp`).
 
 ## How Checks Are Organized
 
 ```
 cop-checks/
-  main.cop              # Composes all checks → CHECK(all-violations)
-  naming.cop            # One focused check per file
+  main.cop              # Builds the codebase, composes all checks → CHECK(all-violations)
+  namespaces.cop        # One focused check per file
   layering.cop          # Another check
   ...
 ```
 
 Rules:
-- **One check per file** — each file defines a single focused rule
-- **Each file exports a violation list** — `export let my-violations = ...`
-- **Only `main.cop` has a command** — `command MAIN = CHECK(all-violations)`
-- **Never put `command` in individual check files**
+- **`main.cop` builds the codebase** with `let codebase = codebase(...)` and is the ONLY file with a `command`.
+- **One check per file** — each file defines a single focused rule.
+- **Each check file exports a violation list** — `export let my-violations = codebase.Types:isViolating :toError(...)`.
+- Check files reference the shared `codebase` defined in `main.cop` — every file in `cop-checks/` loads together as one program.
+- **Never put a `command` in an individual check file.**
 
 ## Canonical Check File Template
 
 ```cop
 # <Brief description of what this check enforces>
 
-import code
-import code-analysis
-
 predicate isViolating(Type) => <condition>
 
-export let my-violations = Types:isViolating
+export let my-violations = codebase.Types:isViolating
     :toError('<message about {item.Name}>')
 ```
 
 ## Canonical `main.cop` Template
 
 ```cop
-# Run all checks: cop cop-checks/main.cop -t . -p csharp
+# Run all checks: cop cop-checks/main.cop -t .
+
+import code
+import code-analysis
+import csharp
+import cop
+
+let codebase = codebase(csharp.parse(), cop.parse())
 
 export let all-violations =
     check-a-violations +
@@ -71,14 +105,11 @@ command MAIN = CHECK(all-violations)
 ```cop
 # All C# types must be in namespaces
 
-import code
-import code-analysis
-
-predicate isInTestProject(Type) => Type.File.Path:startsWith('tests/')
+predicate isInTestProject(Type) => Type.File.Path:startsWith('tests/') || Type.File.Path:startsWith('samples/')
 predicate hasNamespace(Type) => Type.File.Namespace.Length:greaterThan(0)
-predicate isMissingNamespace(Type) => !hasNamespace && !isInTestProject
+predicate isMissingNamespace(Type:isCSharp) => !hasNamespace && !isInTestProject
 
-export let types-without-namespace = Types:isMissingNamespace
+export let types-without-namespace = codebase.Types:isMissingNamespace
     :toError('{item.Name} in {item.File.Path} must be in a namespace')
 ```
 
@@ -87,8 +118,6 @@ export let types-without-namespace = Types:isMissingNamespace
 ```cop
 # Runtime must not reference providers
 
-import code
-import code-analysis
 import code-layering
 
 let runtime-projects = ['runtime']
@@ -98,48 +127,31 @@ predicate isRuntimeReferencingProvider(Project) =>
     Project.Name:in(runtime-projects)
     && Project.References:containsAny(provider-projects)
 
-export let layering-violations = Projects:isRuntimeReferencingProvider
+export let layering-violations = codebase.Projects:isRuntimeReferencingProvider
     :toError('{item.Name} must not reference providers')
 ```
 
 ## DO NOT — Critical Rules
 
-- **DO NOT use text matching on Lines** when semantic Codebase elements exist. Use `Types`, `Statements`, `Methods`, `File.Usings`, `Type.Name`, `Statement.TypeName`, `Statement.MemberName` etc. instead of `Line.Text:contains(...)`. Line-level text matching is a last resort for patterns that have no semantic representation.
+- **DO NOT implement checks as AI / LLM-based checks** (e.g. `ai.judge`) **unless the human VERY EXPLICITLY asks for an AI check.** Default to static, deterministic checks built from the codebase model (`codebase.Types`, `codebase.Statements`, predicates, etc.). AI checks are non-deterministic, require network access and an API key, and cost money — they are an exception, never the default. If a requirement *seems* to need an LLM, first try to express it as a static check; only reach for `ai.judge` when the human has explicitly requested it.
+- **DO NOT pass `-p` flags.** `main.cop` builds the codebase via `parse()`; run with just `-t <target>`.
+- **DO NOT use text matching on Lines** when semantic Codebase elements exist. Use `codebase.Types`, `codebase.Statements`, `Type.Name`, `Statement.TypeName`, `Statement.MemberName`, `File.Usings` etc. instead of `Line.Text:contains(...)`. Line-level text matching is a last resort for patterns that have no semantic representation.
 - **DO NOT use `foreach` to print violations.** Never write `foreach violations => '{item.Message}'`. Always use `CHECK(violations)`.
-- **DO NOT put `command MAIN` in individual check files.** Only `main.cop` has the command.
-- **DO NOT manually iterate violations.** The pattern is always: filter → `:toError()` → `CHECK()`.
+- **DO NOT put a `command` in an individual check file.** Only `main.cop` has the command.
+- **DO NOT manually iterate violations.** The pattern is always: `codebase.<Collection>:predicate` → `:toError()` → `CHECK()`.
 
 ## Key Syntax
 
 - Strings use **single quotes**: `'hello'`
 - Interpolation: `'{item.Name} has {item.Count} methods'`
 - Styled interpolation: `'{item.File@dim}({item.Line@dim}): {item.Message}'`
-- Filter with colon: `collection:predicate` (e.g., `Types:isPublic`)
-- Chain filters: `Types:isPublic:hasNoTests`
+- Filter with colon: `codebase.Types:isPublic`
+- Chain filters: `codebase.Types:isPublic:hasNoTests`
+- Member access binds to the filter result: `codebase.Types:isPublic.Count`
 - Combine violations: `list-a + list-b`
 - Violation levels: `:toError('...')`, `:toWarning('...')`, `:toInfo('...')`
 - Comments: `#` (no multi-line comments)
 - Predicates are camelCase, types are PascalCase, commands are UPPERCASE
-
-## Providers and Ambient Collections
-
-Providers supply data collections (Types, Statements, Lines, Files, etc.) from source code. Load them with `-p`:
-
-```bash
-cop my-checks.cop -t . -p csharp          # C# code analysis
-cop my-checks.cop -t . -p python          # Python code analysis
-cop my-checks.cop -t . -p javascript      # JavaScript/TypeScript analysis
-cop my-checks.cop -t . -p csharp -p python -p javascript  # All languages
-```
-
-Once loaded, providers fill **ambient collections** you can use directly in .cop files:
-- `Types` — all types from all loaded providers
-- `Statements` — all statements
-- `Lines` — all source lines
-- `Files` — all source files
-- `Projects` — all projects
-
-For multi-language repos, use multiple `-p` flags — collections merge automatically.
 
 ## Getting More Help
 
@@ -156,14 +168,15 @@ When using a package, run `cop help <package-name>` to see its types and API.
 
 | Package | Provides | Usage |
 |---------|----------|-------|
-| `code` | Source code types | Types, Statements, Lines, Files, Methods |
-| `code-analysis` | Violation type + CHECK | toError, toWarning, toInfo |
-| `code-metrics` | Slop metrics (JSON) | METRICS(violations, lines) |
-| `code-layering` | Dependency rules | containsAny, in |
-| `csharp-checks` | C# conventions | Run with: `cop csharp-checks -t .` |
-| `python-checks` | Python conventions | Run with: `cop python-checks -t .` |
-| `javascript-checks` | JS/TS conventions | Run with: `cop javascript-checks -t .` |
-| `files` | Filesystem analysis | Folders, Files |
+| `code` | Codebase model + `codebase()` | `codebase.Types`, `codebase.Statements`, ... |
+| `code-analysis` | Violation type + CHECK | `toError`, `toWarning`, `toInfo` |
+| `code-metrics` | Slop metrics (JSON) | `METRICS(violations, lines)` |
+| `code-layering` | Dependency rules | `containsAny`, `in` |
+| `csharp` | C# parser | `csharp.parse()` |
+| `python` | Python parser | `python.parse()` |
+| `javascript` | JS/TS parser | `javascript.parse()` |
+| `cop` | Cop language parser | `cop.parse()` |
+| `files` | Filesystem analysis | `files()`, `folders()` |
 
 ## Reporting Issues (IMPORTANT)
 

@@ -4,5 +4,5 @@ predicate isInTestProject(Type) => Type.File.Path:startsWith('tests/') || Type.F
 predicate hasNamespace(Type) => Type.File.Namespace.Length:greaterThan(0)
 predicate isMissingNamespace(Type:isCSharp) => !hasNamespace && !isInTestProject
 
-export let types-without-namespace = cb.Types:isMissingNamespace
+export let types-without-namespace = codebase.Types:isMissingNamespace
     :toError('{item.Name} in {item.File.Path} must be in a namespace')

@@ -6,5 +6,5 @@ let allowed-interfaces = ['ICopCallable']
 predicate isDisallowedInterface(Type:isCSharp) => Type.Kind == Interface
     && !allowed-interfaces:contains(Type.Name)
 
-export let no-new-interfaces = cb.Types:isDisallowedInterface
+export let no-new-interfaces = codebase.Types:isDisallowedInterface
     :toError('Do not add new interfaces — use abstract classes instead: {item.Name} in {item.File.Path}')
