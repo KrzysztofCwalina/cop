@@ -16,7 +16,7 @@ predicate isSnippetFence(FenceBlock) => FenceBlock.Tag:startsWith('Snippet:')
 
 # Cached collections of snippet regions and fences
 let snippetRegions = python.regions():isSnippetRegion
-let snippetFences  = fenceBlocks():markdown:isSnippetFence
+let snippetFences  = markdown.parse().FenceBlocks:markdown:isSnippetFence
 
 # Cross-collection matching
 

@@ -689,7 +689,7 @@ public class TypeRegistry
 
     public bool HasCollection(string name) => _collections.ContainsKey(name);
 
-    private static bool IsCorePrimitive(string name) =>
+    public static bool IsCorePrimitive(string name) =>
         name is "Object" or "string" or "int" or "float" or "bool" or "byte";
 
     public IEnumerable<TypeDescriptor> AllTypes => _types.Values;

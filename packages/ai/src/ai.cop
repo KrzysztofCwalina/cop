@@ -36,3 +36,10 @@
 # ~/.cop/ai.json lives outside any repo and must never be committed.
 
 import code-analysis
+
+## Reviews `code` against a natural-language `requirement` using an LLM and returns a
+## list of Violations (empty if the code satisfies the requirement). `code` may be a
+## literal string or a collection (e.g. Types, Lines, Files), which is summarized for
+## the model. Requires ~/.cop/ai.json (see ai.example.json). Set the COP_AI_LOG env
+## var to a file path to record the full agent↔judge interaction.
+export function judge(requirement : string, code : string) : [Violation] => intrinsic

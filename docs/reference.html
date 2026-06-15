@@ -260,7 +260,15 @@ const packages = {
     "collections": [],
     "types": {},
     "predicates": [],
-    "functions": [],
+    "functions": [
+      {
+        "name": "judge",
+        "params": "requirement: string, code: string",
+        "returns": "[Violation]",
+        "desc": "Reviews `code` against a natural-language `requirement` using an LLM and returns a\nlist of Violations (empty if the code satisfies the requirement). `code` may be a\nliteral string or a collection (e.g. Types, Lines, Files), which is summarized for\nthe model. Requires ~/.cop/ai.json (see ai.example.json). Set the COP_AI_LOG env\nvar to a file path to record the full agent↔judge interaction.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/ai/src/ai.cop#L45"
+      }
+    ],
     "checks": [],
     "commands": []
   },
@@ -3917,13 +3925,13 @@ const packages = {
     "samples": [
       {
         "title": "Check for broken links",
-        "code": "import markdown\n\npredicate isBroken(Link) =>\n    Link.Url:startsWith('http')\n    && Link.Text:empty\n\ncommand MAIN = foreach links():isBroken\n    => 'Missing link text: {item.Url}'"
+        "code": "import markdown\n\npredicate isBroken(Link) =>\n    Link.Url:startsWith('http')\n    && Link.Text:empty\n\ncommand MAIN = foreach markdown.parse().Links:isBroken\n    => 'Missing link text: {item.Url}'"
       }
     ],
     "collections": [],
     "types": {
       "Heading": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/markdown/src/markdown.cop#L67",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/markdown/src/markdown.cop#L62",
         "baseType": "TextFilePosition",
         "props": [
           {
@@ -3939,7 +3947,7 @@ const packages = {
         ]
       },
       "Link": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/markdown/src/markdown.cop#L68",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/markdown/src/markdown.cop#L63",
         "baseType": "TextFilePosition",
         "props": [
           {
@@ -3955,7 +3963,7 @@ const packages = {
         ]
       },
       "Section": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/markdown/src/markdown.cop#L69",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/markdown/src/markdown.cop#L64",
         "baseType": "TextFilePosition",
         "props": [
           {
@@ -3971,7 +3979,7 @@ const packages = {
         ]
       },
       "FenceBlock": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/markdown/src/markdown.cop#L66",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/markdown/src/markdown.cop#L61",
         "baseType": "TextFilePosition",
         "props": [
           {
@@ -4015,32 +4023,18 @@ const packages = {
     "predicates": [],
     "functions": [
       {
-        "name": "headings",
+        "name": "parse",
         "params": "",
-        "returns": "[Heading]",
-        "desc": "Returns all headings found in markdown files.",
+        "returns": "MarkdownContent",
+        "desc": "Parses markdown files in the target directory and returns their structured content.\nExample: let md = markdown.parse()",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/markdown/src/markdown.cop#L54"
       },
       {
-        "name": "links",
-        "params": "",
-        "returns": "[Link]",
-        "desc": "Returns all links found in markdown files.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/markdown/src/markdown.cop#L57"
-      },
-      {
-        "name": "sections",
-        "params": "",
-        "returns": "[Section]",
-        "desc": "Returns all sections found in markdown files.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/markdown/src/markdown.cop#L60"
-      },
-      {
-        "name": "fenceBlocks",
-        "params": "",
-        "returns": "[FenceBlock]",
-        "desc": "Returns all fenced code blocks found in markdown files.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/markdown/src/markdown.cop#L63"
+        "name": "parse",
+        "params": "path: string",
+        "returns": "MarkdownContent",
+        "desc": "Parses markdown files in the specified directory and returns their structured content.\nExample: let md = markdown.parse('docs/')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/markdown/src/markdown.cop#L58"
       }
     ],
     "checks": [],

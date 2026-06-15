@@ -223,14 +223,18 @@ public static class TypeValidator
             return false;
         }
 
-        // CopProviderProxy matches 'object' (already handled above) and also
-        // matches Codebase since it exposes the same structural fields
+        // CopProviderProxy matches 'object' (already handled above) and is structurally
+        // compatible with any record/content type a provider can back — Codebase,
+        // MarkdownContent, and other provider content types. Its fields are resolved on
+        // demand, so it is assignable to any non-primitive type (and, when a registry is
+        // available, any registered type).
         if (value is CopProviderProxy)
         {
-            // Provider proxies are structurally compatible with Codebase
             if (string.Equals(typeName, "Codebase", StringComparison.OrdinalIgnoreCase))
                 return true;
-            return false;
+            if (TypeRegistry.IsCorePrimitive(typeName))
+                return false;
+            return registry is null || registry.HasType(typeName);
         }
 
         return false;

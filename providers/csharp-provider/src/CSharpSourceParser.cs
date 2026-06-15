@@ -201,6 +201,30 @@ public class CSharpSourceParser : ISourceParser
                     catch { }
                 }
             }
+            // Resolve the inferred type for `var` declarations, so `var` is never a TypeName.
+            // The `var` keyword stays in Keywords; TypeName becomes the actual inferred type.
+            else if (node is LocalDeclarationStatementSyntax varDecl && varDecl.Declaration.Type.IsVar)
+            {
+                var line = node.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+                if (stmtsByLine.TryGetValue(line, out var stmts))
+                {
+                    try
+                    {
+                        var inferred = model.GetTypeInfo(varDecl.Declaration.Type).Type
+                            ?.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)
+                            ?.TrimEnd('?');
+                        if (!string.IsNullOrEmpty(inferred) && inferred != "?" && inferred != "var")
+                        {
+                            // Match by variable name so multiple declarations on one line stay distinct.
+                            var names = varDecl.Declaration.Variables.Select(v => v.Identifier.Text).ToHashSet();
+                            foreach (var stmt in stmts)
+                                if (stmt.Kind == "declaration" && stmt.MemberName is not null && names.Contains(stmt.MemberName))
+                                    stmt.TypeName = inferred;
+                        }
+                    }
+                    catch { }
+                }
+            }
         }
     }
 
@@ -476,8 +500,11 @@ public class CSharpSourceParser : ISourceParser
             case LocalDeclarationStatementSyntax decl:
             {
                 List<string> keywords = [];
-                string typeName = decl.Declaration.Type.ToString();
-                if (decl.Declaration.Type.IsVar) keywords.Add("var");
+                // `var` is a keyword, not a type name — record it in Keywords and leave
+                // TypeName empty here; the inferred type is filled in by EnrichWithSemantics.
+                bool isVar = decl.Declaration.Type.IsVar;
+                string typeName = isVar ? "" : decl.Declaration.Type.ToString();
+                if (isVar) keywords.Add("var");
                 if (typeName == "dynamic") keywords.Add("dynamic");
                 foreach (var v in decl.Declaration.Variables)
                 {

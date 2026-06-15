@@ -4,5 +4,5 @@ predicate isBroken(Link) =>
     Link.Url:startsWith('http')
     && Link.Text:empty
 
-command MAIN = foreach links():isBroken
+command MAIN = foreach markdown.parse().Links:isBroken
     => 'Missing link text: {item.Url}'

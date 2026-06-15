@@ -1,6 +1,6 @@
 {
   "name": "ai",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "LLM-based code review — ai.judge(requirement, code) returns [Violation]",
   "title": "AI Judge Provider",
   "authors": "cop-team",

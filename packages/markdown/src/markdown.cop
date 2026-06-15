@@ -48,19 +48,14 @@ export type MarkdownContent = {
 }
 
 # Provides markdown content via the built-in markdown provider
-let md : MarkdownContent = provider('markdown')
 
-## Returns all headings found in markdown files.
-export function headings() : [Heading] => md.Headings
+## Parses markdown files in the target directory and returns their structured content.
+## Example: let md = markdown.parse()
+export function parse() : MarkdownContent => provider('markdown')
 
-## Returns all links found in markdown files.
-export function links() : [Link] => md.Links
-
-## Returns all sections found in markdown files.
-export function sections() : [Section] => md.Sections
-
-## Returns all fenced code blocks found in markdown files.
-export function fenceBlocks() : [FenceBlock] => md.FenceBlocks
+## Parses markdown files in the specified directory and returns their structured content.
+## Example: let md = markdown.parse('docs/')
+export function parse(path : string) : MarkdownContent => provider('markdown', path)
 
 # Violation overloads for markdown types — via TextFilePosition trait conformance
 export type FenceBlock : TextFilePosition = { filePath => item.File.Path, line => item.StartLine }
