@@ -951,18 +951,13 @@ public class CopParser
     private Expression ParsePostfixPredicate()
     {
         // After ':', parse a predicate reference which may be:
-        // - identifier: expr:myPredicate
-        // - identifier(args): expr:startsWith('foo')
-        // - member: expr:Type.Name
+        // - identifier:        expr:myPredicate
+        // - identifier(args):  expr:startsWith('foo')
+        // A trailing `.member` is intentionally NOT consumed here — it binds to the
+        // filter *result*, so `coll:pred.Count` parses as `(coll:pred).Count`
+        // (handled by the outer postfix loop).
         var ident = ExpectIdentifier("predicate name");
         Expression pred = new IdentifierExpr(ident, CurrentLine());
-
-        // Dot-qualified: Type.Property
-        while (Match(TokenKind.Dot))
-        {
-            var member = ExpectIdentifier("member name");
-            pred = new MemberExpr(pred, member, CurrentLine());
-        }
 
         // Call with args: pred(args)
         if (Check(TokenKind.LParen))

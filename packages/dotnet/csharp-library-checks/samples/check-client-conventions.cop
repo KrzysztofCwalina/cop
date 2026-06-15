@@ -1,8 +1,3 @@
 import csharp-library-checks
 
-# Find all client types
-command MAIN = foreach Clients
-    => '{item.Name}'
-
-# Run all client checks
-CHECK csharp-library-checks
+command MAIN = CHECK(csharp-library-checks)

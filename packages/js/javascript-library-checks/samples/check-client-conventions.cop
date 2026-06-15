@@ -1,6 +1,3 @@
 import javascript-library-checks
 
-command MAIN = foreach Clients
-    => '{item.Name}'
-
-CHECK js-client-checks
+command MAIN = CHECK(javascript-client-checks)

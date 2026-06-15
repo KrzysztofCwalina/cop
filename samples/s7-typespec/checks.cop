@@ -2,11 +2,13 @@
 # Demonstrates how Cop packages can target specialized domains beyond source code.
 import typespec-http
 
+let http = provider('typespec-http')
+
 # PUT path even segments rule
 # Equivalent to TypeSpec's put-path-even-segments linter rule:
 # HTTP PUT operations should have a path with an even number of segments.
 
 predicate hasEvenSegments(HttpOperation) => HttpOperation.Path:matches('^((/[^/]+){2})+$')
 
-let put-odd-segments = Operations:isPut:!hasEvenSegments
+let put-odd-segments = http.Operations:isPut:!hasEvenSegments
 command MAIN = foreach put-odd-segments => print('{warning:@yellow-bold} PUT {item.Name} ({item.Path}) has odd number of path segments')

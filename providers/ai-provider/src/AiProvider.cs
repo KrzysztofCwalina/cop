@@ -65,7 +65,10 @@ public class AiProvider : DataProvider
             using var resp = await _http.SendAsync(req);
             var respText = await resp.Content.ReadAsStringAsync();
             if (!resp.IsSuccessStatusCode)
+            {
+                LogInteraction(config, system, user, $"{(int)resp.StatusCode} FAILED", respText);
                 return One($"ai.judge: LLM call failed ({(int)resp.StatusCode}): {Truncate(respText, 300)}");
+            }
 
             using var doc = JsonDocument.Parse(respText);
             var content = doc.RootElement
@@ -74,12 +77,40 @@ public class AiProvider : DataProvider
                 .GetProperty("content")
                 .GetString() ?? "[]";
 
+            LogInteraction(config, system, user, $"{(int)resp.StatusCode} OK", content);
             return ParseViolations(StripFences(content));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             return One($"ai.judge error: {ex.Message}");
         }
+    }
+
+    // When COP_AI_LOG names a file path, append a transcript of the agent↔judge
+    // interaction (the request the runtime sent and the raw response). Opt-in
+    // transparency for LLM-based rules; no effect unless the env var is set.
+    private static void LogInteraction(AiConfig config, string system, string user, string status, string assistant)
+    {
+        var path = Environment.GetEnvironmentVariable("COP_AI_LOG");
+        if (string.IsNullOrEmpty(path)) return;
+        var sb = new StringBuilder();
+        sb.AppendLine("================== ai.judge interaction ==================");
+        sb.AppendLine($"model:    {config.Model}");
+        sb.AppendLine($"endpoint: {config.Endpoint}");
+        sb.AppendLine($"status:   {status}");
+        sb.AppendLine();
+        sb.AppendLine("------------------ REQUEST  (agent → judge) ------------------");
+        sb.AppendLine("[system]");
+        sb.AppendLine(system);
+        sb.AppendLine();
+        sb.AppendLine("[user]");
+        sb.AppendLine(user);
+        sb.AppendLine();
+        sb.AppendLine("------------------ RESPONSE (judge → agent) -----------------");
+        sb.AppendLine(assistant);
+        sb.AppendLine("=========================================================");
+        sb.AppendLine();
+        try { File.AppendAllText(path, sb.ToString()); } catch { /* logging is best-effort */ }
     }
 
     // Renders the second ai.judge argument into a readable code context for the LLM.

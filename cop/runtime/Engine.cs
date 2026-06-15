@@ -77,7 +77,8 @@ public static class Engine
             programArgs,
             commandFilter,
             diagLog,
-            topLevelProviderPackages: providerPackages);
+            topLevelProviderPackages: providerPackages,
+            assertMode: assertMode);
 
         diagLog?.Invoke($"[diag] Total: {totalSw.ElapsedMilliseconds}ms");
         return result;
@@ -191,6 +192,7 @@ public static class Engine
         string[]? commandFilter,
         Action<string>? diagLog,
         List<(string Dir, PackageMetadata Meta)>? topLevelProviderPackages,
+        bool assertMode = false,
         Dictionary<string, List<ParsedModule>>? packageModuleMap = null)
     {
         var outputs = new List<PrintOutput>();
@@ -201,8 +203,6 @@ public static class Engine
 
         var bridge = CreateBridge(outputs, fileOutputLines, asserts, diagLog);
         bridge.Evaluator.TraceLog = diagLog;
-        RegisterProgram(bridge, programArgs);
-        RegisterPlaceholderCollections(bridge.Evaluator.GlobalEnvironment, _builtinProviders.Select(p => (p.Name, p.Schema)));
 
         // Phase 1: Register functions, types, enums (NOT let bindings — those need provider data)
         foreach (var module in modules)
@@ -386,6 +386,16 @@ public static class Engine
             return new CopProviderProxy(providerName, env);
         });
 
+        // Register Program with Providers list — only explicit -p providers, not import-detected ones.
+        // Import-detected providers are loaded for provider('name') intrinsic access,
+        // but should NOT appear in Program.Providers (the user didn't request them for analysis).
+        var providerProxies = (topLevelProviderPackages ?? [])
+            .Select(pp => PackageMetadata.TryLoadFromDirectory(pp.Dir)?.Name ?? Path.GetFileName(pp.Dir))
+            .Where(name => bridge.Evaluator.GlobalEnvironment.TryLookup(name, out _))
+            .Select(name => (CopValue)new CopProviderProxy(name, bridge.Evaluator.GlobalEnvironment))
+            .ToList();
+        RegisterProgram(bridge, programArgs, providerProxies);
+
         // Phase 2: Evaluate let bindings (now that provider data is available)
         // First: deferred let bindings from imported packages
         moduleLoader.EvalDeferredLetBindings(bridge.Evaluator, errors);
@@ -442,11 +452,33 @@ public static class Engine
             }
         }
 
-        var commandsToRun = commandFilter is { Length: > 0 }
-            ? commandFilter.Select(NormalizeCommandName).Distinct(StringComparer.Ordinal).ToList()
-            : packageModuleMap is { Count: > 1 }
-                ? packageModuleMap.Keys.Select(NormalizeCommandName).ToList()
-                : new List<string> { commandName ?? "main" };
+        List<string> commandsToRun;
+        if (assertMode)
+        {
+            // Test mode (`cop test`): run every TEST-* command — each evaluates an
+            // assert() call that records a result. There is no 'main' to run.
+            // `test foo = ...` desugars to a FunctionDecl named TEST-FOO.
+            commandsToRun = modules
+                .SelectMany(m => m.Module.Declarations)
+                .Select(d => d switch
+                {
+                    FunctionDecl fd => fd.Name,
+                    CommandDecl cd => cd.Name,
+                    _ => null
+                })
+                .Where(n => n is not null && n.StartsWith("TEST-", StringComparison.Ordinal))
+                .Select(n => n!)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+        }
+        else
+        {
+            commandsToRun = commandFilter is { Length: > 0 }
+                ? commandFilter.Select(NormalizeCommandName).Distinct(StringComparer.Ordinal).ToList()
+                : packageModuleMap is { Count: > 1 }
+                    ? packageModuleMap.Keys.Select(NormalizeCommandName).ToList()
+                    : new List<string> { commandName ?? "main" };
+        }
 
         int? exitCode = null;
         foreach (var command in commandsToRun)
@@ -603,31 +635,20 @@ public static class Engine
         return data;
     }
 
-    private static void RegisterProgram(LanguageBridge bridge, string[]? programArgs)
+    private static void RegisterProgram(LanguageBridge bridge, string[]? programArgs, List<CopValue>? providers = null)
     {
         var args = (programArgs ?? [])
             .Select(arg => (CopValue)new CopString(arg))
             .ToList();
         var programObj = new CopObject(new Dictionary<string, CopValue>(StringComparer.Ordinal)
         {
-            ["Args"] = new CopList(args)
+            ["Args"] = new CopList(args),
+            ["Providers"] = new CopList(providers ?? [])
         }) { TypeName = "Program" };
 
         // Register as both a value (Program) and FFI function (program())
         bridge.RegisterValue("Program", programObj);
         bridge.RegisterFunction("program", (_, _) => programObj, 0);
-    }
-
-    private static void RegisterPlaceholderCollections(Cop.Lang.Interpreter.Environment env, IEnumerable<(string Name, ProviderSchema Schema)> providers)
-    {
-        foreach (var (providerName, schema) in providers)
-        {
-            foreach (var collection in schema.Collections)
-            {
-                env.Define($"{providerName}.{collection.Name}", new CopList([]));
-                env.Define(collection.Name, new CopList([]));
-            }
-        }
     }
 
     private static void WarnIfProviderEmpty(string providerName, Dictionary<string, List<object>> collections, ProviderSchema schema, List<string> warnings)
@@ -705,7 +726,6 @@ public static class Engine
                 .Select(item => (CopValue)new CopDynamicObject(item, adapter))
                 .ToList());
             env.Define($"{providerName}.{collectionName}", copList);
-            env.Define(collectionName, copList);
         }
 
         // Register a provider proxy so "filesystem.Folders" member-access syntax works
@@ -759,18 +779,6 @@ public static class Engine
             });
 
             env.Define($"{providerName}.{collName}", lazy);
-
-            // Merge with existing bare collection if another provider already registered it
-            if (env.TryLookup(collName, out var existing) && existing is CopLazyCollection existingLazy)
-            {
-                var merged = new CopLazyCollection(() =>
-                    existingLazy.Enumerate().Concat(lazy.Enumerate()));
-                env.Define(collName, merged);
-            }
-            else
-            {
-                env.Define(collName, lazy);
-            }
         }
 
         env.Define(providerName, new CopProviderProxy(providerName, env));

@@ -1,11 +1,13 @@
 # Cop Self-Checks
 # Run all checks: cop cop-checks/main.cop -t .
+# Run AI checks:  cop cop-checks/main.cop -t . -c ai
 
 import code
 import code-analysis
 import csharp
-import python
 import cop
+
+let cb = codebase(csharp.parse(), cop.parse())
 
 export let all-violations = 
     intrinsics-in-wrong-file +
@@ -17,3 +19,9 @@ export let all-violations =
     no-regex
 
 command MAIN = CHECK(all-violations)
+
+# AI-based checks (require network + ~/.cop/ai.json)
+export let all-ai-violations =
+    core-purity-violations
+
+command AI = CHECK(all-ai-violations)

@@ -1163,6 +1163,15 @@ public sealed class Evaluator
             func.Declaration.Params[^1].Type is { IsCollection: true } &&
             args.Count >= paramCount;
 
+        // Don't use param-array collation when a single list arg is passed to match the collection param exactly
+        if (hasParamArray && args.Count == paramCount)
+        {
+            var lastArg = args[^1];
+            if (lastArg is CopThunk t) lastArg = t.Force();
+            if (lastArg is CopList or CopLazyCollection)
+                hasParamArray = false;
+        }
+
         // Bind parameters
         if (hasParamArray)
         {

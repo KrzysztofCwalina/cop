@@ -2,8 +2,8 @@ import code
 import csharp
 import javascript
 
-let cs : Codebase = provider('csharp')
-let js : Codebase = provider('javascript')
+let cs = provider('csharp')
+let js = provider('javascript')
 
 command main =
     print('C#: {cs.Types.Count} types, {cs.Files.Count} files, {cs.Lines.Count} lines') |

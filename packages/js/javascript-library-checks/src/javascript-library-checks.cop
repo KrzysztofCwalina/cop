@@ -1,31 +1,33 @@
-# Library and client library design definitions for JavaScript/TypeScript
+# JavaScript/TypeScript library and client library design checks
 
 import javascript
 import javascript-checks
 import code-analysis
 
+let cb = codebase(Program.Providers)
+
 ## Library Design Rules
 
 ## Do not use default exports — use named exports only
 predicate isDefaultExport(Line) => Line.Text:matches('^export\\s+default\\s')
-export let no-default-exports = javascript.lines():isDefaultExport
+export let no-default-exports = cb.Lines:isDefaultExport
     :toError('Do not use default exports — use named exports')
 
 ## Do not import Promise from external libraries (use native Promise)
 predicate isImportingBluebird(Line) => Line.Text:matches('from\\s+[\'"]bluebird[\'"]')
     || Line.Text:matches('require\\([\'"]bluebird[\'"]\\)')
-export let no-external-promises = javascript.lines():isImportingBluebird
+export let no-external-promises = cb.Lines:isImportingBluebird
     :toError('Use native Promise — do not import from bluebird or other polyfill libraries')
 
 ## Do not use const enums (problematic for consumers)
 predicate isConstEnumDeclaration(Line) => Line.Text:matches('^\\s*(export\\s+)?const\\s+enum\\s')
-export let no-const-enums = javascript.lines():isConstEnumDeclaration
+export let no-const-enums = cb.Lines:isConstEnumDeclaration
     :toWarning('Do not use const enum — use regular enum instead')
 
 ## Do not reference window global — use self for cross-platform compatibility
 predicate hasWindowReference(Line) => Line.Text:matches('\\bwindow\\.')
     && !Line.Text:matches('//') && !Line.Text:matches('\\*')
-export let no-window-reference = javascript.lines():hasWindowReference
+export let no-window-reference = cb.Lines:hasWindowReference
     :toError('Do not use window — use self for cross-platform compatibility')
 
 ## Combined library design checks
@@ -35,7 +37,7 @@ export let javascript-library-design-checks = no-default-exports + no-external-p
 
 # Client type detection
 export predicate isClient(Type) => Type.Name:endsWith('Client')
-export predicate Clients(Types) => javascript && isClient
+export let Clients = cb.Types:isClient
 
 # Shared method predicates
 predicate isPublicMethod(Method) => Method:isPublic && !Method.Name:startsWith('_')

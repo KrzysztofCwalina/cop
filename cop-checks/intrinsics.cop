@@ -4,5 +4,5 @@ predicate isStrayIntrinsic(Statement) => Statement.Kind == declaration
     && Statement.Keywords:contains('intrinsic')
     && !Statement.File.Path:endsWith('intrinsics.cop')
 
-export let intrinsics-in-wrong-file = Statements:isStrayIntrinsic
+export let intrinsics-in-wrong-file = cb.Statements:isStrayIntrinsic
     :toError('Intrinsic declaration must be in intrinsics.cop, not {item.File.Path}')

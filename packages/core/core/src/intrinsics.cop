@@ -115,13 +115,22 @@ export function fail(message : string) => intrinsic
 # Utilities
 
 ## Returns the current program context.
-## Provides access to command-line arguments passed to the cop invocation.
+## Provides access to command-line arguments and loaded providers.
 export function program() : Program => intrinsic
 
 ## Represents the running program's context.
-## Provides access to command-line arguments passed to the cop invocation.
+## Args: command-line arguments passed to the cop invocation.
+## Providers: language providers loaded via -p flags (use with codebase()).
 export type Program : object = {
-    Args : [string]
+    Args : [string],
+    Providers : [Provider]
+}
+
+## Represents a loaded language provider (e.g., csharp, python).
+## Providers are added to Program.Providers via the -p command-line flag.
+## Access parsed data via codebase(Program.Providers) or individual parse() calls.
+export type Provider : object = {
+    Name : string
 }
 
 ## Glob-matches a file path against a pattern.

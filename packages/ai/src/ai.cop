@@ -29,6 +29,10 @@
 # ai.judge's second argument may be a literal code string OR a collection
 # (e.g. Types / Lines / Files); collections are summarized for the LLM.
 #
+# Transparency: set the COP_AI_LOG env var to a file path to append a full
+# transcript of each agent↔judge interaction (the request the runtime sent and
+# the raw judge response) — useful for debugging and auditing LLM rules.
+#
 # ~/.cop/ai.json lives outside any repo and must never be committed.
 
 import code-analysis

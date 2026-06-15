@@ -19,5 +19,5 @@ predicate isRuntimeReferencingProvider(Project) =>
     Project.Name:in(runtime-projects)
     && Project.References:containsAny(provider-projects)
 
-export let layering-violations = Projects:isRuntimeReferencingProvider
+export let layering-violations = cb.Projects:isRuntimeReferencingProvider
     :toError('{item.Name} must not reference providers other than filesystem-provider')

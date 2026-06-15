@@ -6,6 +6,8 @@
 import code
 import code-analysis
 
+let cb = codebase(Program.Providers)
+
 ## Computes aggregate metrics from violations and lines, outputs as JSON.
 ## Usage: METRICS(violations, lines) where violations is [Violation] and lines is [Line].
 ## Output is a JSON object with total counts, severity breakdown, LOC, and per-KLOC rates.
@@ -39,16 +41,16 @@ predicate isUndocumentedPublic(Type) => Type.Documented == false && Type.Modifie
 predicate hasTooManyParams(Type) => Type.Methods:any((m) => m.Parameters.Count > 5)
 predicate isEmptyCatch(Statement) => Statement.ErrorHandler == true && Statement.Generic == true
 
-export let long-methods = Types:hasLongMethod
+export let long-methods = cb.Types:hasLongMethod
     :toWarning('{item.Name} has a method with more than 50 statements')
 
-export let undocumented-types = Types:isUndocumentedPublic
+export let undocumented-types = cb.Types:isUndocumentedPublic
     :toWarning('{item.Name} is a public type without documentation')
 
-export let too-many-params = Types:hasTooManyParams
+export let too-many-params = cb.Types:hasTooManyParams
     :toWarning('{item.Name} has a method with more than 5 parameters')
 
-export let empty-catches = Statements:isEmptyCatch
+export let empty-catches = cb.Statements:isEmptyCatch
     :toError('Empty catch block swallows all exceptions')
 
 ## Curated language-agnostic slop rules with severity weights.
@@ -59,6 +61,6 @@ export let slop =
     too-many-params:withSeverity(0.5) +
     empty-catches:withSeverity(0.8)
 
-## Default command: compute slop metrics using ambient Lines from loaded providers.
+## Default command: compute slop metrics using Lines from loaded providers.
 ## Run with: cop code-metrics -t <dir> -p csharp -p python
-command main = METRICS(slop, Lines)
+command main = METRICS(slop, cb.Lines)

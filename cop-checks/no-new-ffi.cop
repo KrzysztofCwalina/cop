@@ -24,5 +24,5 @@ predicate registersApprovedName(Statement) => Statement.Arguments:containsAny(ap
 
 predicate isUnapprovedFfi(Statement) => isFfiRegister && !registersApprovedName
 
-export let no-new-ffi = Statements:isUnapprovedFfi
+export let no-new-ffi = cb.Statements:isUnapprovedFfi
     :toError('New runtime FFI registered without approval. The FFI surface must not grow — implement the capability as a .cop package, or get sign-off and add its name to approved-ffi-names.')

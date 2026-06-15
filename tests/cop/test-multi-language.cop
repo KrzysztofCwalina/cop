@@ -4,6 +4,13 @@
 import csharp
 import python
 import javascript
+import files
+
+# ── Statement call predicates ──
+predicate printCall(Statement) => Statement.Kind == 'call' && Statement.MemberName == 'print'
+predicate consoleCall(Statement) => Statement.Kind == 'call' && Statement.TypeName == 'console'
+predicate evalCall(Statement) => Statement.Kind == 'call' && Statement.MemberName == 'eval'
+predicate alertCall(Statement) => Statement.Kind == 'call' && Statement.MemberName == 'alert'
 
 # ── Namespace resolution ──
 test cs-types = assert(csharp.Types.Count > 0, 'csharp.Types via namespace')
@@ -35,5 +42,5 @@ let public-all = public-cs + python.Types
 test union-filtered = assert(public-all.Count > 0, 'union with filtered branch')
 
 # ── Filesystem ──
-test has-files = assert(Files.Count > 0, 'should have files')
-test has-folders = assert(Folders.Count > 0, 'should have folders')
+test has-files = assert(files().Count > 0, 'should have files')
+test has-folders = assert(folders().Count > 0, 'should have folders')

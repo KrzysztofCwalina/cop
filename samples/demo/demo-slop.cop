@@ -1,6 +1,6 @@
 import csharp
 import code-metrics
 
-let codebase = codebase(csharp)
+let cb = codebase(csharp)
 
-command main = METRICS(slop, codebase.Lines)
+command main = METRICS(slop, cb.Lines)

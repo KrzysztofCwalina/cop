@@ -1,0 +1,23 @@
+# Unit test for ai.judge — always produces a complaint.
+#
+# Feeds blatantly code-analysis types against a rule that forbids them; the LLM
+# judge must return at least one Violation. This exercises the whole ai.judge
+# path (request → LLM → parsed violations) and fails loudly if the judge stops
+# responding with complaints.
+#
+# Requires ~/.cop/ai.json (see packages/ai). It makes a network call, so it is
+# kept OUT of the offline tests/cop/ suite.
+#   Run: cop test tests/ai/
+
+import ai
+
+let code-analysis-leak =
+    'public class CodeReviewViolation { public int Severity; public string Message; }
+public class StyleLintAnalyzer { public string RuleId; public int Severity; }
+public class CodeAnalysisRule { public string Description; }'
+
+let complaints = ai.judge(
+    'The code under review must NOT contain any code-analysis, linting, or code-review types — for example a code-review Violation type, code-issue Severity levels, or Rule, Lint, or Analyzer concepts. Flag EVERY such type as a violation, one per type.',
+    code-analysis-leak)
+
+test judge-complains = assert(complaints.Count > 0, 'ai.judge must flag the blatant code-analysis types')
