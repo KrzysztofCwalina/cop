@@ -1,0 +1,9 @@
+# Derived rule: every C# project must enable nullable reference types.
+
+import code-layering
+
+predicate neBadNullable(ProjectProperty) => ProjectProperty.Name:equals('Nullable') && ProjectProperty.Value:notEquals('enable')
+predicate neNullableNotEnabled(Project) => Project.Properties:any(neBadNullable)
+
+export let derived-nullable-enabled = codebase.Projects:neNullableNotEnabled
+    :toError('Project {item.Name} must set <Nullable>enable</Nullable>')

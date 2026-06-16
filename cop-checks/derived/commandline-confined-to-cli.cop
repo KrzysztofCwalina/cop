@@ -1,0 +1,8 @@
+# Derived rule: System.CommandLine usage is confined to the CLI (cop/cli).
+# The parsing/argument layer must not leak into the language, runtime, or providers.
+
+predicate clNotInCli(Type) => !Type.File.Path:contains('cop/cli/')
+predicate clUsesCommandLine(Type) => Type.File.Usings:contains('System.CommandLine')
+
+export let derived-commandline-confined-to-cli = codebase.Types:clNotInCli:clUsesCommandLine
+    :toError('{item.Name} uses System.CommandLine outside cop/cli ({item.File.Path})')

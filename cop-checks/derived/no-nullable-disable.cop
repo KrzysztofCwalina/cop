@@ -1,0 +1,8 @@
+# Derived rule: nullable reference types must stay enabled — no `#nullable disable`.
+# Scoped to .cs files (the directive only appears in C#).
+
+predicate ndInCs(Line) => Line.File.Path:endsWith('.cs')
+predicate ndIsDisable(Line) => Line.Text:contains('#nullable disable')
+
+export let derived-no-nullable-disable = codebase.Lines:ndInCs:ndIsDisable
+    :toError('Do not disable nullable reference types ({item.File.Path}:{item.Number})')

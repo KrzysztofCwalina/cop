@@ -1,0 +1,9 @@
+# Derived rule: every C# project must enable implicit usings.
+
+import code-layering
+
+predicate iuBadImplicit(ProjectProperty) => ProjectProperty.Name:equals('ImplicitUsings') && ProjectProperty.Value:notEquals('enable')
+predicate iuNotEnabled(Project) => Project.Properties:any(iuBadImplicit)
+
+export let derived-implicit-usings = codebase.Projects:iuNotEnabled
+    :toError('Project {item.Name} must set <ImplicitUsings>enable</ImplicitUsings>')

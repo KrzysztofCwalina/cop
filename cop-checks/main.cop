@@ -25,3 +25,37 @@ export let all-ai-violations =
     core-purity-violations
 
 command AI = CHECK(all-ai-violations)
+
+# Derived checks — additional codified architectural/design rules (cop-checks/derived/).
+# Run with: cop cop-checks/main.cop -t . -c DERIVED
+export let all-derived-violations =
+    derived-provider-naming +
+    derived-core-domain-purity +
+    derived-core-network-isolation +
+    derived-exception-naming +
+    derived-test-class-naming +
+    derived-no-async-void +
+    derived-no-nullable-disable +
+    derived-target-framework +
+    derived-nullable-enabled +
+    derived-implicit-usings +
+    derived-single-target-framework +
+    derived-provider-sources-under-src +
+    derived-tests-location +
+    derived-single-command-in-checks +
+    derived-no-foreach-in-checks +
+    derived-core-no-cli-dependency +
+    derived-commandline-confined-to-cli +
+    derived-core-no-roslyn +
+    derived-providers-no-cli-dependency +
+    derived-no-console-in-pure-core +
+    derived-cli-commands-are-static +
+    derived-no-datetime-now +
+    derived-interpreter-no-process-launch +
+    derived-ai-imports-only-in-ai-checks +
+    derived-provider-namespace +
+    derived-exception-suffix-implies-base +
+    derived-provider-isolation +
+    derived-test-projects-use-nunit
+
+command DERIVED = CHECK(all-derived-violations)

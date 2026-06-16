@@ -1,0 +1,28 @@
+# Derived rule: provider projects must not reference other provider projects.
+# Providers may reference the core cop project, but must stay isolated from each other.
+
+import code-layering
+
+let pi-provider-projects = [
+    'AiProvider'
+    'codeql-provider'
+    'cop-provider'
+    'csharp-provider'
+    'go-provider'
+    'HttpProvider'
+    'java-provider'
+    'javascript-provider'
+    'json-provider'
+    'python-provider'
+    'rust-provider'
+    'tool-providers'
+    'typespec-provider'
+]
+
+predicate piIsProviderProject(Project) => Project.Name:in(pi-provider-projects)
+predicate piIsProviderName(string) => string:in(pi-provider-projects)
+predicate piReferencesProviderProject(Project) => Project.References:any(piIsProviderName)
+
+export let derived-provider-isolation = codebase.Projects:piIsProviderProject:piReferencesProviderProject
+    :toError('Provider project {item.Name} must not reference another provider project')
+

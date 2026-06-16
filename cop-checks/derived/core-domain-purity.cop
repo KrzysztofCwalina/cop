@@ -1,0 +1,10 @@
+# Derived rule: the C# core (cop/shared, cop/runtime) must stay domain-agnostic.
+# Code-analysis concepts (Violation, Analyzer, Linter, CodeSmell, CodeReview) belong in
+# .cop packages, never baked into the language core. This is the deterministic, network-free
+# complement to the AI core-purity check.
+
+predicate cdpInCore(Type) => Type.File.Path:contains('cop/shared/') || Type.File.Path:contains('cop/runtime/')
+predicate cdpHasDomainName(Type) => Type.Name:contains('Analyzer') || Type.Name:contains('Linter') || Type.Name:contains('CodeSmell') || Type.Name:contains('CodeReview')
+
+export let derived-core-domain-purity = codebase.Types:cdpInCore:cdpHasDomainName
+    :toError('Core type {item.Name} has a code-analysis domain name — move it to a .cop package ({item.File.Path})')

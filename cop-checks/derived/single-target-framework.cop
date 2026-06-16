@@ -1,0 +1,9 @@
+# Derived rule: projects use a single TargetFramework, not TargetFrameworks (no multi-targeting).
+
+import code-layering
+
+predicate stHasMultiTfm(ProjectProperty) => ProjectProperty.Name:equals('TargetFrameworks')
+predicate stIsMultiTargeted(Project) => Project.Properties:any(stHasMultiTfm)
+
+export let derived-single-target-framework = codebase.Projects:stIsMultiTargeted
+    :toError('Project {item.Name} uses TargetFrameworks (multi-targeting) — use a single TargetFramework')

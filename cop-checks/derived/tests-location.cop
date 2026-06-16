@@ -1,0 +1,7 @@
+# Derived rule: NUnit test fixtures must live under tests/.
+
+predicate tlIsFixture(Type) => Type.Decorators:contains('TestFixture')
+predicate tlOutsideTests(Type) => !Type.File.Path:startsWith('tests/')
+
+export let derived-tests-location = codebase.Types:tlIsFixture:tlOutsideTests
+    :toError('Test fixture {item.Name} must live under tests/ ({item.File.Path})')

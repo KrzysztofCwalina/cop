@@ -1,0 +1,9 @@
+# Derived rule: C# classes extending DataProvider must be named *Provider.
+# Load-bearing — DataProvider.ToString() derives the provider's display name by
+# stripping the 'Provider' suffix, so a misnamed subclass breaks provider naming.
+
+predicate pnExtendsDataProvider(Type) => Type.BaseTypes:contains('DataProvider')
+predicate pnNotNamedProvider(Type) => !Type.Name:endsWith('Provider')
+
+export let derived-provider-naming = codebase.Types:pnExtendsDataProvider:pnNotNamedProvider
+    :toError('{item.Name} extends DataProvider but is not named *Provider ({item.File.Path})')

@@ -1,0 +1,10 @@
+# Derived rule: every C# project must target net10.0.
+# No central Directory.Build.props exists, so each project sets this itself.
+
+import code-layering
+
+predicate tfBadTfm(ProjectProperty) => ProjectProperty.Name:equals('TargetFramework') && ProjectProperty.Value:notEquals('net10.0')
+predicate tfNotNet10(Project) => Project.Properties:any(tfBadTfm)
+
+export let derived-target-framework = codebase.Projects:tfNotNet10
+    :toError('Project {item.Name} must target net10.0')

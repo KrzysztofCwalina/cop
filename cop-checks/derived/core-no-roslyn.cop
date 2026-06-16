@@ -1,0 +1,8 @@
+# Derived rule: the C# core (cop/shared, cop/runtime) must not depend on Roslyn.
+# C# semantic analysis belongs in csharp-provider, not the language core.
+
+predicate cnrInCore(Type) => Type.File.Path:contains('cop/shared/') || Type.File.Path:contains('cop/runtime/')
+predicate cnrUsesRoslyn(Type) => Type.File.Usings:contains('Microsoft.CodeAnalysis') || Type.File.Usings:contains('Microsoft.CodeAnalysis.CSharp')
+
+export let derived-core-no-roslyn = codebase.Types:cnrInCore:cnrUsesRoslyn
+    :toError('Core type {item.Name} depends on Roslyn — move C# analysis to csharp-provider ({item.File.Path})')

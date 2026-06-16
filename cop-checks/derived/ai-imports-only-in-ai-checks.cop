@@ -1,0 +1,10 @@
+# Derived rule: AI/LLM checks are opt-in. Only the designated AI check file (core-purity.cop)
+# may `import ai`; the default deterministic suite must stay static and network-free.
+# To add another AI check, allowlist it below by file name.
+
+predicate aiIsImport(Statement) => Statement.Kind == import && Statement.MemberName:equals('ai')
+predicate aiInChecks(Statement) => Statement.File.Path:contains('cop-checks/')
+predicate aiNotAllowlisted(Statement) => !Statement.File.Path:endsWith('core-purity.cop')
+
+export let derived-ai-imports-only-in-ai-checks = codebase.Statements:aiIsImport:aiInChecks:aiNotAllowlisted
+    :toError('Only the designated AI check (core-purity.cop) may import ai — keep the default suite deterministic ({item.File.Path})')

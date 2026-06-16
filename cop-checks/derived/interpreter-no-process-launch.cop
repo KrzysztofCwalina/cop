@@ -1,0 +1,9 @@
+# Derived rule: the evaluator (cop/shared/interpreter) must not launch processes.
+# Process execution belongs in providers (e.g. ProcessObjectProvider, tool-providers),
+# keeping the language evaluator pure and side-effect-free.
+
+predicate inplInInterp(Statement) => Statement.File.Path:contains('cop/shared/interpreter/')
+predicate inplUsesProcess(Statement) => Statement.TypeName:equals('Process')
+
+export let derived-interpreter-no-process-launch = codebase.Statements:inplInInterp:inplUsesProcess
+    :toError('The evaluator must not launch processes — move it to a provider ({item.File.Path}:{item.Line})')

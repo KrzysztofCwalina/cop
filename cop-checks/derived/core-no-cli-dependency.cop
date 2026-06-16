@@ -1,0 +1,8 @@
+# Derived rule: the language core (cop/shared) must not depend on the CLI host.
+# The Cop language and runtime are independent of how they are invoked.
+
+predicate cncInShared(Type) => Type.File.Path:contains('cop/shared/')
+predicate cncUsesCli(Type) => Type.File.Usings:contains('Cop.Cli.Commands') || Type.File.Usings:contains('Cop.Repl')
+
+export let derived-core-no-cli-dependency = codebase.Types:cncInShared:cncUsesCli
+    :toError('Core type {item.Name} depends on the CLI (Cop.Cli/Cop.Repl) ({item.File.Path})')

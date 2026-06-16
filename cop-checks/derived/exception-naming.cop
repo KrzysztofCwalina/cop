@@ -1,0 +1,10 @@
+# Derived rule: C# types deriving from Exception must be named *Exception.
+# Keeps the exception surface discoverable and consistent (AmbiguousCollectionException,
+# CircularDependencyException, PackageNotFoundException all follow this).
+
+predicate enDerivesException(Type) => Type.BaseTypes:contains('Exception')
+predicate enNotNamedException(Type) => !Type.Name:endsWith('Exception')
+predicate enNotInTests(Type) => !Type.File.Path:startsWith('tests/') && !Type.File.Path:startsWith('samples/')
+
+export let derived-exception-naming = codebase.Types:enDerivesException:enNotNamedException:enNotInTests
+    :toError('{item.Name} derives from Exception but is not named *Exception ({item.File.Path})')

@@ -1,0 +1,11 @@
+# Derived rule: every test project must reference NUnit.
+
+import code-layering
+
+predicate tpunInTests(Project) => Project.Path:startsWith('tests/')
+predicate tpunIsNUnit(string) => string:equals('NUnit')
+predicate tpunUsesNUnit(Project) => Project.Packages:any(tpunIsNUnit)
+predicate tpunMissingNUnit(Project) => !tpunUsesNUnit
+
+export let derived-test-projects-use-nunit = codebase.Projects:tpunInTests:tpunMissingNUnit
+    :toError('Test project {item.Name} must reference NUnit')

@@ -1,0 +1,9 @@
+# Derived rule: within cop-checks/, only main.cop may declare a command.
+# Each individual check file exports a violation list; only the aggregator runs commands.
+
+predicate scIsCommand(Statement) => Statement.Kind == command
+predicate scInChecks(Statement) => Statement.File.Path:contains('cop-checks/')
+predicate scNotMain(Statement) => !Statement.File.Path:endsWith('main.cop')
+
+export let derived-single-command-in-checks = codebase.Statements:scIsCommand:scInChecks:scNotMain
+    :toError('Only cop-checks/main.cop may declare a command ({item.File.Path}:{item.Line})')

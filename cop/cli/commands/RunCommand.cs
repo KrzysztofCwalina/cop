@@ -259,11 +259,12 @@ public static class RunCommand
         }
         else if (scopeToFile != null)
         {
-            // Load all .cop files in the same directory as the specified file.
-            // This enables the cop-checks/ pattern where main.cop imports providers
-            // and other files define checks that use the shared environment.
+            // Load all .cop files in the same directory as the specified file, including
+            // subfolders. This enables the cop-checks/ pattern where main.cop imports
+            // providers and other files (including those grouped in subfolders such as
+            // cop-checks/derived/) define checks that use the shared environment.
             // Place the target file LAST so its command definitions take priority.
-            var siblingFiles = Directory.GetFiles(scriptsDir, "*.cop");
+            var siblingFiles = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
             Array.Sort(siblingFiles, StringComparer.Ordinal);
             var others = siblingFiles.Where(f => !string.Equals(f, scopeToFile, StringComparison.OrdinalIgnoreCase)).ToArray();
             allScriptFiles = [.. others, scopeToFile];

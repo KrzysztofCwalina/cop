@@ -1,0 +1,9 @@
+# Derived rule: CLI command classes (cop/cli/commands/*Command) are static.
+# They hold no instance state — every command is a static entry point.
+
+predicate ccInCliCommands(Type) => Type.File.Path:contains('cop/cli/commands/')
+predicate ccCommandSuffix(Type) => Type.Name:endsWith('Command')
+predicate ccNotStatic(Type) => !Type.Modifiers:isSet(Static)
+
+export let derived-cli-commands-are-static = codebase.Types:ccInCliCommands:ccCommandSuffix:ccNotStatic
+    :toError('CLI command {item.Name} must be a static class ({item.File.Path})')

@@ -1,0 +1,13 @@
+# Derived rule: provider classes live in the Cop.Providers namespace (or a nested subnamespace).
+# Known exception: the TypeSpec providers declare namespace 'TypeSpecProvider' (allowlisted here,
+# the way no-interfaces allowlists ICopCallable). Sample providers under samples/ are excluded.
+
+let provider-ns-allowlist = ['TypeSpecHttpProvider' 'TypeSpecRawProvider']
+
+predicate pnsIsProvider(Type) => Type.BaseTypes:contains('DataProvider')
+predicate pnsBadNamespace(Type) => !Type.File.Namespace:startsWith('Cop.Providers')
+predicate pnsNotSample(Type) => !Type.File.Path:startsWith('samples/')
+predicate pnsNotAllowlisted(Type) => !Type.Name:in(provider-ns-allowlist)
+
+export let derived-provider-namespace = codebase.Types:pnsIsProvider:pnsBadNamespace:pnsNotSample:pnsNotAllowlisted
+    :toError('Provider {item.Name} must live in the Cop.Providers namespace, not {item.File.Namespace} ({item.File.Path})')

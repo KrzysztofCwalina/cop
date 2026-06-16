@@ -1,0 +1,8 @@
+# Derived rule: provider source files live under providers/<name>/src/.
+# Reported via the types declared in those files.
+
+predicate psInProviders(Type) => Type.File.Path:startsWith('providers/')
+predicate psOutsideSrc(Type) => !Type.File.Path:contains('/src/')
+
+export let derived-provider-sources-under-src = codebase.Types:psInProviders:psOutsideSrc
+    :toError('{item.Name} is a provider source outside a src/ folder ({item.File.Path})')

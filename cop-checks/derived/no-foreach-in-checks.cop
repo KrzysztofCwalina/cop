@@ -1,0 +1,8 @@
+# Derived rule: cop-checks files must not use `foreach` to emit output.
+# Violations are always produced with :toError/:toWarning/:toInfo and printed via CHECK.
+
+predicate nfIsForeach(Statement) => Statement.Kind == foreach
+predicate nfInChecks(Statement) => Statement.File.Path:contains('cop-checks/')
+
+export let derived-no-foreach-in-checks = codebase.Statements:nfIsForeach:nfInChecks
+    :toError('Do not use foreach in cop-checks — use CHECK ({item.File.Path}:{item.Line})')

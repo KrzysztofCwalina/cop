@@ -1,0 +1,9 @@
+# Derived rule: the pure language core must not write to the console directly.
+# Output goes through the output abstraction (cop/shared/output/*). Diagnostics and sinks
+# (DiagnosticFormatter, DataSink) and the CLI are the sanctioned console boundaries.
+
+predicate ncInPureCore(Statement) => Statement.File.Path:contains('cop/shared/interpreter/') || Statement.File.Path:contains('cop/shared/ast/') || Statement.File.Path:contains('cop/shared/parser/') || Statement.File.Path:contains('cop/shared/tokenizer/') || Statement.File.Path:contains('cop/runtime/')
+predicate ncIsConsole(Statement) => Statement.TypeName:equals('Console')
+
+export let derived-no-console-in-pure-core = codebase.Statements:ncInPureCore:ncIsConsole
+    :toError('{item.TypeName}.{item.MemberName} writes to the console in the pure core — use the output abstraction ({item.File.Path}:{item.Line})')

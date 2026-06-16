@@ -15,9 +15,9 @@ let provider-projects = [
     'cop-provider'
 ]
 
-predicate isRuntimeReferencingProvider(Project) =>
-    Project.Name:in(runtime-projects)
-    && Project.References:containsAny(provider-projects)
+predicate isLayeringRuntimeProject(Project) => Project.Name:in(runtime-projects)
+predicate isLayeringProviderName(string) => string:in(provider-projects)
+predicate hasLayeringProviderReference(Project) => Project.References:any(isLayeringProviderName)
 
-export let layering-violations = codebase.Projects:isRuntimeReferencingProvider
+export let layering-violations = codebase.Projects:isLayeringRuntimeProject:hasLayeringProviderReference
     :toError('{item.Name} must not reference providers other than filesystem-provider')

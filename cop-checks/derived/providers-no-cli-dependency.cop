@@ -1,0 +1,8 @@
+# Derived rule: providers must not depend on the CLI host (Cop.Cli/Cop.Repl).
+# Providers supply data to the runtime; they must not reach into the command layer.
+
+predicate pncInProviders(Type) => Type.File.Path:startsWith('providers/')
+predicate pncUsesCli(Type) => Type.File.Usings:contains('Cop.Cli.Commands') || Type.File.Usings:contains('Cop.Repl')
+
+export let derived-providers-no-cli-dependency = codebase.Types:pncInProviders:pncUsesCli
+    :toError('Provider type {item.Name} depends on the CLI (Cop.Cli/Cop.Repl) ({item.File.Path})')
