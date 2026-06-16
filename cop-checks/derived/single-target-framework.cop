@@ -1,4 +1,5 @@
-# Derived rule: projects use a single TargetFramework, not TargetFrameworks (no multi-targeting).
+# Projects use a single <TargetFramework>, never multi-targeting (<TargetFrameworks>).
+# The repo builds one framework everywhere; multi-targeting would complicate build/publish.
 
 import code-layering
 

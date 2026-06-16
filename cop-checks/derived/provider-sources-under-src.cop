@@ -1,5 +1,5 @@
-# Derived rule: provider source files live under providers/<name>/src/.
-# Reported via the types declared in those files.
+# A provider's C# source files must live under providers/<name>/src/ — the standard provider
+# package layout the build and packaging rely on. (Reported via the types in each file.)
 
 predicate psInProviders(Type) => Type.File.Path:startsWith('providers/')
 predicate psOutsideSrc(Type) => !Type.File.Path:contains('/src/')

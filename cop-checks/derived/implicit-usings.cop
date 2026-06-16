@@ -1,4 +1,5 @@
-# Derived rule: every C# project must enable implicit usings.
+# Every C# project must enable implicit usings. There is no central Directory.Build.props,
+# so each project sets this itself; the check keeps them consistent.
 
 import code-layering
 

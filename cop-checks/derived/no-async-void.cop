@@ -1,9 +1,0 @@
-# Derived rule: no `async void` methods.
-# `async void` swallows exceptions and makes failures unobservable in the async runtime —
-# use `async Task` instead. (Event handlers, the only legitimate exception, are not used here.)
-
-predicate navIsAsyncVoid(Method) => Method.Modifiers:isSet(Async) && Method.ReturnType.Name:equals('void')
-predicate navHasAsyncVoid(Type) => Type.Methods:any(navIsAsyncVoid)
-
-export let derived-no-async-void = codebase.Types:navHasAsyncVoid
-    :toError('{item.Name} declares an async void method — use async Task ({item.File.Path})')

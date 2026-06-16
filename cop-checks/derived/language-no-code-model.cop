@@ -1,0 +1,17 @@
+# Keep the Cop language decoupled from the C# code model.
+#
+# WHAT: Flags any C# file in cop/shared (the Cop language itself — parser, evaluator,
+# type system) that imports `Cop.Providers.SourceModel`.
+#
+# WHY: `Cop.Providers.SourceModel` holds the C#-specific analysis records (TypeDeclaration,
+# StatementInfo, MethodDeclaration, ...). The Cop language is general-purpose: a .cop program
+# could analyze C#, Python, JSON, or anything else. So the language engine must never name
+# those C# types directly — analysis data reaches it only as generic provider data. If the
+# language starts depending on the code model, it stops being general-purpose.
+# (The runtime loader in cop/runtime may reference it; this rule is about the language layer.)
+
+predicate lcmInLanguage(Type) => Type.File.Path:contains('cop/shared/')
+predicate lcmUsesCodeModel(Type) => Type.File.Usings:contains('Cop.Providers.SourceModel')
+
+export let derived-language-no-code-model = codebase.Types:lcmInLanguage:lcmUsesCodeModel
+    :toError('{item.Name} (in the Cop language, cop/shared) imports the C# code model Cop.Providers.SourceModel — the language must stay general-purpose ({item.File.Path})')

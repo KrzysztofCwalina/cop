@@ -1,4 +1,4 @@
-# Derived rule: every test project must reference NUnit.
+# Projects under tests/ must reference the NUnit package — the repo's single test framework.
 
 import code-layering
 

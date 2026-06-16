@@ -1,4 +1,5 @@
-# Derived rule: every C# project must enable nullable reference types.
+# Every C# project must enable nullable reference types. There is no central
+# Directory.Build.props, so this stops a newly-added project from silently turning it off.
 
 import code-layering
 

@@ -1,7 +1,8 @@
-# Derived rule: the C# core (cop/shared, cop/runtime) must stay domain-agnostic.
-# Code-analysis concepts (Violation, Analyzer, Linter, CodeSmell, CodeReview) belong in
-# .cop packages, never baked into the language core. This is the deterministic, network-free
-# complement to the AI core-purity check.
+# The Cop language and runtime (cop/shared, cop/runtime) are general-purpose and must not
+# contain code-review/linting logic. This flags C# classes there whose names (Analyzer,
+# Linter, CodeSmell, CodeReview) suggest such logic has leaked into the engine instead of
+# living in a .cop package like code-analysis. It is a fast, name-based heuristic; the AI
+# core-purity check judges the same boundary by meaning.
 
 predicate cdpInCore(Type) => Type.File.Path:contains('cop/shared/') || Type.File.Path:contains('cop/runtime/')
 predicate cdpHasDomainName(Type) => Type.Name:contains('Analyzer') || Type.Name:contains('Linter') || Type.Name:contains('CodeSmell') || Type.Name:contains('CodeReview')

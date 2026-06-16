@@ -26,36 +26,38 @@ export let all-ai-violations =
 
 command AI = CHECK(all-ai-violations)
 
-# Derived checks — additional codified architectural/design rules (cop-checks/derived/).
-# Run with: cop cop-checks/main.cop -t . -c DERIVED
+# Derived checks — architectural & design rules specific to the cop codebase
+# (cop-checks/derived/). Each codifies a decision a newcomer wouldn't know from
+# standard .NET tooling. Run with: cop cop-checks/main.cop -t . -c DERIVED
 export let all-derived-violations =
-    derived-provider-naming +
+    # Layering & the general-purpose-core boundary
+    derived-language-no-code-model +
     derived-core-domain-purity +
     derived-core-network-isolation +
-    derived-exception-naming +
-    derived-test-class-naming +
-    derived-no-async-void +
-    derived-no-nullable-disable +
+    derived-core-no-cli-dependency +
+    derived-core-no-roslyn +
+    derived-commandline-confined-to-cli +
+    derived-providers-no-cli-dependency +
+    derived-interpreter-no-process-launch +
+    derived-no-console-in-pure-core +
+    # Provider plugin conventions
+    derived-provider-naming +
+    derived-provider-namespace +
+    derived-provider-sources-under-src +
+    derived-provider-isolation +
+    # cop-checks authoring conventions
+    derived-single-command-in-checks +
+    derived-no-foreach-in-checks +
+    derived-ai-imports-only-in-ai-checks +
+    # CLI conventions
+    derived-cli-commands-are-static +
+    # Per-project build settings (no central Directory.Build.props exists)
     derived-target-framework +
     derived-nullable-enabled +
     derived-implicit-usings +
     derived-single-target-framework +
-    derived-provider-sources-under-src +
+    # Test layout
     derived-tests-location +
-    derived-single-command-in-checks +
-    derived-no-foreach-in-checks +
-    derived-core-no-cli-dependency +
-    derived-commandline-confined-to-cli +
-    derived-core-no-roslyn +
-    derived-providers-no-cli-dependency +
-    derived-no-console-in-pure-core +
-    derived-cli-commands-are-static +
-    derived-no-datetime-now +
-    derived-interpreter-no-process-launch +
-    derived-ai-imports-only-in-ai-checks +
-    derived-provider-namespace +
-    derived-exception-suffix-implies-base +
-    derived-provider-isolation +
     derived-test-projects-use-nunit
 
 command DERIVED = CHECK(all-derived-violations)

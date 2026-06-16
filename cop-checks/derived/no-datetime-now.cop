@@ -1,8 +1,0 @@
-# Derived rule: use DateTimeOffset / UtcNow, not DateTime.Now.
-# DateTime.Now is locale/timezone-dependent and non-deterministic across machines.
-
-predicate dtnIsNow(Statement) => Statement.TypeName:equals('DateTime') && Statement.MemberName:equals('Now')
-predicate dtnNotTest(Statement) => !Statement.File.Path:startsWith('tests/') && !Statement.File.Path:startsWith('samples/')
-
-export let derived-no-datetime-now = codebase.Statements:dtnIsNow:dtnNotTest
-    :toError('Use DateTimeOffset/UtcNow instead of DateTime.Now ({item.File.Path}:{item.Line})')

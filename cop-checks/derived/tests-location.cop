@@ -1,4 +1,5 @@
-# Derived rule: NUnit test fixtures must live under tests/.
+# NUnit test fixtures ([TestFixture] classes) must live under tests/. A fixture anywhere
+# else won't be compiled or run by the test projects.
 
 predicate tlIsFixture(Type) => Type.Decorators:contains('TestFixture')
 predicate tlOutsideTests(Type) => !Type.File.Path:startsWith('tests/')

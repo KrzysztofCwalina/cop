@@ -1,5 +1,5 @@
-# Derived rule: every C# project must target net10.0.
-# No central Directory.Build.props exists, so each project sets this itself.
+# Every C# project must target net10.0. There is no central Directory.Build.props, so this
+# guards against a newly-added project silently using a different framework.
 
 import code-layering
 
