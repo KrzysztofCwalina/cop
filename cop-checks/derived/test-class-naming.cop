@@ -1,0 +1,8 @@
+# Derived rule: NUnit test fixtures must be named *Tests.
+# Every type carrying [TestFixture] in the repo follows the *Tests convention.
+
+predicate tcnIsFixture(Type) => Type.Decorators:contains('TestFixture')
+predicate tcnNotNamedTests(Type) => !Type.Name:endsWith('Tests')
+
+export let derived-test-class-naming = codebase.Types:tcnIsFixture:tcnNotNamedTests
+    :toError('Test fixture {item.Name} must be named *Tests ({item.File.Path})')

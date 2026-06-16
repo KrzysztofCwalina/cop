@@ -1,11 +1,11 @@
 # Derived Cop self-checks
 
-These checks codify **architecture and design decisions that are specific to the cop
-codebase** — the kind of thing a newcomer wouldn't learn from standard .NET tooling. Run them
-with:
+These checks codify **architecture, design, and convention decisions for the cop codebase**.
+Most are cop-specific — a newcomer wouldn't learn them from standard .NET tooling — and a few
+enforce baseline .NET hygiene the repo relies on. Run them with:
 
 ```bash
-cop cop-checks/main.cop -t . -c DERIVED    # the 23 rules below
+cop cop-checks/main.cop -t . -c DERIVED    # the 29 rules below
 cop cop-checks/main.cop -t . -c MAIN       # the original hand-written suite
 cop verify cop-checks/                      # type-check every check file
 ```
@@ -32,7 +32,7 @@ Anything domain-specific — understanding C#, reviewing code for problems, reac
 belongs in a provider or a `.cop` package, never baked into the core. Many checks below enforce
 one edge of that boundary.
 
-## Rules (23)
+## Rules (29)
 
 ### Keeping the language & runtime general-purpose
 | Check | What it enforces and why |
@@ -67,6 +67,19 @@ one edge of that boundary.
 |-------|--------------------------|
 | `cli-commands-are-static.cop` | CLI command classes (`cop/cli/commands/*Command`) must be `static`. Each command is a stateless entry point with no instance data — the established pattern for this repo's CLI. |
 
+### C# naming
+| Check | What it enforces and why |
+|-------|--------------------------|
+| `exception-naming.cop` | Types deriving from `Exception` must be named `*Exception`. |
+| `exception-suffix-implies-base.cop` | Conversely, a type named `*Exception` must actually derive from `Exception` (guards against a non-exception accidentally named that way). |
+
+### C# safety
+| Check | What it enforces and why |
+|-------|--------------------------|
+| `no-async-void.cop` | No `async void` methods — they swallow exceptions and make failures unobservable in the async runtime; use `async Task`. |
+| `no-datetime-now.cop` | Use `DateTimeOffset`/`UtcNow`, not `DateTime.Now` (locale/timezone-dependent and non-deterministic across machines). |
+| `no-nullable-disable.cop` | No `#nullable disable` directives — nullable reference types stay on everywhere. |
+
 ### Per-project build settings
 There is no central `Directory.Build.props` in this repo, so every `.csproj` sets these itself.
 The checks stop a newly-added project from silently drifting from the rest.
@@ -82,6 +95,7 @@ The checks stop a newly-added project from silently drifting from the rest.
 | Check | What it enforces and why |
 |-------|--------------------------|
 | `tests-location.cop` | NUnit test fixtures (`[TestFixture]` classes) must live under `tests/`. A fixture anywhere else won't be compiled or run by the test projects. |
+| `test-class-naming.cop` | NUnit test fixtures (`[TestFixture]` classes) must be named `*Tests`. |
 | `test-projects-use-nunit.cop` | Projects under `tests/` must reference the `NUnit` package — the repo's single test framework. |
 
 ## Also implemented, as a script
@@ -92,11 +106,6 @@ non-zero exit on violation):
 - **provider references core with `Private=false`** — provider `.csproj` reference `cop.csproj` with `<Private>false</Private>` (so a provider DLL doesn't ship its own copy of the cop assembly).
 - **all projects in the solution** — every `.csproj` is listed in `cop.sln`.
 - **external providers ship a `cop.json`** — with `provider: clr` and `providerEntry`.
-
-## Intentionally *not* included
-Generic .NET conventions that any analyzer or StyleCop already enforces are out of scope here —
-this suite is for cop-specific architecture. Examples deliberately left out: exception/test-class
-naming (`*Exception`, `*Tests`), `async void`, `DateTime.Now`, and `#nullable disable`.
 
 ## Deferred (proposed but not shippable yet, each with a concrete reason)
 

@@ -51,6 +51,13 @@ export let all-derived-violations =
     derived-ai-imports-only-in-ai-checks +
     # CLI conventions
     derived-cli-commands-are-static +
+    # C# naming
+    derived-exception-naming +
+    derived-exception-suffix-implies-base +
+    # C# safety
+    derived-no-async-void +
+    derived-no-datetime-now +
+    derived-no-nullable-disable +
     # Per-project build settings (no central Directory.Build.props exists)
     derived-target-framework +
     derived-nullable-enabled +
@@ -58,6 +65,7 @@ export let all-derived-violations =
     derived-single-target-framework +
     # Test layout
     derived-tests-location +
+    derived-test-class-naming +
     derived-test-projects-use-nunit
 
 command DERIVED = CHECK(all-derived-violations)
