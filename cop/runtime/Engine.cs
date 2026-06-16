@@ -27,6 +27,13 @@ public static class Engine
 
     private static readonly BuiltinProvider[] _builtinProviders = _rawProviders.Select(ToBuiltin).ToArray();
 
+    /// <summary>
+    /// When true, the engine times each top-level rule (let-binding) after provider
+    /// data is loaded and prints a <c>[profile]</c> breakdown to stderr before running
+    /// commands. Enabled via the CLI <c>-rp</c> flag.
+    /// </summary>
+    public static bool ProfileRules;
+
     private static BuiltinProvider ToBuiltin(DataProvider provider)
     {
         var schema = ProviderSchema.FromJson(provider.GetSchema());
@@ -200,6 +207,7 @@ public static class Engine
         var errors = new List<string>();
         var asserts = new List<AssertResult>();
         var fileOutputLines = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        var setupSw = Stopwatch.StartNew();
 
         var bridge = CreateBridge(outputs, fileOutputLines, asserts, diagLog);
         bridge.Evaluator.TraceLog = diagLog;
@@ -355,11 +363,11 @@ public static class Engine
         foreach (var builtinProvider in _builtinProviders)
         {
             queryService.RegisterProvider(builtinProvider.Name, builtinProvider.Instance, builtinProvider.Schema);
-            var collections = QueryProviderCollections(builtinProvider.Instance, builtinProvider.Schema, query, errors);
-            diagLog?.Invoke($"[diag] Provider '{builtinProvider.Name}' returned {collections.Count} collections: {string.Join(", ", collections.Select(c => $"{c.Key}({c.Value.Count})"))}");
-            // Built-in providers are always loaded regardless of user imports — don't fail when they return 0 items
+            // Lazy: a built-in provider (e.g. filesystem / markdown parsing) is only
+            // queried when one of its collections is actually accessed. Programs that
+            // never use a provider pay nothing for it.
             var runtimeBindings = builtinProvider.Instance.GetRuntimeBindings();
-            RegisterProviderCollections(bridge.Evaluator.GlobalEnvironment, builtinProvider.Name, collections, builtinProvider.Schema, runtimeBindings);
+            RegisterLazyProviderCollections(bridge.Evaluator.GlobalEnvironment, builtinProvider.Name, builtinProvider.Instance, builtinProvider.Schema, query, errors, warnings, runtimeBindings, diagLog);
         }
 
         // Re-register provider intrinsic with query service access (same pattern as print/save/assert)
@@ -451,6 +459,9 @@ public static class Engine
                     diagLog?.Invoke($"[diag] No 'command main' found in package '{pkgName}'");
             }
         }
+
+        if (ProfileRules)
+            ProfileAllRules(bridge, setupSw.ElapsedMilliseconds);
 
         List<string> commandsToRun;
         if (assertMode)
@@ -545,6 +556,81 @@ public static class Engine
             : commandName ?? "main";
 
         return new EngineResult(outputs, parseErrors, errors, resultCommandName, fileOutputs, warnings, asserts, diagnostics, exitCode);
+    }
+
+    /// <summary>
+    /// Times the force+enumerate cost of every top-level rule (let-binding that
+    /// evaluates to a collection) and prints a `[profile]` breakdown to stderr.
+    /// Leaf rules are forced before aggregate ("all-*") rules so the aggregates are
+    /// not charged the cost of the leaves they reference (thunks memoize once forced).
+    /// AI rules are skipped because forcing them would make a network call.
+    /// </summary>
+    private static void ProfileAllRules(LanguageBridge bridge, long setupMs)
+    {
+        var evaluator = bridge.Evaluator;
+        var savedTrace = evaluator.TraceLog;
+        evaluator.TraceLog = null; // exclude trace logging overhead from measurements
+
+        // AI rules make network calls (ai.judge) — never force them while profiling.
+        var skip = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "all-ai-violations",
+            "core-purity-violations",
+        };
+
+        var thunks = evaluator.GlobalEnvironment.AllBindings()
+            .Where(b => b.Value is CopThunk && !skip.Contains(b.Key))
+            .Select(b => (Name: b.Key, Thunk: (CopThunk)b.Value))
+            // Leaves first (rules), aggregates ("all-*") last.
+            .OrderBy(t => t.Name.StartsWith("all-", StringComparison.Ordinal) ? 1 : 0)
+            .ThenBy(t => t.Name, StringComparer.Ordinal)
+            .ToList();
+
+        var results = new List<(string Name, double Ms, int Count, string? Error)>();
+        var sw = new Stopwatch();
+        foreach (var (name, thunk) in thunks)
+        {
+            sw.Restart();
+            try
+            {
+                var count = CountForced(thunk.Force());
+                sw.Stop();
+                results.Add((name, sw.Elapsed.TotalMilliseconds, count, null));
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                sw.Stop();
+                results.Add((name, sw.Elapsed.TotalMilliseconds, -1, ex.Message));
+            }
+        }
+
+        evaluator.TraceLog = savedTrace;
+
+        var ruleTotal = results.Sum(r => r.Ms);
+        Console.Error.WriteLine();
+        Console.Error.WriteLine($"[profile] setup (parse + load providers): {setupMs} ms");
+        Console.Error.WriteLine($"[profile] rules total: {ruleTotal:F1} ms across {results.Count} rules");
+        Console.Error.WriteLine($"[profile] {"ms",8}  {"items",6}  rule");
+        foreach (var r in results.OrderByDescending(r => r.Ms).ThenBy(r => r.Name, StringComparer.Ordinal))
+        {
+            var items = r.Count < 0 ? "ERR" : r.Count.ToString();
+            var err = r.Error is null ? "" : "  -- " + r.Error;
+            Console.Error.WriteLine($"[profile] {r.Ms,8:F2}  {items,6}  {r.Name}{err}");
+        }
+        Console.Error.WriteLine();
+    }
+
+    /// <summary>Forces and counts the items of a (possibly lazy) collection value.</summary>
+    private static int CountForced(CopValue v)
+    {
+        if (v is CopThunk t) v = t.Force();
+        return v switch
+        {
+            CopList l => l.Items.Count,
+            CopLazyCollection lz => lz.Enumerate().Count(),
+            CopQueryable q => q.Enumerate().Count(),
+            _ => 0,
+        };
     }
 
     private static LanguageBridge CreateBridge(
@@ -694,42 +780,6 @@ public static class Engine
             errors.Add($"Provider '{provider}' query failed: {ex.Message}");
             return new Dictionary<string, List<object>>(StringComparer.Ordinal);
         }
-    }
-
-    private static void RegisterProviderCollections(Cop.Lang.Interpreter.Environment env, string providerName, Dictionary<string, List<object>> collections, ProviderSchema schema, RuntimeBindings? bindings = null)
-    {
-        // Build a type lookup from the schema for RecordView-based access
-        var typeSchemas = schema.Types.ToDictionary(t => t.Name, StringComparer.Ordinal);
-        var collectionItemTypes = schema.Collections.ToDictionary(c => c.Name, c => c.ItemType, StringComparer.Ordinal);
-
-        foreach (var (collectionName, items) in collections)
-        {
-            IDynamicObjectAdapter adapter = DataObjectAdapter.Instance;
-
-            if (items.Count > 0 && collectionItemTypes.TryGetValue(collectionName, out var itemType))
-            {
-                if (items[0] is RecordView && typeSchemas.TryGetValue(itemType, out var typeSchema))
-                {
-                    // Binary format: RecordView items with schema-based slot access
-                    adapter = new RecordViewAdapter(typeSchema.Properties, typeName: itemType);
-                }
-                else if (items[0] is not DataObject && bindings?.Accessors is not null &&
-                         bindings.Accessors.TryGetValue(itemType, out var accessors))
-                {
-                    // CLR object collections: use runtime binding accessors with full type info
-                    adapter = new ClrObjectAdapter(accessors, typeName: itemType,
-                        allAccessors: bindings.Accessors, clrTypeMappings: bindings.ClrTypeMappings);
-                }
-            }
-
-            var copList = new CopList(items
-                .Select(item => (CopValue)new CopDynamicObject(item, adapter))
-                .ToList());
-            env.Define($"{providerName}.{collectionName}", copList);
-        }
-
-        // Register a provider proxy so "filesystem.Folders" member-access syntax works
-        env.Define(providerName, new CopProviderProxy(providerName, env));
     }
 
     /// <summary>

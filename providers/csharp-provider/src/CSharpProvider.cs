@@ -4,6 +4,7 @@ using Cop.Providers.SourceModel;
 using Cop.Providers.SourceParsers;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using System.Threading.Tasks;
 
 namespace Cop.Providers;
 
@@ -91,11 +92,13 @@ public class CSharpProvider : DataProvider
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
                 .WithNullableContextOptions(NullableContextOptions.Enable));
 
-        // 4. Parse each file using semantic model
-        var sourceFiles = new List<SourceFile>();
-        var parser = new CSharpSourceParser();
-        foreach (var (tree, filePath, text) in syntaxTrees)
+        // 4. Parse each file using its semantic model. Files are independent and the
+        //    Roslyn compilation is immutable, so GetSemanticModel + extraction run in
+        //    parallel. Semantic binding over every file is the dominant analysis cost.
+        var parsedFiles = new SourceFile?[syntaxTrees.Count];
+        Parallel.For(0, syntaxTrees.Count, i =>
         {
+            var (tree, filePath, text) = syntaxTrees[i];
             SemanticModel? model = null;
             try { model = compilation.GetSemanticModel(tree); }
             catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -103,14 +106,20 @@ public class CSharpProvider : DataProvider
                 Console.Error.WriteLine($"Warning: Semantic analysis failed for '{filePath}': {ex.Message}");
             }
 
-            var sourceFile = parser.ParseWithSemantics(filePath, text, tree, model);
-            if (sourceFile is null) continue;
+            // CSharpSourceParser is stateless (all helpers static); a fresh instance
+            // per file keeps the parallel work trivially thread-safe.
+            var sourceFile = new CSharpSourceParser().ParseWithSemantics(filePath, text, tree, model);
+            if (sourceFile is null) return;
 
             var relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
             var normalized = sourceFile with { Path = relativePath };
-            LinkReferences(normalized);
-            sourceFiles.Add(normalized);
-        }
+            LinkReferences(normalized); // mutates only this file — safe in parallel
+            parsedFiles[i] = normalized;
+        });
+
+        var sourceFiles = new List<SourceFile>(syntaxTrees.Count);
+        foreach (var sf in parsedFiles)
+            if (sf is not null) sourceFiles.Add(sf);
 
         sourceFiles.Sort((a, b) => string.Compare(a.Path, b.Path, StringComparison.Ordinal));
 

@@ -111,6 +111,7 @@ if (!knownVerbs.Contains(args[0]) && !args[0].StartsWith('-') && !args[0].Starts
         string? copCommands = null;
         bool copDiag = diag;
         bool copOnlyIfModified = false;
+        bool copProfile = false;
         var copProviders = new List<string>();
         var programArgs = new List<string>();
         var remaining = args.Length > 1 ? args[1..] : Array.Empty<string>();
@@ -122,9 +123,10 @@ if (!knownVerbs.Contains(args[0]) && !args[0].StartsWith('-') && !args[0].Starts
             else if (remaining[i] == "-p" && i + 1 < remaining.Length) copProviders.Add(remaining[++i]);
             else if (remaining[i] == "-d") copDiag = true;
             else if (remaining[i] == "-om") copOnlyIfModified = true;
+            else if (remaining[i] == "-rp") copProfile = true;
             else programArgs.Add(remaining[i]);
         }
-        return RunCommand.Execute(firstArg, programArgs.Count > 0 ? programArgs.ToArray() : null, copTarget, copFormat, copCommands, copDiag, copOnlyIfModified, copProviders.Count > 0 ? copProviders.ToArray() : null);
+        return RunCommand.Execute(firstArg, programArgs.Count > 0 ? programArgs.ToArray() : null, copTarget, copFormat, copCommands, copDiag, copOnlyIfModified, copProviders.Count > 0 ? copProviders.ToArray() : null, copProfile);
     }
 
     // 2. URL → run remotely

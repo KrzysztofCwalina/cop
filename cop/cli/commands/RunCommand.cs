@@ -150,8 +150,10 @@ public static class RunCommand
         return 0;
     }
 
-    public static int Execute(string? command, string[]? programArgs = null, string? target = null, string? format = null, string? commands = null, bool diag = false, bool onlyIfModified = false, string[]? providers = null)
+    public static int Execute(string? command, string[]? programArgs = null, string? target = null, string? format = null, string? commands = null, bool diag = false, bool onlyIfModified = false, string[]? providers = null, bool profileRules = false)
     {
+        Engine.ProfileRules = profileRules;
+
         if (command != null && IsUri(command))
             return ExecuteFromUri(command, programArgs, target, format, commands, diag);
 
@@ -205,7 +207,13 @@ public static class RunCommand
         {
             var fileCommands = GetCommandNamesFromFile(scopeToFile);
             if (fileCommands.Length > 0)
-                commandFilter = fileCommands;
+            {
+                // Default to the primary MAIN command when present, so a bare run does
+                // NOT trigger opt-in commands (e.g. network-based AI checks, or DERIVED).
+                // Those stay available explicitly via -c AI / -c DERIVED.
+                var main = fileCommands.FirstOrDefault(c => c.Equals("MAIN", StringComparison.OrdinalIgnoreCase));
+                commandFilter = main is not null ? [main] : fileCommands;
+            }
             else
             {
                 Console.Error.WriteLine($"Error: No commands defined in '{command}'");
