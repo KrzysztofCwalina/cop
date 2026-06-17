@@ -4,6 +4,8 @@ using Cop.Providers.SourceModel;
 using Cop.Providers.SourceParsers;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using System.Collections.Concurrent;
+using System.Threading.Tasks;
 
 namespace Cop.Providers;
 
@@ -26,11 +28,17 @@ public class CSharpProvider : DataProvider
         var rootPath = query.RootPath;
         var excluded = query.ExcludedDirectories;
 
+        // Optional phase timing for diagnosing slow/large analyses: set COP_CSHARP_DIAG=1.
+        var _sw = System.Diagnostics.Stopwatch.StartNew();
+        var _diag = Environment.GetEnvironmentVariable("COP_CSHARP_DIAG") is not null;
+        void Log(string m) { if (_diag) Console.Error.WriteLine($"[csharp] {m} (+{_sw.ElapsedMilliseconds}ms)"); }
+
         // 1. Discover source files
         var filePaths = new List<string>();
         var parsers = new SourceParserRegistry();
         parsers.Register(new CSharpSourceParser());
         CodeCollectionBuilder.CollectSourceFiles(rootPath, parsers, excluded, filePaths);
+        Log($"discovered {filePaths.Count} source files");
 
         // Retry with backoff if 0 files found (handles antivirus interference)
         // Only retry if directory actually contains .cs files (not just other file types)
@@ -53,25 +61,41 @@ public class CSharpProvider : DataProvider
             }
         }
 
-        // 2. Parse syntax trees and read source text
-        var syntaxTrees = new List<(SyntaxTree Tree, string FilePath, string Text)>();
-        var fileErrors = new List<string>();
-        foreach (var filePath in filePaths)
+        // 2. Read + parse syntax trees. Unlike GetSemanticModel (step 4), parsing is a
+        //    pure, independent, per-file operation with no shared Roslyn state, so it is
+        //    safe to parallelize — and on large repos (e.g. azure-sdk-for-net, with big
+        //    auto-generated files) reading+parsing is the dominant cost, not binding.
+        var csFiles = filePaths.Where(p => p.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)).ToList();
+
+        // Large analyses (e.g. an entire monorepo) take minutes; tell the user so a long
+        // run doesn't look like a hang. Scoping with -t <subdir> is much faster.
+        if (csFiles.Count > 5000)
+            Console.Error.WriteLine(
+                $"Analyzing {csFiles.Count:N0} C# files — this can take several minutes. " +
+                "Narrow the scope with -t <subdir> for faster runs, or set COP_CSHARP_DIAG=1 for progress.");
+
+        var parsedTrees = new (SyntaxTree Tree, string FilePath, string Text)?[csFiles.Count];
+        var fileErrors = new ConcurrentBag<string>();
+        Parallel.For(0, csFiles.Count, i =>
         {
-            if (!filePath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)) continue;
+            var filePath = csFiles[i];
             try
             {
                 using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                 using var reader = new StreamReader(stream);
                 var text = reader.ReadToEnd();
                 var tree = CSharpSyntaxTree.ParseText(text, path: filePath);
-                syntaxTrees.Add((tree, filePath, text));
+                parsedTrees[i] = (tree, filePath, text);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 fileErrors.Add($"Failed to read '{filePath}': {ex.Message}");
             }
-        }
+        });
+
+        var syntaxTrees = new List<(SyntaxTree Tree, string FilePath, string Text)>(csFiles.Count);
+        foreach (var p in parsedTrees)
+            if (p is not null) syntaxTrees.Add(p.Value);
 
         if (fileErrors.Count > 0)
         {
@@ -79,17 +103,20 @@ public class CSharpProvider : DataProvider
                 Console.Error.WriteLine(err);
             if (syntaxTrees.Count == 0)
                 throw new InvalidOperationException(
-                    $"Failed to read all {fileErrors.Count} source file(s). First error: {fileErrors[0]}");
+                    $"Failed to read all {fileErrors.Count} source file(s). First error: {fileErrors.First()}");
         }
+        Log($"parsed {syntaxTrees.Count} syntax trees");
 
         // 3. Create Roslyn compilation with framework + project references
         var references = GetReferences(rootPath);
+        Log($"loaded {references.Count} metadata references");
         var compilation = CSharpCompilation.Create(
             "CopAnalysis",
             syntaxTrees.Select(t => t.Tree),
             references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
                 .WithNullableContextOptions(NullableContextOptions.Enable));
+        Log("created compilation");
 
         // 4. Parse each file using its semantic model.
         //
@@ -101,6 +128,7 @@ public class CSharpProvider : DataProvider
         // and memory thrashing that can hang for many minutes. Keep it sequential.
         var sourceFiles = new List<SourceFile>(syntaxTrees.Count);
         var parser = new CSharpSourceParser();
+        var _n = 0;
         foreach (var (tree, filePath, text) in syntaxTrees)
         {
             SemanticModel? model = null;
@@ -111,6 +139,7 @@ public class CSharpProvider : DataProvider
             }
 
             var sourceFile = parser.ParseWithSemantics(filePath, text, tree, model);
+            if (++_n % 500 == 0) Log($"semantic-extracted {_n}/{syntaxTrees.Count} files");
             if (sourceFile is null) continue;
 
             var relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
@@ -120,15 +149,18 @@ public class CSharpProvider : DataProvider
         }
 
         sourceFiles.Sort((a, b) => string.Compare(a.Path, b.Path, StringComparison.Ordinal));
+        Log($"semantic extraction complete ({sourceFiles.Count} files)");
 
         // 5. Build collections
         var collections = CodeCollectionBuilder.ExtractCollections(sourceFiles, query.Collection, query.CollectionFilters);
+        Log("built collections");
 
         // 6. Discover projects and link files
         var projects = CSharpProjectDiscovery.Discover(rootPath, excluded);
         LinkFilesToProjects(collections, projects, rootPath);
         if (query.Collection == null || query.Collection == "Projects")
             collections["Projects"] = projects.Cast<object>().ToList();
+        Log($"discovered {projects.Count} projects");
 
         return collections;
     }
