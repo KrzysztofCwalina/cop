@@ -823,6 +823,7 @@ public static class RunCommand
         // BFS: download missing packages and their transitive imports
         var queue = new Queue<string>(missing);
         var downloaded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var restoredCount = 0;
 
         if (missing.Count > 0)
         {
@@ -892,6 +893,7 @@ public static class RunCommand
                     Console.Error.WriteLine(" ok");
                     downloaded.Add(pkgName);
                     restored = true;
+                    restoredCount++;
 
                     // Parse src/ .cop files to discover transitive imports (skip samples/)
                     foreach (var (relPath, _) in files.Where(f =>
@@ -928,9 +930,9 @@ public static class RunCommand
                 Console.Error.WriteLine($"Warning: Package '{pkgName}' not found in any configured feed.");
         }
 
-        if (downloaded.Count > 0)
+        if (restoredCount > 0)
         {
-            Console.Error.WriteLine($"{downloaded.Count} package(s) restored successfully");
+            Console.Error.WriteLine($"{restoredCount} package(s) restored successfully");
         }
     }
 
@@ -989,6 +991,7 @@ public static class RunCommand
         // BFS: download requested packages, then their imports
         var queue = new Queue<string>(packageNames);
         var downloaded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var restoredCount = 0;
 
         if (packageNames.Count > 0)
         {
@@ -1056,6 +1059,7 @@ public static class RunCommand
                     Console.Error.WriteLine(" ok");
                     downloaded.Add(pkgName);
                     restored = true;
+                    restoredCount++;
 
                     // Parse src/ .cop files to discover transitive imports (skip samples/)
                     foreach (var (relPath, _) in files.Where(f =>
@@ -1095,9 +1099,9 @@ public static class RunCommand
             }
         }
 
-        if (downloaded.Count > 0)
+        if (restoredCount > 0)
         {
-            Console.Error.WriteLine($"{downloaded.Count} package(s) restored successfully");
+            Console.Error.WriteLine($"{restoredCount} package(s) restored successfully");
         }
 
         return true;

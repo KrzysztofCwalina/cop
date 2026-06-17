@@ -4,7 +4,6 @@ using Cop.Providers.SourceModel;
 using Cop.Providers.SourceParsers;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using System.Threading.Tasks;
 
 namespace Cop.Providers;
 
@@ -92,13 +91,18 @@ public class CSharpProvider : DataProvider
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
                 .WithNullableContextOptions(NullableContextOptions.Enable));
 
-        // 4. Parse each file using its semantic model. Files are independent and the
-        //    Roslyn compilation is immutable, so GetSemanticModel + extraction run in
-        //    parallel. Semantic binding over every file is the dominant analysis cost.
-        var parsedFiles = new SourceFile?[syntaxTrees.Count];
-        Parallel.For(0, syntaxTrees.Count, i =>
+        // 4. Parse each file using its semantic model.
+        //
+        // NOTE: This is intentionally SEQUENTIAL. Parallelizing GetSemanticModel across
+        // a single shared CSharpCompilation looks like a win on small repos but is
+        // pathological at scale: the first semantic-model access lazily builds the
+        // compilation's declaration/symbol tables, and doing that under heavy parallel
+        // contention on a large solution (e.g. azure-sdk-for-net) causes lock contention
+        // and memory thrashing that can hang for many minutes. Keep it sequential.
+        var sourceFiles = new List<SourceFile>(syntaxTrees.Count);
+        var parser = new CSharpSourceParser();
+        foreach (var (tree, filePath, text) in syntaxTrees)
         {
-            var (tree, filePath, text) = syntaxTrees[i];
             SemanticModel? model = null;
             try { model = compilation.GetSemanticModel(tree); }
             catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -106,20 +110,14 @@ public class CSharpProvider : DataProvider
                 Console.Error.WriteLine($"Warning: Semantic analysis failed for '{filePath}': {ex.Message}");
             }
 
-            // CSharpSourceParser is stateless (all helpers static); a fresh instance
-            // per file keeps the parallel work trivially thread-safe.
-            var sourceFile = new CSharpSourceParser().ParseWithSemantics(filePath, text, tree, model);
-            if (sourceFile is null) return;
+            var sourceFile = parser.ParseWithSemantics(filePath, text, tree, model);
+            if (sourceFile is null) continue;
 
             var relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
             var normalized = sourceFile with { Path = relativePath };
-            LinkReferences(normalized); // mutates only this file — safe in parallel
-            parsedFiles[i] = normalized;
-        });
-
-        var sourceFiles = new List<SourceFile>(syntaxTrees.Count);
-        foreach (var sf in parsedFiles)
-            if (sf is not null) sourceFiles.Add(sf);
+            LinkReferences(normalized);
+            sourceFiles.Add(normalized);
+        }
 
         sourceFiles.Sort((a, b) => string.Compare(a.Path, b.Path, StringComparison.Ordinal));
 
