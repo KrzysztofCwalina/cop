@@ -4,7 +4,7 @@ import javascript
 import javascript-checks
 import code-analysis
 
-let cb = codebase(Program.Providers)
+let cb = codebase(javascript.parse())
 
 ## Library Design Rules
 

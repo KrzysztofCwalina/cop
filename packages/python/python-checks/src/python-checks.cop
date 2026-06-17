@@ -3,7 +3,7 @@
 import code-analysis
 import python
 
-let cb = codebase(Program.Providers)
+let cb = codebase(python.parse())
 
 ## Correctness Checks
 

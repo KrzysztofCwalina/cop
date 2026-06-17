@@ -4,7 +4,7 @@ import csharp
 import csharp-checks
 import code-analysis
 
-let cb = codebase(Program.Providers)
+let cb = codebase(csharp.parse())
 
 ## Library API Design
 
@@ -50,7 +50,7 @@ export predicate isInDualModeMethod(Statement) => Statement.Method != nic
     && Statement.Method:hasSyncAndAsyncVariants
 
 # Statement has an ancestor if-statement whose condition references 'async'
-predicate isAsyncGuard(Ancestor) => Ancestor.Kind == 'if' && Ancestor.Condition:contains('async')
+predicate isAsyncGuard(Statement) => Statement.Kind == 'if' && Statement.Condition:contains('async')
 export predicate isGuardedByAsyncCheck(Statement) => Statement.Ancestors:any(isAsyncGuard)
 
 # Unconditional await in dual-mode method (AZC0110)
@@ -71,20 +71,18 @@ export let unconditional-sync-in-dual-mode = cb.Statements:isUnconditionalEnsure
 
 # AZC0108: Detect wrong async argument values in guarded branches
 
-predicate isPositiveAsyncGuard(Ancestor) => Ancestor.Kind == 'if' && Ancestor.Condition == 'async'
+predicate isPositiveAsyncGuard(Statement) => Statement.Kind == 'if' && Statement.Condition == 'async'
 predicate isInPositiveAsyncGuard(Statement) => Statement.Ancestors:any(isPositiveAsyncGuard)
-predicate isNegatedAsyncGuard(Ancestor) => Ancestor.Kind == 'if' && Ancestor.Condition:contains('!async')
-predicate isElseBranch(Ancestor) => Ancestor.Kind == 'else'
+predicate isNegatedAsyncGuard(Statement) => Statement.Kind == 'if' && Statement.Condition:contains('!async')
+predicate isElseBranch(Statement) => Statement.Kind == 'else'
 predicate isInNegatedAsyncGuard(Statement) => Statement.Ancestors:any(isNegatedAsyncGuard)
     || Statement.Ancestors:any(isElseBranch)
-predicate hasAsyncFalseArg(Argument) => Argument:contains('async: false')
 export predicate hasWrongAsyncFalseInAsyncGuard(Statement) => Statement.Kind == 'call'
     && isInDualModeMethod && isInPositiveAsyncGuard
-    && Statement.Arguments:any(hasAsyncFalseArg)
-predicate hasAsyncTrueArg(Argument) => Argument:contains('async: true')
+    && Statement.Arguments:any((a) => a:contains('async: false'))
 export predicate hasWrongAsyncTrueInSyncGuard(Statement) => Statement.Kind == 'call'
     && isInDualModeMethod && isInNegatedAsyncGuard
-    && Statement.Arguments:any(hasAsyncTrueArg)
+    && Statement.Arguments:any((a) => a:contains('async: true'))
 
 ## Wrong async argument value in guarded branch (AZC0108)
 export let wrong-async-arg-value = cb.Statements:hasWrongAsyncFalseInAsyncGuard

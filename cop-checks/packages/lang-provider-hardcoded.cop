@@ -1,0 +1,26 @@
+# Language-specific check packages must hardcode their language provider.
+#
+# A package under a language directory (dotnet/, js/, python/, java/, go/, rust/)
+# must build its codebase with codebase(<lang>.parse()) — e.g. codebase(csharp.parse()) —
+# so that `cop <lang>-checks -t <dir>` works with NO -p flag. Using
+# codebase(Program.Providers) makes the package silently produce nothing unless the
+# caller remembers to pass `-p <lang>`, which is a footgun.
+#
+# Run against the packages directory: cop cop-checks/packages/main.cop -t packages
+#
+# Detection is a deliberate last-resort text match: the cop provider does not expose
+# a call's arguments as a semantic element, so there is no Statement/Call field that
+# captures `codebase(Program.Providers)`.
+
+predicate lpInLanguagePackage(Line) =>
+    Line.File.Path:startsWith('dotnet/')
+    || Line.File.Path:startsWith('js/')
+    || Line.File.Path:startsWith('python/')
+    || Line.File.Path:startsWith('java/')
+    || Line.File.Path:startsWith('go/')
+    || Line.File.Path:startsWith('rust/')
+
+predicate lpUsesProgramProviders(Line) => Line.Text:contains('codebase(Program.Providers)')
+
+export let lang-provider-hardcoded-violations = codebase.Lines:lpUsesProgramProviders:lpInLanguagePackage
+    :toError('Language-specific package must hardcode its provider via codebase(<lang>.parse()), not codebase(Program.Providers), so it works without -p')

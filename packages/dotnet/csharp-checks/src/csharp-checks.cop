@@ -4,7 +4,7 @@ import code
 import code-analysis
 import csharp
 
-let cb = codebase(Program.Providers)
+let cb = codebase(csharp.parse())
 
 ## Correctness Checks
 

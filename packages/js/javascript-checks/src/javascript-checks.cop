@@ -3,7 +3,7 @@
 import javascript
 import code-analysis
 
-let cb = codebase(Program.Providers)
+let cb = codebase(javascript.parse())
 
 ## JavaScript Correctness
 
