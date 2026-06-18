@@ -238,7 +238,7 @@ public sealed class Evaluator
         var collection = Eval(stmt.Collection, env);
         // Named subset resolution: predicate Clients(Types) used as foreach source
         collection = TryResolveNamedSubset(collection, env);
-        _traceLog?.Invoke($"[trace] ExecForEach: collection type={collection?.GetType().Name}, body stmts={stmt.Body.Count}");
+        _traceLog?.Invoke($"[trace] ExecForEach: {ExpressionRenderer.Render(stmt.Collection)}  (collection={DescribeValue(collection)}, body stmts={stmt.Body.Count})");
         var items = CoerceToEnumerable(collection);
         int count = 0;
 
@@ -681,13 +681,27 @@ public sealed class Evaluator
     private CopValue EvalConditional(ConditionalExpr cond, Environment env)
     {
         var rawCondition = ForceValue(Eval(cond.Condition, env));
-        _traceLog?.Invoke($"[trace] EvalConditional: raw condition type={rawCondition?.GetType().Name}, display={rawCondition?.Display()?.Substring(0, Math.Min(rawCondition?.Display()?.Length ?? 0, 50))}");
+        _traceLog?.Invoke($"[trace] EvalConditional: {ExpressionRenderer.Render(cond.Condition)}  (raw={DescribeValue(rawCondition)})");
         var condition = CoerceCallableToBool(rawCondition, env);
-        _traceLog?.Invoke($"[trace] EvalConditional: coerced condition type={condition?.GetType().Name}, truthy={condition?.IsTruthy}");
+        _traceLog?.Invoke($"[trace] EvalConditional: coerced={DescribeValue(condition)}, truthy={condition?.IsTruthy}");
         return condition.IsTruthy
             ? Eval(cond.Then, env)
             : Eval(cond.Else, env);
     }
+
+    /// <summary>
+    /// Describes a runtime value's collection kind for diagnostics — e.g. CopList[412],
+    /// CopQueryable&lt;csharp&gt; — without forcing or enumerating lazy/queryable sources.
+    /// </summary>
+    private static string DescribeValue(CopValue? value) => value switch
+    {
+        null => "null",
+        CopList l => $"CopList[{l.Items.Count}]",
+        CopQueryable q => $"CopQueryable<{q.ProviderName}>",
+        CopQueryableProperty qp => $"CopQueryableProperty<{qp.Source.ProviderName}.{qp.PropertyName}>",
+        CopLazyCollection => "CopLazyCollection[lazy]",
+        _ => value.GetType().Name
+    };
 
     private CopValue EvalMatch(MatchExpr match, Environment env)
     {
@@ -743,7 +757,7 @@ public sealed class Evaluator
         var collection = ForceValue(Eval(filter.Collection, env));
         bool negated = filter.Negated;
 
-        _traceLog?.Invoke($"[trace] EvalFilter: collection type={collection?.GetType().Name}, predicate={filter.Predicate?.GetType().Name}");
+        _traceLog?.Invoke($"[trace] EvalFilter: {ExpressionRenderer.Render(filter)}  (collection={DescribeValue(collection)})");
 
         // Queryable collection: try to compile predicate and accumulate filter (lazy pushdown)
         if (collection is CopQueryable queryable)
@@ -752,7 +766,7 @@ public sealed class Evaluator
             var compiled = PredicateCompiler.TryCompile(filter.Predicate, negated);
             if (compiled is not null)
             {
-                _traceLog?.Invoke($"[trace] EvalFilter: compiled predicate to FilterExpression, accumulating on queryable");
+                _traceLog?.Invoke($"[trace] EvalFilter: compiled predicate '{ExpressionRenderer.Render(filter.Predicate)}' to FilterExpression, accumulating on queryable");
                 return queryable.WithFilter(compiled);
             }
 
@@ -766,7 +780,7 @@ public sealed class Evaluator
             }
 
             // Cannot compile — materialize and fall through to normal path
-            _traceLog?.Invoke($"[trace] EvalFilter: cannot compile predicate, materializing queryable");
+            _traceLog?.Invoke($"[trace] EvalFilter: cannot compile predicate '{ExpressionRenderer.Render(filter.Predicate)}', materializing queryable");
             collection = queryable.Materialize();
             collection = ForceValue(collection);
         }
@@ -778,7 +792,7 @@ public sealed class Evaluator
             var compiled = PredicateCompiler.TryCompile(filter.Predicate, negated, queryProp.PropertyName);
             if (compiled is not null)
             {
-                _traceLog?.Invoke($"[trace] EvalFilter: compiled compound filter {queryProp.PropertyName}:{filter.Predicate}");
+                _traceLog?.Invoke($"[trace] EvalFilter: compiled compound filter {queryProp.PropertyName}:{ExpressionRenderer.Render(filter.Predicate)}");
                 return queryProp.Source.WithFilter(compiled);
             }
 
