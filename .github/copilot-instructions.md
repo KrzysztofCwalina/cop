@@ -37,6 +37,33 @@ install/verify-archives.ps1
 
 This validates that Linux/macOS zip archives have the correct ZIP "version made by" host OS (Unix) and executable permission bits. Without these, `unzip`/`mise` extract the `cop` binary as non-executable (0644) and users get "Permission denied".
 
+## Versioning & Releases
+
+**The version IS the date.** `<Version>` in `cop/cli/cop.csproj` is `YYYY.M.D.N` where:
+
+- `YYYY.M.D` = the **current calendar date** of the release (no leading zeros, e.g. `2026.6.18`).
+- `N` = the build number **within that day**, starting at `1` and incrementing for each additional release the same day.
+
+So the first release on 2026-06-18 is `2026.6.18.1`; a second release that same day is `2026.6.18.2`. **Never** keep a stale date and only bump `N` (e.g. do NOT ship `2026.6.16.6` on June 18) — always set `Y.M.D` to today's date first. Check today's date before bumping.
+
+**Cutting a release** (always from a clean `master`, after tests pass):
+
+```bash
+# 1. Set cop/cli/cop.csproj <Version> to today's date, e.g. 2026.6.18.1
+# 2. Rebuild exe + provider DLLs + all platform zips
+install/publish.ps1
+# 3. Regenerate docs if packages changed
+dotnet run --project tools/copdocs -- packages --output docs/reference.html
+# 4. Commit version + install/cop-*.zip + rebuilt packages/**/lib/*.dll (+ docs)
+git add -A && git commit -m "..." && git push
+# 5. Create the release (asset names must be cop-<rid>.zip + cop-vscode.zip)
+gh release create v2026.6.18.1 install/cop-*.zip install/cop-vscode.zip --title v2026.6.18.1 --latest
+# 6. Verify end-to-end
+cop update      # must report the new version
+```
+
+`cop update` always installs `releases/latest` (no version comparison), so the new release must be marked `--latest`. The release tag is `v<version>`.
+
 ## Regenerating Docs
 
 After any change to packages (new/renamed packages, updated doc comments, added/removed samples), regenerate the reference app:
