@@ -210,7 +210,10 @@ public static class Engine
         var setupSw = Stopwatch.StartNew();
 
         var bridge = CreateBridge(outputs, fileOutputLines, asserts, diagLog);
-        bridge.Evaluator.TraceLog = diagLog;
+        // Per-item evaluator trace ([trace] lines) is a deep-debug firehose (millions of lines on
+        // large repos). Keep -d focused on [diag] summaries; opt into [trace] via COP_TRACE=1.
+        bridge.Evaluator.TraceLog =
+            (diagLog is not null && System.Environment.GetEnvironmentVariable("COP_TRACE") == "1") ? diagLog : null;
 
         // Phase 1: Register functions, types, enums (NOT let bindings — those need provider data)
         foreach (var module in modules)

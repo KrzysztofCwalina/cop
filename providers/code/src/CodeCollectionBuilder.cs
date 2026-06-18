@@ -83,6 +83,7 @@ public static class CodeCollectionBuilder
     {
         var parseErrors = new System.Collections.Concurrent.ConcurrentBag<string>();
         var sourceFiles = new System.Collections.Concurrent.ConcurrentBag<SourceFile>();
+        var diagThresholdMs = GetParseDiagThresholdMs();
         Parallel.ForEach(filePaths,
             new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
             filePath =>
@@ -97,7 +98,18 @@ public static class CodeCollectionBuilder
                     using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                     using var reader = new StreamReader(stream);
                     var text = reader.ReadToEnd();
-                    sourceFile = parser.Parse(filePath, text);
+                    if (diagThresholdMs >= 0)
+                    {
+                        var sw = System.Diagnostics.Stopwatch.StartNew();
+                        sourceFile = parser.Parse(filePath, text);
+                        sw.Stop();
+                        if (sw.ElapsedMilliseconds >= diagThresholdMs)
+                            Console.Error.WriteLine($"[parse-diag] {sw.ElapsedMilliseconds,6} ms  {text.Length,8} chars  {filePath}");
+                    }
+                    else
+                    {
+                        sourceFile = parser.Parse(filePath, text);
+                    }
                 }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
@@ -120,6 +132,17 @@ public static class CodeCollectionBuilder
         }
 
         return sourceFiles.OrderBy(f => f.Path, StringComparer.Ordinal).ToList();
+    }
+
+    /// <summary>
+    /// Returns the per-file parse timing threshold in ms when COP_PARSE_DIAG is set
+    /// (a bare value enables a 100ms default; a numeric value overrides it). Returns -1 when disabled.
+    /// </summary>
+    private static long GetParseDiagThresholdMs()
+    {
+        var v = Environment.GetEnvironmentVariable("COP_PARSE_DIAG");
+        if (string.IsNullOrEmpty(v)) return -1;
+        return long.TryParse(v, out var ms) ? ms : 100;
     }
 
     /// <summary>
@@ -274,26 +297,20 @@ public static class CodeCollectionBuilder
 
     public static void CollectSourceFiles(string rootDir, SourceParserRegistry parsers, IReadOnlySet<string>? excluded, List<string> result, bool isRoot = true)
     {
-        // Use EnumerateFiles with AllDirectories for a single enumeration handle.
-        // This is more resilient to transient filesystem filter driver interference on Windows
-        // (antivirus, indexer) compared to per-directory GetFiles + GetDirectories recursion.
+        // Prune excluded directories (node_modules, bin, obj, .git, dist, ...) DURING traversal
+        // instead of enumerating the whole tree and filtering paths afterward. This is critical:
+        // a single JS repo node_modules can hold millions of files, and walking it would dominate
+        // runtime (observed: 8M files / ~49s for one azure-sdk-for-js package). We enumerate each
+        // directory's files, then recurse only into non-excluded, non-reparse-point subdirectories.
         try
         {
             foreach (var file in Directory.EnumerateFiles(rootDir, "*", new EnumerationOptions
             {
-                RecurseSubdirectories = true,
+                RecurseSubdirectories = false,
                 IgnoreInaccessible = !isRoot,  // propagate root errors, skip subdirectory errors
                 AttributesToSkip = FileAttributes.System
             }))
             {
-                // Check excluded directories in the path
-                if (excluded is not null)
-                {
-                    var relativePath = file.AsSpan(rootDir.Length);
-                    if (IsInExcludedDirectory(relativePath, excluded))
-                        continue;
-                }
-
                 var ext = Path.GetExtension(file);
                 if (parsers.GetParser(ext) != null)
                     result.Add(file);
@@ -301,26 +318,27 @@ public static class CodeCollectionBuilder
         }
         catch (UnauthorizedAccessException) when (!isRoot) { }
         catch (IOException) when (!isRoot) { }
-    }
 
-    private static bool IsInExcludedDirectory(ReadOnlySpan<char> relativePath, IReadOnlySet<string> excluded)
-    {
-        // Check each path segment against excluded set
-        var pathStr = relativePath.ToString();
-        var start = 0;
-        for (int i = 0; i <= pathStr.Length; i++)
+        IEnumerable<string> subDirs;
+        try
         {
-            if (i == pathStr.Length || pathStr[i] == Path.DirectorySeparatorChar || pathStr[i] == Path.AltDirectorySeparatorChar)
+            subDirs = Directory.EnumerateDirectories(rootDir, "*", new EnumerationOptions
             {
-                if (i > start)
-                {
-                    var segment = pathStr.Substring(start, i - start);
-                    if (excluded.Contains(segment))
-                        return true;
-                }
-                start = i + 1;
-            }
+                RecurseSubdirectories = false,
+                IgnoreInaccessible = !isRoot,
+                // Skip reparse points (symlinks/junctions) to avoid infinite loops in pnpm-style node_modules.
+                AttributesToSkip = FileAttributes.System | FileAttributes.ReparsePoint
+            });
         }
-        return false;
+        catch (UnauthorizedAccessException) when (!isRoot) { return; }
+        catch (IOException) when (!isRoot) { return; }
+
+        foreach (var subDir in subDirs)
+        {
+            var dirName = Path.GetFileName(subDir);
+            if (excluded is not null && excluded.Contains(dirName))
+                continue;
+            CollectSourceFiles(subDir, parsers, excluded, result, isRoot: false);
+        }
     }
 }

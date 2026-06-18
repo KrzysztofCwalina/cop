@@ -235,7 +235,7 @@ internal class JavaLexer(string source)
         if (_pos + 2 < source.Length)
         {
             var three = source.Substring(_pos, 3);
-            if (three is ">>>") { _pos += 3; return new JavaToken(JavaTokenKind.Punctuation, three, line, start, _pos); }
+            if (three is ">>>" or "...") { _pos += 3; return new JavaToken(JavaTokenKind.Punctuation, three, line, start, _pos); }
         }
         if (_pos + 1 < source.Length)
         {
@@ -255,6 +255,23 @@ internal class JavaLexer(string source)
 internal class JavaParser(List<JavaToken> tokens, string sourceText)
 {
     private int _pos;
+    private static readonly bool _diag = Environment.GetEnvironmentVariable("COP_JAVA_DIAG") is not null;
+
+    /// <summary>
+    /// Progress guard for parser loops: if a loop iteration consumed no tokens, force a
+    /// single advance so the parser can never hang on an unexpected token sequence.
+    /// Returns the (possibly advanced) position to use as the next iteration's baseline.
+    /// </summary>
+    private int Guard(int before, string where)
+    {
+        if (_pos == before && !IsAtEnd())
+        {
+            if (_diag)
+                Console.Error.WriteLine($"[java-parser] non-advancing loop in {where} at token #{_pos} '{Current().Value}' ({Current().Kind}); forcing advance");
+            Advance();
+        }
+        return _pos;
+    }
 
     public SourceFile Parse(string filePath)
     {
@@ -375,6 +392,7 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
 
             while (!IsAtEnd() && !Check("}"))
             {
+                int g = _pos;
                 SkipComments();
                 if (Check("}")) break;
                 SkipAnnotations();
@@ -395,6 +413,7 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
                             methods.Add(member);
                     }
                 }
+                Guard(g, "class-body");
             }
             if (Check("}")) Advance();
         }
@@ -407,6 +426,7 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
     {
         while (!IsAtEnd() && !Check("}") && !Check(";"))
         {
+            int g = _pos;
             SkipComments();
             SkipAnnotations();
             if (Check("}") || Check(";")) break;
@@ -418,6 +438,7 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
                 if (Check("{")) SkipBraces();
             }
             if (Check(",")) Advance();
+            Guard(g, "enum-constants");
         }
         if (Check(";")) Advance();
     }
@@ -428,6 +449,7 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
         Advance(); // skip (
         while (!IsAtEnd() && !Check(")"))
         {
+            int g = _pos;
             SkipComments();
             SkipAnnotations();
             if (Check(")")) break;
@@ -436,6 +458,7 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
             if (paramName != "")
                 fields.Add(new FieldDeclaration(paramName, new TypeReference(paramType, null, [], paramType), Modifier.Public, CurrentLine()));
             if (Check(",")) Advance();
+            Guard(g, "record-components");
         }
         if (Check(")")) Advance();
         return fields;
@@ -484,7 +507,8 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
         SkipGenerics();
         if (Check("[")) { Advance(); if (Check("]")) Advance(); } // array type
 
-        if (Current().Kind != JavaTokenKind.Identifier)
+        if (Current().Kind != JavaTokenKind.Identifier
+            && !(Current().Kind == JavaTokenKind.Keyword && ContextualKeywords.Contains(Current().Value)))
         {
             // Not a valid member — skip to next semicolon or brace
             SkipUntilSemiOrBrace();
@@ -527,6 +551,7 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
         Advance();
         while (!IsAtEnd() && !Check(")"))
         {
+            int g = _pos;
             SkipComments();
             SkipAnnotations();
             if (Check(")")) break;
@@ -540,6 +565,7 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
             if (paramName != "")
                 parameters.Add(new ParameterDeclaration(paramName, new TypeReference(paramType, null, [], paramType), isVariadic, false, false, 0));
             if (Check(",")) Advance();
+            Guard(g, "parameters");
         }
         if (Check(")")) Advance();
         return parameters;
@@ -694,10 +720,16 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
 
     private string ConsumeIdentifier()
     {
-        if (!IsAtEnd() && Current().Kind == JavaTokenKind.Identifier)
+        if (!IsAtEnd() && (Current().Kind == JavaTokenKind.Identifier
+            || (Current().Kind == JavaTokenKind.Keyword && ContextualKeywords.Contains(Current().Value))))
         { var v = Current().Value; Advance(); return v; }
         return "";
     }
+
+    // Java contextual keywords that are also legal identifiers (param/var/method names).
+    // Treating them as hard keywords caused the parser to stall on e.g. `Object record`.
+    private static readonly HashSet<string> ContextualKeywords =
+        ["var", "yield", "record", "sealed", "permits", "non-sealed"];
 
     private string ConsumeQualifiedName()
     {
