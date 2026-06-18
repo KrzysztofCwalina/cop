@@ -28,9 +28,9 @@ public class CSharpProvider : DataProvider
         var rootPath = query.RootPath;
         var excluded = query.ExcludedDirectories;
 
-        // Optional phase timing for diagnosing slow/large analyses: set COP_CSHARP_DIAG=1.
+        // Optional phase timing for diagnosing slow/large analyses: enabled at -dd (CopDiagnostics.Timing).
         var _sw = System.Diagnostics.Stopwatch.StartNew();
-        var _diag = Environment.GetEnvironmentVariable("COP_CSHARP_DIAG") is not null;
+        var _diag = Cop.Core.CopDiagnostics.Timing;
         void Log(string m) { if (_diag) Console.Error.WriteLine($"[csharp] {m} (+{_sw.ElapsedMilliseconds}ms)"); }
 
         // 1. Discover source files
@@ -72,7 +72,7 @@ public class CSharpProvider : DataProvider
         if (csFiles.Count > 5000)
             Console.Error.WriteLine(
                 $"Analyzing {csFiles.Count:N0} C# files — this can take several minutes. " +
-                "Narrow the scope with -t <subdir> for faster runs, or set COP_CSHARP_DIAG=1 for progress.");
+                "Narrow the scope with -t <subdir> for faster runs, or pass -dd for progress.");
 
         var parsedTrees = new (SyntaxTree Tree, string FilePath, string Text)?[csFiles.Count];
         var fileErrors = new ConcurrentBag<string>();

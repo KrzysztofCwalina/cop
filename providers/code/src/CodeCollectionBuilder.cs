@@ -135,15 +135,11 @@ public static class CodeCollectionBuilder
     }
 
     /// <summary>
-    /// Returns the per-file parse timing threshold in ms when COP_PARSE_DIAG is set
-    /// (a bare value enables a 100ms default; a numeric value overrides it). Returns -1 when disabled.
+    /// Returns the per-file parse timing threshold in ms when -dd (CopDiagnostics.Timing) is set
+    /// (logs files slower than 100ms). Returns -1 when disabled.
     /// </summary>
     private static long GetParseDiagThresholdMs()
-    {
-        var v = Environment.GetEnvironmentVariable("COP_PARSE_DIAG");
-        if (string.IsNullOrEmpty(v)) return -1;
-        return long.TryParse(v, out var ms) ? ms : 100;
-    }
+        => Cop.Core.CopDiagnostics.Timing ? 100 : -1;
 
     /// <summary>
     /// Restores source files from cache, re-linking references.

@@ -17,11 +17,17 @@ internal static class ConsoleMarkdown
     internal const string Reset = "\x1b[0m";
 
     /// <summary>
-    /// Returns true if ANSI colors should be used based on environment.
+    /// Set by the --no-color CLI flag to force plain output (replaces the former NO_COLOR env var).
+    /// </summary>
+    internal static bool NoColor;
+
+    /// <summary>
+    /// Returns true if ANSI colors should be used: only when writing to a real terminal
+    /// (not redirected/piped) and --no-color was not passed.
     /// </summary>
     internal static bool UseColor =>
         !Console.IsOutputRedirected &&
-        Environment.GetEnvironmentVariable("NO_COLOR") == null;
+        !NoColor;
 
     /// <summary>
     /// Writes markdown content to the console with ANSI colorization.

@@ -1,19 +1,15 @@
-# Flag every use of System.Environment.* for review.
+# Environment variables must not control cop's behavior — use CLI flags or config instead.
+# The ONLY acceptable use of an environment variable is reading a SECRET (e.g. GITHUB_TOKEN)
+# that must not be passed on a command line (it would leak into process listings / shell history).
 #
-# Environment access is hidden, machine-global, side-effecting state. Environment-variable
-# configuration in particular is discouraged in this codebase — behavior should be driven by
-# explicit options/flags, not by env vars a caller can't discover. Every Environment.* usage
-# must be deliberately reviewed and justified (or removed).
-#
-# Detection is line-based on purpose: property accesses (e.g. Environment.ProcessorCount) and
-# calls nested inside arguments (e.g. if (...Environment.GetEnvironmentVariable("CI"))) have no
-# Statement/Call node in the code model, so the semantic model cannot see every usage. The \b
-# word boundary matches `Environment.` and `System.Environment.` while excluding unrelated
-# members such as GlobalEnvironment.* and RuntimeEnvironment.*.
+# This flags every Environment.GetEnvironmentVariable / SetEnvironmentVariable call whose line
+# does not reference a secret (TOKEN/SECRET/PASSWORD). Detection is line-based because env-var
+# calls nested inside expressions have no Statement/Call node in the code model.
 
 predicate envIsCSharp(Line) => Line.File.Path:endsWith('.cs')
 predicate envNotTest(Line) => !Line.File.Path:startsWith('tests/') && !Line.File.Path:startsWith('samples/')
-predicate usesEnvironment(Line) => Line.Text:matches('.*\bEnvironment\..*')
+predicate readsEnvVar(Line) => Line.Text:contains('GetEnvironmentVariable') || Line.Text:contains('SetEnvironmentVariable')
+predicate notSecret(Line) => !Line.Text:contains('TOKEN') && !Line.Text:contains('SECRET') && !Line.Text:contains('PASSWORD')
 
-export let no-environment = codebase.Lines:usesEnvironment:envIsCSharp:envNotTest
-    :toWarning('System.Environment usage must be reviewed/justified — prefer explicit options over env vars ({item.File.Path}:{item.Number})')
+export let no-environment = codebase.Lines:readsEnvVar:envIsCSharp:envNotTest:notSecret
+    :toError('Environment variable used to control behavior — use a CLI flag or config instead ({item.File.Path}:{item.Number})')

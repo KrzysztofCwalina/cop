@@ -17,20 +17,23 @@ public static class InitCommand
     {
         var localHookOption = new Option<bool>("--al", "Generate local Claude Code hook (.claude/settings.local.json)");
         var globalHookOption = new Option<bool>("--ag", "Generate shared Claude Code hook (.claude/settings.json)");
+        var copilotHookOption = new Option<bool>("--ch", "Generate GitHub Copilot CLI hook (.github/hooks/cop.json)");
         var command = new Command("init", "Generate agent instruction files for writing cop rules")
         {
             localHookOption,
-            globalHookOption
+            globalHookOption,
+            copilotHookOption
         };
 
         command.SetAction(ctx => Execute(
             ctx.GetValue(localHookOption),
-            ctx.GetValue(globalHookOption)));
+            ctx.GetValue(globalHookOption),
+            ctx.GetValue(copilotHookOption)));
 
         return command;
     }
 
-    public static int Execute(bool localHook = false, bool globalHook = false)
+    public static int Execute(bool localHook = false, bool globalHook = false, bool copilotHook = false)
     {
         var cwd = Directory.GetCurrentDirectory();
         int filesUpdated = 0;
@@ -49,12 +52,20 @@ public static class InitCommand
         Console.WriteLine($"{agentsResult}: AGENTS.md");
         filesUpdated++;
 
-        // Generate .claude/commands/cop.md (cop-specific file, always write)
+        // Generate .claude/commands/cop.md (Claude Code custom command, always write)
         var claudeCommandsDir = Path.Combine(cwd, ".claude", "commands");
         var copCommandPath = Path.Combine(claudeCommandsDir, "cop.md");
         Directory.CreateDirectory(claudeCommandsDir);
         File.WriteAllText(copCommandPath, GetCopCommandContent());
         Console.WriteLine($"Updated: {GetRelativePath(cwd, copCommandPath)}");
+        filesUpdated++;
+
+        // Generate .github/skills/cop/SKILL.md (GitHub Copilot CLI agent skill — analog of the Claude command, always write)
+        var copilotSkillDir = Path.Combine(githubDir, "skills", "cop");
+        var copilotSkillPath = Path.Combine(copilotSkillDir, "SKILL.md");
+        Directory.CreateDirectory(copilotSkillDir);
+        File.WriteAllText(copilotSkillPath, GetCopilotSkillContent());
+        Console.WriteLine($"Updated: {GetRelativePath(cwd, copilotSkillPath)}");
         filesUpdated++;
 
         // Generate Claude Code hook settings
@@ -67,6 +78,14 @@ public static class InitCommand
         if (globalHook)
         {
             int result = GenerateClaudeHook(cwd, "settings.json");
+            if (result < 0) return 1;
+            filesUpdated += result;
+        }
+
+        // Generate GitHub Copilot CLI hook settings
+        if (copilotHook)
+        {
+            int result = GenerateCopilotHook(cwd);
             if (result < 0) return 1;
             filesUpdated += result;
         }
@@ -310,6 +329,151 @@ public static class InitCommand
         return root;
     }
 
+    private static int GenerateCopilotHook(string cwd)
+    {
+        var hooksDir = Path.Combine(cwd, ".github", "hooks");
+        var hookPath = Path.Combine(hooksDir, "cop.json");
+        var fullPath = Path.GetFullPath(hookPath);
+
+        JsonObject root;
+
+        if (File.Exists(hookPath))
+        {
+            // Always merge into existing file — never overwrite unrelated hooks
+            string existingJson;
+            try
+            {
+                existingJson = File.ReadAllText(hookPath);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Error: Cannot read {fullPath}: {ex.Message}");
+                return -1;
+            }
+
+            try
+            {
+                root = JsonNode.Parse(existingJson)?.AsObject()
+                    ?? throw new JsonException("File is not a JSON object");
+            }
+            catch (JsonException ex)
+            {
+                Console.Error.WriteLine($"Error: {fullPath} contains invalid JSON: {ex.Message}");
+                return -1;
+            }
+
+            // Remove existing cop agentStop hook and re-add (ensures it's up-to-date)
+            RemoveCopAgentStopHook(root);
+            MergeAgentStopHook(root);
+        }
+        else
+        {
+            try
+            {
+                Directory.CreateDirectory(hooksDir);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Error: Cannot create directory {hooksDir}: {ex.Message}");
+                return -1;
+            }
+            root = CreateFreshCopilotHookSettings();
+        }
+
+        try
+        {
+            WriteJson(hookPath, root);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error: Cannot write {fullPath}: {ex.Message}");
+            return -1;
+        }
+
+        // Verify the write by reading back
+        try
+        {
+            var written = File.ReadAllText(hookPath);
+            var verified = JsonNode.Parse(written)?.AsObject();
+            if (verified == null || verified["hooks"] is not JsonObject)
+            {
+                Console.Error.WriteLine($"Error: Verification failed — {fullPath} does not contain valid hooks JSON after write");
+                return -1;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error: Verification failed — cannot read back {fullPath}: {ex.Message}");
+            return -1;
+        }
+
+        Console.WriteLine($"Wrote: {fullPath}");
+        Console.WriteLine(File.ReadAllText(hookPath));
+        Console.WriteLine("GitHub Copilot CLI loads hooks at startup — restart any running session to pick this up.");
+        return 1;
+    }
+
+    private static void RemoveCopAgentStopHook(JsonObject root)
+    {
+        if (root["hooks"] is not JsonObject hooks) return;
+        if (hooks["agentStop"] is not JsonArray arr) return;
+        for (int i = arr.Count - 1; i >= 0; i--)
+        {
+            if (arr[i] is not JsonObject entry) continue;
+            var bash = entry["bash"]?.GetValue<string>();
+            var powershell = entry["powershell"]?.GetValue<string>();
+            var commandStr = entry["command"]?.GetValue<string>();
+            if ((bash != null && bash.Contains("cop cop-checks/main.cop"))
+                || (powershell != null && powershell.Contains("cop cop-checks/main.cop"))
+                || (commandStr != null && commandStr.Contains("cop cop-checks/main.cop")))
+            {
+                arr.RemoveAt(i);
+            }
+        }
+        if (arr.Count == 0)
+            hooks.Remove("agentStop");
+    }
+
+    private static void MergeAgentStopHook(JsonObject root)
+    {
+        if (root["version"] == null)
+            root["version"] = 1;
+
+        if (root["hooks"] is not JsonObject hooks)
+        {
+            hooks = new JsonObject();
+            root["hooks"] = hooks;
+        }
+
+        // Non-blocking hook: bash uses '|| true' and PowerShell uses '; exit 0' so a
+        // failing cop run or pre-existing violations never error the hook or trap the
+        // agent. '-om' skips analysis when the git working tree has no modifications.
+        var hookEntry = new JsonObject
+        {
+            ["type"] = "command",
+            ["bash"] = "cop cop-checks/main.cop -t . -om || true",
+            ["powershell"] = "cop cop-checks/main.cop -t . -om; exit 0",
+            ["cwd"] = ".",
+            ["timeoutSec"] = 120
+        };
+
+        if (hooks["agentStop"] is JsonArray existing)
+        {
+            existing.Add(hookEntry);
+        }
+        else
+        {
+            hooks["agentStop"] = new JsonArray(hookEntry);
+        }
+    }
+
+    private static JsonObject CreateFreshCopilotHookSettings()
+    {
+        var root = new JsonObject { ["version"] = 1 };
+        MergeAgentStopHook(root);
+        return root;
+    }
+
     private static void WriteJson(string path, JsonObject root)
     {
         var options = new JsonSerializerOptions { WriteIndented = true };
@@ -334,6 +498,29 @@ public static class InitCommand
     private static string GetCopCommandContent()
     {
         return """
+            Run cop static analysis on this repository.
+
+            Execute the following command:
+            ```
+            cop cop-checks/main.cop -t .
+            ```
+
+            This runs all cop checks defined in `cop-checks/main.cop` against the repository root.
+            If there are violations, fix them before continuing.
+
+            If `cop-checks/` doesn't exist, tell the user they need to create cop check files first.
+            Run `cop help language` for the full language reference if you need to write or fix cop rules.
+            """.Replace("            ", "");
+    }
+
+    private static string GetCopilotSkillContent()
+    {
+        return """
+            ---
+            name: cop
+            description: Run cop static analysis on this repository. Use this skill whenever asked to run cop, run cop checks, lint or analyze this codebase with cop, or verify the repo against its cop-checks.
+            ---
+
             Run cop static analysis on this repository.
 
             Execute the following command:

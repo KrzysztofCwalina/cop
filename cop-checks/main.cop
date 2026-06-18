@@ -16,16 +16,10 @@ export let all-violations =
     layering-violations +
     no-aspnet-in-cli +
     no-new-ffi +
-    no-regex
+    no-regex +
+    no-environment
 
 command MAIN = CHECK(all-violations)
-
-# Environment / env-var usage audit. Flags every System.Environment.* usage in .cs
-# for review — env vars are discouraged unless absolutely necessary; prefer explicit
-# options/flags. Kept as its own command (not in MAIN) so the triage of existing,
-# mostly-legitimate framework usages (GetFolderPath, Exit, NewLine, ...) doesn't gate
-# CI before review. Run with: cop cop-checks/main.cop -t . -c ENV
-command ENV = CHECK(no-environment)
 
 # AI-based checks (require network + ~/.cop/ai.json)
 export let all-ai-violations =

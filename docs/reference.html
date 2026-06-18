@@ -265,7 +265,7 @@ const packages = {
         "name": "judge",
         "params": "requirement: string, code: string",
         "returns": "[Violation]",
-        "desc": "Reviews `code` against a natural-language `requirement` using an LLM and returns a\nlist of Violations (empty if the code satisfies the requirement). `code` may be a\nliteral string or a collection (e.g. Types, Lines, Files), which is summarized for\nthe model. Requires ~/.cop/ai.json (see ai.example.json). Set the COP_AI_LOG env\nvar to a file path to record the full agent↔judge interaction.",
+        "desc": "Reviews `code` against a natural-language `requirement` using an LLM and returns a\nlist of Violations (empty if the code satisfies the requirement). `code` may be a\nliteral string or a collection (e.g. Types, Lines, Files), which is summarized for\nthe model. Requires ~/.cop/ai.json (see ai.example.json). Pass --ai-log <path>\nto record the full agent↔judge interaction.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/ai/src/ai.cop#L45"
       }
     ],

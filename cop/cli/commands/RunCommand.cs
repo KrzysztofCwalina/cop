@@ -593,21 +593,20 @@ public static class RunCommand
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cop", "checks");
 
     /// <summary>
+    /// Set by the --no-user-checks CLI flag to skip including user/global check files
+    /// (replaces the former COP_NO_USER_CHECKS env var).
+    /// </summary>
+    internal static bool NoUserChecks;
+
+    /// <summary>
     /// Discovers .cop files in ~/.cop/checks/ for user checks (hierarchical).
     /// - Top-level *.cop files are global (apply to all repos).
     /// - Subdirectory *.cop files are repo-specific (only when repo name matches).
-    /// Returns empty array if the directory doesn't exist, if in CI, or if opted out.
+    /// Returns empty array if the directory doesn't exist or if --no-user-checks was passed.
     /// </summary>
     private static string[] GetUserCheckFiles(Action<string>? diagLog)
     {
-        // Skip in CI environments
-        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CI")))
-            return [];
-        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("GITHUB_ACTIONS")))
-            return [];
-        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("TF_BUILD")))
-            return [];
-        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("COP_NO_USER_CHECKS")))
+        if (NoUserChecks)
             return [];
 
         var checksDir = UserChecksDirectory;

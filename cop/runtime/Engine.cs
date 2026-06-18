@@ -211,9 +211,9 @@ public static class Engine
 
         var bridge = CreateBridge(outputs, fileOutputLines, asserts, diagLog);
         // Per-item evaluator trace ([trace] lines) is a deep-debug firehose (millions of lines on
-        // large repos). Keep -d focused on [diag] summaries; opt into [trace] via COP_TRACE=1.
+        // large repos). Enabled only at -ddd (CopDiagnostics.Trace); -d/-dd stay focused on [diag].
         bridge.Evaluator.TraceLog =
-            (diagLog is not null && System.Environment.GetEnvironmentVariable("COP_TRACE") == "1") ? diagLog : null;
+            (diagLog is not null && Cop.Core.CopDiagnostics.Trace) ? diagLog : null;
 
         // Phase 1: Register functions, types, enums (NOT let bindings — those need provider data)
         foreach (var module in modules)

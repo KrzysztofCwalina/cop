@@ -5,19 +5,30 @@ using System.Linq;
 using Cop.Cli.Commands;
 using Cop.Repl;
 
-bool diag = args.Contains("-d");
+// Diagnostic verbosity from -d / -dd / -ddd (replaces the former COP_*_DIAG / COP_TRACE / COP_PARSE_DIAG env vars).
+int diagLevel = args.Contains("-ddd") ? 3 : args.Contains("-dd") ? 2 : args.Contains("-d") ? 1 : 0;
+Cop.Core.CopDiagnostics.Level = diagLevel;
+bool diag = diagLevel >= 1;
+
+// --ai-log <path> replaces the former COP_AI_LOG env var.
+int aiLogIdx = Array.IndexOf(args, "--ai-log");
+if (aiLogIdx >= 0 && aiLogIdx + 1 < args.Length)
+    Cop.Core.CopDiagnostics.AiLogPath = args[aiLogIdx + 1];
+
+// --no-color replaces the former NO_COLOR env var (color is also auto-disabled for non-terminal output).
+if (args.Contains("--no-color"))
+    ConsoleMarkdown.NoColor = true;
+
+// --no-user-checks replaces the former COP_NO_USER_CHECKS env var.
+if (args.Contains("--no-user-checks"))
+    RunCommand.NoUserChecks = true;
+
 long clrStartupMs = 0;
 if (diag)
 {
     var process = Process.GetCurrentProcess();
     clrStartupMs = (long)(DateTime.UtcNow - process.StartTime.ToUniversalTime()).TotalMilliseconds;
     Console.Error.WriteLine($"[diag] Process startup: {clrStartupMs}ms");
-}
-
-// Auto-update check (skipped for update/help/version commands and diagnostics)
-if (!ShouldSkipAutoUpdate(args))
-{
-    AutoUpdater.TryAutoUpdate();
 }
 
 // Known verbs (subcommands) — anything else is treated as a program to run
@@ -71,18 +82,19 @@ if (args[0] == "help")
 // cop init — generate agent instruction files
 if (args[0] == "init")
 {
-    var knownInitOptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "--al", "--ag" };
+    var knownInitOptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "--al", "--ag", "--ch" };
     foreach (var arg in args.Skip(1))
     {
         if (arg.StartsWith('-') && !knownInitOptions.Contains(arg))
         {
-            Console.Error.WriteLine($"Unknown option '{arg}'. Known options: --al, --ag");
+            Console.Error.WriteLine($"Unknown option '{arg}'. Known options: --al, --ag, --ch");
             return 1;
         }
     }
     bool localHook = args.Contains("--al");
     bool globalHook = args.Contains("--ag");
-    return InitCommand.Execute(localHook, globalHook);
+    bool copilotHook = args.Contains("--ch");
+    return InitCommand.Execute(localHook, globalHook, copilotHook);
 }
 
 // cop update — self-update from GitHub releases
@@ -121,9 +133,11 @@ if (!knownVerbs.Contains(args[0]) && !args[0].StartsWith('-') && !args[0].Starts
             else if (remaining[i] == "-f" && i + 1 < remaining.Length) copFormat = remaining[++i];
             else if (remaining[i] == "-c" && i + 1 < remaining.Length) copCommands = remaining[++i];
             else if (remaining[i] == "-p" && i + 1 < remaining.Length) copProviders.Add(remaining[++i]);
-            else if (remaining[i] == "-d") copDiag = true;
+            else if (remaining[i] == "-d" || remaining[i] == "-dd" || remaining[i] == "-ddd") copDiag = true;
             else if (remaining[i] == "-om") copOnlyIfModified = true;
             else if (remaining[i] == "-rp") copProfile = true;
+            else if (remaining[i] == "--no-color" || remaining[i] == "--no-user-checks") { /* handled globally */ }
+            else if (remaining[i] == "--ai-log" && i + 1 < remaining.Length) i++; // value consumed globally
             else programArgs.Add(remaining[i]);
         }
         return RunCommand.Execute(firstArg, programArgs.Count > 0 ? programArgs.ToArray() : null, copTarget, copFormat, copCommands, copDiag, copOnlyIfModified, copProviders.Count > 0 ? copProviders.ToArray() : null, copProfile);
@@ -161,7 +175,7 @@ if (!knownVerbs.Contains(args[0]) && !args[0].StartsWith('-') && !args[0].Starts
         else if (remainingArgs[i] == "-c" && i + 1 < remainingArgs.Length) rules = remainingArgs[++i];
         else if (remainingArgs[i] == "-f" && i + 1 < remainingArgs.Length) format = remainingArgs[++i];
         else if (remainingArgs[i] == "-p" && i + 1 < remainingArgs.Length) pkgProviders.Add(remainingArgs[++i]);
-        else if (remainingArgs[i] == "-d") isDiag = true;
+        else if (remainingArgs[i] == "-d" || remainingArgs[i] == "-dd" || remainingArgs[i] == "-ddd") isDiag = true;
         else if (remainingArgs[i] == "-om") isOnlyIfModified = true;
     }
 
@@ -314,21 +328,3 @@ static int ExecuteDefault()
     return 0;
 }
 
-/// <summary>
-/// Commands that should not trigger auto-update (too quick, or handle updates themselves).
-/// </summary>
-static bool ShouldSkipAutoUpdate(string[] args)
-{
-    if (args.Length == 0) return false;
-    var first = args[0];
-
-    // Skip for help/version flags
-    if (first is "-h" or "-help" or "--help" or "-v" or "--version")
-        return true;
-
-    // Skip for the update command itself and other quick info commands
-    if (first is "update" or "help")
-        return true;
-
-    return false;
-}

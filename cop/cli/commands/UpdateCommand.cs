@@ -168,9 +168,6 @@ static class UpdateCommand
             // Refresh package cache — seed packages may have new types/predicates
             RefreshPackageCache();
 
-            // Warn if a shadowing copy exists on PATH
-            WarnAboutShadowingInstalls(installDir, exeName);
-
             return 0;
         }
         catch (UnauthorizedAccessException)
@@ -241,44 +238,6 @@ static class UpdateCommand
 
         return (!string.IsNullOrEmpty(programFiles) && path.StartsWith(programFiles, StringComparison.OrdinalIgnoreCase))
             || (!string.IsNullOrEmpty(programFilesX86) && path.StartsWith(programFilesX86, StringComparison.OrdinalIgnoreCase));
-    }
-
-    /// <summary>
-    /// Warns if there are other copies of cop on PATH that might shadow the updated one.
-    /// </summary>
-    private static void WarnAboutShadowingInstalls(string installDir, string exeName)
-    {
-        var pathDirs = (Environment.GetEnvironmentVariable("PATH") ?? "")
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
-
-        var shadows = new List<string>();
-        bool foundInstallDir = false;
-
-        foreach (var dir in pathDirs)
-        {
-            var normalized = Path.GetFullPath(dir.Trim());
-            if (normalized.Equals(Path.GetFullPath(installDir), StringComparison.OrdinalIgnoreCase))
-            {
-                foundInstallDir = true;
-                continue;
-            }
-
-            var candidate = Path.Combine(normalized, exeName);
-            if (File.Exists(candidate))
-            {
-                if (!foundInstallDir)
-                    shadows.Add(normalized); // ahead on PATH = shadows our install
-            }
-        }
-
-        if (shadows.Count > 0)
-        {
-            Console.Error.WriteLine();
-            Console.Error.WriteLine("Warning: Other cop installations found ahead on PATH (may shadow this update):");
-            foreach (var s in shadows)
-                Console.Error.WriteLine($"  {Path.Combine(s, exeName)}");
-            Console.Error.WriteLine($"Consider removing them or reordering PATH so '{installDir}' comes first.");
-        }
     }
 
     static string? GetCurrentRid()

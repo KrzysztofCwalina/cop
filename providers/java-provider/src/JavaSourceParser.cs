@@ -255,7 +255,7 @@ internal class JavaLexer(string source)
 internal class JavaParser(List<JavaToken> tokens, string sourceText)
 {
     private int _pos;
-    private static readonly bool _diag = Environment.GetEnvironmentVariable("COP_JAVA_DIAG") is not null;
+    private static bool _diag => Cop.Core.CopDiagnostics.Timing;
 
     /// <summary>
     /// Progress guard for parser loops: if a loop iteration consumed no tokens, force a

@@ -86,12 +86,12 @@ public class AiProvider : DataProvider
         }
     }
 
-    // When COP_AI_LOG names a file path, append a transcript of the agent↔judge
+    // When --ai-log names a file path, append a transcript of the agent↔judge
     // interaction (the request the runtime sent and the raw response). Opt-in
-    // transparency for LLM-based rules; no effect unless the env var is set.
+    // transparency for LLM-based rules; no effect unless --ai-log is passed.
     private static void LogInteraction(AiConfig config, string system, string user, string status, string assistant)
     {
-        var path = Environment.GetEnvironmentVariable("COP_AI_LOG");
+        var path = Cop.Core.CopDiagnostics.AiLogPath;
         if (string.IsNullOrEmpty(path)) return;
         var sb = new StringBuilder();
         sb.AppendLine("================== ai.judge interaction ==================");

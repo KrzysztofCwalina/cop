@@ -14,7 +14,10 @@ Options:
 | `-p <provider>` | Load a data provider (can be repeated: `-p csharp -p python`) |
 | `-c <commands>` | Filter to specific named functions (comma-separated) |
 | `-f <format>` | Output format: `text` (default) or `json` |
-| `-d` | Diagnostic mode (timing, traces, debug output to stderr) |
+| `-d` / `-dd` / `-ddd` | Diagnostics to stderr: `-d` summaries, `-dd` + phase/parse timing, `-ddd` + per-item trace |
+| `--ai-log <path>` | Append a transcript of each `ai.judge` interaction to a file |
+| `--no-color` | Disable ANSI color (also auto-disabled when output is not a terminal) |
+| `--no-user-checks` | Skip personal checks in `~/.cop/checks/` for this run |
 | `-cql` | Transpile to CodeQL instead of running |
 | `-h` | Show help |
 | `-v` | Show version |
@@ -192,7 +195,7 @@ cop test [<file>] [-d]
 | Argument / Option | Description |
 |-------------------|-------------|
 | `<file>` | `.cop` file or directory to test. When omitted, all `.cop` files in the current directory are used. |
-| `-d` | Enable diagnostic mode (timing, traces, and DEBUG output) to stderr |
+| `-d` / `-dd` / `-ddd` | Diagnostics to stderr (increasing verbosity: summaries, timing, per-item trace) |
 
 ### Examples
 
@@ -267,32 +270,43 @@ If the package is not found locally, run `cop package restore` first.
 
 ## cop init
 
-Generate agent instruction files for coding agents (GitHub Copilot, Claude Code) so they can write cop rules in your project.
+Generate agent integration files for coding agents (GitHub Copilot, Claude Code) so they can write and run cop rules in your project.
 
 ```bash
-cop init [--force]
+cop init [--al] [--ag] [--ch]
 ```
 
 | Option | Description |
 |--------|-------------|
-| `--force` | Overwrite existing instruction files |
+| `--al` | Generate a local Claude Code hook (`.claude/settings.local.json`) |
+| `--ag` | Generate a shared Claude Code hook (`.claude/settings.json`) |
+| `--ch` | Generate a GitHub Copilot CLI hook (`.github/hooks/cop.json`) |
 
-Creates:
-- `.github/copilot-instructions.md` — discovered automatically by GitHub Copilot
-- `AGENTS.md` — discovered automatically by Claude Code
+Always creates (merged in-place, never clobbering your own content):
+- `.github/copilot-instructions.md` — cop language context, discovered automatically by GitHub Copilot
+- `AGENTS.md` — cop language context, discovered automatically by Claude Code and other agents
+- `.claude/commands/cop.md` — Claude Code custom command to run cop checks
+- `.github/skills/cop/SKILL.md` — GitHub Copilot CLI agent skill (the Copilot analog of the Claude command) to run cop checks
 
-The files contain a concise cop language overview, common patterns, instructions pointing agents to `cop help language` and `cop help <package>` for full reference, and guidance for reporting issues back to the cop project.
+The instruction files contain a concise cop language overview, common patterns, pointers to `cop help language` and `cop help <package>`, and guidance for reporting issues back to the cop project.
 
-Skips files that already exist (use `--force` to overwrite). Run once per project, then commit the generated files.
+The optional hooks run `cop cop-checks/main.cop -t . -om` automatically after the agent finishes a turn (Claude's `Stop` event / Copilot CLI's `agentStop` event), surfacing any violations back to the agent. They are non-blocking — a failing run or pre-existing violations never trap the agent — and `-om` skips analysis when the git working tree is unmodified.
+
+> GitHub Copilot CLI loads hook files at startup, so restart any running CLI session after `cop init --ch`.
+
+The instruction and command/skill files are safe to run repeatedly; cop sections are updated in place. Commit the generated files so your whole team benefits.
 
 ### Example
 
 ```bash
 cd my-project
-cop init
+cop init --ch
 # Created: .github/copilot-instructions.md
-# Created: AGENTS.md
-# 2 file(s) created. Agents will now discover cop language context automatically.
+# Updated: AGENTS.md
+# Updated: .claude/commands/cop.md
+# Updated: .github/skills/cop/SKILL.md
+# Wrote: .../.github/hooks/cop.json
+# 5 file(s) updated. Agents will now discover cop language context automatically.
 ```
 
 ## cop lock
@@ -382,16 +396,11 @@ Self-update cop to the latest release from GitHub. Detects your platform automat
 cop update
 ```
 
-### Auto-Update
+### Updating
 
-Cop automatically checks for updates once every 24 hours. When a newer release is detected, it downloads and installs the update silently. The new version takes effect on the next run.
-
-Auto-update is skipped for quick commands (`-h`, `-v`, `help`, `update`) and in CI environments.
-
-| Environment Variable | Effect |
-|---------------------|--------|
-| `COP_NO_AUTO_UPDATE=1` | Disable auto-update entirely |
-| `CI=true` | Auto-update is skipped |
+Cop does not update itself automatically. Run `cop update` to download and install the
+latest release on demand (see [cop update](#cop-update)). This keeps runs predictable and
+never overwrites a locally built/installed binary behind your back.
 
 ## User Checks
 
@@ -443,12 +452,7 @@ Now `cop` will include this check in every run, alongside whatever checks the re
 
 ### Opt-out
 
-| Environment Variable | Effect |
-|---------------------|--------|
-| `COP_NO_USER_CHECKS=1` | Disable user checks |
-| `CI=true` | User checks are skipped automatically |
-
-User checks are always skipped in CI environments (`CI`, `GITHUB_ACTIONS`, `TF_BUILD`).
+Pass `--no-user-checks` to skip personal checks in `~/.cop/checks/` for a run.
 
 ## cop vscode
 
