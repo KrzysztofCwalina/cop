@@ -136,6 +136,27 @@ describe('scanDocument', () => {
         expect(symbols.lets.get('name').typeAnnotation).toBe('string');
     });
 
+    test('captures multi-line let with chained :toError continuation', () => {
+        const doc = mockDoc([
+            'let empty-folder-violations = files.folders():empty',
+            "    :toError('Empty folder is not allowed: {item.Path}')",
+        ]);
+        const symbols = scanDocument(doc);
+        const entry = symbols.lets.get('empty-folder-violations');
+        expect(entry).toBeDefined();
+        expect(entry.expr).toContain(':toError(');
+    });
+
+    test('multi-line let capture does not swallow the next declaration', () => {
+        const doc = mockDoc([
+            'let a = Types:isPublic',
+            'let b = Statements',
+        ]);
+        const symbols = scanDocument(doc);
+        expect(symbols.lets.get('a').expr).toBe('Types:isPublic');
+        expect(symbols.lets.get('b').expr).toBe('Statements');
+    });
+
     test('parses predicates', () => {
         const doc = mockDoc([
             'predicate isPublic(Type) => Type.Modifiers:isSet(Public)',
@@ -284,6 +305,12 @@ describe('inferExprType', () => {
             _resolvedCollections: { Types: 'Type' },
         };
         expect(inferExprType('code.Types', symbols)).toBe('[Type]');
+    });
+
+    test('toError/toWarning/toInfo chains resolve to [Violation]', () => {
+        expect(inferExprType("files.folders():empty :toError('x')", baseSymbols)).toBe('[Violation]');
+        expect(inferExprType("Types:isPublic:toWarning('x')", baseSymbols)).toBe('[Violation]');
+        expect(inferExprType("Folders:empty:toInfo('x')", baseSymbols)).toBe('[Violation]');
     });
 });
 

@@ -837,7 +837,24 @@ function scanDocument(doc) {
         }
         // let name : [Type] = expr  OR  let name = expr
         if ((m = text.match(/^(?:export\s+)?let\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s*(?::\s*(\[[^\]]+\]|[A-Za-z_][A-Za-z0-9_?]*))?\s*=\s*(.+)/))) {
-            lets.set(m[1], { expr: m[3].trim(), typeAnnotation: m[2] || null });
+            // Gather continuation lines so multi-line expressions are captured in full,
+            // e.g. a chained `:toError(...)` on the next line, or a union spread across
+            // lines (`a +` / `b`). Without this the hover would miss the transform and the
+            // inferred type would be wrong (or "unknown").
+            let letExpr = m[3].trim();
+            let j = i + 1;
+            while (j < doc.lineCount) {
+                const cont = doc.lineAt(j).text.trim();
+                if (cont === '' || cont.startsWith('#')) break;
+                // Don't swallow a new top-level declaration.
+                if (/^(?:export\s+)?(?:let|predicate|function|command|type|enum|flags|import|feed|test|foreach)\b/.test(cont)) break;
+                if (/^[:.+]/.test(cont) || /[+:(,]$/.test(letExpr)) {
+                    letExpr += ' ' + cont;
+                    j++;
+                } else break;
+            }
+            lets.set(m[1], { expr: letExpr.trim(), typeAnnotation: m[2] || null });
+            i = j - 1;
         }
         if ((m = text.match(/^(?:export\s+)?predicate\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s*\(([A-Z][a-zA-Z0-9_]*)/))) {
             predicates.set(m[1], m[2]);
@@ -903,6 +920,11 @@ function resolveIdentifierType(name, symbols) {
 }
 
 function inferExprType(expr, symbols) {
+    // toError / toWarning / toInfo / toViolation transform a filtered collection into a
+    // list of Violations, regardless of the source collection type. This must run before
+    // the generic filter-chain handling below (which assumes `:` preserves the type).
+    if (/:to(?:Error|Warning|Info|Violation)\s*\(/.test(expr)) return '[Violation]';
+
     // runtime::X
     let m = expr.match(/^runtime::(\w+)/);
     if (m) return m[1];
