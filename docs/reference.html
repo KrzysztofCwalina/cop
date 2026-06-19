@@ -2017,7 +2017,33 @@ const packages = {
     "types": {},
     "predicates": [],
     "functions": [],
-    "checks": [],
+    "checks": [
+      {
+        "name": "long-methods",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-metrics/src/code-metrics.cop#L44"
+      },
+      {
+        "name": "undocumented-types",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-metrics/src/code-metrics.cop#L47"
+      },
+      {
+        "name": "too-many-params",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-metrics/src/code-metrics.cop#L50"
+      },
+      {
+        "name": "empty-catches",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-metrics/src/code-metrics.cop#L53"
+      },
+      {
+        "name": "slop",
+        "desc": "Curated language-agnostic slop rules with severity weights.\nUsers can extend with language-specific rules via multi-package execution.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code-metrics/src/code-metrics.cop#L58"
+      }
+    ],
     "commands": [
       {
         "name": "METRICS",
@@ -2797,7 +2823,338 @@ const packages = {
       }
     ],
     "functions": [],
-    "checks": [],
+    "checks": [
+      {
+        "name": "var-declarations",
+        "desc": "Disallow implicit typing with var — use explicit types",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L18"
+      },
+      {
+        "name": "dynamic-declarations",
+        "desc": "Disallow dynamic typing",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L22"
+      },
+      {
+        "name": "thread-sleep-calls",
+        "desc": "Use Task.Delay instead of blocking Thread.Sleep",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L50"
+      },
+      {
+        "name": "configure-await-true-calls",
+        "desc": "ConfigureAwait(true) is the default and should not be used explicitly",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L54"
+      },
+      {
+        "name": "sync-over-async-calls",
+        "desc": "Do not block on async code with GetAwaiter().GetResult()",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L58"
+      },
+      {
+        "name": "bare-task-completion-sources",
+        "desc": "TaskCompletionSource should be created with RunContinuationsAsynchronously",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L62"
+      },
+      {
+        "name": "sync-wait-in-async",
+        "desc": "Do not use sync-blocking calls (.Wait(), .GetResult()) inside async methods (AZC0103)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L66"
+      },
+      {
+        "name": "console-calls",
+        "desc": "Avoid Console output in library code",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L75"
+      },
+      {
+        "name": "base-exception-catches",
+        "desc": "Catch specific exception types instead of bare Exception",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L91"
+      },
+      {
+        "name": "swallowed-exceptions",
+        "desc": "Do not swallow base exceptions — always rethrow",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L95"
+      },
+      {
+        "name": "empty-catches",
+        "desc": "Empty catch — catches base Exception and does absolutely nothing",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L99"
+      },
+      {
+        "name": "uri-tostring",
+        "desc": "Banned API: Uri.ToString() — use Uri.AbsoluteUri for consistent output",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L110"
+      },
+      {
+        "name": "type-name-is-keyword",
+        "desc": "CA1716: Type names should not match C# reserved keywords",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L129"
+      },
+      {
+        "name": "uninstantiated-internal",
+        "desc": "CA1812: Internal classes should be instantiated (heuristic)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L138"
+      },
+      {
+        "name": "undisposed-new",
+        "desc": "CA2000: Dispose objects before losing scope",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L149"
+      },
+      {
+        "name": "csharp-correctness-checks",
+        "desc": "Combined correctness checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L158"
+      },
+      {
+        "name": "interface-prefix",
+        "desc": "SA1302: Interface names must begin with 'I' followed by an uppercase letter",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L173"
+      },
+      {
+        "name": "type-name-casing",
+        "desc": "SA1300: Type names must begin with an uppercase letter (PascalCase)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L177"
+      },
+      {
+        "name": "method-name-casing",
+        "desc": "SA1300: Public method names must begin with an uppercase letter (PascalCase)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L181"
+      },
+      {
+        "name": "single-type-per-file",
+        "desc": "SA1402: A file may only contain a single type",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L193"
+      },
+      {
+        "name": "file-header-required",
+        "desc": "SA1633: File must have a header",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L197"
+      },
+      {
+        "name": "comment-spacing",
+        "desc": "SA1005: Single-line comment must begin with a space after //",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L218"
+      },
+      {
+        "name": "no-tabs",
+        "desc": "SA1027: Code must not contain tabs",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L222"
+      },
+      {
+        "name": "no-trailing-whitespace",
+        "desc": "SA1028: Code must not contain trailing whitespace",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L226"
+      },
+      {
+        "name": "no-empty-statements",
+        "desc": "SA1106: Code must not contain empty statements",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L230"
+      },
+      {
+        "name": "use-string-empty",
+        "desc": "SA1122: Use string.Empty instead of \"\"",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L234"
+      },
+      {
+        "name": "required-braces",
+        "desc": "SA1503: Braces must not be omitted",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L244"
+      },
+      {
+        "name": "public-documented",
+        "desc": "SA1600: Public elements should be documented",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L259"
+      },
+      {
+        "name": "public-method-documented",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L262"
+      },
+      {
+        "name": "public-property-documented",
+        "desc": "SA1600: Public properties should be documented",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L266"
+      },
+      {
+        "name": "no-public-fields",
+        "desc": "SA1401: Fields should be private (only on public/protected types — internal structs with public fields are a valid perf pattern)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L288"
+      },
+      {
+        "name": "private-field-naming",
+        "desc": ".editorconfig naming: private field underscore prefix",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L292"
+      },
+      {
+        "name": "static-field-naming",
+        "desc": ".editorconfig naming: static field s_ prefix",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L296"
+      },
+      {
+        "name": "const-naming",
+        "desc": ".editorconfig naming: const PascalCase",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L300"
+      },
+      {
+        "name": "csharp-style-checks",
+        "desc": "Combined style checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L304"
+      },
+      {
+        "name": "exception-suffix",
+        "desc": "FDG: Types inheriting from Exception must end with 'Exception'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L319"
+      },
+      {
+        "name": "attribute-suffix",
+        "desc": "FDG: Types inheriting from Attribute must end with 'Attribute'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L327"
+      },
+      {
+        "name": "eventargs-suffix",
+        "desc": "FDG: Types inheriting from EventArgs must end with 'EventArgs'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L335"
+      },
+      {
+        "name": "stream-suffix",
+        "desc": "FDG: Types inheriting from Stream must end with 'Stream'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L343"
+      },
+      {
+        "name": "no-hungarian-prefix",
+        "desc": "FDG: Classes should not use Hungarian notation (C prefix)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L352"
+      },
+      {
+        "name": "bool-property-naming",
+        "desc": "FDG: Boolean properties should use affirmative naming",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L370"
+      },
+      {
+        "name": "namespace-segments",
+        "desc": "FDG: Namespace should have at least two segments",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L377"
+      },
+      {
+        "name": "fdg-naming",
+        "desc": "Combined FDG naming checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L381"
+      },
+      {
+        "name": "enum-no-suffix",
+        "desc": "FDG: Enum types should not use Enum/Flags suffix",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L390"
+      },
+      {
+        "name": "flags-plural-name",
+        "desc": "FDG: [Flags] enums should use plural names",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L398"
+      },
+      {
+        "name": "abstract-protected-ctor",
+        "desc": "FDG: Abstract classes should have protected constructors",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L406"
+      },
+      {
+        "name": "static-no-instance",
+        "desc": "FDG: Static classes should not have instance members",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L414"
+      },
+      {
+        "name": "no-marker-interfaces",
+        "desc": "FDG: Marker interfaces should be avoided",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L422"
+      },
+      {
+        "name": "should-be-static",
+        "desc": "FDG: Classes with only static members should be static",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L434"
+      },
+      {
+        "name": "struct-size",
+        "desc": "FDG: Structs should be small",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L441"
+      },
+      {
+        "name": "fdg-type-design",
+        "desc": "Combined FDG type design checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L445"
+      },
+      {
+        "name": "max-parameters",
+        "desc": "FDG: Methods should not have more than 5 parameters",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L454"
+      },
+      {
+        "name": "no-write-only-properties",
+        "desc": "FDG: No write-only properties",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L462"
+      },
+      {
+        "name": "extension-class-naming",
+        "desc": "FDG: Extension methods should be in *Extensions classes",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L472"
+      },
+      {
+        "name": "ctor-parameter-count",
+        "desc": "FDG: Constructors should not have too many parameters",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L480"
+      },
+      {
+        "name": "avoid-bool-params",
+        "desc": "FDG: Avoid bool parameters in public methods",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L489"
+      },
+      {
+        "name": "no-array-properties",
+        "desc": "FDG: Properties should not return arrays",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L497"
+      },
+      {
+        "name": "fdg-member-design",
+        "desc": "Combined FDG member design checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L501"
+      },
+      {
+        "name": "exception-naming",
+        "desc": "FDG: Custom exceptions must end in 'Exception'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L519"
+      },
+      {
+        "name": "exception-standard-ctors",
+        "desc": "FDG: Custom exceptions should have standard constructors",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L532"
+      },
+      {
+        "name": "no-banned-throws",
+        "desc": "FDG: Do not throw banned exception types",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L546"
+      },
+      {
+        "name": "try-pattern-returns-bool",
+        "desc": "FDG: Try* methods should return bool",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L555"
+      },
+      {
+        "name": "no-swallow-cancellation",
+        "desc": "FDG: Do not swallow OperationCanceledException",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L563"
+      },
+      {
+        "name": "fdg-exceptions",
+        "desc": "Combined FDG exception design checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L567"
+      },
+      {
+        "name": "fdg-checks",
+        "desc": "Combined FDG checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L570"
+      },
+      {
+        "name": "csharp-checks",
+        "desc": "All C# checks combined",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-checks/src/csharp-checks.cop#L573"
+      }
+    ],
     "commands": []
   },
   "csharp-codeql-export": {
@@ -2952,7 +3309,173 @@ const packages = {
     "types": {},
     "predicates": [],
     "functions": [],
-    "checks": [],
+    "checks": [
+      {
+        "name": "client-needs-token-credential",
+        "desc": "Azure clients must accept TokenCredential for authentication",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/client-design.cop#L11"
+      },
+      {
+        "name": "client-needs-mocking-ctor",
+        "desc": "Client types must provide a protected parameterless constructor for mocking",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/client-design.cop#L15"
+      },
+      {
+        "name": "client-needs-options-ctor",
+        "desc": "Client types should have a constructor that accepts ClientOptions",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/client-design.cop#L28"
+      },
+      {
+        "name": "client-needs-simple-ctor",
+        "desc": "Client types should have a constructor without ClientOptions for simple scenarios",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/client-design.cop#L32"
+      },
+      {
+        "name": "no-request-content-in-convenience",
+        "desc": "Convenience methods should not take RequestContent or RequestBody parameters",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/client-design.cop#L41"
+      },
+      {
+        "name": "settings-ctor-isolation",
+        "desc": "ClientSettings constructor should not combine settings param with other params (AZC0021)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/client-design.cop#L52"
+      },
+      {
+        "name": "no-banned-internal-types",
+        "desc": "Public API should not expose types from banned internal namespaces",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/code-quality.cop#L9"
+      },
+      {
+        "name": "no-pipeline-types-in-api",
+        "desc": "Public API should not expose Azure.Core.Pipeline internal types",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/code-quality.cop#L17"
+      },
+      {
+        "name": "internals-visible-to",
+        "desc": "InternalsVisibleTo — export for project-level filtering",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/code-quality.cop#L24"
+      },
+      {
+        "name": "internals-visible-to-non-test",
+        "desc": "InternalsVisibleTo targeting non-test assemblies (AZC0112)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/code-quality.cop#L32"
+      },
+      {
+        "name": "model-reader-writer-context",
+        "desc": "ModelReaderWriter.Read should include the ModelReaderWriterOptions context parameter",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/code-quality.cop#L40"
+      },
+      {
+        "name": "model-needs-factory",
+        "desc": "Output model types should have a corresponding ModelFactory method (AZC0035)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/code-quality.cop#L52"
+      },
+      {
+        "name": "use-ensure-completed",
+        "desc": "Use EnsureCompleted() instead of GetAwaiter().GetResult() in sync methods (AZC0104)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/code-quality.cop#L60"
+      },
+      {
+        "name": "no-public-async-in-sync",
+        "desc": "Don't call *Async methods from sync context (AZC0107)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/code-quality.cop#L68"
+      },
+      {
+        "name": "cancellation-token-propagation",
+        "desc": "Async calls should propagate CancellationToken or RequestContext (AZC0020)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/code-quality.cop#L81"
+      },
+      {
+        "name": "csharp-library-azure-checks",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/csharp-library-azure-checks.cop#L5"
+      },
+      {
+        "name": "service-method-needs-cancellation",
+        "desc": "Public virtual service methods must accept CancellationToken or RequestContext",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/method-design.cop#L15"
+      },
+      {
+        "name": "no-raw-http-return-types",
+        "desc": "Client methods should return azure-specific types, not raw HTTP types",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/method-design.cop#L26"
+      },
+      {
+        "name": "protocol-method-return-type",
+        "desc": "Protocol methods (with RequestContext) must return allowed types only",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/method-design.cop#L49"
+      },
+      {
+        "name": "no-ambiguous-overloads",
+        "desc": "Avoid ambiguous overloads between protocol and convenience methods",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/method-design.cop#L59"
+      },
+      {
+        "name": "no-collection-suffix",
+        "desc": "Model types should not use 'Collection' suffix",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/naming.cop#L8"
+      },
+      {
+        "name": "no-request-suffix",
+        "desc": "Model types should not use 'Request' suffix",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/naming.cop#L12"
+      },
+      {
+        "name": "no-parameter-suffix",
+        "desc": "Model types should not use 'Parameter' or 'Parameters' suffix",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/naming.cop#L16"
+      },
+      {
+        "name": "no-option-suffix",
+        "desc": "Model types should not use 'Option' or 'Options' suffix (unless ClientOptions)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/naming.cop#L20"
+      },
+      {
+        "name": "no-resource-suffix",
+        "desc": "Model types should not use 'Resource' suffix",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/naming.cop#L26"
+      },
+      {
+        "name": "duplicate-bcl-type-name",
+        "desc": "Model type name duplicates a common .NET BCL type name (AZC0034)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/naming.cop#L77"
+      },
+      {
+        "name": "no-single-word-type-name",
+        "desc": "Avoid single-word public type names — too generic (AZC0012)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/naming.cop#L84"
+      },
+      {
+        "name": "options-inherits-base",
+        "desc": "Options types must inherit from ClientOptions or ClientPipelineOptions",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/options-design.cop#L10"
+      },
+      {
+        "name": "options-single-ctor-param",
+        "desc": "ClientOptions constructors should not take more than one parameter",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/options-design.cop#L17"
+      },
+      {
+        "name": "options-first-param-service-version",
+        "desc": "ClientOptions constructor first parameter should be ServiceVersion",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/options-design.cop#L28"
+      },
+      {
+        "name": "options-needs-service-version-enum",
+        "desc": "ClientOptions types should contain a nested ServiceVersion enum",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/options-design.cop#L34"
+      },
+      {
+        "name": "service-version-naming",
+        "desc": "ServiceVersion enum members should follow 'V{major}_{minor}' naming pattern",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/options-design.cop#L43"
+      },
+      {
+        "name": "service-version-default-value",
+        "desc": "ServiceVersion parameter should have a default value (latest version)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-azure-checks/src/options-design.cop#L53"
+      }
+    ],
     "commands": []
   },
   "csharp-library-checks": {
@@ -3163,7 +3686,83 @@ const packages = {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L203"
       }
     ],
-    "checks": [],
+    "checks": [
+      {
+        "name": "public-async-bool-params",
+        "desc": "Public methods should not have a bool parameter named 'async'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L27"
+      },
+      {
+        "name": "async-missing-bool-param",
+        "desc": "Non-public async methods should accept a bool 'async' parameter",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L31"
+      },
+      {
+        "name": "awaits-using-default",
+        "desc": "Library code must use ConfigureAwait(false) on all await expressions",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L40"
+      },
+      {
+        "name": "unconditional-await-in-dual-mode",
+        "desc": "Unconditional await in dual-mode method (AZC0110)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L61"
+      },
+      {
+        "name": "unconditional-sync-in-dual-mode",
+        "desc": "Unconditional EnsureCompleted in dual-mode method (AZC0111)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L69"
+      },
+      {
+        "name": "wrong-async-arg-value",
+        "desc": "Wrong async argument value in guarded branch (AZC0108)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L88"
+      },
+      {
+        "name": "wrong-sync-arg-value",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L90"
+      },
+      {
+        "name": "async-param-misuse",
+        "desc": "Misuse of async parameter (AZC0109)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L100"
+      },
+      {
+        "name": "csharp-library-async-checks",
+        "desc": "Combined async/sync library checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L104"
+      },
+      {
+        "name": "client-needs-options-ctor",
+        "desc": "Client types must have a constructor that accepts an Options parameter",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L138"
+      },
+      {
+        "name": "client-sealed-or-abstract",
+        "desc": "Client types must be sealed or abstract to prevent unintended inheritance",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L142"
+      },
+      {
+        "name": "async-needs-cancellation-token",
+        "desc": "Async methods on client types must accept a CancellationToken parameter",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L161"
+      },
+      {
+        "name": "client-methods-virtual",
+        "desc": "Public instance methods on client types should be virtual for mocking",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L165"
+      },
+      {
+        "name": "async-needs-sync-counterpart",
+        "desc": "Every public async method on a client type must have a matching sync method",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L169"
+      },
+      {
+        "name": "csharp-library-checks",
+        "desc": "All client library checks combined",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-library-checks/src/csharp-library-checks.cop#L178"
+      }
+    ],
     "commands": []
   },
   "csharp-lister": {
@@ -3199,7 +3798,33 @@ const packages = {
     "types": {},
     "predicates": [],
     "functions": [],
-    "checks": [],
+    "checks": [
+      {
+        "name": "snippet-missing-docs",
+        "desc": "C# snippet has no corresponding markdown fence",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-snippets-checks/src/csharp-snippets-checks.cop#L45"
+      },
+      {
+        "name": "snippet-orphaned-ref",
+        "desc": "Markdown fence references a snippet that does not exist in C# source",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-snippets-checks/src/csharp-snippets-checks.cop#L49"
+      },
+      {
+        "name": "snippet-duplicate-name",
+        "desc": "Same snippet name defined in multiple C# locations",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-snippets-checks/src/csharp-snippets-checks.cop#L53"
+      },
+      {
+        "name": "snippet-stale-content",
+        "desc": "Markdown snippet content is out of sync with C# source",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-snippets-checks/src/csharp-snippets-checks.cop#L57"
+      },
+      {
+        "name": "csharp-snippets-checks",
+        "desc": "All snippet checks combined",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp-snippets-checks/src/csharp-snippets-checks.cop#L61"
+      }
+    ],
     "commands": []
   },
   "csharp-stylecop": {
@@ -3400,7 +4025,13 @@ const packages = {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/files/src/files.cop#L39"
       }
     ],
-    "checks": [],
+    "checks": [
+      {
+        "name": "empty-folders",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/files/src/files.cop#L55"
+      }
+    ],
     "commands": []
   },
   "go": {
@@ -3652,7 +4283,28 @@ const packages = {
     "types": {},
     "predicates": [],
     "functions": [],
-    "checks": [],
+    "checks": [
+      {
+        "name": "console-output",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/java/java-checks/src/java-checks.cop#L15"
+      },
+      {
+        "name": "print-stack-trace",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/java/java-checks/src/java-checks.cop#L20"
+      },
+      {
+        "name": "system-exit",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/java/java-checks/src/java-checks.cop#L26"
+      },
+      {
+        "name": "java-checks",
+        "desc": "All Java checks combined",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/java/java-checks/src/java-checks.cop#L30"
+      }
+    ],
     "commands": []
   },
   "javascript": {
@@ -3730,7 +4382,58 @@ const packages = {
     "types": {},
     "predicates": [],
     "functions": [],
-    "checks": [],
+    "checks": [
+      {
+        "name": "console-calls",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-checks/src/javascript-checks.cop#L13"
+      },
+      {
+        "name": "alert-calls",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-checks/src/javascript-checks.cop#L19"
+      },
+      {
+        "name": "eval-calls",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-checks/src/javascript-checks.cop#L25"
+      },
+      {
+        "name": "debugger-statements",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-checks/src/javascript-checks.cop#L31"
+      },
+      {
+        "name": "var-declarations",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-checks/src/javascript-checks.cop#L37"
+      },
+      {
+        "name": "swallowed-exceptions",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-checks/src/javascript-checks.cop#L43"
+      },
+      {
+        "name": "javascript-correctness-checks",
+        "desc": "Combined JavaScript correctness checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-checks/src/javascript-checks.cop#L47"
+      },
+      {
+        "name": "await-thenable",
+        "desc": "Disallow awaiting a value that is not a Thenable (@typescript-eslint/await-thenable)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-checks/src/javascript-checks.cop#L66"
+      },
+      {
+        "name": "typescript-checks",
+        "desc": "Combined TypeScript checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-checks/src/javascript-checks.cop#L70"
+      },
+      {
+        "name": "javascript-checks",
+        "desc": "All JavaScript/TypeScript checks combined",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-checks/src/javascript-checks.cop#L73"
+      }
+    ],
     "commands": []
   },
   "javascript-eslint": {
@@ -3777,7 +4480,33 @@ const packages = {
     "types": {},
     "predicates": [],
     "functions": [],
-    "checks": [],
+    "checks": [
+      {
+        "name": "client-needs-credential",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-azure-checks/src/javascript-library-azure-checks.cop#L16"
+      },
+      {
+        "name": "copyright-header",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-azure-checks/src/javascript-library-azure-checks.cop#L34"
+      },
+      {
+        "name": "error-handling",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-azure-checks/src/javascript-library-azure-checks.cop#L49"
+      },
+      {
+        "name": "no-console-logging",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-azure-checks/src/javascript-library-azure-checks.cop#L55"
+      },
+      {
+        "name": "javascript-library-azure-checks",
+        "desc": "All Azure-specific JavaScript client library checks combined",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-azure-checks/src/javascript-library-azure-checks.cop#L59"
+      }
+    ],
     "commands": []
   },
   "javascript-library-checks": {
@@ -3874,7 +4603,68 @@ const packages = {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L127"
       }
     ],
-    "checks": [],
+    "checks": [
+      {
+        "name": "no-default-exports",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L13"
+      },
+      {
+        "name": "no-external-promises",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L19"
+      },
+      {
+        "name": "no-const-enums",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L24"
+      },
+      {
+        "name": "no-window-reference",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L30"
+      },
+      {
+        "name": "javascript-library-design-checks",
+        "desc": "Combined library design checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L34"
+      },
+      {
+        "name": "standardized-verbs",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L56"
+      },
+      {
+        "name": "subclient-naming",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L65"
+      },
+      {
+        "name": "support-cancellation",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L79"
+      },
+      {
+        "name": "pagination-list-return",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L88"
+      },
+      {
+        "name": "lro-begin-prefix",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L97"
+      },
+      {
+        "name": "javascript-client-checks",
+        "desc": "Combined client checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L101"
+      },
+      {
+        "name": "javascript-library-checks",
+        "desc": "All JavaScript library and client library checks combined",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-library-checks/src/javascript-library-checks.cop#L104"
+      }
+    ],
     "commands": []
   },
   "javascript-lister": {
@@ -3910,7 +4700,33 @@ const packages = {
     "types": {},
     "predicates": [],
     "functions": [],
-    "checks": [],
+    "checks": [
+      {
+        "name": "snippet-missing-docs",
+        "desc": "JavaScript snippet has no corresponding markdown fence",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-snippets-checks/src/javascript-snippets-checks.cop#L45"
+      },
+      {
+        "name": "snippet-orphaned-ref",
+        "desc": "Markdown fence references a snippet that does not exist in JavaScript source",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-snippets-checks/src/javascript-snippets-checks.cop#L49"
+      },
+      {
+        "name": "snippet-duplicate-name",
+        "desc": "Same snippet name defined in multiple JavaScript locations",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-snippets-checks/src/javascript-snippets-checks.cop#L53"
+      },
+      {
+        "name": "snippet-stale-content",
+        "desc": "Markdown snippet content is out of sync with JavaScript source",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-snippets-checks/src/javascript-snippets-checks.cop#L57"
+      },
+      {
+        "name": "javascript-snippets-checks",
+        "desc": "All snippet checks combined",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript-snippets-checks/src/javascript-snippets-checks.cop#L61"
+      }
+    ],
     "commands": []
   },
   "json": {
@@ -4126,7 +4942,148 @@ const packages = {
     "types": {},
     "predicates": [],
     "functions": [],
-    "checks": [],
+    "checks": [
+      {
+        "name": "print-calls",
+        "desc": "Avoid print() — use logging instead",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L14"
+      },
+      {
+        "name": "bare-except-clauses",
+        "desc": "Do not use bare except — catch a specific exception type",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L21"
+      },
+      {
+        "name": "silenced-exceptions",
+        "desc": "Do not silence Exception — reraise or catch a specific type",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L32"
+      },
+      {
+        "name": "no-six-import",
+        "desc": "Do not import the six package — Python 2 is no longer supported",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L39"
+      },
+      {
+        "name": "no-legacy-typing",
+        "desc": "Do not use legacy type comments — use Python 3.9+ type annotations",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L46"
+      },
+      {
+        "name": "no-eval",
+        "desc": "Do not use eval() — it is a security risk",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L53"
+      },
+      {
+        "name": "python-correctness-checks",
+        "desc": "Combined correctness checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L57"
+      },
+      {
+        "name": "class-name-casing",
+        "desc": "Class names should use PascalCase (CapWords convention)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L67"
+      },
+      {
+        "name": "function-name-casing",
+        "desc": "Function and method names should use snake_case",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L77"
+      },
+      {
+        "name": "import-wildcard",
+        "desc": "Avoid wildcard imports — import specific names instead",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L84"
+      },
+      {
+        "name": "mutable-default-arg",
+        "desc": "Do not use mutable default arguments — use None and assign inside the function",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L98"
+      },
+      {
+        "name": "trailing-whitespace",
+        "desc": "Lines should not have trailing whitespace",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L105"
+      },
+      {
+        "name": "mixed-indentation",
+        "desc": "Use spaces for indentation, not tabs",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L112"
+      },
+      {
+        "name": "python-style-checks",
+        "desc": "Combined style checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L116"
+      },
+      {
+        "name": "none-comparison",
+        "desc": "Use 'is None' or 'is not None' instead of '== None' / '!= None'",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L124"
+      },
+      {
+        "name": "type-comparison",
+        "desc": "Use isinstance() instead of type() comparison",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L132"
+      },
+      {
+        "name": "old-style-format",
+        "desc": "Prefer f-strings over %-style string formatting",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L140"
+      },
+      {
+        "name": "range-len-pattern",
+        "desc": "Use enumerate() instead of range(len(...))",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L147"
+      },
+      {
+        "name": "global-statement",
+        "desc": "Avoid the global statement — pass values as parameters or use a class",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L154"
+      },
+      {
+        "name": "python-idiom-checks",
+        "desc": "Combined idiom checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L158"
+      },
+      {
+        "name": "too-many-params",
+        "desc": "Functions should not have more than 5 parameters — consider using a config object or **kwargs",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L170"
+      },
+      {
+        "name": "empty-except-body",
+        "desc": "Do not use empty except blocks — handle or log the exception",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L178"
+      },
+      {
+        "name": "broad-exception-raise",
+        "desc": "Raise specific exception types instead of generic Exception",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L186"
+      },
+      {
+        "name": "python-quality-checks",
+        "desc": "Combined quality checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L190"
+      },
+      {
+        "name": "missing-class-docstring",
+        "desc": "Public classes should have a docstring",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L201"
+      },
+      {
+        "name": "missing-function-docstring",
+        "desc": "Public functions and methods should have a docstring",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L212"
+      },
+      {
+        "name": "python-doc-checks",
+        "desc": "Combined documentation checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L216"
+      },
+      {
+        "name": "python-checks",
+        "desc": "All Python checks combined",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-checks/src/python-checks.cop#L219"
+      }
+    ],
     "commands": []
   },
   "python-library-azure-checks": {
@@ -4142,7 +5099,63 @@ const packages = {
     "types": {},
     "predicates": [],
     "functions": [],
-    "checks": [],
+    "checks": [
+      {
+        "name": "client-needs-credential",
+        "desc": "Azure clients must accept a 'credential' parameter in the constructor",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-azure-checks/src/python-library-azure-checks.cop#L11"
+      },
+      {
+        "name": "client-needs-api-version",
+        "desc": "Azure clients must accept 'api_version' keyword argument",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-azure-checks/src/python-library-azure-checks.cop#L20"
+      },
+      {
+        "name": "method-snake-case",
+        "desc": "Method names must use snake_case",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-azure-checks/src/python-library-azure-checks.cop#L29"
+      },
+      {
+        "name": "type-pascal-case",
+        "desc": "Type names must use PascalCase",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-azure-checks/src/python-library-azure-checks.cop#L36"
+      },
+      {
+        "name": "delete-returns-none",
+        "desc": "Delete operations should return None",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-azure-checks/src/python-library-azure-checks.cop#L49"
+      },
+      {
+        "name": "no-raise-with-traceback",
+        "desc": "Do not use raise_with_traceback; use raise ... from syntax",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-azure-checks/src/python-library-azure-checks.cop#L57"
+      },
+      {
+        "name": "no-legacy-typing",
+        "desc": "Do not use legacy type comments; use Python 3.9+ type hints",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-azure-checks/src/python-library-azure-checks.cop#L64"
+      },
+      {
+        "name": "no-asyncio-sleep",
+        "desc": "Do not use asyncio.sleep; use transport sleep from azure.core",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-azure-checks/src/python-library-azure-checks.cop#L72"
+      },
+      {
+        "name": "no-log-exceptions-above-debug",
+        "desc": "Do not log exceptions at non-debug levels (may reveal sensitive info)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-azure-checks/src/python-library-azure-checks.cop#L83"
+      },
+      {
+        "name": "missing-tracing-decorator",
+        "desc": "Client service methods should have distributed tracing decorator",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-azure-checks/src/python-library-azure-checks.cop#L96"
+      },
+      {
+        "name": "python-library-azure-checks",
+        "desc": "All Azure Python client library checks combined",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-azure-checks/src/python-library-azure-checks.cop#L109"
+      }
+    ],
     "commands": []
   },
   "python-library-checks": {
@@ -4264,7 +5277,73 @@ const packages = {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L180"
       }
     ],
-    "checks": [],
+    "checks": [
+      {
+        "name": "untyped-public-params",
+        "desc": "Public methods should have type hints on all parameters",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L22"
+      },
+      {
+        "name": "missing-return-types",
+        "desc": "Public methods should declare a return type",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L32"
+      },
+      {
+        "name": "python-library-typing-checks",
+        "desc": "Combined typing checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L36"
+      },
+      {
+        "name": "async-client-bad-name",
+        "desc": "Async clients should not have 'Async' in the name",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L51"
+      },
+      {
+        "name": "client-missing-kwargs",
+        "desc": "Client constructor must accept **kwargs",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L64"
+      },
+      {
+        "name": "no-connection-string-in-ctor",
+        "desc": "Client constructor should not have a connection_string parameter (use factory method)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L71"
+      },
+      {
+        "name": "no-static-methods",
+        "desc": "Client methods should not use static methods (use module-level functions)",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L81"
+      },
+      {
+        "name": "too-many-positional-params",
+        "desc": "Client methods with more than 5 positional parameters",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L90"
+      },
+      {
+        "name": "async-method-missing-kwargs",
+        "desc": "Async client methods should accept **kwargs",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L100"
+      },
+      {
+        "name": "lro-naming",
+        "desc": "LRO methods should be prefixed with begin_",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L111"
+      },
+      {
+        "name": "paging-naming",
+        "desc": "Paging methods should be prefixed with list_",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L124"
+      },
+      {
+        "name": "name-too-long",
+        "desc": "Type/class names should be under 40 characters",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L153"
+      },
+      {
+        "name": "python-library-checks",
+        "desc": "All Python library checks combined",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-library-checks/src/python-library-checks.cop#L157"
+      }
+    ],
     "commands": []
   },
   "python-lister": {
@@ -4372,7 +5451,33 @@ const packages = {
     "types": {},
     "predicates": [],
     "functions": [],
-    "checks": [],
+    "checks": [
+      {
+        "name": "snippet-missing-docs",
+        "desc": "Python snippet has no corresponding markdown fence",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-snippets-checks/src/python-snippets-checks.cop#L45"
+      },
+      {
+        "name": "snippet-orphaned-ref",
+        "desc": "Markdown fence references a snippet that does not exist in Python source",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-snippets-checks/src/python-snippets-checks.cop#L49"
+      },
+      {
+        "name": "snippet-duplicate-name",
+        "desc": "Same snippet name defined in multiple Python locations",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-snippets-checks/src/python-snippets-checks.cop#L53"
+      },
+      {
+        "name": "snippet-stale-content",
+        "desc": "Markdown snippet content is out of sync with Python source",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-snippets-checks/src/python-snippets-checks.cop#L57"
+      },
+      {
+        "name": "python-snippets-checks",
+        "desc": "All snippet checks combined",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python-snippets-checks/src/python-snippets-checks.cop#L61"
+      }
+    ],
     "commands": []
   },
   "rust": {
@@ -4419,7 +5524,73 @@ const packages = {
     "types": {},
     "predicates": [],
     "functions": [],
-    "checks": [],
+    "checks": [
+      {
+        "name": "unwrap-calls",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/rust/rust-checks/src/rust-checks.cop#L36"
+      },
+      {
+        "name": "expect-calls",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/rust/rust-checks/src/rust-checks.cop#L42"
+      },
+      {
+        "name": "panic-macros",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/rust/rust-checks/src/rust-checks.cop#L48"
+      },
+      {
+        "name": "unfinished-code",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/rust/rust-checks/src/rust-checks.cop#L54"
+      },
+      {
+        "name": "rust-correctness-checks",
+        "desc": "Combined correctness checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/rust/rust-checks/src/rust-checks.cop#L58"
+      },
+      {
+        "name": "console-output",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/rust/rust-checks/src/rust-checks.cop#L68"
+      },
+      {
+        "name": "type-naming",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/rust/rust-checks/src/rust-checks.cop#L74"
+      },
+      {
+        "name": "method-naming",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/rust/rust-checks/src/rust-checks.cop#L80"
+      },
+      {
+        "name": "rust-style-checks",
+        "desc": "Combined style checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/rust/rust-checks/src/rust-checks.cop#L84"
+      },
+      {
+        "name": "undocumented-types",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/rust/rust-checks/src/rust-checks.cop#L90"
+      },
+      {
+        "name": "undocumented-methods",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/rust/rust-checks/src/rust-checks.cop#L96"
+      },
+      {
+        "name": "rust-doc-checks",
+        "desc": "Combined documentation checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/rust/rust-checks/src/rust-checks.cop#L100"
+      },
+      {
+        "name": "rust-checks",
+        "desc": "All Rust checks combined",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/rust/rust-checks/src/rust-checks.cop#L103"
+      }
+    ],
     "commands": []
   },
   "test-nunit-checks": {

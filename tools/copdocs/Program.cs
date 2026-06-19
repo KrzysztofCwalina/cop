@@ -49,7 +49,8 @@ try
     var dir = new DirectoryInfo(firstDir);
     while (dir != null)
     {
-        if (Directory.Exists(Path.Combine(dir.FullName, ".git")))
+        var gitPath = Path.Combine(dir.FullName, ".git");
+        if (Directory.Exists(gitPath) || File.Exists(gitPath))
         {
             repoRoot = dir.FullName;
             break;

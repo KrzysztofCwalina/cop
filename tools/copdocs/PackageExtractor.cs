@@ -64,7 +64,7 @@ public class PackageExtractor
             }
             catch (ParseException)
             {
-                // Skip files that fail to parse
+                // Skip files that fail to parse; remaining package files still contribute docs.
             }
         }
 
@@ -286,39 +286,88 @@ public class PackageExtractor
     }
 
     private static bool IsViolationCollection(LetDeclaration let, List<LetDeclaration> allLets)
+        => IsViolationCollection(let, allLets, []);
+
+    private static bool IsViolationCollection(LetDeclaration let, List<LetDeclaration> allLets, HashSet<string> visited)
     {
-        if (!let.IsValueBinding && !let.IsCollectionUnion)
-            return let.Filters.Count > 0 && HasViolationFilter(let.Filters);
+        if (!visited.Add(let.Name)) return false; // guard against reference cycles
 
-        if (let.IsCollectionUnion && let.ValueExpression is CollectionUnionExpr union)
-        {
-            foreach (var element in union.Elements)
-            {
-                if (element is IdentifierExpr id)
-                {
-                    var constituent = allLets.FirstOrDefault(l => l.Name == id.Name);
-                    if (constituent != null && IsViolationCollection(constituent, allLets))
-                        return true;
-                }
-            }
-        }
+        // Common form: `let x = cb.Calls:isFoo:toWarning('...')` — the whole filter/transform
+        // chain is the ValueExpression and ends in a toError/toWarning/toInfo call.
+        if (let.ValueExpression is not null)
+            return ContainsViolationCall(let.ValueExpression, allLets, visited);
 
-        return false;
+        // Legacy filter-chain form where filters are stored separately.
+        return let.Filters.Any(f => ContainsViolationCall(f, allLets, visited));
     }
 
-    private static bool HasViolationFilter(List<Expression> filters)
+    /// <summary>
+    /// True if the expression is (or contains) a toError/toWarning/toInfo call, following
+    /// references to other exported violation collections (for `a + b + c` unions).
+    /// </summary>
+    private static bool ContainsViolationCall(Expression expr, List<LetDeclaration> allLets, HashSet<string> visited)
     {
-        foreach (var filter in filters)
+        switch (expr)
         {
-            var name = filter switch
-            {
-                CallExpr c => c.Name,
-                _ => null
-            };
-            if (name is "toError" or "toWarning" or "toInfo")
-                return true;
+            case AstExpressionWrapper wrapper:
+                return ContainsViolationCallAst(wrapper.AstExpression, allLets, visited);
+            case CallExpr call:
+                if (call.Name is "toError" or "toWarning" or "toInfo") return true;
+                if (call.Target is not null && ContainsViolationCall(call.Target, allLets, visited)) return true;
+                return call.Args.Any(a => ContainsViolationCall(a, allLets, visited));
+            case CollectionUnionExpr union:
+                return union.Elements.Any(e => ContainsViolationCall(e, allLets, visited));
+            case BinaryExpr bin:
+                return ContainsViolationCall(bin.Left, allLets, visited) || ContainsViolationCall(bin.Right, allLets, visited);
+            case UnaryExpr u:
+                return ContainsViolationCall(u.Operand, allLets, visited);
+            case MemberAccessExpr m:
+                return ContainsViolationCall(m.Target, allLets, visited);
+            case PathScopedExpr p:
+                return ContainsViolationCall(p.Inner, allLets, visited);
+            case IdentifierExpr id:
+                var constituent = allLets.FirstOrDefault(l => l.Name == id.Name);
+                return constituent != null && IsViolationCollection(constituent, allLets, visited);
+            default:
+                return false;
         }
-        return false;
+    }
+
+    /// <summary>
+    /// Scans the raw parser AST (Cop.Lang.Ast.Expression) produced by the new parser and
+    /// wrapped in AstExpressionWrapper. Detects toError/toWarning/toInfo filter-calls and
+    /// follows identifier references to other exported violation collections (`a + b + c`).
+    /// </summary>
+    private static bool ContainsViolationCallAst(Cop.Lang.Ast.Expression expr, List<LetDeclaration> allLets, HashSet<string> visited)
+    {
+        switch (expr)
+        {
+            case Cop.Lang.Ast.CallExpr call:
+                if (call.Callee is Cop.Lang.Ast.IdentifierExpr cid && cid.Name is "toError" or "toWarning" or "toInfo") return true;
+                if (call.Callee is Cop.Lang.Ast.MemberExpr cm && cm.Member is "toError" or "toWarning" or "toInfo") return true;
+                if (ContainsViolationCallAst(call.Callee, allLets, visited)) return true;
+                return call.Args.Any(a => ContainsViolationCallAst(a, allLets, visited));
+            case Cop.Lang.Ast.FilterExpr filter:
+                return ContainsViolationCallAst(filter.Collection, allLets, visited)
+                    || ContainsViolationCallAst(filter.Predicate, allLets, visited);
+            case Cop.Lang.Ast.BinaryExpr bin:
+                return ContainsViolationCallAst(bin.Left, allLets, visited) || ContainsViolationCallAst(bin.Right, allLets, visited);
+            case Cop.Lang.Ast.UnaryExpr u:
+                return ContainsViolationCallAst(u.Operand, allLets, visited);
+            case Cop.Lang.Ast.MemberExpr m:
+                return ContainsViolationCallAst(m.Object, allLets, visited);
+            case Cop.Lang.Ast.IndexExpr ix:
+                return ContainsViolationCallAst(ix.Object, allLets, visited) || ContainsViolationCallAst(ix.Index, allLets, visited);
+            case Cop.Lang.Ast.ConditionalExpr c:
+                return ContainsViolationCallAst(c.Then, allLets, visited) || ContainsViolationCallAst(c.Else, allLets, visited);
+            case Cop.Lang.Ast.ListExpr list:
+                return list.Elements.Any(e => ContainsViolationCallAst(e, allLets, visited));
+            case Cop.Lang.Ast.IdentifierExpr id:
+                var constituent = allLets.FirstOrDefault(l => l.Name == id.Name);
+                return constituent != null && IsViolationCollection(constituent, allLets, visited);
+            default:
+                return false;
+        }
     }
 
     private static void LoadSamples(string packageDir, PackageEntry entry)
