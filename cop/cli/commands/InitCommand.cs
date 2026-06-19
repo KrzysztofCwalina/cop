@@ -15,17 +15,20 @@ public static class InitCommand
 
     public static Command Create()
     {
-        var localHookOption = new Option<bool>("--al", "Generate local Claude Code hook (.claude/settings.local.json)");
-        var globalHookOption = new Option<bool>("--ag", "Generate shared Claude Code hook (.claude/settings.json)");
+        var claudeOption = new Option<bool>("--claude", "Generate Claude Code instructions instead of GitHub Copilot");
+        var localHookOption = new Option<bool>("--al", "Generate local Claude Code hook (.claude/settings.local.json); implies --claude");
+        var globalHookOption = new Option<bool>("--ag", "Generate shared Claude Code hook (.claude/settings.json); implies --claude");
         var copilotHookOption = new Option<bool>("--ch", "Generate GitHub Copilot CLI hook (.github/hooks/cop.json)");
-        var command = new Command("init", "Generate agent instruction files for writing cop rules")
+        var command = new Command("init", "Generate agent instruction files for writing cop rules (GitHub Copilot by default, Claude Code with --claude)")
         {
+            claudeOption,
             localHookOption,
             globalHookOption,
             copilotHookOption
         };
 
         command.SetAction(ctx => Execute(
+            ctx.GetValue(claudeOption) || ctx.GetValue(localHookOption) || ctx.GetValue(globalHookOption),
             ctx.GetValue(localHookOption),
             ctx.GetValue(globalHookOption),
             ctx.GetValue(copilotHookOption)));
@@ -33,61 +36,69 @@ public static class InitCommand
         return command;
     }
 
-    public static int Execute(bool localHook = false, bool globalHook = false, bool copilotHook = false)
+    public static int Execute(bool claude = false, bool localHook = false, bool globalHook = false, bool copilotHook = false)
     {
         var cwd = Directory.GetCurrentDirectory();
         int filesUpdated = 0;
 
-        // Generate .github/copilot-instructions.md (merge cop section)
-        var githubDir = Path.Combine(cwd, ".github");
-        var copilotPath = Path.Combine(githubDir, "copilot-instructions.md");
-        Directory.CreateDirectory(githubDir);
-        var copilotResult = MergeCopSection(copilotPath);
-        Console.WriteLine($"{copilotResult}: {GetRelativePath(cwd, copilotPath)}");
-        filesUpdated++;
-
-        // Generate AGENTS.md (merge cop section)
+        // AGENTS.md — generic, cross-agent instructions. Written in both modes because
+        // it is the shared standard read by GitHub Copilot, Claude Code, and others.
         var agentsPath = Path.Combine(cwd, "AGENTS.md");
         var agentsResult = MergeCopSection(agentsPath);
         Console.WriteLine($"{agentsResult}: AGENTS.md");
         filesUpdated++;
 
-        // Generate .claude/commands/cop.md (Claude Code custom command, always write)
-        var claudeCommandsDir = Path.Combine(cwd, ".claude", "commands");
-        var copCommandPath = Path.Combine(claudeCommandsDir, "cop.md");
-        Directory.CreateDirectory(claudeCommandsDir);
-        File.WriteAllText(copCommandPath, GetCopCommandContent());
-        Console.WriteLine($"Updated: {GetRelativePath(cwd, copCommandPath)}");
-        filesUpdated++;
-
-        // Generate .github/skills/cop/SKILL.md (GitHub Copilot CLI agent skill — analog of the Claude command, always write)
-        var copilotSkillDir = Path.Combine(githubDir, "skills", "cop");
-        var copilotSkillPath = Path.Combine(copilotSkillDir, "SKILL.md");
-        Directory.CreateDirectory(copilotSkillDir);
-        File.WriteAllText(copilotSkillPath, GetCopilotSkillContent());
-        Console.WriteLine($"Updated: {GetRelativePath(cwd, copilotSkillPath)}");
-        filesUpdated++;
-
-        // Generate Claude Code hook settings
-        if (localHook)
+        if (claude)
         {
-            int result = GenerateClaudeHook(cwd, "settings.local.json");
-            if (result < 0) return 1;
-            filesUpdated += result;
+            // ── Claude Code (cop init --claude) ──────────────────────────────
+            // .claude/commands/cop.md (Claude Code custom /cop command)
+            var claudeCommandsDir = Path.Combine(cwd, ".claude", "commands");
+            var copCommandPath = Path.Combine(claudeCommandsDir, "cop.md");
+            Directory.CreateDirectory(claudeCommandsDir);
+            File.WriteAllText(copCommandPath, GetCopCommandContent());
+            Console.WriteLine($"Updated: {GetRelativePath(cwd, copCommandPath)}");
+            filesUpdated++;
+
+            // Claude Code hook settings
+            if (localHook)
+            {
+                int result = GenerateClaudeHook(cwd, "settings.local.json");
+                if (result < 0) return 1;
+                filesUpdated += result;
+            }
+            if (globalHook)
+            {
+                int result = GenerateClaudeHook(cwd, "settings.json");
+                if (result < 0) return 1;
+                filesUpdated += result;
+            }
         }
-        if (globalHook)
+        else
         {
-            int result = GenerateClaudeHook(cwd, "settings.json");
-            if (result < 0) return 1;
-            filesUpdated += result;
-        }
+            // ── GitHub Copilot (cop init, default) ───────────────────────────
+            // .github/copilot-instructions.md (merge cop section)
+            var githubDir = Path.Combine(cwd, ".github");
+            var copilotPath = Path.Combine(githubDir, "copilot-instructions.md");
+            Directory.CreateDirectory(githubDir);
+            var copilotResult = MergeCopSection(copilotPath);
+            Console.WriteLine($"{copilotResult}: {GetRelativePath(cwd, copilotPath)}");
+            filesUpdated++;
 
-        // Generate GitHub Copilot CLI hook settings
-        if (copilotHook)
-        {
-            int result = GenerateCopilotHook(cwd);
-            if (result < 0) return 1;
-            filesUpdated += result;
+            // .github/skills/cop/SKILL.md (GitHub Copilot CLI agent skill)
+            var copilotSkillDir = Path.Combine(githubDir, "skills", "cop");
+            var copilotSkillPath = Path.Combine(copilotSkillDir, "SKILL.md");
+            Directory.CreateDirectory(copilotSkillDir);
+            File.WriteAllText(copilotSkillPath, GetCopilotSkillContent());
+            Console.WriteLine($"Updated: {GetRelativePath(cwd, copilotSkillPath)}");
+            filesUpdated++;
+
+            // GitHub Copilot CLI hook settings
+            if (copilotHook)
+            {
+                int result = GenerateCopilotHook(cwd);
+                if (result < 0) return 1;
+                filesUpdated += result;
+            }
         }
 
         Console.WriteLine($"\n{filesUpdated} file(s) updated. Agents will now discover cop language context automatically.");

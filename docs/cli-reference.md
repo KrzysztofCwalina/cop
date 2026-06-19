@@ -270,23 +270,29 @@ If the package is not found locally, run `cop package restore` first.
 
 ## cop init
 
-Generate agent integration files for coding agents (GitHub Copilot, Claude Code) so they can write and run cop rules in your project.
+Generate agent integration files for coding agents so they can write and run cop rules in your project. By default this targets **GitHub Copilot**; pass `--claude` for **Claude Code**.
 
 ```bash
-cop init [--al] [--ag] [--ch]
+cop init [--claude] [--al] [--ag] [--ch]
 ```
 
 | Option | Description |
 |--------|-------------|
-| `--al` | Generate a local Claude Code hook (`.claude/settings.local.json`) |
-| `--ag` | Generate a shared Claude Code hook (`.claude/settings.json`) |
+| `--claude` | Generate Claude Code instructions instead of GitHub Copilot |
+| `--al` | Generate a local Claude Code hook (`.claude/settings.local.json`); implies `--claude` |
+| `--ag` | Generate a shared Claude Code hook (`.claude/settings.json`); implies `--claude` |
 | `--ch` | Generate a GitHub Copilot CLI hook (`.github/hooks/cop.json`) |
 
-Always creates (merged in-place, never clobbering your own content):
+Always creates `AGENTS.md` (the cross-agent standard, merged in-place and never clobbering your own content).
+
+**Default (`cop init`) — GitHub Copilot:**
 - `.github/copilot-instructions.md` — cop language context, discovered automatically by GitHub Copilot
-- `AGENTS.md` — cop language context, discovered automatically by Claude Code and other agents
-- `.claude/commands/cop.md` — Claude Code custom command to run cop checks
-- `.github/skills/cop/SKILL.md` — GitHub Copilot CLI agent skill (the Copilot analog of the Claude command) to run cop checks
+- `.github/skills/cop/SKILL.md` — GitHub Copilot CLI agent skill to run cop checks
+- `.github/hooks/cop.json` — GitHub Copilot CLI hook (with `--ch`)
+
+**`cop init --claude` — Claude Code:**
+- `.claude/commands/cop.md` — Claude Code custom `/cop` command to run cop checks
+- `.claude/settings.local.json` / `.claude/settings.json` — Claude Code hook (with `--al` / `--ag`)
 
 The instruction files contain a concise cop language overview, common patterns, pointers to `cop help language` and `cop help <package>`, and guidance for reporting issues back to the cop project.
 
@@ -301,12 +307,16 @@ The instruction and command/skill files are safe to run repeatedly; cop sections
 ```bash
 cd my-project
 cop init --ch
-# Created: .github/copilot-instructions.md
 # Updated: AGENTS.md
-# Updated: .claude/commands/cop.md
+# Created: .github/copilot-instructions.md
 # Updated: .github/skills/cop/SKILL.md
 # Wrote: .../.github/hooks/cop.json
-# 5 file(s) updated. Agents will now discover cop language context automatically.
+# 4 file(s) updated. Agents will now discover cop language context automatically.
+
+cop init --claude
+# Updated: AGENTS.md
+# Updated: .claude/commands/cop.md
+# 2 file(s) updated. Agents will now discover cop language context automatically.
 ```
 
 ## cop lock
