@@ -25,7 +25,8 @@ export type UncategorizedProject = {
 
 # Violation formatting functions
 export function toError(Project, message: string) => Violation {
-    Severity = 'error',
+    Severity = 1.0,
+    Certainty = 1.0,
     Message = message,
     File = item.Path,
     Line = 0,
@@ -33,7 +34,8 @@ export function toError(Project, message: string) => Violation {
 }
 
 export function toWarning(Project, message: string) => Violation {
-    Severity = 'warning',
+    Severity = 0.5,
+    Certainty = 1.0,
     Message = message,
     File = item.Path,
     Line = 0,
@@ -41,7 +43,8 @@ export function toWarning(Project, message: string) => Violation {
 }
 
 export function toInfo(Project, message: string) => Violation {
-    Severity = 'info',
+    Severity = 0.2,
+    Certainty = 1.0,
     Message = message,
     File = item.Path,
     Line = 0,
