@@ -63,8 +63,9 @@ cop-checks/
 Rules:
 - **`main.cop` builds the codebase** with `let codebase = codebase(...)` and is the ONLY file with a `command`.
 - **One check per file** — each file defines a single focused rule.
-- **Each check file exports a violation list** — `export let my-violations = codebase.Types:isViolating :toError(...)`.
+- **Each check file declares a violation list** — `let my-violations = codebase.Types:isViolating :toError(...)`.
 - Check files reference the shared `codebase` defined in `main.cop` — every file in `cop-checks/` loads together as one program.
+- **No `export` needed.** Files in `cop-checks/` load as one program, so a `let` in one file is visible to the others directly. `export` is only for publishing a reusable package that other repos consume via `import`.
 - **Never put a `command` in an individual check file.**
 
 ## Canonical Check File Template
@@ -74,7 +75,7 @@ Rules:
 
 predicate isViolating(Type) => <condition>
 
-export let my-violations = codebase.Types:isViolating
+let my-violations = codebase.Types:isViolating
     :toError('<message about {item.Name}>')
 ```
 
@@ -90,7 +91,7 @@ import cop
 
 let codebase = codebase(csharp.parse(), cop.parse())
 
-export let all-violations =
+let all-violations =
     check-a-violations +
     check-b-violations +
     check-c-violations
@@ -109,7 +110,7 @@ predicate isInTestProject(Type) => Type.File.Path:startsWith('tests/') || Type.F
 predicate hasNamespace(Type) => Type.File.Namespace.Length:greaterThan(0)
 predicate isMissingNamespace(Type:isCSharp) => !hasNamespace && !isInTestProject
 
-export let types-without-namespace = codebase.Types:isMissingNamespace
+let types-without-namespace = codebase.Types:isMissingNamespace
     :toError('{item.Name} in {item.File.Path} must be in a namespace')
 ```
 
@@ -127,7 +128,7 @@ predicate isRuntimeReferencingProvider(Project) =>
     Project.Name:in(runtime-projects)
     && Project.References:containsAny(provider-projects)
 
-export let layering-violations = codebase.Projects:isRuntimeReferencingProvider
+let layering-violations = codebase.Projects:isRuntimeReferencingProvider
     :toError('{item.Name} must not reference providers')
 ```
 

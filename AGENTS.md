@@ -218,14 +218,14 @@ cop-checks/
 ### Rules for `cop-checks/`:
 
 1. **One check per file** — each `.cop` file defines a single focused check
-2. **Each file exports a `let` with its violations** — e.g., `export let naming-violations = ...`
+2. **Each file declares a `let` with its violations** — e.g., `let naming-violations = ...`
 3. **`main.cop` composes all checks** — imports violation lists from each file and runs `CHECK(all)`
 4. **Run all checks with** `cop cop-checks/main.cop -t .` from the repo root
 
 ### Example `main.cop`:
 
 ```cop
-export let all-violations =
+let all-violations =
     naming-violations +
     layering-violations +
     no-new-interfaces
@@ -241,7 +241,7 @@ import code-analysis
 
 predicate hasBadName(Type) => Type.Name:startsWith('_')
 
-export let naming-violations = csharp.Types:hasBadName
+let naming-violations = csharp.Types:hasBadName
     :toError('{item.Name} must not start with underscore')
 ```
 
@@ -332,7 +332,7 @@ cop-checks/
 Rules:
 - **`main.cop` builds the codebase** with `let codebase = codebase(...)` and is the ONLY file with a `command`.
 - **One check per file** — each file defines a single focused rule.
-- **Each check file exports a violation list** — `export let my-violations = codebase.Types:isViolating :toError(...)`.
+- **Each check file declares a violation list** — `let my-violations = codebase.Types:isViolating :toError(...)`.
 - Check files reference the shared `codebase` defined in `main.cop` — every file in `cop-checks/` loads together as one program.
 - **Never put a `command` in an individual check file.**
 
@@ -343,7 +343,7 @@ Rules:
 
 predicate isViolating(Type) => <condition>
 
-export let my-violations = codebase.Types:isViolating
+let my-violations = codebase.Types:isViolating
     :toError('<message about {item.Name}>')
 ```
 
@@ -359,7 +359,7 @@ import cop
 
 let codebase = codebase(csharp.parse(), cop.parse())
 
-export let all-violations =
+let all-violations =
     check-a-violations +
     check-b-violations +
     check-c-violations
@@ -378,7 +378,7 @@ predicate isInTestProject(Type) => Type.File.Path:startsWith('tests/') || Type.F
 predicate hasNamespace(Type) => Type.File.Namespace.Length:greaterThan(0)
 predicate isMissingNamespace(Type:isCSharp) => !hasNamespace && !isInTestProject
 
-export let types-without-namespace = codebase.Types:isMissingNamespace
+let types-without-namespace = codebase.Types:isMissingNamespace
     :toError('{item.Name} in {item.File.Path} must be in a namespace')
 ```
 
@@ -396,7 +396,7 @@ predicate isRuntimeReferencingProvider(Project) =>
     Project.Name:in(runtime-projects)
     && Project.References:containsAny(provider-projects)
 
-export let layering-violations = codebase.Projects:isRuntimeReferencingProvider
+let layering-violations = codebase.Projects:isRuntimeReferencingProvider
     :toError('{item.Name} must not reference providers')
 ```
 

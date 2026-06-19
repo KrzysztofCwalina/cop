@@ -173,7 +173,10 @@ public static class RunCommand
             var spec = new FileInfo(command);
             if (!spec.Exists) { Console.Error.WriteLine($"Error: File '{spec.FullName}' not found"); return 1; }
             scriptsDir = spec.DirectoryName ?? Directory.GetCurrentDirectory();
-            rootPath = scriptsDir;
+            // The analysis target defaults to the current working directory, NOT the
+            // .cop file's folder, so `cop cop-checks/main.cop` run from the repo root
+            // analyzes the repo root. `-t` overrides this (see ResolveTargetRoot).
+            rootPath = ResolveTargetRoot(target, Directory.GetCurrentDirectory());
             scopeToFile = spec.FullName;
 
             // First extra arg is the command name (if not a switch)
@@ -187,14 +190,8 @@ public static class RunCommand
         {
             // Command name mode: discover .cop files in cwd
             scriptsDir = Directory.GetCurrentDirectory();
-            rootPath = scriptsDir;
+            rootPath = ResolveTargetRoot(target, scriptsDir);
             commandName = command;
-        }
-
-        // Override rootPath if -t is specified
-        if (!string.IsNullOrEmpty(target))
-        {
-            rootPath = Path.GetFullPath(target);
         }
 
         // Parse -c filter
@@ -966,6 +963,17 @@ public static class RunCommand
     /// Downloads missing packages from configured GitHub feeds into the cache directory.
     /// Recursively resolves imports from downloaded .cop files.
     /// </summary>
+    /// <summary>
+    /// Resolves the analysis target (root) directory. When <paramref name="target"/>
+    /// (the <c>-t</c> flag) is empty, the target is the current working directory — NOT
+    /// the folder containing the named .cop file. This is what makes
+    /// <c>cop cop-checks/main.cop</c> (run from the repo root) analyze the repo root.
+    /// </summary>
+    public static string ResolveTargetRoot(string? target, string currentDirectory) =>
+        string.IsNullOrEmpty(target)
+            ? Path.GetFullPath(currentDirectory)
+            : Path.GetFullPath(target);
+
     public static async Task<bool> AutoRestorePackagesAsync(List<string> packageNames, string cachePath)
     {
         var feedManager = new FeedManager();
@@ -1035,19 +1043,11 @@ public static class RunCommand
                             await File.WriteAllBytesAsync(destPath, content);
                         }
 
-                        // Atomic move — if another process already created the directory, use theirs
-                        if (!Directory.Exists(pkgDir))
-                        {
-                            try { Directory.Move(tempDir, pkgDir); }
-                            catch (IOException) when (Directory.Exists(pkgDir))
-                            {
-                                try { Directory.Delete(tempDir, recursive: true); } catch { }
-                            }
-                        }
-                        else
-                        {
-                            try { Directory.Delete(tempDir, recursive: true); } catch { }
-                        }
+                        // Place the package. We only reach here when no VALID package (one
+                        // containing cop.json) was found above, so any existing pkgDir is
+                        // stale/incomplete and must be replaced — unless another process
+                        // concurrently placed a complete package in the meantime.
+                        PackageInstaller.PlaceRestoredPackage(tempDir, pkgDir);
                     }
                     catch
                     {

@@ -262,7 +262,7 @@ export let datetime-now = Statements:usesDateTime
     :toError('Use DateTimeOffset.UtcNow instead of DateTime.Now')
 ```
 
-The `##` comment above the `export let` becomes the check's description (shown in `cop package commands`).
+The `##` comment above the check becomes its description. (Within a `cop-checks/` folder you don't need `export` — it's only required to publish a reusable package whose checks show up in `cop package commands`.)
 
 ### Organizing Checks in a Folder
 
@@ -276,7 +276,7 @@ cop-checks/
   no-interfaces.cop  # "No new interfaces" check
 ```
 
-Each file exports its violations:
+Each file declares its violations (no `export` needed — cop-checks files load together as one program):
 
 ```ruby
 # naming.cop
@@ -285,7 +285,7 @@ import code-analysis
 
 predicate hasBadName(Type) => Type.Name:startsWith('_')
 
-export let naming-violations = csharp.Types:hasBadName
+let naming-violations = csharp.Types:hasBadName
     :toError('{item.Name} must not start with underscore')
 ```
 
@@ -293,7 +293,7 @@ And `main.cop` composes them:
 
 ```ruby
 # main.cop
-export let all-violations =
+let all-violations =
     naming-violations +
     layering-violations +
     no-new-interfaces
@@ -320,7 +320,7 @@ let my-checks = csharp-checks - var-declarations
 predicate isHardcodedUrl(Statement) => Statement.Kind == declaration
     && Statement.Source:contains('http://')
 ## Do not hardcode URLs — use configuration
-export let no-hardcoded-urls = Statements:isHardcodedUrl
+let no-hardcoded-urls = Statements:isHardcodedUrl
     :toWarning('Do not hardcode URLs — use configuration')
 
 let all-checks = my-checks + no-hardcoded-urls
