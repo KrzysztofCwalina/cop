@@ -1075,6 +1075,25 @@ public class RustSourceParserTests
         Assert.That(result.Statements.Any(s => s.MemberName == "actual_call"), Is.True);
     }
 
+    [Test]
+    public void Parse_BlockDocComment_IsRecognized()
+    {
+        var result = Parse("""
+            /** A documented struct */
+            pub struct Documented { x: i32 }
+            """);
+        Assert.That(result.Types.First(t => t.Name == "Documented").HasDocComment, Is.True);
+    }
+
+    [Test]
+    public void Parse_NegativeImpl_HasTargetName()
+    {
+        var result = Parse("impl !Send for Foo {}");
+        var impl = result.Types.First(t => t.Name.Contains("(impl"));
+        Assert.That(impl.Name, Does.StartWith("Foo"), "negative-impl target must be named, not '?'");
+        Assert.That(impl.BaseTypes, Does.Contain("Send"));
+    }
+
     // ================================================================
     // Helper
     // ================================================================

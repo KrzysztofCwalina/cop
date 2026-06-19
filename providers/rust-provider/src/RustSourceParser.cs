@@ -153,7 +153,14 @@ internal class RustLexer(string source)
         int start = _pos;
         int line = _line;
         _pos += 2; // skip //
-        bool isDoc = _pos < source.Length && source[_pos] == '/';
+        // /// is an outer doc, //! is an inner doc, but //// (or more) is a plain comment.
+        bool isDoc = false;
+        if (_pos < source.Length)
+        {
+            char c3 = source[_pos];
+            if (c3 == '!') isDoc = true;
+            else if (c3 == '/' && (_pos + 1 >= source.Length || source[_pos + 1] != '/')) isDoc = true;
+        }
         while (_pos < source.Length && source[_pos] != '\n')
             _pos++;
         var value = source[start.._pos];
@@ -177,7 +184,17 @@ internal class RustLexer(string source)
                 _pos++;
             }
         }
-        return new RustToken(RustTokenKind.BlockComment, source[start.._pos], line, start, _pos);
+        var value = source[start.._pos];
+        // /** ... */ is an outer doc and /*! ... */ an inner doc; /**/ and /*** ... */ are not.
+        RustTokenKind kind = RustTokenKind.BlockComment;
+        if (value.Length >= 3 && value[1] == '*')
+        {
+            if (value[2] == '!')
+                kind = RustTokenKind.DocComment;
+            else if (value[2] == '*' && (value.Length < 4 || (value[3] != '*' && value[3] != '/')))
+                kind = RustTokenKind.DocComment;
+        }
+        return new RustToken(kind, value, line, start, _pos);
     }
 
     private RustToken ReadAttribute()
@@ -669,6 +686,7 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
     /// </summary>
     private string ConsumeImplTypeName()
     {
+        if (Check("!")) Advance(); // negative impl: `impl !Send for T`
         while (Check("&") || Check("*"))
         {
             Advance();
