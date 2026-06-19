@@ -1,0 +1,16 @@
+{
+  "name": "rust-checks",
+  "version": "1.0.0",
+  "description": "Rust coding conventions and correctness checks for coding agents",
+  "title": "Rust Checks",
+  "authors": "cop-team",
+  "tags": [
+    "rust",
+    "coding-standards",
+    "correctness"
+  ],
+  "language": "Rust",
+  "dependencies": [
+    "rust"
+  ]
+}

@@ -149,6 +149,22 @@ if (-not $SkipBuild) {
     dotnet build "$RepoRoot\providers\python-provider\python-provider.csproj" -c Release
     if ($LASTEXITCODE -ne 0) { throw "python-provider build failed" }
 
+    Write-Host "Building rust-provider..."
+    dotnet build "$RepoRoot\providers\rust-provider\rust-provider.csproj" -c Release
+    if ($LASTEXITCODE -ne 0) { throw "rust-provider build failed" }
+
+    Write-Host "Building java-provider..."
+    dotnet build "$RepoRoot\providers\java-provider\java-provider.csproj" -c Release
+    if ($LASTEXITCODE -ne 0) { throw "java-provider build failed" }
+
+    Write-Host "Building javascript-provider..."
+    dotnet build "$RepoRoot\providers\javascript-provider\javascript-provider.csproj" -c Release
+    if ($LASTEXITCODE -ne 0) { throw "javascript-provider build failed" }
+
+    Write-Host "Building go-provider..."
+    dotnet build "$RepoRoot\providers\go-provider\go-provider.csproj" -c Release
+    if ($LASTEXITCODE -ne 0) { throw "go-provider build failed" }
+
     Write-Host "Building tool-providers..."
     dotnet build "$RepoRoot\providers\tool-providers\tool-providers.csproj" -c Release
     if ($LASTEXITCODE -ne 0) { throw "tool-providers build failed" }

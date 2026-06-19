@@ -93,6 +93,40 @@ public class LanguageCheckPackageTests
             Directory.Delete(fixtureDir, recursive: true);
         }
     }
+    /// <summary>
+    /// End-to-end: running the rust-checks package against Rust source must produce
+    /// violations WITHOUT a -p provider flag (the package hardcodes rust.parse()).
+    /// This is the exact scenario `cop rust-checks -t &lt;dir&gt;` exercises.
+    /// </summary>
+    [Test]
+    public void RustChecks_RunsWithoutProviderFlag_ProducesViolations()
+    {
+        var feedPaths = new List<string> { Path.Combine(RepoRoot, "packages") };
+
+        var fixtureDir = Path.Combine(Path.GetTempPath(), "cop-langcheck-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(fixtureDir);
+        try
+        {
+            // .unwrap() triggers rust-checks' unwrap-calls rule.
+            File.WriteAllText(Path.Combine(fixtureDir, "sample.rs"),
+                "pub fn run() { let x = parse().unwrap(); }");
+
+            // No `providers:` argument — mirrors `cop rust-checks -t <dir>` with no -p.
+            var result = Engine.RunProject(feedPaths, ["rust-checks"], fixtureDir, []);
+
+            Assert.That(result.HasFatalErrors, Is.False,
+                "rust-checks should run without -p. Errors: " + string.Join("; ", result.Errors));
+            Assert.That(result.Outputs, Is.Not.Empty,
+                "rust-checks produced no output without -p — the package likely uses " +
+                "codebase(Program.Providers) instead of codebase(rust.parse()).");
+            Assert.That(result.Outputs.Any(o => o.Message.Contains("unwrap", StringComparison.OrdinalIgnoreCase)),
+                Is.True, "Expected an .unwrap() violation from the analyzed Rust source.");
+        }
+        finally
+        {
+            Directory.Delete(fixtureDir, recursive: true);
+        }
+    }
     /// go/, rust/) may build its codebase from Program.Providers — it must hardcode
     /// its provider so it works without a -p flag.
     /// </summary>

@@ -115,6 +115,13 @@ Each package includes samples in its `samples/` directory showing real-world usa
 |--------|-------------|
 | [run-java-checks](../packages/java/java-checks/samples/run-java-checks.cop) | Run built-in Java style checks |
 
+### Rust
+
+| Sample | Description |
+|--------|-------------|
+| [list-public-types](../packages/rust/rust/samples/list-public-types.cop) | List all public Rust types |
+| [run-rust-checks](../packages/rust/rust-checks/samples/run-rust-checks.cop) | Run built-in Rust correctness and style checks |
+
 ### Specialized
 
 | Sample | Description |

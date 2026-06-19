@@ -308,6 +308,7 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
 
         while (!IsAtEnd())
         {
+            int loopStart = _pos;
             SkipCommentsAndAttributes();
             if (IsAtEnd()) break;
 
@@ -315,25 +316,23 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
             {
                 ParseUse(usings);
             }
-            else if (CheckKeyword("pub") || CheckKeyword("struct") || CheckKeyword("enum") || CheckKeyword("trait") || CheckKeyword("impl") || CheckKeyword("unsafe"))
+            else if (CheckKeyword("struct") || CheckKeyword("enum") || CheckKeyword("trait")
+                || CheckKeyword("impl") || CheckKeyword("pub") || CheckKeyword("unsafe"))
             {
                 var type = TryParseTypeOrImpl(statements);
                 if (type != null) types.Add(type);
-                else Advance();
+                // If null (e.g. a `pub fn` free function), position is reset; the global
+                // progress guard below advances past `pub`/`unsafe` so the function is then
+                // parsed exactly once by the fn branch on a later iteration.
             }
-            else if (CheckKeyword("fn") || (CheckKeyword("pub") || CheckKeyword("async")))
+            else if ((CheckKeyword("fn") || CheckKeyword("async")) && IsFnAhead())
             {
-                if (IsFnAhead())
-                {
-                    var (method, _) = ParseFn(statements);
-                    Advance(); // handled
-                }
-                else Advance();
+                ParseFn(statements);
             }
-            else
-            {
-                Advance();
-            }
+
+            // Guarantee forward progress on every iteration — never spin on a token that
+            // no branch consumed (stray punctuation, top-level const/mod/type, etc.).
+            if (_pos == loopStart) Advance();
         }
 
         return new SourceFile(filePath, "rust", types, statements, sourceText)
@@ -360,13 +359,10 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
         if (CheckKeyword("enum")) return ParseEnum(isPub, attributes, hasDoc);
         if (CheckKeyword("trait")) return ParseTrait(isPub, attributes, hasDoc, statements);
         if (CheckKeyword("impl")) return ParseImpl(statements);
-        if (CheckKeyword("fn") || CheckKeyword("async"))
-        {
-            var (method, _) = ParseFn(statements);
-            _pos = savedPos;
-            return null;
-        }
 
+        // A free function (possibly pub/async/unsafe). Do NOT parse it here — doing so
+        // would append its statements to the file, and the main loop's function branch
+        // will parse it again, double-counting every statement. Reset and defer.
         _pos = savedPos;
         return null;
     }
@@ -437,6 +433,7 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
             Advance();
             while (!IsAtEnd() && !Check("}"))
             {
+                int loopStart = _pos;
                 SkipCommentsAndAttributes();
                 if (Check("}")) break;
                 string variantName = ConsumeIdentifier();
@@ -446,6 +443,7 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
                 if (Check("{")) SkipBraces();
                 if (Check("=")) { Advance(); while (!IsAtEnd() && !Check(",") && !Check("}")) Advance(); }
                 if (Check(",")) Advance();
+                if (_pos == loopStart) Advance();
             }
             if (Check("}")) Advance();
         }
@@ -580,25 +578,43 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
             Advance();
             while (!IsAtEnd() && !Check(")"))
             {
+                int loopStart = _pos;
                 SkipCommentsAndAttributes();
                 if (Check(")")) break;
-                // self params
+
+                // self receiver: self, &self, &mut self, self: Box<Self>
                 if (CheckKeyword("self") || Check("&"))
                 {
                     SkipUntilCommaOrParen();
                     if (Check(",")) Advance();
+                    if (_pos == loopStart) Advance();
                     continue;
                 }
-                if (MatchKeyword("mut")) { }
+
+                // Destructuring patterns bound as a parameter: (a, b): (T1, T2), [a, b]: [T; 2]
+                if (Check("(") || Check("["))
+                {
+                    if (Check("(")) SkipParens(); else SkipBrackets();
+                    if (Check(":")) { Advance(); ConsumeType(); }
+                    if (Check(",")) Advance();
+                    if (_pos == loopStart) Advance();
+                    continue;
+                }
+
+                while (MatchKeyword("mut") || MatchKeyword("ref")) { }
                 string paramName = ConsumeIdentifier();
                 if (Check(":"))
                 {
                     Advance();
                     string paramType = ConsumeType();
-                    parameters.Add(new ParameterDeclaration(paramName,
-                        new TypeReference(paramType, null, [], paramType), false, false, false, 0));
+                    if (paramName != "" && paramName != "_")
+                        parameters.Add(new ParameterDeclaration(paramName,
+                            new TypeReference(paramType, null, [], paramType), false, false, false, 0));
                 }
                 if (Check(",")) Advance();
+
+                // Guaranteed forward progress: never spin on an unexpected token.
+                if (_pos == loopStart) Advance();
             }
             if (Check(")")) Advance();
         }
@@ -758,12 +774,17 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
     private string ConsumeType()
     {
         int start = _pos;
-        int depth = 0;
+        int angle = 0, paren = 0, bracket = 0;
         while (!IsAtEnd())
         {
-            if (Check("<")) { depth++; Advance(); continue; }
-            if (Check(">")) { if (depth == 0) break; depth--; Advance(); continue; }
-            if (depth == 0 && (Check(",") || Check(";") || Check("{") || Check("}") || Check(")") || CheckKeyword("where"))) break;
+            if (Check("<")) { angle++; Advance(); continue; }
+            if (Check(">")) { if (angle == 0) break; angle--; Advance(); continue; }
+            if (Check("(")) { paren++; Advance(); continue; }
+            if (Check(")")) { if (paren == 0) break; paren--; Advance(); continue; }
+            if (Check("[")) { bracket++; Advance(); continue; }
+            if (Check("]")) { if (bracket == 0) break; bracket--; Advance(); continue; }
+            if (angle == 0 && paren == 0 && bracket == 0
+                && (Check(",") || Check(";") || Check("{") || Check("}") || CheckKeyword("where"))) break;
             Advance();
         }
         if (_pos == start) return "";

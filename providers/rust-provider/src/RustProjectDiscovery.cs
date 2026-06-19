@@ -45,8 +45,25 @@ public static class RustProjectDiscovery
                 if (trimmed.StartsWith("["))
                 {
                     inPackage = trimmed == "[package]";
-                    inDependencies = trimmed == "[dependencies]" || trimmed == "[dev-dependencies]"
-                        || trimmed == "[build-dependencies]";
+                    inDependencies = false;
+
+                    var header = trimmed.TrimStart('[').TrimEnd(']').Trim();
+
+                    // Sub-table dependency, e.g. [dependencies.serde],
+                    // [build-dependencies.cc] or [target.'cfg(unix)'.dependencies.nix]
+                    // declares a dependency on the trailing name; its keys are that
+                    // crate's properties, not new dependencies.
+                    if (TryReadSubTableDependency(header, out var subDep))
+                    {
+                        dependencies.Add(subDep);
+                    }
+                    // Plain dependency table, including target-specific variants like
+                    // [target.'cfg(windows)'.dependencies].
+                    else if (header == "dependencies" || header == "dev-dependencies"
+                        || header == "build-dependencies" || header.EndsWith(".dependencies"))
+                    {
+                        inDependencies = true;
+                    }
                     continue;
                 }
 
@@ -119,6 +136,15 @@ public static class RustProjectDiscovery
             return false;
 
         var keyEnd = index;
+
+        // Dotted single-line form: `dep.workspace = true`, `dep.path = "..."`,
+        // `dep.version = "1.0"`. The dependency is on `dep`.
+        if (index < text.Length && text[index] == '.')
+        {
+            key = text[..keyEnd];
+            return true;
+        }
+
         while (index < text.Length && char.IsWhiteSpace(text[index]))
             index++;
 
@@ -126,6 +152,33 @@ public static class RustProjectDiscovery
             return false;
 
         key = text[..keyEnd];
+        return true;
+    }
+
+    /// <summary>
+    /// Recognizes a dependency sub-table header body (brackets already stripped), e.g.
+    /// "dependencies.serde", "dev-dependencies.tokio", or
+    /// "target.'cfg(unix)'.dependencies.nix", and extracts the trailing crate name.
+    /// </summary>
+    private static bool TryReadSubTableDependency(string header, out string name)
+    {
+        name = "";
+        const string marker = "dependencies.";
+        int idx = header.LastIndexOf(marker, StringComparison.Ordinal);
+        if (idx < 0)
+            return false;
+
+        var remainder = header[(idx + marker.Length)..].Trim();
+        if (remainder.Length == 0)
+            return false;
+
+        foreach (var ch in remainder)
+        {
+            if (!IsDependencyKeyCharacter(ch))
+                return false;
+        }
+
+        name = remainder;
         return true;
     }
 

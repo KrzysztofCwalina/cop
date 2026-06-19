@@ -85,7 +85,34 @@ Commit the generated files (`.github/copilot-instructions.md`, `AGENTS.md`) to y
 
 ---
 
-## 4. Write a Simple Rule
+## 4. Run the Built-in Rust Checks
+
+The fastest way to get value is the **`rust-checks`** package — a curated set of Rust
+correctness, style, and documentation checks. It hardcodes the Rust provider, so no `-p`
+flag is needed:
+
+```bash
+cop rust-checks -t .
+```
+
+It flags common issues such as:
+
+- `.unwrap()` / `.expect()` — panicking APIs that should propagate errors with `?`
+- `panic!` / `todo!` / `unimplemented!` — aborts and unfinished code
+- `println!` / `eprintln!` / `dbg!` — console output that belongs in a logging framework
+- Types that are not `UpperCamelCase` and functions that are not `snake_case`
+- Public types and methods missing doc comments
+
+Example output:
+
+```
+src/main.rs(63): warning: Avoid panic! in library code — return a Result instead
+src/main.rs(55): warning: Public type Status is missing a doc comment
+```
+
+---
+
+## 5. Write a Custom Rule
 
 Create a file called `checks.cop` in your project root:
 
@@ -96,8 +123,8 @@ import code-analysis
 
 let cb = rust.parse()
 
-# Flag structs that have no doc comment
-predicate isUndocumented(Type) => Type.Documented == false && Type:isPublic
+# Flag public types that have no doc comment
+predicate isUndocumented(Type) => !Type.Documented && Type:isPublic
 
 # Flag uses of panic! (prefer Result returns in library code)
 predicate isPanic(Statement) => Statement.Kind == throw && Statement.MemberName == 'panic'
@@ -117,7 +144,7 @@ This rule does two things:
 
 ---
 
-## 5. Run the Rule
+## 6. Run the Rule
 
 From your project root:
 
@@ -136,7 +163,51 @@ src/main.rs: warning: Avoid panic! at line 34 — prefer returning Result
 
 ---
 
-## 6. Explore Further
+## 7. Enforce Crate Layering
+
+Cop discovers your Cargo crates and their dependencies (from each `Cargo.toml`, including
+workspace-shorthand `dep.workspace = true` and `[dependencies.<name>]` forms). The
+language-agnostic **`code-layering`** package lets you enforce architectural rules across
+crates — for example, that foundation crates must not depend on higher-level service crates.
+
+Create `layering.cop`:
+
+```cop
+import rust
+import code
+import code-layering
+
+let cb = codebase(rust.parse())
+
+# Foundation crates must not depend on service crates.
+let foundation-crates = ['my_core']
+let service-crates = ['my_storage' 'my_identity']
+
+predicate isFoundationCrate(Project) => Project.Name:in(foundation-crates)
+predicate isServiceCrateName(string) => string:in(service-crates)
+predicate dependsOnService(Project) => Project.References:any(isServiceCrateName)
+
+let violations = cb.Projects:isFoundationCrate:dependsOnService
+    :toError('Foundation crate {item.Name} must not depend on a service crate')
+
+command MAIN = CHECK(violations)
+```
+
+Run it against your workspace root:
+
+```bash
+cop layering.cop -t .
+```
+
+The check exits non-zero (and prints each offending crate) when a foundation crate
+references a service crate, so you can wire it into CI.
+
+> Tip: `cb.Projects` exposes each crate's `Name` and `References` (its Cargo dependencies).
+> Use `Project.References:any(predicate)` to test whether a crate depends on a set of crates.
+
+---
+
+## 8. Explore Further
 
 ### List all types in your project
 
@@ -185,9 +256,10 @@ The `rust.parse()` function returns a `Codebase` with these collections:
 |------------|-------------|
 | `cb.Types` | All structs, enums, traits, and impl blocks |
 | `cb.Statements` | Function calls, macro invocations, panic!/todo! |
+| `cb.Calls` | Just the call statements (method/function/macro calls) |
 | `cb.Files` | Source files with metadata |
 | `cb.Lines` | Every line of code (with kind: code/comment/blank) |
-| `cb.Projects` | Cargo.toml projects with dependencies |
+| `cb.Projects` | Cargo crates with their dependencies (from `Cargo.toml`) |
 
 ### Type Kinds
 
@@ -203,6 +275,8 @@ The `rust.parse()` function returns a `Codebase` with these collections:
 ## Tips
 
 - Use `cop verify checks.cop` to check your rule for syntax/type errors before running
+- Start with the built-in `cop rust-checks -t .` before writing custom rules
+- Enforce crate dependency rules with the `code-layering` package (see section 7)
 - Use `-t path/` to target a specific subdirectory
 - Combine with other providers: `import rust` + `import python` to analyze polyglot projects
 - Run `cop help code` to see all available predicates and types

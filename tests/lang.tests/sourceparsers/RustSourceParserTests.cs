@@ -729,8 +729,172 @@ public class RustSourceParserTests
     }
 
     // ================================================================
+    // Parameter patterns / hang regressions
+    // ================================================================
+
+    // Regression: a tuple-destructured parameter `(v1, v2): (T1, T2)` previously
+    // sent the parameter loop into an infinite loop (it never advanced past '(').
+    // This hung cop on azure-sdk-for-rust (cosmos partition_key.rs). The parse must
+    // terminate and still recognize the method.
+    [Test]
+    public void Parse_TupleDestructuredParam_DoesNotHang()
+    {
+        var result = ParseWithin("""
+            impl<T1, T2> From<(T1, T2)> for PartitionKey
+            where
+                T1: Into<PartitionKeyValue>,
+                T2: Into<PartitionKeyValue>,
+            {
+                fn from((v1, v2): (T1, T2)) -> Self {
+                    PartitionKey(vec![v1.into(), v2.into()])
+                }
+            }
+            """, 5000);
+        var impl = result.Types.First(t => t.Name.Contains("impl"));
+        Assert.That(impl.Methods.Select(m => m.Name).Concat(impl.Constructors.Select(c => c.Name)),
+            Does.Contain("from"));
+    }
+
+    [Test]
+    public void Parse_ClosureTypedParam_ParsesAsSingleType()
+    {
+        var result = ParseWithin("""
+            struct S;
+            impl S {
+                pub fn apply(&self, f: impl Fn(i32) -> i32, x: i32) -> i32 {
+                    f(x)
+                }
+            }
+            """, 5000);
+        var impl = result.Types.First(t => t.Name.Contains("impl"));
+        var m = impl.Methods.First(x => x.Name == "apply");
+        // 'f' (closure) and 'x' should both be recognized as parameters.
+        Assert.That(m.Parameters.Select(p => p.Name), Does.Contain("x"));
+    }
+
+    [Test]
+    public void Parse_TupleTypedParam_DoesNotHang()
+    {
+        var result = ParseWithin("""
+            struct S;
+            impl S {
+                pub fn handle(&self, pair: (i32, String), flag: bool) -> bool {
+                    flag
+                }
+            }
+            """, 5000);
+        var impl = result.Types.First(t => t.Name.Contains("impl"));
+        var m = impl.Methods.First(x => x.Name == "handle");
+        var pair = m.Parameters.First(p => p.Name == "pair");
+        Assert.That(pair.Type?.Name, Does.Contain("i32"));
+        Assert.That(m.Parameters.Select(p => p.Name), Does.Contain("flag"));
+    }
+
+    [Test]
+    public void Parse_RefMutAndWildcardParams_DoNotHang()
+    {
+        var result = ParseWithin("""
+            struct S;
+            impl S {
+                fn weird(&self, mut a: i32, ref b: String, _: u8) -> i32 {
+                    a
+                }
+            }
+            """, 5000);
+        var impl = result.Types.First(t => t.Name.Contains("impl"));
+        var m = impl.Methods.First(x => x.Name == "weird");
+        Assert.That(m.Parameters.Select(p => p.Name), Does.Contain("a"));
+    }
+
+    // ================================================================
+    // Free functions — no double-counting, correct visibility
+    // ================================================================
+
+    // Regression: a `pub fn` free function was parsed twice (once while probing for a
+    // type, once by the function branch), doubling every statement it contained.
+    [Test]
+    public void Parse_PubFreeFn_StatementsCountedOnce()
+    {
+        var result = Parse("""
+            pub fn run() {
+                first();
+                second();
+                third();
+            }
+            """);
+        var calls = result.Statements.Where(s => s.Kind == "call").ToList();
+        Assert.That(calls.Count(s => s.MemberName == "first"), Is.EqualTo(1));
+        Assert.That(calls.Count(s => s.MemberName == "second"), Is.EqualTo(1));
+        Assert.That(calls.Count(s => s.MemberName == "third"), Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Parse_NonPubFreeFn_StatementsCountedOnce()
+    {
+        var result = Parse("""
+            fn run() {
+                only_once();
+            }
+            """);
+        var calls = result.Statements.Where(s => s.Kind == "call").ToList();
+        Assert.That(calls.Count(s => s.MemberName == "only_once"), Is.EqualTo(1));
+    }
+
+    // Regression: the stray trailing advance after a free function consumed the `pub`
+    // of a following item, mis-classifying it as private. A pub struct after a pub fn
+    // must remain public.
+    [Test]
+    public void Parse_PubStructAfterPubFn_IsPublic()
+    {
+        var result = Parse("""
+            pub fn helper() {
+                noop();
+            }
+
+            pub struct Config {
+                pub value: i32,
+            }
+            """);
+        var config = result.Types.First(t => t.Name == "Config");
+        Assert.That(config.IsPublic, Is.True);
+    }
+
+    [Test]
+    public void Parse_MultiplePubFreeFns_AllStatementsOnce()
+    {
+        var result = Parse("""
+            pub fn a() {
+                call_a();
+            }
+            pub fn b() {
+                call_b();
+            }
+            pub fn c() {
+                call_c();
+            }
+            """);
+        var calls = result.Statements.Where(s => s.Kind == "call").ToList();
+        Assert.That(calls.Count(s => s.MemberName == "call_a"), Is.EqualTo(1));
+        Assert.That(calls.Count(s => s.MemberName == "call_b"), Is.EqualTo(1));
+        Assert.That(calls.Count(s => s.MemberName == "call_c"), Is.EqualTo(1));
+    }
+
+    // ================================================================
     // Helper
     // ================================================================
+
+    // Parses on a background task and fails (instead of hanging the suite) if the
+    // parser does not terminate within the given budget — guards against the
+    // non-advancing-loop class of bugs.
+    private SourceFile ParseWithin(string source, int milliseconds)
+    {
+        SourceFile? result = null;
+        var task = Task.Run(() => { result = _parser.Parse("test.rs", source); });
+        Assert.That(task.Wait(milliseconds), Is.True,
+            $"Parser did not terminate within {milliseconds}ms — likely an infinite loop.");
+        Assert.That(result, Is.Not.Null, "Parser returned null");
+        return result!;
+    }
 
     private SourceFile Parse(string source)
     {

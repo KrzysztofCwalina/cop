@@ -211,7 +211,8 @@ const categories = [
   {
     "name": "Rust",
     "packages": [
-      "rust"
+      "rust",
+      "rust-checks"
     ]
   },
   {
@@ -4402,6 +4403,22 @@ const packages = {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/rust/rust/src/rust.cop#L10"
       }
     ],
+    "checks": [],
+    "commands": []
+  },
+  "rust-checks": {
+    "label": "rust-checks",
+    "overview": "Rust coding conventions and correctness checks for coding agents",
+    "samples": [
+      {
+        "title": "Run rust checks",
+        "code": "import rust-checks\n\nCHECK rust-checks"
+      }
+    ],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [],
     "checks": [],
     "commands": []
   },
