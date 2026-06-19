@@ -106,8 +106,10 @@ It flags common issues such as:
 Example output:
 
 ```
-src/main.rs(63): warning: Avoid panic! in library code — return a Result instead
-src/main.rs(55): warning: Public type Status is missing a doc comment
+src/main.rs(33): warning: Avoid panic! in library code — return a Result instead
+src/main.rs(40): warning: Avoid println! — use a logging framework (log/tracing)
+src/main.rs(25): warning: Public type Status is missing a doc comment
+src/main.rs(11): warning: User (impl) has public methods without doc comments
 ```
 
 ---
@@ -123,8 +125,9 @@ import code-analysis
 
 let cb = rust.parse()
 
-# Flag public types that have no doc comment
-predicate isUndocumented(Type) => !Type.Documented && Type:isPublic
+# Flag public structs/enums/traits that have no doc comment (skip impl blocks)
+predicate isDeclaredType(Type) => Type.Kind == Struct || Type.Kind == Enum || Type.Kind == Interface
+predicate isUndocumented(Type) => isDeclaredType && isPublic && !Type.Documented
 
 # Flag uses of panic! (prefer Result returns in library code)
 predicate isPanic(Statement) => Statement.Kind == throw && Statement.MemberName == 'panic'
@@ -155,10 +158,8 @@ cop checks.cop -t .
 Example output:
 
 ```
-src/main.rs: warning: Public type Status is missing documentation
-src/main.rs: warning: Avoid panic! at line 34 — prefer returning Result
-
-2 violation(s) found.
+src/main.rs(25): warning: Public type Status is missing documentation
+src/main.rs(33): warning: Avoid panic! at line 33 — prefer returning Result
 ```
 
 ---
@@ -218,18 +219,18 @@ let cb = rust.parse()
 command MAIN = foreach cb.Types => '{item.Name} ({item.Kind})'
 ```
 
-### List public methods
+### List methods of each type
 
 ```cop
 import rust
-import code
 
 let cb = rust.parse()
-let public-methods = cb.Types.Methods:isPublic
-command MAIN = foreach public-methods => '{item.Name} (line {item.Line})'
+
+# Each type lists its method names (impl blocks hold a type's methods)
+command MAIN = foreach cb.Types => '{item.Name}: {item.MethodNames}'
 ```
 
-### Check for missing documentation on public functions
+### Check for missing documentation on public methods
 
 ```cop
 import rust
@@ -238,10 +239,11 @@ import code-analysis
 
 let cb = rust.parse()
 
-predicate isUndocumented(Method) => Method.Documented == false && Method:isPublic
+predicate isUndocumentedMethod(Method) => isPublic && !Method.Documented
+predicate hasUndocumentedMethods(Type) => Type.Methods:any(isUndocumentedMethod)
 
-let violations = cb.Types.Methods:isUndocumented
-    :toWarning('Public method {item.Name} has no doc comment')
+let violations = cb.Types:hasUndocumentedMethods
+    :toWarning('{item.Name} has public methods without doc comments')
 
 command MAIN = CHECK(violations)
 ```
