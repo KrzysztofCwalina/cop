@@ -384,14 +384,16 @@ public class RustSourceParserTests
     public void Parse_FreeFn()
     {
         var result = Parse("""
-            fn add(a: i32, b: i32) -> i32 {
+            pub fn add(a: i32, b: i32) -> i32 {
                 a + b
             }
             """);
-        // Free functions generate statements
-        var calls = result.Statements;
-        // The parser should at least not crash on free functions
-        Assert.That(result.Types, Has.Count.EqualTo(0));
+        // Free functions are exposed as methods of a synthetic per-file container type
+        // (so doc/naming checks can see a module's free-function API surface).
+        var container = result.Types.FirstOrDefault(t => t.Name.Contains("(functions)"));
+        Assert.That(container, Is.Not.Null, "free functions should be collected into a synthetic container type");
+        Assert.That(container!.Methods.Select(m => m.Name), Does.Contain("add"));
+        Assert.That(container.Methods.First(m => m.Name == "add").IsPublic, Is.True);
     }
 
     // ================================================================
@@ -877,6 +879,200 @@ public class RustSourceParserTests
         Assert.That(calls.Count(s => s.MemberName == "call_a"), Is.EqualTo(1));
         Assert.That(calls.Count(s => s.MemberName == "call_b"), Is.EqualTo(1));
         Assert.That(calls.Count(s => s.MemberName == "call_c"), Is.EqualTo(1));
+    }
+
+    // ================================================================
+    // Robustness regressions (review swarm)
+    // ================================================================
+
+    [Test]
+    public void Parse_ManyBlankLines_DoesNotStackOverflow()
+    {
+        // SkipWhitespace used to recurse per newline -> uncatchable StackOverflow.
+        var src = new string('\n', 30000) + "pub fn after() { work(); }";
+        var result = ParseWithin(src, 5000);
+        Assert.That(result.Statements.Any(s => s.MemberName == "work"), Is.True);
+    }
+
+    [Test]
+    public void Parse_CharLiteral_NotMisLexedAsLifetime()
+    {
+        var result = Parse("""
+            struct S;
+            impl S {
+                fn f(&self) {
+                    helper('a');
+                    after_call();
+                }
+            }
+            """);
+        var members = result.Statements.Where(s => s.Kind == "call").Select(s => s.MemberName).ToList();
+        Assert.That(members, Does.Contain("helper"));
+        Assert.That(members, Does.Contain("after_call"), "the char literal must not swallow the next call");
+    }
+
+    [Test]
+    public void Parse_StructWithWhereClause_KeepsFields()
+    {
+        var result = Parse("""
+            pub struct Filter<T> where T: Send {
+                value: T,
+                name: String,
+            }
+            """);
+        var t = result.Types.First(x => x.Name == "Filter");
+        Assert.That(t.Fields.Select(f => f.Name), Does.Contain("value"));
+        Assert.That(t.Fields.Select(f => f.Name), Does.Contain("name"));
+    }
+
+    [Test]
+    public void Parse_BodylessFnWithWhere_DoesNotDropFollowingItems()
+    {
+        var result = Parse("""
+            pub trait T {
+                fn foo() where Self: Sized;
+                fn bar(&self);
+            }
+            """);
+        var t = result.Types.First(x => x.Name == "T");
+        Assert.That(t.Methods.Select(m => m.Name), Does.Contain("foo"));
+        Assert.That(t.Methods.Select(m => m.Name), Does.Contain("bar"));
+    }
+
+    [Test]
+    public void Parse_TraitWithLifetimeSupertrait_KeepsBody()
+    {
+        var result = Parse("""
+            pub trait Foo: 'static {
+                fn m(&self);
+                fn n(&self);
+            }
+            """);
+        var t = result.Types.First(x => x.Name == "Foo");
+        Assert.That(t.Methods.Select(m => m.Name), Does.Contain("m"));
+        Assert.That(t.Methods.Select(m => m.Name), Does.Contain("n"));
+    }
+
+    [Test]
+    public void Parse_RawIdentifierStruct_IsCaptured()
+    {
+        var result = Parse("pub struct r#Match { pub x: i32 }");
+        Assert.That(result.Types.Select(t => t.Name), Does.Contain("Match"));
+    }
+
+    [Test]
+    public void Parse_Union_IsCaptured()
+    {
+        var result = Parse("pub union MyUnion { a: i32, b: f32 }");
+        var u = result.Types.First(t => t.Name == "MyUnion");
+        Assert.That(u.Fields, Has.Count.EqualTo(2));
+    }
+
+    [Test]
+    public void Parse_PubCrate_IsNotPublic()
+    {
+        var result = Parse("pub(crate) struct CrateThing { pub x: i32 }");
+        var t = result.Types.First(x => x.Name == "CrateThing");
+        Assert.That(t.IsPublic, Is.False, "pub(crate) is restricted, not public API");
+    }
+
+    [Test]
+    public void Parse_PublicTraitMethods_ArePublic()
+    {
+        var result = Parse("""
+            pub trait Greeter {
+                fn greet(&self) -> String;
+            }
+            """);
+        var greet = result.Types.First(t => t.Name == "Greeter").Methods.First(m => m.Name == "greet");
+        Assert.That(greet.IsPublic, Is.True, "a public trait's methods are public API");
+    }
+
+    [Test]
+    public void Parse_NestedCallsInArguments_AreCaptured()
+    {
+        var result = Parse("""
+            struct S;
+            impl S {
+                fn f(&self) {
+                    log(process(data.unwrap()));
+                }
+            }
+            """);
+        var members = result.Statements.Where(s => s.Kind == "call").Select(s => s.MemberName).ToList();
+        Assert.That(members, Does.Contain("log"));
+        Assert.That(members, Does.Contain("process"));
+        Assert.That(members, Does.Contain("unwrap"), "a call nested in arguments must still be captured");
+    }
+
+    [Test]
+    public void Parse_PanicInClosureArgument_IsCaptured()
+    {
+        var result = Parse("""
+            struct S;
+            impl S {
+                fn f(&self) {
+                    items.for_each(|x| panic!("boom"));
+                }
+            }
+            """);
+        Assert.That(result.Statements.Any(s => s.Kind == "throw" && s.MemberName == "panic"), Is.True);
+    }
+
+    [Test]
+    public void Parse_ImplForNonIdentifierTarget_KeepsNameAndMethods()
+    {
+        var result = Parse("""
+            impl MyTrait for [u8] {
+                fn go(&self) {}
+            }
+            """);
+        var impl = result.Types.First(t => t.Name.Contains("(impl"));
+        Assert.That(impl.Name.Trim(), Does.Not.StartWith("(impl"), "impl target name must not be empty");
+        Assert.That(impl.Methods.Select(m => m.Name), Does.Contain("go"), "impl-on-slice methods must be captured");
+        Assert.That(impl.BaseTypes, Does.Contain("MyTrait"));
+    }
+
+    [Test]
+    public void Parse_ImplWithPathTrait_UsesTraitNotFirstSegment()
+    {
+        var result = Parse("""
+            impl std::fmt::Debug for Foo {
+                fn fmt(&self) {}
+            }
+            """);
+        var impl = result.Types.First(t => t.Name.Contains("(impl"));
+        Assert.That(impl.BaseTypes, Does.Contain("Debug"));
+        Assert.That(impl.BaseTypes, Does.Not.Contain("std"));
+        Assert.That(impl.Name, Does.StartWith("Foo"));
+    }
+
+    [Test]
+    public void Parse_PubConstFnInImpl_IsPublic()
+    {
+        var result = Parse("""
+            struct S;
+            impl S {
+                pub const fn make() -> i32 { 1 }
+            }
+            """);
+        var impl = result.Types.First(t => t.Name.Contains("(impl"));
+        var make = impl.Methods.Concat(impl.Constructors).First(m => m.Name == "make");
+        Assert.That(make.IsPublic, Is.True);
+    }
+
+    [Test]
+    public void Parse_MacroRulesBody_IsNotParsedAsCode()
+    {
+        var result = Parse("""
+            macro_rules! make {
+                () => { fn phantom_fn() { phantom_call(); } };
+            }
+            pub fn real() { actual_call(); }
+            """);
+        Assert.That(result.Statements.Any(s => s.MemberName == "phantom_call"), Is.False,
+            "macro_rules! template tokens must not be parsed as real calls");
+        Assert.That(result.Statements.Any(s => s.MemberName == "actual_call"), Is.True);
     }
 
     // ================================================================

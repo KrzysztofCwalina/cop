@@ -119,10 +119,124 @@ public class RustProjectDiscoveryTests
 
         var projects = RustProjectDiscovery.Discover(_tempDir, null);
 
+        // References = production dependencies only (used for layering); dev/build deps are
+        // tracked in Packages so a prod layering rule isn't tripped by test-only crates.
         var refs = projects[0].References;
+        var packages = projects[0].Packages;
         Assert.That(refs, Does.Contain("log"));
-        Assert.That(refs, Does.Contain("criterion"));
-        Assert.That(refs, Does.Contain("cc"));
+        Assert.That(refs, Does.Not.Contain("criterion"), "dev-dependencies must not be in References");
+        Assert.That(refs, Does.Not.Contain("cc"), "build-dependencies must not be in References");
+        Assert.That(packages, Does.Contain("criterion"));
+        Assert.That(packages, Does.Contain("cc"));
+    }
+
+    // Regression: a renamed dependency `key = { package = "real" }` must record the real
+    // crate name (used by layering), not the local alias.
+    [Test]
+    public void Discover_RenamedDependency_RecordsRealCrate()
+    {
+        File.WriteAllText(Path.Combine(_tempDir, "Cargo.toml"), """
+            [package]
+            name = "my_crate"
+
+            [dependencies]
+            reqwest = { package = "azure_core_reqwest", version = "1" }
+            plain = "1.0"
+            """);
+
+        var refs = RustProjectDiscovery.Discover(_tempDir, null)[0].References;
+        Assert.That(refs, Does.Contain("azure_core_reqwest"));
+        Assert.That(refs, Does.Not.Contain("reqwest"), "the local alias must not be recorded");
+        Assert.That(refs, Does.Contain("plain"));
+    }
+
+    // Regression: a multi-line inline dependency table must not inject phantom deps from its
+    // version/features keys, and a `package =` rename inside it is honored.
+    [Test]
+    public void Discover_MultiLineInlineTable_NoPhantomDeps()
+    {
+        File.WriteAllText(Path.Combine(_tempDir, "Cargo.toml"), """
+            [package]
+            name = "my_crate"
+
+            [dependencies]
+            tokio = {
+                version = "1",
+                features = ["full"]
+            }
+            serde = "1"
+            """);
+
+        var refs = RustProjectDiscovery.Discover(_tempDir, null)[0].References;
+        Assert.That(refs, Does.Contain("tokio"));
+        Assert.That(refs, Does.Contain("serde"));
+        Assert.That(refs, Does.Not.Contain("version"));
+        Assert.That(refs, Does.Not.Contain("features"));
+    }
+
+    // Regression: [workspace.dependencies] defines versions for the workspace, not the root
+    // crate's own dependencies, so those crates must not appear in the root crate's References.
+    [Test]
+    public void Discover_WorkspaceDependencies_NotAttributedToRootCrate()
+    {
+        File.WriteAllText(Path.Combine(_tempDir, "Cargo.toml"), """
+            [package]
+            name = "my_root_crate"
+
+            [dependencies]
+            log = "0.4"
+
+            [workspace.dependencies]
+            serde = "1.0"
+            tokio = { version = "1" }
+            """);
+
+        var refs = RustProjectDiscovery.Discover(_tempDir, null)[0].References;
+        Assert.That(refs, Does.Contain("log"));
+        Assert.That(refs, Does.Not.Contain("serde"), "workspace.dependencies are not the crate's deps");
+        Assert.That(refs, Does.Not.Contain("tokio"));
+    }
+
+    // Regression: a trailing comment on a [package]/[dependencies] header must not break
+    // section detection (previously dropped the crate name / whole section).
+    [Test]
+    public void Discover_HeaderTrailingComment_StillParsed()
+    {
+        File.WriteAllText(Path.Combine(_tempDir, "Cargo.toml"), """
+            [package] # the main crate
+            name = "my_crate"
+
+            [dependencies] # third-party
+            serde = "1"
+            """);
+
+        var projects = RustProjectDiscovery.Discover(_tempDir, null);
+        Assert.That(projects, Has.Count.EqualTo(1));
+        Assert.That(projects[0].Name, Is.EqualTo("my_crate"));
+        Assert.That(projects[0].References, Does.Contain("serde"));
+    }
+
+    // Regression: target-specific dev/build dependency tables.
+    [Test]
+    public void Discover_TargetDevDependencies_TrackedNotInProdRefs()
+    {
+        File.WriteAllText(Path.Combine(_tempDir, "Cargo.toml"), """
+            [package]
+            name = "my_crate"
+
+            [target.'cfg(unix)'.dependencies]
+            nix = "0.27"
+
+            [target.'cfg(windows)'.dev-dependencies]
+            wintest = "0.1"
+            """);
+
+        var projects = RustProjectDiscovery.Discover(_tempDir, null);
+        var refs = projects[0].References;
+        var packages = projects[0].Packages;
+        Assert.That(refs, Does.Contain("nix"), "target normal deps are production deps");
+        Assert.That(refs, Does.Not.Contain("wintest"), "target dev-deps are not production deps");
+        Assert.That(packages, Does.Contain("wintest"));
     }
 
     [Test]
