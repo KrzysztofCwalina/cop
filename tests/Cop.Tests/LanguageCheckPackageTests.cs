@@ -60,7 +60,39 @@ public class LanguageCheckPackageTests
     }
 
     /// <summary>
-    /// Design rule: no language-specific package (under dotnet/, js/, python/, java/,
+    /// End-to-end: running the java-checks package against Java source must produce
+    /// violations WITHOUT a -p provider flag (the package hardcodes java.parse()).
+    /// This is the exact scenario `cop java-checks -t &lt;dir&gt;` exercises.
+    /// </summary>
+    [Test]
+    public void JavaChecks_RunsWithoutProviderFlag_ProducesViolations()
+    {
+        var feedPaths = new List<string> { Path.Combine(RepoRoot, "packages") };
+
+        var fixtureDir = Path.Combine(Path.GetTempPath(), "cop-langcheck-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(fixtureDir);
+        try
+        {
+            // System.exit(...) triggers java-checks' system-exit rule.
+            File.WriteAllText(Path.Combine(fixtureDir, "Sample.java"),
+                "public class Sample { void m() { System.out.println(\"x\"); System.exit(1); } }");
+
+            // No `providers:` argument — mirrors `cop java-checks -t <dir>` with no -p.
+            var result = Engine.RunProject(feedPaths, ["java-checks"], fixtureDir, []);
+
+            Assert.That(result.HasFatalErrors, Is.False,
+                "java-checks should run without -p. Errors: " + string.Join("; ", result.Errors));
+            Assert.That(result.Outputs, Is.Not.Empty,
+                "java-checks produced no output without -p — the package likely uses " +
+                "codebase(Program.Providers) instead of codebase(java.parse()).");
+            Assert.That(result.Outputs.Any(o => o.Message.Contains("System.exit", StringComparison.OrdinalIgnoreCase)),
+                Is.True, "Expected a System.exit() violation from the analyzed Java source.");
+        }
+        finally
+        {
+            Directory.Delete(fixtureDir, recursive: true);
+        }
+    }
     /// go/, rust/) may build its codebase from Program.Providers — it must hardcode
     /// its provider so it works without a -p flag.
     /// </summary>

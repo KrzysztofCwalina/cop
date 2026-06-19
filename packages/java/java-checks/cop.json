@@ -1,0 +1,16 @@
+{
+  "name": "java-checks",
+  "version": "1.0.0",
+  "description": "Java coding conventions and correctness checks for coding agents",
+  "title": "Java Checks",
+  "authors": "cop-team",
+  "tags": [
+    "java",
+    "coding-standards",
+    "correctness"
+  ],
+  "language": "Java",
+  "dependencies": [
+    "java"
+  ]
+}

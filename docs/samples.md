@@ -109,6 +109,12 @@ Each package includes samples in its `samples/` directory showing real-world usa
 | [run-ruff](../packages/python/python-ruff/samples/run-ruff.cop) | Run Ruff linter |
 | [run-snippet-checks](../packages/python/python-snippets-checks/samples/run-snippet-checks.cop) | Verify Python snippet sync with docs |
 
+### Java
+
+| Sample | Description |
+|--------|-------------|
+| [run-java-checks](../packages/java/java-checks/samples/run-java-checks.cop) | Run built-in Java style checks |
+
 ### Specialized
 
 | Sample | Description |
