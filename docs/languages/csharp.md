@@ -36,13 +36,15 @@ MyProject.csproj
 
 ## 3. Set Up Agent Context
 
-Run `cop init` to generate instruction files that teach coding agents (GitHub Copilot, Claude Code) how to write cop rules in your project:
+Run `cop init` to generate instruction files that teach **GitHub Copilot** how to write cop rules in your project:
 
 ```bash
 cop init
 ```
 
 Commit the generated files (`.github/copilot-instructions.md`, `AGENTS.md`) to your repo.
+
+<sub>Using Claude Code? Run `cop init --claude` to generate Claude Code instruction files (`.claude/commands/cop.md`) instead.</sub>
 
 ---
 

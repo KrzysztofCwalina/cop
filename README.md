@@ -32,16 +32,9 @@ Run `cop init` in the root folder of your repo.
 cop init
 ```
 
-This generates instruction files (`.github/copilot-instructions.md`, `AGENTS.md`) that teach your coding agent[s] how to write cop rules. It also creates `.claude/commands/cop.md` — a `/cop` slash command so you can type `/cop` in Claude Code to manually run cop analysis at any time. Commit these to your repo.
+This generates instruction files (`.github/copilot-instructions.md`, `.github/skills/cop/SKILL.md`, `AGENTS.md`) that teach **GitHub Copilot** how to write cop rules. Commit these to your repo.
 
-To also set up a Claude Code hook that automatically runs cop checks after the agent finishes work:
-
-```bash
-cop init --ag    # shared hook (.claude/settings.json) — commit to repo
-cop init --al    # local hook (.claude/settings.local.json) — per-user, not tracked
-```
-
-This adds a `Stop` hook that runs `cop cop-checks/main.cop -t . -om` when Claude Code completes a task. The `-om` flag (only-if-modified) skips analysis on turns where no files changed, saving time on Q&A interactions. If the settings file already exists, the hook is merged in without overwriting other settings.
+<sub>**Using Claude Code?** Run `cop init --claude` to generate Claude Code instruction files (`.claude/commands/cop.md` — a `/cop` slash command) instead. Add `--ag` (shared hook, committed) or `--al` (local hook, per-user) to also install a Claude Code `Stop` hook that runs `cop cop-checks/main.cop -t . -om` after each task; `-om` skips analysis when no files changed. Both flags imply `--claude`, and existing settings are merged, not overwritten.</sub>
 
 ### 2. Create Rules
 
