@@ -8,3 +8,20 @@ export function parse() : Codebase => provider('java')
 ## Parses Java source files in the specified directory and returns a Codebase.
 ## Example: let cb = java.parse('/path/to/project')
 export function parse(path : string) : Codebase => provider('java', path)
+
+## A Java-specific view of a Type, exposing Java-only facts (records, enums) that are
+## flattened in the language-agnostic model. Obtain one by narrowing with `asJava`.
+export type JavaType = Type & {
+    IsRecord : bool,
+    IsEnum : bool
+}
+
+## Narrows a Type to a JavaType (Java types only), exposing Java-specific fields.
+## Example: codebase.Types:asJava:isRecord
+export predicate asJava(Type) : JavaType => Type.File.Language == java
+
+## True for Java `record` declarations.
+export predicate isRecord(JavaType) => JavaType.IsRecord
+
+## True for Java `enum` declarations.
+export predicate isEnum(JavaType) => JavaType.IsEnum

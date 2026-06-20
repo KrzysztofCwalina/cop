@@ -16,9 +16,9 @@ namespace Cop.Providers;
 public class CSharpProvider : DataProvider
 {
 
-    public override ReadOnlyMemory<byte> GetSchema() => CodeSchema.GetJson();
+    public override ReadOnlyMemory<byte> GetSchema() => CSharpSchema.GetJson();
 
-    public override RuntimeBindings GetRuntimeBindings() => CodeBindings.Build();
+    public override RuntimeBindings GetRuntimeBindings() => CSharpBindings.Build();
 
     public override object? Query(ProviderQuery query)
     {

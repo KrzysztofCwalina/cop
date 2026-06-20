@@ -419,7 +419,8 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
         }
 
         return new TypeDeclaration(name, kind, modifiers, baseTypes, annotations, constructors, methods, nestedTypes, enumValues, line)
-        { HasDocComment = hasDoc, Fields = fields };
+        { HasDocComment = hasDoc, Fields = fields }
+            .AsJava(isRecord: kind == TypeKind.Struct, isEnum: kind == TypeKind.Enum);
     }
 
     private void ParseEnumConstants(List<string> enumValues)

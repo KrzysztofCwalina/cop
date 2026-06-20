@@ -420,6 +420,29 @@ predicate isCall(Statement) : Call => Statement.Kind == call
 
 When applied as a filter, items are narrowed to `Call` (a superset of Statement’s properties).
 
+Language providers use the same mechanism to expose **language-specific AST** on top of the
+common `Codebase` model. For example, the `csharp` package narrows a `Type` to a `CSharpType`
+(which adds C#-only fields such as `IsRecord` and `IsPartial`):
+
+```ruby
+predicate asCSharp(Type) : CSharpType => Type.File.Language == csharp
+
+let records = codebase.Types:asCSharp:isRecord
+    :toError('{item.Name} is a record')
+```
+
+This keeps the common model language-agnostic — multi-language checks still run over plain
+`Type`/`Statement` — while a check that needs C# specifics narrows with `:asCSharp` and reads
+the extra fields. The narrowed values still satisfy their base type, so base predicates
+(`isPublic`, `isCSharp`, …) and `toError`/`toWarning` continue to work after narrowing.
+
+> **Write language-specific checks only when the language-agnostic model can't express the
+> rule.** Most rules should use `codebase.Types`, `Type.Name`, `Type.Kind`, `Type.Modifiers`,
+> `Type.BaseTypes`, `Type.Decorators`, etc. — they work across every language. Reach for a
+> language narrowing (`:asCSharp`, `:asRust`, `:asJava`, `:asPython`, `:asGo`, `:asJavaScript`)
+> **only** for a fact the common model genuinely lacks (e.g. C# `record`/`partial`, Rust
+> `unsafe`/traits, Java `record`). Run `cop help <language>` to see each language's extra fields.
+
 #### Constrained Predicates
 
 Append `:constraint` to the parameter type to create predicate overloads constrained by another predicate. The constraint is any predicate — language names like `csharp` and `python` are just predicates that match by file language:

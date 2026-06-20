@@ -266,6 +266,12 @@ public static class HelpCommand
         var flags = new List<(string Name, string? Doc, string Members)>();
         var lets = new List<(string Name, string? Doc, string? TypeStr)>();
 
+        // Track a language-specific narrowing subtype (a `type XType = Type & {...}`) and its
+        // `asXxx` narrowing predicate, so language packages get a teaching section explaining
+        // when to reach for language-specific checks.
+        string? narrowType = null;
+        string? narrowPredicate = null;
+
         foreach (var copFile in copFiles)
         {
             try
@@ -284,12 +290,15 @@ public static class HelpCommand
                                 return $"  {p.Name}{typeStr}";
                             }).ToList();
                             types.Add((td.Name, td.DocComment, props));
+                            if (td.BaseType == "Type") narrowType = td.Name;
                             break;
 
                         case FunctionDecl fd when fd.IsExported && fd.IsPredicate:
                             var paramType = fd.Params.Count > 0 && fd.Params[0].Type != null
                                 ? fd.Params[0].Type.Name : "object";
                             predicates.Add((fd.Name, fd.DocComment, paramType));
+                            if (fd.Name.Length > 2 && fd.Name.StartsWith("as", StringComparison.Ordinal) && char.IsUpper(fd.Name[2]))
+                                narrowPredicate = fd.Name;
                             break;
 
                         case FunctionDecl fd2 when fd2.IsExported:
@@ -466,11 +475,25 @@ public static class HelpCommand
             Console.WriteLine();
         }
 
+        // Language-specific checks guidance (printed for language packages that define a
+        // `type XType = Type & {...}` narrowing subtype).
+        if (narrowType != null && narrowPredicate != null)
+        {
+            ConsoleMarkdown.WriteHeader("Language-specific checks");
+            Console.WriteLine();
+            Console.WriteLine("  Prefer the language-agnostic model — codebase.Types, Type.Name, Type.Kind,");
+            Console.WriteLine("  Type.Modifiers, Type.BaseTypes, etc. — so a check works across languages.");
+            Console.WriteLine();
+            Console.WriteLine($"  ONLY when a fact cannot be expressed that way, narrow a Type to {narrowType}");
+            Console.WriteLine($"  with :{narrowPredicate} and read the {narrowType} fields listed above:");
+            Console.WriteLine();
+            Console.WriteLine($"    codebase.Types:{narrowPredicate}:<predicate>");
+            Console.WriteLine("        :toError('...')");
+            Console.WriteLine();
+        }
+
         return 0;
     }
-
-    /// <summary>
-    /// Writes a property line with type annotation colorized.
     /// Input format: "  PropName : TypeName" or "  PropName : TypeName?"
     /// </summary>
     private static void WritePropertyLine(string prop)

@@ -183,7 +183,8 @@ public class JavaScriptSourceParser : ISourceParser
 
         var classModifiers = isExported ? Modifier.Public : Modifier.None;
         return (new TypeDeclaration(className, TypeKind.Class, classModifiers,
-            baseTypes, [], constructors, methods, [], [], startLine + 1), i);
+            baseTypes, [], constructors, methods, [], [], startLine + 1)
+            .AsJavaScript(isExported: isExported, hasBaseClass: baseTypes.Count > 0), i);
     }
 
     private static (MethodDeclaration?, int) ParseFunction(string[] lines, int startLine,

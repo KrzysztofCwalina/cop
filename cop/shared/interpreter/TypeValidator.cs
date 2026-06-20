@@ -105,6 +105,11 @@ public static class TypeValidator
     {
         if (decl.ReturnType is null) return; // no declared return type — no check
 
+        // Predicates implicitly return bool; any `: Type` annotation is a narrowing type
+        // (e.g. `predicate asCSharp(Type) : CSharpType`), not a runtime return type. The
+        // body evaluates to a bool test result, so there is nothing to validate here.
+        if (decl.IsPredicate) return;
+
         // Skip validation for generic return types — inference handles consistency
         if (GenericInference.IsTypeVariable(decl.ReturnType.Name))
             return;
@@ -206,6 +211,9 @@ public static class TypeValidator
                 return true;
             if (string.Equals(obj.TypeName, typeName, StringComparison.OrdinalIgnoreCase))
                 return true;
+            // A declared subtype satisfies its base type (e.g. CSharpType where Type is expected)
+            if (registry is not null && registry.IsSubtypeOf(obj.TypeName, typeName))
+                return true;
             // Check trait conformance
             if (registry is not null && registry.ConformsTo(obj.TypeName, typeName))
                 return true;
@@ -216,6 +224,9 @@ public static class TypeValidator
         if (value is CopDynamicObject dyn)
         {
             if (string.Equals(dyn.TypeName, typeName, StringComparison.OrdinalIgnoreCase))
+                return true;
+            // A declared subtype satisfies its base type (e.g. CSharpType where Type is expected)
+            if (registry is not null && dyn.TypeName is not null && registry.IsSubtypeOf(dyn.TypeName, typeName))
                 return true;
             // Check trait conformance
             if (registry is not null && dyn.TypeName is not null && registry.ConformsTo(dyn.TypeName, typeName))

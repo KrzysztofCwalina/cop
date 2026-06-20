@@ -12,3 +12,20 @@ export function parse(path : string) : Codebase => provider('csharp', path)
 ## Loads a .NET assembly binary and returns its code model.
 ## Example: csharp.load('lib/MyLib.dll')
 export function load(path : string) : Codebase => provider('csharp', path)
+
+## A C#-specific view of a Type, exposing C#-only facts that have no place in the
+## language-agnostic common model. Obtain one by narrowing with `asCSharp`.
+export type CSharpType = Type & {
+    IsRecord : bool,
+    IsPartial : bool
+}
+
+## Narrows a Type to a CSharpType (C# types only), exposing C#-specific fields.
+## Example: codebase.Types:asCSharp:isRecord
+export predicate asCSharp(Type) : CSharpType => Type.File.Language == csharp
+
+## True for C# `record` / `record struct` declarations.
+export predicate isRecord(CSharpType) => CSharpType.IsRecord
+
+## True for C# `partial` type declarations.
+export predicate isPartial(CSharpType) => CSharpType.IsPartial

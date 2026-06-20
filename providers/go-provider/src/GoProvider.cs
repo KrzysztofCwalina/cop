@@ -1,4 +1,5 @@
 using Cop.Core;
+using Cop.Providers.SourceModel;
 using Cop.Providers.SourceParsers;
 
 namespace Cop.Providers;
@@ -9,12 +10,13 @@ namespace Cop.Providers;
 public class GoProvider : DataProvider
 {
 
-    public override ReadOnlyMemory<byte> GetSchema() => CodeSchema.GetJson();
+    public override ReadOnlyMemory<byte> GetSchema() => GoSchema.GetJson();
 
-    public override RuntimeBindings GetRuntimeBindings() => CodeBindings.Build();
+    public override RuntimeBindings GetRuntimeBindings() => GoBindings.Build();
 
     public override object? Query(ProviderQuery query)
     {
+        GoTypeDeclaration.RegisterCacheFactory();
         var parsers = new SourceParserRegistry();
         parsers.Register(new GoSourceParser());
         var collections = CodeCollectionBuilder.CollectAndParse(parsers, query);

@@ -2763,8 +2763,34 @@ const packages = {
       }
     ],
     "collections": [],
-    "types": {},
-    "predicates": [],
+    "types": {
+      "CSharpType": {
+        "desc": "A C#-specific view of a Type, exposing C#-only facts that have no place in the\nlanguage-agnostic common model. Obtain one by narrowing with `asCSharp`.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L18",
+        "baseType": "Type",
+        "props": []
+      }
+    },
+    "predicates": [
+      {
+        "name": "asCSharp",
+        "appliesTo": "Type",
+        "desc": "Narrows a Type to a CSharpType (C# types only), exposing C#-specific fields.\nExample: codebase.Types:asCSharp:isRecord",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L25"
+      },
+      {
+        "name": "isRecord",
+        "appliesTo": "CSharpType",
+        "desc": "True for C# `record` / `record struct` declarations.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L28"
+      },
+      {
+        "name": "isPartial",
+        "appliesTo": "CSharpType",
+        "desc": "True for C# `partial` type declarations.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L31"
+      }
+    ],
     "functions": [
       {
         "name": "parse",
@@ -4044,8 +4070,34 @@ const packages = {
       }
     ],
     "collections": [],
-    "types": {},
-    "predicates": [],
+    "types": {
+      "GoType": {
+        "desc": "A Go-specific view of a Type. Note: IsInterface/IsStruct are also derivable from the\ncommon `Kind`; they demonstrate the mechanism — prefer language-independent checks when\nthey suffice. Obtain one by narrowing with `asGo`.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/go/go/src/go.cop#L15",
+        "baseType": "Type",
+        "props": []
+      }
+    },
+    "predicates": [
+      {
+        "name": "asGo",
+        "appliesTo": "Type",
+        "desc": "Narrows a Type to a GoType (Go types only), exposing Go-specific fields.\nExample: codebase.Types:asGo:isInterface",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/go/go/src/go.cop#L22"
+      },
+      {
+        "name": "isInterface",
+        "appliesTo": "GoType",
+        "desc": "True for Go `interface` types.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/go/go/src/go.cop#L25"
+      },
+      {
+        "name": "isStruct",
+        "appliesTo": "GoType",
+        "desc": "True for Go `struct` types.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/go/go/src/go.cop#L28"
+      }
+    ],
     "functions": [
       {
         "name": "parse",
@@ -4249,8 +4301,34 @@ const packages = {
       }
     ],
     "collections": [],
-    "types": {},
-    "predicates": [],
+    "types": {
+      "JavaType": {
+        "desc": "A Java-specific view of a Type, exposing Java-only facts (records, enums) that are\nflattened in the language-agnostic model. Obtain one by narrowing with `asJava`.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/java/java/src/java.cop#L14",
+        "baseType": "Type",
+        "props": []
+      }
+    },
+    "predicates": [
+      {
+        "name": "asJava",
+        "appliesTo": "Type",
+        "desc": "Narrows a Type to a JavaType (Java types only), exposing Java-specific fields.\nExample: codebase.Types:asJava:isRecord",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/java/java/src/java.cop#L21"
+      },
+      {
+        "name": "isRecord",
+        "appliesTo": "JavaType",
+        "desc": "True for Java `record` declarations.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/java/java/src/java.cop#L24"
+      },
+      {
+        "name": "isEnum",
+        "appliesTo": "JavaType",
+        "desc": "True for Java `enum` declarations.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/java/java/src/java.cop#L27"
+      }
+    ],
     "functions": [
       {
         "name": "parse",
@@ -4317,8 +4395,34 @@ const packages = {
       }
     ],
     "collections": [],
-    "types": {},
-    "predicates": [],
+    "types": {
+      "JavaScriptType": {
+        "desc": "A JavaScript/TypeScript-specific view of a Type. Note: these facts are also derivable from\nthe common model (isPublic, BaseTypes); they demonstrate the mechanism — prefer\nlanguage-independent checks when they suffice. Obtain one by narrowing with `asJavaScript`.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L15",
+        "baseType": "Type",
+        "props": []
+      }
+    },
+    "predicates": [
+      {
+        "name": "asJavaScript",
+        "appliesTo": "Type",
+        "desc": "Narrows a Type to a JavaScriptType (JS/TS types only), exposing JS-specific fields.\nExample: codebase.Types:asJavaScript:isExported",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L22"
+      },
+      {
+        "name": "isExported",
+        "appliesTo": "JavaScriptType",
+        "desc": "True for `export`ed classes.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L25"
+      },
+      {
+        "name": "hasBaseClass",
+        "appliesTo": "JavaScriptType",
+        "desc": "True when the class `extends` a base class.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L28"
+      }
+    ],
     "functions": [
       {
         "name": "parse",
@@ -4884,8 +4988,34 @@ const packages = {
       }
     ],
     "collections": [],
-    "types": {},
-    "predicates": [],
+    "types": {
+      "PythonType": {
+        "desc": "A Python-specific view of a Type, exposing Python-only facts (dataclasses, enums)\nthat the language-agnostic model flattens. Obtain one by narrowing with `asPython`.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L14",
+        "baseType": "Type",
+        "props": []
+      }
+    },
+    "predicates": [
+      {
+        "name": "asPython",
+        "appliesTo": "Type",
+        "desc": "Narrows a Type to a PythonType (Python types only), exposing Python-specific fields.\nExample: codebase.Types:asPython:isDataclass",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L21"
+      },
+      {
+        "name": "isDataclass",
+        "appliesTo": "PythonType",
+        "desc": "True for classes decorated with `@dataclass`.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L24"
+      },
+      {
+        "name": "isEnum",
+        "appliesTo": "PythonType",
+        "desc": "True for classes deriving from `Enum` (IntEnum, StrEnum, Flag, ...).",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L27"
+      }
+    ],
     "functions": [
       {
         "name": "parse",
@@ -5490,8 +5620,40 @@ const packages = {
       }
     ],
     "collections": [],
-    "types": {},
-    "predicates": [],
+    "types": {
+      "RustType": {
+        "desc": "A Rust-specific view of a Type, exposing Rust-only facts that have no place in the\nlanguage-agnostic common model. Obtain one by narrowing with `asRust`.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/rust/rust/src/rust.cop#L14",
+        "baseType": "Type",
+        "props": []
+      }
+    },
+    "predicates": [
+      {
+        "name": "asRust",
+        "appliesTo": "Type",
+        "desc": "Narrows a Type to a RustType (Rust types only), exposing Rust-specific fields.\nExample: codebase.Types:asRust:isTrait",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/rust/rust/src/rust.cop#L22"
+      },
+      {
+        "name": "isTrait",
+        "appliesTo": "RustType",
+        "desc": "True for Rust `trait` declarations.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/rust/rust/src/rust.cop#L25"
+      },
+      {
+        "name": "isImpl",
+        "appliesTo": "RustType",
+        "desc": "True for synthetic types that represent an `impl` block.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/rust/rust/src/rust.cop#L28"
+      },
+      {
+        "name": "isUnsafe",
+        "appliesTo": "RustType",
+        "desc": "True for `unsafe` traits and impls.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/rust/rust/src/rust.cop#L31"
+      }
+    ],
     "functions": [
       {
         "name": "parse",

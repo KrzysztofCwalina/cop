@@ -398,7 +398,7 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
         if (freeFunctions.Count > 0)
         {
             var moduleName = System.IO.Path.GetFileNameWithoutExtension(filePath) + " (functions)";
-            types.Add(new TypeDeclaration(moduleName, TypeKind.Class, Modifier.Public, [], [], [], freeFunctions, [], [], 0));
+            types.Add(new TypeDeclaration(moduleName, TypeKind.Class, Modifier.Public, [], [], [], freeFunctions, [], [], 0).AsRust());
         }
 
         return new SourceFile(filePath, "rust", types, statements, sourceText)
@@ -419,12 +419,12 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
 
         bool isUnsafe = MatchKeyword("unsafe");
 
-        if (CheckKeyword("struct")) return ParseStruct(vis, attributes, hasDoc);
-        if (CheckKeyword("enum")) return ParseEnum(vis, attributes, hasDoc);
-        if (CheckKeyword("trait")) return ParseTrait(vis, attributes, hasDoc, statements);
-        if (CheckKeyword("impl")) return ParseImpl(statements);
+        if (CheckKeyword("struct")) return ParseStruct(vis, attributes, hasDoc).AsRust(isUnsafe: isUnsafe);
+        if (CheckKeyword("enum")) return ParseEnum(vis, attributes, hasDoc).AsRust(isUnsafe: isUnsafe);
+        if (CheckKeyword("trait")) return ParseTrait(vis, attributes, hasDoc, statements).AsRust(isTrait: true, isUnsafe: isUnsafe);
+        if (CheckKeyword("impl")) return ParseImpl(statements)?.AsRust(isImpl: true, isUnsafe: isUnsafe);
         if (CheckIdent("union") && Peek().Kind == RustTokenKind.Identifier)
-            return ParseUnion(vis, attributes, hasDoc);
+            return ParseUnion(vis, attributes, hasDoc).AsRust(isUnsafe: isUnsafe);
 
         // A free function (possibly pub/const/async/extern/unsafe fn). Parse it here exactly
         // once with its real visibility and collect it; the main loop's fn branch only runs

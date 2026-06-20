@@ -50,6 +50,31 @@ let codebase = codebase(csharp.parse(), python.parse(), javascript.parse())
 Narrow a collection to one language with `isCSharp` / `isPython` / `isJavaScript`
 (e.g. `codebase.Types:isCSharp`).
 
+## Language-Specific Checks (use sparingly)
+
+The `Codebase` model above is **language-agnostic** — `codebase.Types`, `Type.Name`,
+`Type.Kind`, `Type.Modifiers`, `Type.BaseTypes`, `Type.Decorators`, etc. work for every
+language. **Always prefer the language-agnostic model**: those checks are simpler and run
+across languages.
+
+Some facts have **no** language-agnostic representation (e.g. C# `record`/`partial`, Rust
+`unsafe`/traits, Java `record`/`enum`, Python `@dataclass`). **Only then**, narrow a `Type`
+to a language-specific subtype with `:as<Language>` and read its extra fields:
+
+```cop
+import csharp
+
+# `record`-ness has no place in the common model, so narrow to CSharpType:
+predicate isDto(Type) => Type.Name:endsWith('Dto')
+let mutable-dtos = codebase.Types:isDto:asCSharp:!isRecord
+    :toError('{item.Name} should be a record')
+```
+
+Available narrowings: `:asCSharp` → `CSharpType`, `:asRust` → `RustType`, `:asJava` →
+`JavaType`, `:asPython` → `PythonType`, `:asGo` → `GoType`, `:asJavaScript` →
+`JavaScriptType`. Run `cop help <language>` to see each one's extra fields. If the
+language-agnostic model already expresses your rule, **do not** use a narrowing.
+
 ## How Checks Are Organized
 
 ```
@@ -141,6 +166,7 @@ let layering-violations = codebase.Projects:isRuntimeReferencingProvider
 - **DO NOT use `foreach` to print violations.** Never write `foreach violations => '{item.Message}'`. Always use `CHECK(violations)`.
 - **DO NOT put a `command` in an individual check file.** Only `main.cop` has the command.
 - **DO NOT manually iterate violations.** The pattern is always: `codebase.<Collection>:predicate` → `:toError()` → `CHECK()`.
+- **DO NOT use a language-specific narrowing (`:asCSharp`, `:asRust`, `:asJava`, `:asPython`, `:asGo`, `:asJavaScript`) when the language-agnostic model already expresses the rule.** Prefer `codebase.Types`, `Type.Kind`, `Type.Modifiers`, `Type.BaseTypes`, etc. Reach for a narrowing ONLY for a fact the common model genuinely lacks (e.g. C# `record`, Rust `unsafe`).
 
 ## Key Syntax
 

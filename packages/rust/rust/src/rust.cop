@@ -8,3 +8,24 @@ export function parse() : Codebase => provider('rust')
 ## Parses Rust source files in the specified directory and returns a Codebase.
 ## Example: let cb = rust.parse('/path/to/project')
 export function parse(path : string) : Codebase => provider('rust', path)
+
+## A Rust-specific view of a Type, exposing Rust-only facts that have no place in the
+## language-agnostic common model. Obtain one by narrowing with `asRust`.
+export type RustType = Type & {
+    IsTrait : bool,
+    IsImpl : bool,
+    IsUnsafe : bool
+}
+
+## Narrows a Type to a RustType (Rust types only), exposing Rust-specific fields.
+## Example: codebase.Types:asRust:isTrait
+export predicate asRust(Type) : RustType => Type.File.Language == rust
+
+## True for Rust `trait` declarations.
+export predicate isTrait(RustType) => RustType.IsTrait
+
+## True for synthetic types that represent an `impl` block.
+export predicate isImpl(RustType) => RustType.IsImpl
+
+## True for `unsafe` traits and impls.
+export predicate isUnsafe(RustType) => RustType.IsUnsafe

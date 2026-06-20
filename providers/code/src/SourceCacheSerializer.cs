@@ -7,7 +7,7 @@ namespace Cop.Providers;
 internal static class SourceCacheSerializer
 {
     private static readonly byte[] Magic = [(byte)'C', (byte)'O', (byte)'P', (byte)'C'];
-    private const int FormatVersion = 1;
+    private const int FormatVersion = 2;
 
     public static void Save(string cachePath, byte[] fingerprint, List<SourceFile> sourceFiles)
     {
@@ -116,6 +116,20 @@ internal static class SourceCacheSerializer
         WriteList(writer, type.Fields, WriteFieldDeclaration);
         WriteList(writer, type.Properties, WritePropertyDeclaration);
         WriteList(writer, type.Events, WriteEventDeclaration);
+
+        // Language-specific subtype tag + flags (e.g. RustType). Null for base types.
+        var languageTag = type.LanguageTag;
+        WriteNullableString(writer, languageTag);
+        if (languageTag is not null)
+        {
+            var flags = type.LanguageFlags ?? [];
+            writer.Write(flags.Count);
+            foreach (var flag in flags)
+            {
+                writer.Write(flag.Key);
+                writer.Write(flag.Value);
+            }
+        }
     }
 
     private static TypeDeclaration ReadTypeDeclaration(BinaryReader reader)
@@ -138,6 +152,20 @@ internal static class SourceCacheSerializer
             Properties = ReadList(reader, ReadPropertyDeclaration, "TypeDeclaration.Properties"),
             Events = ReadList(reader, ReadEventDeclaration, "TypeDeclaration.Events")
         };
+
+        // Language-specific subtype tag + flags — reconstruct the subtype if registered.
+        var languageTag = ReadNullableString(reader);
+        if (languageTag is not null)
+        {
+            var flagCount = ReadCount(reader, "TypeDeclaration.LanguageFlags");
+            var flags = new Dictionary<string, bool>(flagCount, StringComparer.Ordinal);
+            for (int i = 0; i < flagCount; i++)
+            {
+                var key = reader.ReadString();
+                flags[key] = reader.ReadBoolean();
+            }
+            return LanguageTypeRegistry.Reconstruct(languageTag, type, flags);
+        }
 
         return type;
     }

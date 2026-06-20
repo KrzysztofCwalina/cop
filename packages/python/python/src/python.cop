@@ -8,3 +8,20 @@ export function parse() : Codebase => provider('python')
 ## Parses Python source files in the specified directory and returns a Codebase.
 ## Example: let cb = python.parse('/path/to/project')
 export function parse(path : string) : Codebase => provider('python', path)
+
+## A Python-specific view of a Type, exposing Python-only facts (dataclasses, enums)
+## that the language-agnostic model flattens. Obtain one by narrowing with `asPython`.
+export type PythonType = Type & {
+    IsDataclass : bool,
+    IsEnum : bool
+}
+
+## Narrows a Type to a PythonType (Python types only), exposing Python-specific fields.
+## Example: codebase.Types:asPython:isDataclass
+export predicate asPython(Type) : PythonType => Type.File.Language == python
+
+## True for classes decorated with `@dataclass`.
+export predicate isDataclass(PythonType) => PythonType.IsDataclass
+
+## True for classes deriving from `Enum` (IntEnum, StrEnum, Flag, ...).
+export predicate isEnum(PythonType) => PythonType.IsEnum

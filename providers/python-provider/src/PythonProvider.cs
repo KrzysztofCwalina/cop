@@ -1,4 +1,5 @@
 using Cop.Core;
+using Cop.Providers.SourceModel;
 using Cop.Providers.SourceParsers;
 
 namespace Cop.Providers;
@@ -9,12 +10,13 @@ namespace Cop.Providers;
 public class PythonProvider : DataProvider
 {
 
-    public override ReadOnlyMemory<byte> GetSchema() => CodeSchema.GetJson();
+    public override ReadOnlyMemory<byte> GetSchema() => PythonSchema.GetJson();
 
-    public override RuntimeBindings GetRuntimeBindings() => CodeBindings.Build();
+    public override RuntimeBindings GetRuntimeBindings() => PythonBindings.Build();
 
     public override object? Query(ProviderQuery query)
     {
+        PythonTypeDeclaration.RegisterCacheFactory();
         var parsers = new SourceParserRegistry();
         parsers.Register(new PythonSourceParser());
         var collections = CodeCollectionBuilder.CollectAndParse(parsers, query);

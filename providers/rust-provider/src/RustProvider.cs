@@ -1,4 +1,5 @@
 using Cop.Core;
+using Cop.Providers.SourceModel;
 using Cop.Providers.SourceParsers;
 
 namespace Cop.Providers;
@@ -9,12 +10,16 @@ namespace Cop.Providers;
 public class RustProvider : DataProvider
 {
 
-    public override ReadOnlyMemory<byte> GetSchema() => CodeSchema.GetJson();
+    public override ReadOnlyMemory<byte> GetSchema() => RustSchema.GetJson();
 
-    public override RuntimeBindings GetRuntimeBindings() => CodeBindings.Build();
+    public override RuntimeBindings GetRuntimeBindings() => RustBindings.Build();
 
     public override object? Query(ProviderQuery query)
     {
+        // Ensure cached Rust types reconstruct as RustTypeDeclaration (not the plain base)
+        // before the source cache is read in CollectAndParse.
+        RustTypeDeclaration.RegisterCacheFactory();
+
         var parsers = new SourceParserRegistry();
         parsers.Register(new RustSourceParser());
         var collections = CodeCollectionBuilder.CollectAndParse(parsers, query);

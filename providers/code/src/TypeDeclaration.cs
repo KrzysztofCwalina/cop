@@ -37,4 +37,18 @@ public record TypeDeclaration(
 
     public bool Implements(string interfaceName) =>
         Interfaces.Any(i => i == interfaceName || i.EndsWith("." + interfaceName));
+
+    /// <summary>
+    /// Language-specific subtype tag for disk-cache round-tripping (e.g. "rust").
+    /// Null for the language-agnostic base type. Subclasses that add language-specific
+    /// fields override this together with <see cref="LanguageFlags"/> and register a
+    /// reconstruction factory via <see cref="LanguageTypeRegistry"/>.
+    /// </summary>
+    public virtual string? LanguageTag => null;
+
+    /// <summary>
+    /// Language-specific boolean facts serialized alongside the base type in the cache.
+    /// Null for the base type.
+    /// </summary>
+    public virtual IReadOnlyList<KeyValuePair<string, bool>>? LanguageFlags => null;
 }

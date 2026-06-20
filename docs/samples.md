@@ -23,11 +23,17 @@ These are standalone examples in `samples/` demonstrating language features and 
 | [s13-composition](../samples/s13-composition/composition.cop) | Predicate composition: building complex rules from simple ones |
 | [s14-inlineexpressions](../samples/s14-inlineexpressions/checks.cop) | Inline expressions and predicate composition |
 | [s15-httpserver](../samples/s15-httpserver/server.cop) | HTTP server using the push-provider pipeline |
+| [s16-csharp-specific-ast](../samples/s16-csharp-specific-ast/checks.cop) | Downcast a Type to a CSharpType (`:asCSharp`) to check C#-only AST (records, partial) |
 | [s17-currying](../samples/s17-currying/currying.cop) | Partial application (currying) |
 | [s18-Provider](../samples/s18-Provider/package/samples/use-widgets.cop) | Custom data provider package (see also [sample.cop](../samples/s18-Provider/package/src/sample.cop)) |
 | [s19-providerstreaming](../samples/s19-providerstreaming/main.cop) | Streaming provider with source/sink pattern (see also [ticker.cop](../samples/s19-providerstreaming/ticker/src/ticker.cop)) |
 | [s20-crosslanguage](../samples/s20-crosslanguage/checks.cop) | Cross-language code analysis |
 | [s21-filtering](../samples/s21-filtering/filters.cop) | Filtering and subset patterns |
+| [s22-rust-specific-ast](../samples/s22-rust-specific-ast/checks.cop) | Downcast a Type to a RustType (`:asRust`) to check Rust-only AST (traits, impl, unsafe) |
+| [s23-java-specific-ast](../samples/s23-java-specific-ast/checks.cop) | Downcast a Type to a JavaType (`:asJava`) to check Java-only AST (records, enums) |
+| [s24-python-specific-ast](../samples/s24-python-specific-ast/checks.cop) | Downcast a Type to a PythonType (`:asPython`) to check Python-only AST (dataclass, enum) |
+| [s25-go-specific-ast](../samples/s25-go-specific-ast/checks.cop) | Downcast a Type to a GoType (`:asGo`) — teaching case: prefer language-independent when it suffices |
+| [s26-javascript-specific-ast](../samples/s26-javascript-specific-ast/checks.cop) | Downcast a Type to a JavaScriptType (`:asJavaScript`) — teaching case: prefer language-independent |
 
 ## Demo Samples
 

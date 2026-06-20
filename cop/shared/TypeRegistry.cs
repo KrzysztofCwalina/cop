@@ -843,12 +843,43 @@ public class TypeRegistry
 
     /// <summary>
     /// Checks if a type conforms to a trait. "object" always conforms to any trait (wildcard).
+    /// A subtype inherits its base types' trait conformances (e.g. CSharpType conforms to any
+    /// trait that Type conforms to), so the base-type chain is walked.
     /// </summary>
     public bool ConformsTo(string typeName, string traitName)
     {
         if (typeName == "object") return true;
-        if (_traitConformance.TryGetValue(traitName, out var conformers))
+        if (!_traitConformance.TryGetValue(traitName, out var conformers))
+            return false;
+
+        var desc = GetType(typeName);
+        if (desc is null)
             return conformers.Contains(typeName);
+
+        while (desc is not null)
+        {
+            if (conformers.Contains(desc.Name))
+                return true;
+            desc = desc.BaseType;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Checks if <paramref name="typeName"/> is the same as, or a (transitive) subtype of,
+    /// <paramref name="baseName"/> by walking the declared base-type chain (e.g. the
+    /// <c>Type</c> in <c>type CSharpType = Type &amp; { ... }</c>). Used so a value of a
+    /// language-specific subtype satisfies a parameter declared with its common base type.
+    /// </summary>
+    public bool IsSubtypeOf(string typeName, string baseName)
+    {
+        var desc = GetType(typeName);
+        while (desc is not null)
+        {
+            if (string.Equals(desc.Name, baseName, StringComparison.OrdinalIgnoreCase))
+                return true;
+            desc = desc.BaseType;
+        }
         return false;
     }
 
@@ -870,10 +901,22 @@ public class TypeRegistry
 
     /// <summary>
     /// Gets a computed property expression for a type, or null if none registered.
+    /// Walks the base-type chain so a subtype inherits its base types' computed trait
+    /// properties (e.g. CSharpType inherits Type's TextFilePosition filePath/line).
     /// </summary>
     public Ast.Expression? GetComputedProperty(string typeName, string propName)
     {
-        return _computedProperties.TryGetValue((typeName, propName), out var expr) ? expr : null;
+        var desc = GetType(typeName);
+        if (desc is null)
+            return _computedProperties.TryGetValue((typeName, propName), out var direct) ? direct : null;
+
+        while (desc is not null)
+        {
+            if (_computedProperties.TryGetValue((desc.Name, propName), out var expr))
+                return expr;
+            desc = desc.BaseType;
+        }
+        return null;
     }
 
     /// <summary>

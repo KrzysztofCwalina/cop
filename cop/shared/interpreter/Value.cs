@@ -393,6 +393,21 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
                 var registry = evaluator.TypeRegistry;
                 if (registry is not null)
                 {
+                    // Subtype match: subject's type is a (transitive) subtype of an overload's
+                    // param type (e.g. a CSharpType subject dispatches to an `(Type)` overload).
+                    foreach (var overload in _overloads)
+                    {
+                        if (overload.Declaration.Params.Count > 0)
+                        {
+                            var firstParam = overload.Declaration.Params[0];
+                            var paramType = firstParam.Type?.Name;
+                            if (paramType is not null && registry.IsSubtypeOf(subjectTypeName, paramType))
+                            {
+                                return evaluator.CallUserFunction(overload, args);
+                            }
+                        }
+                    }
+
                     foreach (var overload in _overloads)
                     {
                         if (overload.Declaration.Params.Count > 0)

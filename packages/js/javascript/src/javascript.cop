@@ -8,3 +8,21 @@ export function parse() : Codebase => provider('javascript')
 ## Parses JavaScript/TypeScript source files in the specified directory and returns a Codebase.
 ## Example: let cb = javascript.parse('/path/to/project')
 export function parse(path : string) : Codebase => provider('javascript', path)
+
+## A JavaScript/TypeScript-specific view of a Type. Note: these facts are also derivable from
+## the common model (isPublic, BaseTypes); they demonstrate the mechanism — prefer
+## language-independent checks when they suffice. Obtain one by narrowing with `asJavaScript`.
+export type JavaScriptType = Type & {
+    IsExported : bool,
+    HasBaseClass : bool
+}
+
+## Narrows a Type to a JavaScriptType (JS/TS types only), exposing JS-specific fields.
+## Example: codebase.Types:asJavaScript:isExported
+export predicate asJavaScript(Type) : JavaScriptType => Type.File.Language == javascript
+
+## True for `export`ed classes.
+export predicate isExported(JavaScriptType) => JavaScriptType.IsExported
+
+## True when the class `extends` a base class.
+export predicate hasBaseClass(JavaScriptType) => JavaScriptType.HasBaseClass

@@ -1,0 +1,25 @@
+# Language-specific AST — downcasting a Type to a JavaType
+#
+# The unified Codebase model flattens Java records to "Struct", so the record
+# distinction isn't visible language-independently. Narrow a Type to a JavaType
+# with `:asJava` to reach Java-specific fields such as IsRecord and IsEnum.
+#
+# Run with: cop run        (or: cop checks.cop -t .)
+import code
+import code-analysis
+import java
+
+let codebase = codebase(java.parse())
+
+# Convention: data-transfer types (*Dto) should be immutable records. Needs the
+# Java-specific AST — the common model can't tell a record from a class here.
+predicate isDto(Type) => Type.Name:endsWith('Dto')
+
+let dto-violations = codebase.Types:isDto:asJava:!isRecord
+    :toWarning('{item.Name} is a DTO and should be a record')
+
+# Enums are also recovered via `:asJava`.
+let enum-violations = codebase.Types:asJava:isEnum
+    :toInfo('{item.Name} is an enum')
+
+command MAIN = CHECK(dto-violations + enum-violations)

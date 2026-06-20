@@ -302,11 +302,13 @@ public class CSharpSourceParser : ISourceParser
             Fields = fields,
             Properties = properties,
             Events = events
-        };
+        }.AsCSharp(
+            isRecord: syntax is RecordDeclarationSyntax,
+            isPartial: syntax.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)));
     }
 
     private static TypeDeclaration ExtractEnum(EnumDeclarationSyntax syntax) =>
-        new(syntax.Identifier.Text, CheckTypeKind.Enum, ExtractModifiers(syntax.Modifiers),
+        new TypeDeclaration(syntax.Identifier.Text, CheckTypeKind.Enum, ExtractModifiers(syntax.Modifiers),
             syntax.BaseList?.Types.Select(t => t.Type.ToString()).ToList() ?? [],
             [], [], [], [],
             syntax.Members.Select(m => m.Identifier.Text).ToList(),
@@ -314,7 +316,7 @@ public class CSharpSourceParser : ISourceParser
         {
             HasDocComment = HasDocComment(syntax),
             DocComment = GetDocComment(syntax)
-        };
+        }.AsCSharp(isRecord: false, isPartial: false);
 
     private static MethodDeclaration ExtractConstructor(ConstructorDeclarationSyntax syntax)
     {

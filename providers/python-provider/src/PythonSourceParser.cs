@@ -137,7 +137,10 @@ public class PythonSourceParser : ISourceParser
 
         return (new TypeDeclaration(className, TypeKind.Class, Modifier.Public,
             baseTypes, decorators, constructors, methods, [], [], startLine + 1)
-        { HasDocComment = hasDocstring }, i);
+        { HasDocComment = hasDocstring }
+            .AsPython(
+                isDataclass: decorators.Exists(d => d.Contains("dataclass")),
+                isEnum: baseTypes.Exists(b => b is "Enum" or "IntEnum" or "StrEnum" or "Flag" or "IntFlag")), i);
     }
 
     private static (MethodDeclaration?, int) ParseMethod(string[] lines, int startLine, int methodIndent,

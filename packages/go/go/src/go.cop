@@ -8,3 +8,21 @@ export function parse() : Codebase => provider('go')
 ## Parses Go source files in the specified directory and returns a Codebase.
 ## Example: let cb = go.parse('/path/to/project')
 export function parse(path : string) : Codebase => provider('go', path)
+
+## A Go-specific view of a Type. Note: IsInterface/IsStruct are also derivable from the
+## common `Kind`; they demonstrate the mechanism — prefer language-independent checks when
+## they suffice. Obtain one by narrowing with `asGo`.
+export type GoType = Type & {
+    IsInterface : bool,
+    IsStruct : bool
+}
+
+## Narrows a Type to a GoType (Go types only), exposing Go-specific fields.
+## Example: codebase.Types:asGo:isInterface
+export predicate asGo(Type) : GoType => Type.File.Language == go
+
+## True for Go `interface` types.
+export predicate isInterface(GoType) => GoType.IsInterface
+
+## True for Go `struct` types.
+export predicate isStruct(GoType) => GoType.IsStruct

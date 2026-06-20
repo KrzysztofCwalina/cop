@@ -1,4 +1,5 @@
 using Cop.Core;
+using Cop.Providers.SourceModel;
 using Cop.Providers.SourceParsers;
 
 namespace Cop.Providers;
@@ -9,12 +10,13 @@ namespace Cop.Providers;
 public class JavaScriptProvider : DataProvider
 {
 
-    public override ReadOnlyMemory<byte> GetSchema() => CodeSchema.GetJson();
+    public override ReadOnlyMemory<byte> GetSchema() => JavaScriptSchema.GetJson();
 
-    public override RuntimeBindings GetRuntimeBindings() => CodeBindings.Build();
+    public override RuntimeBindings GetRuntimeBindings() => JavaScriptBindings.Build();
 
     public override object? Query(ProviderQuery query)
     {
+        JavaScriptTypeDeclaration.RegisterCacheFactory();
         var parsers = new SourceParserRegistry();
         parsers.Register(new JavaScriptSourceParser());
         var collections = CodeCollectionBuilder.CollectAndParse(parsers, query);

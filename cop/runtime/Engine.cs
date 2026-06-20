@@ -345,6 +345,10 @@ public static class Engine
                 continue;
 
             queryService.RegisterProvider(loaded.PackageName, loaded.Instance, loaded.Schema);
+            // Register the provider's schema types (and accessors) into the TypeRegistry so
+            // trait/subtype resolution works for provider-declared types — e.g. so a
+            // language-specific subtype like CSharpType is known to be a subtype of Type.
+            ProviderLoader.RegisterSchema(loaded.Instance, typeRegistry);
             var runtimeBindings = loaded.Instance.GetRuntimeBindings();
             RegisterLazyProviderCollections(bridge.Evaluator.GlobalEnvironment, loaded.PackageName, loaded.Instance, loaded.Schema, query, errors, warnings, runtimeBindings, diagLog);
 
@@ -817,24 +821,71 @@ public static class Engine
                 if (!allCollections.TryGetValue(collName, out var items) || items.Count == 0)
                     return [];
 
-                IDynamicObjectAdapter adapter = DataObjectAdapter.Instance;
                 if (collectionItemTypes.TryGetValue(collName, out var itemType))
                 {
                     if (items[0] is RecordView && typeSchemas.TryGetValue(itemType, out var typeSchema))
-                        adapter = new RecordViewAdapter(typeSchema.Properties, typeName: itemType);
-                    else if (items[0] is not DataObject && bindings?.Accessors is not null &&
-                             bindings.Accessors.TryGetValue(itemType, out var accessors))
-                        adapter = new ClrObjectAdapter(accessors, typeName: itemType,
-                            allAccessors: bindings.Accessors, clrTypeMappings: bindings.ClrTypeMappings);
+                    {
+                        var rvAdapter = new RecordViewAdapter(typeSchema.Properties, typeName: itemType);
+                        return items.Select(item => (CopValue)new CopDynamicObject(item, rvAdapter));
+                    }
+
+                    if (items[0] is not DataObject && bindings?.Accessors is not null)
+                    {
+                        // Per-item adapter selection. A collection declared as [Type] may contain
+                        // language-specific subtypes (e.g. CSharpType items in a Types collection)
+                        // whose CLR type maps to a different cop type than the collection's declared
+                        // itemType. Resolving each item's adapter by its CLR type mapping lets
+                        // subtype-only fields (e.g. CSharpType.IsRecord) resolve to real provider
+                        // data instead of null, while plain items keep the collection's default.
+                        var runtimeBindings = bindings;
+                        var defaultAdapter = runtimeBindings.Accessors.TryGetValue(itemType, out var accessors)
+                            ? new ClrObjectAdapter(accessors, typeName: itemType,
+                                allAccessors: runtimeBindings.Accessors, clrTypeMappings: runtimeBindings.ClrTypeMappings)
+                            : null;
+                        var adapterCache = new Dictionary<string, ClrObjectAdapter>(StringComparer.Ordinal);
+                        return items.Select(item =>
+                        {
+                            var itemAdapter = ResolveClrItemAdapter(item, itemType, defaultAdapter, adapterCache, runtimeBindings);
+                            return (CopValue)new CopDynamicObject(item, itemAdapter ?? (IDynamicObjectAdapter)DataObjectAdapter.Instance);
+                        });
+                    }
                 }
 
-                return items.Select(item => (CopValue)new CopDynamicObject(item, adapter));
+                return items.Select(item => (CopValue)new CopDynamicObject(item, DataObjectAdapter.Instance));
             });
 
             env.Define($"{providerName}.{collName}", lazy);
         }
 
         env.Define(providerName, new CopProviderProxy(providerName, env));
+    }
+
+    /// <summary>
+    /// Resolves the adapter for a single provider collection item. When the item's CLR type
+    /// maps (via the provider's <see cref="RuntimeBindings.ClrTypeMappings"/>) to a different
+    /// cop type than the collection's declared <paramref name="itemType"/> — e.g. a
+    /// language-specific subtype like CSharpType inside a [Type] collection — the item gets
+    /// that subtype's accessor set so its extra fields resolve to real data. Otherwise it
+    /// uses the collection's <paramref name="defaultAdapter"/>. Adapters are cached per
+    /// resolved type name to avoid re-allocating one per item.
+    /// </summary>
+    private static ClrObjectAdapter? ResolveClrItemAdapter(
+        object item, string itemType, ClrObjectAdapter? defaultAdapter,
+        Dictionary<string, ClrObjectAdapter> cache, RuntimeBindings bindings)
+    {
+        if (bindings.ClrTypeMappings.TryGetValue(item.GetType(), out var mapped)
+            && !string.Equals(mapped, itemType, StringComparison.Ordinal)
+            && bindings.Accessors.TryGetValue(mapped, out var accessors))
+        {
+            if (!cache.TryGetValue(mapped, out var adapter))
+            {
+                adapter = new ClrObjectAdapter(accessors, typeName: mapped,
+                    allAccessors: bindings.Accessors, clrTypeMappings: bindings.ClrTypeMappings);
+                cache[mapped] = adapter;
+            }
+            return adapter;
+        }
+        return defaultAdapter;
     }
 
     private static void CollectCollectionOutputs(CopValue result, List<PrintOutput> outputs)

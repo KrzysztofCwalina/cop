@@ -358,7 +358,7 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
             // type alias or other
             string aliasType = ConsumeType();
             return new TypeDeclaration(name, TypeKind.Struct, modifiers, [], [], [], [], [], [], line)
-            { HasDocComment = hasDoc };
+            { HasDocComment = hasDoc }.AsGo(isStruct: true);
         }
     }
 
@@ -419,7 +419,7 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
         }
 
         return new TypeDeclaration(name, TypeKind.Struct, modifiers, embedded, [], [], [], [], [], line)
-        { HasDocComment = hasDoc, Fields = fields };
+        { HasDocComment = hasDoc, Fields = fields }.AsGo(isStruct: true);
     }
 
     private TypeDeclaration ParseInterfaceType(string name, Modifier modifiers, bool hasDoc, int line, List<StatementInfo> statements)
@@ -463,7 +463,7 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
         }
 
         return new TypeDeclaration(name, TypeKind.Interface, modifiers, embedded, [], [], methods, [], [], line)
-        { HasDocComment = hasDoc };
+        { HasDocComment = hasDoc }.AsGo(isInterface: true);
     }
 
     private (MethodDeclaration? method, string? receiver)? ParseFunc(List<StatementInfo> statements)
