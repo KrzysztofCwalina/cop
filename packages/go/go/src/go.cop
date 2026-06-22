@@ -14,15 +14,87 @@ export function parse(path : string) : Codebase => provider('go', path)
 ## they suffice. Obtain one by narrowing with `asGo`.
 export type GoType = Type & {
     IsInterface : bool,
-    IsStruct : bool
+    IsStruct : bool,
+    IsTypeAlias : bool,
+    HasStructTags : bool,
+    HasUnionTypeSet : bool,
+    HasUnderlyingTypeTerms : bool,
+    Methods : [GoMethod]
+}
+
+## A Go-specific view of a Method, exposing Go-only facts for receivers, named returns,
+## variadic parameters, and type parameters. Obtain one via a narrowed type's `.Methods`
+## or by narrowing `codebase.Methods` with `asGo`.
+export type GoMethod = Method & {
+    IsPointerReceiver : bool,
+    HasNamedReturns : bool,
+    IsVariadic : bool,
+    IsGeneric : bool
+}
+
+## A Go-specific view of a Statement, exposing Go control-flow facts (defer, goroutine,
+## select, range loops, type switches) that have no place in the common model.
+export type GoStatement = Statement & {
+    IsDefer : bool,
+    IsGoroutine : bool,
+    IsSelect : bool,
+    IsRangeLoop : bool,
+    IsTypeSwitch : bool
 }
 
 ## Narrows a Type to a GoType (Go types only), exposing Go-specific fields.
 ## Example: codebase.Types:asGo:isInterface
 export predicate asGo(Type) : GoType => Type.File.Language == go
 
+## Narrows a Method to a GoMethod (Go methods only), exposing Go-specific fields.
+## Example: codebase.Methods:asGo:isPointerReceiver
+export predicate asGo(Method) : GoMethod => Method.File.Language == go
+
+## Narrows a Statement to a GoStatement (Go statements only), exposing Go-specific fields.
+## Example: codebase.Statements:asGo:isDefer
+export predicate asGo(Statement) : GoStatement => Statement.File.Language == go
+
 ## True for Go `interface` types.
 export predicate isInterface(GoType) => GoType.IsInterface
 
 ## True for Go `struct` types.
 export predicate isStruct(GoType) => GoType.IsStruct
+
+## True for Go `type X = Y` aliases.
+export predicate isTypeAlias(GoType) => GoType.IsTypeAlias
+
+## True for Go `struct` types with field tags.
+export predicate hasStructTags(GoType) => GoType.HasStructTags
+
+## True for Go `interface` type sets with union terms.
+export predicate hasUnionTypeSet(GoType) => GoType.HasUnionTypeSet
+
+## True for Go `interface` type sets with underlying type terms.
+export predicate hasUnderlyingTypeTerms(GoType) => GoType.HasUnderlyingTypeTerms
+
+## True for Go methods whose receiver is a pointer (`*T`).
+export predicate isPointerReceiver(GoMethod) => GoMethod.IsPointerReceiver
+
+## True when a Go function declares named return parameters.
+export predicate hasNamedReturns(GoMethod) => GoMethod.HasNamedReturns
+
+## True when a Go function's final parameter is variadic (`...T`).
+export predicate isVariadicFn(GoMethod) => GoMethod.IsVariadic
+
+## True when a Go function declares type parameters.
+export predicate isGenericMethod(GoMethod) => GoMethod.IsGeneric
+
+## True for a Go `defer` statement.
+export predicate isDefer(GoStatement) => GoStatement.IsDefer
+
+## True for a Go `go` statement that starts a goroutine.
+export predicate isGoroutine(GoStatement) => GoStatement.IsGoroutine
+
+## True for a Go `select` statement.
+export predicate isSelect(GoStatement) => GoStatement.IsSelect
+
+## True for a Go `for ... range` loop.
+export predicate isRangeLoop(GoStatement) => GoStatement.IsRangeLoop
+
+## True for a Go type switch.
+export predicate isTypeSwitch(GoStatement) => GoStatement.IsTypeSwitch

@@ -334,10 +334,22 @@ public class CSharpProvider : DataProvider
         for (int i = 0; i < file.Types.Count; i++)
             file.Types[i] = file.Types[i] with { File = file };
 
+        LinkMethodFiles(file.Types, file);
+
         for (int i = 0; i < file.Regions.Count; i++)
         {
             if (file.Regions[i].File is null)
                 file.Regions[i] = file.Regions[i] with { File = file };
+        }
+    }
+
+    private static void LinkMethodFiles(IEnumerable<TypeDeclaration> types, SourceFile file)
+    {
+        foreach (var type in types)
+        {
+            foreach (var method in type.Methods) method.File = file;
+            foreach (var ctor in type.Constructors) ctor.File = file;
+            LinkMethodFiles(type.NestedTypes, file);
         }
     }
 

@@ -1,10 +1,11 @@
-# Language-specific AST — downcasting a Type to a CSharpType
+# Language-specific AST — downcasting Types, Methods, and Statements
 #
 # The unified Codebase model is language-agnostic, so it deliberately can't
-# express C#-only concepts like records or partial types. To reach those, narrow
-# a Type to a CSharpType with `:asCSharp`, which exposes C#-specific fields such
-# as IsRecord and IsPartial. Multi-language checks keep using the common model;
-# only the checks that need C# specifics downcast.
+# express C#-only concepts like records, extension methods, or lock statements.
+# To reach those, narrow with `:asCSharp` — the same narrowing works on Types
+# (-> CSharpType), Methods (-> CSharpMethod), and Statements (-> CSharpStatement).
+# Multi-language checks keep using the common model; only the checks that need C#
+# specifics downcast.
 #
 # Run with: cop run        (or: cop checks.cop -t .)
 import code
@@ -25,4 +26,13 @@ let dto-violations = codebase.Types:isDto:asCSharp:!isRecord
 let partial-violations = codebase.Types:asCSharp:isPartial
     :toInfo('{item.Name} is a partial type — consider consolidating it')
 
-command MAIN = CHECK(dto-violations + partial-violations)
+# Method-level C# facts: narrow Methods the same way. Flag unsafe methods.
+let unsafe-methods = codebase.Methods:asCSharp:isUnsafeMethod
+    :toWarning('{item.Name} is an unsafe method')
+
+# Statement-level C# facts (control blocks / error handling): flag `lock`
+# statements, which the common Statement model has no Kind for.
+let lock-statements = codebase.Statements:asCSharp:isLock
+    :toInfo('lock statement at line {item.Line}')
+
+command MAIN = CHECK(dto-violations + partial-violations + unsafe-methods + lock-statements)

@@ -58,8 +58,10 @@ language. **Always prefer the language-agnostic model**: those checks are simple
 across languages.
 
 Some facts have **no** language-agnostic representation (e.g. C# `record`/`partial`, Rust
-`unsafe`/traits, Java `record`/`enum`, Python `@dataclass`). **Only then**, narrow a `Type`
-to a language-specific subtype with `:as<Language>` and read its extra fields:
+`unsafe`/traits, Java `record`/`enum`, Python `@dataclass`). **Only then**, narrow with
+`:as<Language>` and read the extra fields. The same `:as<Language>` narrows **Types,
+Methods, AND Statements** (control blocks, error handling, ...), via `codebase.Types`,
+`codebase.Methods`, and `codebase.Statements`:
 
 ```cop
 import csharp
@@ -68,11 +70,17 @@ import csharp
 predicate isDto(Type) => Type.Name:endsWith('Dto')
 let mutable-dtos = codebase.Types:isDto:asCSharp:!isRecord
     :toError('{item.Name} should be a record')
+
+# Method/statement facts narrow the same way:
+let ext-methods = codebase.Methods:asCSharp:isExtensionMethod
+    :toWarning('{item.Name} is an extension method')
+let locks = codebase.Statements:asCSharp:isLock
+    :toInfo('lock statement at line {item.Line}')
 ```
 
-Available narrowings: `:asCSharp` → `CSharpType`, `:asRust` → `RustType`, `:asJava` →
-`JavaType`, `:asPython` → `PythonType`, `:asGo` → `GoType`, `:asJavaScript` →
-`JavaScriptType`. Run `cop help <language>` to see each one's extra fields. If the
+Available narrowings: `:asCSharp` → `CSharpType`/`CSharpMethod`/`CSharpStatement`, `:asRust` →
+`RustType`/`RustMethod`/`RustStatement`, and likewise `:asJava`, `:asPython`, `:asGo`,
+`:asJavaScript`. Run `cop help <language>` to see each one's extra fields. If the
 language-agnostic model already expresses your rule, **do not** use a narrowing.
 
 ## How Checks Are Organized

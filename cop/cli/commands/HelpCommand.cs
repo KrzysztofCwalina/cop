@@ -493,11 +493,13 @@ public static class HelpCommand
             Console.WriteLine("  Prefer the language-agnostic model — codebase.Types, Type.Name, Type.Kind,");
             Console.WriteLine("  Type.Modifiers, Type.BaseTypes, etc. — so a check works across languages.");
             Console.WriteLine();
-            Console.WriteLine($"  ONLY when a fact cannot be expressed that way, narrow a Type to {narrowType}");
-            Console.WriteLine($"  with :{narrowPredicate} and read the {narrowType} fields listed above:");
+            Console.WriteLine($"  ONLY when a fact cannot be expressed that way, narrow with :{narrowPredicate}");
+            Console.WriteLine($"  and read the language-specific fields listed above. The same :{narrowPredicate}");
+            Console.WriteLine("  narrows Types, Methods, AND Statements (control blocks, error handling, ...):");
             Console.WriteLine();
-            Console.WriteLine($"    codebase.Types:{narrowPredicate}:<predicate>");
-            Console.WriteLine("        :toError('...')");
+            Console.WriteLine($"    codebase.Types:{narrowPredicate}:<predicate>:toError('...')");
+            Console.WriteLine($"    codebase.Methods:{narrowPredicate}:<predicate>:toError('...')");
+            Console.WriteLine($"    codebase.Statements:{narrowPredicate}:<predicate>:toError('...')");
             Console.WriteLine();
         }
         else if (string.Equals(packageName, "code", StringComparison.OrdinalIgnoreCase))
@@ -513,6 +515,12 @@ public static class HelpCommand
             Console.WriteLine();
             Console.WriteLine("    :asCSharp -> CSharpType    :asRust -> RustType      :asJava -> JavaType");
             Console.WriteLine("    :asPython -> PythonType    :asGo -> GoType          :asJavaScript -> JavaScriptType");
+            Console.WriteLine();
+            Console.WriteLine("  The same :asXxx also narrows Methods and Statements (control blocks, error");
+            Console.WriteLine("  handling, ...) to e.g. CSharpMethod / CSharpStatement — narrow the matching");
+            Console.WriteLine("  collection the same way:");
+            Console.WriteLine();
+            Console.WriteLine("    codebase.Methods:asCSharp:<predicate>     codebase.Statements:asRust:<predicate>");
             Console.WriteLine();
             Console.WriteLine("  Run 'cop help <language>' (e.g. cop help csharp) to see each subtype's fields.");
             Console.WriteLine();

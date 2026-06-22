@@ -27,7 +27,44 @@ public static class CSharpSchema
                 Properties =
                 [
                     new ProviderPropertySchema { Name = "IsRecord", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsRecordStruct", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsReadOnly", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsRef", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsFileLocal", Type = "bool" },
                     new ProviderPropertySchema { Name = "IsPartial", Type = "bool" },
+                    new ProviderPropertySchema { Name = "HasPrimaryConstructor", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsGeneric", Type = "bool" },
+                ],
+            },
+            new()
+            {
+                Name = "CSharpMethod",
+                Base = "Method",
+                Properties =
+                [
+                    new ProviderPropertySchema { Name = "IsExtension", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsPartial", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsUnsafe", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsExtern", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsExpressionBodied", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsGeneric", Type = "bool" },
+                ],
+            },
+            new()
+            {
+                Name = "CSharpStatement",
+                Base = "Statement",
+                Properties =
+                [
+                    new ProviderPropertySchema { Name = "IsLock", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsUnsafe", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsFixed", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsChecked", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsUnchecked", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsYield", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsGoto", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsAwaitForeach", Type = "bool" },
+                    new ProviderPropertySchema { Name = "HasCatchFilter", Type = "bool" },
                 ],
             },
         };

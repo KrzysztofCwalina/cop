@@ -233,6 +233,8 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
     {
         var types = new List<TypeDeclaration>();
         var statements = new List<StatementInfo>();
+        var receiverMethods = new List<(string Receiver, MethodDeclaration Method)>();
+        var freeFunctions = new List<MethodDeclaration>();
         var usings = new List<string>();
         string? ns = null;
 
@@ -256,10 +258,12 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
             else if (CheckKeyword("func"))
             {
                 var method = ParseFunc(statements);
-                // Top-level funcs: add them grouped if needed
-                if (method != null && method.Value.receiver == null)
+                if (method is { } parsed && parsed.method != null)
                 {
-                    // Free function — could attach to a synthetic type or ignore
+                    if (parsed.receiver != null)
+                        receiverMethods.Add((parsed.receiver, parsed.method));
+                    else
+                        freeFunctions.Add(parsed.method);
                 }
             }
             else if (CheckKeyword("var") || CheckKeyword("const"))
@@ -270,6 +274,21 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
             {
                 Advance();
             }
+        }
+
+        foreach (var (receiver, method) in receiverMethods)
+        {
+            var type = types.FirstOrDefault(t => t.Name == receiver);
+            type?.Methods.Add(method);
+        }
+
+        // Go free functions (no receiver) aren't members of any type. Surface them as methods of a
+        // synthetic per-file "(functions)" type (mirrors the Rust provider) so they appear in the
+        // flat Methods collection and can be narrowed with :asGo.
+        if (freeFunctions.Count > 0)
+        {
+            var moduleName = System.IO.Path.GetFileNameWithoutExtension(filePath) + " (functions)";
+            types.Add(new TypeDeclaration(moduleName, TypeKind.Class, Modifier.Public, [], [], [], freeFunctions, [], [], 0).AsGo());
         }
 
         return new SourceFile(filePath, "go", types, statements, sourceText)
@@ -356,9 +375,10 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
         else
         {
             // type alias or other
+            bool isAlias = Check("=");
             string aliasType = ConsumeType();
             return new TypeDeclaration(name, TypeKind.Struct, modifiers, [], [], [], [], [], [], line)
-            { HasDocComment = hasDoc }.AsGo(isStruct: true);
+            { HasDocComment = hasDoc }.AsGo(isStruct: true, isTypeAlias: isAlias);
         }
     }
 
@@ -367,6 +387,7 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
         Advance(); // skip 'struct'
         var fields = new List<FieldDeclaration>();
         var embedded = new List<string>();
+        bool hasStructTags = false;
 
         if (Check("{"))
         {
@@ -413,13 +434,17 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
                 else Advance();
 
                 // Skip struct tags
-                if (Current().Kind == GoTokenKind.StringLiteral) Advance();
+                if (Current().Kind == GoTokenKind.StringLiteral)
+                {
+                    hasStructTags = true;
+                    Advance();
+                }
             }
             if (Check("}")) Advance();
         }
 
         return new TypeDeclaration(name, TypeKind.Struct, modifiers, embedded, [], [], [], [], [], line)
-        { HasDocComment = hasDoc, Fields = fields }.AsGo(isStruct: true);
+        { HasDocComment = hasDoc, Fields = fields }.AsGo(isStruct: true, hasStructTags: hasStructTags);
     }
 
     private TypeDeclaration ParseInterfaceType(string name, Modifier modifiers, bool hasDoc, int line, List<StatementInfo> statements)
@@ -427,6 +452,8 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
         Advance(); // skip 'interface'
         var methods = new List<MethodDeclaration>();
         var embedded = new List<string>();
+        bool hasUnion = false;
+        bool hasUnderlying = false;
 
         if (Check("{"))
         {
@@ -435,6 +462,8 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
             {
                 SkipComments();
                 if (Check("}")) break;
+                if (Check("|")) hasUnion = true;
+                if (Check("~")) hasUnderlying = true;
 
                 if (Current().Kind == GoTokenKind.Identifier)
                 {
@@ -446,10 +475,13 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
                     {
                         // Method signature
                         var parameters = ParseParamList();
-                        TypeReference? returnType = ParseReturnType();
+                        TypeReference? returnType = ParseReturnType(out bool hasNamedReturns);
                         bool exported = char.IsUpper(methodOrType[0]);
                         methods.Add(new MethodDeclaration(methodOrType,
-                            exported ? Modifier.Public : Modifier.Private, [], returnType, parameters, mLine));
+                            exported ? Modifier.Public : Modifier.Private, [], returnType, parameters, mLine)
+                            .AsGo(
+                                hasNamedReturns: hasNamedReturns,
+                                isVariadic: parameters.Any(p => p.IsVariadic)));
                     }
                     else
                     {
@@ -463,7 +495,7 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
         }
 
         return new TypeDeclaration(name, TypeKind.Interface, modifiers, embedded, [], [], methods, [], [], line)
-        { HasDocComment = hasDoc }.AsGo(isInterface: true);
+        { HasDocComment = hasDoc }.AsGo(isInterface: true, hasUnionTypeSet: hasUnion, hasUnderlyingTypeTerms: hasUnderlying);
     }
 
     private (MethodDeclaration? method, string? receiver)? ParseFunc(List<StatementInfo> statements)
@@ -473,6 +505,7 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
 
         string? receiver = null;
         string? receiverType = null;
+        bool isPointerReceiver = false;
 
         // Method receiver: func (r *Type) Name(...)
         if (Check("("))
@@ -483,7 +516,11 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
                 receiver = Current().Value;
                 Advance();
             }
-            if (Check("*")) Advance();
+            if (Check("*"))
+            {
+                isPointerReceiver = true;
+                Advance();
+            }
             if (Current().Kind == GoTokenKind.Identifier)
             {
                 receiverType = Current().Value;
@@ -496,10 +533,11 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
         string name = ConsumeIdentifier();
         if (name == "") { SkipBraces(); return null; }
         int line = CurrentLine();
+        bool isGeneric = Check("[");
         SkipGenerics();
 
         var parameters = ParseParamList();
-        TypeReference? returnType = ParseReturnType();
+        TypeReference? returnType = ParseReturnType(out bool hasNamedReturns);
 
         bool isExported = char.IsUpper(name[0]);
         var modifiers = isExported ? Modifier.Public : Modifier.Private;
@@ -512,7 +550,12 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
         statements.AddRange(methodStatements);
 
         var method = new MethodDeclaration(name, modifiers, [], returnType, parameters, line)
-        { Statements = methodStatements, HasDocComment = hasDoc };
+        { Statements = methodStatements, HasDocComment = hasDoc }
+            .AsGo(
+                isPointerReceiver: isPointerReceiver,
+                hasNamedReturns: hasNamedReturns,
+                isVariadic: parameters.Any(p => p.IsVariadic),
+                isGeneric: isGeneric);
 
         return (method, receiverType);
     }
@@ -554,10 +597,11 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
                 {
                     // first is param name, now consume type
                     names.Add(first);
-                    if (Check("...")) Advance();
+                    bool isVariadic = Check("...");
+                    if (isVariadic) Advance();
                     string paramType = ConsumeType();
                     foreach (var n in names)
-                        parameters.Add(new ParameterDeclaration(n, new TypeReference(paramType, null, [], paramType), false, false, false, 0));
+                        parameters.Add(new ParameterDeclaration(n, new TypeReference(paramType, null, [], paramType), isVariadic, false, false, 0));
                     names.Clear();
                     if (Check(",")) Advance();
                 }
@@ -586,14 +630,16 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
         return parameters;
     }
 
-    private TypeReference? ParseReturnType()
+    private TypeReference? ParseReturnType(out bool hasNamedReturns)
     {
+        hasNamedReturns = false;
         if (Check("("))
         {
             // Multiple returns
             int start = _pos;
             SkipParens();
             string multi = string.Join("", tokens[start.._pos].Select(t => t.Value));
+            hasNamedReturns = HasNamedReturnParameters(tokens[start.._pos]);
             return new TypeReference(multi, null, [], multi);
         }
         if (!Check("{") && !IsAtEnd() && Current().Kind is GoTokenKind.Identifier or GoTokenKind.Keyword && !CheckKeyword("func"))
@@ -603,6 +649,42 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
             if (retType != "") return new TypeReference(retType, null, [], retType);
         }
         return null;
+    }
+
+    private static bool HasNamedReturnParameters(IReadOnlyList<GoToken> returnTokens)
+    {
+        var group = new List<GoToken>();
+        int depth = 0;
+        foreach (var token in returnTokens)
+        {
+            if (token.Value is "(" or "[" or "{") depth++;
+            else if (token.Value is ")" or "]" or "}") depth--;
+
+            if (depth == 1 && token.Value == ",")
+            {
+                if (IsNamedReturnGroup(group)) return true;
+                group.Clear();
+                continue;
+            }
+
+            if (depth == 1 && token.Value is not "(" and not ")")
+                group.Add(token);
+        }
+
+        return IsNamedReturnGroup(group);
+    }
+
+    private static bool IsNamedReturnGroup(IReadOnlyList<GoToken> group)
+    {
+        var significant = group
+            .Where(t => t.Kind is GoTokenKind.Identifier or GoTokenKind.Keyword || t.Value is "*" or "...")
+            .Take(2)
+            .ToList();
+        if (significant.Count < 2 || significant[0].Kind != GoTokenKind.Identifier)
+            return false;
+
+        return significant[1].Kind is GoTokenKind.Identifier or GoTokenKind.Keyword
+            || significant[1].Value is "*" or "...";
     }
 
     private void ParseBlock(List<StatementInfo> statements)
@@ -615,13 +697,48 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
             if (Check("{")) { depth++; Advance(); continue; }
             if (Check("}")) { depth--; if (depth == 0) { Advance(); break; } Advance(); continue; }
 
+            if (CheckKeyword("defer"))
+            {
+                statements.Add(new GoStatementInfo("defer", [], null, null, [], CurrentLine(), true));
+                Advance();
+                continue;
+            }
+
+            if (CheckKeyword("go"))
+            {
+                statements.Add(new GoStatementInfo("go", [], null, null, [], CurrentLine(), true));
+                Advance();
+                continue;
+            }
+
+            if (CheckKeyword("select"))
+            {
+                statements.Add(new GoStatementInfo("select", [], null, null, [], CurrentLine(), true));
+                Advance();
+                continue;
+            }
+
+            if (CheckKeyword("for") && ContainsKeywordBeforeBlock("range"))
+            {
+                statements.Add(new GoStatementInfo("range", [], null, null, [], CurrentLine(), true));
+                Advance();
+                continue;
+            }
+
+            if (CheckKeyword("switch") && ContainsKeywordBeforeBlock("type"))
+            {
+                statements.Add(new GoStatementInfo("type-switch", [], null, null, [], CurrentLine(), true));
+                Advance();
+                continue;
+            }
+
             // Detect panic/recover
             if (Current().Kind == GoTokenKind.Identifier && Current().Value is "panic")
             {
                 int stmtLine = CurrentLine();
                 Advance();
                 if (Check("(")) SkipParens();
-                statements.Add(new StatementInfo("throw", [], null, "panic", [], stmtLine, true));
+                statements.Add(new GoStatementInfo("throw", [], null, "panic", [], stmtLine, true));
                 continue;
             }
             if (Current().Kind == GoTokenKind.Identifier && Current().Value is "recover")
@@ -629,7 +746,7 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
                 int stmtLine = CurrentLine();
                 Advance();
                 if (Check("(")) SkipParens();
-                statements.Add(new StatementInfo("catch", [], null, "recover", [], stmtLine, true));
+                statements.Add(new GoStatementInfo("catch", [], null, "recover", [], stmtLine, true));
                 continue;
             }
 
@@ -652,7 +769,7 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
 
                 if (Check("("))
                 {
-                    statements.Add(new StatementInfo("call", [],
+                    statements.Add(new GoStatementInfo("call", [],
                         typeName != "" ? typeName : null, memberName, [], stmtLine, true));
                     SkipParens();
                 }
@@ -661,6 +778,21 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
 
             Advance();
         }
+    }
+
+    private bool ContainsKeywordBeforeBlock(string keyword)
+    {
+        int depth = 0;
+        for (int i = _pos; i < tokens.Count; i++)
+        {
+            var token = tokens[i];
+            if (depth == 0 && token.Value == "{") return false;
+            if (token.Value is "(" or "[" or "{") depth++;
+            else if (token.Value is ")" or "]" or "}") depth--;
+            if (depth <= 1 && token.Kind == GoTokenKind.Keyword && token.Value == keyword) return true;
+            if (depth == 0 && token.Value == ";") return false;
+        }
+        return false;
     }
 
     private void SkipVarOrConst()
@@ -714,6 +846,9 @@ internal class GoParser(List<GoToken> tokens, string sourceText)
             if (Check("]") || Check(")")) { if (depth == 0) break; depth--; Advance(); continue; }
             if (Check("{") || Check("}")) break;
             if (depth == 0 && (Check(",") || Check(";") || Check("\n"))) break;
+            // A struct tag (raw/interpreted string) is not part of the field type — stop here
+            // so the tag stays as the current token for tag detection and the next field parses.
+            if (depth == 0 && Current().Kind == GoTokenKind.StringLiteral) break;
             // Stop at keywords that start new declarations
             if (depth == 0 && (CheckKeyword("func") || CheckKeyword("type") || CheckKeyword("var") || CheckKeyword("const"))) break;
             Advance();

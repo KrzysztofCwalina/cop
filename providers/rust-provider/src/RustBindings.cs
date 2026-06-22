@@ -26,8 +26,29 @@ public static class RustBindings
             ["IsTrait"] = o => (object)((RustTypeDeclaration)o).IsTrait,
             ["IsImpl"] = o => (object)((RustTypeDeclaration)o).IsImpl,
             ["IsUnsafe"] = o => (object)((RustTypeDeclaration)o).IsUnsafe,
+            ["IsUnion"] = o => (object)((RustTypeDeclaration)o).IsUnion,
+            ["IsTupleStruct"] = o => (object)((RustTypeDeclaration)o).IsTupleStruct,
+            ["IsUnitStruct"] = o => (object)((RustTypeDeclaration)o).IsUnitStruct,
+            ["IsNegativeImpl"] = o => (object)((RustTypeDeclaration)o).IsNegativeImpl,
         };
         bindings.Accessors["RustType"] = rustAccessors;
+
+        bindings.ClrTypeMappings[typeof(RustMethodDeclaration)] = "RustMethod";
+        var rustMethodAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Method"])
+        {
+            ["IsUnsafe"] = o => (object)((RustMethodDeclaration)o).IsUnsafe,
+            ["IsConst"] = o => (object)((RustMethodDeclaration)o).IsConst,
+            ["IsExtern"] = o => (object)((RustMethodDeclaration)o).IsExtern,
+        };
+        bindings.Accessors["RustMethod"] = rustMethodAccessors;
+
+        bindings.ClrTypeMappings[typeof(RustStatementInfo)] = "RustStatement";
+        var rustStatementAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Statement"])
+        {
+            ["IsMacroCall"] = o => (object)((RustStatementInfo)o).IsMacroCall,
+            ["IsPanic"] = o => (object)((RustStatementInfo)o).IsPanic,
+        };
+        bindings.Accessors["RustStatement"] = rustStatementAccessors;
 
         return bindings;
     }

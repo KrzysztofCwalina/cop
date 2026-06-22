@@ -17,15 +17,120 @@ export function load(path : string) : Codebase => provider('csharp', path)
 ## language-agnostic common model. Obtain one by narrowing with `asCSharp`.
 export type CSharpType = Type & {
     IsRecord : bool,
-    IsPartial : bool
+    IsRecordStruct : bool,
+    IsReadOnly : bool,
+    IsRef : bool,
+    IsFileLocal : bool,
+    IsPartial : bool,
+    HasPrimaryConstructor : bool,
+    IsGeneric : bool,
+    Methods : [CSharpMethod]
+}
+
+## A C#-specific view of a Method, exposing C#-only facts (extension, partial, unsafe,
+## extern, expression-bodied, generic) absent from the common model. Reached via a
+## narrowed type's `.Methods` (e.g. `codebase.Types:asCSharp.Methods`) or `asCSharp`.
+export type CSharpMethod = Method & {
+    IsExtension : bool,
+    IsPartial : bool,
+    IsUnsafe : bool,
+    IsExtern : bool,
+    IsExpressionBodied : bool,
+    IsGeneric : bool
 }
 
 ## Narrows a Type to a CSharpType (C# types only), exposing C#-specific fields.
 ## Example: codebase.Types:asCSharp:isRecord
 export predicate asCSharp(Type) : CSharpType => Type.File.Language == csharp
 
+## Narrows a Method to a CSharpMethod (C# methods only), exposing C#-specific fields.
+## Example: codebase.Methods:asCSharp:isExtensionMethod
+export predicate asCSharp(Method) : CSharpMethod => Method.File.Language == csharp
+
 ## True for C# `record` / `record struct` declarations.
 export predicate isRecord(CSharpType) => CSharpType.IsRecord
 
+## True for C# `record struct` declarations specifically.
+export predicate isRecordStruct(CSharpType) => CSharpType.IsRecordStruct
+
+## True for C# `readonly struct` declarations.
+export predicate isReadonlyStruct(CSharpType) => CSharpType.IsReadOnly
+
+## True for C# `ref struct` declarations.
+export predicate isRef(CSharpType) => CSharpType.IsRef
+
+## True for C# `file`-scoped (file-local) type declarations.
+export predicate isFileLocal(CSharpType) => CSharpType.IsFileLocal
+
 ## True for C# `partial` type declarations.
 export predicate isPartial(CSharpType) => CSharpType.IsPartial
+
+## True when the type declares a primary constructor.
+export predicate hasPrimaryConstructor(CSharpType) => CSharpType.HasPrimaryConstructor
+
+## True when the type declares generic type parameters.
+export predicate isGenericType(CSharpType) => CSharpType.IsGeneric
+
+## True for C# extension methods (first parameter has the `this` modifier).
+export predicate isExtensionMethod(CSharpMethod) => CSharpMethod.IsExtension
+
+## True for `partial` method declarations.
+export predicate isPartialMethod(CSharpMethod) => CSharpMethod.IsPartial
+
+## True for `unsafe` method declarations.
+export predicate isUnsafeMethod(CSharpMethod) => CSharpMethod.IsUnsafe
+
+## True for `extern` method declarations (e.g. P/Invoke).
+export predicate isExternMethod(CSharpMethod) => CSharpMethod.IsExtern
+
+## True for expression-bodied methods (`=> expr;`).
+export predicate isExpressionBodied(CSharpMethod) => CSharpMethod.IsExpressionBodied
+
+## True when the method declares generic type parameters.
+export predicate isGenericMethod(CSharpMethod) => CSharpMethod.IsGeneric
+
+## A C#-specific view of a Statement, exposing C# control-flow and error-handling facts
+## (lock / unsafe / fixed / checked blocks, yield, goto, await foreach, catch filters) that
+## have no place in the common model. Reached by narrowing with `asCSharp`.
+export type CSharpStatement = Statement & {
+    IsLock : bool,
+    IsUnsafe : bool,
+    IsFixed : bool,
+    IsChecked : bool,
+    IsUnchecked : bool,
+    IsYield : bool,
+    IsGoto : bool,
+    IsAwaitForeach : bool,
+    HasCatchFilter : bool
+}
+
+## Narrows a Statement to a CSharpStatement (C# statements only), exposing C#-specific fields.
+## Example: codebase.Statements:asCSharp:isLock
+export predicate asCSharp(Statement) : CSharpStatement => Statement.File.Language == csharp
+
+## True for a C# `lock` statement.
+export predicate isLock(CSharpStatement) => CSharpStatement.IsLock
+
+## True for a C# `unsafe` block statement.
+export predicate isUnsafeBlock(CSharpStatement) => CSharpStatement.IsUnsafe
+
+## True for a C# `fixed` statement.
+export predicate isFixed(CSharpStatement) => CSharpStatement.IsFixed
+
+## True for a C# `checked` block statement.
+export predicate isChecked(CSharpStatement) => CSharpStatement.IsChecked
+
+## True for a C# `unchecked` block statement.
+export predicate isUnchecked(CSharpStatement) => CSharpStatement.IsUnchecked
+
+## True for a C# `yield return` / `yield break` statement.
+export predicate isYield(CSharpStatement) => CSharpStatement.IsYield
+
+## True for a C# `goto` statement.
+export predicate isGoto(CSharpStatement) => CSharpStatement.IsGoto
+
+## True for a C# `await foreach` (async stream) statement.
+export predicate isAwaitForeach(CSharpStatement) => CSharpStatement.IsAwaitForeach
+
+## True for a `catch` clause with an exception filter (`when (...)`).
+export predicate hasCatchFilter(CSharpStatement) => CSharpStatement.HasCatchFilter

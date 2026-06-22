@@ -96,7 +96,7 @@ public class JavaScriptSourceParser : ISourceParser
 
     private static bool IsClassDeclaration(string trimmed)
     {
-        // export class, export default class, class
+        // export class, export default class, abstract class, class
         return IsClassDeclarationPattern(trimmed);
     }
 
@@ -110,7 +110,9 @@ public class JavaScriptSourceParser : ISourceParser
         var trimmed = lines[startLine].TrimStart();
         bool isExported = trimmed.StartsWith("export");
 
-        if (!TryParseClassDeclaration(trimmed, out var className, out var baseType)) return (null, startLine + 1);
+        if (!TryParseClassDeclaration(trimmed, out var className, out var baseType,
+            out var isAbstract, out var isGeneric, out var hasImplements))
+            return (null, startLine + 1);
 
         var baseTypes = baseType != null
             ? [baseType]
@@ -145,7 +147,8 @@ public class JavaScriptSourceParser : ISourceParser
             if (braceDepth <= 0) { i++; break; }
 
             // Method: name(...) {, async name(...) {, static name(...) {, get/set name(...) {
-            if (TryParseMethodDeclaration(line, out var methodName, out var parameterText, out var isStatic, out var methodIsAsync)
+            if (TryParseMethodDeclaration(line, out var methodName, out var parameterText, out var isStatic,
+                    out var methodIsAsync, out var isGenerator, out var isArrow, out var isGetter, out var isSetter)
                 && !line.StartsWith("if") && !line.StartsWith("for") && !line.StartsWith("while"))
             {
                 var modifiers = Modifier.Public;
@@ -161,10 +164,8 @@ public class JavaScriptSourceParser : ISourceParser
                 ExtractBodyStatements(lines, i + 1, bodyEnd, methodStatements);
                 statements.AddRange(methodStatements);
 
-                var method = new MethodDeclaration(methodName, modifiers, [], null, parameters, i + 1)
-                {
-                    Statements = methodStatements
-                };
+                var method = NewMethod(methodName, modifiers, [], null, parameters, i + 1, methodStatements)
+                    .AsJavaScript(isGenerator: isGenerator, isArrow: isArrow, isGetter: isGetter, isSetter: isSetter);
 
                 if (methodName == "constructor")
                     constructors.Add(method);
@@ -184,7 +185,8 @@ public class JavaScriptSourceParser : ISourceParser
         var classModifiers = isExported ? Modifier.Public : Modifier.None;
         return (new TypeDeclaration(className, TypeKind.Class, classModifiers,
             baseTypes, [], constructors, methods, [], [], startLine + 1)
-            .AsJavaScript(isExported: isExported, hasBaseClass: baseTypes.Count > 0), i);
+            .AsJavaScript(isExported: isExported, hasBaseClass: baseTypes.Count > 0,
+                isAbstract: isAbstract, isGeneric: isGeneric, hasImplements: hasImplements), i);
     }
 
     private static (MethodDeclaration?, int) ParseFunction(string[] lines, int startLine,
@@ -195,7 +197,7 @@ public class JavaScriptSourceParser : ISourceParser
         bool isExported = trimmed.StartsWith("export");
         bool isAsync = trimmed.Contains("async ");
 
-        if (!TryParseFunctionDeclaration(trimmed, out var funcName, out var parameterText)) return (null, startLine + 1);
+        if (!TryParseFunctionDeclaration(trimmed, out var funcName, out var parameterText, out var isGenerator)) return (null, startLine + 1);
 
         var parameters = ParseParameters(parameterText);
 
@@ -210,10 +212,8 @@ public class JavaScriptSourceParser : ISourceParser
         ExtractBodyStatements(lines, startLine + 1, bodyEnd, methodStatements);
         statements.AddRange(methodStatements);
 
-        return (new MethodDeclaration(funcName, modifiers, [], null, parameters, startLine + 1)
-        {
-            Statements = methodStatements
-        }, bodyEnd);
+        return (NewMethod(funcName, modifiers, [], null, parameters, startLine + 1, methodStatements)
+            .AsJavaScript(isGenerator: isGenerator), bodyEnd);
     }
 
     private static void ExtractBodyStatements(string[] lines, int start, int end,
@@ -234,7 +234,7 @@ public class JavaScriptSourceParser : ISourceParser
             {
                 // JS catch is always untyped — capture the variable name for reference but TypeName is null
                 bool hasRethrow = HasRethrow(lines, i + 1, end);
-                statements.Add(new StatementInfo("catch", [], null, null, [], i + 1, true)
+                statements.Add(new JavaScriptStatementInfo("catch", [], null, null, [], i + 1, true)
                 {
                     HasRethrow = hasRethrow,
                     IsErrorHandler = true,
@@ -243,10 +243,22 @@ public class JavaScriptSourceParser : ISourceParser
                 continue;
             }
 
+            if (trimmed.StartsWith("try") && (trimmed.Length == 3 || trimmed[3] is ' ' or '{'))
+            {
+                statements.Add(NewStatement("try", [], null, null, [], i + 1, true));
+                continue;
+            }
+
+            if (TryParseForKind(trimmed, out var forKind))
+            {
+                statements.Add(NewStatement(forKind, ["for"], null, null, [], i + 1, true));
+                continue;
+            }
+
             // debugger statement
             if (trimmed.StartsWith("debugger"))
             {
-                statements.Add(new StatementInfo("call", ["debugger"], null, "debugger", [], i + 1, true));
+                statements.Add(NewStatement("call", ["debugger"], null, "debugger", [], i + 1, true));
                 continue;
             }
 
@@ -254,7 +266,7 @@ public class JavaScriptSourceParser : ISourceParser
             if (trimmed.StartsWith("throw "))
             {
                 string? typeName = TryParseThrowNewType(trimmed, out var parsedTypeName) ? parsedTypeName : null;
-                statements.Add(new StatementInfo("throw", [], typeName, null, [], i + 1, true));
+                statements.Add(NewStatement("throw", [], typeName, null, [], i + 1, true));
                 continue;
             }
 
@@ -294,13 +306,13 @@ public class JavaScriptSourceParser : ISourceParser
 
             if (part.StartsWith("debugger"))
             {
-                statements.Add(new StatementInfo("call", ["debugger"], null, "debugger", [], lineNumber, isInMethod));
+                statements.Add(NewStatement("call", ["debugger"], null, "debugger", [], lineNumber, isInMethod));
                 continue;
             }
             if (part.StartsWith("throw "))
             {
                 string? typeName = TryParseThrowNewType(part, out var parsedTypeName) ? parsedTypeName : null;
-                statements.Add(new StatementInfo("throw", [], typeName, null, [], lineNumber, isInMethod));
+                statements.Add(NewStatement("throw", [], typeName, null, [], lineNumber, isInMethod));
                 continue;
             }
             if (part.StartsWith("return await ") || part.StartsWith("await "))
@@ -317,6 +329,18 @@ public class JavaScriptSourceParser : ISourceParser
     private static void ExtractLineStatement(string trimmed, int lineNumber, bool isInMethod,
         List<StatementInfo> statements)
     {
+        if (trimmed.StartsWith("try") && (trimmed.Length == 3 || trimmed[3] is ' ' or '{'))
+        {
+            statements.Add(NewStatement("try", [], null, null, [], lineNumber, isInMethod));
+            return;
+        }
+
+        if (TryParseForKind(trimmed, out var forKind))
+        {
+            statements.Add(NewStatement(forKind, ["for"], null, null, [], lineNumber, isInMethod));
+            return;
+        }
+
         // Variable declarations: const/let/var name = ...
         if (TryParseVariableDeclaration(trimmed, out var variableName))
         {
@@ -325,7 +349,7 @@ public class JavaScriptSourceParser : ISourceParser
             if (trimmed.Contains("let ")) keywords.Add("let");
             if (trimmed.Contains("var ")) keywords.Add("var");
 
-            statements.Add(new StatementInfo("declaration", keywords, null, variableName, [], lineNumber, isInMethod));
+            statements.Add(NewStatement("declaration", keywords, null, variableName, [], lineNumber, isInMethod));
 
             // Also extract calls on the right-hand side (e.g., const x = console.log(...))
             var afterEq = trimmed.IndexOf('=');
@@ -348,7 +372,7 @@ public class JavaScriptSourceParser : ISourceParser
         // eval() call
         if (ContainsEvalCall(trimmed))
         {
-            statements.Add(new StatementInfo("call", [], null, "eval", [], lineNumber, isInMethod));
+            statements.Add(NewStatement("call", [], null, "eval", [], lineNumber, isInMethod));
             return;
         }
 
@@ -372,7 +396,7 @@ public class JavaScriptSourceParser : ISourceParser
             ? argsText.Split(',', StringSplitOptions.TrimEntries).ToList()
             : new List<string>();
 
-        statements.Add(new StatementInfo("call", [], typeName, memberName, args, lineNumber, isInMethod));
+        statements.Add(NewStatement("call", [], typeName, memberName, args, lineNumber, isInMethod));
     }
 
     private static void ExtractAwaitStatement(string awaitExpr, int lineNumber, bool isInMethod,
@@ -394,13 +418,50 @@ public class JavaScriptSourceParser : ISourceParser
             }
         }
 
-        statements.Add(new StatementInfo("await", [], typeName, memberName, [], lineNumber, isInMethod)
+        statements.Add(new JavaScriptStatementInfo("await", [], typeName, memberName, [], lineNumber, isInMethod)
         {
             Expression = awaitExpr
         });
 
         // Also emit the inner call for backward compatibility
         ExtractCallFromExpression(awaitExpr, lineNumber, isInMethod, statements);
+    }
+
+    private static MethodDeclaration NewMethod(string name, Modifier modifiers, List<string> decorators,
+        TypeReference? returnType, List<ParameterDeclaration> parameters, int line, List<StatementInfo> statements)
+    {
+        MethodDeclaration method = new(name, modifiers, decorators, returnType, parameters, line);
+        method.Statements = statements;
+        return method;
+    }
+
+    private static JavaScriptStatementInfo NewStatement(string kind, List<string> keywords, string? typeName,
+        string? memberName, List<string> arguments, int line, bool isInMethod)
+        => new(kind, keywords, typeName, memberName, arguments, line, isInMethod);
+
+    private static bool TryParseForKind(string text, out string kind)
+    {
+        kind = string.Empty;
+        int pos = 0;
+        if (!TryReadLiteral(text, ref pos, "for") || !IsWordBoundaryAfter(text, pos))
+            return false;
+
+        if (!TryExtractFirstParenthesizedText(text, out var clause))
+            return false;
+
+        if (ContainsWord(clause, "of"))
+        {
+            kind = "for-of";
+            return true;
+        }
+
+        if (ContainsWord(clause, "in"))
+        {
+            kind = "for-in";
+            return true;
+        }
+
+        return false;
     }
 
     private static bool TryParseRequireModule(string text, out string module)
@@ -461,6 +522,7 @@ public class JavaScriptSourceParser : ISourceParser
     {
         int pos = 0;
         TryReadExportDefaultPrefix(text, ref pos);
+        TryReadAbstractPrefix(text, ref pos);
         if (!TryReadLiteral(text, ref pos, "class") || !SkipRequiredWhitespace(text, ref pos))
             return false;
 
@@ -472,51 +534,69 @@ public class JavaScriptSourceParser : ISourceParser
         int pos = 0;
         TryReadExportDefaultPrefix(text, ref pos);
         TryReadAsyncPrefix(text, ref pos);
-        if (!TryReadLiteral(text, ref pos, "function") || !SkipRequiredWhitespace(text, ref pos))
+        if (!TryReadLiteral(text, ref pos, "function"))
+            return false;
+
+        int afterFunction = pos;
+        SkipWhitespace(text, ref pos);
+        bool hadWhitespace = pos > afterFunction;
+        if (TryReadChar(text, ref pos, '*'))
+            SkipWhitespace(text, ref pos);
+        else if (!hadWhitespace)
             return false;
 
         return pos < text.Length && IsWordChar(text[pos]);
     }
 
-    private static bool TryParseClassDeclaration(string text, out string className, out string? baseType)
+    private static bool TryParseClassDeclaration(string text, out string className, out string? baseType,
+        out bool isAbstract, out bool isGeneric, out bool hasImplements)
     {
         className = string.Empty;
         baseType = null;
+        isAbstract = false;
+        isGeneric = false;
+        hasImplements = false;
 
-        for (int i = 0; i < text.Length; i++)
+        int pos = 0;
+        TryReadExportDefaultPrefix(text, ref pos);
+        isAbstract = TryReadAbstractPrefix(text, ref pos);
+
+        if (!TryReadLiteral(text, ref pos, "class") || !SkipRequiredWhitespace(text, ref pos))
+            return false;
+
+        if (!TryReadWord(text, ref pos, out className))
+            return false;
+
+        if (pos < text.Length && text[pos] == '<')
         {
-            if (!StartsWithAt(text, i, "class"))
-                continue;
+            isGeneric = true;
+            TrySkipBalancedAngleList(text, ref pos);
+        }
+        SkipWhitespace(text, ref pos);
 
-            int pos = i + "class".Length;
-            if (!SkipRequiredWhitespace(text, ref pos))
-                continue;
-
-            if (!TryReadWord(text, ref pos, out className))
-                continue;
-
-            int extendsPos = pos;
-            if (SkipRequiredWhitespace(text, ref extendsPos)
-                && TryReadLiteral(text, ref extendsPos, "extends")
-                && SkipRequiredWhitespace(text, ref extendsPos)
-                && TryReadDottedWord(text, ref extendsPos, out var parsedBaseType))
-            {
-                baseType = parsedBaseType;
-            }
-
-            return true;
+        int extendsPos = pos;
+        if (TryReadLiteral(text, ref extendsPos, "extends")
+            && SkipRequiredWhitespace(text, ref extendsPos)
+            && TryReadDottedWord(text, ref extendsPos, out var parsedBaseType))
+        {
+            baseType = parsedBaseType;
         }
 
-        return false;
+        hasImplements = ContainsWord(text, "implements");
+        return true;
     }
 
     private static bool TryParseMethodDeclaration(string text, out string methodName, out string parameterText,
-        out bool isStatic, out bool isAsync)
+        out bool isStatic, out bool isAsync, out bool isGenerator, out bool isArrow, out bool isGetter, out bool isSetter)
     {
         methodName = string.Empty;
         parameterText = string.Empty;
         isStatic = false;
         isAsync = false;
+        isGenerator = false;
+        isArrow = false;
+        isGetter = false;
+        isSetter = false;
 
         foreach (var staticChoice in GetOptionalPrefixChoices(text, 0, "static"))
         {
@@ -525,6 +605,8 @@ public class JavaScriptSourceParser : ISourceParser
                 foreach (var accessorChoice in GetOptionalPrefixChoices(text, asyncChoice.Position, "get", "set"))
                 {
                     int pos = accessorChoice.Position;
+                    bool generator = TryReadChar(text, ref pos, '*');
+                    SkipWhitespace(text, ref pos);
                     if (!TryReadWord(text, ref pos, out methodName))
                         continue;
 
@@ -534,7 +616,34 @@ public class JavaScriptSourceParser : ISourceParser
 
                     isStatic = staticChoice.Consumed;
                     isAsync = asyncChoice.Consumed;
+                    isGenerator = generator;
+                    isGetter = accessorChoice.Consumed && StartsWithAt(text, asyncChoice.Position, "get");
+                    isSetter = accessorChoice.Consumed && StartsWithAt(text, asyncChoice.Position, "set");
                     return true;
+                }
+
+                int arrowPos = asyncChoice.Position;
+                if (TryReadWord(text, ref arrowPos, out var arrowName))
+                {
+                    SkipWhitespace(text, ref arrowPos);
+                    if (TryReadChar(text, ref arrowPos, '='))
+                    {
+                        SkipWhitespace(text, ref arrowPos);
+                        var arrowIsAsync = asyncChoice.Consumed || (TryReadLiteral(text, ref arrowPos, "async") && SkipRequiredWhitespace(text, ref arrowPos));
+                        if (TryReadParenthesizedTextAt(text, ref arrowPos, out var arrowParameters))
+                        {
+                            SkipWhitespace(text, ref arrowPos);
+                            if (TryReadLiteral(text, ref arrowPos, "=>"))
+                            {
+                                methodName = arrowName;
+                                parameterText = arrowParameters;
+                                isStatic = staticChoice.Consumed;
+                                isAsync = arrowIsAsync;
+                                isArrow = true;
+                                return true;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -542,10 +651,12 @@ public class JavaScriptSourceParser : ISourceParser
         return false;
     }
 
-    private static bool TryParseFunctionDeclaration(string text, out string functionName, out string parameterText)
+    private static bool TryParseFunctionDeclaration(string text, out string functionName, out string parameterText,
+        out bool isGenerator)
     {
         functionName = string.Empty;
         parameterText = string.Empty;
+        isGenerator = false;
 
         for (int i = 0; i < text.Length; i++)
         {
@@ -553,7 +664,16 @@ public class JavaScriptSourceParser : ISourceParser
                 continue;
 
             int pos = i + "function".Length;
-            if (!SkipRequiredWhitespace(text, ref pos) || !TryReadWord(text, ref pos, out functionName))
+            int afterFunction = pos;
+            SkipWhitespace(text, ref pos);
+            bool hadWhitespace = pos > afterFunction;
+            isGenerator = TryReadChar(text, ref pos, '*');
+            if (isGenerator)
+                SkipWhitespace(text, ref pos);
+            else if (!hadWhitespace)
+                continue;
+
+            if (!TryReadWord(text, ref pos, out functionName))
                 continue;
 
             SkipWhitespace(text, ref pos);
@@ -612,6 +732,17 @@ public class JavaScriptSourceParser : ISourceParser
             int pos = i + "eval".Length;
             SkipWhitespace(text, ref pos);
             if (pos < text.Length && text[pos] == '(')
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool ContainsWord(string text, string word)
+    {
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (StartsWithAt(text, i, word) && IsWordBoundaryBefore(text, i) && IsWordBoundaryAfter(text, i + word.Length))
                 return true;
         }
 
@@ -727,6 +858,46 @@ public class JavaScriptSourceParser : ISourceParser
         int beforeDefault = pos;
         if (!TryReadLiteral(text, ref pos, "default") || !SkipRequiredWhitespace(text, ref pos))
             pos = beforeDefault;
+    }
+
+    private static bool TryReadAbstractPrefix(string text, ref int pos)
+    {
+        int original = pos;
+        if (!TryReadLiteral(text, ref pos, "abstract") || !SkipRequiredWhitespace(text, ref pos))
+        {
+            pos = original;
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TrySkipBalancedAngleList(string text, ref int pos)
+    {
+        if (pos >= text.Length || text[pos] != '<')
+            return false;
+
+        int depth = 0;
+        while (pos < text.Length)
+        {
+            if (text[pos] == '<')
+            {
+                depth++;
+            }
+            else if (text[pos] == '>')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    pos++;
+                    return true;
+                }
+            }
+
+            pos++;
+        }
+
+        return false;
     }
 
     private static List<(int Position, bool Consumed)> GetOptionalPrefixChoices(string text, int pos,
@@ -857,6 +1028,11 @@ public class JavaScriptSourceParser : ISourceParser
     private static bool IsWordBoundaryBefore(string text, int pos)
     {
         return pos == 0 || !IsWordChar(text[pos - 1]);
+    }
+
+    private static bool IsWordBoundaryAfter(string text, int pos)
+    {
+        return pos >= text.Length || !IsWordChar(text[pos]);
     }
 
     private static bool IsWordChar(char ch)

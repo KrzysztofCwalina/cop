@@ -78,7 +78,7 @@ public class CSharpSourceParser : ISourceParser
                 var attrName = attr.Name.ToString().Replace("Attribute", "");
                 var args = attr.ArgumentList?.Arguments
                     .Select(a => a.Expression.ToString().Trim('"')).ToList() ?? [];
-                allStatements.Add(new StatementInfo("attribute", [], attrName, null, args, LineOf(attrList), false));
+                allStatements.Add(new CSharpStatementInfo("attribute", [], attrName, null, args, LineOf(attrList), false));
             }
         }
 
@@ -304,7 +304,13 @@ public class CSharpSourceParser : ISourceParser
             Events = events
         }.AsCSharp(
             isRecord: syntax is RecordDeclarationSyntax,
-            isPartial: syntax.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)));
+            isRecordStruct: syntax is RecordDeclarationSyntax rds && rds.ClassOrStructKeyword.IsKind(SyntaxKind.StructKeyword),
+            isReadOnly: syntax.Modifiers.Any(m => m.IsKind(SyntaxKind.ReadOnlyKeyword)),
+            isRef: syntax.Modifiers.Any(m => m.IsKind(SyntaxKind.RefKeyword)),
+            isFileLocal: syntax.Modifiers.Any(m => m.IsKind(SyntaxKind.FileKeyword)),
+            isPartial: syntax.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)),
+            hasPrimaryConstructor: syntax.ParameterList != null,
+            isGeneric: syntax.TypeParameterList != null);
     }
 
     private static TypeDeclaration ExtractEnum(EnumDeclarationSyntax syntax) =>
@@ -316,7 +322,7 @@ public class CSharpSourceParser : ISourceParser
         {
             HasDocComment = HasDocComment(syntax),
             DocComment = GetDocComment(syntax)
-        }.AsCSharp(isRecord: false, isPartial: false);
+        }.AsCSharp(isFileLocal: syntax.Modifiers.Any(m => m.IsKind(SyntaxKind.FileKeyword)));
 
     private static MethodDeclaration ExtractConstructor(ConstructorDeclarationSyntax syntax)
     {
@@ -355,7 +361,14 @@ public class CSharpSourceParser : ISourceParser
             ExtractExpressionStatement(syntax.ExpressionBody.Expression, methodStatements,
                 LineOf(syntax.ExpressionBody), isInMethod: true, method: method, parent: null);
         method.Statements = methodStatements;
-        return method;
+        return method.AsCSharp(
+            isExtension: syntax.ParameterList.Parameters.FirstOrDefault()?.Modifiers
+                .Any(m => m.IsKind(SyntaxKind.ThisKeyword)) == true,
+            isPartial: syntax.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)),
+            isUnsafe: syntax.Modifiers.Any(m => m.IsKind(SyntaxKind.UnsafeKeyword)),
+            isExtern: syntax.Modifiers.Any(m => m.IsKind(SyntaxKind.ExternKeyword)),
+            isExpressionBodied: syntax.ExpressionBody != null,
+            isGeneric: syntax.TypeParameterList != null);
     }
 
     private static List<FieldDeclaration> ExtractFields(FieldDeclarationSyntax syntax)
@@ -510,7 +523,7 @@ public class CSharpSourceParser : ISourceParser
                 if (typeName == "dynamic") keywords.Add("dynamic");
                 foreach (var v in decl.Declaration.Variables)
                 {
-                    var declStmt = new StatementInfo("declaration", keywords, typeName, v.Identifier.Text, [], line, isInMethod)
+                    var declStmt = new CSharpStatementInfo("declaration", keywords, typeName, v.Identifier.Text, [], line, isInMethod)
                     {
                         Method = method, Parent = parent,
                         Expression = v.Initializer?.Value.ToString()
@@ -530,7 +543,7 @@ public class CSharpSourceParser : ISourceParser
             {
                 string? typeName = throwStmt.Expression is ObjectCreationExpressionSyntax creation
                     ? creation.Type.ToString() : null;
-                var throwInfo = new StatementInfo("throw", [], typeName, null, [], line, isInMethod)
+                var throwInfo = new CSharpStatementInfo("throw", [], typeName, null, [], line, isInMethod)
                     { Method = method, Parent = parent };
                 results.Add(throwInfo);
                 parent?._children.Add(throwInfo);
@@ -538,7 +551,7 @@ public class CSharpSourceParser : ISourceParser
             }
             case ReturnStatementSyntax returnStmt:
             {
-                var retInfo = new StatementInfo("return", [], null, null, [], line, isInMethod)
+                var retInfo = new CSharpStatementInfo("return", [], null, null, [], line, isInMethod)
                 {
                     Method = method, Parent = parent,
                     Expression = returnStmt.Expression?.ToString()
@@ -551,7 +564,7 @@ public class CSharpSourceParser : ISourceParser
             }
             case UsingStatementSyntax usingStmt:
             {
-                var usingInfo = new StatementInfo("using", [], null, null, [], line, isInMethod)
+                var usingInfo = new CSharpStatementInfo("using", [], null, null, [], line, isInMethod)
                     { Method = method, Parent = parent };
                 results.Add(usingInfo);
                 parent?._children.Add(usingInfo);
@@ -561,12 +574,13 @@ public class CSharpSourceParser : ISourceParser
             }
             case ForEachStatementSyntax forEach:
             {
-                var feInfo = new StatementInfo("foreach", [], forEach.Type.ToString(),
+                var feInfo = new CSharpStatementInfo("foreach", [], forEach.Type.ToString(),
                     forEach.Identifier.Text, [], line, isInMethod)
                 {
                     Method = method, Parent = parent,
                     Condition = forEach.Expression.ToString(),
-                    IsBraced = forEach.Statement is BlockSyntax
+                    IsBraced = forEach.Statement is BlockSyntax,
+                    IsAwaitForeach = forEach.AwaitKeyword.IsKind(SyntaxKind.AwaitKeyword)
                 };
                 results.Add(feInfo);
                 parent?._children.Add(feInfo);
@@ -575,7 +589,7 @@ public class CSharpSourceParser : ISourceParser
             }
             case TryStatementSyntax tryStmt:
             {
-                var tryInfo = new StatementInfo("try", [], null, null, [], line, isInMethod)
+                var tryInfo = new CSharpStatementInfo("try", [], null, null, [], line, isInMethod)
                     { Method = method, Parent = parent };
                 results.Add(tryInfo);
                 parent?._children.Add(tryInfo);
@@ -586,10 +600,11 @@ public class CSharpSourceParser : ISourceParser
                     string? caughtType = c.Declaration?.Type.ToString();
                     bool hasRethrow = c.Block != null && c.Block.DescendantNodes().OfType<ThrowStatementSyntax>().Any();
                     bool isGeneric = caughtType is null or "Exception" or "System.Exception";
-                    var catchInfo = new StatementInfo("catch", [], caughtType, null, [], LineOf(c), isInMethod)
+                    var catchInfo = new CSharpStatementInfo("catch", [], caughtType, null, [], LineOf(c), isInMethod)
                     {
                         HasRethrow = hasRethrow, IsErrorHandler = true, IsGenericErrorHandler = isGeneric,
-                        Method = method, Parent = parent
+                        Method = method, Parent = parent,
+                        HasCatchFilter = c.Filter != null
                     };
                     results.Add(catchInfo);
                     parent?._children.Add(catchInfo);
@@ -600,7 +615,7 @@ public class CSharpSourceParser : ISourceParser
             }
             case IfStatementSyntax ifStmt:
             {
-                var ifInfo = new StatementInfo("if", [], null, null, [], line, isInMethod)
+                var ifInfo = new CSharpStatementInfo("if", [], null, null, [], line, isInMethod)
                 {
                     Method = method, Parent = parent,
                     Condition = ifStmt.Condition.ToString(),
@@ -613,7 +628,7 @@ public class CSharpSourceParser : ISourceParser
                 {
                     // else is a child of the if-statement so that statements inside else
                     // have the if (with its Condition) as an ancestor — enables guard checks
-                    var elseInfo = new StatementInfo("else", [], null, null, [], LineOf(ifStmt.Else), isInMethod)
+                    var elseInfo = new CSharpStatementInfo("else", [], null, null, [], LineOf(ifStmt.Else), isInMethod)
                     {
                         Method = method, Parent = ifInfo,
                         IsBraced = ifStmt.Else.Statement is BlockSyntax
@@ -626,7 +641,7 @@ public class CSharpSourceParser : ISourceParser
             }
             case WhileStatementSyntax ws:
             {
-                var whileInfo = new StatementInfo("while", [], null, null, [], line, isInMethod)
+                var whileInfo = new CSharpStatementInfo("while", [], null, null, [], line, isInMethod)
                 {
                     Method = method, Parent = parent,
                     Condition = ws.Condition.ToString(),
@@ -639,7 +654,7 @@ public class CSharpSourceParser : ISourceParser
             }
             case ForStatementSyntax fs:
             {
-                var forInfo = new StatementInfo("for", [], null, null, [], line, isInMethod)
+                var forInfo = new CSharpStatementInfo("for", [], null, null, [], line, isInMethod)
                 {
                     Method = method, Parent = parent,
                     Condition = fs.Condition?.ToString(),
@@ -652,7 +667,7 @@ public class CSharpSourceParser : ISourceParser
             }
             case SwitchStatementSyntax sw:
             {
-                var switchInfo = new StatementInfo("switch", [], null, null, [], line, isInMethod)
+                var switchInfo = new CSharpStatementInfo("switch", [], null, null, [], line, isInMethod)
                 {
                     Method = method, Parent = parent,
                     Expression = sw.Expression.ToString()
@@ -667,6 +682,63 @@ public class CSharpSourceParser : ISourceParser
             case BlockSyntax nested:
                 ExtractStatements(nested, results, isInMethod, method, parent);
                 break;
+            case LockStatementSyntax lockStmt:
+            {
+                var info = new CSharpStatementInfo("lock", [], null, null, [], line, isInMethod)
+                    { Method = method, Parent = parent, Expression = lockStmt.Expression.ToString() };
+                results.Add(info);
+                parent?._children.Add(info);
+                ExtractStatementBody(lockStmt.Statement, info._children, isInMethod, method, info);
+                break;
+            }
+            case UnsafeStatementSyntax unsafeStmt:
+            {
+                var info = new CSharpStatementInfo("unsafe", [], null, null, [], line, isInMethod)
+                    { Method = method, Parent = parent };
+                results.Add(info);
+                parent?._children.Add(info);
+                if (unsafeStmt.Block != null)
+                    ExtractStatements(unsafeStmt.Block, info._children, isInMethod, method, info);
+                break;
+            }
+            case FixedStatementSyntax fixedStmt:
+            {
+                var info = new CSharpStatementInfo("fixed", [], null, null, [], line, isInMethod)
+                    { Method = method, Parent = parent };
+                results.Add(info);
+                parent?._children.Add(info);
+                ExtractStatementBody(fixedStmt.Statement, info._children, isInMethod, method, info);
+                break;
+            }
+            case CheckedStatementSyntax checkedStmt:
+            {
+                bool isUnchecked = checkedStmt.Keyword.IsKind(SyntaxKind.UncheckedKeyword);
+                var info = new CSharpStatementInfo(isUnchecked ? "unchecked" : "checked", [], null, null, [], line, isInMethod)
+                    { Method = method, Parent = parent };
+                results.Add(info);
+                parent?._children.Add(info);
+                if (checkedStmt.Block != null)
+                    ExtractStatements(checkedStmt.Block, info._children, isInMethod, method, info);
+                break;
+            }
+            case YieldStatementSyntax yieldStmt:
+            {
+                var info = new CSharpStatementInfo("yield", [], null, null, [], line, isInMethod)
+                    { Method = method, Parent = parent, Expression = yieldStmt.Expression?.ToString() };
+                results.Add(info);
+                parent?._children.Add(info);
+                if (yieldStmt.Expression != null)
+                    ExtractExpressionStatement(yieldStmt.Expression, results, line, isInMethod, method, parent);
+                break;
+            }
+            case GotoStatementSyntax:
+            {
+                var info = new CSharpStatementInfo("goto", [], null, null, [], line, isInMethod)
+                    { Method = method, Parent = parent };
+                results.Add(info);
+                parent?._children.Add(info);
+                break;
+            }
         }
     }
 
@@ -690,7 +762,7 @@ public class CSharpSourceParser : ISourceParser
                 }
                 var args = invocation.ArgumentList.Arguments
                     .Select(a => a.ToString()).ToList();
-                var callInfo = new StatementInfo("call", [], typeName, memberName, args, line, isInMethod)
+                var callInfo = new CSharpStatementInfo("call", [], typeName, memberName, args, line, isInMethod)
                 {
                     Method = method, Parent = parent,
                     Expression = invocation.ToString()
@@ -702,7 +774,7 @@ public class CSharpSourceParser : ISourceParser
             case AwaitExpressionSyntax awaitExpr:
             {
                 var (awaitType, awaitMember, awaitArgs) = ExtractInvocationParts(awaitExpr.Expression);
-                var awaitInfo = new StatementInfo("await", [], awaitType, awaitMember, awaitArgs, line, isInMethod)
+                var awaitInfo = new CSharpStatementInfo("await", [], awaitType, awaitMember, awaitArgs, line, isInMethod)
                 {
                     Method = method, Parent = parent,
                     Expression = awaitExpr.Expression.ToString()
@@ -720,7 +792,7 @@ public class CSharpSourceParser : ISourceParser
                 var ctorType = ExtractBaseTypeName(objCreate.Type);
                 var args = objCreate.ArgumentList?.Arguments
                     .Select(a => a.ToString()).ToList() ?? [];
-                var ctorInfo = new StatementInfo("call", [], ctorType, null, args, line, isInMethod)
+                var ctorInfo = new CSharpStatementInfo("call", [], ctorType, null, args, line, isInMethod)
                 {
                     Method = method, Parent = parent,
                     Expression = objCreate.ToString()
@@ -845,3 +917,4 @@ public class CSharpSourceParser : ISourceParser
         return commentLines;
     }
 }
+

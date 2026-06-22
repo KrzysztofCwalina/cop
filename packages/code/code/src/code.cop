@@ -44,7 +44,9 @@ export type Method = {
     Decorators : [string],
     Line : int,
     Documented : bool,
-    Documentation : string?
+    Documentation : string?,
+    File : File?,
+    Source : string
 }
 
 export type Constructor = Method & {}
@@ -241,6 +243,7 @@ export type Codebase = {
     Files : [File],
     Types : [Type],
     Statements : [Statement],
+    Methods : [Method],
     Calls : [Statement],
     Lines : [Line],
     Regions : [Region],
@@ -253,6 +256,7 @@ export function codebase(providers : [Provider]) : Codebase => {
     Types: reduce(providers, (acc, p) => acc + p.Types, []),
     Lines: reduce(providers, (acc, p) => acc + p.Lines, []),
     Statements: reduce(providers, (acc, p) => acc + p.Statements, []),
+    Methods: reduce(providers, (acc, p) => acc + p.Methods, []),
     Files: reduce(providers, (acc, p) => acc + p.Files, []),
     Calls: reduce(providers, (acc, p) => acc + p.Calls, []),
     Regions: reduce(providers, (acc, p) => acc + p.Regions, []),
@@ -262,36 +266,42 @@ export function codebase(providers : [Provider]) : Codebase => {
 # Language filter predicates
 export predicate isCSharp(Type) => Type.File.Language == csharp
 export predicate isCSharp(Statement) => Statement.File.Language == csharp
+export predicate isCSharp(Method) => Method.File.Language == csharp
 export predicate isCSharp(Line) => Line.File.Language == csharp
 export predicate isCSharp(Region) => Region.File.Language == csharp
 export predicate isCSharp(Api) => Api.File.Language == csharp
 
 export predicate isPython(Type) => Type.File.Language == python
 export predicate isPython(Statement) => Statement.File.Language == python
+export predicate isPython(Method) => Method.File.Language == python
 export predicate isPython(Line) => Line.File.Language == python
 export predicate isPython(Region) => Region.File.Language == python
 export predicate isPython(Api) => Api.File.Language == python
 
 export predicate isJavaScript(Type) => Type.File.Language == javascript
 export predicate isJavaScript(Statement) => Statement.File.Language == javascript
+export predicate isJavaScript(Method) => Method.File.Language == javascript
 export predicate isJavaScript(Line) => Line.File.Language == javascript
 export predicate isJavaScript(Region) => Region.File.Language == javascript
 export predicate isJavaScript(Api) => Api.File.Language == javascript
 
 export predicate isRust(Type) => Type.File.Language == rust
 export predicate isRust(Statement) => Statement.File.Language == rust
+export predicate isRust(Method) => Method.File.Language == rust
 export predicate isRust(Line) => Line.File.Language == rust
 export predicate isRust(Region) => Region.File.Language == rust
 export predicate isRust(Api) => Api.File.Language == rust
 
 export predicate isGo(Type) => Type.File.Language == go
 export predicate isGo(Statement) => Statement.File.Language == go
+export predicate isGo(Method) => Method.File.Language == go
 export predicate isGo(Line) => Line.File.Language == go
 export predicate isGo(Region) => Region.File.Language == go
 export predicate isGo(Api) => Api.File.Language == go
 
 export predicate isJava(Type) => Type.File.Language == java
 export predicate isJava(Statement) => Statement.File.Language == java
+export predicate isJava(Method) => Method.File.Language == java
 export predicate isJava(Line) => Line.File.Language == java
 export predicate isJava(Region) => Region.File.Language == java
 export predicate isJava(Api) => Api.File.Language == java

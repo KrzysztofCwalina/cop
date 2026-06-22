@@ -14,15 +14,83 @@ export function parse(path : string) : Codebase => provider('javascript', path)
 ## language-independent checks when they suffice. Obtain one by narrowing with `asJavaScript`.
 export type JavaScriptType = Type & {
     IsExported : bool,
-    HasBaseClass : bool
+    HasBaseClass : bool,
+    IsAbstract : bool,
+    IsGeneric : bool,
+    HasImplements : bool,
+    Methods : [JavaScriptMethod]
+}
+
+## A JavaScript/TypeScript-specific view of a Method, exposing JS-only facts.
+## Reached through a narrowed type's `.Methods` or by narrowing with `asJavaScript`.
+export type JavaScriptMethod = Method & {
+    IsGenerator : bool,
+    IsArrow : bool,
+    IsGetter : bool,
+    IsSetter : bool,
+    IsConstructor : bool
+}
+
+## A JavaScript/TypeScript-specific view of a Statement, exposing JS statement kinds.
+## Reached by narrowing with `asJavaScript`.
+export type JavaScriptStatement = Statement & {
+    IsForOf : bool,
+    IsForIn : bool,
+    IsThrow : bool,
+    IsAwait : bool,
+    IsTryCatch : bool
 }
 
 ## Narrows a Type to a JavaScriptType (JS/TS types only), exposing JS-specific fields.
 ## Example: codebase.Types:asJavaScript:isExported
 export predicate asJavaScript(Type) : JavaScriptType => Type.File.Language == javascript
 
+## Narrows a Method to a JavaScriptMethod (JS/TS methods only), exposing JS-specific fields.
+## Example: codebase.Methods:asJavaScript:isGeneratorMethod
+export predicate asJavaScript(Method) : JavaScriptMethod => Method.File.Language == javascript
+
+## Narrows a Statement to a JavaScriptStatement (JS/TS statements only), exposing JS-specific fields.
+## Example: codebase.Statements:asJavaScript:isAwait
+export predicate asJavaScript(Statement) : JavaScriptStatement => Statement.File.Language == javascript
+
 ## True for `export`ed classes.
 export predicate isExported(JavaScriptType) => JavaScriptType.IsExported
 
 ## True when the class `extends` a base class.
 export predicate hasBaseClass(JavaScriptType) => JavaScriptType.HasBaseClass
+
+## True when the class is declared `abstract`.
+export predicate isAbstractClass(JavaScriptType) => JavaScriptType.IsAbstract
+
+## True when the class declares type parameters.
+export predicate isGenericType(JavaScriptType) => JavaScriptType.IsGeneric
+
+## True when the class has an `implements` clause.
+export predicate hasImplements(JavaScriptType) => JavaScriptType.HasImplements
+
+## True for `function*` or `*name()` generator methods.
+export predicate isGeneratorMethod(JavaScriptMethod) => JavaScriptMethod.IsGenerator
+
+## True for class-field arrow function methods.
+export predicate isArrowMethod(JavaScriptMethod) => JavaScriptMethod.IsArrow
+
+## True for `get name()` accessors.
+export predicate isGetter(JavaScriptMethod) => JavaScriptMethod.IsGetter
+
+## True for `set name(value)` accessors.
+export predicate isSetter(JavaScriptMethod) => JavaScriptMethod.IsSetter
+
+## True for a JavaScript `for (... of ...)` statement.
+export predicate isForOf(JavaScriptStatement) => JavaScriptStatement.IsForOf
+
+## True for a JavaScript `for (... in ...)` statement.
+export predicate isForIn(JavaScriptStatement) => JavaScriptStatement.IsForIn
+
+## True for a JavaScript `throw` statement.
+export predicate isThrow(JavaScriptStatement) => JavaScriptStatement.IsThrow
+
+## True for a JavaScript `await` statement/expression.
+export predicate isAwait(JavaScriptStatement) => JavaScriptStatement.IsAwait
+
+## True for a JavaScript `try` statement.
+export predicate isTryCatch(JavaScriptStatement) => JavaScriptStatement.IsTryCatch

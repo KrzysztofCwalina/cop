@@ -94,6 +94,8 @@ public static class CodeBindings
                 ["Line"] = o => (object)((MethodDeclaration)o).Line,
                 ["Documented"] = o => (object)((MethodDeclaration)o).HasDocComment,
                 ["Documentation"] = o => (object?)((MethodDeclaration)o).DocComment,
+                ["File"] = o => (object?)((MethodDeclaration)o).File,
+                ["Source"] = o => ((MethodDeclaration)o).Source,
             },
             ["Parameter"] = new()
             {
@@ -240,6 +242,12 @@ public static class CodeBindings
         {
             ["Types"] = doc => ((SourceFile)doc).Types.Cast<object>().ToList(),
             ["Statements"] = doc => ((SourceFile)doc).Statements.Cast<object>().ToList(),
+            ["Methods"] = doc =>
+            {
+                var result = new List<object>();
+                CollectMethods(((SourceFile)doc).Types, result);
+                return result;
+            },
             ["Calls"] = doc => ((SourceFile)doc).Statements.Where(s => s.Kind == "call").Cast<object>().ToList(),
             ["Lines"] = doc =>
             {
@@ -324,5 +332,15 @@ public static class CodeBindings
                 return file.Regions.Select(r => (object)(r with { File = file })).ToList();
             },
         };
+    }
+
+    /// <summary>Recursively flattens all methods declared in the given types (including nested types).</summary>
+    private static void CollectMethods(IEnumerable<TypeDeclaration> types, List<object> result)
+    {
+        foreach (var type in types)
+        {
+            result.AddRange(type.Methods);
+            CollectMethods(type.NestedTypes, result);
+        }
     }
 }

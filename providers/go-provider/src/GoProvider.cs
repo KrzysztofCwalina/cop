@@ -17,6 +17,8 @@ public class GoProvider : DataProvider
     public override object? Query(ProviderQuery query)
     {
         GoTypeDeclaration.RegisterCacheFactory();
+        GoMethodDeclaration.RegisterCacheFactory();
+        GoStatementInfo.RegisterCacheFactory();
         var parsers = new SourceParserRegistry();
         parsers.Register(new GoSourceParser());
         var collections = CodeCollectionBuilder.CollectAndParse(parsers, query);

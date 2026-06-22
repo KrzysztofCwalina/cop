@@ -20,4 +20,21 @@ public record MethodDeclaration(
     public List<StatementInfo> Statements { get; set; } = [];
     public bool HasDocComment { get; init; }
     public string? DocComment { get; init; }
+
+    /// <summary>The source file declaring this method. Set during reference linking.</summary>
+    public SourceFile? File { get; set; }
+
+    /// <summary>Stable identity string for this method (file path + name).</summary>
+    public string Source => File is null ? Name : $"{File.Path}:{Name}";
+
+    /// <summary>
+    /// Language-specific subtype tag for disk-cache round-tripping (e.g. "csharp"). Null for
+    /// the language-agnostic base method. Subclasses that add language-specific fields override
+    /// this together with <see cref="LanguageFlags"/> and register a reconstruction factory via
+    /// <see cref="MethodTypeRegistry"/>.
+    /// </summary>
+    public virtual string? LanguageTag => null;
+
+    /// <summary>Language-specific boolean facts serialized alongside the base method. Null for the base.</summary>
+    public virtual IReadOnlyList<KeyValuePair<string, bool>>? LanguageFlags => null;
 }

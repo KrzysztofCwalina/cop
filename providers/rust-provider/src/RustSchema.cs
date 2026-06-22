@@ -29,6 +29,31 @@ public static class RustSchema
                     new ProviderPropertySchema { Name = "IsTrait", Type = "bool" },
                     new ProviderPropertySchema { Name = "IsImpl", Type = "bool" },
                     new ProviderPropertySchema { Name = "IsUnsafe", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsUnion", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsTupleStruct", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsUnitStruct", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsNegativeImpl", Type = "bool" },
+                ],
+            },
+            new()
+            {
+                Name = "RustMethod",
+                Base = "Method",
+                Properties =
+                [
+                    new ProviderPropertySchema { Name = "IsUnsafe", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsConst", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsExtern", Type = "bool" },
+                ],
+            },
+            new()
+            {
+                Name = "RustStatement",
+                Base = "Statement",
+                Properties =
+                [
+                    new ProviderPropertySchema { Name = "IsMacroCall", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsPanic", Type = "bool" },
                 ],
             },
         };

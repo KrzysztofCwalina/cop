@@ -173,10 +173,23 @@ public static class CodeCollectionBuilder
         for (int i = 0; i < file.Types.Count; i++)
             file.Types[i] = file.Types[i] with { File = file };
 
+        LinkMethodFiles(file.Types, file);
+
         for (int i = 0; i < file.Regions.Count; i++)
         {
             if (file.Regions[i].File is null)
                 file.Regions[i] = file.Regions[i] with { File = file };
+        }
+    }
+
+    /// <summary>Recursively sets <see cref="MethodDeclaration.File"/> on all methods/constructors.</summary>
+    private static void LinkMethodFiles(IEnumerable<TypeDeclaration> types, SourceFile file)
+    {
+        foreach (var type in types)
+        {
+            foreach (var method in type.Methods) method.File = file;
+            foreach (var ctor in type.Constructors) ctor.File = file;
+            LinkMethodFiles(type.NestedTypes, file);
         }
     }
 
@@ -282,6 +295,7 @@ public static class CodeCollectionBuilder
     {
         ["Types"] = "Type",
         ["Statements"] = "Statement",
+        ["Methods"] = "Method",
         ["Calls"] = "Statement",
         ["Lines"] = "Line",
         ["Files"] = "File",

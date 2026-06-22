@@ -421,20 +421,30 @@ predicate isCall(Statement) : Call => Statement.Kind == call
 When applied as a filter, items are narrowed to `Call` (a superset of Statement’s properties).
 
 Language providers use the same mechanism to expose **language-specific AST** on top of the
-common `Codebase` model. For example, the `csharp` package narrows a `Type` to a `CSharpType`
-(which adds C#-only fields such as `IsRecord` and `IsPartial`):
+common `Codebase` model. The narrowing applies to **Types, Methods, and Statements** alike —
+the same `:as<Language>` predicate is overloaded for each. For example, the `csharp` package
+narrows a `Type` to a `CSharpType`, a `Method` to a `CSharpMethod`, and a `Statement` to a
+`CSharpStatement` (each adding C#-only fields):
 
 ```ruby
 predicate asCSharp(Type) : CSharpType => Type.File.Language == csharp
+predicate asCSharp(Method) : CSharpMethod => Method.File.Language == csharp
+predicate asCSharp(Statement) : CSharpStatement => Statement.File.Language == csharp
 
+# Type facts (records), method facts (extension methods),
+# and statement facts (lock / control blocks / error handling):
 let records = codebase.Types:asCSharp:isRecord
     :toError('{item.Name} is a record')
+let ext-methods = codebase.Methods:asCSharp:isExtensionMethod
+    :toWarning('{item.Name} is an extension method')
+let locks = codebase.Statements:asCSharp:isLock
+    :toInfo('lock at line {item.Line}')
 ```
 
 This keeps the common model language-agnostic — multi-language checks still run over plain
-`Type`/`Statement` — while a check that needs C# specifics narrows with `:asCSharp` and reads
-the extra fields. The narrowed values still satisfy their base type, so base predicates
-(`isPublic`, `isCSharp`, …) and `toError`/`toWarning` continue to work after narrowing.
+`Type`/`Method`/`Statement` — while a check that needs C# specifics narrows with `:asCSharp`
+and reads the extra fields. The narrowed values still satisfy their base type, so base
+predicates (`isPublic`, `isCSharp`, …) and `toError`/`toWarning` continue to work after narrowing.
 
 > **Write language-specific checks only when the language-agnostic model can't express the
 > rule.** Most rules should use `codebase.Types`, `Type.Name`, `Type.Kind`, `Type.Modifiers`,

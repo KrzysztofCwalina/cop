@@ -14,7 +14,12 @@ export function parse(path : string) : Codebase => provider('rust', path)
 export type RustType = Type & {
     IsTrait : bool,
     IsImpl : bool,
-    IsUnsafe : bool
+    IsUnsafe : bool,
+    IsUnion : bool,
+    IsTupleStruct : bool,
+    IsUnitStruct : bool,
+    IsNegativeImpl : bool,
+    Methods : [RustMethod]
 }
 
 ## Narrows a Type to a RustType (Rust types only), exposing Rust-specific fields.
@@ -29,3 +34,53 @@ export predicate isImpl(RustType) => RustType.IsImpl
 
 ## True for `unsafe` traits and impls.
 export predicate isUnsafe(RustType) => RustType.IsUnsafe
+
+## True for Rust `union` declarations.
+export predicate isUnion(RustType) => RustType.IsUnion
+
+## True for tuple structs such as `struct S(T);`.
+export predicate isTupleStruct(RustType) => RustType.IsTupleStruct
+
+## True for unit structs such as `struct S;`.
+export predicate isUnitStruct(RustType) => RustType.IsUnitStruct
+
+## True for negative impls such as `impl !Send for T {}`.
+export predicate isNegativeImpl(RustType) => RustType.IsNegativeImpl
+
+## A Rust-specific view of a Method (function), exposing Rust-only facts (unsafe / const /
+## extern functions) absent from the common model. Reached by narrowing with `asRust`.
+export type RustMethod = Method & {
+    IsUnsafe : bool,
+    IsConst : bool,
+    IsExtern : bool
+}
+
+## Narrows a Method to a RustMethod (Rust functions only), exposing Rust-specific fields.
+## Example: codebase.Methods:asRust:isUnsafeFn
+export predicate asRust(Method) : RustMethod => Method.File.Language == rust
+
+## True for `unsafe fn` declarations.
+export predicate isUnsafeFn(RustMethod) => RustMethod.IsUnsafe
+
+## True for `const fn` declarations.
+export predicate isConstFn(RustMethod) => RustMethod.IsConst
+
+## True for `extern` functions (FFI).
+export predicate isExternFn(RustMethod) => RustMethod.IsExtern
+
+## A Rust-specific view of a Statement, exposing Rust-only facts (macro invocations, panic-like
+## macros) absent from the common model. Reached by narrowing with `asRust`.
+export type RustStatement = Statement & {
+    IsMacroCall : bool,
+    IsPanic : bool
+}
+
+## Narrows a Statement to a RustStatement (Rust statements only), exposing Rust-specific fields.
+## Example: codebase.Statements:asRust:isMacroCall
+export predicate asRust(Statement) : RustStatement => Statement.File.Language == rust
+
+## True for a Rust macro invocation (e.g. `println!`, `vec!`).
+export predicate isMacroCall(RustStatement) => RustStatement.IsMacroCall
+
+## True for a panic-like macro (`panic!` / `todo!` / `unimplemented!` / `unreachable!`).
+export predicate isPanic(RustStatement) => RustStatement.IsPanic

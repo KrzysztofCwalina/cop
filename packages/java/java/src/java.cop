@@ -9,19 +9,94 @@ export function parse() : Codebase => provider('java')
 ## Example: let cb = java.parse('/path/to/project')
 export function parse(path : string) : Codebase => provider('java', path)
 
-## A Java-specific view of a Type, exposing Java-only facts (records, enums) that are
+## A Java-specific view of a Type, exposing Java-only facts that are
 ## flattened in the language-agnostic model. Obtain one by narrowing with `asJava`.
 export type JavaType = Type & {
     IsRecord : bool,
-    IsEnum : bool
+    IsEnum : bool,
+    IsSealed : bool,
+    IsNonSealed : bool,
+    IsFinal : bool,
+    IsGeneric : bool,
+    Methods : [JavaMethod]
+}
+
+## A Java-specific view of a Method, exposing Java-only facts absent from the common model.
+## Obtain one by narrowing with `asJava` or through a narrowed JavaType's `.Methods`.
+export type JavaMethod = Method & {
+    IsSynchronized : bool,
+    IsNative : bool,
+    IsDefault : bool,
+    IsStrictfp : bool,
+    IsGeneric : bool
+}
+
+## A Java-specific view of a Statement, exposing Java-only statement facts.
+## Obtain one by narrowing with `asJava`.
+export type JavaStatement = Statement & {
+    IsSynchronized : bool,
+    IsTryWithResources : bool,
+    IsEnhancedFor : bool,
+    IsThrow : bool,
+    IsAssert : bool
 }
 
 ## Narrows a Type to a JavaType (Java types only), exposing Java-specific fields.
 ## Example: codebase.Types:asJava:isRecord
 export predicate asJava(Type) : JavaType => Type.File.Language == java
 
+## Narrows a Method to a JavaMethod (Java methods only), exposing Java-specific fields.
+## Example: codebase.Methods:asJava:isSynchronizedMethod
+export predicate asJava(Method) : JavaMethod => Method.File.Language == java
+
+## Narrows a Statement to a JavaStatement (Java statements only), exposing Java-specific fields.
+## Example: codebase.Statements:asJava:isEnhancedFor
+export predicate asJava(Statement) : JavaStatement => Statement.File.Language == java
+
 ## True for Java `record` declarations.
 export predicate isRecord(JavaType) => JavaType.IsRecord
 
 ## True for Java `enum` declarations.
 export predicate isEnum(JavaType) => JavaType.IsEnum
+
+## True for Java `sealed` type declarations.
+export predicate isSealedClass(JavaType) => JavaType.IsSealed
+
+## True for Java `non-sealed` type declarations.
+export predicate isNonSealed(JavaType) => JavaType.IsNonSealed
+
+## True for Java `final` type declarations.
+export predicate isFinal(JavaType) => JavaType.IsFinal
+
+## True for Java generic type declarations.
+export predicate isGenericType(JavaType) => JavaType.IsGeneric
+
+## True for Java `synchronized` method declarations.
+export predicate isSynchronizedMethod(JavaMethod) => JavaMethod.IsSynchronized
+
+## True for Java `native` method declarations.
+export predicate isNativeMethod(JavaMethod) => JavaMethod.IsNative
+
+## True for Java interface `default` method declarations.
+export predicate isDefaultMethod(JavaMethod) => JavaMethod.IsDefault
+
+## True for Java `strictfp` method declarations.
+export predicate isStrictfp(JavaMethod) => JavaMethod.IsStrictfp
+
+## True when the Java method declares generic type parameters.
+export predicate isGenericMethod(JavaMethod) => JavaMethod.IsGeneric
+
+## True for Java `synchronized` blocks.
+export predicate isSynchronizedBlock(JavaStatement) => JavaStatement.IsSynchronized
+
+## True for Java `try` statements with resources.
+export predicate isTryWithResources(JavaStatement) => JavaStatement.IsTryWithResources
+
+## True for Java enhanced `for` / for-each statements.
+export predicate isEnhancedFor(JavaStatement) => JavaStatement.IsEnhancedFor
+
+## True for Java `throw` statements.
+export predicate isThrow(JavaStatement) => JavaStatement.IsThrow
+
+## True for Java `assert` statements.
+export predicate isAssert(JavaStatement) => JavaStatement.IsAssert

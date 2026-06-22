@@ -17,6 +17,8 @@ public class PythonProvider : DataProvider
     public override object? Query(ProviderQuery query)
     {
         PythonTypeDeclaration.RegisterCacheFactory();
+        PythonMethodDeclaration.RegisterCacheFactory();
+        PythonStatementInfo.RegisterCacheFactory();
         var parsers = new SourceParserRegistry();
         parsers.Register(new PythonSourceParser());
         var collections = CodeCollectionBuilder.CollectAndParse(parsers, query);

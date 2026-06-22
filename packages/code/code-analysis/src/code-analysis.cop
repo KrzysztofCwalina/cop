@@ -29,6 +29,7 @@ export type TextFilePosition = {
 # Trait conformances — map TextFilePosition properties for each type
 export type Statement : TextFilePosition = { filePath => item.File.Path, line => item.Line }
 export type Type : TextFilePosition = { filePath => item.File.Path, line => item.Line }
+export type Method : TextFilePosition = { filePath => item.File.Path, line => item.Line }
 export type Api : TextFilePosition = { filePath => item.File.Path, line => item.Line }
 export type Line : TextFilePosition = { filePath => item.File.Path, line => item.Number }
 export type Region : TextFilePosition = { filePath => item.File.Path, line => item.StartLine }

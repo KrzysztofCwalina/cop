@@ -19,6 +19,8 @@ public class RustProvider : DataProvider
         // Ensure cached Rust types reconstruct as RustTypeDeclaration (not the plain base)
         // before the source cache is read in CollectAndParse.
         RustTypeDeclaration.RegisterCacheFactory();
+        RustMethodDeclaration.RegisterCacheFactory();
+        RustStatementInfo.RegisterCacheFactory();
 
         var parsers = new SourceParserRegistry();
         parsers.Register(new RustSourceParser());

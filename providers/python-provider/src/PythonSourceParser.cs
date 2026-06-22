@@ -110,6 +110,8 @@ public class PythonSourceParser : ISourceParser
                 hasDocstring = true;
         }
 
+        bool hasSlots = false;
+
         while (i < lines.Length)
         {
             if (string.IsNullOrWhiteSpace(lines[i])) { i++; continue; }
@@ -117,6 +119,9 @@ public class PythonSourceParser : ISourceParser
             if (indent <= classIndent) break;
 
             var trimmed = lines[i].TrimStart();
+            if (trimmed.StartsWith("__slots__"))
+                hasSlots = true;
+
             if (trimmed.StartsWith("def ") || trimmed.StartsWith("async def "))
             {
                 var (method, nextLine) = ParseMethod(lines, i, indent, statements);
@@ -140,7 +145,12 @@ public class PythonSourceParser : ISourceParser
         { HasDocComment = hasDocstring }
             .AsPython(
                 isDataclass: decorators.Exists(d => d.Contains("dataclass")),
-                isEnum: baseTypes.Exists(b => b is "Enum" or "IntEnum" or "StrEnum" or "Flag" or "IntFlag")), i);
+                isEnum: baseTypes.Exists(b => b is "Enum" or "IntEnum" or "StrEnum" or "Flag" or "IntFlag"),
+                isAbstract: baseTypes.Exists(b => b == "ABC" || b == "ABCMeta" || b.EndsWith(".ABC")),
+                isNamedTuple: baseTypes.Exists(b => b == "NamedTuple" || b.EndsWith(".NamedTuple")),
+                isProtocol: baseTypes.Exists(b => b == "Protocol" || b.EndsWith(".Protocol")),
+                isException: baseTypes.Exists(b => b.EndsWith("Exception") || b.EndsWith("Error") || b == "BaseException"),
+                hasSlots: hasSlots), i);
     }
 
     private static (MethodDeclaration?, int) ParseMethod(string[] lines, int startLine, int methodIndent,
@@ -204,7 +214,8 @@ public class PythonSourceParser : ISourceParser
 
         var retRef = returnType != null ? new TypeReference(returnType, null, [], returnType) : null;
         return (new MethodDeclaration(methodName, modifiers, decorators,
-            retRef, parameters, startLine + 1) { Statements = methodStatements, HasDocComment = hasDocstring }, nextLine);
+            retRef, parameters, startLine + 1) { Statements = methodStatements, HasDocComment = hasDocstring }
+            .AsPython(isGenerator: methodStatements.Exists(s => s.Kind == "yield")), nextLine);
     }
 
     /// <summary>
@@ -241,7 +252,7 @@ public class PythonSourceParser : ISourceParser
                 // Check for bare raise in the except body (same indentation level as the except block's children)
                 bool hasRethrow = HasBareRaise(lines, i + 1, end, lineIndent);
 
-                statements.Add(new StatementInfo("catch", [], caughtType, null, [], i + 1, isInMethod)
+                statements.Add(new PythonStatementInfo("catch", [], caughtType, null, [], i + 1, isInMethod)
                 {
                     HasRethrow = hasRethrow,
                     IsErrorHandler = true,
@@ -278,17 +289,56 @@ public class PythonSourceParser : ISourceParser
     private static void ExtractLineStatement(string trimmed, int lineNumber, bool isInMethod,
         List<StatementInfo> statements)
     {
+        if (StartsKeyword(trimmed, "async with"))
+        {
+            statements.Add(new PythonStatementInfo("async with", [], null, null, [], lineNumber, isInMethod));
+            return;
+        }
+
+        if (StartsKeyword(trimmed, "with"))
+        {
+            statements.Add(new PythonStatementInfo("with", [], null, null, [], lineNumber, isInMethod));
+            return;
+        }
+
+        if (StartsKeyword(trimmed, "assert"))
+        {
+            statements.Add(new PythonStatementInfo("assert", [], null, null, [], lineNumber, isInMethod));
+            return;
+        }
+
+        if (StartsKeyword(trimmed, "global"))
+        {
+            statements.Add(new PythonStatementInfo("global", [], null, null, [], lineNumber, isInMethod));
+            return;
+        }
+
+        if (StartsKeyword(trimmed, "nonlocal"))
+        {
+            statements.Add(new PythonStatementInfo("nonlocal", [], null, null, [], lineNumber, isInMethod));
+            return;
+        }
+
+        if (ContainsYield(trimmed))
+        {
+            statements.Add(new PythonStatementInfo("yield", [], null, null, [], lineNumber, isInMethod));
+            return;
+        }
+
+        if (ContainsComprehension(trimmed))
+            statements.Add(new PythonStatementInfo("comprehension", [], null, null, [], lineNumber, isInMethod));
+
         // raise with type: raise SomeException(...)
         if (trimmed.StartsWith("raise "))
         {
             string? typeName = ParseRaisedType(trimmed);
-            statements.Add(new StatementInfo("throw", [], typeName, null, [], lineNumber, isInMethod));
+            statements.Add(new PythonStatementInfo("throw", [], typeName, null, [], lineNumber, isInMethod));
             return;
         }
         // bare raise (re-raise)
         if (trimmed is "raise" or "raise\r")
         {
-            statements.Add(new StatementInfo("throw", [], null, null, [], lineNumber, isInMethod));
+            statements.Add(new PythonStatementInfo("throw", [], null, null, [], lineNumber, isInMethod));
             return;
         }
 
@@ -310,7 +360,7 @@ public class PythonSourceParser : ISourceParser
                 ? argsText.Split(',', StringSplitOptions.TrimEntries).ToList()
                 : new List<string>();
 
-            statements.Add(new StatementInfo("call", [], typeName, memberName, args, lineNumber, isInMethod));
+            statements.Add(new PythonStatementInfo("call", [], typeName, memberName, args, lineNumber, isInMethod));
         }
     }
 
@@ -698,6 +748,34 @@ public class PythonSourceParser : ISourceParser
 
         var close = text.IndexOf(')', open + 1);
         return close >= 0 ? text[(open + 1)..close] : null;
+    }
+
+    private static bool StartsKeyword(string text, string keyword) =>
+        StartsWithAt(text, 0, keyword)
+        && (text.Length == keyword.Length || char.IsWhiteSpace(text[keyword.Length]));
+
+    private static bool ContainsYield(string text) =>
+        ContainsWord(text, "yield");
+
+    private static bool ContainsComprehension(string text) =>
+        text.Contains(" for ", StringComparison.Ordinal)
+        && ((text.IndexOf('[') >= 0 && text.IndexOf(']') >= 0)
+            || (text.IndexOf('(') >= 0 && text.IndexOf(')') >= 0)
+            || (text.IndexOf('{') >= 0 && text.IndexOf('}') >= 0));
+
+    private static bool ContainsWord(string text, string word)
+    {
+        var index = text.IndexOf(word, StringComparison.Ordinal);
+        while (index >= 0)
+        {
+            var before = index == 0 || !IsWordChar(text[index - 1]);
+            var afterIndex = index + word.Length;
+            var after = afterIndex >= text.Length || !IsWordChar(text[afterIndex]);
+            if (before && after)
+                return true;
+            index = text.IndexOf(word, index + word.Length, StringComparison.Ordinal);
+        }
+        return false;
     }
 
     private static string? ParseRegionMarker(string text, string marker)

@@ -7,7 +7,7 @@ namespace Cop.Providers;
 internal static class SourceCacheSerializer
 {
     private static readonly byte[] Magic = [(byte)'C', (byte)'O', (byte)'P', (byte)'C'];
-    private const int FormatVersion = 2;
+    private const int FormatVersion = 3;
 
     public static void Save(string cachePath, byte[] fingerprint, List<SourceFile> sourceFiles)
     {
@@ -181,11 +181,12 @@ internal static class SourceCacheSerializer
         WriteList(writer, method.Statements, WriteStatementInfo);
         writer.Write(method.HasDocComment);
         WriteNullableString(writer, method.DocComment);
+        WriteLanguageSubtype(writer, method.LanguageTag, method.LanguageFlags);
     }
 
     private static MethodDeclaration ReadMethodDeclaration(BinaryReader reader)
     {
-        return new MethodDeclaration(
+        var method = new MethodDeclaration(
             reader.ReadString(),
             (Modifier)reader.ReadInt32(),
             ReadList(reader, static r => r.ReadString(), "MethodDeclaration.Decorators"),
@@ -197,6 +198,8 @@ internal static class SourceCacheSerializer
             HasDocComment = reader.ReadBoolean(),
             DocComment = ReadNullableString(reader)
         };
+        var (tag, flags) = ReadLanguageSubtype(reader, "MethodDeclaration");
+        return tag is not null ? MethodTypeRegistry.Reconstruct(tag, method, flags) : method;
     }
 
     private static void WriteStatementInfo(BinaryWriter writer, StatementInfo statement)
@@ -216,11 +219,12 @@ internal static class SourceCacheSerializer
         WriteNullableString(writer, statement.Expression);
         writer.Write(statement.CopIgnore);
         WriteList(writer, statement._children, WriteStatementInfo);
+        WriteLanguageSubtype(writer, statement.LanguageTag, statement.LanguageFlags);
     }
 
     private static StatementInfo ReadStatementInfo(BinaryReader reader)
     {
-        return new StatementInfo(
+        var statement = new StatementInfo(
             reader.ReadString(),
             ReadList(reader, static r => r.ReadString(), "StatementInfo.Keywords"),
             ReadNullableString(reader),
@@ -238,6 +242,41 @@ internal static class SourceCacheSerializer
             CopIgnore = reader.ReadString(),
             _children = ReadList(reader, ReadStatementInfo, "StatementInfo.Children")
         };
+        var (tag, flags) = ReadLanguageSubtype(reader, "StatementInfo");
+        return tag is not null ? StatementTypeRegistry.Reconstruct(tag, statement, flags) : statement;
+    }
+
+    /// <summary>Writes a language-specific subtype tag + flags (shared by Type/Method/Statement).</summary>
+    private static void WriteLanguageSubtype(BinaryWriter writer, string? tag, IReadOnlyList<KeyValuePair<string, bool>>? flags)
+    {
+        WriteNullableString(writer, tag);
+        if (tag is not null)
+        {
+            var list = flags ?? [];
+            writer.Write(list.Count);
+            foreach (var flag in list)
+            {
+                writer.Write(flag.Key);
+                writer.Write(flag.Value);
+            }
+        }
+    }
+
+    /// <summary>Reads a language-specific subtype tag + flags written by <see cref="WriteLanguageSubtype"/>.</summary>
+    private static (string? Tag, Dictionary<string, bool> Flags) ReadLanguageSubtype(BinaryReader reader, string context)
+    {
+        var tag = ReadNullableString(reader);
+        var flags = new Dictionary<string, bool>(StringComparer.Ordinal);
+        if (tag is not null)
+        {
+            var flagCount = ReadCount(reader, $"{context}.LanguageFlags");
+            for (int i = 0; i < flagCount; i++)
+            {
+                var key = reader.ReadString();
+                flags[key] = reader.ReadBoolean();
+            }
+        }
+        return (tag, flags);
     }
 
     private static void WriteFieldDeclaration(BinaryWriter writer, FieldDeclaration field)

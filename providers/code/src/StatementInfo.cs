@@ -40,6 +40,17 @@ public class StatementInfo(
 
     public List<StatementInfo> _children = [];
 
+    /// <summary>
+    /// Language-specific subtype tag for disk-cache round-tripping (e.g. "csharp"). Null for
+    /// the language-agnostic base statement. Subclasses that add language-specific fields
+    /// override this together with <see cref="LanguageFlags"/> and register a reconstruction
+    /// factory via <see cref="StatementTypeRegistry"/>.
+    /// </summary>
+    public virtual string? LanguageTag => null;
+
+    /// <summary>Language-specific boolean facts serialized alongside the base statement. Null for the base.</summary>
+    public virtual IReadOnlyList<KeyValuePair<string, bool>>? LanguageFlags => null;
+
     public List<StatementInfo> GetAncestors()
     {
         var result = new List<StatementInfo>();

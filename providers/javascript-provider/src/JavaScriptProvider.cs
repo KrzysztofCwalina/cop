@@ -17,6 +17,8 @@ public class JavaScriptProvider : DataProvider
     public override object? Query(ProviderQuery query)
     {
         JavaScriptTypeDeclaration.RegisterCacheFactory();
+        JavaScriptMethodDeclaration.RegisterCacheFactory();
+        JavaScriptStatementInfo.RegisterCacheFactory();
         var parsers = new SourceParserRegistry();
         parsers.Register(new JavaScriptSourceParser());
         var collections = CodeCollectionBuilder.CollectAndParse(parsers, query);

@@ -223,6 +223,14 @@ internal class JavaLexer(string source)
         int line = _line;
         while (_pos < source.Length && (char.IsLetterOrDigit(source[_pos]) || source[_pos] is '_' or '$'))
             _pos++;
+        if (source[start.._pos] == "non"
+            && _pos + 7 <= source.Length
+            && source[_pos] == '-'
+            && source.AsSpan(_pos + 1, 6).SequenceEqual("sealed".AsSpan())
+            && (_pos + 7 == source.Length || !(char.IsLetterOrDigit(source[_pos + 7]) || source[_pos + 7] is '_' or '$')))
+        {
+            _pos += 7;
+        }
         var value = source[start.._pos];
         var kind = Keywords.Contains(value) ? JavaTokenKind.Keyword : JavaTokenKind.Identifier;
         return new JavaToken(kind, value, line, start, _pos);
@@ -334,7 +342,7 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
     {
         var annotations = CollectAnnotations();
         bool hasDoc = HasPrecedingDocComment();
-        var modifiers = ParseModifiers();
+        var modifiers = ParseModifiers(out var isSealed, out var isNonSealed, out var isFinal);
         SkipComments();
 
         TypeKind kind;
@@ -347,6 +355,7 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
         string name = ConsumeIdentifier();
         if (name == "") return null;
         int line = CurrentLine();
+        bool isGeneric = Check("<");
         SkipGenerics(); // type parameters
 
         // Record components
@@ -420,7 +429,13 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
 
         return new TypeDeclaration(name, kind, modifiers, baseTypes, annotations, constructors, methods, nestedTypes, enumValues, line)
         { HasDocComment = hasDoc, Fields = fields }
-            .AsJava(isRecord: kind == TypeKind.Struct, isEnum: kind == TypeKind.Enum);
+            .AsJava(
+                isRecord: kind == TypeKind.Struct,
+                isEnum: kind == TypeKind.Enum,
+                isSealed: isSealed,
+                isNonSealed: isNonSealed,
+                isFinal: isFinal,
+                isGeneric: isGeneric);
     }
 
     private void ParseEnumConstants(List<string> enumValues)
@@ -470,9 +485,15 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
         SkipComments();
         bool hasDoc = HasPrecedingDocComment();
         var annotations = CollectAnnotations();
-        var modifiers = ParseModifiers();
+        var modifiers = ParseModifiers(
+            out _, out _, out _,
+            out var isSynchronized,
+            out var isNative,
+            out var isDefault,
+            out var isStrictfp);
 
         // Skip type parameters on methods
+        bool isGeneric = Check("<");
         SkipGenerics();
         SkipComments();
 
@@ -500,7 +521,18 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
             var body = new List<StatementInfo>();
             if (Check("{")) ParseBlock(body);
             allStatements.AddRange(body);
-            return new MethodDeclaration("<init>", modifiers, annotations, null, parameters, CurrentLine())
+            return new JavaMethodDeclaration(
+                "<init>",
+                modifiers,
+                annotations,
+                null,
+                parameters,
+                CurrentLine(),
+                isSynchronized,
+                isNative,
+                isDefault,
+                isStrictfp,
+                isGeneric)
             { Statements = body, HasDocComment = hasDoc };
         }
 
@@ -528,7 +560,18 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
             if (Check("{")) ParseBlock(body);
             else if (Check(";")) Advance();
             allStatements.AddRange(body);
-            return new MethodDeclaration(memberName, modifiers, annotations, returnType, parameters, CurrentLine())
+            return new JavaMethodDeclaration(
+                memberName,
+                modifiers,
+                annotations,
+                returnType,
+                parameters,
+                CurrentLine(),
+                isSynchronized,
+                isNative,
+                isDefault,
+                isStrictfp,
+                isGeneric)
             { Statements = body, HasDocComment = hasDoc };
         }
 
@@ -588,7 +631,16 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
                 int stmtLine = CurrentLine();
                 Advance();
                 string excType = Current().Kind == JavaTokenKind.Identifier ? ConsumeIdentifier() : "";
-                statements.Add(new StatementInfo("throw", [], null, excType, [], stmtLine, true));
+                statements.Add(new JavaStatementInfo("throw", [], null, excType, [], stmtLine, true));
+                continue;
+            }
+
+            // assert statement
+            if (CheckKeyword("assert"))
+            {
+                int stmtLine = CurrentLine();
+                Advance();
+                statements.Add(new JavaStatementInfo("assert", [], null, "assert", [], stmtLine, true));
                 continue;
             }
 
@@ -598,7 +650,44 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
                 int stmtLine = CurrentLine();
                 Advance();
                 if (Check("(")) SkipParens();
-                statements.Add(new StatementInfo("catch", [], null, "catch", [], stmtLine, true));
+                statements.Add(new JavaStatementInfo("catch", [], null, "catch", [], stmtLine, true));
+                continue;
+            }
+
+            // synchronized block
+            if (CheckKeyword("synchronized"))
+            {
+                int stmtLine = CurrentLine();
+                Advance();
+                if (Check("(")) SkipParens();
+                statements.Add(new JavaStatementInfo("synchronized", [], null, "synchronized", [], stmtLine, true));
+                continue;
+            }
+
+            // try / try-with-resources
+            if (CheckKeyword("try"))
+            {
+                int stmtLine = CurrentLine();
+                Advance();
+                bool isTryWithResources = Check("(");
+                if (isTryWithResources) SkipParens();
+                statements.Add(new JavaStatementInfo("try", [], null, "try", [], stmtLine, true)
+                {
+                    IsTryWithResources = isTryWithResources
+                });
+                continue;
+            }
+
+            // for / enhanced for
+            if (CheckKeyword("for"))
+            {
+                int stmtLine = CurrentLine();
+                Advance();
+                bool isEnhancedFor = Check("(") && SkipParensContainsTopLevelColon();
+                statements.Add(new JavaStatementInfo("for", [], null, "for", [], stmtLine, true)
+                {
+                    IsEnhancedFor = isEnhancedFor
+                });
                 continue;
             }
 
@@ -618,7 +707,7 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
                     Advance();
                     if (Check("("))
                     {
-                        statements.Add(new StatementInfo("call", [], prevName, memberName, [], stmtLine, true));
+                        statements.Add(new JavaStatementInfo("call", [], prevName, memberName, [], stmtLine, true));
                         SkipParens();
                         stmtLine = CurrentLine();
                         memberName = "";
@@ -627,7 +716,7 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
 
                 if (memberName != "" && Check("("))
                 {
-                    statements.Add(new StatementInfo("call", [], null, memberName, [], stmtLine, true));
+                    statements.Add(new JavaStatementInfo("call", [], null, memberName, [], stmtLine, true));
                     SkipParens();
                 }
                 continue;
@@ -642,7 +731,7 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
                 SkipGenerics();
                 if (Check("("))
                 {
-                    statements.Add(new StatementInfo("call", [], ctorType, "<init>", [], stmtLine, true));
+                    statements.Add(new JavaStatementInfo("call", [], ctorType, "<init>", [], stmtLine, true));
                     SkipParens();
                 }
                 continue;
@@ -652,8 +741,32 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
         }
     }
 
-    private Modifier ParseModifiers()
+    private Modifier ParseModifiers(out bool isSealed, out bool isNonSealed, out bool isFinal)
+        => ParseModifiers(
+            out isSealed,
+            out isNonSealed,
+            out isFinal,
+            out _,
+            out _,
+            out _,
+            out _);
+
+    private Modifier ParseModifiers(
+        out bool isSealed,
+        out bool isNonSealed,
+        out bool isFinal,
+        out bool isSynchronized,
+        out bool isNative,
+        out bool isDefault,
+        out bool isStrictfp)
     {
+        isSealed = false;
+        isNonSealed = false;
+        isFinal = false;
+        isSynchronized = false;
+        isNative = false;
+        isDefault = false;
+        isStrictfp = false;
         var mod = Modifier.None;
         while (!IsAtEnd())
         {
@@ -662,14 +775,19 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
             else if (MatchKeyword("protected")) mod |= Modifier.Protected;
             else if (MatchKeyword("static")) mod |= Modifier.Static;
             else if (MatchKeyword("abstract")) mod |= Modifier.Abstract;
-            else if (MatchKeyword("final")) mod |= Modifier.Sealed;
-            else if (MatchKeyword("synchronized")) { }
-            else if (MatchKeyword("native")) { }
+            else if (MatchKeyword("final"))
+            {
+                mod |= Modifier.Sealed;
+                isFinal = true;
+            }
+            else if (MatchKeyword("synchronized")) { isSynchronized = true; }
+            else if (MatchKeyword("native")) { isNative = true; }
             else if (MatchKeyword("volatile")) { }
             else if (MatchKeyword("transient")) { }
-            else if (MatchKeyword("strictfp")) { }
-            else if (MatchKeyword("default")) { }
-            else if (MatchKeyword("sealed")) { }
+            else if (MatchKeyword("strictfp")) { isStrictfp = true; }
+            else if (MatchKeyword("default")) { isDefault = true; }
+            else if (MatchKeyword("sealed")) { isSealed = true; }
+            else if (MatchKeyword("non-sealed")) { isNonSealed = true; }
             else break;
         }
         return mod;
@@ -798,6 +916,34 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
             else if (Check(")")) { depth--; Advance(); if (depth == 0) break; }
             else Advance();
         }
+    }
+
+    private bool SkipParensContainsTopLevelColon()
+    {
+        if (!Check("(")) return false;
+        int depth = 0;
+        bool containsColon = false;
+        while (!IsAtEnd())
+        {
+            if (Check("("))
+            {
+                depth++;
+                Advance();
+            }
+            else if (Check(")"))
+            {
+                depth--;
+                Advance();
+                if (depth == 0) break;
+            }
+            else
+            {
+                if (depth == 1 && Check(":"))
+                    containsColon = true;
+                Advance();
+            }
+        }
+        return containsColon;
     }
 
     private void SkipBraces()

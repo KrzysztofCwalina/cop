@@ -16,8 +16,10 @@ public class JavaProvider : DataProvider
 
     public override object? Query(ProviderQuery query)
     {
-        // Ensure cached Java types reconstruct as JavaTypeDeclaration before the cache is read.
+        // Ensure cached Java language-specific subtypes reconstruct before the cache is read.
         JavaTypeDeclaration.RegisterCacheFactory();
+        JavaMethodDeclaration.RegisterCacheFactory();
+        JavaStatementInfo.RegisterCacheFactory();
 
         var parsers = new SourceParserRegistry();
         parsers.Register(new JavaSourceParser());

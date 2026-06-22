@@ -51,7 +51,8 @@ public static class CodeSchema
                     Bool("IsStatic"), Bool("IsAbstract"), Bool("IsPublic"),
                     Opt("ReturnType", "TypeReference"),
                     Coll("Parameters", "Parameter"), Coll("Statements", "Statement"), Coll("Decorators"),
-                    Prop("Line", "int"), Bool("Documented"), Opt("Documentation")),
+                    Prop("Line", "int"), Bool("Documented"), Opt("Documentation"),
+                    Opt("File", "File"), Prop("Source")),
 
                 TypeDef("Constructor", "Method"),
 
@@ -129,6 +130,7 @@ public static class CodeSchema
             [
                 new() { Name = "Types", ItemType = "Type" },
                 new() { Name = "Statements", ItemType = "Statement" },
+                new() { Name = "Methods", ItemType = "Method" },
                 new() { Name = "Calls", ItemType = "Statement" },
                 new() { Name = "Lines", ItemType = "Line" },
                 new() { Name = "Files", ItemType = "File" },

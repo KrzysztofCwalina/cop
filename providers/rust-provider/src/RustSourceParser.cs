@@ -419,12 +419,20 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
 
         bool isUnsafe = MatchKeyword("unsafe");
 
-        if (CheckKeyword("struct")) return ParseStruct(vis, attributes, hasDoc).AsRust(isUnsafe: isUnsafe);
+        if (CheckKeyword("struct"))
+        {
+            return ParseStruct(vis, attributes, hasDoc, out var isTupleStruct, out var isUnitStruct)
+                .AsRust(isTupleStruct: isTupleStruct, isUnitStruct: isUnitStruct, isUnsafe: isUnsafe);
+        }
         if (CheckKeyword("enum")) return ParseEnum(vis, attributes, hasDoc).AsRust(isUnsafe: isUnsafe);
         if (CheckKeyword("trait")) return ParseTrait(vis, attributes, hasDoc, statements).AsRust(isTrait: true, isUnsafe: isUnsafe);
-        if (CheckKeyword("impl")) return ParseImpl(statements)?.AsRust(isImpl: true, isUnsafe: isUnsafe);
+        if (CheckKeyword("impl"))
+        {
+            return ParseImpl(statements, out var isNegativeImpl)
+                ?.AsRust(isImpl: true, isNegativeImpl: isNegativeImpl, isUnsafe: isUnsafe);
+        }
         if (CheckIdent("union") && Peek().Kind == RustTokenKind.Identifier)
-            return ParseUnion(vis, attributes, hasDoc).AsRust(isUnsafe: isUnsafe);
+            return ParseUnion(vis, attributes, hasDoc).AsRust(isUnion: true, isUnsafe: isUnsafe);
 
         // A free function (possibly pub/const/async/extern/unsafe fn). Parse it here exactly
         // once with its real visibility and collect it; the main loop's fn branch only runs
@@ -471,8 +479,15 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
         { HasDocComment = hasDoc, Fields = fields };
     }
 
-    private TypeDeclaration ParseStruct(Modifier vis, List<string> attributes, bool hasDoc)
+    private TypeDeclaration ParseStruct(
+        Modifier vis,
+        List<string> attributes,
+        bool hasDoc,
+        out bool isTupleStruct,
+        out bool isUnitStruct)
     {
+        isTupleStruct = false;
+        isUnitStruct = false;
         int line = CurrentLine();
         Advance(); // skip 'struct'
         string name = ConsumeIdentifier();
@@ -482,6 +497,7 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
 
         if (Check("("))
         {
+            isTupleStruct = true;
             // tuple struct: `struct S(T);` or `struct S(T) where T: X;`
             SkipParens();
             if (CheckKeyword("where")) SkipWhereClause();
@@ -490,7 +506,7 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
         else
         {
             if (CheckKeyword("where")) SkipWhereClause();
-            if (Check(";")) { Advance(); }                  // unit struct (optionally with where)
+            if (Check(";")) { isUnitStruct = true; Advance(); } // unit struct (optionally with where)
             else if (Check("{")) { fields = ParseStructFields(); }
         }
 
@@ -619,13 +635,14 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
         { HasDocComment = hasDoc };
     }
 
-    private TypeDeclaration? ParseImpl(List<StatementInfo> statements)
+    private TypeDeclaration? ParseImpl(List<StatementInfo> statements, out bool isNegativeImpl)
     {
         int line = CurrentLine();
         Advance(); // skip 'impl'
         SkipGenerics();
 
         // Read the first type/trait path (handles std::fmt::Debug, &T, [T], (A,B), dyn X, generics).
+        isNegativeImpl = Check("!");
         string first = ConsumeImplTypeName();
 
         string typeName;
@@ -722,13 +739,16 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
     {
         bool hasDoc = HasPrecedingDocComment();
         var modifiers = Modifier.Private;
+        bool isUnsafe = false, isConst = false, isExtern = false;
 
         // Consume fn modifiers in any order: async, const, unsafe, default, extern "C".
         while (true)
         {
             if (MatchKeyword("async")) { modifiers |= Modifier.Async; continue; }
-            if (MatchKeyword("const") || MatchKeyword("unsafe") || MatchKeyword("default")) continue;
-            if (MatchKeyword("extern")) { if (Check("\"")) Advance(); continue; }
+            if (MatchKeyword("const")) { isConst = true; continue; }
+            if (MatchKeyword("unsafe")) { isUnsafe = true; continue; }
+            if (MatchKeyword("default")) continue;
+            if (MatchKeyword("extern")) { isExtern = true; if (Check("\"")) Advance(); continue; }
             break;
         }
 
@@ -808,7 +828,7 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
 
         statements.AddRange(methodStatements);
         return (new MethodDeclaration(name, modifiers, [], returnType, parameters, line)
-        { Statements = methodStatements, HasDocComment = hasDoc }, null);
+        { Statements = methodStatements, HasDocComment = hasDoc }.AsRust(isUnsafe, isConst, isExtern), null);
     }
 
     private void ParseBlock(List<StatementInfo> statements)
@@ -828,7 +848,7 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
             {
                 string macroName = Current().Value;
                 int stmtLine = CurrentLine();
-                statements.Add(new StatementInfo("throw", [], null, macroName, [], stmtLine, true));
+                statements.Add(new RustStatementInfo("throw", [], null, macroName, [], stmtLine, true));
                 Advance(); Advance(); // skip name and !
                 // Do NOT skip the macro args — let the scanner descend so calls like
                 // panic!("{}", x.unwrap()) still surface the inner unwrap.
@@ -866,7 +886,7 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
 
                 if (Check("(") && memberName is not "if" and not "for" and not "while" and not "loop" and not "match")
                 {
-                    statements.Add(new StatementInfo("call", [],
+                    statements.Add(new RustStatementInfo("call", [],
                         typeName != "" ? typeName : null, memberName, [], stmtLine, true));
                     // Do NOT skip the argument list — keep scanning so calls nested in
                     // arguments/closures (e.g. log(x.unwrap())) are captured too.
@@ -877,7 +897,7 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
                     Advance();
                     string macroCall = memberName + "!";
                     // Emit the macro call but keep scanning its delimited body for nested calls.
-                    statements.Add(new StatementInfo("call", [], null, macroCall, [], stmtLine, true));
+                    statements.Add(new RustStatementInfo("call", [], null, macroCall, [], stmtLine, true));
                 }
                 continue;
             }
@@ -1106,3 +1126,4 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
 }
 
 #endregion
+

@@ -190,6 +190,16 @@ public sealed class Binder
             {
                 // Predicate overloading — always OK
             }
+            else if (decl.IsPredicate
+                && existing is FunctionSymbol existingPred
+                && existingPred.Declaration?.IsPredicate == true)
+            {
+                // Narrowing-predicate overloading by parameter type. A narrowing predicate
+                // (`predicate asX(T) : XType => ...`) has a non-bool return type and no
+                // parameter guard, so it is classified as a Function above — but the
+                // `predicate` keyword means it dispatches by parameter type like any other
+                // predicate, so overloading it across parameter types is allowed.
+            }
             else if (existing is FunctionSymbol existingFunc
                 && callableKind == CallableKind.Function
                 && existingFunc.CallableKind == CallableKind.Function
