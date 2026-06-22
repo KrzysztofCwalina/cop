@@ -291,36 +291,17 @@ public class CopParser
         {
             if (Match(TokenKind.LBrace))
             {
-                while (!IsAtEnd() && !Check(TokenKind.RBrace))
-                {
-                    SkipDocComments(out _);
-                    if (Check(TokenKind.RBrace)) break;
-                    var propLine = CurrentLine();
-                    var propName = ExpectIdentifier("property name");
-
-                    // Computed property: name => expr
-                    if (Match(TokenKind.Arrow))
-                    {
-                        var expr = ParseExpression();
-                        Match(TokenKind.Comma); // optional trailing comma
-                        var computedType = new TypeRef("computed", false, propLine);
-                        properties.Add(new PropertyDecl(propName, computedType, false, propLine, expr));
-                        continue;
-                    }
-
-                    Expect(TokenKind.Colon, "':'");
-                    var typeRef = ParseTypeRef();
-                    bool isOptional = false;
-                    if (Match(TokenKind.QuestionMark))
-                        isOptional = true;
-                    Match(TokenKind.Comma); // optional trailing comma
-                    properties.Add(new PropertyDecl(propName, typeRef, isOptional, propLine));
-                }
-                Expect(TokenKind.RBrace, "'}'");
+                ParsePropertyBlock(properties);
                 return new TypeDecl(name, baseType, properties, isExported, docComment, line, traits);
             }
-            // type Name = BaseType (alias) — treat base type as the value after =
+            // type Name = BaseType (alias), or an intersection
+            // type Name = BaseType & { Prop : Type, ... } (subtype that adds properties).
             baseType = ExpectIdentifier("base type name");
+            if (Match(TokenKind.Ampersand))
+            {
+                Expect(TokenKind.LBrace, "'{'");
+                ParsePropertyBlock(properties);
+            }
             return new TypeDecl(name, baseType, properties, isExported, docComment, line, traits);
         }
 
@@ -360,6 +341,41 @@ public class CopParser
         }
 
         return new TypeDecl(name, baseType, properties, isExported, docComment, line, traits);
+    }
+
+    /// <summary>
+    /// Parses the body of a brace-enclosed property block (the opening '{' is already consumed)
+    /// up to and including the closing '}'. Used for both `type X = { ... }` and the
+    /// intersection form `type X = Base & { ... }`.
+    /// </summary>
+    private void ParsePropertyBlock(List<PropertyDecl> properties)
+    {
+        while (!IsAtEnd() && !Check(TokenKind.RBrace))
+        {
+            SkipDocComments(out _);
+            if (Check(TokenKind.RBrace)) break;
+            var propLine = CurrentLine();
+            var propName = ExpectIdentifier("property name");
+
+            // Computed property: name => expr
+            if (Match(TokenKind.Arrow))
+            {
+                var expr = ParseExpression();
+                Match(TokenKind.Comma); // optional trailing comma
+                var computedType = new TypeRef("computed", false, propLine);
+                properties.Add(new PropertyDecl(propName, computedType, false, propLine, expr));
+                continue;
+            }
+
+            Expect(TokenKind.Colon, "':'");
+            var typeRef = ParseTypeRef();
+            bool isOptional = false;
+            if (Match(TokenKind.QuestionMark))
+                isOptional = true;
+            Match(TokenKind.Comma); // optional trailing comma
+            properties.Add(new PropertyDecl(propName, typeRef, isOptional, propLine));
+        }
+        Expect(TokenKind.RBrace, "'}'");
     }
 
     private Declaration ParseEnumDecl(bool isExported, string? docComment, int line)

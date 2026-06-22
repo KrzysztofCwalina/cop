@@ -258,7 +258,7 @@ public static class HelpCommand
             return 0;
         }
 
-        var types = new List<(string Name, string? Doc, List<string> Properties)>();
+        var types = new List<(string Name, string? Doc, string? BaseType, List<string> Properties)>();
         var predicates = new List<(string Name, string? Doc, string ParamType)>();
         var functions = new List<(string Name, string? Doc, string Signature)>();
         var commands = new List<(string Name, string? Doc)>();
@@ -289,7 +289,7 @@ public static class HelpCommand
                                 var typeStr = $" : {FormatTypeRef(p.Type, p.IsOptional)}";
                                 return $"  {p.Name}{typeStr}";
                             }).ToList();
-                            types.Add((td.Name, td.DocComment, props));
+                            types.Add((td.Name, td.DocComment, td.BaseType, props));
                             if (td.BaseType == "Type") narrowType = td.Name;
                             break;
 
@@ -410,7 +410,7 @@ public static class HelpCommand
         {
             ConsoleMarkdown.WriteHeader("Types");
             Console.WriteLine();
-            foreach (var (name, doc, props) in types)
+            foreach (var (name, doc, baseTypeName, props) in types)
             {
                 if (doc != null)
                 {
@@ -420,10 +420,19 @@ public static class HelpCommand
                 }
                 Console.Write("  ");
                 ConsoleMarkdown.WriteKeywordName("type", name);
-                Console.WriteLine(" = {");
-                foreach (var prop in props)
-                    WritePropertyLine("    " + prop.TrimStart());
-                Console.WriteLine("  }");
+                // Show the base type for intersection subtypes, e.g. `CSharpType = Type & { ... }`.
+                var opener = baseTypeName != null ? $" = {baseTypeName} &" : " =";
+                if (props.Count == 0)
+                {
+                    Console.WriteLine($"{opener} {{}}");
+                }
+                else
+                {
+                    Console.WriteLine($"{opener} {{");
+                    foreach (var prop in props)
+                        WritePropertyLine("    " + prop.TrimStart());
+                    Console.WriteLine("  }");
+                }
                 Console.WriteLine();
             }
         }
@@ -489,6 +498,23 @@ public static class HelpCommand
             Console.WriteLine();
             Console.WriteLine($"    codebase.Types:{narrowPredicate}:<predicate>");
             Console.WriteLine("        :toError('...')");
+            Console.WriteLine();
+        }
+        else if (string.Equals(packageName, "code", StringComparison.OrdinalIgnoreCase))
+        {
+            // The hub package: point agents at the per-language narrowings.
+            ConsoleMarkdown.WriteHeader("Language-specific checks");
+            Console.WriteLine();
+            Console.WriteLine("  This model is language-agnostic — prefer it (codebase.Types, Type.Name,");
+            Console.WriteLine("  Type.Kind, Type.Modifiers, Type.BaseTypes, ...) so checks work across languages.");
+            Console.WriteLine();
+            Console.WriteLine("  For a fact the common model can't express, narrow a Type to a language-specific");
+            Console.WriteLine("  subtype, then read its extra fields:");
+            Console.WriteLine();
+            Console.WriteLine("    :asCSharp -> CSharpType    :asRust -> RustType      :asJava -> JavaType");
+            Console.WriteLine("    :asPython -> PythonType    :asGo -> GoType          :asJavaScript -> JavaScriptType");
+            Console.WriteLine();
+            Console.WriteLine("  Run 'cop help <language>' (e.g. cop help csharp) to see each subtype's fields.");
             Console.WriteLine();
         }
 

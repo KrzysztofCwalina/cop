@@ -171,6 +171,7 @@ public class PackageExtractor
             {
                 Name = pd.Name,
                 AppliesTo = pd.ParameterType,
+                Narrows = pd.NarrowedType,
                 Desc = pd.DocComment ?? "",
                 SourceUrl = MakeSourceUrl(copFile, pd.Line)
             });

@@ -518,10 +518,11 @@ function renderType(pkgId, typeName) {
       const hasComment = comments[key] ? 'has-comment' : '';
       const fromLabel = pred.fromPkg !== pkgId ? ` <span style="color:#8b949e; font-size:11px;">(${pred.fromPkg})</span>` : '';
       const paramsHtml = pred.params ? `(${formatParamsWithLinks(pkgId, pred.params)})` : '';
+      const narrowsHtml = pred.narrows ? ` <span style="color:#57606a">:</span> ${makeTypeLink(pkgId, pred.narrows)}` : '';
       html += `
         <div class="comment-wrapper">
           <div class="item-row">
-            <span class="item-name">${pred.name}${paramsHtml}${fromLabel}</span>
+            <span class="item-name">${pred.name}${paramsHtml}${narrowsHtml}${fromLabel}</span>
             <span class="item-detail">${escapeHtml(pred.desc)}</span>
             ${sourceLink(pred.sourceUrl)}
             <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
@@ -593,10 +594,11 @@ function renderPredicates(pkgId) {
       const key = `${pkgId}.pred.${pred.name}.${pred.appliesTo}`;
       const hasComment = comments[key] ? 'has-comment' : '';
       const paramsHtml = pred.params ? `, ${formatParamsWithLinks(pkgId, pred.params)}` : '';
+      const narrowsHtml = pred.narrows ? ` <span style="color:#57606a">:</span> ${makeTypeLink(pkgId, pred.narrows)}` : '';
       html += `
         <div class="comment-wrapper">
           <div class="item-row">
-            <span class="item-name">${pred.name}(${formatTypeLink(pkgId, pred.appliesTo)}${paramsHtml})</span>
+            <span class="item-name">${pred.name}(${formatTypeLink(pkgId, pred.appliesTo)}${paramsHtml})${narrowsHtml}</span>
             <span class="item-detail">${escapeHtml(pred.desc)}</span>
             ${sourceLink(pred.sourceUrl)}
             <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>

@@ -126,6 +126,10 @@ public class PredicateEntry
     [JsonPropertyName("appliesTo")]
     public string AppliesTo { get; set; } = "";
 
+    [JsonPropertyName("narrows")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Narrows { get; set; }
+
     [JsonPropertyName("desc")]
     public string Desc { get; set; } = "";
 

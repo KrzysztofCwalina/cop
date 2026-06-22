@@ -967,7 +967,13 @@ const packages = {
       "Call": {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code/src/code.cop#L129",
         "baseType": "Statement",
-        "props": []
+        "props": [
+          {
+            "name": "Signature",
+            "type": "string",
+            "desc": ""
+          }
+        ]
       },
       "Declaration": {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code/src/code.cop#L133",
@@ -1427,24 +1433,28 @@ const packages = {
       {
         "name": "isCall",
         "appliesTo": "Statement",
+        "narrows": "Call",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code/src/code.cop#L184"
       },
       {
         "name": "isDeclaration",
         "appliesTo": "Statement",
+        "narrows": "Declaration",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code/src/code.cop#L185"
       },
       {
         "name": "isErrorHandler",
         "appliesTo": "Statement",
+        "narrows": "ErrorHandler",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code/src/code.cop#L186"
       },
       {
         "name": "isAttribute",
         "appliesTo": "Statement",
+        "narrows": "Attribute",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/code/code/src/code.cop#L187"
       },
@@ -2768,13 +2778,25 @@ const packages = {
         "desc": "A C#-specific view of a Type, exposing C#-only facts that have no place in the\nlanguage-agnostic common model. Obtain one by narrowing with `asCSharp`.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L18",
         "baseType": "Type",
-        "props": []
+        "props": [
+          {
+            "name": "IsRecord",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsPartial",
+            "type": "bool",
+            "desc": ""
+          }
+        ]
       }
     },
     "predicates": [
       {
         "name": "asCSharp",
         "appliesTo": "Type",
+        "narrows": "CSharpType",
         "desc": "Narrows a Type to a CSharpType (C# types only), exposing C#-specific fields.\nExample: codebase.Types:asCSharp:isRecord",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dotnet/csharp/src/csharp.cop#L25"
       },
@@ -4075,13 +4097,25 @@ const packages = {
         "desc": "A Go-specific view of a Type. Note: IsInterface/IsStruct are also derivable from the\ncommon `Kind`; they demonstrate the mechanism — prefer language-independent checks when\nthey suffice. Obtain one by narrowing with `asGo`.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/go/go/src/go.cop#L15",
         "baseType": "Type",
-        "props": []
+        "props": [
+          {
+            "name": "IsInterface",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsStruct",
+            "type": "bool",
+            "desc": ""
+          }
+        ]
       }
     },
     "predicates": [
       {
         "name": "asGo",
         "appliesTo": "Type",
+        "narrows": "GoType",
         "desc": "Narrows a Type to a GoType (Go types only), exposing Go-specific fields.\nExample: codebase.Types:asGo:isInterface",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/go/go/src/go.cop#L22"
       },
@@ -4306,13 +4340,25 @@ const packages = {
         "desc": "A Java-specific view of a Type, exposing Java-only facts (records, enums) that are\nflattened in the language-agnostic model. Obtain one by narrowing with `asJava`.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/java/java/src/java.cop#L14",
         "baseType": "Type",
-        "props": []
+        "props": [
+          {
+            "name": "IsRecord",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsEnum",
+            "type": "bool",
+            "desc": ""
+          }
+        ]
       }
     },
     "predicates": [
       {
         "name": "asJava",
         "appliesTo": "Type",
+        "narrows": "JavaType",
         "desc": "Narrows a Type to a JavaType (Java types only), exposing Java-specific fields.\nExample: codebase.Types:asJava:isRecord",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/java/java/src/java.cop#L21"
       },
@@ -4400,13 +4446,25 @@ const packages = {
         "desc": "A JavaScript/TypeScript-specific view of a Type. Note: these facts are also derivable from\nthe common model (isPublic, BaseTypes); they demonstrate the mechanism — prefer\nlanguage-independent checks when they suffice. Obtain one by narrowing with `asJavaScript`.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L15",
         "baseType": "Type",
-        "props": []
+        "props": [
+          {
+            "name": "IsExported",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "HasBaseClass",
+            "type": "bool",
+            "desc": ""
+          }
+        ]
       }
     },
     "predicates": [
       {
         "name": "asJavaScript",
         "appliesTo": "Type",
+        "narrows": "JavaScriptType",
         "desc": "Narrows a Type to a JavaScriptType (JS/TS types only), exposing JS-specific fields.\nExample: codebase.Types:asJavaScript:isExported",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/js/javascript/src/javascript.cop#L22"
       },
@@ -4993,13 +5051,25 @@ const packages = {
         "desc": "A Python-specific view of a Type, exposing Python-only facts (dataclasses, enums)\nthat the language-agnostic model flattens. Obtain one by narrowing with `asPython`.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L14",
         "baseType": "Type",
-        "props": []
+        "props": [
+          {
+            "name": "IsDataclass",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsEnum",
+            "type": "bool",
+            "desc": ""
+          }
+        ]
       }
     },
     "predicates": [
       {
         "name": "asPython",
         "appliesTo": "Type",
+        "narrows": "PythonType",
         "desc": "Narrows a Type to a PythonType (Python types only), exposing Python-specific fields.\nExample: codebase.Types:asPython:isDataclass",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/python/python/src/python.cop#L21"
       },
@@ -5625,13 +5695,30 @@ const packages = {
         "desc": "A Rust-specific view of a Type, exposing Rust-only facts that have no place in the\nlanguage-agnostic common model. Obtain one by narrowing with `asRust`.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/rust/rust/src/rust.cop#L14",
         "baseType": "Type",
-        "props": []
+        "props": [
+          {
+            "name": "IsTrait",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsImpl",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsUnsafe",
+            "type": "bool",
+            "desc": ""
+          }
+        ]
       }
     },
     "predicates": [
       {
         "name": "asRust",
         "appliesTo": "Type",
+        "narrows": "RustType",
         "desc": "Narrows a Type to a RustType (Rust types only), exposing Rust-specific fields.\nExample: codebase.Types:asRust:isTrait",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/rust/rust/src/rust.cop#L22"
       },
@@ -6642,10 +6729,11 @@ function renderType(pkgId, typeName) {
       const hasComment = comments[key] ? 'has-comment' : '';
       const fromLabel = pred.fromPkg !== pkgId ? ` <span style="color:#8b949e; font-size:11px;">(${pred.fromPkg})</span>` : '';
       const paramsHtml = pred.params ? `(${formatParamsWithLinks(pkgId, pred.params)})` : '';
+      const narrowsHtml = pred.narrows ? ` <span style="color:#57606a">:</span> ${makeTypeLink(pkgId, pred.narrows)}` : '';
       html += `
         <div class="comment-wrapper">
           <div class="item-row">
-            <span class="item-name">${pred.name}${paramsHtml}${fromLabel}</span>
+            <span class="item-name">${pred.name}${paramsHtml}${narrowsHtml}${fromLabel}</span>
             <span class="item-detail">${escapeHtml(pred.desc)}</span>
             ${sourceLink(pred.sourceUrl)}
             <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
@@ -6717,10 +6805,11 @@ function renderPredicates(pkgId) {
       const key = `${pkgId}.pred.${pred.name}.${pred.appliesTo}`;
       const hasComment = comments[key] ? 'has-comment' : '';
       const paramsHtml = pred.params ? `, ${formatParamsWithLinks(pkgId, pred.params)}` : '';
+      const narrowsHtml = pred.narrows ? ` <span style="color:#57606a">:</span> ${makeTypeLink(pkgId, pred.narrows)}` : '';
       html += `
         <div class="comment-wrapper">
           <div class="item-row">
-            <span class="item-name">${pred.name}(${formatTypeLink(pkgId, pred.appliesTo)}${paramsHtml})</span>
+            <span class="item-name">${pred.name}(${formatTypeLink(pkgId, pred.appliesTo)}${paramsHtml})${narrowsHtml}</span>
             <span class="item-detail">${escapeHtml(pred.desc)}</span>
             ${sourceLink(pred.sourceUrl)}
             <span class="comment-btn ${hasComment}" data-key="${key}" title="Add comment">💬</span>
