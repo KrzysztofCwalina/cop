@@ -799,3 +799,91 @@ describe('completion provider routing', () => {
         expect(lbls).toContain('startsWith');
     });
 });
+
+// ── Language-specific narrowing (:as<Language>) ─────────────────────────────
+describe('language-specific narrowing', () => {
+    test('parseTypesFromCop captures subtype base and predicate narrowing return type', () => {
+        const content = [
+            'export type CSharpType = Type & {',
+            '    IsRecord : bool,',
+            '    IsPartial : bool',
+            '}',
+            'export predicate asCSharp(Type) : CSharpType => Type.File.Language == csharp',
+            'export predicate isRecord(CSharpType) => CSharpType.IsRecord',
+        ].join('\n');
+        const types = {}, collections = {}, functions = [], predicates = [];
+        parseTypesFromCop(content, types, collections, functions, predicates);
+        expect(types.CSharpType).toBeDefined();
+        expect(types.CSharpType.base).toBe('Type');
+        expect(types.CSharpType.properties.map(p => p.name)).toEqual(['IsRecord', 'IsPartial']);
+        expect(predicates.find(p => p.name === 'asCSharp')).toMatchObject({ paramType: 'Type', returnType: 'CSharpType' });
+        expect(predicates.find(p => p.name === 'isRecord')).toMatchObject({ paramType: 'CSharpType', returnType: undefined });
+    });
+
+    function narrowingSymbols() {
+        return {
+            lets: new Map([
+                ['types', { expr: '', typeAnnotation: '[Type]' }],
+                ['methods', { expr: '', typeAnnotation: '[Method]' }],
+            ]),
+            predicates: new Map(),
+            functions: new Map(),
+            types: new Map([
+                ['Type', { properties: [{ name: 'Name', type: 'string' }] }],
+                ['Method', { properties: [{ name: 'Name', type: 'string' }] }],
+                ['CSharpType', { properties: [{ name: 'IsRecord', type: 'bool' }], base: 'Type' }],
+                ['CSharpMethod', { properties: [{ name: 'IsExtension', type: 'bool' }], base: 'Method' }],
+            ]),
+            imports: [],
+            docNarrowing: [
+                { name: 'asCSharp', paramType: 'Type', returnType: 'CSharpType' },
+                { name: 'asCSharp', paramType: 'Method', returnType: 'CSharpMethod' },
+                { name: 'isRecord', paramType: 'CSharpType', returnType: undefined },
+            ],
+            _resolvedTypes: null, _resolvedCollections: null, _resolvedFunctions: null, _resolvedPredicates: null,
+        };
+    }
+
+    test('resolveFullChainType narrows [Type]:asCSharp to [CSharpType]', () => {
+        expect(resolveFullChainType('types:asCSharp', narrowingSymbols())).toBe('[CSharpType]');
+    });
+
+    test('narrowing selects the right overload by element type', () => {
+        expect(resolveFullChainType('methods:asCSharp', narrowingSymbols())).toBe('[CSharpMethod]');
+    });
+
+    test('a plain (non-narrowing) filter preserves the type', () => {
+        expect(resolveFullChainType('types:isRecord', narrowingSymbols())).toBe('[Type]');
+    });
+
+    test('narrowing survives a following filter', () => {
+        expect(resolveFullChainType('types:asCSharp:isRecord', narrowingSymbols())).toBe('[CSharpType]');
+    });
+
+    test('lookupType merges base fields into a narrowing subtype', () => {
+        const names = lookupType('CSharpType', narrowingSymbols()).properties.map(p => p.name);
+        expect(names).toContain('IsRecord'); // own field
+        expect(names).toContain('Name');     // inherited from base Type
+    });
+
+    test('predicate completions follow :asCSharp to CSharpType predicates (real packages)', () => {
+        const p = require('path');
+        const doc = mockDoc([
+            'import code',
+            'import csharp',
+            'let cb : Codebase = codebase(csharp.parse())',
+            'let v = cb.Types:asCSharp:',
+        ], p.join(__dirname, '..', '..', 'cop-checks', 'x.cop'));
+        const symbols = scanDocument(doc);
+        // The csharp package's narrowing predicate and subtype parsed from disk:
+        const asType = (symbols._resolvedPredicates || []).find(x => x.name === 'asCSharp' && x.paramType === 'Type');
+        expect(asType && asType.returnType).toBe('CSharpType');
+        const asMethod = (symbols._resolvedPredicates || []).find(x => x.name === 'asCSharp' && x.paramType === 'Method');
+        expect(asMethod && asMethod.returnType).toBe('CSharpMethod');
+        // Completions after `cb.Types:asCSharp:` include CSharpType predicates:
+        const items = getPredicateCompletions(doc, 'let v = cb.Types:asCSharp:');
+        const lbls = labels(items);
+        expect(lbls).toContain('isRecord');
+        expect(lbls).toContain('isPartial');
+    });
+});
