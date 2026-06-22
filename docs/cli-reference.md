@@ -274,11 +274,13 @@ Generate agent integration files for coding agents so they can write and run cop
 
 ```bash
 cop init [--claude] [--al] [--ag] [--ch]
+cop init --checks [--claude]
 ```
 
 | Option | Description |
 |--------|-------------|
-| `--claude` | Generate Claude Code instructions instead of GitHub Copilot |
+| `--checks` | Generate cop checks from your existing instructions by shelling out to a coding agent (see below) |
+| `--claude` | Generate Claude Code instructions instead of GitHub Copilot (or, with `--checks`, drive Claude Code instead of Copilot) |
 | `--al` | Generate a local Claude Code hook (`.claude/settings.local.json`); implies `--claude` |
 | `--ag` | Generate a shared Claude Code hook (`.claude/settings.json`); implies `--claude` |
 | `--ch` | Generate a GitHub Copilot CLI hook (`.github/hooks/cop.json`) |
@@ -317,6 +319,39 @@ cop init --claude
 # Updated: AGENTS.md
 # Updated: .claude/commands/cop.md
 # 2 file(s) updated. Agents will now discover cop language context automatically.
+```
+
+### cop init --checks
+
+Generate cop checks **from your project's existing natural-language guidelines**. Instead of
+generating the `.cop` files itself, cop shells out to an installed coding agent and asks it to
+do the conversion — the agent reads `.github/copilot-instructions.md` (and `AGENTS.md`), writes
+deterministic static checks under `cop-checks/`, and runs its own `cop verify cop-checks/`
+fix-loop until they compile. cop then runs a final `cop verify` gate and reports.
+
+```bash
+cop init --checks            # drive GitHub Copilot CLI (copilot)
+cop init --checks --claude   # drive Claude Code (claude)
+```
+
+**Prerequisites:**
+- A coding-agent CLI on your `PATH`: `copilot` by default (install: <https://docs.github.com/copilot/how-tos/set-up/install-copilot-cli>), or `claude` with `--claude`.
+- Project guidelines to convert: `.github/copilot-instructions.md` or `AGENTS.md` (run `cop init` first if you have neither).
+
+The agent runs **non-interactively with tools enabled** so it can write files and run `cop verify`
+without prompting — `copilot -p … --allow-all-tools` (or `claude -p … --permission-mode acceptEdits`).
+Only guidelines that can be expressed as static checks are converted; vague or subjective ones are
+skipped, and AI-based checks (`ai.judge`) are never generated. Review the generated `cop-checks/`
+before committing, then run them with `cop cop-checks/main.cop -t .`.
+
+```bash
+cd my-project
+cop init --checks
+# Launching copilot to generate cop checks from your guidelines...
+# ... (agent writes cop-checks/*.cop and runs cop verify) ...
+# Verifying generated checks: cop verify cop-checks/
+#   ✓ 3 file(s) verified successfully
+# ✓ cop-checks/ generated and verified. Run: cop cop-checks/main.cop -t .
 ```
 
 ## cop lock
@@ -373,7 +408,13 @@ cop unlock
 
 ## cop verify
 
-Verify `.cop` program correctness without executing. Checks syntax, imports, name binding, types, and arity.
+Verify `.cop` program correctness without executing. It runs several static passes:
+
+1. **Syntax** — parse every file.
+2. **Imports** — resolve every imported package.
+3. **Name binding** — every referenced name resolves (unresolved names are allowed where they may be runtime-provided, e.g. dynamic provider fields).
+4. **Types** — declared types and fields exist.
+5. **Static type checking** — function-call arguments are checked against the callee's declared signature, accounting for subtyping and trait conformance. This catches mismatches before runtime — for example anchoring `toError` on a value that is not a `TextFilePosition` (such as a `File`, or a collection). It is conservative: only confident, concrete mismatches are reported, so values whose type can't be inferred are never flagged.
 
 ```bash
 cop verify [<path>]
@@ -385,8 +426,10 @@ cop verify [<path>]
 
 ```bash
 cop verify checks.cop
-cop verify src/
+cop verify cop-checks/
 ```
+
+> `cop verify` checks correctness statically; it does not execute the program. Some failures (e.g. a value's runtime shape) can only surface when the checks are run — see `cop init --checks`, whose final gate runs the generated checks, not just verifies them.
 
 ## cop repl
 

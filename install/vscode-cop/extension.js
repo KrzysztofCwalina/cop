@@ -74,9 +74,10 @@ function isPackageDir(dirPath, dirName) {
 function parsePackageInfo(packageDir) {
     if (_packageCache.has(packageDir)) return _packageCache.get(packageDir);
 
-    const types = {};      // typeName → { properties: [{name, type}] }
+    const types = {};      // typeName → { properties: [{name, type}], base? }
     const collections = {}; // collectionName → elementType
     const functions = [];  // [{name, params, returnType}]
+    const predicates = []; // [{name, paramType, returnType}]
 
     // Find .cop source files in src/ or types/
     let copDir = null;
@@ -90,7 +91,7 @@ function parsePackageInfo(packageDir) {
             const files = fs.readdirSync(copDir).filter(f => f.endsWith('.cop'));
             for (const file of files) {
                 const content = fs.readFileSync(path.join(copDir, file), 'utf8');
-                parseTypesFromCop(content, types, collections, functions);
+                parseTypesFromCop(content, types, collections, functions, predicates);
             }
         } catch { /* ignore read errors */ }
     }
@@ -112,7 +113,7 @@ function parsePackageInfo(packageDir) {
         } catch { /* ignore */ }
     }
 
-    const result = { types, collections, functions };
+    const result = { types, collections, functions, predicates };
     _packageCache.set(packageDir, result);
     return result;
 }
@@ -120,27 +121,30 @@ function parsePackageInfo(packageDir) {
 /**
  * Parse export type definitions, collection declarations, and exported functions from .cop content
  */
-function parseTypesFromCop(content, types, collections, functions) {
+function parseTypesFromCop(content, types, collections, functions, predicates) {
     const lines = content.split(/\r?\n/);
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
         if (line.startsWith('#')) continue;
 
-        // export type Name = { ... }
-        let m = line.match(/^(?:export\s+)?type\s+([A-Z][a-zA-Z0-9_]*)\s*=\s*\{/);
+        // export type Name = { ... }   OR   export type Name = Base & { ... }
+        let m = line.match(/^(?:export\s+)?type\s+([A-Z][a-zA-Z0-9_]*)\s*=\s*(?:([A-Z][a-zA-Z0-9_]*)\s*&\s*)?\{(.*)$/);
         if (m) {
             const typeName = m[1];
+            const base = m[2] || undefined;
             const properties = [];
-            for (let j = i + 1; j < lines.length; j++) {
-                const fieldLine = lines[j].trim();
-                if (fieldLine === '}') break;
-                if (fieldLine.startsWith('#')) continue;
-                const fm = fieldLine.match(/^([A-Z][a-zA-Z0-9_]*)\s*:\s*(.+?),?\s*$/);
-                if (fm) {
-                    properties.push({ name: fm[1], type: fm[2].replace(/,$/, '').trim() });
+            if (!m[3].includes('}')) {
+                for (let j = i + 1; j < lines.length; j++) {
+                    const fieldLine = lines[j].trim();
+                    if (fieldLine === '}' || fieldLine.startsWith('}')) break;
+                    if (fieldLine.startsWith('#')) continue;
+                    const fm = fieldLine.match(/^([A-Z][a-zA-Z0-9_]*)\s*:\s*(.+?),?\s*$/);
+                    if (fm) {
+                        properties.push({ name: fm[1], type: fm[2].replace(/,$/, '').trim() });
+                    }
                 }
             }
-            types[typeName] = { properties };
+            types[typeName] = { properties, base };
             continue;
         }
 
@@ -158,6 +162,15 @@ function parseTypesFromCop(content, types, collections, functions) {
             const params = m[2].trim();
             const returnType = m[3] || undefined;
             functions.push({ name: funcName, params, returnType });
+            continue;
+        }
+
+        // export predicate name(ParamType[:guard]) [: NarrowedType] => ...
+        // Captures the first parameter's type and the optional narrowing return type so the
+        // editor can follow `:as<Language>` narrowing (e.g. asCSharp(Type) : CSharpType).
+        m = line.match(/^(?:export\s+)?predicate\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s*\(\s*([A-Z][a-zA-Z0-9_]*)[^)]*\)\s*(?::\s*([A-Z][a-zA-Z0-9_]*))?/);
+        if (m && predicates) {
+            predicates.push({ name: m[1], paramType: m[2], returnType: m[3] || undefined });
         }
     }
 }
@@ -195,6 +208,7 @@ function resolveImports(docPath, imports) {
     const mergedTypes = {};
     const mergedCollections = {};
     const mergedFunctions = {}; // packageName → [{name, params, returnType}]
+    const mergedPredicates = []; // [{name, paramType, returnType}] across all packages
 
     for (const pkg of imports) {
         const pkgDir = findPackageDir(docDir, pkg);
@@ -205,10 +219,13 @@ function resolveImports(docPath, imports) {
             if (info.functions && info.functions.length > 0) {
                 mergedFunctions[pkg] = info.functions;
             }
+            if (info.predicates && info.predicates.length > 0) {
+                mergedPredicates.push(...info.predicates);
+            }
         }
     }
 
-    return { types: mergedTypes, collections: mergedCollections, functions: mergedFunctions };
+    return { types: mergedTypes, collections: mergedCollections, functions: mergedFunctions, predicates: mergedPredicates };
 }
 
 // ── Type and property definitions ──────────────────────────────────────────
@@ -826,6 +843,7 @@ function scanDocument(doc) {
     const functions = new Map();
     const types = new Map();
     const imports = [];
+    const docNarrowing = [];      // [{name, paramType, returnType}] for document-local predicates
 
     for (let i = 0; i < doc.lineCount; i++) {
         const text = doc.lineAt(i).text.trim();
@@ -856,34 +874,39 @@ function scanDocument(doc) {
             lets.set(m[1], { expr: letExpr.trim(), typeAnnotation: m[2] || null });
             i = j - 1;
         }
-        if ((m = text.match(/^(?:export\s+)?predicate\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s*\(([A-Z][a-zA-Z0-9_]*)/))) {
+        if ((m = text.match(/^(?:export\s+)?predicate\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s*\(\s*([A-Z][a-zA-Z0-9_]*)[^)]*\)\s*(?::\s*([A-Z][a-zA-Z0-9_]*))?/))) {
             predicates.set(m[1], m[2]);
+            docNarrowing.push({ name: m[1], paramType: m[2], returnType: m[3] || undefined });
         }
         if ((m = text.match(/^(?:export\s+)?function\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s*\(([A-Z][a-zA-Z0-9_]*)/))) {
             functions.set(m[1], m[2]);
         }
-        if ((m = text.match(/^(?:export\s+)?type\s+([A-Z][a-zA-Z0-9_]*)\s*=\s*\{/))) {
+        if ((m = text.match(/^(?:export\s+)?type\s+([A-Z][a-zA-Z0-9_]*)\s*=\s*(?:([A-Z][a-zA-Z0-9_]*)\s*&\s*)?\{(.*)$/))) {
             const typeName = m[1];
+            const base = m[2] || undefined;
             const properties = [];
-            for (let j = i + 1; j < doc.lineCount; j++) {
-                const fieldLine = doc.lineAt(j).text.trim();
-                if (fieldLine === '}') break;
-                const fm = fieldLine.match(/^([A-Z][a-zA-Z0-9_]*)\s*:\s*(.+?),?\s*$/);
-                if (fm) {
-                    properties.push({ name: fm[1], type: fm[2].replace(/,$/, '').trim() });
+            if (!m[3].includes('}')) {
+                for (let j = i + 1; j < doc.lineCount; j++) {
+                    const fieldLine = doc.lineAt(j).text.trim();
+                    if (fieldLine === '}' || fieldLine.startsWith('}')) break;
+                    const fm = fieldLine.match(/^([A-Z][a-zA-Z0-9_]*)\s*:\s*(.+?),?\s*$/);
+                    if (fm) {
+                        properties.push({ name: fm[1], type: fm[2].replace(/,$/, '').trim() });
+                    }
                 }
             }
-            types.set(typeName, { properties });
+            types.set(typeName, { properties, base });
         }
     }
 
     // Resolve imported packages dynamically from disk
-    const symbols = { lets, predicates, functions, types, imports, _resolvedTypes: null, _resolvedCollections: null, _resolvedFunctions: null };
+    const symbols = { lets, predicates, functions, types, imports, docNarrowing, _resolvedTypes: null, _resolvedCollections: null, _resolvedFunctions: null, _resolvedPredicates: null };
     if (imports.length > 0 && doc.uri && doc.uri.fsPath) {
         const resolved = resolveImports(doc.uri.fsPath, imports);
         symbols._resolvedTypes = resolved.types;
         symbols._resolvedCollections = resolved.collections;
         symbols._resolvedFunctions = resolved.functions;
+        symbols._resolvedPredicates = resolved.predicates;
     }
 
     return symbols;
@@ -994,7 +1017,7 @@ function inferExprType(expr, symbols) {
 function resolveFullChainType(fullExpr, symbols) {
     if (!fullExpr) return undefined;
 
-    // Split by `:` first — filtering preserves type, so we only care about the base
+    // Split by `:` first — resolve the base, then apply narrowing predicates segment by segment.
     const colonParts = fullExpr.split(':');
     const baseExpr = colonParts[0].trim();
 
@@ -1005,9 +1028,44 @@ function resolveFullChainType(fullExpr, symbols) {
     } else {
         currentType = resolveIdentifierType(baseExpr, symbols);
     }
+    if (!currentType) return currentType;
 
-    // Filter chains (:pred) don't change the collection type
+    // Apply narrowing predicates. Most `:pred` filters preserve the type, but a narrowing
+    // predicate (e.g. `asCSharp(Type) : CSharpType`) switches the element type to its return
+    // type, so editor completions and hovers follow the narrowing.
+    const narrowing = getNarrowingPredicates(symbols);
+    if (narrowing.length > 0) {
+        for (let i = 1; i < colonParts.length; i++) {
+            const seg = colonParts[i].trim();
+            if (!seg) continue;
+            // strip a leading `!` and any argument list to get the bare predicate name
+            const predName = seg.replace(/^!+/, '').replace(/\(.*$/, '').trim();
+            if (!predName) continue;
+            const coll = isCollection(currentType);
+            const elem = stripNullable(coll ? elementType(currentType) : currentType);
+            const narrowed = findNarrowingReturn(narrowing, predName, elem);
+            if (narrowed) {
+                currentType = coll ? `[${narrowed}]` : narrowed;
+            }
+        }
+    }
     return currentType;
+}
+
+/** Collect narrowing predicates (with return types) from imported packages and the document. */
+function getNarrowingPredicates(symbols) {
+    const list = [];
+    if (symbols._resolvedPredicates) list.push(...symbols._resolvedPredicates);
+    if (symbols.docNarrowing) list.push(...symbols.docNarrowing);
+    return list;
+}
+
+/** Find a narrowing predicate's return type for `name` applied to element type `elemType`. */
+function findNarrowingReturn(list, name, elemType) {
+    // Prefer an exact parameter-type match: narrowing predicates like `asCSharp` are overloaded
+    // across Type/Method/Statement, so the parameter type selects the right return type.
+    const hit = list.find(p => p.name === name && p.returnType && p.paramType === elemType);
+    return hit ? hit.returnType : undefined;
 }
 
 /**
@@ -1064,10 +1122,38 @@ function resolveItemType(doc, position, symbols) {
 
 /** Look up a type definition from built-in TYPES, document types, or resolved package types */
 function lookupType(typeName, symbols) {
-    if (TYPES[typeName]) return TYPES[typeName];
-    if (symbols.types && symbols.types.has(typeName)) return symbols.types.get(typeName);
-    if (symbols._resolvedTypes && symbols._resolvedTypes[typeName]) return symbols._resolvedTypes[typeName];
-    return undefined;
+    let def;
+    if (TYPES[typeName]) def = TYPES[typeName];
+    else if (symbols.types && symbols.types.has(typeName)) def = symbols.types.get(typeName);
+    else if (symbols._resolvedTypes && symbols._resolvedTypes[typeName]) def = symbols._resolvedTypes[typeName];
+    if (!def) return undefined;
+    // Narrowing subtypes (e.g. `CSharpType = Type & {...}`) declare a base — merge the base's
+    // properties so a narrowed value exposes both the common fields and the language-specific ones.
+    if (def.base) {
+        const baseDef = lookupType(def.base, symbols);
+        if (baseDef && baseDef.properties) {
+            const own = def.properties || [];
+            const ownNames = new Set(own.map(p => p.name));
+            return { properties: [...baseDef.properties.filter(p => !ownNames.has(p.name)), ...own] };
+        }
+    }
+    return def;
+}
+
+/** Returns the type and its base ancestors (e.g. CSharpType → [CSharpType, Type]). */
+function typeAncestors(typeName, symbols) {
+    const chain = [];
+    let t = typeName;
+    const guard = new Set();
+    while (t && !guard.has(t)) {
+        guard.add(t);
+        chain.push(t);
+        const def = TYPES[t]
+            || (symbols.types && symbols.types.get && symbols.types.get(t))
+            || (symbols._resolvedTypes && symbols._resolvedTypes[t]);
+        t = def && def.base;
+    }
+    return chain;
 }
 
 /** Walk a dot chain like Code.Types to resolve the final property type */
@@ -1217,7 +1303,30 @@ function getPredicateCompletions(document, textBefore) {
         items.push({ label: name, detail: `(${paramType}) — function`, kind: Kind.Function });
     }
 
-    // Also add predicates/functions from imported packages
+    // Imported package predicates — scope by the (possibly narrowed) element type so a narrow
+    // like `:asCSharp` surfaces CSharpType / CSharpMethod / CSharpStatement predicates, while
+    // base predicates (isPublic, ...) stay available on the narrowed subtype.
+    if (symbols._resolvedPredicates && symbols._resolvedPredicates.length > 0) {
+        let applicable = null;
+        if (exprMatch) {
+            const t = resolveFullChainType(exprMatch[1], symbols);
+            if (t) {
+                const elemType = stripNullable(isCollection(t) ? elementType(t) : t);
+                applicable = new Set(typeAncestors(elemType, symbols));
+            }
+        }
+        const seen = new Set();
+        for (const p of symbols._resolvedPredicates) {
+            if (applicable && !applicable.has(p.paramType)) continue;
+            const key = p.name + '/' + p.paramType;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const detail = p.returnType ? `(${p.paramType}) → ${p.returnType}` : `(${p.paramType}) — predicate`;
+            items.push({ label: p.name, detail, kind: Kind.Method });
+        }
+    }
+
+    // Also add functions from imported packages
     if (symbols._resolvedFunctions) {
         for (const [pkgName, funcs] of Object.entries(symbols._resolvedFunctions)) {
             for (const fn of funcs) {

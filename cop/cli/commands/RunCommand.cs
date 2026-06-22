@@ -864,20 +864,11 @@ public static class RunCommand
                             File.WriteAllBytes(destPath, content);
                         }
 
-                        // Atomic move — if another process already created the directory, use theirs
-                        if (!Directory.Exists(pkgDir))
-                        {
-                            try { Directory.Move(tempDir, pkgDir); }
-                            catch (IOException) when (Directory.Exists(pkgDir))
-                            {
-                                // Another process beat us — that's fine, use theirs
-                                try { Directory.Delete(tempDir, recursive: true); } catch { }
-                            }
-                        }
-                        else
-                        {
-                            try { Directory.Delete(tempDir, recursive: true); } catch { }
-                        }
+                        // Place the package. We only reach here when no VALID package (one
+                        // containing cop.json) was found above, so any existing pkgDir is
+                        // stale/incomplete and must be replaced — unless another process
+                        // concurrently placed a complete package in the meantime.
+                        PackageInstaller.PlaceRestoredPackage(tempDir, pkgDir);
                     }
                     catch
                     {

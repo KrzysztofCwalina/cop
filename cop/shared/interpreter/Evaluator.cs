@@ -845,6 +845,18 @@ public sealed class Evaluator
                 {
                     var result = ApplyFilterPredicateValue(filter.Predicate, item, env);
 
+                    // A predicate whose body is a sole bare predicate name (e.g. `=> isPublic`)
+                    // evaluates to that predicate's function group instead of invoking it. Invoke
+                    // it on the item so the filter sees a bool — otherwise map-mode is mis-detected
+                    // below and the filter yields function groups, which crash downstream (e.g. in
+                    // toError). Mirrors how `&&`/`||` coerce a bare predicate via CoerceCallableToBool.
+                    if (result is ICopCallable)
+                    {
+                        var coerceEnv = env.Extend();
+                        coerceEnv.Define("item", item);
+                        result = CoerceCallableToBool(result, coerceEnv);
+                    }
+
                     if (firstItem)
                     {
                         _traceLog?.Invoke($"[trace] EvalFilter({predName}): first result type={result?.GetType().Name}, value={result?.Display()?.Substring(0, Math.Min(result?.Display()?.Length ?? 0, 50))}, item={item?.Display()?.Substring(0, Math.Min(item?.Display()?.Length ?? 0, 50))}");

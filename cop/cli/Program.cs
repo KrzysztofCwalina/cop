@@ -55,6 +55,7 @@ if (args.Length == 1 && (args[0] == "-h" || args[0] == "-help" || args[0] == "--
           cop help language                  Full language reference
           cop help <package>                 Package documentation
           cop init                           Generate Copilot instructions (--claude for Claude Code)
+          cop init --checks                  Generate cop checks from existing instructions (via a coding agent)
           cop update                         Update cop to the latest release
           cop vscode                         Install VS Code extension
           cop test [<file>]                  Run tests
@@ -82,14 +83,19 @@ if (args[0] == "help")
 // cop init — generate agent instruction files
 if (args[0] == "init")
 {
-    var knownInitOptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "--claude", "--al", "--ag", "--ch" };
+    var knownInitOptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "--claude", "--al", "--ag", "--ch", "--checks" };
     foreach (var arg in args.Skip(1))
     {
         if (arg.StartsWith('-') && !knownInitOptions.Contains(arg))
         {
-            Console.Error.WriteLine($"Unknown option '{arg}'. Known options: --claude, --al, --ag, --ch");
+            Console.Error.WriteLine($"Unknown option '{arg}'. Known options: --checks, --claude, --al, --ag, --ch");
             return 1;
         }
+    }
+    // cop init --checks — shell out to a coding agent to convert existing instructions into cop rules
+    if (args.Contains("--checks"))
+    {
+        return ChecksCommand.Execute(args.Contains("--claude"));
     }
     bool localHook = args.Contains("--al");
     bool globalHook = args.Contains("--ag");

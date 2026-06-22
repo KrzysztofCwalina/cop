@@ -145,6 +145,21 @@ public static class VerifyCommand
         // Phase 4: Type/field validation (check provider schema references)
         ValidateProviderReferences(modules, feedPaths, diagnostics);
 
+        // Phase 5: Static type checking — argument types against declared signatures.
+        // Conservative: only confident, concrete incompatibilities are reported.
+        try
+        {
+            var typeModel = modules.Select(m => m.Module).Concat(moduleLoader.LoadedModules);
+            var toCheck = modules.Select(m => (m.Module, m.FilePath, m.Source));
+            diagnostics.AddRange(TypeChecker.Check(typeModel, toCheck));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The type checker must never make verification crash; fall back to the other phases.
+            if (Cop.Core.CopDiagnostics.Level >= 1)
+                Console.Error.WriteLine($"[diag] type checker skipped: {ex.Message}");
+        }
+
         // Output
         int errorCount = diagnostics.Count(d => d.Severity == CopDiagnosticSeverity.Error);
         int warningCount = diagnostics.Count(d => d.Severity == CopDiagnosticSeverity.Warning);

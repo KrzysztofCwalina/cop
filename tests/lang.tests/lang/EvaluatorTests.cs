@@ -73,6 +73,28 @@ public class EvaluatorTests
     }
 
     // ========================================================================
+    // Filters
+    // ========================================================================
+
+    [Test]
+    public void EvalFilter_SoleBarePredicateBody_FiltersInsteadOfReturningFunctionGroup()
+    {
+        // Regression: a predicate whose body is a SOLE bare predicate name (`=> isHuge`) must
+        // invoke that predicate per item, not yield its function group. Previously the filter
+        // mis-detected map mode and produced function groups, which crashed downstream (e.g. a
+        // toError anchor became a CopFunctionGroup). Mirrors `&&`/`||` callable coercion.
+        var result = Eval("""
+            let nums = [1, 2, 3, 4]
+            predicate isHuge(int) => int > 2
+            predicate isBig(int) => isHuge
+            let big = nums:isBig
+            command main = big.Count
+            """);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(2), "nums:isBig should keep items where isHuge holds (3 and 4)");
+    }
+
+    // ========================================================================
     // Arithmetic
     // ========================================================================
 
