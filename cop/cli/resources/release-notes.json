@@ -33,6 +33,16 @@
         "cop now checks once a day for a newer release and shows a persistent reminder to run `cop update`.",
         "After you update, cop prints a concise \"what's new\" summary — including any versions you skipped."
       ]
+    },
+    {
+      "version": "2026.6.23.2",
+      "approved": true,
+      "features": [
+        "New built-in analysis for config formats and scripts: YAML (CI workflows, Kubernetes, docker-compose), Dockerfile, XML (.csproj/pom.xml), OpenAPI, SQL, Bash, and PowerShell — each with a ready-to-run check package.",
+        "New cross-language SQL injection check flags database queries built from non-constant strings (Python and JavaScript).",
+        "TypeScript: `.tsx`/`.jsx` files are now analyzed and `interface`/`enum` declarations are modeled as types.",
+        "Language fixes: a `!somePredicate` predicate body and `:any`/`:all`/`:none`/`:count(item ...)` inline expressions now evaluate correctly."
+      ]
     }
   ]
 }
