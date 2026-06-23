@@ -1,0 +1,19 @@
+# Flags TypeScript interfaces that use the discouraged Hungarian "I" prefix (e.g. IUserService).
+# Idiomatic TypeScript uses plain PascalCase interface names. This demonstrates that the
+# javascript provider now models TS `interface` (and `enum`) declarations as queryable types.
+#
+# Run: cop samples/static-analysis/typescript-interfaces/typescript-interfaces.cop -t samples/static-analysis/typescript-interfaces
+
+import code
+import javascript
+import code-analysis
+
+let codebase = codebase(javascript.parse())
+
+predicate isInterface(Type) => Type.Kind == Interface
+predicate hasIPrefix(Type) => isInterface && Type.Name:matches('^I[A-Z]')
+
+let violations = codebase.Types:hasIPrefix
+    :toWarning('Interface {item.Name} uses a discouraged "I" prefix; prefer plain PascalCase')
+
+command MAIN = CHECK(violations)

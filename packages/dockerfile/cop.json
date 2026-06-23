@@ -1,0 +1,15 @@
+{
+  "name": "dockerfile",
+  "version": "1.0.0",
+  "description": "Analyze Dockerfiles: instructions, arguments, stages, aliases, and line numbers",
+  "title": "Dockerfile",
+  "authors": "cop-team",
+  "tags": [
+    "dockerfile",
+    "containers",
+    "security"
+  ],
+  "provider": "clr",
+  "providerEntry": "Cop.Providers.Dockerfile.DockerfileProvider",
+  "providerAssembly": "dockerfile-provider.dll"
+}

@@ -1,0 +1,35 @@
+# Embedded SQL injection (SQL-A): flag database query calls whose query string is built
+# dynamically (string concatenation, f-strings, template literals, .format) rather than
+# passed as a constant with bound parameters. This analyzes the HOST language AST — no SQL
+# parser is needed — and works across languages.
+#
+# Run: cop samples/static-analysis/sql-injection/sql-injection.cop -t samples/static-analysis/sql-injection
+
+import code
+import python
+import javascript
+import code-analysis
+
+let codebase = codebase(python.parse(), javascript.parse())
+
+# Methods that execute a SQL query (the "sinks").
+predicate isQuerySink(Statement) =>
+    Statement.MemberName:equals('execute')
+    || Statement.MemberName:equals('executemany')
+    || Statement.MemberName:equals('query')
+    || Statement.MemberName:equals('raw')
+
+# A query argument that is computed rather than a constant + bound parameters:
+# string concatenation, a Python f-string, .format(), or a JS template literal (${...}).
+predicate buildsQueryDynamically(Statement) =>
+    Statement.Arguments.Where(
+        item:contains(' + ')
+        || item:startsWith('f"')
+        || item:contains('.format(')
+        || item:contains('${')
+    ).Count > 0
+
+let injection = codebase.Statements:isQuerySink:buildsQueryDynamically
+    :toWarning('Possible SQL injection: {item.MemberName}(...) builds its query from a non-constant string; use bound parameters')
+
+command MAIN = CHECK(injection)

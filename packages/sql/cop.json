@@ -1,0 +1,17 @@
+{
+  "name": "sql",
+  "version": "1.0.0",
+  "description": "Analyze SQL files: statements, statement kinds, SELECT * usage, and unscoped DML",
+  "title": "SQL",
+  "authors": "cop-team",
+  "tags": [
+    "sql",
+    "database",
+    "migration",
+    "ddl",
+    "dml"
+  ],
+  "provider": "clr",
+  "providerEntry": "Cop.Providers.Sql.SqlProvider",
+  "providerAssembly": "sql-provider.dll"
+}

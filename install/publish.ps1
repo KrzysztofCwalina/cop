@@ -186,6 +186,34 @@ if (-not $SkipBuild) {
     dotnet build "$RepoRoot\providers\go-provider\go-provider.csproj" -c Release
     if ($LASTEXITCODE -ne 0) { throw "go-provider build failed" }
 
+    Write-Host "Building yaml-provider..."
+    dotnet build "$RepoRoot\providers\yaml-provider\yaml-provider.csproj" -c Release
+    if ($LASTEXITCODE -ne 0) { throw "yaml-provider build failed" }
+
+    Write-Host "Building dockerfile-provider..."
+    dotnet build "$RepoRoot\providers\dockerfile-provider\dockerfile-provider.csproj" -c Release
+    if ($LASTEXITCODE -ne 0) { throw "dockerfile-provider build failed" }
+
+    Write-Host "Building xml-provider..."
+    dotnet build "$RepoRoot\providers\xml-provider\xml-provider.csproj" -c Release
+    if ($LASTEXITCODE -ne 0) { throw "xml-provider build failed" }
+
+    Write-Host "Building bash-provider..."
+    dotnet build "$RepoRoot\providers\bash-provider\bash-provider.csproj" -c Release
+    if ($LASTEXITCODE -ne 0) { throw "bash-provider build failed" }
+
+    Write-Host "Building powershell-provider..."
+    dotnet build "$RepoRoot\providers\powershell-provider\powershell-provider.csproj" -c Release
+    if ($LASTEXITCODE -ne 0) { throw "powershell-provider build failed" }
+
+    Write-Host "Building sql-provider..."
+    dotnet build "$RepoRoot\providers\sql-provider\sql-provider.csproj" -c Release
+    if ($LASTEXITCODE -ne 0) { throw "sql-provider build failed" }
+
+    Write-Host "Building openapi-provider..."
+    dotnet build "$RepoRoot\providers\openapi-provider\openapi-provider.csproj" -c Release
+    if ($LASTEXITCODE -ne 0) { throw "openapi-provider build failed" }
+
     Write-Host "Building tool-providers..."
     dotnet build "$RepoRoot\providers\tool-providers\tool-providers.csproj" -c Release
     if ($LASTEXITCODE -ne 0) { throw "tool-providers build failed" }

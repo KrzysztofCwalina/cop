@@ -1,0 +1,17 @@
+{
+  "name": "bash",
+  "version": "1.0.0",
+  "description": "Analyze Bash/Shell scripts: simple commands, logical command text, line numbers, and strict-mode usage",
+  "title": "Bash/Shell",
+  "authors": "cop-team",
+  "tags": [
+    "bash",
+    "shell",
+    "scripts",
+    "security"
+  ],
+  "provider": "clr",
+  "providerEntry": "Cop.Providers.Bash.BashProvider",
+  "providerAssembly": "bash-provider.dll"
+}
+

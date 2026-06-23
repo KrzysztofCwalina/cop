@@ -95,6 +95,8 @@ cop run csharp-checks -t src/             # analyze a specific directory
 
 Cop also supports **Rust**, **Go**, and **Java** — see the [Language Walkthroughs](docs/languages/) for getting started with any supported language.
 
+Beyond source code, Cop ships native C# providers for common **config formats and scripts** — **YAML** (CI workflows, Kubernetes, compose), **Dockerfile**, **XML** (`.csproj`/`pom.xml`), **OpenAPI**, **Bash**, **PowerShell**, and **SQL** — so you can enforce rules on infrastructure and config too (e.g. pin GitHub Actions to a SHA, forbid `:latest` base images, flag `UPDATE`/`DELETE` without `WHERE`). See the [samples](docs/samples.md#formats-config--scripts).
+
 You can see all pre-built packages by executing `cop package list`.
 You can see details of packages, including usage samples, with `cop help <package_namwe>`.
 

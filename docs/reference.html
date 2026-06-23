@@ -149,10 +149,17 @@ const categories = [
     "name": "Core",
     "packages": [
       "ai",
+      "bash",
       "core",
+      "dockerfile",
       "files",
       "json",
-      "markdown"
+      "markdown",
+      "openapi",
+      "powershell",
+      "sql",
+      "xml",
+      "yaml"
     ]
   },
   {
@@ -438,6 +445,85 @@ const packages = {
         "returns": "[Violation]",
         "desc": "Returns the Trivy violations collection.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/analysis/analysis-trivy/src/analysis-trivy.cop#L9"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
+  "bash": {
+    "label": "bash",
+    "overview": "Analyze Bash/Shell scripts: simple commands, logical command text, line numbers, and strict-mode usage",
+    "samples": [
+      {
+        "title": "Remote pipe to shell",
+        "code": "# Flags downloader commands piped directly into a shell.\n#\n# Run: cop packages/bash/samples/remote-pipe-to-shell.cop -t packages/bash/samples/fixtures\n\nimport bash\nimport code-analysis\n\npredicate isRemotePipeToShell(ShellCommand) =>\n    (ShellCommand.Name:equals('curl') || ShellCommand.Name:equals('wget'))\n    && (ShellCommand.Text:matches('.*\\\\|\\\\s*(sh|bash)(\\\\s|$).*') || ShellCommand.Text:contains('| bash'))\n\npredicate isMissingStrictMode(ShellScript) =>\n    ShellScript.HasStrictMode == false\n\nlet remote-pipe-shell = bash.parse().Commands:isRemotePipeToShell\n    :toError('Avoid piping remote downloads directly to a shell: {item.Text}')\n\nlet missing-strict-mode = bash.parse().Scripts:isMissingStrictMode\n    :toWarning('Shell script should enable strict mode near the top')\n\ncommand MAIN = CHECK(remote-pipe-shell + missing-strict-mode)"
+      }
+    ],
+    "collections": [],
+    "types": {
+      "ShellCommand": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/bash/src/bash.cop#L39",
+        "baseType": "TextFilePosition",
+        "props": [
+          {
+            "name": "filePath",
+            "type": "computed",
+            "desc": ""
+          },
+          {
+            "name": "line",
+            "type": "computed",
+            "desc": ""
+          }
+        ]
+      },
+      "ShellScript": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/bash/src/bash.cop#L40",
+        "baseType": "TextFilePosition",
+        "props": [
+          {
+            "name": "filePath",
+            "type": "computed",
+            "desc": ""
+          },
+          {
+            "name": "line",
+            "type": "computed",
+            "desc": ""
+          }
+        ]
+      },
+      "ShellContent": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/bash/src/bash.cop#L25",
+        "props": [
+          {
+            "name": "Commands",
+            "type": "[ShellCommand]",
+            "desc": ""
+          },
+          {
+            "name": "Scripts",
+            "type": "[ShellScript]",
+            "desc": ""
+          }
+        ]
+      }
+    },
+    "predicates": [],
+    "functions": [
+      {
+        "name": "parse",
+        "params": "",
+        "returns": "ShellContent",
+        "desc": "Parses .sh and .bash files in the target directory.\nExample: let sh = bash.parse()",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/bash/src/bash.cop#L32"
+      },
+      {
+        "name": "parse",
+        "params": "path: string",
+        "returns": "ShellContent",
+        "desc": "Parses .sh and .bash files in the specified directory.\nExample: let sh = bash.parse('scripts')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/bash/src/bash.cop#L36"
       }
     ],
     "checks": [],
@@ -4237,6 +4323,85 @@ const packages = {
     "checks": [],
     "commands": []
   },
+  "dockerfile": {
+    "label": "dockerfile",
+    "overview": "Analyze Dockerfiles: instructions, arguments, stages, aliases, and line numbers",
+    "samples": [
+      {
+        "title": "Pin base images",
+        "code": "# Flags Dockerfile FROM instructions that use mutable base image references: untagged images\n# or the :latest tag.\n#\n# Run: cop packages\\dockerfile\\samples\\pin-base-images.cop -t packages\\dockerfile\\samples\\fixtures\n\nimport dockerfile\nimport code-analysis\n\npredicate isUnpinnedFrom(DockerInstruction) =>\n    DockerInstruction.Instruction:equals('FROM')\n    && (DockerInstruction.Argument:contains(':latest') || !DockerInstruction.Argument:contains(':'))\n\nlet unpinned-base-images = dockerfile.parse().Instructions:isUnpinnedFrom\n    :toWarning('Base image {item.Argument} should be pinned to an immutable, non-latest tag')\n\ncommand MAIN = CHECK(unpinned-base-images)"
+      }
+    ],
+    "collections": [],
+    "types": {
+      "DockerInstruction": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dockerfile/src/dockerfile.cop#L41",
+        "baseType": "TextFilePosition",
+        "props": [
+          {
+            "name": "filePath",
+            "type": "computed",
+            "desc": ""
+          },
+          {
+            "name": "line",
+            "type": "computed",
+            "desc": ""
+          }
+        ]
+      },
+      "DockerStage": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dockerfile/src/dockerfile.cop#L42",
+        "baseType": "TextFilePosition",
+        "props": [
+          {
+            "name": "filePath",
+            "type": "computed",
+            "desc": ""
+          },
+          {
+            "name": "line",
+            "type": "computed",
+            "desc": ""
+          }
+        ]
+      },
+      "DockerfileContent": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dockerfile/src/dockerfile.cop#L27",
+        "props": [
+          {
+            "name": "Instructions",
+            "type": "[DockerInstruction]",
+            "desc": ""
+          },
+          {
+            "name": "Stages",
+            "type": "[DockerStage]",
+            "desc": ""
+          }
+        ]
+      }
+    },
+    "predicates": [],
+    "functions": [
+      {
+        "name": "parse",
+        "params": "",
+        "returns": "DockerfileContent",
+        "desc": "Parses Dockerfile, Dockerfile.*, and *.dockerfile files in the target directory.\nExample: let d = dockerfile.parse()",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dockerfile/src/dockerfile.cop#L34"
+      },
+      {
+        "name": "parse",
+        "params": "path: string",
+        "returns": "DockerfileContent",
+        "desc": "Parses Dockerfile, Dockerfile.*, and *.dockerfile files in the specified directory.\nExample: let d = dockerfile.parse('containers')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/dockerfile/src/dockerfile.cop#L38"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
   "files": {
     "label": "files",
     "overview": "Type definitions for filesystem structural and temporal analysis",
@@ -5900,6 +6065,164 @@ const packages = {
     "checks": [],
     "commands": []
   },
+  "openapi": {
+    "label": "openapi",
+    "overview": "Analyze OpenAPI/Swagger specs: paths, operations, summaries, operationIds, responses, and source line numbers",
+    "samples": [
+      {
+        "title": "Undocumented operations",
+        "code": "# Flags OpenAPI operations missing a summary/description or responses mapping.\n#\n# Run: cop packages/openapi/samples/undocumented-operations.cop -t packages/openapi/samples/fixtures\n\nimport openapi\nimport code-analysis\n\npredicate isUndocumented(OpenApiOperation) => !OpenApiOperation.HasSummary\npredicate hasNoResponses(OpenApiOperation) => !OpenApiOperation.HasResponses\n\nlet undocumented-operations = openapi.parse().Operations:isUndocumented\n    :toError('{item.Method} {item.Path} is missing a summary or description')\n\nlet operations-without-responses = openapi.parse().Operations:hasNoResponses\n    :toError('{item.Method} {item.Path} is missing responses')\n\ncommand MAIN = CHECK(undocumented-operations + operations-without-responses)"
+      }
+    ],
+    "collections": [],
+    "types": {
+      "OpenApiOperation": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/openapi/src/openapi.cop#L40",
+        "baseType": "TextFilePosition",
+        "props": [
+          {
+            "name": "filePath",
+            "type": "computed",
+            "desc": ""
+          },
+          {
+            "name": "line",
+            "type": "computed",
+            "desc": ""
+          }
+        ]
+      },
+      "OpenApiPath": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/openapi/src/openapi.cop#L41",
+        "baseType": "TextFilePosition",
+        "props": [
+          {
+            "name": "filePath",
+            "type": "computed",
+            "desc": ""
+          },
+          {
+            "name": "line",
+            "type": "computed",
+            "desc": ""
+          }
+        ]
+      },
+      "OpenApiContent": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/openapi/src/openapi.cop#L26",
+        "props": [
+          {
+            "name": "Operations",
+            "type": "[OpenApiOperation]",
+            "desc": ""
+          },
+          {
+            "name": "Paths",
+            "type": "[OpenApiPath]",
+            "desc": ""
+          }
+        ]
+      }
+    },
+    "predicates": [],
+    "functions": [
+      {
+        "name": "parse",
+        "params": "",
+        "returns": "OpenApiContent",
+        "desc": "Parses OpenAPI YAML/YML/JSON files in the target directory.\nFiles without a top-level openapi: or swagger: marker are ignored.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/openapi/src/openapi.cop#L33"
+      },
+      {
+        "name": "parse",
+        "params": "path: string",
+        "returns": "OpenApiContent",
+        "desc": "Parses OpenAPI YAML/YML/JSON files in the specified directory.\nFiles without a top-level openapi: or swagger: marker are ignored.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/openapi/src/openapi.cop#L37"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
+  "powershell": {
+    "label": "powershell",
+    "overview": "Analyze PowerShell scripts: commands, logical command text, line numbers, and strict-mode usage",
+    "samples": [
+      {
+        "title": "Dangerous dynamic exec",
+        "code": "# Flags dangerous dynamic PowerShell execution.\n#\n# Run: cop packages\\powershell\\samples\\dangerous-dynamic-exec.cop -t packages\\powershell\\samples\\fixtures\n\nimport powershell\nimport code-analysis\n\npredicate isDynamicExec(PowerShellCommand) =>\n    PowerShellCommand.Name:equals('Invoke-Expression')\n    || (PowerShellCommand.Name:equals('iex') && !PowerShellCommand.Text:contains('| iex'))\n    || ((PowerShellCommand.Name:equals('Invoke-WebRequest') || PowerShellCommand.Name:equals('iwr') || PowerShellCommand.Name:equals('curl'))\n        && (PowerShellCommand.Text:contains('| iex') || PowerShellCommand.Text:contains('| Invoke-Expression')))\n\npredicate isMissingStrictMode(PowerShellScript) =>\n    PowerShellScript.UsesStrictMode == false\n\nlet dynamic-exec = powershell.parse().Commands:isDynamicExec\n    :toError('Avoid dynamic PowerShell execution: {item.Text}')\n\nlet missing-strict-mode = powershell.parse().Scripts:isMissingStrictMode\n    :toWarning('PowerShell script should enable Set-StrictMode')\n\ncommand MAIN = CHECK(dynamic-exec + missing-strict-mode)"
+      }
+    ],
+    "collections": [],
+    "types": {
+      "PowerShellCommand": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/powershell/src/powershell.cop#L38",
+        "baseType": "TextFilePosition",
+        "props": [
+          {
+            "name": "filePath",
+            "type": "computed",
+            "desc": ""
+          },
+          {
+            "name": "line",
+            "type": "computed",
+            "desc": ""
+          }
+        ]
+      },
+      "PowerShellScript": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/powershell/src/powershell.cop#L39",
+        "baseType": "TextFilePosition",
+        "props": [
+          {
+            "name": "filePath",
+            "type": "computed",
+            "desc": ""
+          },
+          {
+            "name": "line",
+            "type": "computed",
+            "desc": ""
+          }
+        ]
+      },
+      "PowerShellContent": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/powershell/src/powershell.cop#L24",
+        "props": [
+          {
+            "name": "Commands",
+            "type": "[PowerShellCommand]",
+            "desc": ""
+          },
+          {
+            "name": "Scripts",
+            "type": "[PowerShellScript]",
+            "desc": ""
+          }
+        ]
+      }
+    },
+    "predicates": [],
+    "functions": [
+      {
+        "name": "parse",
+        "params": "",
+        "returns": "PowerShellContent",
+        "desc": "Parses .ps1, .psm1, and .psd1 files in the target directory.\nExample: let ps = powershell.parse()",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/powershell/src/powershell.cop#L31"
+      },
+      {
+        "name": "parse",
+        "params": "path: string",
+        "returns": "PowerShellContent",
+        "desc": "Parses .ps1, .psm1, and .psd1 files in the specified directory.\nExample: let ps = powershell.parse('scripts')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/powershell/src/powershell.cop#L35"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
   "python": {
     "label": "python",
     "overview": "Python source code parser and analyzer",
@@ -7075,6 +7398,64 @@ const packages = {
     ],
     "commands": []
   },
+  "sql": {
+    "label": "sql",
+    "overview": "Analyze SQL files: statements, statement kinds, SELECT * usage, and unscoped DML",
+    "samples": [
+      {
+        "title": "Risky dml and select star",
+        "code": "# Flags risky SQL statements: mass UPDATE/DELETE statements with no top-level WHERE,\n# and SELECT statements whose select-list is exactly '*'.\n#\n# Run: cop packages\\sql\\samples\\risky-dml-and-select-star.cop -t packages\\sql\\samples\\fixtures\n\nimport sql\nimport code-analysis\n\npredicate isUnscopedMutation(SqlStatement) =>\n    (SqlStatement.Kind:equals('UPDATE') || SqlStatement.Kind:equals('DELETE'))\n    && !SqlStatement.HasWhere\n\npredicate isSelectStar(SqlStatement) => SqlStatement.SelectsStar\n\nlet unscoped-mutations = sql.parse().Statements:isUnscopedMutation\n    :toError('SQL {item.Kind} statement has no WHERE clause')\n\nlet select-stars = sql.parse().Statements:isSelectStar\n    :toWarning('SQL SELECT statement uses SELECT *')\n\ncommand MAIN = CHECK(unscoped-mutations + select-stars)"
+      }
+    ],
+    "collections": [],
+    "types": {
+      "SqlStatement": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/sql/src/sql.cop#L31",
+        "baseType": "TextFilePosition",
+        "props": [
+          {
+            "name": "filePath",
+            "type": "computed",
+            "desc": ""
+          },
+          {
+            "name": "line",
+            "type": "computed",
+            "desc": ""
+          }
+        ]
+      },
+      "SqlContent": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/sql/src/sql.cop#L18",
+        "props": [
+          {
+            "name": "Statements",
+            "type": "[SqlStatement]",
+            "desc": ""
+          }
+        ]
+      }
+    },
+    "predicates": [],
+    "functions": [
+      {
+        "name": "parse",
+        "params": "",
+        "returns": "SqlContent",
+        "desc": "Parses SQL files in the target directory and returns their statements.\nExample: let s = sql.parse()",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/sql/src/sql.cop#L24"
+      },
+      {
+        "name": "parse",
+        "params": "path: string",
+        "returns": "SqlContent",
+        "desc": "Parses SQL files in the specified directory and returns their statements.\nExample: let s = sql.parse('migrations')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/sql/src/sql.cop#L28"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
   "test-nunit-checks": {
     "label": "test-nunit-checks",
     "overview": "NUnit-specific testing patterns and analyzer references",
@@ -7629,6 +8010,164 @@ const packages = {
         "returns": "[HttpService]",
         "desc": "Returns all HTTP services defined in the TypeSpec project.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/api/typespec-http/src/typespec-http.cop#L57"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
+  "xml": {
+    "label": "xml",
+    "overview": "Analyze XML files and XML-based project/config files: elements, attributes, values, paths, and line numbers",
+    "samples": [
+      {
+        "title": "Floating package versions",
+        "code": "# Flags PackageReference Version attributes that use floating versions such as '*'.\n# Run: cop packages/xml/samples/floating-package-versions.cop -t packages/xml/samples/fixtures\n\nimport xml\nimport code-analysis\n\npredicate isFloatingPackageVersion(XmlAttribute) =>\n    XmlAttribute.ElementName:equals('PackageReference')\n    && XmlAttribute.Name:equals('Version')\n    && XmlAttribute.Value:contains('*')\n\nlet floating-package-versions = xml.parse().Attributes:isFloatingPackageVersion\n    :toError('PackageReference {item.ElementPath} uses floating version {item.Value}')\n\ncommand MAIN = CHECK(floating-package-versions)"
+      }
+    ],
+    "collections": [],
+    "types": {
+      "XmlElement": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/xml/src/xml.cop#L41",
+        "baseType": "TextFilePosition",
+        "props": [
+          {
+            "name": "filePath",
+            "type": "computed",
+            "desc": ""
+          },
+          {
+            "name": "line",
+            "type": "computed",
+            "desc": ""
+          }
+        ]
+      },
+      "XmlAttribute": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/xml/src/xml.cop#L42",
+        "baseType": "TextFilePosition",
+        "props": [
+          {
+            "name": "filePath",
+            "type": "computed",
+            "desc": ""
+          },
+          {
+            "name": "line",
+            "type": "computed",
+            "desc": ""
+          }
+        ]
+      },
+      "XmlContent": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/xml/src/xml.cop#L27",
+        "props": [
+          {
+            "name": "Elements",
+            "type": "[XmlElement]",
+            "desc": ""
+          },
+          {
+            "name": "Attributes",
+            "type": "[XmlAttribute]",
+            "desc": ""
+          }
+        ]
+      }
+    },
+    "predicates": [],
+    "functions": [
+      {
+        "name": "parse",
+        "params": "",
+        "returns": "XmlContent",
+        "desc": "Parses XML files in the target directory and returns their elements and attributes.\nExample: let x = xml.parse()",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/xml/src/xml.cop#L34"
+      },
+      {
+        "name": "parse",
+        "params": "path: string",
+        "returns": "XmlContent",
+        "desc": "Parses XML files in the specified directory or file and returns their elements and attributes.\nExample: let x = xml.parse('src/MyProject.csproj')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/xml/src/xml.cop#L38"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
+  "yaml": {
+    "label": "yaml",
+    "overview": "Analyze YAML files (CI workflows, Kubernetes manifests, docker-compose): flattened key paths, values, and line numbers",
+    "samples": [
+      {
+        "title": "Pin actions to sha",
+        "code": "# Flags GitHub Actions `uses:` references that are not pinned to a full 40-character\n# commit SHA (tags and branches like @v4 or @main are mutable and a supply-chain risk).\n#\n# Run: cop packages/yaml/samples/pin-actions-to-sha.cop -t packages/yaml/samples/fixtures\n\nimport yaml\nimport code-analysis\n\npredicate isUnpinnedActionUse(YamlEntry) =>\n    YamlEntry.Key:equals('uses')\n    && !YamlEntry.Value:matches('.*@[0-9a-f]{40}$')\n\nlet unpinned-actions = yaml.parse().Entries:isUnpinnedActionUse\n    :toWarning('Action {item.Value} is not pinned to a commit SHA')\n\ncommand MAIN = CHECK(unpinned-actions)"
+      }
+    ],
+    "collections": [],
+    "types": {
+      "YamlEntry": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/yaml/src/yaml.cop#L42",
+        "baseType": "TextFilePosition",
+        "props": [
+          {
+            "name": "filePath",
+            "type": "computed",
+            "desc": ""
+          },
+          {
+            "name": "line",
+            "type": "computed",
+            "desc": ""
+          }
+        ]
+      },
+      "YamlDocument": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/yaml/src/yaml.cop#L43",
+        "baseType": "TextFilePosition",
+        "props": [
+          {
+            "name": "filePath",
+            "type": "computed",
+            "desc": ""
+          },
+          {
+            "name": "line",
+            "type": "computed",
+            "desc": ""
+          }
+        ]
+      },
+      "YamlContent": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/yaml/src/yaml.cop#L28",
+        "props": [
+          {
+            "name": "Entries",
+            "type": "[YamlEntry]",
+            "desc": ""
+          },
+          {
+            "name": "Documents",
+            "type": "[YamlDocument]",
+            "desc": ""
+          }
+        ]
+      }
+    },
+    "predicates": [],
+    "functions": [
+      {
+        "name": "parse",
+        "params": "",
+        "returns": "YamlContent",
+        "desc": "Parses YAML files in the target directory and returns their flattened content.\nExample: let y = yaml.parse()",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/yaml/src/yaml.cop#L35"
+      },
+      {
+        "name": "parse",
+        "params": "path: string",
+        "returns": "YamlContent",
+        "desc": "Parses YAML files in the specified directory and returns their flattened content.\nExample: let y = yaml.parse('.github/workflows')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/yaml/src/yaml.cop#L39"
       }
     ],
     "checks": [],

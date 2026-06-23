@@ -1,0 +1,31 @@
+# SQL Package — types for analyzing .sql files.
+# Provides SqlStatement. Import with: import sql
+
+import code-analysis
+
+## A SQL statement split from a .sql file. Kind is the uppercase leading keyword
+## (SELECT/INSERT/UPDATE/DELETE/CREATE/ALTER/DROP/MERGE/OTHER).
+export type SqlStatement = {
+    Kind : string,
+    Text : string,
+    Line : int,
+    SelectsStar : bool,
+    HasWhere : bool,
+    File : File?,
+    Source : string
+}
+
+export type SqlContent = {
+    Statements : [SqlStatement]
+}
+
+## Parses SQL files in the target directory and returns their statements.
+## Example: let s = sql.parse()
+export function parse() : SqlContent => provider('sql')
+
+## Parses SQL files in the specified directory and returns their statements.
+## Example: let s = sql.parse('migrations')
+export function parse(path : string) : SqlContent => provider('sql', path)
+
+# Violation overload for SQL statements — via TextFilePosition trait conformance.
+export type SqlStatement : TextFilePosition = { filePath => item.File.Path, line => item.Line }

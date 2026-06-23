@@ -44,6 +44,8 @@ enforce in CI. The check shape is always a predicate → `:toError` / `:toWarnin
 | [banned-calls](../samples/static-analysis/banned-calls/banned-calls.cop) | Forbid Console output / blocking `Thread.Sleep` in libraries |
 | [csharp-specific-ast](../samples/static-analysis/csharp-specific-ast/csharp-specific-ast.cop) | Downcast with `:asCSharp` for records, partial, and lock |
 | [cross-language](../samples/static-analysis/cross-language/cross-language.cop) | One model across C#, Python, and JS/TS |
+| [sql-injection](../samples/static-analysis/sql-injection/sql-injection.cop) | Flag SQL queries built from non-constant strings (Python + JS) |
+| [typescript-interfaces](../samples/static-analysis/typescript-interfaces/typescript-interfaces.cop) | Flag TypeScript interfaces using the discouraged `I` prefix |
 | [typespec-http](../samples/static-analysis/typespec-http/typespec-http.cop) | Domain check over a TypeSpec / HTTP API spec |
 | [slop](../samples/static-analysis/slop-metrics/slop.cop) | Score a codebase with `METRICS` |
 | [custom-slop](../samples/static-analysis/slop-metrics/custom-slop.cop) | Extend the built-in slop rule set with a custom rule |
@@ -139,6 +141,20 @@ Each package includes samples in its `samples/` directory showing real-world usa
 |--------|-------------|
 | [list-public-types](../packages/rust/rust/samples/list-public-types.cop) | List all public Rust types |
 | [run-rust-checks](../packages/rust/rust-checks/samples/run-rust-checks.cop) | Run built-in Rust correctness and style checks |
+
+### Formats, Config & Scripts
+
+Native C# providers for configuration formats and scripting languages.
+
+| Sample | Description |
+|--------|-------------|
+| [pin-actions-to-sha](../packages/yaml/samples/pin-actions-to-sha.cop) | YAML: require GitHub Actions pinned to a commit SHA |
+| [pin-base-images](../packages/dockerfile/samples/pin-base-images.cop) | Dockerfile: require base images pinned to a non-`latest` tag |
+| [floating-package-versions](../packages/xml/samples/floating-package-versions.cop) | XML: flag floating `PackageReference` versions in `.csproj` |
+| [undocumented-operations](../packages/openapi/samples/undocumented-operations.cop) | OpenAPI: flag operations missing a summary or responses |
+| [remote-pipe-to-shell](../packages/bash/samples/remote-pipe-to-shell.cop) | Bash: flag piping a remote download into a shell |
+| [dangerous-dynamic-exec](../packages/powershell/samples/dangerous-dynamic-exec.cop) | PowerShell: flag `Invoke-Expression` / download-and-run |
+| [risky-dml-and-select-star](../packages/sql/samples/risky-dml-and-select-star.cop) | SQL: flag `UPDATE`/`DELETE` without `WHERE` and `SELECT *` |
 
 ### Specialized
 

@@ -1,0 +1,26 @@
+openapi: 3.0.3
+info:
+  title: Petstore
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      summary: List pets
+      responses:
+        '200':
+          description: A paged array of pets
+    post:
+      operationId: createPet
+      responses:
+        '201':
+          description: Pet created
+  /pets/{id}:
+    get:
+      operationId: getPet
+      description: Gets a pet by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+

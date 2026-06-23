@@ -1,0 +1,16 @@
+{
+  "name": "xml",
+  "version": "1.0.0",
+  "description": "Analyze XML files and XML-based project/config files: elements, attributes, values, paths, and line numbers",
+  "title": "XML",
+  "authors": "cop-team",
+  "tags": [
+    "xml",
+    "csproj",
+    "config",
+    "packages"
+  ],
+  "provider": "clr",
+  "providerEntry": "Cop.Providers.Xml.XmlProvider",
+  "providerAssembly": "xml-provider.dll"
+}

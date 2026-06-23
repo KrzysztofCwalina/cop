@@ -1,0 +1,20 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@8f152de45cc393bb48ce5d89d36b731f54556e65
+        with:
+          node-version: 20
+      - name: Build
+        run: npm run build
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: some/deployer@main

@@ -4,7 +4,7 @@ namespace Cop.Providers.SourceParsers;
 
 public class JavaScriptSourceParser : ISourceParser
 {
-    public override IReadOnlyList<string> Extensions => [".js", ".ts"];
+    public override IReadOnlyList<string> Extensions => [".js", ".ts", ".tsx", ".jsx"];
     public override string Language => "javascript";
 
     public override SourceFile? Parse(string filePath, string sourceText)
@@ -58,6 +58,15 @@ public class JavaScriptSourceParser : ISourceParser
                 continue;
             }
 
+            // TypeScript interface / enum declarations
+            if (IsTsTypeDeclaration(trimmed))
+            {
+                var (tsType, tsNext) = ParseTsType(lines, i);
+                if (tsType != null) types.Add(tsType);
+                i = tsNext;
+                continue;
+            }
+
             // Top-level function declaration
             if (IsFunctionDeclaration(trimmed))
             {
@@ -103,6 +112,62 @@ public class JavaScriptSourceParser : ISourceParser
     private static bool IsFunctionDeclaration(string trimmed)
     {
         return IsFunctionDeclarationPattern(trimmed);
+    }
+
+    // Recognizes TypeScript 'interface' / 'enum' declarations, ignoring leading modifiers
+    // (export, default, declare, abstract, const).
+    private static bool IsTsTypeDeclaration(string trimmed)
+    {
+        var t = StripTypeModifiers(trimmed);
+        return t.StartsWith("interface ") || t.StartsWith("enum ");
+    }
+
+    private static string StripTypeModifiers(string trimmed)
+    {
+        var t = trimmed;
+        bool changed = true;
+        while (changed)
+        {
+            changed = false;
+            foreach (var kw in new[] { "export ", "default ", "declare ", "abstract ", "const " })
+            {
+                if (t.StartsWith(kw)) { t = t[kw.Length..].TrimStart(); changed = true; }
+            }
+        }
+        return t;
+    }
+
+    // Parses a TypeScript interface/enum into a TypeDeclaration with the matching TypeKind.
+    // The body is skipped (members are not individually modeled). Requires an opening brace
+    // on the declaration line, mirroring class parsing.
+    private static (TypeDeclaration?, int) ParseTsType(string[] lines, int startLine)
+    {
+        var trimmed = lines[startLine].TrimStart();
+        bool isExported = trimmed.StartsWith("export");
+        var t = StripTypeModifiers(trimmed);
+
+        TypeKind kind;
+        string keyword;
+        if (t.StartsWith("interface ")) { kind = TypeKind.Interface; keyword = "interface "; }
+        else if (t.StartsWith("enum ")) { kind = TypeKind.Enum; keyword = "enum "; }
+        else return (null, startLine + 1);
+
+        var rest = t[keyword.Length..].TrimStart();
+        int end = 0;
+        while (end < rest.Length && (char.IsLetterOrDigit(rest[end]) || rest[end] == '_' || rest[end] == '$'))
+            end++;
+        if (end == 0) return (null, startLine + 1);
+        var name = rest[..end];
+
+        if (FindCharOnLine(lines[startLine], '{') < 0)
+            return (null, startLine + 1);
+
+        int bodyEnd = SkipBracedBlock(lines, startLine);
+        var mods = isExported ? Modifier.Public : Modifier.None;
+        var type = new TypeDeclaration(name, kind, mods,
+            new List<string>(), [], [], [], [], [], startLine + 1)
+            .AsJavaScript(isExported: isExported);
+        return (type, bodyEnd);
     }
 
     private static (TypeDeclaration?, int) ParseClass(string[] lines, int startLine, List<StatementInfo> statements)

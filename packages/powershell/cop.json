@@ -1,0 +1,16 @@
+{
+  "name": "powershell",
+  "version": "1.0.0",
+  "description": "Analyze PowerShell scripts: commands, logical command text, line numbers, and strict-mode usage",
+  "title": "PowerShell",
+  "authors": "cop-team",
+  "tags": [
+    "powershell",
+    "ps1",
+    "scripts",
+    "security"
+  ],
+  "provider": "clr",
+  "providerEntry": "Cop.Providers.PowerShell.PowerShellProvider",
+  "providerAssembly": "powershell-provider.dll"
+}
