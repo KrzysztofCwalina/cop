@@ -394,7 +394,10 @@ public sealed class Evaluator
         var operand = ForceValue(Eval(un.Operand, env));
         return un.Op switch
         {
-            UnaryOp.Not => CopBool.Of(!operand.IsTruthy),
+            // Coerce a bare predicate reference (a callable) to a bool by invoking it on the
+            // current `item`, mirroring how `&&`/`||` handle a bare predicate. Without this,
+            // `=> !somePredicate` would negate the (always-truthy) callable and yield false.
+            UnaryOp.Not => CopBool.Of(!CoerceCallableToBool(operand, env).IsTruthy),
             UnaryOp.Negate => operand switch
             {
                 CopInt i => new CopInt(-i.Value),

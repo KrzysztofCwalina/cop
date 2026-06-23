@@ -94,6 +94,23 @@ public class EvaluatorTests
         Assert.That(((CopInt)result).Value, Is.EqualTo(2), "nums:isBig should keep items where isHuge holds (3 and 4)");
     }
 
+    [Test]
+    public void EvalFilter_NegatedBarePredicateBody_InvokesPredicatePerItem()
+    {
+        // Regression (#36): a predicate body that NEGATES a bare predicate name (`=> !isHuge`)
+        // must invoke that predicate per item and negate its boolean result — not negate the
+        // (always-truthy) function group, which silently yielded false for every item.
+        var result = Eval("""
+            let nums = [1, 2, 3, 4]
+            predicate isHuge(int) => int > 2
+            predicate isSmall(int) => !isHuge
+            let small = nums:isSmall
+            command main = small.Count
+            """);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(2), "nums:isSmall should keep items where isHuge is false (1 and 2)");
+    }
+
     // ========================================================================
     // Arithmetic
     // ========================================================================
