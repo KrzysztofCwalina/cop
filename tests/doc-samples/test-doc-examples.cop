@@ -28,7 +28,7 @@ test clients = assert(CsClients.Count > 0)
 
 # Predicate composition
 predicate optionsType(Parameter) => Parameter.Type.Name:endsWith('Options')
-predicate hasOptions(Constructor) => Constructor.Parameters:any(optionsType)
+predicate hasOptions(Method) => Method.Parameters:any(optionsType)
 predicate missingOptions(Type) => Type.Constructors:none(hasOptions)
 test composition = assert(CsClients:missingOptions.Count > 0)
 
@@ -95,3 +95,26 @@ test js-calls = assert(javascript.Statements:isCall.Count > 0)
 
 predicate anyErrorHandler(Statement) => Statement.ErrorHandler == true
 test error-handlers = assert(python.Statements:anyErrorHandler.Count > 0)
+
+# --- Language Reference: Collection transforms (Select / Where / OrderBy) ---
+# These exercise per-item `item` binding on provider-backed collections.
+
+let publicNames = csharp.Types:isPublic.Select(item.Name)
+test select-member = assert(publicNames.Count > 0)
+
+let arrowNames = csharp.Types:isPublic.Select((t) => t.Name)
+test select-arrow = assert(arrowNames.Count > 0)
+
+let clientTypes = csharp.Types.Where(item.Name:endsWith('Client'))
+test where-filter = assert(clientTypes.Count > 0)
+
+let orderedAsc = csharp.Types.OrderBy(item.Name)
+test order-by = assert(orderedAsc.Count > 0)
+
+let orderedDesc = csharp.Types.OrderByDescending(item.Name)
+test order-by-desc = assert(orderedDesc.Count == orderedAsc.Count)
+
+# --- Language Reference: convention-insensitive equality (sameAs / sm) ---
+
+predicate isBlobSm(Type) => Type.Name:sm('blob_client')
+test sm-alias = assert(csharp.Types:isBlobSm.Count > 0)

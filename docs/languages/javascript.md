@@ -101,10 +101,10 @@ src/services/api.ts: warning: Remove console.log at line 47 — use a logger
 Cop ships with comprehensive JavaScript/TypeScript check packages:
 
 ```bash
-cop javascript-checks                      # all JS/TS conventions
-cop javascript-checks -c no-console       # just the "no console" check
-cop javascript-library-checks              # library API design rules
-cop javascript-library-azure-checks        # Azure SDK conventions
+cop run javascript-checks                  # all JS/TS conventions
+cop run javascript-checks -c no-console    # just the "no console" check
+cop run javascript-library-checks          # library API design rules
+cop run javascript-library-azure-checks    # Azure SDK conventions
 ```
 
 ---
@@ -130,7 +130,6 @@ import code-analysis
 
 let cb = javascript.parse()
 
-predicate isAsync(Method) => Method.Modifiers:isSet(Async)
 predicate hasNoCatch(Method) => Method.Statements:isErrorHandler.count() == 0
 
 let violations = cb.Types.Methods:isAsync:hasNoCatch

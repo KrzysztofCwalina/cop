@@ -515,7 +515,7 @@ The `CodeSchema` and `CodeBindings` classes provide the shared code model schema
 
 Collections are named `Code.Types`, `Code.Methods`, `Code.Statements`, `Code.Lines`, `Code.Files`, etc. Language packages expose these via explicit exports:
 
-```cop
+```cop skip
 let cb : Codebase = provider('haskell')
 export let Types = cb.Types
 export let Methods = cb.Methods
@@ -579,7 +579,7 @@ public class MySink : SinkProvider
 
 #### Cop Package Usage
 
-```cop
+```cop skip
 import my-streaming-package
 
 export let Events : [Event] = source('my-streaming-package')
@@ -596,7 +596,7 @@ The engine discovers all `StreamProvider` and `SinkProvider` subclasses in the p
 2. Copy it to your package's `lib/` directory
 3. Create a test `.cop` file:
 
-```cop
+```cop skip
 import my-provider
 
 foreach Widgets
@@ -785,7 +785,7 @@ command MAIN = CHECK(ruff-checks)
 
 ```bash
 # Run ruff checks on a Python project
-cop python-ruff -t path/to/project
+cop run python-ruff -t path/to/project
 
 # Output:
 # src/app.py(1): warning: F401: `os` imported but unused

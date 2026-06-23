@@ -9,7 +9,7 @@
     <PublishReadyToRun>true</PublishReadyToRun>
     <SelfContained>false</SelfContained>
     <AssemblyName>cop</AssemblyName>
-    <Version>2026.6.22.3</Version>
+    <Version>2026.6.23.1</Version>
     <ApplicationIcon>resources\cop.ico</ApplicationIcon>
   </PropertyGroup>
 
@@ -37,6 +37,7 @@
   <ItemGroup>
     <EmbeddedResource Include="..\..\docs\language-reference.md" LogicalName="Cop.Cli.LanguageReference.md" />
     <EmbeddedResource Include="resources\init-instructions.md" LogicalName="Cop.Cli.InitInstructions.md" />
+    <EmbeddedResource Include="resources\release-notes.json" LogicalName="Cop.Cli.ReleaseNotes.json" />
   </ItemGroup>
 
 </Project>

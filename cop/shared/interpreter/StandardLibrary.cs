@@ -537,6 +537,18 @@ public static class StandardLibrary
             return CopBool.Of(!str.Equals(other, StringComparison.OrdinalIgnoreCase));
         });
 
+        // sameAs / sm: convention-insensitive equality (ignores case, underscores, hyphens)
+        ffi.Register("sameAs", (args, env) =>
+        {
+            if (args.Count < 2) return CopBool.False;
+            return CopBool.Of(NormalizeConvention(args[0].Display()) == NormalizeConvention(args[1].Display()));
+        });
+        ffi.Register("sm", (args, env) =>
+        {
+            if (args.Count < 2) return CopBool.False;
+            return CopBool.Of(NormalizeConvention(args[0].Display()) == NormalizeConvention(args[1].Display()));
+        });
+
         ffi.Register("matches", (args, env) =>
         {
             if (args.Count < 2) return CopBool.False;
@@ -586,6 +598,22 @@ public static class StandardLibrary
         CopNumber n => (long)n.Value,
         _ => 0
     };
+
+    /// <summary>
+    /// Normalize an identifier for convention-insensitive comparison (sameAs / sm).
+    /// Strips underscores and hyphens and lowercases everything — so 'BlobClient',
+    /// 'blob_client', and 'blob-client' all compare equal.
+    /// </summary>
+    private static string NormalizeConvention(string s)
+    {
+        var sb = new System.Text.StringBuilder(s.Length);
+        foreach (var c in s)
+        {
+            if (c != '_' && c != '-')
+                sb.Append(char.ToLowerInvariant(c));
+        }
+        return sb.ToString();
+    }
 
     // ========================================================================
     // Helpers

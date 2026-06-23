@@ -38,20 +38,32 @@ Use exit codes in CI pipelines:
 cop checks.cop || exit 1
 ```
 
-## cop \<program\>
+## cop run \<program\>
 
 Run a program. The argument can be a `.cop` file, a URL, a local UPPERCASE function name, or a package name from a feed.
 
+Running a **package** requires the explicit `run` verb. This way a mistyped or non-existent command surfaces as a clear `Unknown command` error instead of being silently treated as a package name to auto-restore from a feed:
+
 ```bash
-cop <program> [-t <target>] [-c <commands>] [-f text|json] [-d] [-cql]
+cop run <program> [-t <target>] [-c <commands>] [-f text|json] [-d]
+```
+
+Local `.cop` files (and URLs) can also be run directly, without `run`:
+
+```bash
+cop <file.cop> [-t <target>] [-c <commands>] [-f text|json] [-d] [-cql]
 ```
 
 ### Resolution order
+
+`cop run <program>` resolves the argument in this order:
 
 1. If the argument ends in `.cop` → run that local file
 2. If the argument is an HTTPS URL → download and run
 3. If local `.cop` files define an UPPERCASE function with that name → run it
 4. Otherwise → treat as a package name, auto-restore from feed, and run
+
+A bare `cop <program>` (without `run`) only resolves steps 1–3. If none match, cop prints an `Unknown command` error rather than attempting a package restore — use `cop run <program>` to run a package.
 
 ### Examples
 
@@ -70,13 +82,13 @@ cop checks.cop
 Run a package from a feed:
 
 ```bash
-cop csharp-checks
+cop run csharp-checks
 ```
 
 Run multiple packages:
 
 ```bash
-cop csharp-checks csharp-library-checks
+cop run csharp-checks csharp-library-checks
 ```
 
 Run a named UPPERCASE function defined in local `.cop` files:
@@ -112,9 +124,9 @@ cop https://raw.githubusercontent.com/owner/repo/main/checks.cop
 Load data providers to supply code collections:
 
 ```bash
-cop csharp-checks -t src/ -p csharp
-cop code-metrics -t . -p csharp -p python
-cop csharp-checks python-checks -t . -p csharp -p python
+cop run csharp-checks -t src/ -p csharp
+cop run code-metrics -t . -p csharp -p python
+cop run csharp-checks python-checks -t . -p csharp -p python
 ```
 
 Output as JSON:
@@ -451,9 +463,21 @@ cop update
 
 ### Updating
 
-Cop does not update itself automatically. Run `cop update` to download and install the
-latest release on demand (see [cop update](#cop-update)). This keeps runs predictable and
-never overwrites a locally built/installed binary behind your back.
+Cop does not install updates automatically — run `cop update` to download and install the
+latest release on demand. This keeps runs predictable and never overwrites a locally
+built/installed binary behind your back.
+
+To help you stay current, cop shows two non-blocking, interactive-only notices (printed to
+stderr in colour; suppressed in pipes/CI, so scripted output is never affected):
+
+- **Update available** — at most **once a day**, cop checks GitHub for a newer release. If one
+  exists, it prints a yellow reminder to run `cop update`. The reminder persists on every run
+  until you update; the network check itself happens only once per day.
+- **What's new** — the first run after you update prints a concise summary of the new features,
+  covering **every version since the one you last ran** (so the notes for any versions you
+  skipped are included too).
+
+State for these notices is kept in `~/.cop/update-check.json`.
 
 ## User Checks
 

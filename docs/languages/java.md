@@ -120,12 +120,12 @@ let cb = java.parse()
 predicate isUndocumented(Type) => Type.Documented == false && Type:isPublic
 
 # Flag throw statements (prefer checked exceptions or Result patterns)
-predicate isThrow(Statement) => Statement.Kind == throw
+predicate isThrowStmt(Statement) => Statement.Kind == throw
 
 let undocumented = cb.Types:isUndocumented
     :toWarning('Public type {item.Name} is missing Javadoc')
 
-let throws = cb.Statements:isThrow
+let throws = cb.Statements:isThrowStmt
     :toWarning('throw at line {item.Line} — consider a checked exception or validation')
 
 command MAIN = CHECK(undocumented + throws)

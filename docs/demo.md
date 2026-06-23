@@ -44,7 +44,7 @@ The rule catches any unsealed class in the project. Agents can add, modify, or c
 Run built-in checks on the cop repo — no extra flags needed:
 
 ```bash
-cop csharp-checks -t C:\git\cop
+cop run csharp-checks -t C:\git\cop
 ```
 
 ```
@@ -81,7 +81,7 @@ This analyzes both C# and Python code in one pass, reporting violations from eit
 The `code-metrics` package computes an aggregate slop (code quality) score:
 
 ```bash
-cop code-metrics -t C:\git\cop -p csharp
+cop run code-metrics -t C:\git\cop -p csharp
 ```
 
 **Output:**

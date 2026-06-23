@@ -927,6 +927,91 @@ command main = x + 1", "test.cop");
         Assert.That(((CopInt)result).Value, Is.EqualTo(20));
     }
 
+    // ========================================================================
+    // Per-item collection transforms: Select / Where / OrderBy (item-binding)
+    // ========================================================================
+
+    [Test]
+    public void SelectProjectsMemberPerItem()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        // item.Length must bind `item` to each element (regression: was "Undefined variable 'item'")
+        var result = EvalExpr("['ab', 'c', 'def'].Select(item.Length)", ffi);
+        Assert.That(result, Is.InstanceOf<CopList>());
+        var items = ((CopList)result).Items;
+        Assert.That(items.Select(i => ((CopInt)i).Value), Is.EqualTo(new[] { 2, 1, 3 }));
+    }
+
+    [Test]
+    public void SelectSupportsArrowLambda()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = EvalExpr("['ab', 'c'].Select((s) => s.Length)", ffi);
+        Assert.That(result, Is.InstanceOf<CopList>());
+        var items = ((CopList)result).Items;
+        Assert.That(items.Select(i => ((CopInt)i).Value), Is.EqualTo(new[] { 2, 1 }));
+    }
+
+    [Test]
+    public void WhereFiltersPerItem()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = EvalExpr("['Blob', 'Queue', 'Bus'].Where(item:startsWith('B'))", ffi);
+        Assert.That(result, Is.InstanceOf<CopList>());
+        var items = ((CopList)result).Items;
+        Assert.That(items.Count, Is.EqualTo(2));
+        Assert.That(((CopString)items[0]).Value, Is.EqualTo("Blob"));
+        Assert.That(((CopString)items[1]).Value, Is.EqualTo("Bus"));
+    }
+
+    [Test]
+    public void OrderBySortsByKeyAscending()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = EvalExpr("['bb', 'a', 'ccc'].OrderBy(item.Length)", ffi);
+        Assert.That(result, Is.InstanceOf<CopList>());
+        var items = ((CopList)result).Items.Select(i => ((CopString)i).Value);
+        Assert.That(items, Is.EqualTo(new[] { "a", "bb", "ccc" }));
+    }
+
+    [Test]
+    public void OrderByDescendingSortsByKeyDescending()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = EvalExpr("['a', 'ccc', 'bb'].OrderByDescending(item.Length)", ffi);
+        Assert.That(result, Is.InstanceOf<CopList>());
+        var items = ((CopList)result).Items.Select(i => ((CopString)i).Value);
+        Assert.That(items, Is.EqualTo(new[] { "ccc", "bb", "a" }));
+    }
+
+    // ========================================================================
+    // Convention-insensitive equality: sameAs / sm
+    // ========================================================================
+
+    [Test]
+    public void SameAsIsConventionInsensitive()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        Assert.That(EvalExpr("'BlobClient'.sameAs('blob_client')", ffi), Is.EqualTo(CopBool.True));
+        Assert.That(EvalExpr("'BlobClient'.sameAs('blob-client')", ffi), Is.EqualTo(CopBool.True));
+        Assert.That(EvalExpr("'BlobClient'.sameAs('QueueClient')", ffi), Is.EqualTo(CopBool.False));
+    }
+
+    [Test]
+    public void SmIsAliasForSameAs()
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        Assert.That(EvalExpr("'BlobClient'.sm('blob_client')", ffi), Is.EqualTo(CopBool.True));
+        Assert.That(EvalExpr("'BlobClient'.sm('QueueClient')", ffi), Is.EqualTo(CopBool.False));
+    }
+
     [Test]
     public void EmptyReturnsTrueForEmptyList()
     {

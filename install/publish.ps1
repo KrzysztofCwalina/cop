@@ -12,6 +12,27 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $RepoRoot = "$PSScriptRoot\.."
 $OutputBase = $PSScriptRoot
 
+# Release-notes approval guard: the version being published should have an APPROVED entry in
+# cop/cli/resources/release-notes.json (the "release file"). cop only shows a version's
+# "what's new" features to users once approved, so this is a reminder to review them first.
+function Test-ReleaseNotesApproved {
+    $csproj = Join-Path $RepoRoot 'cop\cli\cop.csproj'
+    $notesPath = Join-Path $RepoRoot 'cop\cli\resources\release-notes.json'
+    if (-not (Test-Path $csproj) -or -not (Test-Path $notesPath)) { return }
+    $version = ([regex]::Match((Get-Content $csproj -Raw), '<Version>([^<]+)</Version>')).Groups[1].Value.Trim()
+    if (-not $version) { return }
+    try { $releases = (Get-Content $notesPath -Raw | ConvertFrom-Json).releases } catch { Write-Warning "release-notes.json is not valid JSON"; return }
+    $entry = $releases | Where-Object { $_.version -eq $version }
+    if (-not $entry) {
+        Write-Warning "RELEASE NOTES: version $version has no entry in release-notes.json. Add its 'what''s new' features (otherwise users see no notes for this version)."
+    } elseif (-not $entry.approved) {
+        Write-Warning "RELEASE NOTES: version $version is NOT approved. Review its features in release-notes.json and set approved=true before releasing (cop hides unapproved features)."
+    } else {
+        Write-Host "Release notes for ${version}: approved ($($entry.features.Count) feature(s))." -ForegroundColor Green
+    }
+}
+Test-ReleaseNotesApproved
+
 # Patches the ZIP central directory "version made by" host OS byte to Unix (3)
 # for all entries in the archive. .NET's ZipArchive always writes host OS = 0 (MS-DOS),
 # which causes unzip/mise to ignore ExternalAttributes Unix permission bits.

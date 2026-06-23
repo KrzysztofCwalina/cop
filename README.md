@@ -87,10 +87,10 @@ Exit code 1 if violations found, 0 if clean — suitable for CI. Agents see thes
 Agent Cop ships with pre-built check packages for common rules. No `.cop` files needed:
 
 ```bash
-cop csharp-checks                         # C# naming, formatting, documentation
-cop python-checks                         # Python conventions
-cop javascript-checks                     # JS/TS conventions
-cop csharp-checks -t src/                 # analyze a specific directory
+cop run csharp-checks                     # C# naming, formatting, documentation
+cop run python-checks                     # Python conventions
+cop run javascript-checks                 # JS/TS conventions
+cop run csharp-checks -t src/             # analyze a specific directory
 ```
 
 Cop also supports **Rust**, **Go**, and **Java** — see the [Language Walkthroughs](docs/languages/) for getting started with any supported language.

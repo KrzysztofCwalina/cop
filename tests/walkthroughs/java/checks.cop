@@ -1,0 +1,12 @@
+# Java walkthrough (docs/languages/java.md §4) — verifies the documented rule works.
+import java
+import code
+
+let cb = java.parse()
+
+predicate isUndocumented(Type) => Type.Documented == false && Type:isPublic
+predicate isThrow(Statement) => Statement.Kind == throw
+
+test java-parse = assert(cb.Types.Count > 0, 'java.parse() should return types')
+test java-undocumented = assert(cb.Types:isUndocumented.Count > 0, 'expected an undocumented public type')
+test java-throw = assert(cb.Statements:isThrow.Count > 0, 'expected a throw statement')

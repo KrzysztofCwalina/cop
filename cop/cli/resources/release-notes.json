@@ -1,0 +1,38 @@
+{
+  "_comment": "Release notes shown by cop after an update (what's new since the user's previous version, including skipped versions). 'approved' MUST be true before a version's features are shown to users and before that version is released. When cutting a release, add an entry for the new version, review the features, then set approved=true.",
+  "releases": [
+    {
+      "version": "2026.6.22.1",
+      "approved": true,
+      "features": [
+        "cop help and reference.html now render `type X = Base & { ... }` fields; all six `:as<Language>` narrowings are documented and linked."
+      ]
+    },
+    {
+      "version": "2026.6.22.2",
+      "approved": true,
+      "features": [
+        "`:as<Language>` narrowing now applies to Methods and Statements across all 6 languages; added a flat `codebase.Methods` collection."
+      ]
+    },
+    {
+      "version": "2026.6.22.3",
+      "approved": true,
+      "features": [
+        "`cop init --checks`: generate cop checks from your repo's existing instructions via a coding agent.",
+        "`cop verify` now statically type-checks call arguments (e.g. flags anchoring `toError` on a non-position before runtime).",
+        "Package auto-restore now repairs incomplete/stale cached packages instead of looping on \"restored ok\" / \"not found\"."
+      ]
+    },
+    {
+      "version": "2026.6.23.1",
+      "approved": true,
+      "features": [
+        "Running a package now uses `cop run <package>`; a mistyped or unknown command shows a clear error (with a suggestion) instead of trying to restore it as a package.",
+        "New `sameAs` / `sm` functions: convention-insensitive identifier comparison (ignores case, underscores, and hyphens).",
+        "cop now checks once a day for a newer release and shows a persistent reminder to run `cop update`.",
+        "After you update, cop prints a concise \"what's new\" summary — including any versions you skipped."
+      ]
+    }
+  ]
+}

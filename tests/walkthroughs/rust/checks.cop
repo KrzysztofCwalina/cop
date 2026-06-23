@@ -1,0 +1,13 @@
+# Rust walkthrough (docs/languages/rust.md §5) — verifies the documented rule works.
+import rust
+import code
+
+let cb = rust.parse()
+
+predicate isDeclaredType(Type) => Type.Kind == Struct || Type.Kind == Enum || Type.Kind == Interface
+predicate isUndocumented(Type) => isDeclaredType && isPublic && !Type.Documented
+predicate isPanic(Statement) => Statement.Kind == throw && Statement.MemberName == 'panic'
+
+test rust-parse = assert(cb.Types.Count > 0, 'rust.parse() should return types')
+test rust-undocumented = assert(cb.Types:isUndocumented.Count > 0, 'expected an undocumented public type')
+test rust-panic = assert(cb.Statements:isPanic.Count > 0, 'expected a panic! call')

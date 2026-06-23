@@ -1,0 +1,12 @@
+# Go walkthrough (docs/languages/go.md §4) — verifies the documented rule works.
+import go
+import code
+
+let cb = go.parse()
+
+predicate isUndocumented(Type) => Type.Documented == false && Type:isPublic
+predicate isPanic(Statement) => Statement.Kind == throw && Statement.MemberName == 'panic'
+
+test go-parse = assert(cb.Types.Count > 0, 'go.parse() should return types')
+test go-undocumented = assert(cb.Types:isUndocumented.Count > 0, 'expected an undocumented exported type')
+test go-panic = assert(cb.Statements:isPanic.Count > 0, 'expected a panic() call')

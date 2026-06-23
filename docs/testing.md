@@ -29,7 +29,7 @@ cop test checks-test.cop
 
 ## Syntax
 
-```cop
+```cop skip
 test <name> = assert(<condition>)
 test <name> = assert(<condition>, '<message>')
 ```
@@ -90,7 +90,7 @@ cop test tests/cop/ || exit 1
 
 ## Test Isolation
 
-Tests declared with `test` only run via `cop test`. They are skipped during normal execution (`cop <package>` or `cop <file>`). This means you can safely put test declarations alongside regular code — they won't execute unless you explicitly run `cop test`.
+Tests declared with `test` only run via `cop test`. They are skipped during normal execution (`cop run <package>` or `cop <file>`). This means you can safely put test declarations alongside regular code — they won't execute unless you explicitly run `cop test`.
 
 ## Writing Good Tests
 

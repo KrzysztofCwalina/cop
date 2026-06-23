@@ -1,0 +1,10 @@
+# C# walkthrough (docs/languages/csharp.md §4) — verifies the documented rule works.
+import csharp
+import code
+
+let cb = csharp.parse()
+
+predicate isUndocumented(Type) => Type.Documented == false && Type:isPublic
+
+test cs-parse = assert(cb.Types.Count > 0, 'csharp.parse() should return types')
+test cs-undocumented = assert(cb.Types:isUndocumented.Count > 0, 'expected an undocumented public type')

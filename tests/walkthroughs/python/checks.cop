@@ -1,0 +1,12 @@
+# Python walkthrough (docs/languages/python.md §4) — verifies the documented rule works.
+import python
+import code
+
+let cb = python.parse()
+
+predicate isUndocumented(Type) => Type.Documented == false && Type:isPublic
+predicate isBareExcept(Statement) => Statement.ErrorHandler == true && Statement.Generic == true
+
+test py-parse = assert(cb.Types.Count > 0, 'python.parse() should return types')
+test py-undocumented = assert(cb.Types:isUndocumented.Count > 0, 'expected an undocumented class')
+test py-bare-except = assert(cb.Statements:isBareExcept.Count > 0, 'expected a bare except')

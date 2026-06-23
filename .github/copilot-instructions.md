@@ -50,19 +50,26 @@ So the first release on 2026-06-18 is `2026.6.18.1`; a second release that same 
 
 ```bash
 # 1. Set cop/cli/cop.csproj <Version> to today's date, e.g. 2026.6.18.1
-# 2. Rebuild exe + provider DLLs + all platform zips
+# 2. Add a release-notes entry for the new version in cop/cli/resources/release-notes.json
+#    with a concise list of the most important features, and set "approved": true after review.
+#    (publish.ps1 warns if the version being published has no approved entry. cop shows these
+#    "what's new" notes to users after they update — only approved versions are shown.)
+# 3. Rebuild exe + provider DLLs + all platform zips
 install/publish.ps1
-# 3. Regenerate docs if packages changed
+# 4. Regenerate docs if packages changed
 dotnet run --project tools/copdocs -- packages --output docs/reference.html
-# 4. Commit version + install/cop-*.zip + rebuilt packages/**/lib/*.dll (+ docs)
+# 5. Commit version + release-notes.json + install/cop-*.zip + rebuilt packages/**/lib/*.dll (+ docs)
 git add -A && git commit -m "..." && git push
-# 5. Create the release (asset names must be cop-<rid>.zip + cop-vscode.zip)
+# 6. Create the release (asset names must be cop-<rid>.zip + cop-vscode.zip)
 gh release create v2026.6.18.1 install/cop-*.zip install/cop-vscode.zip --title v2026.6.18.1 --latest
-# 6. Verify end-to-end
+# 7. Verify end-to-end
 cop update      # must report the new version
 ```
 
 `cop update` always installs `releases/latest` (no version comparison), so the new release must be marked `--latest`. The release tag is `v<version>`.
+
+**Release notes / what's new.** `cop/cli/resources/release-notes.json` (embedded in cop.exe) is the source of the "what's new" notices cop shows after an update. Each entry is `{ "version", "approved", "features": [...] }`. Keep features short and user-facing. A version's features are shown to users only when `"approved": true` — review and approve before releasing.
+
 
 ## Regenerating Docs
 

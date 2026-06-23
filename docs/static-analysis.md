@@ -6,10 +6,10 @@ Agent Cop ships with built-in check packages that enforce conventions out of the
 
 ## Running Built-In Checks
 
-By default, cop analyzes the **current working directory** — it scans all source files in the directory tree. Run `cop` from your repository root with one or more check packages:
+By default, cop analyzes the **current working directory** — it scans all source files in the directory tree. Run `cop run` from your repository root with one or more check packages:
 
 ```bash
-cop csharp-checks
+cop run csharp-checks
 ```
 
 This scans all C# files under the current directory and reports violations:
@@ -29,8 +29,8 @@ Each line shows the **file path**, **line number**, **severity** (error/warning/
 Use `-t` to analyze a different directory than the current one:
 
 ```bash
-cop csharp-checks -t src/              # only check files under src/
-cop python-checks -t backend/          # only check backend/ code
+cop run csharp-checks -t src/              # only check files under src/
+cop run python-checks -t backend/          # only check backend/ code
 ```
 
 ### Running Multiple Packages
@@ -38,7 +38,7 @@ cop python-checks -t backend/          # only check backend/ code
 You can run several check packages in one command:
 
 ```bash
-cop csharp-checks javascript-checks    # check both C# and JS/TS
+cop run csharp-checks javascript-checks    # check both C# and JS/TS
 ```
 
 ### Running a Single Check
@@ -46,8 +46,8 @@ cop csharp-checks javascript-checks    # check both C# and JS/TS
 Use `-c` to run only specific checks from a package:
 
 ```bash
-cop csharp-checks -c interface-prefix              # just the interface naming check
-cop csharp-checks -c interface-prefix,no-tabs      # two specific checks
+cop run csharp-checks -c interface-prefix              # just the interface naming check
+cop run csharp-checks -c interface-prefix,no-tabs      # two specific checks
 ```
 
 ### Exit Codes
@@ -150,7 +150,7 @@ When a package flags something you don't care about, you have several options to
 The simplest approach — no files to create. Use `-c` to run only checks you want:
 
 ```bash
-cop csharp-checks -c interface-prefix,type-name-casing    # run ONLY these two checks
+cop run csharp-checks -c interface-prefix,type-name-casing    # run ONLY these two checks
 ```
 
 ### Option 2: Create a `.cop` File that Excludes Checks
@@ -400,11 +400,11 @@ Cop can run external analysis tools and present their results in the same unifie
 ### Running an Analyzer
 
 ```bash
-cop python-ruff -t path/to/project          # Python lint
-cop python-mypy -t path/to/project          # Python type check
-cop javascript-eslint -t path/to/project    # JS/TS lint
-cop csharp-stylecop -t path/to/project      # C# style
-cop analysis-semgrep -t path/to/project     # Security scan
+cop run python-ruff -t path/to/project          # Python lint
+cop run python-mypy -t path/to/project          # Python type check
+cop run javascript-eslint -t path/to/project    # JS/TS lint
+cop run csharp-stylecop -t path/to/project      # C# style
+cop run analysis-semgrep -t path/to/project     # Security scan
 ```
 
 All produce the same unified output format.

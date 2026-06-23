@@ -411,6 +411,15 @@ public sealed class Evaluator
         if (call.Callee is MemberExpr mem)
         {
             var obj = ForceValue(Eval(mem.Object, env));
+
+            // Per-item collection transforms (Select/Where/OrderBy) evaluate their
+            // argument once per element with `item` bound (Cop convention), so they must
+            // run before the generic eager-argument dispatch below — which evaluates args
+            // in the outer environment and would fail to resolve `item`.
+            if (IsCollectionValue(obj) &&
+                TryEvalPerItemTransform(obj, mem.Member, call.Args, env, out var transformResult))
+                return transformResult;
+
             var args = call.Args.Select(a => Eval(a, env)).ToList();
 
             // First, try resolving as a member that is callable
@@ -449,6 +458,89 @@ public sealed class Evaluator
         throw new CopEvaluationException(
             $"Value of type {callee.GetType().Name} is not callable",
             call.Line, _filePath);
+    }
+
+    private static bool IsCollectionValue(CopValue v) =>
+        v is CopList or CopLazyCollection or CopQueryable or CopQueryableProperty;
+
+    /// <summary>
+    /// Collection transforms whose single argument is a per-element expression
+    /// (Cop convention: `item` is the element). Unlike FFI collection functions
+    /// (text, distinct, take, ...), the argument must be evaluated once per item
+    /// with `item` bound, so these are handled here instead of via eager dispatch.
+    /// Supports both the implicit-item form `Select(item.Name)` and an explicit
+    /// single-parameter lambda `Select((t) => t.Name)`.
+    /// </summary>
+    private bool TryEvalPerItemTransform(CopValue collection, string member,
+        IReadOnlyList<Expression> argExprs, Environment env, out CopValue result)
+    {
+        result = CopNull.Instance;
+        switch (member)
+        {
+            case "Select" or "select":
+            {
+                if (argExprs.Count != 1) return false;
+                var projected = new List<CopValue>();
+                foreach (var item in CoerceToEnumerable(collection))
+                    projected.Add(ForceValue(EvalElementExpr(argExprs[0], item, env)));
+                result = new CopList(projected);
+                return true;
+            }
+            case "Where" or "where":
+            {
+                if (argExprs.Count != 1) return false;
+                var kept = new List<CopValue>();
+                foreach (var item in CoerceToEnumerable(collection))
+                {
+                    var v = ForceValue(EvalElementExpr(argExprs[0], item, env));
+                    if (v is ICopCallable callable)
+                        v = callable.Invoke([item], this, env);
+                    if (v.IsTruthy)
+                        kept.Add(item);
+                }
+                result = new CopList(kept);
+                return true;
+            }
+            case "OrderBy" or "orderBy" or "OrderByDescending" or "orderByDescending":
+            {
+                if (argExprs.Count != 1) return false;
+                bool descending = member.Contains("Descending", StringComparison.OrdinalIgnoreCase);
+                var keyed = new List<(CopValue Item, CopValue Key)>();
+                foreach (var item in CoerceToEnumerable(collection))
+                    keyed.Add((item, ForceValue(EvalElementExpr(argExprs[0], item, env))));
+                keyed.Sort((a, b) => CompareValues(a.Key, b.Key) * (descending ? -1 : 1));
+                result = new CopList(keyed.Select(k => k.Item).ToList());
+                return true;
+            }
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Evaluate a per-element transform argument with `item` bound to the element.
+    /// An explicit single-parameter lambda also binds its parameter to the element.
+    /// </summary>
+    private CopValue EvalElementExpr(Expression argExpr, CopValue item, Environment env)
+    {
+        var elemEnv = env.Extend();
+        elemEnv.Define("item", item);
+        if (argExpr is LambdaExpr lambda)
+        {
+            if (lambda.Params.Count >= 1)
+                elemEnv.Define(lambda.Params[0].Name, item);
+            return Eval(lambda.Body, elemEnv);
+        }
+        return Eval(argExpr, elemEnv);
+    }
+
+    /// <summary>3-way compare for OrderBy: numeric when both sides are numbers, else ordinal string.</summary>
+    private static int CompareValues(CopValue a, CopValue b)
+    {
+        var (an, bn) = (ToNumber(a), ToNumber(b));
+        if (an is not null && bn is not null)
+            return an.Value.CompareTo(bn.Value);
+        return string.Compare(a.Display(), b.Display(), StringComparison.Ordinal);
     }
 
     private CopValue? TryGetMember(CopValue obj, string member)

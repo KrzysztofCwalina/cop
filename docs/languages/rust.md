@@ -94,7 +94,7 @@ correctness, style, and documentation checks. It hardcodes the Rust provider, so
 flag is needed:
 
 ```bash
-cop rust-checks -t .
+cop run rust-checks -t .
 ```
 
 It flags common issues such as:
@@ -132,12 +132,12 @@ predicate isDeclaredType(Type) => Type.Kind == Struct || Type.Kind == Enum || Ty
 predicate isUndocumented(Type) => isDeclaredType && isPublic && !Type.Documented
 
 # Flag uses of panic! (prefer Result returns in library code)
-predicate isPanic(Statement) => Statement.Kind == throw && Statement.MemberName == 'panic'
+predicate isPanicCall(Statement) => Statement.Kind == throw && Statement.MemberName == 'panic'
 
 let undocumented = cb.Types:isUndocumented
     :toWarning('Public type {item.Name} is missing documentation')
 
-let panics = cb.Statements:isPanic
+let panics = cb.Statements:isPanicCall
     :toWarning('Avoid panic! at line {item.Line} — prefer returning Result')
 
 command MAIN = CHECK(undocumented + panics)
@@ -279,7 +279,7 @@ The `rust.parse()` function returns a `Codebase` with these collections:
 ## Tips
 
 - Use `cop verify checks.cop` to check your rule for syntax/type errors before running
-- Start with the built-in `cop rust-checks -t .` before writing custom rules
+- Start with the built-in `cop run rust-checks -t .` before writing custom rules
 - Enforce crate dependency rules with the `code-layering` package (see section 7)
 - Use `-t path/` to target a specific subdirectory
 - Combine with other providers: `import rust` + `import python` to analyze polyglot projects

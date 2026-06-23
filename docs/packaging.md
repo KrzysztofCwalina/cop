@@ -121,7 +121,7 @@ import csharp
 import code-analysis
 import files
 
-command main = foreach csharp.types()
+command main = foreach csharp.Types
     => '{item.Name}'
 ```
 
@@ -162,7 +162,7 @@ Here is the complete sequence, step by step, starting from a fresh machine where
 import csharp
 import code-analysis
 
-command main = foreach csharp.types()
+command main = foreach csharp.Types
     => '{item.Name} has {item.Methods.Count} methods'
 ```
 
@@ -258,7 +258,7 @@ The engine builds its own ordered list of feed paths. This list determines where
 1. **Walk up from the script directory.** Starting from `C:\myproject\`, at each level, if a `packages/` subdirectory exists, add it. (In this example, none exist.)
 
 2. **`feed` declarations in `.cop` files.** A `.cop` file can declare additional feed paths:
-   ```cop
+   ```cop skip
    feed '../shared-packages'
    import xxx
    ```
@@ -362,7 +362,7 @@ cop package restore foo.cop
 
 This parses the `.cop` file, reads its `feed` and `import` declarations, and downloads all imported packages (and their transitive dependencies) from the declared GitHub feed. Unlike auto-restore, `cop package restore` requires the `.cop` file to contain a `feed` declaration pointing to a GitHub repository:
 
-```cop
+```cop skip
 feed 'github.com/myorg/my-packages'
 import my-checks
 ```

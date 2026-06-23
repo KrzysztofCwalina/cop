@@ -8,7 +8,7 @@ This project uses **Cop** — a data processing language for writing static anal
 
 ```bash
 cop <file.cop>           # Run a .cop file
-cop <package-name>       # Run a package by name
+cop run <package-name>   # Run a package by name (auto-restores from a feed)
 cop                      # Run all .cop files in current directory
 cop verify               # Verify program correctness (no execution)
 cop test                 # Run tests

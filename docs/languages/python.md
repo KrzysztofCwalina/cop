@@ -62,7 +62,7 @@ let cb = python.parse()
 predicate isUndocumented(Type) => Type.Documented == false && Type:isPublic
 
 # Flag bare except clauses (catch-all exception handling)
-predicate isBareExcept(Statement) => Statement:isErrorHandler && Statement:isGeneric
+predicate isBareExcept(Statement) => Statement.ErrorHandler == true && Statement.Generic == true
 
 let undocumented = cb.Types:isUndocumented
     :toWarning('Public class {item.Name} is missing a docstring')
@@ -99,10 +99,10 @@ src/mypackage/services.py: warning: Bare except at line 42 — catch a specific 
 Cop ships with comprehensive Python check packages:
 
 ```bash
-cop python-checks                          # all Python conventions
-cop python-checks -c no-print             # just the "no print" check
-cop python-library-checks                  # library API design rules
-cop python-library-azure-checks            # Azure SDK conventions
+cop run python-checks                      # all Python conventions
+cop run python-checks -c no-print          # just the "no print" check
+cop run python-library-checks              # library API design rules
+cop run python-library-azure-checks        # Azure SDK conventions
 ```
 
 ---

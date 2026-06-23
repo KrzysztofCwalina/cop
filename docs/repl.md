@@ -231,7 +231,7 @@ import code-analysis
 let publicTypes = Code.Types:isPublic
 
 foreach publicTypes.Methods:isPublic:matches('[a-z].*')
-    => :toWarning('{item.Name} should use PascalCase')
+    => '{item.Name} should use PascalCase'
 ```
 
 **5. Run it — files auto-reload**

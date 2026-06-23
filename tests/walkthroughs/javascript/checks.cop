@@ -1,0 +1,10 @@
+# JavaScript walkthrough (docs/languages/javascript.md §4) — verifies the documented rule works.
+import javascript
+import code
+
+let cb = javascript.parse()
+
+predicate isConsoleLog(Statement) => Statement.TypeName == 'console' && Statement.MemberName == 'log'
+
+test js-parse = assert(cb.Types.Count > 0, 'javascript.parse() should return types')
+test js-console = assert(cb.Statements:isConsoleLog.Count > 0, 'expected a console.log call')

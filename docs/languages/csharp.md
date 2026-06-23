@@ -100,10 +100,10 @@ src/Services/UserService.cs: warning: Method ProcessBatch has 45 statements (max
 Cop ships with comprehensive C# check packages:
 
 ```bash
-cop csharp-checks                          # all C# conventions
-cop csharp-checks -c no-var                # just the "no var" check
-cop csharp-library-checks                  # library API design rules
-cop csharp-library-azure-checks            # Azure SDK conventions
+cop run csharp-checks                      # all C# conventions
+cop run csharp-checks -c no-var            # just the "no var" check
+cop run csharp-library-checks              # library API design rules
+cop run csharp-library-azure-checks        # Azure SDK conventions
 ```
 
 ---

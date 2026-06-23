@@ -67,7 +67,7 @@ public class DemoTests
     public void Demo_CsharpChecks_WithPFlag_ProducesViolations()
     {
         // Step 1: run csharp-checks package with -p csharp
-        var (stdout, _, _) = RunCop($"csharp-checks -t \"{RepoRoot}\" -p csharp");
+        var (stdout, _, _) = RunCop($"run csharp-checks -t \"{RepoRoot}\" -p csharp");
 
         // Should produce violations
         Assert.That(stdout, Is.Not.Empty, "csharp-checks should produce output");
@@ -79,7 +79,7 @@ public class DemoTests
     public void Demo_CodeMetrics_WithPFlag_ProducesValidJson()
     {
         // Step 2: run code-metrics package with -p csharp
-        var (stdout, _, _) = RunCop($"code-metrics -t \"{RepoRoot}\" -p csharp");
+        var (stdout, _, _) = RunCop($"run code-metrics -t \"{RepoRoot}\" -p csharp");
 
         Assert.That(stdout, Does.StartWith("{"), "Output should be JSON object");
 
@@ -130,7 +130,7 @@ public class DemoTests
     [Test]
     public void Demo_PFlag_ErrorOnUnknownProvider()
     {
-        var (_, stderr, exitCode) = RunCop($"code-metrics -t \"{RepoRoot}\" -p nonexistent");
+        var (_, stderr, exitCode) = RunCop($"run code-metrics -t \"{RepoRoot}\" -p nonexistent");
         Assert.That(exitCode, Is.EqualTo(2));
         Assert.That(stderr, Does.Contain("not found"));
     }
