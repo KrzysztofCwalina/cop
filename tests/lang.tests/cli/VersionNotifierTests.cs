@@ -207,6 +207,20 @@ public class VersionNotifierTests
     }
 
     [Test]
+    public void WhatsNew_UpgradeTo_2026_6_23_2_AnnouncesFormatSupport()
+    {
+        // The user upgrading from the previous release must see the new format/script support
+        // in the "what's new" output.
+        var notes = VersionNotifier.LoadReleaseNotes();
+        var now = DateTime.UtcNow;
+        var state = new VersionNotifier.State(now, "v2026.6.23.2", "2026.6.23.1");
+        var (_, messages) = VersionNotifier.Run(state, notes, new Version("2026.6.23.2"), now, () => null);
+        var text = string.Join("\n", messages.Select(m => m.Text));
+        Assert.That(text, Does.Contain("What's new"));
+        Assert.That(text, Does.Contain("YAML").And.Contain("Dockerfile").And.Contain("XML").And.Contain("SQL"));
+    }
+
+    [Test]
     public void State_RoundTripsThroughFile()
     {
         var path = Path.Combine(Path.GetTempPath(), "cop-state-" + Guid.NewGuid().ToString("N") + ".json");
