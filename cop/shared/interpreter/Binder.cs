@@ -111,7 +111,21 @@ public sealed class Binder
         };
 
         if (!_currentScope.Declare(symbol))
-            ReportDuplicate(decl.Name, decl.Line);
+        {
+            // Allow a trait-conformance overload: `type X : Trait = { ... }` declared alongside
+            // the base `type X = { ... }` (e.g. a TextFilePosition conformance used for violations).
+            // The conformance form carries a BaseType; the runtime merges it onto the existing
+            // type, so the binder must not flag it as a duplicate declaration.
+            var existing = _currentScope.ResolveLocal(decl.Name);
+            if (decl.BaseType is not null && existing is TypeSymbol)
+            {
+                // trait-conformance overload — OK
+            }
+            else
+            {
+                ReportDuplicate(decl.Name, decl.Line);
+            }
+        }
 
         _result.RecordResolution(decl, symbol);
     }
@@ -691,6 +705,10 @@ public sealed class Binder
     {
         // Single uppercase letters are generic type parameter placeholders (A-Z)
         if (name.Length == 1 && name[0] >= 'A' && name[0] <= 'Z') return;
+
+        // 'computed' is the synthetic type of a computed property (`name => expr`) used in
+        // conformance/struct bodies; it has no declared type to resolve.
+        if (name == "computed") return;
 
         // Function types like '(T) => bool' or '(A, T) => A' are always valid structurally
         if (name.Contains("=>")) return;

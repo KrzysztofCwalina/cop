@@ -111,6 +111,41 @@ public class EvaluatorTests
         Assert.That(((CopInt)result).Value, Is.EqualTo(2), "nums:isSmall should keep items where isHuge is false (1 and 2)");
     }
 
+    [Test]
+    public void EvalAggregate_InlineElementExpr_ColonForm()
+    {
+        // Regression: `coll:any/all/none/count(inlineExpr)` must evaluate the inline element
+        // expression per item (with `item` bound), not silently fall through to the per-item
+        // filter loop and return a collection.
+        Assert.That(((CopBool)Eval("let n = [1, 2, 3, 4]\ncommand main = n:any(item > 3)")).Value, Is.True);
+        Assert.That(((CopBool)Eval("let n = [1, 2, 3, 4]\ncommand main = n:any(item > 9)")).Value, Is.False);
+        Assert.That(((CopBool)Eval("let n = [1, 2, 3, 4]\ncommand main = n:all(item > 0)")).Value, Is.True);
+        Assert.That(((CopBool)Eval("let n = [1, 2, 3, 4]\ncommand main = n:all(item > 2)")).Value, Is.False);
+        Assert.That(((CopBool)Eval("let n = [1, 2, 3, 4]\ncommand main = n:none(item > 9)")).Value, Is.True);
+        Assert.That(((CopInt)Eval("let n = [1, 2, 3, 4]\ncommand main = n:count(item > 2)")).Value, Is.EqualTo(2));
+    }
+
+    [Test]
+    public void EvalAggregate_InlineElementExpr_DotForm()
+    {
+        // Regression: `coll.any(inlineExpr)` must bind `item` per element (previously threw
+        // "Undefined variable 'item'").
+        Assert.That(((CopBool)Eval("let n = [1, 2, 3, 4]\ncommand main = n.any(item > 3)")).Value, Is.True);
+        Assert.That(((CopInt)Eval("let n = [1, 2, 3, 4]\ncommand main = n.count(item > 2)")).Value, Is.EqualTo(2));
+    }
+
+    [Test]
+    public void EvalAggregate_NamedPredicate_StillWorks()
+    {
+        // The named-predicate form must be preserved after routing aggregates per item.
+        var result = Eval("""
+            let n = [1, 2, 3, 4]
+            predicate isBig(int) => int > 2
+            command main = n:any(isBig)
+            """);
+        Assert.That(((CopBool)result).Value, Is.True);
+    }
+
     // ========================================================================
     // Arithmetic
     // ========================================================================

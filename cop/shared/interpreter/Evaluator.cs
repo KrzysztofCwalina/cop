@@ -515,6 +515,14 @@ public sealed class Evaluator
                 result = new CopList(keyed.Select(k => k.Item).ToList());
                 return true;
             }
+            case "any" or "all" or "none" or "count":
+            {
+                // Aggregates over an inline element expression (e.g. items.any(item > 2)).
+                var agg = TryEvalAggregate(member, collection, argExprs, negated: false, env);
+                if (agg is null) return false;
+                result = agg;
+                return true;
+            }
             default:
                 return false;
         }
@@ -535,6 +543,48 @@ public sealed class Evaluator
             return Eval(lambda.Body, elemEnv);
         }
         return Eval(argExpr, elemEnv);
+    }
+
+    /// <summary>
+    /// Evaluates a per-item aggregate (any/all/none/count) over a collection. The single
+    /// argument expression is evaluated once per element with <c>item</c> bound, so an inline
+    /// expression (<c>item:contains('x')</c>), a bare predicate name, or a lambda all work
+    /// uniformly. Returns null when the argument count is not exactly one (caller falls back).
+    /// </summary>
+    private CopValue? TryEvalAggregate(string methodName, CopValue collection,
+        IReadOnlyList<Expression> argExprs, bool negated, Environment env)
+    {
+        if (argExprs.Count != 1) return null;
+
+        int matched = 0;
+        foreach (var item in CoerceToEnumerable(collection))
+        {
+            var v = ForceValue(EvalElementExpr(argExprs[0], item, env));
+            if (v is ICopCallable callable)
+                v = callable.Invoke([item], this, env);
+
+            if (v.IsTruthy)
+            {
+                matched++;
+                if (methodName == "any") return Negate(true);
+                if (methodName == "none") return Negate(false);
+            }
+            else if (methodName == "all")
+            {
+                return Negate(false);
+            }
+        }
+
+        return methodName switch
+        {
+            "any" => Negate(false),
+            "none" => Negate(true),
+            "all" => Negate(true),       // vacuously true for an empty collection
+            "count" => new CopInt(matched),
+            _ => null
+        };
+
+        CopValue Negate(bool b) => CopBool.Of(negated ? !b : b);
     }
 
     /// <summary>3-way compare for OrderBy: numeric when both sides are numbers, else ordinal string.</summary>
@@ -1008,6 +1058,17 @@ public sealed class Evaluator
         };
 
         if (methodName is null || call.Args.Count == 0) return null;
+
+        // Per-item aggregates (any/all/none/count) accept an inline element expression
+        // (e.g. items:any(item:contains('x'))), a bare predicate name, or a lambda —
+        // evaluate the argument once per element with `item` bound. Without this, an inline
+        // expression isn't a callable, so the colon form silently fell through to the per-item
+        // filter loop and returned a collection instead of a bool.
+        if (methodName is "any" or "all" or "none" or "count")
+        {
+            var agg = TryEvalAggregate(methodName, collection, call.Args, negated, env);
+            if (agg is not null) return agg;
+        }
 
         // Generic dispatch: if any arg is a lambda or resolves to a callable,
         // this is a collection-level method call (e.g., Types:all(isPublic))

@@ -279,6 +279,22 @@ let x : int = 2");
     }
 
     [Test]
+    public void AllowsTraitConformanceOverloadWithComputedMembers()
+    {
+        // Regression: `type X = {...}` followed by `type X : Trait = { name => expr, ... }`
+        // (a trait-conformance overload used e.g. for violation positioning) must NOT be flagged
+        // as a duplicate declaration, and the computed-property bodies ('name => expr') must NOT
+        // be type-checked as a literal type named 'computed'.
+        var result = Bind("""
+            type TextFilePosition = { filePath : string, line : int }
+            type Entry = { Name : string, Line : int }
+            type Entry : TextFilePosition = { filePath => item.Name, line => item.Line }
+            """);
+        Assert.That(result.HasErrors, Is.False,
+            "conformance overload + computed members should bind cleanly");
+    }
+
+    [Test]
     public void DuplicateFunctionIsAllowed_Overloading()
     {
         // In Cop, multiple predicates with same name (different guards) are common
