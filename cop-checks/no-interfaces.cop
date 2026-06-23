@@ -3,8 +3,14 @@
 
 let allowed-interfaces = ['ICopCallable']
 
+# Sample/example/test fixtures are illustrative code, not production — skip them.
+predicate isFixtureCode(Type) => Type.File.Path:startsWith('samples/')
+    || Type.File.Path:startsWith('examples/')
+    || Type.File.Path:startsWith('tests/')
+
 predicate isDisallowedInterface(Type:isCSharp) => Type.Kind == Interface
     && !allowed-interfaces:contains(Type.Name)
+    && !isFixtureCode
 
 export let no-new-interfaces = codebase.Types:isDisallowedInterface
     :toError('Do not add new interfaces — use abstract classes instead: {item.Name} in {item.File.Path}')

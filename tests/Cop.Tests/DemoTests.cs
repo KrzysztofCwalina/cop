@@ -22,7 +22,7 @@ public class DemoTests
     }
 
     private static string CopExe => Path.Combine(RepoRoot, "install", "win-x64", "cop.exe");
-    private static string DemoDir => Path.Combine(RepoRoot, "samples", "demo");
+    private static string DemoDir => Path.Combine(RepoRoot, "samples", "static-analysis", "slop-metrics");
 
     private (string stdout, string stderr, int exitCode) RunCop(string args, int timeoutMs = 120_000)
     {
@@ -49,7 +49,7 @@ public class DemoTests
     public void Demo_AllFiles_PassVerify()
     {
         var demoFiles = Directory.GetFiles(DemoDir, "*.cop");
-        Assert.That(demoFiles.Length, Is.GreaterThanOrEqualTo(3), "Expected at least 3 demo .cop files");
+        Assert.That(demoFiles.Length, Is.GreaterThanOrEqualTo(2), "Expected at least 2 slop-metrics .cop files");
 
         var failures = new List<string>();
         foreach (var file in demoFiles)
@@ -100,7 +100,7 @@ public class DemoTests
     public void Demo_Slop_WithPFlag_ProducesJson()
     {
         // demo-slop.cop with -p csharp
-        var copFile = Path.Combine(DemoDir, "demo-slop.cop");
+        var copFile = Path.Combine(DemoDir, "slop.cop");
         var (stdout, _, _) = RunCop($"\"{copFile}\" -t \"{RepoRoot}\" -p csharp");
 
         Assert.That(stdout, Does.StartWith("{"), "Output should be JSON");
@@ -114,8 +114,8 @@ public class DemoTests
     public void Demo_Custom_WithPFlag_AddsViolations()
     {
         // demo-slop (base) vs demo-custom (extended)
-        var slopFile = Path.Combine(DemoDir, "demo-slop.cop");
-        var customFile = Path.Combine(DemoDir, "demo-custom.cop");
+        var slopFile = Path.Combine(DemoDir, "slop.cop");
+        var customFile = Path.Combine(DemoDir, "custom-slop.cop");
 
         var (slopOut, _, _) = RunCop($"\"{slopFile}\" -t \"{RepoRoot}\" -p csharp");
         var (customOut, _, _) = RunCop($"\"{customFile}\" -t \"{RepoRoot}\" -p csharp");

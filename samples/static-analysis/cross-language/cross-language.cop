@@ -1,0 +1,30 @@
+# Cross-language checks — one model, many languages.
+#
+# codebase(...) merges C#, Python, and JS/TS into a single model. A
+# language-agnostic predicate runs across all of them; a single predicate can
+# also branch per language using the isCSharp / isPython / isJavaScript guards.
+#
+# Run from this folder with:  cop cross-language.cop -t .
+import code
+import code-analysis
+import csharp
+import python
+import javascript
+
+let codebase = codebase(csharp.parse(), python.parse(), javascript.parse())
+
+# Language-agnostic: flag long methods in ANY language.
+predicate isLong(Method) => Method.Statements.Count > 3
+let long-methods = codebase.Methods:isLong
+    :toWarning('{item.Name} is long ({item.Statements.Count} statements)')
+
+# Per-language conditions in one predicate: console/print output differs by
+# language, so branch with language guards.
+predicate writesOutput(Statement) =>
+    (Statement:isCSharp && Statement.TypeName:equals('Console'))
+    || (Statement:isPython && Statement.MemberName:equals('print'))
+    || (Statement:isJavaScript && Statement.TypeName:equals('console'))
+let output-stmts = codebase.Statements:writesOutput
+    :toInfo('writes to console/stdout')
+
+command MAIN = CHECK(long-methods + output-stmts)

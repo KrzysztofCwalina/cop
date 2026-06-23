@@ -1,0 +1,17 @@
+# No `var` — require explicit type declarations.
+#
+# The simplest kind of check: filter statements, report each match. Some teams
+# ban C#'s implicit `var` so every declaration shows its type.
+#
+# Run from this folder with:  cop no-var.cop -t .
+import code
+import csharp
+
+let codebase = codebase(csharp.parse())
+
+# Statement.Keywords lists the keywords a statement uses.
+predicate usesVar(Statement) => Statement.Keywords:contains('var')
+
+let statementsUsingVar = codebase.Statements:usesVar
+
+command MAIN = foreach statementsUsingVar => print('{item.File.Path}:{item.Line} uses \'var\'')

@@ -1,0 +1,18 @@
+# TODO comments — flag unresolved TODO / FIXME markers.
+#
+# A line-level check: filter comment lines, match on text. This is the
+# canonical check shape — predicate → :toWarning → CHECK.
+#
+# Run from this folder with:  cop todo-comments.cop -t .
+import code
+import code-analysis
+import csharp
+
+let codebase = codebase(csharp.parse())
+
+predicate hasTodo(Line) => Line.Text:contains('TODO') || Line.Text:contains('FIXME')
+
+let violations = codebase.Lines:isComment:hasTodo
+    :toWarning('unresolved marker —{item.Text}')
+
+command MAIN = CHECK(violations)

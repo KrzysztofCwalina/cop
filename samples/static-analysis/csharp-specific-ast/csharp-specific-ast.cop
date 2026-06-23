@@ -1,0 +1,31 @@
+# Language-specific AST — downcasting to a C# view with `:asCSharp`.
+#
+# The unified Codebase model is language-agnostic, so it deliberately can't
+# express C#-only concepts like records or partial types. Narrow with
+# `:asCSharp` to reach them — the same narrowing works on Types, Methods,
+# and Statements. Multi-language checks keep using the common model; only the
+# parts that need C# specifics downcast.
+#
+# Run from this folder with:  cop csharp-specific-ast.cop -t .
+import code
+import code-analysis
+import csharp
+
+let codebase = codebase(csharp.parse())
+
+# Convention: data-transfer types (named *Dto) should be immutable records.
+# `IsRecord` exists ONLY on the C#-specific AST.
+predicate isDto(Type) => Type.Name:endsWith('Dto')
+let dto-violations = codebase.Types:isDto:asCSharp:!isRecord
+    :toWarning('{item.Name} is a DTO and should be a record')
+
+# `partial` is also a C#-only concept, reached the same way via `:asCSharp`.
+let partial-violations = codebase.Types:asCSharp:isPartial
+    :toInfo('{item.Name} is a partial type — consider consolidating it')
+
+# Statement-level C# facts: flag `lock` statements, which the common
+# Statement model has no Kind for.
+let lock-statements = codebase.Statements:asCSharp:isLock
+    :toInfo('lock statement at line {item.Line}')
+
+command MAIN = CHECK(dto-violations + partial-violations + lock-statements)

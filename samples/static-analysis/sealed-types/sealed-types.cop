@@ -1,0 +1,20 @@
+# Sealed types — public client types should be sealed.
+#
+# Azure SDK guidance: concrete client types are sealed unless explicitly
+# designed for inheritance. Flags public *Client classes that are neither
+# sealed nor abstract.
+#
+# Run from this folder with:  cop sealed-types.cop -t .
+import code
+import code-analysis
+import csharp
+
+let codebase = codebase(csharp.parse())
+
+predicate isClient(Type) => Type.Name:endsWith('Client')
+predicate isUnsealedClient(Type) => isClient && Type:isPublic && !Type:isSealed && !Type:isAbstract
+
+let violations = codebase.Types:isUnsealedClient
+    :toWarning('public client {item.Name} should be sealed')
+
+command MAIN = CHECK(violations)

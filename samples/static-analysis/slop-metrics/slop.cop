@@ -1,0 +1,13 @@
+# Slop metrics — score a codebase, not just list violations.
+#
+# METRICS(violations, lines) aggregates a set of violations against lines of
+# code and emits JSON (totals, slop-per-KLOC, weighted score). `slop` is the
+# built-in rule set from code-metrics.
+#
+# Run from this folder with:  cop slop.cop -t .
+import csharp
+import code-metrics
+
+let cb = codebase(csharp.parse())
+
+command MAIN = METRICS(slop, cb.Lines)

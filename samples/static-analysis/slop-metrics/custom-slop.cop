@@ -1,0 +1,20 @@
+# Custom slop metrics — extend the built-in rule set with your own.
+#
+# Add a custom violation (a "god class" rule) to the built-in `slop` set,
+# then score the codebase with METRICS. :toViolation(message, weight, severity)
+# produces a weighted violation.
+#
+# Run from this folder with:  cop custom-slop.cop -t .
+import csharp
+import code-analysis
+import code-metrics
+
+let cb = codebase(csharp.parse())
+
+predicate hasTooManyMethods(Type) => Type.Methods.count() > 10
+let large-types = cb.Types:hasTooManyMethods
+    :toViolation('Type {item.Name} has {item.Methods.count()} methods', 0.6, 0.95)
+
+let my-slop = slop + large-types
+
+command MAIN = METRICS(my-slop, cb.Lines)

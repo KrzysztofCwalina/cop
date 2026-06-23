@@ -11,7 +11,7 @@ public class TypeSpecProviderTests
     [Test]
     public void TypeSpecHttpProvider_PutPathSegments_FindsOddSegmentPut()
     {
-        var scriptsDir = Path.Combine(RepoRoot, "samples", "s7-TypeSpec");
+        var scriptsDir = Path.Combine(RepoRoot, "samples", "static-analysis", "typespec-http");
         var rootPath = Path.Combine(scriptsDir, "spec");
 
         if (!Directory.Exists(scriptsDir) || !Directory.Exists(rootPath))
@@ -39,7 +39,7 @@ public class TypeSpecProviderTests
     public void TypeSpecHttpProvider_ExtendsResolution_InheritsTemplateOperations()
     {
         // Parse just the dynamic-routes.tsp file to verify extends resolution
-        var specDir = Path.Combine(RepoRoot, "samples", "s7-TypeSpec", "spec");
+        var specDir = Path.Combine(RepoRoot, "samples", "static-analysis", "typespec-http", "spec");
         var dynamicFile = Path.Combine(specDir, "dynamic-routes.tsp");
 
         if (!File.Exists(dynamicFile))

@@ -21,10 +21,10 @@ public class ScenarioValidationTests
     [Test]
     public void S1_HelloWorld_DetectsVarUsage()
     {
-        // Arrange: samples/s1-helloworld has rules.cop and app.cs
-        // rules.cop: import code, usesVar predicate, foreach with file path and line
+        // Arrange: samples/static-analysis/no-var has no-var.cop and app.cs
+        // no-var.cop: import code, usesVar predicate, foreach with file path and line
         // app.cs: "var x = 1;" on line 1
-        var sampleDir = GetSamplesDir("s1-helloworld");
+        var sampleDir = GetSamplesDir("static-analysis/no-var");
 
         // Act: Run the check engine against the sample directory
         var result = Engine.Run(sampleDir, sampleDir);
@@ -56,7 +56,7 @@ public class ScenarioValidationTests
     {
         // Verify that 'import code' properly resolves the code package
         // and types (Statement, etc.) are available for predicate evaluation
-        var sampleDir = GetSamplesDir("s1-helloworld");
+        var sampleDir = GetSamplesDir("static-analysis/no-var");
 
         var result = Engine.Run(sampleDir, sampleDir);
 
@@ -70,7 +70,7 @@ public class ScenarioValidationTests
     public void S1_HelloWorld_PrintInterpolation()
     {
         // Verify that {item.File.Path}:{item.Line} interpolation works
-        var sampleDir = GetSamplesDir("s1-helloworld");
+        var sampleDir = GetSamplesDir("static-analysis/no-var");
 
         var result = Engine.Run(sampleDir, sampleDir);
 

@@ -1,0 +1,20 @@
+# Hello World — your first Cop program.
+#
+# A Cop program imports packages, builds a Codebase, defines predicates
+# (named boolean filters), applies them with the `:` operator, and prints
+# results. {item.Name} interpolates the current item.
+#
+# Run from this folder with:  cop hello-world.cop -t .
+import code
+import csharp
+
+# Parse the C# sources in the target directory (-t) into a Codebase.
+let codebase = codebase(csharp.parse())
+
+# A predicate is a named boolean test over an item (here a Type).
+predicate isClient(Type) => Type.Name:endsWith('Client')
+
+# Apply it with `:` to get the matching subset.
+let clients = codebase.Types:isClient
+
+command MAIN = foreach clients => print('Found client: {item.Name}')

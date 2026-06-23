@@ -23,9 +23,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HttpProvider", "providers\h
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "cop-provider", "providers\cop-provider\cop-provider.csproj", "{23B60AD2-A2B3-4A96-A6F3-56346C5F729B}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{5D20AA90-6969-D8BD-9DCD-8634F4692FDA}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "examples", "examples", "{5D20AA90-6969-D8BD-9DCD-8634F4692FDA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "sample-provider", "samples\s18-provider\sample-provider.csproj", "{4EC015AF-E7D2-480E-B8FB-02DB6A2D372A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "sample-provider", "examples\providers\sample-provider\sample-provider.csproj", "{4EC015AF-E7D2-480E-B8FB-02DB6A2D372A}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "cop-src", "cop-src", "{598DC2AB-5BD8-0342-982A-2B54202215B6}"
 EndProject
@@ -59,7 +59,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "tool-providers", "providers
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "s19-providerstreaming", "s19-providerstreaming", "{E6514BF2-6CC3-3A80-746F-221C0F70C710}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "streaming-provider", "samples\s19-providerstreaming\streaming-provider.csproj", "{50BFF206-8A08-4E42-AB94-75EA05ECBFFF}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "streaming-provider", "examples\providers\streaming-provider\streaming-provider.csproj", "{50BFF206-8A08-4E42-AB94-75EA05ECBFFF}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{07C2787E-EAC7-C090-1BA3-A61EC2A24D84}"
 EndProject

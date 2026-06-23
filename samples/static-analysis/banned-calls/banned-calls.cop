@@ -1,0 +1,20 @@
+# Banned calls — keep console output and blocking waits out of library code.
+#
+# Inspired by analyzer rules that forbid Console output and blocking sleeps in
+# libraries. Matches *call* statements by their receiver type and member name.
+#
+# Run from this folder with:  cop banned-calls.cop -t .
+import code
+import code-analysis
+import csharp
+
+let codebase = codebase(csharp.parse())
+
+predicate isConsoleCall(Statement) => Statement.TypeName:equals('Console')
+predicate isThreadSleep(Statement) => Statement.TypeName:equals('Thread') && Statement.MemberName:equals('Sleep')
+predicate isBanned(Statement) => isConsoleCall || isThreadSleep
+
+let violations = codebase.Statements:isBanned
+    :toWarning('avoid {item.TypeName}.{item.MemberName} in library code')
+
+command MAIN = CHECK(violations)

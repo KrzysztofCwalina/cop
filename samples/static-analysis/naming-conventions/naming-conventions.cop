@@ -1,0 +1,32 @@
+# Naming conventions — common .NET API naming rules in one check.
+#
+# Inspired by StyleCop SA1302 and Azure SDK analyzers:
+#   - interface names start with `I`
+#   - exception types end with `Exception`
+#   - public async methods end with `Async`
+#
+# Run from this folder with:  cop naming-conventions.cop -t .
+import code
+import code-analysis
+import csharp
+
+let codebase = codebase(csharp.parse())
+
+# Interfaces must start with `I`.
+predicate isInterface(Type) => Type.Kind == Interface
+predicate missingIPrefix(Type) => isInterface && !Type.Name:startsWith('I')
+let interface-violations = codebase.Types:missingIPrefix
+    :toError('interface {item.Name} should start with \'I\'')
+
+# Exception types must end with `Exception`.
+predicate derivesException(Type) => Type.BaseTypes:contains('Exception')
+predicate badExceptionName(Type) => derivesException && !Type.Name:endsWith('Exception')
+let exception-violations = codebase.Types:badExceptionName
+    :toError('{item.Name} derives from Exception but is not named *Exception')
+
+# Public async methods must end with `Async`.
+predicate missingAsyncSuffix(Method) => Method:isAsync && Method:isPublic && !Method.Name:endsWith('Async')
+let async-violations = codebase.Methods:missingAsyncSuffix
+    :toWarning('async method {item.Name} should end with \'Async\'')
+
+command MAIN = CHECK(interface-violations + exception-violations + async-violations)

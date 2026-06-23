@@ -1,0 +1,19 @@
+# Domain-specific checks — TypeSpec / HTTP API analysis.
+#
+# Cop packages can target specialized domains beyond source code. Here the
+# typespec-http provider exposes HTTP operations parsed from `.tsp` specs.
+#
+# Rule (mirrors TypeSpec's put-path-even-segments linter): an HTTP PUT
+# operation should have a path with an even number of segments.
+#
+# Run from this folder with:  cop typespec-http.cop -t spec
+import typespec-http
+
+let http = provider('typespec-http')
+
+predicate hasEvenSegments(HttpOperation) => HttpOperation.Path:matches('^((/[^/]+){2})+$')
+
+let put-odd-segments = http.Operations:isPut:!hasEvenSegments
+
+command MAIN = foreach put-odd-segments
+    => print('{warning@yellow-bold} PUT {item.Name} ({item.Path}) has an odd number of path segments')

@@ -2,48 +2,60 @@
 
 All samples in this repository pass `cop verify` (syntax + binding validation).
 
-## Walkthrough Samples
+The standalone samples live under `samples/`, organized into two categories:
 
-These are standalone examples in `samples/` demonstrating language features and patterns.
+- **`samples/language/`** — a tour of Cop language features.
+- **`samples/static-analysis/`** — common, real-world static-analysis checks.
 
-| Sample | Description |
-|--------|-------------|
-| [s1-helloworld](../samples/s1-helloworld/main.cop) | Basic code analysis rule: flags C# statements that use 'var' |
-| [s2-json](../samples/s2-json/main.cop) | JSON parsing with custom type definitions |
-| [s3-files](../samples/s3-files/main.cop) | File system analysis and querying |
-| [s4-lister](../samples/s4-lister/main.cop) | Command composition with the & operator |
-| [s5-namedcommands](../samples/s5-namedcommands/commands.cop) | Named commands for reusable operations |
-| [s6-strings](../samples/s6-strings/strings.cop) | String handling and single-quote strings |
-| [s7-typespec](../samples/s7-typespec/checks.cop) | Domain-specific analysis using TypeSpec/HTTP API |
-| [s8-violations](../samples/s8-violations/checks.cop) | Simple code checks using action-let pattern |
-| [s9-predicatechaining](../samples/s9-predicatechaining/checks.cop) | Predicate chaining and negation |
-| [s10-transforms](../samples/s10-transforms/transforms.cop) | List transforms: Where, Select, text, First, Count |
-| [s11-languageconstraints](../samples/s11-languageconstraints/checks.cop) | Language-constrained predicates (multi-dispatch) |
-| [s12-savecommand](../samples/s12-savecommand/export.cop) | Save command for writing results to files |
-| [s13-composition](../samples/s13-composition/composition.cop) | Predicate composition: building complex rules from simple ones |
-| [s14-inlineexpressions](../samples/s14-inlineexpressions/checks.cop) | Inline expressions and predicate composition |
-| [s15-httpserver](../samples/s15-httpserver/server.cop) | HTTP server using the push-provider pipeline |
-| [s16-csharp-specific-ast](../samples/s16-csharp-specific-ast/checks.cop) | Downcast a Type to a CSharpType (`:asCSharp`) to check C#-only AST (records, partial) |
-| [s17-currying](../samples/s17-currying/currying.cop) | Partial application (currying) |
-| [s18-Provider](../samples/s18-Provider/package/samples/use-widgets.cop) | Custom data provider package (see also [sample.cop](../samples/s18-Provider/package/src/sample.cop)) |
-| [s19-providerstreaming](../samples/s19-providerstreaming/main.cop) | Streaming provider with source/sink pattern (see also [ticker.cop](../samples/s19-providerstreaming/ticker/src/ticker.cop)) |
-| [s20-crosslanguage](../samples/s20-crosslanguage/checks.cop) | Cross-language code analysis |
-| [s21-filtering](../samples/s21-filtering/filters.cop) | Filtering and subset patterns |
-| [s22-rust-specific-ast](../samples/s22-rust-specific-ast/checks.cop) | Downcast a Type to a RustType (`:asRust`) to check Rust-only AST (traits, impl, unsafe) |
-| [s23-java-specific-ast](../samples/s23-java-specific-ast/checks.cop) | Downcast a Type to a JavaType (`:asJava`) to check Java-only AST (records, enums) |
-| [s24-python-specific-ast](../samples/s24-python-specific-ast/checks.cop) | Downcast a Type to a PythonType (`:asPython`) to check Python-only AST (dataclass, enum) |
-| [s25-go-specific-ast](../samples/s25-go-specific-ast/checks.cop) | Downcast a Type to a GoType (`:asGo`) — teaching case: prefer language-independent when it suffices |
-| [s26-javascript-specific-ast](../samples/s26-javascript-specific-ast/checks.cop) | Downcast a Type to a JavaScriptType (`:asJavaScript`) — teaching case: prefer language-independent |
+Each sample folder is self-contained: a `.cop` file plus a small source fixture.
+Run one from its folder with `cop <file>.cop -t .`, where `-t` is the target
+directory whose code is analyzed.
 
-## Demo Samples
+## Language Samples
 
-End-to-end demo scripts in `samples/demo/` covering the full cop workflow.
+Located in `samples/language/`.
 
 | Sample | Description |
 |--------|-------------|
-| [demo-multilang](../samples/demo/demo-multilang.cop) | Multi-language codebase analysis (C# + JS) |
-| [demo-slop](../samples/demo/demo-slop.cop) | Computing aggregate slop score as JSON |
-| [demo-custom](../samples/demo/demo-custom.cop) | Adding custom rules to slop scoring |
+| [hello-world](../samples/language/hello-world/hello-world.cop) | Your first program: import, predicate, filter, print |
+| [strings](../samples/language/strings/strings.cop) | String literals, triple-quoted text, and styled output |
+| [filtering](../samples/language/filtering/filtering.cop) | Narrowing collections: `:` filter, `!` negate, property predicates, `+` |
+| [predicates](../samples/language/predicates/predicates.cop) | Defining and composing predicates with `&&` and `:any()` |
+| [transforms](../samples/language/transforms/transforms.cop) | `.Where` / `.Select` / `.text` / `.First` / `.Count` |
+| [commands](../samples/language/commands/commands.cop) | Named, runnable commands selected with `-c` |
+| [json](../samples/language/json/json.cop) | Typed schemas over JSON data with `json.Parse` |
+
+## Static-Analysis Samples
+
+Located in `samples/static-analysis/`. These show common checks — the kind you
+enforce in CI. The check shape is always a predicate → `:toError` / `:toWarning`
+/ `:toInfo` → `CHECK(...)`. Several rules are modeled on real analyzer/lint rules
+(StyleCop, Azure SDK analyzers, ESLint, Pylint).
+
+| Sample | Description |
+|--------|-------------|
+| [no-var](../samples/static-analysis/no-var/no-var.cop) | Flag C# `var` usage (the simplest possible check) |
+| [todo-comments](../samples/static-analysis/todo-comments/todo-comments.cop) | Flag unresolved TODO / FIXME comments |
+| [naming-conventions](../samples/static-analysis/naming-conventions/naming-conventions.cop) | Interface `I` prefix, `*Exception` and `*Async` suffixes |
+| [sealed-types](../samples/static-analysis/sealed-types/sealed-types.cop) | Public client types should be sealed |
+| [no-public-fields](../samples/static-analysis/no-public-fields/no-public-fields.cop) | Public types must not expose public fields |
+| [documented-apis](../samples/static-analysis/documented-apis/documented-apis.cop) | Public types must be documented |
+| [method-length](../samples/static-analysis/method-length/method-length.cop) | Flag methods with too many statements |
+| [banned-calls](../samples/static-analysis/banned-calls/banned-calls.cop) | Forbid Console output / blocking `Thread.Sleep` in libraries |
+| [csharp-specific-ast](../samples/static-analysis/csharp-specific-ast/csharp-specific-ast.cop) | Downcast with `:asCSharp` for records, partial, and lock |
+| [cross-language](../samples/static-analysis/cross-language/cross-language.cop) | One model across C#, Python, and JS/TS |
+| [typespec-http](../samples/static-analysis/typespec-http/typespec-http.cop) | Domain check over a TypeSpec / HTTP API spec |
+| [slop](../samples/static-analysis/slop-metrics/slop.cop) | Score a codebase with `METRICS` |
+| [custom-slop](../samples/static-analysis/slop-metrics/custom-slop.cop) | Extend the built-in slop rule set with a custom rule |
+
+## Extension Examples
+
+Authoring a custom data provider in C# is shown under `examples/providers/`.
+
+| Example | Description |
+|---------|-------------|
+| [sample-provider](../examples/providers/sample-provider/) | A custom provider package (see [use-widgets.cop](../examples/providers/sample-provider/package/samples/use-widgets.cop) and [sample.cop](../examples/providers/sample-provider/package/src/sample.cop)) |
+| [streaming-provider](../examples/providers/streaming-provider/) | A streaming source/sink provider (see [ticker.cop](../examples/providers/streaming-provider/ticker/src/ticker.cop)) |
 
 ## Package Samples
 

@@ -1,0 +1,19 @@
+# Commands — named, runnable entry points.
+#
+# A program can declare several commands; the default is MAIN.
+# Run one by name with -c:   cop commands.cop -t . -c CLIENTS
+#
+# Run from this folder with:  cop commands.cop -t .          (runs MAIN)
+import code
+import csharp
+
+let codebase = codebase(csharp.parse())
+
+predicate isClient(Type) => Type.Name:endsWith('Client')
+
+let publicTypes = codebase.Types:isPublic
+let clients = publicTypes:isClient
+
+command MAIN = foreach publicTypes => print('{item.Name}')
+command CLIENTS = foreach clients => print('client: {item.Name}')
+command COUNT = print('{publicTypes.Count} public types, {clients.Count} clients')

@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>StreamingProvider</RootNamespace>
+  </PropertyGroup>
+
+  <!--
+    For in-repo development, reference cop.csproj directly.
+    For standalone development, replace with:
+      <Reference Include="cop">
+        <HintPath>$(HOME)/.cop/bin/cop.dll</HintPath>
+        <Private>false</Private>
+      </Reference>
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\cop\cli\cop.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+
+  <!-- Copy provider DLL to package lib/ folder after build -->
+  <Target Name="CopyToPackageLib" AfterTargets="Build">
+    <PropertyGroup>
+      <PackageLibDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)package\lib\'))</PackageLibDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(PackageLibDir)" />
+    <ItemGroup>
+      <ProviderFiles Include="$(OutputPath)streaming-provider.dll" />
+      <ProviderFiles Include="$(OutputPath)streaming-provider.deps.json" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ProviderFiles)" DestinationFolder="$(PackageLibDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

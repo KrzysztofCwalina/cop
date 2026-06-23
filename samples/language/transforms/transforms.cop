@@ -1,0 +1,24 @@
+# Transforms — projecting and aggregating collections.
+#
+#   .Where(...)   filter            .Select(...)  project each item
+#   .OrderBy(...) sort              .text(sep)    join to a string
+#   .First        first element     .Count        number of items
+#
+# Run from this folder with:  cop transforms.cop -t .
+import code
+import csharp
+
+let codebase = codebase(csharp.parse())
+
+let publicTypes = codebase.Types:isPublic
+
+predicate hasManyMethods(Type) => Type.Methods.Count > 2
+
+# .Select projects each item to a string; a nested .Select + .text joins names
+let summaries = codebase.Types:hasManyMethods
+    .Select('{item.Name}: {item.Methods.Select(item.Name).text(", ")}')
+
+command MAIN =
+    print('public types: {publicTypes.Count}') &
+    print('first public type: {publicTypes.First.Name}') &
+    foreach summaries => print('{item}')

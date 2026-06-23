@@ -1,0 +1,28 @@
+# Predicates — defining and composing boolean rules.
+#
+# Combine predicates with && and ||, reuse built-ins (isPublic, isStatic, ...),
+# and build higher-level predicates from simpler ones with :any().
+#
+# Run from this folder with:  cop predicates.cop -t .
+import code
+import csharp
+
+let codebase = codebase(csharp.parse())
+
+# Simple predicates
+predicate isClient(Type) => Type.Name:endsWith('Client')
+predicate isOptions(Type) => Type.Name:endsWith('Options')
+
+# Compose with built-ins using && (isPublic / isStatic come from `code`)
+predicate isVoid(Method) => Method.ReturnType.Name:equals('void')
+predicate isEntryPoint(Method) => Method:isPublic && Method:isStatic && Method:isVoid
+
+# Lift a Method predicate to a Type predicate with :any()
+predicate hasEntryPoint(Type) => Type.Methods:any(isEntryPoint)
+
+# Chain + negate: clients that are NOT options types
+let clients = codebase.Types:isClient:!isOptions
+
+command MAIN =
+    print('non-options clients: {clients.Count}') &
+    foreach codebase.Types:hasEntryPoint => print('{item.Name} has an entry point')

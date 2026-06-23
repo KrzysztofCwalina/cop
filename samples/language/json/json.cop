@@ -1,0 +1,17 @@
+# JSON — typed schemas over JSON data.
+#
+# Declare a `type`, load JSON into a typed list, then filter on a field.
+# A boolean field can be used directly as a filter:  people:active
+#
+# Run from this folder with:  cop json.cop
+import json
+
+type Person = {
+    name : string,
+    age : int,
+    active : bool
+}
+
+let people : [Person] = json.Parse('data.json')
+
+command MAIN = foreach people:active => print('{item.name} ({item.age}) is active')

@@ -1,0 +1,19 @@
+# No public fields — expose data through properties, not fields.
+#
+# Public mutable fields break encapsulation and binary versioning. `const`
+# fields are allowed. Demonstrates a sub-collection test with :any().
+#
+# Run from this folder with:  cop no-public-fields.cop -t .
+import code
+import code-analysis
+import csharp
+
+let codebase = codebase(csharp.parse())
+
+predicate isExposedField(Field) => Field:isPublic && !Field:isConst
+predicate exposesPublicField(Type) => Type:isPublic && Type.Fields:any(isExposedField)
+
+let violations = codebase.Types:exposesPublicField
+    :toWarning('{item.Name} exposes public fields — use properties instead')
+
+command MAIN = CHECK(violations)

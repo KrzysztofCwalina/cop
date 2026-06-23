@@ -1,0 +1,19 @@
+# Strings — Cop string literals and styled output.
+#
+# - Single quotes for strings:     'hello'
+# - Triple quotes for multi-line:  '''...'''  (raw; common indent stripped)
+# - {expr} interpolates;  {text@style} styles output
+# - outside {...}, @ is just a literal character
+#
+# Run with:  cop strings.cop
+command MAIN =
+    print('Hello from Cop!') &
+    print(
+        '''
+        =============================
+          Welcome to Cop
+        =============================
+        '''
+    ) &
+    print('{Hello@red} {World@green}!') &
+    print('Contact: admin@example.com')

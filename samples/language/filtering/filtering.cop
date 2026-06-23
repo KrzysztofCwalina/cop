@@ -1,0 +1,33 @@
+# Filtering — narrowing collections with predicates.
+#
+#   `:`  applies a predicate (AND-chains)      `!`  negates
+#   `+`  concatenates two subsets              :Name:startsWith('x')  property predicate
+#
+# Run from this folder with:  cop filtering.cop -t .
+import code
+import csharp
+
+let codebase = codebase(csharp.parse())
+
+predicate isClient(Type) => Type.Name:endsWith('Client')
+
+# AND-chain: public AND client
+let publicClients = codebase.Types:isClient:isPublic
+
+# Negation: types that are NOT public
+let internalTypes = codebase.Types:!isPublic
+
+# Property predicate: read .Name, then test it
+let azureTypes = codebase.Types:Name:startsWith('Azure')
+
+# Concatenate two subsets
+let combined = publicClients + internalTypes
+
+# Sub-collection test
+predicate hasNoMethods(Type) => Type.Methods:empty
+
+command MAIN =
+    print('public clients: {publicClients.Count}') &
+    print('internal types: {internalTypes.Count}') &
+    print('azure-prefixed: {azureTypes.Count}') &
+    foreach codebase.Types:hasNoMethods => print('{item.Name} has no methods')

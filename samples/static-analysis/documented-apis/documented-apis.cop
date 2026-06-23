@@ -1,0 +1,18 @@
+# Documentation — public types must have doc comments.
+#
+# Uses the common model's `Documented` fact (Type:isDocumented), so the same
+# check works for any language that carries doc comments.
+#
+# Run from this folder with:  cop documented-apis.cop -t .
+import code
+import code-analysis
+import csharp
+
+let codebase = codebase(csharp.parse())
+
+predicate isUndocumented(Type) => Type:isPublic && !Type:isDocumented
+
+let violations = codebase.Types:isUndocumented
+    :toWarning('public type {item.Name} is missing documentation')
+
+command MAIN = CHECK(violations)

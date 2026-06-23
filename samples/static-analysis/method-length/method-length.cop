@@ -1,0 +1,18 @@
+# Method length — flag overly long methods.
+#
+# Long methods are hard to test and review. The threshold is kept low (5) so
+# the bundled sample triggers; raise it for real codebases.
+#
+# Run from this folder with:  cop method-length.cop -t .
+import code
+import code-analysis
+import csharp
+
+let codebase = codebase(csharp.parse())
+
+predicate isTooLong(Method) => Method.Statements.Count > 5
+
+let violations = codebase.Methods:isTooLong
+    :toWarning('{item.Name} has {item.Statements.Count} statements — consider splitting it')
+
+command MAIN = CHECK(violations)
