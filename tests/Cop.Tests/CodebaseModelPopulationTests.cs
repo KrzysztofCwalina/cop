@@ -188,8 +188,6 @@ public class CodebaseModelPopulationTests
     }
 
     [Test]
-    [Explicit("Issue #48: Project.Frameworks is empty for a single <TargetFramework> — remove when fixed")]
-    [Category("PendingFix")]
     public void ProjectFrameworks_IncludeSingleTargetFramework()
     {
         // Issue #48

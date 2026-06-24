@@ -8,6 +8,10 @@ namespace Cop.Cli.Commands;
 
 public static class HelpCommand
 {
+    /// <summary>Banner shown at the top of usage/help output, e.g. "Agent Cop - 2026.6.24.2".</summary>
+    public static string Banner =>
+        $"Agent Cop - {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version}";
+
     public static Command Create()
     {
         var fileArg = new Argument<string>("file")
@@ -28,11 +32,13 @@ public static class HelpCommand
         // Bare "cop help" with no argument — show general help
         if (file == null)
         {
-            Console.WriteLine("""
-                cop — a general-purpose scripting language
+            Console.WriteLine($"""
+                {Banner}
 
                 Usage:
-                  cop <program>                      Run a package, local command, or .cop file
+                  cop run <package>                  Run a package from a feed (auto-restores)
+                  cop <file.cop>                     Run a local .cop file
+                  cop                                Run local .cop files in the current directory
                   cop package list                   Browse available packages
                   cop help language                  Full language reference
                   cop help <package>                 Package documentation

@@ -53,8 +53,8 @@ if (args.Length == 0)
 // Intercept help flags before System.CommandLine to show clean single-section help
 if (args.Length == 1 && (args[0] == "-h" || args[0] == "-help" || args[0] == "--help"))
 {
-    Console.WriteLine("""
-        cop — a general-purpose scripting language
+    Console.WriteLine($"""
+        {HelpCommand.Banner}
 
         Usage:
           cop run <package>                  Run a package from a feed (auto-restores)
@@ -165,8 +165,8 @@ if (!knownVerbs.Contains(args[0]) && !args[0].StartsWith('-') && !args[0].Starts
 
 var rootCommand = new RootCommand
 {
-    Description = """
-        cop — a general-purpose scripting language
+    Description = $"""
+        {HelpCommand.Banner}
 
         Quick reference:
           cop run <package>                Run a package from a feed (auto-restores)
@@ -436,7 +436,7 @@ static int ExecuteDefault()
 
     if (copFiles.Length == 0)
     {
-        Console.WriteLine("cop — a general-purpose scripting language");
+        Console.WriteLine(HelpCommand.Banner);
         Console.WriteLine();
         Console.WriteLine("Usage:");
         Console.WriteLine("  cop run <package>      Run a package from a feed");

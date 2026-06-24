@@ -434,6 +434,13 @@ public sealed class Evaluator
                 TryEvalPerItemTransform(obj, mem.Member, call.Args, env, out var transformResult))
                 return transformResult;
 
+            // String transforms that take arguments (Name.Trim('Async'), Name.Replace('a','b')).
+            // Argument-less string members (Lower/Upper/Words/...) are handled as member access in
+            // EvalStringMember; these argument-taking forms must be handled here in call position.
+            if (obj is CopString strSubject &&
+                TryEvalStringMethod(strSubject, mem.Member, call.Args, env, out var strResult))
+                return strResult;
+
             var args = call.Args.Select(a => Eval(a, env)).ToList();
 
             // First, try resolving as a member that is callable
@@ -622,6 +629,61 @@ public sealed class Evaluator
                 result = best.Value == Math.Floor(best.Value) ? new CopInt((int)best.Value) : new CopNumber(best.Value);
                 return true;
             }
+            case "GroupBy" or "groupBy":
+            {
+                // Group items by a per-item key expression. Returns a list of Group objects, each
+                // with Key, Items, and Count properties (documented in language-reference.md).
+                if (argExprs.Count != 1) return false;
+                var order = new List<(CopValue Key, List<CopValue> Items)>();
+                var index = new Dictionary<string, int>(StringComparer.Ordinal);
+                foreach (var item in CoerceToEnumerable(collection))
+                {
+                    var key = ForceValue(EvalElementExpr(argExprs[0], item, env));
+                    var keyStr = key.Display();
+                    if (!index.TryGetValue(keyStr, out var gi))
+                    {
+                        gi = order.Count;
+                        index[keyStr] = gi;
+                        order.Add((key, []));
+                    }
+                    order[gi].Items.Add(item);
+                }
+                result = new CopList(order.Select(g => (CopValue)new CopObject(
+                    new Dictionary<string, CopValue>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["Key"] = g.Key,
+                        ["Items"] = new CopList(g.Items),
+                        ["Count"] = new CopInt(g.Items.Count),
+                    })
+                { TypeName = "Group" }).ToList());
+                return true;
+            }
+            case "Reduce":
+            {
+                // Reduce(operator, itemExpr, [separator]) — fold a collection into one value using a
+                // string operator. '+' sums numbers or joins strings with the optional separator.
+                // (The lowercase `reduce(items, (acc,item)=>..., initial)` lambda fold is a separate
+                // FFI intrinsic and is intentionally NOT intercepted here.)
+                if (argExprs.Count is < 2 or > 3) return false;
+                var op = ForceValue(Eval(argExprs[0], env)).Display();
+                var separator = argExprs.Count == 3 ? ForceValue(Eval(argExprs[2], env)).Display() : "";
+                var values = new List<CopValue>();
+                foreach (var item in CoerceToEnumerable(collection))
+                    values.Add(ForceValue(EvalElementExpr(argExprs[1], item, env)));
+                result = ReduceValues(op, values, separator);
+                return true;
+            }
+            case "Text":
+            {
+                // Items.Text(template) — render the {item.X} template once per element and join with
+                // newlines (the documented per-item form). Lowercase `text` keeps its FFI join form.
+                if (argExprs.Count != 1) return false;
+                var rendered = new List<string>();
+                foreach (var item in CoerceToEnumerable(collection))
+                    rendered.Add(ForceValue(EvalElementExpr(argExprs[0], item, env)).Display());
+                result = new CopString(string.Join("\n", rendered));
+                return true;
+            }
             default:
                 return false;
         }
@@ -642,6 +704,61 @@ public sealed class Evaluator
             return Eval(lambda.Body, elemEnv);
         }
         return Eval(argExpr, elemEnv);
+    }
+
+    /// <summary>
+    /// Argument-taking string transforms invoked in call position: <c>Name.Trim('Async')</c>
+    /// (remove a trailing suffix) and <c>Name.Replace('old','new')</c> (substring replace).
+    /// Returns false for any other member so the normal dispatch can continue.
+    /// </summary>
+    private bool TryEvalStringMethod(CopString str, string member,
+        IReadOnlyList<Expression> argExprs, Environment env, out CopValue result)
+    {
+        result = CopNull.Instance;
+        switch (member)
+        {
+            case "Trim" or "trim":
+            {
+                if (argExprs.Count != 1) return false;
+                var suffix = ForceValue(Eval(argExprs[0], env)).Display();
+                var value = str.Value;
+                if (suffix.Length > 0 && value.EndsWith(suffix, StringComparison.Ordinal))
+                    value = value[..^suffix.Length];
+                result = new CopString(value);
+                return true;
+            }
+            case "Replace" or "replace":
+            {
+                if (argExprs.Count != 2) return false;
+                var oldValue = ForceValue(Eval(argExprs[0], env)).Display();
+                var newValue = ForceValue(Eval(argExprs[1], env)).Display();
+                result = new CopString(oldValue.Length == 0 ? str.Value : str.Value.Replace(oldValue, newValue));
+                return true;
+            }
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>Folds reduced values with a string operator. '+' sums numbers or joins strings.</summary>
+    private static CopValue ReduceValues(string op, List<CopValue> values, string separator)
+    {
+        if (values.Count == 0)
+            return op == "+" ? new CopInt(0) : CopNull.Instance;
+
+        bool allNumeric = values.All(v => ToNumber(v) is not null);
+        if (op == "+" && allNumeric)
+        {
+            double sum = values.Sum(v => ToNumber(v) ?? 0);
+            return sum == Math.Floor(sum) ? new CopInt((int)sum) : new CopNumber(sum);
+        }
+        if (op == "*" && allNumeric)
+        {
+            double product = 1;
+            foreach (var v in values) product *= ToNumber(v) ?? 0;
+            return product == Math.Floor(product) ? new CopInt((int)product) : new CopNumber(product);
+        }
+        return new CopString(string.Join(separator, values.Select(v => v.Display())));
     }
 
     /// <summary>
@@ -1068,6 +1185,21 @@ public sealed class Evaluator
         bool negated = filter.Negated;
 
         _traceLog?.Invoke($"[trace] EvalFilter: {ExpressionRenderer.Render(filter)}  (collection={DescribeValue(collection)})");
+
+        // Collection combinators (concat/push/enqueue) used via colon pipe are collection-level for
+        // ANY collection kind (list, lazy, queryable): resolve the FFI directly and invoke it once
+        // with the whole collection, so `a:concat(b)` yields a+b rather than falling through to the
+        // per-item filter loop (which would just return the left operand).
+        if (IsCollectionValue(collection)
+            && filter.Predicate is CallExpr combinerCall
+            && combinerCall.Callee is IdentifierExpr combinerId
+            && IsCollectionLevelBuiltin(combinerId.Name, combinerCall.Args.Count)
+            && _ffi.Resolve(combinerId.Name) is { } combinerFn)
+        {
+            var combinerArgs = new List<CopValue> { collection };
+            combinerArgs.AddRange(combinerCall.Args.Select(a => ForceValue(Eval(a, env))));
+            return combinerFn.Invoke(combinerArgs, this, env);
+        }
 
         // Queryable collection: try to compile predicate and accumulate filter (lazy pushdown)
         if (collection is CopQueryable queryable)
@@ -1640,10 +1772,14 @@ public sealed class Evaluator
     }
 
     /// <summary>
-    /// The overload (if any) whose sole parameter is a collection type — e.g.
-    /// `empty(items:[T])`, `distinct(items:[T])`. Used to invoke a bare `:name` filter at the
-    /// collection level rather than per item.
+    /// Built-in collection combinators (`concat`, `push`, `enqueue`) take the collection as their
+    /// first argument and a single extra argument, so the colon-pipe form (`a:concat(b)`) is a
+    /// collection-level call. They are FFI builtins (no user declaration), so the declaration-based
+    /// <see cref="FirstParamIsCollectionFunction"/> can't recognise them — hence this explicit list.
     /// </summary>
+    private static bool IsCollectionLevelBuiltin(string name, int argCount) =>
+        argCount == 1 && name is "concat" or "push" or "enqueue";
+
     private static CopFunction? CollectionParamOverload(CopValue binding)
         => OverloadsOf(binding).FirstOrDefault(o =>
             o.Declaration.Params.Count == 1 && o.Declaration.Params[0].Type is { IsCollection: true });

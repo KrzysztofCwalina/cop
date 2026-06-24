@@ -438,14 +438,19 @@ command main = print('done')
     {
         // Parse the actual core/intrinsics.cop file to verify no crashes
         var path = Path.Combine(TestContext.CurrentContext.TestDirectory,
-            "..", "..", "..", "..", "..", "packages", "core", "src", "intrinsics.cop");
-        if (!File.Exists(path))
-            Assert.Ignore($"intrinsics.cop not found at: {Path.GetFullPath(path)}");
+            "..", "..", "..", "..", "..", "packages", "core", "core", "src", "intrinsics.cop");
+        Assert.That(File.Exists(path), Is.True, $"intrinsics.cop not found at: {Path.GetFullPath(path)}");
         var source = File.ReadAllText(path);
         var module = CopParser.Parse(source, "intrinsics.cop");
         Assert.That(module.Declarations.Count, Is.GreaterThanOrEqualTo(10));
         // Most should be FunctionDecl (intrinsics are functions)
         Assert.That(module.Declarations.OfType<FunctionDecl>().Count(), Is.GreaterThanOrEqualTo(10));
+        // Known intrinsics must be present (guards against the parser silently dropping declarations).
+        var funcNames = module.Declarations.OfType<FunctionDecl>().Select(f => f.Name).ToList();
+        Assert.That(funcNames, Does.Contain("print"));
+        Assert.That(funcNames, Does.Contain("provider"));
+        Assert.That(funcNames, Does.Contain("reduce"));
+        Assert.That(funcNames, Does.Contain("pathMatches"));
     }
 
     [Test]
@@ -453,9 +458,8 @@ command main = print('done')
     {
         // Parse the intrinsics.cop file (canonical declarations)
         var path = Path.Combine(TestContext.CurrentContext.TestDirectory,
-            "..", "..", "..", "..", "..", "packages", "core", "src", "intrinsics.cop");
-        if (!File.Exists(path))
-            Assert.Ignore($"intrinsics.cop not found at: {Path.GetFullPath(path)}");
+            "..", "..", "..", "..", "..", "packages", "core", "core", "src", "intrinsics.cop");
+        Assert.That(File.Exists(path), Is.True, $"intrinsics.cop not found at: {Path.GetFullPath(path)}");
         var source = File.ReadAllText(path);
         var module = CopParser.Parse(source, "intrinsics.cop");
         Assert.That(module.Declarations.Count, Is.GreaterThan(5));

@@ -79,7 +79,8 @@ public class CSharpSourceParserTests
         var varStatements = result.Statements
             .Where(s => s.Kind == "declaration" && s.Keywords.Contains("var"))
             .ToList();
-        Assert.That(varStatements, Has.Count.GreaterThanOrEqualTo(1));
+        // BadClient.cs declares exactly two `var` locals: `var x` and `var result`.
+        Assert.That(varStatements, Has.Count.EqualTo(2));
     }
 
     [Test]
@@ -87,9 +88,12 @@ public class CSharpSourceParserTests
     {
         var source = File.ReadAllText(SamplePath("BadClient.cs"));
         var result = _parser.Parse("BadClient.cs", source)!;
-        var sleepCall = result.Statements.FirstOrDefault(
-            s => s.Kind == "call" && s.MemberName == "Sleep");
-        Assert.That(sleepCall, Is.Not.Null);
+        var sleepCalls = result.Statements
+            .Where(s => s.Kind == "call" && s.MemberName == "Sleep")
+            .ToList();
+        // Exactly one Thread.Sleep(100) invocation in BadClient.cs.
+        Assert.That(sleepCalls, Has.Count.EqualTo(1));
+        Assert.That(sleepCalls[0].TypeName, Is.EqualTo("Thread"));
     }
 
     [Test]

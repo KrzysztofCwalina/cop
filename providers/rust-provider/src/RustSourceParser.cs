@@ -928,6 +928,12 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
                 parts.Clear();
                 break;
             }
+            if (Current().Value == "as")
+            {
+                // `use path as alias;` — the alias rename is not part of the module path; skip it.
+                while (!IsAtEnd() && !Check(";")) Advance();
+                break;
+            }
             if (Current().Kind == RustTokenKind.Identifier || Current().Kind == RustTokenKind.Keyword)
                 parts.Add(Current().Value);
             Advance();

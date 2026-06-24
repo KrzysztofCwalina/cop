@@ -380,13 +380,9 @@ command main = foreach Types:isPublic => print(item.Name)");
     {
         // Ensure the new parser can parse all files in packages/core/src/
         var coreDir = FindPackageDir("core");
-        if (coreDir is null)
-        {
-            Assert.Ignore("packages/core/src/ not found");
-            return;
-        }
+        Assert.That(coreDir, Is.Not.Null, "core package src directory not found under packages/");
 
-        var errors = ParseDirectoryOnly(coreDir);
+        var errors = ParseDirectoryOnly(coreDir!);
         Assert.That(errors, Is.Empty, $"Parse errors: {string.Join("\n", errors)}");
     }
 
@@ -394,13 +390,9 @@ command main = foreach Types:isPublic => print(item.Name)");
     public void ParsesCodePackageFiles()
     {
         var codeDir = FindPackageDir("code");
-        if (codeDir is null)
-        {
-            Assert.Ignore("packages/code/src/ not found");
-            return;
-        }
+        Assert.That(codeDir, Is.Not.Null, "code package src directory not found under packages/");
 
-        var errors = ParseDirectoryOnly(codeDir);
+        var errors = ParseDirectoryOnly(codeDir!);
         Assert.That(errors, Is.Empty, $"Parse errors: {string.Join("\n", errors)}");
     }
 
@@ -408,13 +400,9 @@ command main = foreach Types:isPublic => print(item.Name)");
     public void ParsesFilesPackageFiles()
     {
         var filesDir = FindPackageDir("files");
-        if (filesDir is null)
-        {
-            Assert.Ignore("packages/files/src/ not found");
-            return;
-        }
+        Assert.That(filesDir, Is.Not.Null, "files package src directory not found under packages/");
 
-        var errors = ParseDirectoryOnly(filesDir);
+        var errors = ParseDirectoryOnly(filesDir!);
         Assert.That(errors, Is.Empty, $"Parse errors: {string.Join("\n", errors)}");
     }
 
@@ -453,13 +441,22 @@ command main = foreach Types:isPublic => print(item.Name)");
 
     private static string? FindPackageDir(string packageName)
     {
-        // Walk up from test assembly location to find packages/
+        // Walk up from the test assembly location to find packages/. The on-disk layout is
+        // packages/<group>/<name>/src (e.g. packages/core/core/src, packages/core/files/src,
+        // packages/code/code/src), so search recursively for the package's src directory.
         var dir = AppDomain.CurrentDomain.BaseDirectory;
         for (int i = 0; i < 10; i++)
         {
-            var candidate = Path.Combine(dir!, "packages", packageName, "src");
-            if (Directory.Exists(candidate))
-                return candidate;
+            var packagesRoot = Path.Combine(dir!, "packages");
+            if (Directory.Exists(packagesRoot))
+            {
+                var match = Directory
+                    .GetDirectories(packagesRoot, packageName, SearchOption.AllDirectories)
+                    .Select(d => Path.Combine(d, "src"))
+                    .FirstOrDefault(Directory.Exists);
+                if (match is not null)
+                    return match;
+            }
             dir = Path.GetDirectoryName(dir);
             if (dir is null) break;
         }

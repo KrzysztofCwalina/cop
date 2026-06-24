@@ -59,6 +59,22 @@ public static class StandardLibrary
             return new CopObject(fields) { TypeName = "Error" };
         });
 
+        // isError: documented built-in predicate that tests whether a value is an operational Error
+        // (intrinsics.cop carries only the signature; the runtime impl must live here so `items:isError`
+        // and `isError(x)` resolve without an explicit import).
+        ffi.Register("isError", (args, env) =>
+        {
+            if (args.Count == 0) return CopBool.False;
+            var value = args[0] is CopThunk thunk ? thunk.Force() : args[0];
+            var type = value switch
+            {
+                CopObject co => co.TypeName ?? (co.HasField("Type") ? co.GetField("Type").Display() : null),
+                CopDynamicObject dyn => dyn.TypeName,
+                _ => null
+            };
+            return CopBool.Of(string.Equals(type, "Error", StringComparison.Ordinal));
+        });
+
         // I/O functions
         ffi.Register("read", (args, env) =>
         {
@@ -102,6 +118,21 @@ public static class StandardLibrary
             var pattern = args[1].Display();
             var matches = PathMatchesGlob(path, pattern);
             return CopBool.Of(matches);
+        });
+
+        // Documented capital built-ins (language-reference "Built-in Functions"). Used via colon
+        // pipe so the subject arrives as args[0]: `item.Path:Path('**/*.cs')` (glob on a file path)
+        // and `item.Name:Matches('rx')` (regex on the current item text).
+        ffi.Register("Path", (args, env) =>
+        {
+            if (args.Count < 2) return CopBool.False;
+            return CopBool.Of(PathMatchesGlob(args[0].Display(), args[1].Display()));
+        });
+        ffi.Register("Matches", (args, env) =>
+        {
+            if (args.Count < 2) return CopBool.False;
+            try { return CopBool.Of(RegexCache.IsMatch(args[0].Display(), args[1].Display())); }
+            catch (Exception ex) { throw new CopEvaluationException($"Invalid regex pattern '{args[1].Display()}': {ex.Message}"); }
         });
 
         // Collection methods (registered as functions that operate on collections)
@@ -282,6 +313,11 @@ public static class StandardLibrary
 
             return new CopString(args[0].Display());
         });
+
+        // Text(expr): documented scalar conversion to text — also usable via colon pipe (expr:Text).
+        // The per-item collection form (Items.Text(template)) is intercepted earlier in the evaluator.
+        ffi.Register("Text", (args, env) =>
+            args.Count == 0 ? new CopString("") : new CopString(args[0].Display()));
 
         // concat: collection.concat(other) — join two collections
         ffi.Register("concat", (args, env) =>
@@ -697,28 +733,51 @@ public static class StandardLibrary
 
     private static bool PathMatchesGlob(string path, string pattern)
     {
-        // Simple glob matching: * matches anything in a segment, ** matches across segments
+        // Glob matching: `*` matches within a path segment, `**` matches across segments
+        // (`**/` matches zero or more leading segments), `?` matches a single non-separator char.
         var normalized = path.Replace('\\', '/');
         var normalizedPattern = pattern.Replace('\\', '/');
+        var regex = "^" + GlobToRegex(normalizedPattern) + "$";
+        return RegexCache.IsMatch(normalized, regex, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    }
 
-        if (normalizedPattern.Contains("**"))
+    /// <summary>Translates a glob pattern into an anchored-fragment regex.</summary>
+    private static string GlobToRegex(string glob)
+    {
+        var sb = new System.Text.StringBuilder(glob.Length * 2);
+        for (int i = 0; i < glob.Length; i++)
         {
-            var parts = normalizedPattern.Split("**");
-            if (parts.Length == 2)
+            char c = glob[i];
+            if (c == '*')
             {
-                var prefix = parts[0].TrimEnd('/');
-                var suffix = parts[1].TrimStart('/');
-                if (!string.IsNullOrEmpty(prefix) && !normalized.Contains(prefix.Trim('/')))
-                    return false;
-                if (!string.IsNullOrEmpty(suffix) && !normalized.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
-                    return false;
-                return true;
+                bool doubleStar = i + 1 < glob.Length && glob[i + 1] == '*';
+                if (doubleStar)
+                {
+                    i++; // consume the second '*'
+                    if (i + 1 < glob.Length && glob[i + 1] == '/')
+                    {
+                        i++; // consume the trailing slash: '**/' matches zero or more segments
+                        sb.Append("(?:.*/)?");
+                    }
+                    else
+                    {
+                        sb.Append(".*"); // '**' alone matches across segments
+                    }
+                }
+                else
+                {
+                    sb.Append("[^/]*"); // single '*' stays within one segment
+                }
+            }
+            else if (c == '?')
+            {
+                sb.Append("[^/]"); // single non-separator character
+            }
+            else
+            {
+                sb.Append(System.Text.RegularExpressions.Regex.Escape(c.ToString()));
             }
         }
-
-        // Simple wildcard: * matches any segment content
-        var regexPattern = "^" + System.Text.RegularExpressions.Regex.Escape(normalizedPattern)
-            .Replace("\\*", "[^/]*") + "$";
-        return RegexCache.IsMatch(normalized, regexPattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return sb.ToString();
     }
 }

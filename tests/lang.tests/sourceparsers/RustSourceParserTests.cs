@@ -41,8 +41,8 @@ public class RustSourceParserTests
         var result = Parse("""
             use std::fmt::Result as FmtResult;
             """);
-        // Should capture the path (alias is not part of the module path)
-        Assert.That(result.Usings.Count, Is.GreaterThan(0));
+        // Should capture the module path (the alias is not part of the path).
+        Assert.That(result.Usings, Does.Contain("std::fmt::Result"));
     }
 
     [Test]
@@ -530,8 +530,10 @@ public class RustSourceParserTests
             }
             """);
         var t = result.Types[0];
-        Assert.That(t.Decorators, Has.Count.GreaterThan(0));
-        Assert.That(t.Decorators[0], Does.Contain("derive"));
+        var allDecorators = string.Join(" ", t.Decorators);
+        Assert.That(allDecorators, Does.Contain("derive"));
+        Assert.That(allDecorators, Does.Contain("Debug"));
+        Assert.That(allDecorators, Does.Contain("Clone"));
     }
 
     // ================================================================
@@ -553,7 +555,10 @@ public class RustSourceParserTests
             /// doc comment
             fn main() {}
             """);
-        Assert.That(result.CommentLines, Is.Not.Empty);
+        // Lines 1 (// comment) and 2 (/// doc comment) are both comment lines.
+        Assert.That(result.CommentLines, Has.Count.EqualTo(2));
+        Assert.That(result.CommentLines, Does.Contain(1));
+        Assert.That(result.CommentLines, Does.Contain(2));
     }
 
     // ================================================================
@@ -580,8 +585,11 @@ public class RustSourceParserTests
                 }
             }
             """);
-        // Should not crash on raw string literals
-        Assert.That(result.Types.Count, Is.GreaterThan(0));
+        // Raw string literals must not break parsing — the struct and its method are still captured.
+        Assert.That(result.Types.Any(t => t.Name == "S"), Is.True, "the struct S must be parsed");
+        var methodNames = result.Types.SelectMany(t => t.Methods).Select(m => m.Name);
+        Assert.That(methodNames, Does.Contain("get_sql"),
+            "the method whose body contains a raw string must be captured");
     }
 
     [Test]

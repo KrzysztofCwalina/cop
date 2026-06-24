@@ -95,8 +95,6 @@ public class IssueRegressionTests
 
     // Issue #37
     [Test]
-    [Explicit("Issue #37: successful foreach/report program exits 1 when it prints output — remove when fixed")]
-    [Category("PendingFix")]
     public void Issue037_SuccessfulForeachOutputExitsZero()
     {
         var program = Path.Combine(_workDir, "foreach.cop");
@@ -111,8 +109,6 @@ public class IssueRegressionTests
 
     // Issue #38
     [Test]
-    [Explicit("Issue #38: bare top-level expressions produce no output and report no command — remove when fixed")]
-    [Category("PendingFix")]
     public void Issue038_BareTopLevelExpressionProducesOutput()
     {
         var program = Path.Combine(_workDir, "expression.cop");

@@ -87,8 +87,6 @@ public class LanguageFeatureExecutionTests
     }
 
     [Test]
-    [Explicit("Issue #46: list ElementAt/Distinct/Sum/Max on list values fail or return empty values at runtime — remove when fixed")]
-    [Category("PendingFix")]
     public void ListAggregatesAndTransforms_ElementAtDistinctSumMax_RunOnListValue()
     {
         // Issue #46
@@ -105,8 +103,6 @@ public class LanguageFeatureExecutionTests
     }
 
     [Test]
-    [Explicit("Issue #45: list append [1 2] + 3 fails as non-numeric/non-string addition — remove when fixed")]
-    [Category("PendingFix")]
     public void ListAppend_AppendsSingleValue()
     {
         // Issue #45
@@ -119,8 +115,6 @@ public class LanguageFeatureExecutionTests
     }
 
     [Test]
-    [Explicit("Issue #44: value pipe value:function returns the original value instead of invoking the function — remove when fixed")]
-    [Category("PendingFix")]
     public void ValuePipe_CallsFunctionOnValue()
     {
         // Issue #44
@@ -134,8 +128,6 @@ public class LanguageFeatureExecutionTests
     }
 
     [Test]
-    [Explicit("Issue #43: object .Get is not callable and quoted object keys do not parse — remove when fixed")]
-    [Category("PendingFix")]
     public void ObjectOperations_GetKeysAndQuotedKeys_Work()
     {
         // Issue #43
@@ -151,8 +143,6 @@ public class LanguageFeatureExecutionTests
     }
 
     [Test]
-    [Explicit("Issue #42: documented string properties Lower/Upper/Normalized/Words are unknown at runtime — remove when fixed")]
-    [Category("PendingFix")]
     public void StringProperties_LowerUpperNormalizedWords_Work()
     {
         // Issue #42
@@ -169,8 +159,6 @@ public class LanguageFeatureExecutionTests
     }
 
     [Test]
-    [Explicit("Issue #41: verbatim string token @'...' is rejected by the parser — remove when fixed")]
-    [Category("PendingFix")]
     public void VerbatimStrings_Tokenize()
     {
         // Issue #41
@@ -182,8 +170,6 @@ public class LanguageFeatureExecutionTests
     }
 
     [Test]
-    [Explicit("Issue #40: match expression with _ wildcard does not parse/evaluate — remove when fixed")]
-    [Category("PendingFix")]
     public void MatchExpression_Wildcard_ReturnsMatchedArm()
     {
         // Issue #40
@@ -196,8 +182,6 @@ public class LanguageFeatureExecutionTests
     }
 
     [Test]
-    [Explicit("Issue #39: interpolation of non-member expressions prints the literal braces instead of the value — remove when fixed")]
-    [Category("PendingFix")]
     public void StringInterpolation_NonMemberExpression_EvaluatesExpression()
     {
         // Issue #39
@@ -209,8 +193,6 @@ public class LanguageFeatureExecutionTests
     }
 
     [Test]
-    [Explicit("Issue #38: bare top-level expressions report 'No commands defined' instead of printing their value — remove when fixed")]
-    [Category("PendingFix")]
     public void BareTopLevelExpression_ProducesOutput()
     {
         // Issue #38
@@ -223,8 +205,6 @@ public class LanguageFeatureExecutionTests
     }
 
     [Test]
-    [Explicit("Issue #37: successful foreach/report output exits 1 instead of 0 — remove when fixed")]
-    [Category("PendingFix")]
     public void SuccessfulForeachReportProgram_ExitsZero()
     {
         // Issue #37
@@ -289,8 +269,6 @@ public class LanguageFeatureExecutionTests
     }
 
     [Test]
-    [Explicit("Issue #34: curried function used as a filter receives the item as an extra argument and crashes — remove when fixed")]
-    [Category("PendingFix")]
     public void CurriedFunction_UsedAsFilter_DoesNotCrash()
     {
         // Issue #34
