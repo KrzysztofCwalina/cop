@@ -195,7 +195,65 @@ command MAIN = CHECK(violations)
 
 ---
 
-## 7. Next Steps
+## 7. Enforce Module Layering
+
+Cop discovers your Maven/Gradle modules and their dependencies (from each `pom.xml` or
+`build.gradle`). The language-agnostic **`code-layering`** package lets you enforce
+architectural rules across modules — for example, that foundation modules must not
+depend on higher-level service modules.
+
+Create `layering.cop`:
+
+```cop
+import java
+import code
+import code-layering
+
+let cb = codebase(java.parse())
+
+# A module's Name is its Maven artifactId; its References are 'groupId:artifactId' strings.
+let foundation-modules = ['core']
+let service-modules = ['com.example:service' 'com.example:identity']
+
+predicate isFoundationModule(Project) => Project.Name:in(foundation-modules)
+predicate isServiceModuleReference(string) => string:in(service-modules)
+predicate dependsOnService(Project) => Project.References:any(isServiceModuleReference)
+
+let violations = cb.Projects:isFoundationModule:dependsOnService
+    :toError('Foundation module {item.Name} must not depend on a service module')
+
+command MAIN = CHECK(violations)
+```
+
+Run it against your project root:
+
+```bash
+cop layering.cop -t .
+```
+
+The check exits non-zero (and prints each offending module) when a foundation module
+references a service module, so you can wire it into CI.
+
+> Tip: `cb.Projects` exposes each module's `Name` and `References` (its `groupId:artifactId` dependencies).
+> Use `Project.References:any(predicate)` to test whether a module depends on a set of modules.
+
+---
+
+## Available Collections
+
+The `java.parse()` function returns a `Codebase` with these collections:
+
+| Collection | Description |
+|------------|-------------|
+| `cb.Types` | All classes, interfaces, enums, and records |
+| `cb.Statements` | Method calls, object creation, throw, catch |
+| `cb.Files` | Source files with package and import info |
+| `cb.Lines` | Every line of code (with kind: code/comment/blank) |
+| `cb.Projects` | Maven/Gradle modules (`pom.xml` / `build.gradle`) with their dependencies |
+
+---
+
+## 8. Next Steps
 
 - Run `cop help java` to see all available types and functions
 - Run `cop help code` for the full code analysis API

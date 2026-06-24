@@ -63,10 +63,14 @@ git add -A && git commit -m "..." && git push
 # 6. Create the release (asset names must be cop-<rid>.zip + cop-vscode.zip)
 gh release create v2026.6.18.1 install/cop-*.zip install/cop-vscode.zip --title v2026.6.18.1 --latest
 # 7. Verify end-to-end
-cop update      # must report the new version
+cop update --force   # forces a reinstall from the GitHub release; must report the new version
 ```
 
-`cop update` always installs `releases/latest` (no version comparison), so the new release must be marked `--latest`. The release tag is `v<version>`.
+`cop update` installs `releases/latest`, so the new release must be marked `--latest`. The release
+tag is `v<version>`. By default `cop update` skips the download when the running build is already at
+(or newer than) the latest release and prints "already up to date"; use `cop update --force` to
+reinstall regardless — required when verifying a release, because `install/publish.ps1` already
+updated your local `cop.exe` to the new version number.
 
 **Release notes / what's new.** `cop/cli/resources/release-notes.json` (embedded in cop.exe) is the source of the "what's new" notices cop shows after an update. Each entry is `{ "version", "approved", "features": [...] }`. Keep features short and user-facing. A version's features are shown to users only when `"approved": true` — review and approve before releasing.
 

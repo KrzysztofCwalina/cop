@@ -130,7 +130,26 @@ public class VersionNotifierTests
         Assert.That(text, Does.Contain("f2"), "skipped version's feature must show");
         Assert.That(text, Does.Contain("f3"));
         Assert.That(text, Does.Not.Contain("f1"), "the already-seen version must not show");
+        Assert.That(text, Does.Contain("Full release notes: https://github.com/KrzysztofCwalina/cop/releases/tag/v2026.6.22.3"),
+            "the summary must link to the full release notes");
         Assert.That(newState.SeenVersion, Is.EqualTo("2026.6.22.3"));
+    }
+
+    [Test]
+    public void Run_WhatsNew_CapsInlineFeatures_AndPointsToFullNotesForTheRest()
+    {
+        var now = DateTime.UtcNow;
+        // A single version carrying more features than fit inline (e.g. a large or skipped span).
+        var notes = new[] { Note("2026.6.22.2", true, "a", "b", "c", "d", "e", "f", "g") }; // 7 features
+        var state = new VersionNotifier.State(now, "v2026.6.22.2", "2026.6.22.1");
+        var (_, messages) = VersionNotifier.Run(state, notes, new Version("2026.6.22.2"), now, () => null);
+
+        var bullets = messages.Count(m => m.Text.Contains('\u2022'));
+        Assert.That(bullets, Is.EqualTo(5), "inline features must be capped at 5 to stay readable");
+
+        var text = string.Join("\n", messages.Select(m => m.Text));
+        Assert.That(text, Does.Contain("and 2 more"), "the remaining feature count must be shown");
+        Assert.That(text, Does.Contain("/releases/tag/v2026.6.22.2"), "and link to the full notes");
     }
 
     [Test]

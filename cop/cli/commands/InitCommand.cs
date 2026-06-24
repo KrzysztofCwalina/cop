@@ -12,7 +12,11 @@ public static class InitCommand
 {
     private const string SectionStart = "<!-- BEGIN COP INSTRUCTIONS -->";
     private const string SectionEnd = "<!-- END COP INSTRUCTIONS -->";
-    private const string CopCheckCommand = "cop cop-checks/main.cop -t . -om";
+    private const string DefaultCopCommand = "cop";
+
+    // The full check-run command, parameterized by how cop is invoked (default `cop`,
+    // or a custom prefix like `mise exec -- cop` when cop isn't on PATH).
+    private static string CheckCommand(string copCmd) => $"{copCmd} cop-checks/main.cop -t . -om";
 
     public static Command Create()
     {
@@ -20,32 +24,37 @@ public static class InitCommand
         var localHookOption = new Option<bool>("--al", "Generate local Claude Code hook (.claude/settings.local.json); implies --claude");
         var globalHookOption = new Option<bool>("--ag", "Generate shared Claude Code hook (.claude/settings.json); implies --claude");
         var copilotHookOption = new Option<bool>("--ch", "Generate GitHub Copilot CLI hook (.github/hooks/cop-check.json)");
+        var copCmdOption = new Option<string?>("--cop-cmd", "Command used to invoke cop in generated files and hooks when cop is not on PATH (e.g. \"mise exec -- cop\"). Default: cop");
         var command = new Command("init", "Generate agent instruction files for writing cop rules (GitHub Copilot by default, Claude Code with --claude)")
         {
             claudeOption,
             localHookOption,
             globalHookOption,
-            copilotHookOption
+            copilotHookOption,
+            copCmdOption
         };
 
         command.SetAction(ctx => Execute(
             ctx.GetValue(claudeOption) || ctx.GetValue(localHookOption) || ctx.GetValue(globalHookOption),
             ctx.GetValue(localHookOption),
             ctx.GetValue(globalHookOption),
-            ctx.GetValue(copilotHookOption)));
+            ctx.GetValue(copilotHookOption),
+            ctx.GetValue(copCmdOption)));
 
         return command;
     }
 
-    public static int Execute(bool claude = false, bool localHook = false, bool globalHook = false, bool copilotHook = false)
+    public static int Execute(bool claude = false, bool localHook = false, bool globalHook = false, bool copilotHook = false, string? copCmd = null)
     {
         var cwd = Directory.GetCurrentDirectory();
         int filesUpdated = 0;
 
+        copCmd = string.IsNullOrWhiteSpace(copCmd) ? DefaultCopCommand : copCmd.Trim();
+
         // AGENTS.md — generic, cross-agent instructions. Written in both modes because
         // it is the shared standard read by GitHub Copilot, Claude Code, and others.
         var agentsPath = Path.Combine(cwd, "AGENTS.md");
-        var agentsResult = MergeCopSection(agentsPath);
+        var agentsResult = MergeCopSection(agentsPath, copCmd);
         Console.WriteLine($"{agentsResult}: AGENTS.md");
         filesUpdated++;
 
@@ -56,24 +65,24 @@ public static class InitCommand
             var claudeCommandsDir = Path.Combine(cwd, ".claude", "commands");
             var copCommandPath = Path.Combine(claudeCommandsDir, "cop.md");
             Directory.CreateDirectory(claudeCommandsDir);
-            File.WriteAllText(copCommandPath, GetCopCommandContent());
+            File.WriteAllText(copCommandPath, GetCopCommandContent(copCmd));
             Console.WriteLine($"Updated: {GetRelativePath(cwd, copCommandPath)}");
             filesUpdated++;
 
             // Claude Code hook settings
             if (localHook)
             {
-                int result = GenerateClaudeHook(cwd, "settings.local.json");
+                int result = GenerateClaudeHook(cwd, "settings.local.json", copCmd);
                 if (result < 0) return 1;
                 filesUpdated += result;
 
-                result = GenerateCopilotHook(cwd);
+                result = GenerateCopilotHook(cwd, copCmd);
                 if (result < 0) return 1;
                 filesUpdated += result;
             }
             if (globalHook)
             {
-                int result = GenerateClaudeHook(cwd, "settings.json");
+                int result = GenerateClaudeHook(cwd, "settings.json", copCmd);
                 if (result < 0) return 1;
                 filesUpdated += result;
             }
@@ -85,7 +94,7 @@ public static class InitCommand
             var githubDir = Path.Combine(cwd, ".github");
             var copilotPath = Path.Combine(githubDir, "copilot-instructions.md");
             Directory.CreateDirectory(githubDir);
-            var copilotResult = MergeCopSection(copilotPath);
+            var copilotResult = MergeCopSection(copilotPath, copCmd);
             Console.WriteLine($"{copilotResult}: {GetRelativePath(cwd, copilotPath)}");
             filesUpdated++;
 
@@ -93,20 +102,28 @@ public static class InitCommand
             var copilotSkillDir = Path.Combine(githubDir, "skills", "cop");
             var copilotSkillPath = Path.Combine(copilotSkillDir, "SKILL.md");
             Directory.CreateDirectory(copilotSkillDir);
-            File.WriteAllText(copilotSkillPath, GetCopilotSkillContent());
+            File.WriteAllText(copilotSkillPath, GetCopilotSkillContent(copCmd));
             Console.WriteLine($"Updated: {GetRelativePath(cwd, copilotSkillPath)}");
             filesUpdated++;
 
             // GitHub Copilot CLI hook settings
             if (copilotHook)
             {
-                int result = GenerateCopilotHook(cwd);
+                int result = GenerateCopilotHook(cwd, copCmd);
                 if (result < 0) return 1;
                 filesUpdated += result;
             }
         }
 
         Console.WriteLine($"\n{filesUpdated} file(s) updated. Agents will now discover cop language context automatically.");
+
+        if (copCmd == DefaultCopCommand && DetectMiseConfig(cwd))
+        {
+            Console.WriteLine();
+            Console.WriteLine("Note: mise config detected. If cop isn't on your PATH, re-run with");
+            Console.WriteLine("  cop init --cop-cmd \"mise exec -- cop\"");
+            Console.WriteLine("to embed your mise invocation in the generated files and hooks.");
+        }
 
         return 0;
     }
@@ -118,9 +135,9 @@ public static class InitCommand
     /// If the file exists and already has the cop section, updates it in-place.
     /// Returns a status string: "Created", "Updated", or "Up-to-date".
     /// </summary>
-    private static string MergeCopSection(string filePath)
+    private static string MergeCopSection(string filePath, string copCmd)
     {
-        var wrappedContent = $"{SectionStart}\n{GetInstructionContent()}\n{SectionEnd}\n";
+        var wrappedContent = $"{SectionStart}\n{GetInstructionContent(copCmd)}\n{SectionEnd}\n";
 
         if (!File.Exists(filePath))
         {
@@ -156,7 +173,7 @@ public static class InitCommand
         return "Updated";
     }
 
-    private static int GenerateClaudeHook(string cwd, string fileName)
+    private static int GenerateClaudeHook(string cwd, string fileName, string copCmd)
     {
         var claudeDir = Path.Combine(cwd, ".claude");
         var settingsPath = Path.Combine(claudeDir, fileName);
@@ -193,7 +210,7 @@ public static class InitCommand
             if (HasCopStopHook(root))
                 RemoveCopStopHook(root);
 
-            MergeStopHook(root);
+            MergeStopHook(root, copCmd);
         }
         else
         {
@@ -207,7 +224,7 @@ public static class InitCommand
                 Console.Error.WriteLine($"Error: Cannot create directory {claudeDir}: {ex.Message}");
                 return -1;
             }
-            root = CreateFreshHookSettings();
+            root = CreateFreshHookSettings(copCmd);
         }
 
         // Write file
@@ -242,10 +259,12 @@ public static class InitCommand
         Console.WriteLine($"Wrote: {fullPath}");
         Console.WriteLine(File.ReadAllText(settingsPath));
 
-        // Verify cop is in PATH (hook will fail silently if it's not)
+        // Verify the cop invocation runs (the hook will fail silently if it's not accessible)
         try
         {
-            var psi = new System.Diagnostics.ProcessStartInfo("cop", "-v")
+            var (probeFile, probeArgs) = SplitCommand(copCmd);
+            var args = string.IsNullOrEmpty(probeArgs) ? "-v" : probeArgs + " -v";
+            var psi = new System.Diagnostics.ProcessStartInfo(probeFile, args)
             {
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -257,7 +276,7 @@ public static class InitCommand
         }
         catch
         {
-            Console.Error.WriteLine("Warning: 'cop' not found in PATH. The hook will fail unless cop is accessible.");
+            Console.Error.WriteLine($"Warning: '{copCmd}' could not be run. The hook will fail unless cop is accessible.");
         }
 
         Console.WriteLine($"Verify in Claude Code: type /hooks then select Stop");
@@ -276,7 +295,7 @@ public static class InitCommand
             {
                 if (hook is not JsonObject hookObj) continue;
                 var command = hookObj["command"]?.GetValue<string>();
-                if (command != null && command.Contains("cop cop-checks/main.cop"))
+                if (command != null && command.Contains("cop-checks/main.cop"))
                     return true;
             }
         }
@@ -295,7 +314,7 @@ public static class InitCommand
             {
                 if (hook is not JsonObject hookObj) continue;
                 var command = hookObj["command"]?.GetValue<string>();
-                if (command != null && command.Contains("cop cop-checks/main.cop"))
+                if (command != null && command.Contains("cop-checks/main.cop"))
                 {
                     stopArray.RemoveAt(i);
                     break;
@@ -306,7 +325,7 @@ public static class InitCommand
             hooks.Remove("Stop");
     }
 
-    private static void MergeStopHook(JsonObject root)
+    private static void MergeStopHook(JsonObject root, string copCmd)
     {
         if (root["hooks"] is not JsonObject hooks)
         {
@@ -324,7 +343,7 @@ public static class InitCommand
             ["hooks"] = new JsonArray(new JsonObject
             {
                 ["type"] = "command",
-                ["command"] = $"{CopCheckCommand} || true"
+                ["command"] = $"{CheckCommand(copCmd)} || true"
             })
         };
 
@@ -338,14 +357,14 @@ public static class InitCommand
         }
     }
 
-    private static JsonObject CreateFreshHookSettings()
+    private static JsonObject CreateFreshHookSettings(string copCmd)
     {
         var root = new JsonObject();
-        MergeStopHook(root);
+        MergeStopHook(root, copCmd);
         return root;
     }
 
-    private static int GenerateCopilotHook(string cwd)
+    private static int GenerateCopilotHook(string cwd, string copCmd)
     {
         var hooksDir = Path.Combine(cwd, ".github", "hooks");
         var hookPath = Path.Combine(hooksDir, "cop-check.json");
@@ -400,7 +419,7 @@ public static class InitCommand
         try
         {
             WriteJson(hookPath, root);
-            File.WriteAllText(scriptPath, GetCopilotHookScriptContent());
+            File.WriteAllText(scriptPath, GetCopilotHookScriptContent(copCmd));
         }
         catch (Exception ex)
         {
@@ -448,9 +467,9 @@ public static class InitCommand
             var bash = entry["bash"]?.GetValue<string>();
             var powershell = entry["powershell"]?.GetValue<string>();
             var commandStr = entry["command"]?.GetValue<string>();
-            if ((bash != null && (bash.Contains("cop cop-checks/main.cop") || bash.Contains(".github/hooks/cop-check.sh")))
-                || (powershell != null && powershell.Contains("cop cop-checks/main.cop"))
-                || (commandStr != null && commandStr.Contains("cop cop-checks/main.cop")))
+            if ((bash != null && (bash.Contains("cop-checks/main.cop") || bash.Contains(".github/hooks/cop-check.sh")))
+                || (powershell != null && powershell.Contains("cop-checks/main.cop"))
+                || (commandStr != null && commandStr.Contains("cop-checks/main.cop")))
             {
                 arr.RemoveAt(i);
             }
@@ -495,11 +514,11 @@ public static class InitCommand
         return root;
     }
 
-    private static string GetCopilotHookScriptContent()
+    private static string GetCopilotHookScriptContent(string copCmd)
     {
         return string.Join("\n", new[]
         {
-            $"out=\"$({CopCheckCommand} 2>&1)\"",
+            $"out=\"$({CheckCommand(copCmd)} 2>&1)\"",
             "code=$?",
             "if [ \"$code\" -ne 0 ] && [ -n \"$out\" ]; then",
             "  python3 -c 'import json,sys; print(json.dumps({\"decision\":\"block\",\"reason\":sys.argv[1]}))' \\",
@@ -522,37 +541,76 @@ public static class InitCommand
         return Path.GetRelativePath(basePath, fullPath);
     }
 
-    internal static string GetInstructionContent()
+    // Splits a cop invocation into the executable and its leading arguments, e.g.
+    // "mise exec -- cop" => ("mise", "exec -- cop"); "cop" => ("cop", "").
+    private static (string file, string args) SplitCommand(string cmd)
+    {
+        cmd = cmd.Trim();
+        var idx = cmd.IndexOf(' ');
+        return idx < 0 ? (cmd, string.Empty) : (cmd[..idx], cmd[(idx + 1)..]);
+    }
+
+    // True when the current directory looks like a mise-managed repo. Used only to print a
+    // discovery hint suggesting --cop-cmd; never rewrites anything on its own.
+    private static bool DetectMiseConfig(string cwd)
+    {
+        string[] candidates =
+        {
+            "mise.toml", ".mise.toml", "mise.local.toml", ".mise.local.toml",
+            Path.Combine(".config", "mise", "config.toml"),
+            Path.Combine(".config", "mise.toml"),
+            Path.Combine(".mise", "config.toml"),
+            ".tool-versions",
+        };
+        foreach (var rel in candidates)
+        {
+            if (File.Exists(Path.Combine(cwd, rel)))
+                return true;
+        }
+        return false;
+    }
+
+    internal static string GetInstructionContent(string copCmd = DefaultCopCommand)
     {
         using var stream = Assembly.GetExecutingAssembly()
             .GetManifestResourceStream("Cop.Cli.InitInstructions.md");
         if (stream == null)
             throw new InvalidOperationException("Embedded resource 'Cop.Cli.InitInstructions.md' not found.");
         using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
+        var content = reader.ReadToEnd().Replace("{{COP}}", copCmd);
+
+        if (copCmd != DefaultCopCommand)
+        {
+            var callout =
+                $"> **Invoking cop:** this project runs cop via `{copCmd}` — cop is not assumed to be on `PATH`. " +
+                "Use that exact prefix for every `cop` command shown below.\n\n";
+            content = callout + content;
+        }
+
+        return content;
     }
 
-    private static string GetCopCommandContent()
+    private static string GetCopCommandContent(string copCmd)
     {
-        return """
+        return $$"""
             Run cop static analysis on this repository.
 
             Execute the following command:
             ```
-            cop cop-checks/main.cop -t .
+            {{copCmd}} cop-checks/main.cop -t .
             ```
 
             This runs all cop checks defined in `cop-checks/main.cop` against the repository root.
             If there are violations, fix them before continuing.
 
             If `cop-checks/` doesn't exist, tell the user they need to create cop check files first.
-            Run `cop help language` for the full language reference if you need to write or fix cop rules.
+            Run `{{copCmd}} help language` for the full language reference if you need to write or fix cop rules.
             """.Replace("            ", "");
     }
 
-    private static string GetCopilotSkillContent()
+    private static string GetCopilotSkillContent(string copCmd)
     {
-        return """
+        return $$"""
             ---
             name: cop
             description: Run cop static analysis on this repository. Use this skill whenever asked to run cop, run cop checks, lint or analyze this codebase with cop, or verify the repo against its cop-checks.
@@ -562,14 +620,14 @@ public static class InitCommand
 
             Execute the following command:
             ```
-            cop cop-checks/main.cop -t .
+            {{copCmd}} cop-checks/main.cop -t .
             ```
 
             This runs all cop checks defined in `cop-checks/main.cop` against the repository root.
             If there are violations, fix them before continuing.
 
             If `cop-checks/` doesn't exist, tell the user they need to create cop check files first.
-            Run `cop help language` for the full language reference if you need to write or fix cop rules.
+            Run `{{copCmd}} help language` for the full language reference if you need to write or fix cop rules.
             """.Replace("            ", "");
     }
 }

@@ -109,7 +109,50 @@ cop run csharp-library-azure-checks        # Azure SDK conventions
 
 ---
 
-## 7. Explore Further
+## 7. Enforce Project Layering
+
+Cop discovers your C# projects and their dependencies (from each `.csproj`). The
+language-agnostic **`code-layering`** package lets you enforce architectural rules across
+projects — for example, that UI projects must not depend directly on data projects.
+
+Create `layering.cop`:
+
+```cop
+import csharp
+import code
+import code-layering
+
+let cb = codebase(csharp.parse())
+
+# UI projects must not depend directly on data projects.
+let ui-projects = ['MyApp.Web' 'MyApp.Presentation']
+let data-projects = ['MyApp.Data']
+
+predicate isUiProject(Project) => Project.Name:in(ui-projects)
+predicate isDataProjectName(string) => string:in(data-projects)
+predicate dependsOnData(Project) => Project.References:any(isDataProjectName)
+
+let violations = cb.Projects:isUiProject:dependsOnData
+    :toError('UI project {item.Name} must not depend directly on a data project')
+
+command MAIN = CHECK(violations)
+```
+
+Run it against your solution root:
+
+```bash
+cop layering.cop -t .
+```
+
+The check exits non-zero (and prints each offending project) when a UI project
+references a data project, so you can wire it into CI.
+
+> Tip: `cb.Projects` exposes each project's `Name` and `References` (its referenced project names).
+> Use `Project.References:any(predicate)` to test whether a project depends on a set of projects.
+
+---
+
+## 8. Explore Further
 
 ### List all public classes
 

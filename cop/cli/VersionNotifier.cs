@@ -10,9 +10,9 @@ namespace Cop.Cli.Commands;
 ///  1. A once-a-day check for a newer release, with a persistent yellow reminder to run
 ///     `cop update` (the network check is throttled to at most once per day; the reminder shows
 ///     every run until the user is up to date, using the cached latest tag).
-///  2. After an update, a concise "what's new" summary covering every version newer than the one
-///     the user last ran (so skipped versions are included). Only <c>approved</c> release notes
-///     are shown.
+///  2. After an update, a concise "what's new" summary — a short bulleted list plus a link to the
+///     full release notes — covering every version newer than the one the user last ran (so
+///     skipped versions are included). Only <c>approved</c> release notes are shown.
 ///
 /// Everything is fail-silent and only runs when stderr is an interactive terminal, so it never
 /// blocks, breaks, or pollutes scripted/CI output.
@@ -23,9 +23,13 @@ internal static class VersionNotifier
     private const string RepoName = "cop";
     private static readonly TimeSpan CheckInterval = TimeSpan.FromHours(24);
 
+    // Post-update "what's new" presentation: a short bulleted list plus a link to the full notes.
+    private static readonly string ReleasesUrl = $"https://github.com/{RepoOwner}/{RepoName}/releases";
+    private const int MaxInlineFeatures = 5;
+
     internal sealed record ReleaseNote(string Version, bool Approved, string[] Features);
     internal sealed record State(DateTime? LastCheck, string? LatestTag, string? SeenVersion);
-    internal sealed record Message(ConsoleColor Color, string Text);
+    internal sealed record Message(ConsoleColor? Color, string Text);
 
     /// <summary>Entry point — call once at startup. Never throws.</summary>
     public static void Notify()
@@ -65,11 +69,18 @@ internal static class VersionNotifier
             var newNotes = SelectNewFeatures(notes, seen, current);
             if (newNotes.Count > 0)
             {
-                messages.Add(new Message(ConsoleColor.Cyan, $"\u2728 cop updated to {current}. What's new:"));
-                foreach (var note in newNotes)
-                    foreach (var feature in note.Features)
-                        messages.Add(new Message(ConsoleColor.Cyan, $"   \u2022 {feature}"));
-                messages.Add(new Message(ConsoleColor.Cyan, ""));
+                // Show a short, readable bulleted list (header coloured, bullets plain) and link
+                // to the full release notes rather than dumping every feature inline.
+                var features = newNotes.SelectMany(n => n.Features).ToList();
+                messages.Add(new Message(ConsoleColor.Cyan, $"\u2728 Updated to cop {current}. What's new:"));
+                foreach (var feature in features.Take(MaxInlineFeatures))
+                    messages.Add(new Message(null, $"   \u2022 {feature}"));
+                var more = features.Count - Math.Min(features.Count, MaxInlineFeatures);
+                var link = $"{ReleasesUrl}/tag/v{current}";
+                messages.Add(new Message(ConsoleColor.Cyan, more > 0
+                    ? $"   \u2026and {more} more \u2014 full release notes: {link}"
+                    : $"   Full release notes: {link}"));
+                messages.Add(new Message(null, ""));
             }
         }
         var newSeen = seen is null || current > seen ? current.ToString() : state.SeenVersion;
@@ -120,9 +131,9 @@ internal static class VersionNotifier
 
     // ── Output ───────────────────────────────────────────────────────────────
 
-    private static void WriteColored(ConsoleColor color, string text)
+    private static void WriteColored(ConsoleColor? color, string text)
     {
-        if (ConsoleMarkdown.NoColor)
+        if (color is null || ConsoleMarkdown.NoColor)
         {
             Console.Error.WriteLine(text);
             return;
@@ -130,7 +141,7 @@ internal static class VersionNotifier
         var prev = Console.ForegroundColor;
         try
         {
-            Console.ForegroundColor = color;
+            Console.ForegroundColor = color.Value;
             Console.Error.WriteLine(text);
         }
         finally

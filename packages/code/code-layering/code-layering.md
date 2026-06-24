@@ -14,6 +14,8 @@ dependencies:
 
 Defines types and predicates for declaring architectural layers and enforcing dependency direction between projects.
 
+This package is language-agnostic and works with project/dependency data from C#, JavaScript/TypeScript, Python, Java, Go, and Rust.
+
 ## Usage
 
 ```cop

@@ -5,16 +5,16 @@ This project uses **Cop** for static analysis checks. All checks live in `cop-ch
 ## How to Run Checks
 
 ```bash
-cop cop-checks/main.cop -t .          # Run all checks against the repo root
-cop cop-checks/main.cop -t . -c ai    # Run a specific named command (e.g. an AI command)
-cop verify cop-checks/                # Verify check files are correct (no execution)
-cop test tests/                       # Run `test` assertions
+{{COP}} cop-checks/main.cop -t .          # Run all checks against the repo root
+{{COP}} cop-checks/main.cop -t . -c ai    # Run a specific named command (e.g. an AI command)
+{{COP}} verify cop-checks/                # Verify check files are correct (no execution)
+{{COP}} test tests/                       # Run `test` assertions
 ```
 
 **There is NO `-p` flag in this model.** `main.cop` builds the codebase itself by calling
 each language's `parse()` (see below), so checks run with just `-t <target>`.
 
-**Always run `cop verify` after writing or editing .cop files** to catch syntax/type errors before execution.
+**Always run `{{COP}} verify` after writing or editing .cop files** to catch syntax/type errors before execution.
 
 ## The Codebase Model
 
@@ -80,7 +80,7 @@ let locks = codebase.Statements:asCSharp:isLock
 
 Available narrowings: `:asCSharp` → `CSharpType`/`CSharpMethod`/`CSharpStatement`, `:asRust` →
 `RustType`/`RustMethod`/`RustStatement`, and likewise `:asJava`, `:asPython`, `:asGo`,
-`:asJavaScript`. Run `cop help <language>` to see each one's extra fields. If the
+`:asJavaScript`. Run `{{COP}} help <language>` to see each one's extra fields. If the
 language-agnostic model already expresses your rule, **do not** use a narrowing.
 
 ## How Checks Are Organized
@@ -115,7 +115,7 @@ let my-violations = codebase.Types:isViolating
 ## Canonical `main.cop` Template
 
 ```cop
-# Run all checks: cop cop-checks/main.cop -t .
+# Run all checks: {{COP}} cop-checks/main.cop -t .
 
 import code
 import code-analysis
@@ -192,13 +192,13 @@ let layering-violations = codebase.Projects:isRuntimeReferencingProvider
 ## Getting More Help
 
 ```bash
-cop help language           # Full language reference
-cop help <package-name>     # Package API docs (types, fields, functions)
-cop package list            # List available packages
+{{COP}} help language           # Full language reference
+{{COP}} help <package-name>     # Package API docs (types, fields, functions)
+{{COP}} package list            # List available packages
 ```
 
-**Run `cop help language` before writing cop code** for the full syntax reference.
-When using a package, run `cop help <package-name>` to see its types and API.
+**Run `{{COP}} help language` before writing cop code** for the full syntax reference.
+When using a package, run `{{COP}} help <package-name>` to see its types and API.
 
 ## Common Packages
 
@@ -219,7 +219,7 @@ When using a package, run `cop help <package-name>` to see its types and API.
 File a feedback issue whenever you encounter:
 - cop commands fail with errors you cannot resolve
 - Rules produce no output when they should (silent failures)
-- `cop verify` passes but runtime doesn't work as expected
+- `{{COP}} verify` passes but runtime doesn't work as expected
 - You cannot figure out how to accomplish something after consulting help
 
 Do NOT silently work around problems. File the issue FIRST, then work around it.

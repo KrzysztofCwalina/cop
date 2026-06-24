@@ -146,7 +146,51 @@ main.go: warning: Avoid panic() at line 43 — return an error instead
 
 ---
 
-## 6. Explore Further
+## 6. Enforce Module Layering
+
+Cop discovers your Go modules and their dependencies (from each `go.mod`). The
+language-agnostic **`code-layering`** package lets you enforce architectural rules across
+modules — for example, that foundation modules must not depend on higher-level service
+modules.
+
+Create `layering.cop`:
+
+```cop
+import go
+import code
+import code-layering
+
+let cb = codebase(go.parse())
+
+# Foundation modules must not depend on service modules.
+let foundation-modules = ['core']
+let service-modules = ['example.com/storage' 'example.com/identity']
+
+predicate isFoundationModule(Project) => Project.Name:in(foundation-modules)
+predicate isServiceModulePath(string) => string:in(service-modules)
+predicate dependsOnService(Project) => Project.References:any(isServiceModulePath)
+
+let violations = cb.Projects:isFoundationModule:dependsOnService
+    :toError('Foundation module {item.Name} must not depend on a service module')
+
+command MAIN = CHECK(violations)
+```
+
+Run it against your workspace root:
+
+```bash
+cop layering.cop -t .
+```
+
+The check exits non-zero (and prints each offending module) when a foundation module
+references a service module, so you can wire it into CI.
+
+> Tip: `cb.Projects` exposes each module's `Name` (the last path segment) and `References` (its full module-path dependencies).
+> Use `Project.References:any(predicate)` to test whether a module depends on a set of modules.
+
+---
+
+## 7. Explore Further
 
 ### List all exported types
 

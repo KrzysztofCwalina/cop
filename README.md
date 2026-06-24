@@ -34,6 +34,8 @@ cop init
 
 This generates instruction files (`.github/copilot-instructions.md`, `.github/skills/cop/SKILL.md`, `AGENTS.md`) that teach **GitHub Copilot** how to write cop rules. Commit these to your repo.
 
+<sub>**Not on your `PATH`?** If you run cop through a tool manager like [mise](https://mise.jdx.dev) (so your toolchain stays version-locked), run `cop init --cop-cmd "mise exec -- cop"` so the generated files and hooks invoke cop the way you do instead of assuming bare `cop` on `PATH`.</sub>
+
 <sub>**Using Claude Code?** Run `cop init --claude` to generate Claude Code instruction files (`.claude/commands/cop.md` — a `/cop` slash command) instead. Add `--ag` (shared hook, committed) or `--al` (local hook, per-user) to also install a Claude Code `Stop` hook that runs `cop cop-checks/main.cop -t . -om` after each task; `-om` skips analysis when no files changed. Both flags imply `--claude`, and existing settings are merged, not overwritten.</sub>
 
 ### 2. Create Rules

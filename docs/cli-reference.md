@@ -285,7 +285,7 @@ If the package is not found locally, run `cop package restore` first.
 Generate agent integration files for coding agents so they can write and run cop rules in your project. By default this targets **GitHub Copilot**; pass `--claude` for **Claude Code**.
 
 ```bash
-cop init [--claude] [--al] [--ag] [--ch]
+cop init [--claude] [--al] [--ag] [--ch] [--cop-cmd "<invocation>"]
 cop init --checks [--claude]
 ```
 
@@ -296,6 +296,7 @@ cop init --checks [--claude]
 | `--al` | Generate a local Claude Code hook (`.claude/settings.local.json`) and matching GitHub Copilot CLI hook (`.github/hooks/cop-check.*`); implies `--claude` |
 | `--ag` | Generate a shared Claude Code hook (`.claude/settings.json`); implies `--claude` |
 | `--ch` | Generate a GitHub Copilot CLI hook (`.github/hooks/cop-check.json` and `.github/hooks/cop-check.sh`) |
+| `--cop-cmd "<invocation>"` | Command used to invoke cop in the generated files and hooks when cop is not on `PATH` (e.g. `"mise exec -- cop"`). Defaults to `cop`. |
 
 Always creates `AGENTS.md` (the cross-agent standard, merged in-place and never clobbering your own content).
 
@@ -315,6 +316,20 @@ The optional hooks run `cop cop-checks/main.cop -t . -om` automatically after th
 > GitHub Copilot CLI loads hook files at startup, so restart any running CLI session after `cop init --ch` or `cop init --al`.
 
 The instruction and command/skill files are safe to run repeatedly; cop sections are updated in place. Commit the generated files so your whole team benefits.
+
+### Running cop through mise (or another wrapper)
+
+If cop isn't on your `PATH` — for example you run it through [mise](https://mise.jdx.dev) so your toolchain stays version-locked — pass `--cop-cmd` so every generated file and hook invokes cop the way you do:
+
+```bash
+cop init --cop-cmd "mise exec -- cop"
+```
+
+This rewrites the run/verify/help commands throughout `AGENTS.md`, `.github/copilot-instructions.md`, the skill/command files, and the hooks to use that prefix (e.g. `mise exec -- cop cop-checks/main.cop -t .`), and adds a short "Invoking cop" note at the top of the instructions. The flag swaps only the cop **invocation** — the cop language/package references (`import cop`, `cop.parse()`, the `cop-checks/` folder) are left untouched. The default is `cop`, so omit the flag if cop is on your `PATH`.
+
+The value is the invocation **prefix**; cop's arguments are appended to it, so any "run cop with these args" wrapper works (`mise exec -- cop`, a wrapper script, an absolute path). A mise *task* that needs an explicit `mise run cop -- <args>` separator is the one form a plain prefix can't express — use the `mise exec -- cop` tool form instead.
+
+When cop detects a mise config (`mise.toml`, `.tool-versions`, …) and you didn't pass `--cop-cmd`, it prints a one-line hint suggesting the flag — it never edits files on its own.
 
 ### Example
 
@@ -462,6 +477,14 @@ Self-update cop to the latest release from GitHub. Detects your platform automat
 cop update
 ```
 
+If you are already on the latest release, `cop update` says so and exits without downloading
+anything. Use `cop update --force` to reinstall the latest release anyway (e.g. to repair a
+corrupted install).
+
+```bash
+cop update --force
+```
+
 ### Updating
 
 Cop does not install updates automatically — run `cop update` to download and install the
@@ -474,9 +497,10 @@ stderr in colour; suppressed in pipes/CI, so scripted output is never affected):
 - **Update available** — at most **once a day**, cop checks GitHub for a newer release. If one
   exists, it prints a yellow reminder to run `cop update`. The reminder persists on every run
   until you update; the network check itself happens only once per day.
-- **What's new** — the first run after you update prints a concise summary of the new features,
-  covering **every version since the one you last ran** (so the notes for any versions you
-  skipped are included too).
+- **What's new** — the first run after you update prints a short bulleted summary of the new
+  features with a link to the full release notes, covering **every version since the one you last
+  ran** (so the notes for any versions you skipped are included too). A mistyped or unknown
+  command shows only its error — it never triggers this summary.
 
 State for these notices is kept in `~/.cop/update-check.json`.
 

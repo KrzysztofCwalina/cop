@@ -107,7 +107,51 @@ cop run python-library-azure-checks        # Azure SDK conventions
 
 ---
 
-## 7. Explore Further
+## 7. Enforce Package Layering
+
+Cop discovers your Python packages/distributions and their dependencies (from each
+`pyproject.toml` or `setup.py`). The language-agnostic **`code-layering`** package lets
+you enforce architectural rules across distributions — for example, that core packages
+must not depend on higher-level service packages.
+
+Create `layering.cop`:
+
+```cop
+import python
+import code
+import code-layering
+
+let cb = codebase(python.parse())
+
+# Core packages must not depend on service packages.
+let core-packages = ['my-core']
+let service-packages = ['my-storage' 'my-identity']
+
+predicate isCorePackage(Project) => Project.Name:in(core-packages)
+predicate isServicePackageName(string) => string:in(service-packages)
+predicate dependsOnService(Project) => Project.References:any(isServicePackageName)
+
+let violations = cb.Projects:isCorePackage:dependsOnService
+    :toError('Core package {item.Name} must not depend on a service package')
+
+command MAIN = CHECK(violations)
+```
+
+Run it against your project root:
+
+```bash
+cop layering.cop -t .
+```
+
+The check exits non-zero (and prints each offending package) when a core package
+references a service package, so you can wire it into CI.
+
+> Tip: `cb.Projects` exposes each package's `Name` and `References` (its distribution dependencies).
+> Use `Project.References:any(predicate)` to test whether a package depends on a set of packages.
+
+---
+
+## 8. Explore Further
 
 ### List all classes
 

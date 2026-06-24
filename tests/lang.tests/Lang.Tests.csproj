@@ -19,6 +19,8 @@
     <ProjectReference Include="..\..\providers\python-provider\python-provider.csproj" />
     <ProjectReference Include="..\..\providers\javascript-provider\javascript-provider.csproj" />
     <ProjectReference Include="..\..\providers\rust-provider\rust-provider.csproj" />
+    <ProjectReference Include="..\..\providers\java-provider\java-provider.csproj" />
+    <ProjectReference Include="..\..\providers\go-provider\go-provider.csproj" />
   </ItemGroup>
 
   <ItemGroup>

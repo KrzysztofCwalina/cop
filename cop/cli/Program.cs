@@ -23,13 +23,18 @@ if (args.Contains("--no-color"))
 if (args.Contains("--no-user-checks"))
     RunCommand.NoUserChecks = true;
 
-// Once-a-day "new version available" notice + a "what's new" summary after an update.
-// Interactive only and fail-silent, so it never blocks or pollutes scripted/CI output.
+// Known verbs (subcommands) — anything else is treated as a program to run
+var knownVerbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 {
-    var firstArg = args.Length > 0 ? args[0] : "";
-    if (firstArg is not ("update" or "-v" or "--version" or "-h" or "-help" or "--help" or "help"))
-        VersionNotifier.Notify();
-}
+    "run", "test", "syntax", "verify", "lock", "unlock", "help", "package", "repl", "init", "update", "vscode"
+};
+
+// Once-a-day "new version available" notice + a "what's new" summary after an update.
+// Interactive only and fail-silent, so it never blocks or pollutes scripted/CI output. Also
+// suppressed for help/version/update and for an unknown/misspelled command, so a typo prints
+// only the "unknown command" error instead of a stale post-update summary.
+if (!Console.IsErrorRedirected && StartupNotices.ShouldShow(args, knownVerbs, ResolvesToRunnable))
+    VersionNotifier.Notify();
 
 long clrStartupMs = 0;
 if (diag)
@@ -38,12 +43,6 @@ if (diag)
     clrStartupMs = (long)(DateTime.UtcNow - process.StartTime.ToUniversalTime()).TotalMilliseconds;
     Console.Error.WriteLine($"[diag] Process startup: {clrStartupMs}ms");
 }
-
-// Known verbs (subcommands) — anything else is treated as a program to run
-var knownVerbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-{
-    "run", "test", "syntax", "verify", "lock", "unlock", "help", "package", "repl", "init", "update", "vscode"
-};
 
 // Bare invocation (no arguments): look for local .cop files to run or show getting-started
 if (args.Length == 0)
@@ -93,12 +92,33 @@ if (args[0] == "help")
 // cop init — generate agent instruction files
 if (args[0] == "init")
 {
-    var knownInitOptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "--claude", "--al", "--ag", "--ch", "--checks" };
-    foreach (var arg in args.Skip(1))
+    var knownInitOptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "--claude", "--al", "--ag", "--ch", "--checks", "--cop-cmd" };
+
+    // Extract the --cop-cmd value (supports "--cop-cmd <value>" and "--cop-cmd=<value>")
+    // before the unknown-option scan, so its value is never mistaken for an option.
+    string? copCmd = null;
+    var initArgs = args.Skip(1).ToArray();
+    for (int i = 0; i < initArgs.Length; i++)
     {
+        var arg = initArgs[i];
+        if (arg.Equals("--cop-cmd", StringComparison.OrdinalIgnoreCase))
+        {
+            if (i + 1 >= initArgs.Length)
+            {
+                Console.Error.WriteLine("Option '--cop-cmd' requires a value, e.g. --cop-cmd \"mise exec -- cop\".");
+                return 1;
+            }
+            copCmd = initArgs[++i];
+            continue;
+        }
+        if (arg.StartsWith("--cop-cmd=", StringComparison.OrdinalIgnoreCase))
+        {
+            copCmd = arg["--cop-cmd=".Length..];
+            continue;
+        }
         if (arg.StartsWith('-') && !knownInitOptions.Contains(arg))
         {
-            Console.Error.WriteLine($"Unknown option '{arg}'. Known options: --checks, --claude, --al, --ag, --ch");
+            Console.Error.WriteLine($"Unknown option '{arg}'. Known options: --checks, --claude, --al, --ag, --ch, --cop-cmd");
             return 1;
         }
     }
@@ -112,13 +132,13 @@ if (args[0] == "init")
     bool copilotHook = args.Contains("--ch");
     // Default generates GitHub Copilot instructions; --claude (or a Claude hook flag) switches to Claude Code.
     bool claude = args.Contains("--claude") || localHook || globalHook;
-    return InitCommand.Execute(claude, localHook, globalHook, copilotHook);
+    return InitCommand.Execute(claude, localHook, globalHook, copilotHook, copCmd);
 }
 
 // cop update — self-update from GitHub releases
 if (args[0] == "update")
 {
-    return UpdateCommand.Execute();
+    return UpdateCommand.Execute(args.Contains("--force") || args.Contains("-f"));
 }
 
 // cop vscode — install VS Code extension
@@ -356,6 +376,29 @@ static int Levenshtein(string a, string b)
             d[i, j] = Math.Min(Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1), d[i - 1, j - 1] + cost);
         }
     return d[a.Length, b.Length];
+}
+
+/// <summary>
+/// True when a bare leading token names something cop can actually run — a .cop file, an HTTPS
+/// URL, or a command defined in a local .cop file. Used to decide whether to show the startup
+/// version notices: an unknown token returns false so a typo shows only the "unknown command"
+/// error (and not a stale post-update summary).
+/// </summary>
+static bool ResolvesToRunnable(string token)
+{
+    if (token.EndsWith(".cop", StringComparison.OrdinalIgnoreCase)) return true;
+    if (token.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+        token.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) return true;
+    try
+    {
+        var cwd = Directory.GetCurrentDirectory();
+        var localCopFiles = Directory.GetFiles(cwd, "*.cop", SearchOption.TopDirectoryOnly);
+        return localCopFiles.Length > 0 && IsLocalCommand(token, localCopFiles);
+    }
+    catch
+    {
+        return false;
+    }
 }
 
 /// <summary>

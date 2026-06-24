@@ -54,6 +54,16 @@
         "C# provider: `csharp.parse('path')` returns a Codebase and a single `<TargetFramework>` is captured in `Project.Frameworks`.",
         "`cop verify` no longer reports false duplicates for a package overloading or self-importing its own exports, and `cop init` now sets up Copilot CLI hooks."
       ]
+    },
+    {
+      "version": "2026.6.24.2",
+      "approved": true,
+      "features": [
+        "Module layering now works across Go, Java, Python, and JavaScript: cop discovers each module and its dependencies (e.g. from `go.mod`) and exposes `Project.Name`/`Project.References`, so the `code-layering` package can flag forbidden cross-module dependencies in every language — not just C#.",
+        "`cop init --cop-cmd \"<invocation>\"`: when cop isn't on your PATH (e.g. you run it through mise), the generated agent files and hooks invoke cop your way instead of assuming `cop` on PATH; cop also hints this when it detects a mise config.",
+        "Quieter startup: the once-a-day update reminder and post-update \"what's new\" summary no longer print before `help`/`--version`/`update` output or before an \"unknown command\" error — a typo now shows just the error.",
+        "`cop update` now skips the download when you're already on the latest release (and says so); use `cop update --force` to reinstall."
+      ]
     }
   ]
 }

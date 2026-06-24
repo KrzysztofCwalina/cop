@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 
@@ -12,12 +13,12 @@ static class UpdateCommand
     const string RepoName = "cop";
     const string GitHubApiBase = "https://api.github.com";
 
-    public static int Execute()
+    public static int Execute(bool force = false)
     {
-        return ExecuteAsync().GetAwaiter().GetResult();
+        return ExecuteAsync(force).GetAwaiter().GetResult();
     }
 
-    static async Task<int> ExecuteAsync()
+    static async Task<int> ExecuteAsync(bool force)
     {
         var rid = GetCurrentRid();
         if (rid == null)
@@ -55,6 +56,16 @@ static class UpdateCommand
         var releaseJson = await releaseResponse.Content.ReadFromJsonAsync<JsonElement>();
         var tagName = releaseJson.GetProperty("tag_name").GetString();
         var assets = releaseJson.GetProperty("assets");
+
+        // Already on the latest (or a newer local build)? Don't re-download — just say so.
+        // `--force` reinstalls anyway (e.g. to repair a corrupted install, or to verify a release).
+        var currentVersion = Assembly.GetExecutingAssembly().GetName().Version;
+        if (!force && IsUpToDate(currentVersion, tagName))
+        {
+            Console.WriteLine($"cop is already up to date ({currentVersion}).");
+            Console.WriteLine("Use 'cop update --force' to reinstall.");
+            return 0;
+        }
 
         // Find matching asset
         string? downloadUrl = null;
@@ -239,6 +250,16 @@ static class UpdateCommand
         return (!string.IsNullOrEmpty(programFiles) && path.StartsWith(programFiles, StringComparison.OrdinalIgnoreCase))
             || (!string.IsNullOrEmpty(programFilesX86) && path.StartsWith(programFilesX86, StringComparison.OrdinalIgnoreCase));
     }
+
+    /// <summary>
+    /// True when the running build is already at or above the latest released version, so there is
+    /// nothing to install. Conservative: if either version can't be determined it returns false, so
+    /// the normal download/install path runs (better to reinstall than to wrongly skip an update).
+    /// </summary>
+    internal static bool IsUpToDate(Version? current, string? latestTag)
+        => current is not null
+           && VersionNotifier.ParseVersion(latestTag) is { } latest
+           && current >= latest;
 
     static string? GetCurrentRid()
     {

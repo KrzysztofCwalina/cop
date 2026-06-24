@@ -109,7 +109,51 @@ cop run javascript-library-azure-checks    # Azure SDK conventions
 
 ---
 
-## 7. Explore Further
+## 7. Enforce Package Layering
+
+Cop discovers your JavaScript/TypeScript packages and their dependencies (from each
+`package.json`). The language-agnostic **`code-layering`** package lets you enforce
+architectural rules across packages — for example, that foundation packages must not
+depend on higher-level feature or app packages.
+
+Create `layering.cop`:
+
+```cop
+import javascript
+import code
+import code-layering
+
+let cb = codebase(javascript.parse())
+
+# Foundation packages must not depend on feature or app packages.
+let foundation-packages = ['@example/core']
+let feature-packages = ['@example/app' '@example/identity']
+
+predicate isFoundationPackage(Project) => Project.Name:in(foundation-packages)
+predicate isFeaturePackageName(string) => string:in(feature-packages)
+predicate dependsOnFeature(Project) => Project.References:any(isFeaturePackageName)
+
+let violations = cb.Projects:isFoundationPackage:dependsOnFeature
+    :toError('Foundation package {item.Name} must not depend on a feature package')
+
+command MAIN = CHECK(violations)
+```
+
+Run it against your workspace root:
+
+```bash
+cop layering.cop -t .
+```
+
+The check exits non-zero (and prints each offending package) when a foundation package
+references a feature package, so you can wire it into CI.
+
+> Tip: `cb.Projects` exposes each package's `Name` and `References` (its dependency package names).
+> Use `Project.References:any(predicate)` to test whether a package depends on a set of packages.
+
+---
+
+## 8. Explore Further
 
 ### List all classes and their methods
 
