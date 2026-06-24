@@ -1,0 +1,20 @@
+# Currying — partial application of functions.
+#
+# Calling a function with fewer arguments than it needs binds those arguments and
+# returns a closure that waits for the rest. The leading item parameter (a type, here
+# `Type`) is filled per element when the closure is used in a filter chain.
+#
+# Run from this folder with:  cop currying.cop -t .
+import code
+import csharp
+
+let codebase = codebase(csharp.parse())
+
+# `wrapName` wraps a type's name between a prefix and suffix.
+function wrapName(Type, prefix: string, suffix: string) => '{prefix}{item.Name}{suffix}'
+
+# Partial application: bind the prefix, leaving the suffix (and the per-item type) open.
+let bracketed = wrapName('[')
+
+# Complete the call per item by supplying the suffix; the filter fills the item.
+command MAIN = foreach codebase.Types:bracketed(']') => print('{item}')

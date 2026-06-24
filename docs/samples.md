@@ -24,6 +24,7 @@ Located in `samples/language/`.
 | [transforms](../samples/language/transforms/transforms.cop) | `.Where` / `.Select` / `.text` / `.First` / `.Count` |
 | [commands](../samples/language/commands/commands.cop) | Named, runnable commands selected with `-c` |
 | [json](../samples/language/json/json.cop) | Typed schemas over JSON data with `json.Parse` |
+| [currying](../samples/language/currying/currying.cop) | Partial application: bind some arguments, complete the call per item |
 
 ## Static-Analysis Samples
 

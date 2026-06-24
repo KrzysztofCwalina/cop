@@ -12,13 +12,14 @@ public static class InitCommand
 {
     private const string SectionStart = "<!-- BEGIN COP INSTRUCTIONS -->";
     private const string SectionEnd = "<!-- END COP INSTRUCTIONS -->";
+    private const string CopCheckCommand = "cop cop-checks/main.cop -t . -om";
 
     public static Command Create()
     {
         var claudeOption = new Option<bool>("--claude", "Generate Claude Code instructions instead of GitHub Copilot");
         var localHookOption = new Option<bool>("--al", "Generate local Claude Code hook (.claude/settings.local.json); implies --claude");
         var globalHookOption = new Option<bool>("--ag", "Generate shared Claude Code hook (.claude/settings.json); implies --claude");
-        var copilotHookOption = new Option<bool>("--ch", "Generate GitHub Copilot CLI hook (.github/hooks/cop.json)");
+        var copilotHookOption = new Option<bool>("--ch", "Generate GitHub Copilot CLI hook (.github/hooks/cop-check.json)");
         var command = new Command("init", "Generate agent instruction files for writing cop rules (GitHub Copilot by default, Claude Code with --claude)")
         {
             claudeOption,
@@ -63,6 +64,10 @@ public static class InitCommand
             if (localHook)
             {
                 int result = GenerateClaudeHook(cwd, "settings.local.json");
+                if (result < 0) return 1;
+                filesUpdated += result;
+
+                result = GenerateCopilotHook(cwd);
                 if (result < 0) return 1;
                 filesUpdated += result;
             }
@@ -319,7 +324,7 @@ public static class InitCommand
             ["hooks"] = new JsonArray(new JsonObject
             {
                 ["type"] = "command",
-                ["command"] = "cop cop-checks/main.cop -t . -om || true"
+                ["command"] = $"{CopCheckCommand} || true"
             })
         };
 
@@ -343,7 +348,8 @@ public static class InitCommand
     private static int GenerateCopilotHook(string cwd)
     {
         var hooksDir = Path.Combine(cwd, ".github", "hooks");
-        var hookPath = Path.Combine(hooksDir, "cop.json");
+        var hookPath = Path.Combine(hooksDir, "cop-check.json");
+        var scriptPath = Path.Combine(hooksDir, "cop-check.sh");
         var fullPath = Path.GetFullPath(hookPath);
 
         JsonObject root;
@@ -394,10 +400,11 @@ public static class InitCommand
         try
         {
             WriteJson(hookPath, root);
+            File.WriteAllText(scriptPath, GetCopilotHookScriptContent());
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error: Cannot write {fullPath}: {ex.Message}");
+            Console.Error.WriteLine($"Error: Cannot write GitHub Copilot hook files under {hooksDir}: {ex.Message}");
             return -1;
         }
 
@@ -411,17 +418,24 @@ public static class InitCommand
                 Console.Error.WriteLine($"Error: Verification failed — {fullPath} does not contain valid hooks JSON after write");
                 return -1;
             }
+            if (!File.Exists(scriptPath))
+            {
+                Console.Error.WriteLine($"Error: Verification failed — {Path.GetFullPath(scriptPath)} was not written");
+                return -1;
+            }
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error: Verification failed — cannot read back {fullPath}: {ex.Message}");
+            Console.Error.WriteLine($"Error: Verification failed — cannot read back GitHub Copilot hook files: {ex.Message}");
             return -1;
         }
 
         Console.WriteLine($"Wrote: {fullPath}");
         Console.WriteLine(File.ReadAllText(hookPath));
+        Console.WriteLine($"Wrote: {Path.GetFullPath(scriptPath)}");
+        Console.WriteLine(File.ReadAllText(scriptPath));
         Console.WriteLine("GitHub Copilot CLI loads hooks at startup — restart any running session to pick this up.");
-        return 1;
+        return 2;
     }
 
     private static void RemoveCopAgentStopHook(JsonObject root)
@@ -434,7 +448,7 @@ public static class InitCommand
             var bash = entry["bash"]?.GetValue<string>();
             var powershell = entry["powershell"]?.GetValue<string>();
             var commandStr = entry["command"]?.GetValue<string>();
-            if ((bash != null && bash.Contains("cop cop-checks/main.cop"))
+            if ((bash != null && (bash.Contains("cop cop-checks/main.cop") || bash.Contains(".github/hooks/cop-check.sh")))
                 || (powershell != null && powershell.Contains("cop cop-checks/main.cop"))
                 || (commandStr != null && commandStr.Contains("cop cop-checks/main.cop")))
             {
@@ -456,14 +470,10 @@ public static class InitCommand
             root["hooks"] = hooks;
         }
 
-        // Non-blocking hook: bash uses '|| true' and PowerShell uses '; exit 0' so a
-        // failing cop run or pre-existing violations never error the hook or trap the
-        // agent. '-om' skips analysis when the git working tree has no modifications.
         var hookEntry = new JsonObject
         {
             ["type"] = "command",
-            ["bash"] = "cop cop-checks/main.cop -t . -om || true",
-            ["powershell"] = "cop cop-checks/main.cop -t . -om; exit 0",
+            ["bash"] = "bash .github/hooks/cop-check.sh",
             ["cwd"] = ".",
             ["timeoutSec"] = 120
         };
@@ -483,6 +493,22 @@ public static class InitCommand
         var root = new JsonObject { ["version"] = 1 };
         MergeAgentStopHook(root);
         return root;
+    }
+
+    private static string GetCopilotHookScriptContent()
+    {
+        return string.Join("\n", new[]
+        {
+            $"out=\"$({CopCheckCommand} 2>&1)\"",
+            "code=$?",
+            "if [ \"$code\" -ne 0 ] && [ -n \"$out\" ]; then",
+            "  python3 -c 'import json,sys; print(json.dumps({\"decision\":\"block\",\"reason\":sys.argv[1]}))' \\",
+            "    \"cop check FAILED:",
+            "$out",
+            "Fix the cop check violations, then re-run the check until it passes.\"",
+            "fi",
+            "exit 0"
+        }) + "\n";
     }
 
     private static void WriteJson(string path, JsonObject root)

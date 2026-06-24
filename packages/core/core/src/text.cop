@@ -6,3 +6,9 @@ export function text(string) => string
 
 ## Converts a bool to text: true => 'true', false => 'false'.
 export function text(bool) => bool ? 'true' | 'false'
+
+## Joins a collection's items into a single string separated by `separator`.
+## Without this overload a 2-arg `coll.text(sep)` resolved to the 1-arg `text(value)`
+## overloads and failed ("'text' expects 1 argument(s), got 2").
+## Example: names.text(', ')
+export function text(items: [T], separator: string) : string => intrinsic

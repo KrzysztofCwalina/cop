@@ -569,7 +569,38 @@ public static class StandardLibrary
             if (args.Count == 0) return new CopInt(0);
             return new CopInt(args[0].Display().Length);
         });
+
+        // Numeric comparison predicates. These are compiled to ComparisonFilters for provider
+        // pushdown (PredicateCompiler), but were missing as runtime functions, so a per-item /
+        // materialized use like `Person.age:greaterThan(17)` failed with "Undefined variable
+        // 'greaterThan'" (issue #33). Both long and short forms are registered.
+        void RegisterComparison(string longName, string shortName, Func<double, double, bool> op)
+        {
+            CopValue Impl(IReadOnlyList<CopValue> args, Environment env)
+            {
+                if (args.Count < 2) return CopBool.False;
+                var a = ToDoubleOrNull(args[0]);
+                var b = ToDoubleOrNull(args[1]);
+                if (a is null || b is null) return CopBool.False;
+                return CopBool.Of(op(a.Value, b.Value));
+            }
+            ffi.Register(longName, Impl);
+            ffi.Register(shortName, Impl);
+        }
+        RegisterComparison("greaterThan", "gt", (a, b) => a > b);
+        RegisterComparison("lessThan", "lt", (a, b) => a < b);
+        RegisterComparison("greaterOrEqual", "ge", (a, b) => a >= b);
+        RegisterComparison("lessOrEqual", "le", (a, b) => a <= b);
     }
+
+    private static double? ToDoubleOrNull(CopValue v) => v switch
+    {
+        CopInt i => i.Value,
+        CopNumber n => n.Value,
+        CopBool b => b.Value ? 1 : 0,
+        CopString s when double.TryParse(s.Value, System.Globalization.CultureInfo.InvariantCulture, out var d) => d,
+        _ => null
+    };
 
     private static void RegisterFlagPredicates(ForeignFunctionRegistry ffi)
     {

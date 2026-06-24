@@ -2,6 +2,7 @@
 #
 # Declare a `type`, load JSON into a typed list, then filter on a field.
 # A boolean field can be used directly as a filter:  people:active
+# A custom predicate can also filter on any field:   people:canVote
 #
 # Run from this folder with:  cop json.cop
 import json
@@ -14,4 +15,8 @@ type Person = {
 
 let people : [Person] = json.Parse('data.json')
 
+predicate canVote(Person) => Person.age:greaterOrEqual(18)
+
 command MAIN = foreach people:active => print('{item.name} ({item.age}) is active')
+
+command VOTERS = foreach people:canVote => print('{item.name} can vote')

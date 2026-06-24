@@ -1,6 +1,7 @@
 using Cop.Core;
 using Cop.Lang;
 using Cop.Lang.Interpreter;
+using Cop.Lang.Parser;
 using NUnit.Framework;
 
 namespace Cop.Tests.Lang;
@@ -99,6 +100,36 @@ public class QueryableCollectionTests
 
         var typeName = TypeValidator.GetActualTypeName(queryable);
         Assert.That(typeName, Is.EqualTo("collection"));
+    }
+
+    [Test]
+    public void EvalFilter_UserPredicateOverQueryable_MaterializesInsteadOfPushingDown()
+    {
+        // Regression (#33): a user-defined predicate applied to a provider queryable (e.g.
+        // json.Parse()) must be evaluated PER ITEM, not compiled to a PropertyFilter and pushed
+        // down. Pushing down made the provider read a non-existent 'canVote' field and crash with
+        // "PropertyFilter expects bool for 'canVote', got null". Real fields (e.g. people:active)
+        // still push down.
+        CopValue Person(string name, int age) => new CopObject(
+            new Dictionary<string, CopValue> { ["name"] = new CopString(name), ["age"] = new CopInt(age) });
+        var svc = new FakeQueryService(new CopList([Person("Ada", 36), Person("Bo", 12)]));
+        var queryable = new CopQueryable("json", new ProviderQuery { RootPath = "/people.json" }, svc.QueryProvider);
+
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var module = CopParser.Parse("""
+            predicate canVote(p) => p.age:greaterThan(17)
+            command main = people:canVote.Count
+            """, "test.cop");
+        var evaluator = new Evaluator(ffi, "test.cop");
+        evaluator.GlobalEnvironment.Define("people", queryable);
+        evaluator.EvalModule(module);
+        var result = evaluator.RunCommand("main");
+
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(1), "only Ada (age 36) should pass canVote");
+        Assert.That(svc.LastQuery?.Filter, Is.Null,
+            "a user predicate must not be pushed down to the provider as a property filter");
     }
 
     private class FakeQueryService

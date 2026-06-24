@@ -371,6 +371,33 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
         if (args.Count > 0)
         {
             var subject = args[0];
+
+            // Constraint/guard dispatch: when overloads carry a first-parameter constraint predicate
+            // (e.g. `writesOutput(Statement:isCSharp)` vs `(Statement:isPython)`), pick the overload
+            // whose constraint holds for the argument. Without this, same-typed guarded overloads all
+            // collapsed onto the first one and language-guarded overloads silently mis-dispatched —
+            // e.g. Python statements ran the C# overload's body and never matched (issue #35).
+            if (_overloads.Any(o => o.Declaration.Params.Count > 0 && o.Declaration.Params[0].Type?.Constraint is not null))
+            {
+                bool hasUnconstrained = false;
+                foreach (var overload in _overloads)
+                {
+                    var constraint = overload.Declaration.Params.Count > 0
+                        ? overload.Declaration.Params[0].Type?.Constraint : null;
+                    if (constraint is null) { hasUnconstrained = true; continue; }
+                    if (env.TryLookup(constraint, out var guardVal) && guardVal is ICopCallable guard
+                        && guard.Invoke([subject], evaluator, env).IsTruthy)
+                        return evaluator.CallUserFunction(overload, args);
+                }
+                // No constrained overload matched. When every overload is constrained (no default),
+                // the guard genuinely excludes this argument — a guarded predicate returns false (so
+                // e.g. `isMissingNamespace(Type:isCSharp)` simply doesn't apply to non-C# types,
+                // rather than running its body and crashing). With an unconstrained overload present,
+                // fall through to the normal dispatch below so it serves as the default fallback.
+                if (!hasUnconstrained)
+                    return CopBool.False;
+            }
+
             var subjectTypeName = GetTypeName(subject);
 
             if (subjectTypeName is not null)
@@ -482,6 +509,50 @@ public sealed class CopLambda : CopValue, ICopCallable
     }
 
     public override string Display() => "<lambda>";
+    public override string ToString() => Display();
+}
+
+/// <summary>
+/// A partially-applied function (currying). Holds a target function and the explicit arguments
+/// bound so far, EXCLUDING the implicit item parameter (the leading type-named parameter that a
+/// filter fills per element). Direct calls accumulate more explicit arguments (see EvalCall);
+/// when invoked as a callable (e.g. by a filter) the first argument is taken as the item and the
+/// bound explicit arguments complete the call. Enables the documented currying form:
+/// `let bracketed = format('[')` then `Types:bracketed(']')`.
+/// </summary>
+public sealed class CopClosure : CopValue, ICopCallable
+{
+    public CopFunction Func { get; }
+    public IReadOnlyList<CopValue> BoundExplicit { get; }
+    /// <summary>Number of explicit parameters (declared params minus the leading item parameter).</summary>
+    public int ExplicitArity { get; }
+
+    public CopClosure(CopFunction func, IReadOnlyList<CopValue> boundExplicit, int explicitArity)
+    {
+        Func = func;
+        BoundExplicit = boundExplicit;
+        ExplicitArity = explicitArity;
+    }
+
+    /// <summary>Returns a new closure with additional explicit arguments bound (direct application).</summary>
+    public CopClosure WithExplicit(IEnumerable<CopValue> more)
+        => new(Func, [.. BoundExplicit, .. more], ExplicitArity);
+
+    public int Arity => ExplicitArity - BoundExplicit.Count;
+
+    public CopValue Invoke(IReadOnlyList<CopValue> args, Evaluator evaluator, Environment env)
+    {
+        // Invoked as a callable (e.g. by a filter): the first argument is the item that fills the
+        // leading parameter; any further arguments complete the remaining explicit parameters
+        // together with the already-bound ones.
+        if (args.Count == 0) return this;
+        var full = new List<CopValue> { args[0] };
+        full.AddRange(BoundExplicit);
+        for (int i = 1; i < args.Count; i++) full.Add(args[i]);
+        return evaluator.CallUserFunction(Func, full);
+    }
+
+    public override string Display() => $"<closure {Func.Declaration.Name}>";
     public override string ToString() => Display();
 }
 

@@ -146,6 +146,203 @@ public class EvaluatorTests
         Assert.That(((CopBool)result).Value, Is.True);
     }
 
+    [Test]
+    public void EvalFilter_EmptyOnNonEmptyCollection_ReturnsFalseBool()
+    {
+        // Regression (#32): `collection:empty` is a collection-level emptiness test that returns a
+        // BOOL, not a per-item filter. Previously a bare `:empty` fell through to the per-item
+        // loop and produced a collection whose IsTruthy is always true, so `coll:empty` was truthy
+        // even for non-empty collections (e.g. `Statement.Children:empty` matched non-empty catches).
+        var nonEmpty = EvalExpr("[1, 2, 3]:empty");
+        Assert.That(nonEmpty, Is.InstanceOf<CopBool>(), "coll:empty must return a bool, not a collection");
+        Assert.That(((CopBool)nonEmpty).Value, Is.False);
+
+        var empty = EvalExpr("[]:empty");
+        Assert.That(empty, Is.InstanceOf<CopBool>());
+        Assert.That(((CopBool)empty).Value, Is.True);
+    }
+
+    [Test]
+    public void EvalFilter_EmptyInBooleanContext_RespectsActualEmptiness()
+    {
+        // Regression (#32): the exact failure shape — `<bool> && coll:empty` used inside a
+        // predicate body. A non-empty collection must make the conjunction false.
+        Assert.That(((CopBool)EvalExpr("true && [1, 2, 3]:empty")).Value, Is.False);
+        Assert.That(((CopBool)EvalExpr("true && []:empty")).Value, Is.True);
+    }
+
+    [Test]
+    public void EvalFilter_SoleCollectionParamFunction_InvokedAtCollectionLevel()
+    {
+        // Regression (#32): a bare `:name` whose function has a SOLE collection parameter
+        // (like core's `empty(items:[T])`, `distinct`, `pop`) must be invoked once with the
+        // whole collection, not dispatched per item (which errored "expects [..], got <item>").
+        var result = Eval("""
+            let xs = [10, 20, 30]
+            function countItems(items: [T]) : int => items.Count
+            command main = xs:countItems
+            """);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(3));
+    }
+
+    [Test]
+    public void EvalFilter_ScalarOverloadWins_StaysPerItem()
+    {
+        // Regression (#32): when an overload's sole scalar parameter matches the item type
+        // (mirroring files' `empty(Folder)` alongside core's `empty(items:[T])`), the bare
+        // `:name` filter must stay per-item, not collapse to the collection-level overload.
+        var result = Eval("""
+            type Box : object = { Flag : bool }
+            function flagged(items: [T]) : bool => items.Count == 0
+            predicate flagged(Box) => Box.Flag
+            let boxes = [Box { Flag = true }, Box { Flag = false }, Box { Flag = true }]
+            command main = boxes:flagged.Count
+            """);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(2),
+            "per-item predicate overload should keep the two flagged boxes");
+    }
+
+    [Test]
+    public void EvalFilter_EmptyCollectionWithScalarOverload_StaysPerItem()
+    {
+        // Regression (#32 follow-up): for an EMPTY collection the item type can't be inspected, but
+        // a scalar overload in scope (e.g. files' `empty(Folder)`) means the bare `:name` filter is
+        // per-item and must yield an empty collection — NOT collapse to the collection-level
+        // overload and return a bool (which broke `foreach folders():empty => item.Path` when the
+        // folder list was empty).
+        var result = Eval("""
+            type Box : object = { Flag : bool }
+            function flagged(items: [T]) : bool => items.Count == 0
+            predicate flagged(Box) => Box.Flag
+            let boxes : [Box] = []
+            command main = boxes:flagged.Count
+            """);
+        Assert.That(result, Is.InstanceOf<CopInt>(),
+            "an empty collection filtered per-item must stay a collection (Count == 0), not a bool");
+        Assert.That(((CopInt)result).Value, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void EvalFilter_CollectionFirstParamMethodWithListArg_DispatchesAtCollectionLevel()
+    {
+        // Regression (#30): `coll:func(args)` where func's FIRST parameter is a collection — e.g.
+        // containsAny(items:[string], values:[string]) — must invoke func ONCE with the whole
+        // collection, even when no argument is a callable (a plain list literal). Previously the
+        // colon form only dispatched collection-level when an arg was a lambda/callable, so
+        // `References:containsAny(['cop'])` fell through to per-item dispatch and failed with
+        // "'containsAny' parameter 'items' expects [string], got string".
+        var result = Eval("""
+            function hasValue(items: [string], value: string) : bool => items:any((i) => i == value)
+            let xs = ['a', 'b', 'c']
+            command main = xs:hasValue('b')
+            """);
+        Assert.That(result, Is.InstanceOf<CopBool>());
+        Assert.That(((CopBool)result).Value, Is.True);
+
+        var miss = Eval("""
+            function hasValue(items: [string], value: string) : bool => items:any((i) => i == value)
+            let xs = ['a', 'b', 'c']
+            command main = xs:hasValue('z')
+            """);
+        Assert.That(((CopBool)miss).Value, Is.False);
+    }
+
+    [Test]
+    public void EvalCall_TextJoinOnCollection_ResolvesTwoArgOverload()
+    {
+        // Regression (#30): `coll.text(sep)` must join the collection. The single-arg `text(value)`
+        // overloads shadowed the 2-arg collection join, so a 2-arg call failed with
+        // "'text' expects 1 argument(s), got 2". A `text(items:[T], separator)` overload (backed by
+        // the FFI join) restores it.
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = Eval("""
+            function text(value: string) : string => value
+            function text(items: [T], separator: string) : string => intrinsic
+            let xs = ['a', 'b', 'c']
+            command main = xs.text(', ')
+            """, ffi);
+        Assert.That(result, Is.InstanceOf<CopString>());
+        Assert.That(((CopString)result).Value, Is.EqualTo("a, b, c"));
+    }
+
+    [Test]
+    public void EvalFilter_NumericComparisonPredicates_WorkPerItem()
+    {
+        // Regression (#33): the named comparison ops (greaterThan/lessThan/greaterOrEqual/
+        // lessOrEqual + short forms) compiled to provider pushdown filters but were not registered
+        // as runtime functions, so a per-item/materialized `value:greaterThan(n)` crashed with
+        // "Undefined variable 'greaterThan'".
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+
+        CopValue Count(string op, int n) => Eval($$"""
+            let nums = [5, 10, 20, 30]
+            predicate p(int) => int:{{op}}({{n}})
+            command main = nums:p.Count
+            """, ffi);
+
+        Assert.That(((CopInt)Count("greaterThan", 15)).Value, Is.EqualTo(2), "greaterThan");
+        Assert.That(((CopInt)Count("gt", 15)).Value, Is.EqualTo(2), "gt");
+        Assert.That(((CopInt)Count("lessThan", 15)).Value, Is.EqualTo(2), "lessThan");
+        Assert.That(((CopInt)Count("greaterOrEqual", 20)).Value, Is.EqualTo(2), "greaterOrEqual");
+        Assert.That(((CopInt)Count("lessOrEqual", 10)).Value, Is.EqualTo(2), "lessOrEqual");
+    }
+
+    [Test]
+    public void EvalFilter_GuardedPredicateOverloads_DispatchByConstraint()
+    {
+        // Regression (#35): predicate overloads distinguished only by a first-parameter guard
+        // (e.g. `writesOutput(Statement:isCSharp)` vs `(Statement:isPython)` vs `(Statement:isJavaScript)`)
+        // must dispatch to the overload whose guard holds for the item. The parser discarded the
+        // guard, so all same-typed overloads collapsed onto the first one and adding a 3rd guarded
+        // overload silently broke an earlier one's dispatch.
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = Eval("""
+            type Item : object = { n : int }
+            predicate isSmall(Item) => Item.n:lessThan(10)
+            predicate isMid(Item) => Item.n:greaterOrEqual(10) && Item.n:lessThan(100)
+            predicate isLarge(Item) => Item.n:greaterOrEqual(100)
+            predicate keep(Item:isSmall) => true
+            predicate keep(Item:isMid) => false
+            predicate keep(Item:isLarge) => true
+            let items = [Item { n = 5 }, Item { n = 20 }, Item { n = 300 }, Item { n = 3 }]
+            command main = items:keep.Count
+            """, ffi);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(3),
+            "small (5, 3) and large (300) keep=true; mid (20) keep=false — the 3rd overload must not break the 1st");
+    }
+
+    [Test]
+    public void EvalCall_CurriedItemFunction_CompletesPerItemInFilter()
+    {
+        // Regression (#34): partially applying a function whose leading parameter is the implicit
+        // item parameter (`wrap(T, prefix, suffix)`) must bind the explicit parameters and return a
+        // closure that a filter completes per item — `let bracket = wrap('[')` then
+        // `items:bracket(']')`. Previously the partial-application value was a non-callable CopThunk
+        // and the call crashed at runtime ("Value of type CopThunk is not callable").
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = Eval("""
+            type T : object = { Name : string }
+            function wrap(T, prefix: string, suffix: string) => '{prefix}{T.Name}{suffix}'
+            let items = [T { Name = 'A' }, T { Name = 'B' }]
+            let bracket = wrap('[')
+            command main = items:bracket(']')
+            """, ffi);
+        var values = result switch
+        {
+            CopList l => l.Items.Select(i => i.Display()).ToList(),
+            CopLazyCollection lz => lz.Enumerate().Select(i => i.Display()).ToList(),
+            _ => throw new AssertionException($"expected a collection, got {result.GetType().Name}")
+        };
+        Assert.That(values, Is.EqualTo(new[] { "[A]", "[B]" }));
+    }
+
     // ========================================================================
     // Arithmetic
     // ========================================================================

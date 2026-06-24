@@ -452,8 +452,32 @@ public sealed class Evaluator
                 call.Line, _filePath);
         }
 
-        var callee = Eval(call.Callee, env);
+        var callee = ForceValue(Eval(call.Callee, env));
         var callArgs = call.Args.Select(a => Eval(a, env)).ToList();
+
+        // Currying / partial application: a DIRECT call that extends a closure, or under-applies an
+        // item-parameter function (its leading parameter is a type the filter fills per element),
+        // produces a partial-application closure rather than executing. The closure is completed per
+        // item when used in a filter chain (see CopClosure). Filter calls bypass this path — they
+        // resolve the callable in ApplyFilterPredicate* and invoke it with the item directly.
+        if (callee is CopClosure closure)
+            return closure.WithExplicit(callArgs);
+        // A user function may be bound as a function group; pick an item-parameter overload that
+        // this call under-applies, and curry it.
+        var curryTarget = callee switch
+        {
+            CopFunction f => f,
+            CopFunctionGroup g => g.Functions
+                .FirstOrDefault(o => o.Declaration.Params.Count > callArgs.Count && IsItemParameterFirst(o)),
+            _ => null
+        };
+        if (curryTarget is not null && IsItemParameterFirst(curryTarget)
+            && callArgs.Count < curryTarget.Declaration.Params.Count)
+        {
+            int explicitArity = curryTarget.Declaration.Params.Count - 1;
+            if (explicitArity >= 1)
+                return new CopClosure(curryTarget, callArgs, explicitArity);
+        }
 
         if (callee is ICopCallable callable)
             return callable.Invoke(callArgs, this, env);
@@ -461,6 +485,18 @@ public sealed class Evaluator
         throw new CopEvaluationException(
             $"Value of type {callee.GetType().Name} is not callable",
             call.Line, _filePath);
+    }
+
+    /// <summary>
+    /// True if the function's leading parameter is an implicit item parameter — a type-named
+    /// parameter (uppercase first letter) that a filter fills per element rather than the caller.
+    /// Used to skip that parameter when currying so `format('[')` binds the first EXPLICIT param.
+    /// </summary>
+    private static bool IsItemParameterFirst(CopFunction fn)
+    {
+        if (fn.Declaration.Params.Count == 0) return false;
+        var name = fn.Declaration.Params[0].Name;
+        return name.Length > 0 && char.IsUpper(name[0]);
     }
 
     private static bool IsCollectionValue(CopValue v) =>
@@ -630,6 +666,11 @@ public sealed class Evaluator
             CopList list => EvalListMember(list, mem.Member, mem.Line),
             CopLazyCollection lazy => EvalLazyMember(lazy, mem.Member, mem.Line),
             CopString str => EvalStringMember(str, mem.Member, mem.Line),
+            // Null propagation: accessing a member of a null/absent value yields null rather than
+            // crashing, so checks over real-world data with missing fields (e.g. a C# type in the
+            // global namespace whose `File.Namespace` is null) stay robust — `null.Length` is null,
+            // and downstream predicates like `:greaterThan(0)` then simply evaluate to false.
+            CopNull => CopNull.Instance,
             _ when mem.Member == "Type" => new CopString(CopTypeNameOf(obj)),
             _ => throw new CopEvaluationException(
                 $"Cannot access member '{mem.Member}' on {obj.GetType().Name}",
@@ -907,27 +948,41 @@ public sealed class Evaluator
         // Queryable collection: try to compile predicate and accumulate filter (lazy pushdown)
         if (collection is CopQueryable queryable)
         {
-            // Try to compile the predicate AST to a FilterExpression for pushdown
-            var compiled = PredicateCompiler.TryCompile(filter.Predicate, negated);
-            if (compiled is not null)
+            // A user-defined (non-intrinsic) predicate is NOT a provider property and must not be
+            // pushed down — the provider would treat it as a missing field and yield null. Compiling
+            // `people:canVote` to a PropertyFilter('canVote') crashed the json provider with
+            // "PropertyFilter expects bool for 'canVote', got null" (issue #33). Materialize and
+            // evaluate per item so the predicate body actually runs. Real fields (e.g. `people:active`)
+            // don't resolve to a user function and still push down.
+            if (ResolvesToUserPredicate(filter.Predicate, env))
             {
-                _traceLog?.Invoke($"[trace] EvalFilter: compiled predicate '{ExpressionRenderer.Render(filter.Predicate)}' to FilterExpression, accumulating on queryable");
-                return queryable.WithFilter(compiled);
+                _traceLog?.Invoke($"[trace] EvalFilter: '{ExpressionRenderer.Render(filter.Predicate)}' is a user predicate, materializing queryable for per-item evaluation");
+                collection = ForceValue(queryable.Materialize());
             }
-
-            // Check if this is a property access (map semantic) that could be part of a compound filter
-            var propName = PredicateCompiler.TryExtractPropertyAccess(filter.Predicate);
-            if (propName is not null)
+            else
             {
-                // Return a queryable with property context — next filter in chain may compile to StringOp/Comparison
-                _traceLog?.Invoke($"[trace] EvalFilter: property access '{propName}' on queryable, creating property proxy");
-                return new CopQueryableProperty(queryable, propName);
-            }
+                // Try to compile the predicate AST to a FilterExpression for pushdown
+                var compiled = PredicateCompiler.TryCompile(filter.Predicate, negated);
+                if (compiled is not null)
+                {
+                    _traceLog?.Invoke($"[trace] EvalFilter: compiled predicate '{ExpressionRenderer.Render(filter.Predicate)}' to FilterExpression, accumulating on queryable");
+                    return queryable.WithFilter(compiled);
+                }
 
-            // Cannot compile — materialize and fall through to normal path
-            _traceLog?.Invoke($"[trace] EvalFilter: cannot compile predicate '{ExpressionRenderer.Render(filter.Predicate)}', materializing queryable");
-            collection = queryable.Materialize();
-            collection = ForceValue(collection);
+                // Check if this is a property access (map semantic) that could be part of a compound filter
+                var propName = PredicateCompiler.TryExtractPropertyAccess(filter.Predicate);
+                if (propName is not null)
+                {
+                    // Return a queryable with property context — next filter in chain may compile to StringOp/Comparison
+                    _traceLog?.Invoke($"[trace] EvalFilter: property access '{propName}' on queryable, creating property proxy");
+                    return new CopQueryableProperty(queryable, propName);
+                }
+
+                // Cannot compile — materialize and fall through to normal path
+                _traceLog?.Invoke($"[trace] EvalFilter: cannot compile predicate '{ExpressionRenderer.Render(filter.Predicate)}', materializing queryable");
+                collection = queryable.Materialize();
+                collection = ForceValue(collection);
+            }
         }
 
         // Queryable property: compound pattern e.g., queryable:Name:startsWith('A')
@@ -963,6 +1018,28 @@ public sealed class Evaluator
             _traceLog?.Invoke($"[trace] EvalFilter: scalar branch, collection={collection?.Display()?.Substring(0, Math.Min(collection?.Display()?.Length ?? 0, 80))}");
             var result = ApplyFilterPredicate(filter.Predicate, collection, env);
             return CopBool.Of(negated ? !result : result);
+        }
+
+        // Bare identifier on a collection: a function whose SOLE parameter is a collection
+        // (core's `empty(items:[T]) : bool`, `distinct(items:[T])`, `pop(items:[T])`, ...) is a
+        // collection-level operation — invoke it once with the whole collection. The per-item
+        // filter loop would wrongly pass each element (e.g. `empty` got each child statement and
+        // returned an always-truthy collection, matching non-empty collections in a boolean
+        // context — issue #32; `distinct`/`pop` errored with "expects [collection], got <item>").
+        // If instead a scalar overload's parameter matches the item type (e.g. files'
+        // `empty(Folder)`), keep per-item filtering.
+        if (filter.Predicate is IdentifierExpr bareId
+            && ShouldApplyAtCollectionLevel(bareId.Name, collection, env))
+        {
+            if (env.TryLookup(bareId.Name, out var bareBinding)
+                && CollectionParamOverload(bareBinding) is { } collOverload)
+            {
+                var r = collOverload.Invoke([collection], this, env);
+                return negated && r is CopBool rb ? CopBool.Of(!rb.Value) : r;
+            }
+            // Builtin `:empty` with no user collection overload in scope → emptiness test.
+            bool isEmpty = IsEmpty(collection);
+            return CopBool.Of(negated ? !isEmpty : isEmpty);
         }
 
         // Check for collection-level predicates (contains, any, all, none, count)
@@ -1070,9 +1147,13 @@ public sealed class Evaluator
             if (agg is not null) return agg;
         }
 
-        // Generic dispatch: if any arg is a lambda or resolves to a callable,
-        // this is a collection-level method call (e.g., Types:all(isPublic))
-        if (HasCallableArg(call.Args, env))
+        // Generic dispatch: collection-level when any arg is a lambda/callable (e.g.
+        // Types:all(isPublic)) OR the resolved function's first parameter is a collection
+        // (e.g. References:containsAny(['cop']) → containsAny(items:[string], values:[string])).
+        // Without the latter, `coll:containsAny([...])` dispatched per item and failed with
+        // "'containsAny' parameter 'items' expects [string], got string" (issue #30).
+        if (HasCallableArg(call.Args, env)
+            || FirstParamIsCollectionFunction(methodName, call.Args.Count, collection, env))
         {
             var evaluatedArgs = call.Args.Select(a => Eval(a, env)).ToList();
             var allArgs = new List<CopValue> { collection };
@@ -1136,7 +1217,7 @@ public sealed class Evaluator
         switch (predicateExpr)
         {
             case IdentifierExpr id:
-                if (env.TryLookup(id.Name, out var fn) && fn is ICopCallable callable)
+                if (env.TryLookup(id.Name, out var fn) && ForceValue(fn) is ICopCallable callable)
                     return callable.Invoke([subject], this, env);
                 var ffiFn = _ffi.Resolve(id.Name);
                 if (ffiFn is ICopCallable ffiCallable)
@@ -1173,7 +1254,7 @@ public sealed class Evaluator
                     var allArgs = new List<CopValue> { subject };
                     allArgs.AddRange(args);
 
-                    if (env.TryLookup(methodName, out var mfn) && mfn is ICopCallable mc)
+                    if (env.TryLookup(methodName, out var mfn) && ForceValue(mfn) is ICopCallable mc)
                         return mc.Invoke(allArgs, this, env);
                     var mffi = _ffi.Resolve(methodName);
                     if (mffi is ICopCallable mfc)
@@ -1302,6 +1383,132 @@ public sealed class Evaluator
         _ => false
     };
 
+    /// <summary>
+    /// Decides whether a bare `collection:name` filter should run at the COLLECTION level
+    /// (invoke once with the whole collection → e.g. `empty`, `distinct`, `pop`) rather than
+    /// per item. It is collection-level when a sole-collection-parameter overload (or the builtin
+    /// `empty`) applies AND no scalar overload claims the items. A scalar overload claims the items
+    /// when its parameter matches the first item's type; for an EMPTY collection (no item to
+    /// inspect) the presence of any scalar overload is taken as per-item intent so that, e.g.,
+    /// `folders():empty` keeps filtering and yields an empty collection instead of a bool.
+    /// </summary>
+    private bool ShouldApplyAtCollectionLevel(string name, CopValue collection, Environment env)
+    {
+        bool isBuiltinEmpty = name == "empty";
+        var overloads = env.TryLookup(name, out var binding) ? OverloadsOf(binding) : [];
+        bool hasCollectionParam = overloads.Any(o =>
+            o.Declaration.Params.Count == 1 && o.Declaration.Params[0].Type is { IsCollection: true });
+        if (!hasCollectionParam && !isBuiltinEmpty) return false;
+
+        var scalarOverloads = overloads
+            .Where(o => o.Declaration.Params.Count == 1 && o.Declaration.Params[0].Type is { IsCollection: false })
+            .ToList();
+        if (scalarOverloads.Count == 0) return true; // no per-item interpretation exists
+
+        var itemType = FirstItemTypeName(collection);
+        if (itemType is null) return false; // empty collection + a scalar overload → assume per-item
+
+        var registry = TypeRegistry;
+        foreach (var o in scalarOverloads)
+        {
+            var pt = o.Declaration.Params[0].Type!;
+            if (string.Equals(pt.Name, itemType, StringComparison.OrdinalIgnoreCase)) return false;
+            if (registry is not null && (registry.IsSubtypeOf(itemType, pt.Name) || registry.ConformsTo(itemType, pt.Name)))
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// User-function overloads bound to a value (single function or function group).
+    /// FFI builtins (CopExternalFunction) are intentionally excluded.
+    /// </summary>
+    private static List<CopFunction> OverloadsOf(CopValue binding) => binding switch
+    {
+        CopFunction f => [f],
+        CopFunctionGroup g => g.Functions.ToList(),
+        _ => []
+    };
+
+    /// <summary>
+    /// True if a filter predicate expression resolves to a user-defined, non-intrinsic predicate or
+    /// function (i.e. one with a real body, not a provider property or builtin). Such predicates
+    /// cannot be pushed down to a provider as a property filter and must be evaluated per item.
+    /// </summary>
+    private static bool ResolvesToUserPredicate(Expression pred, Environment env)
+    {
+        string? name = pred switch
+        {
+            IdentifierExpr id => id.Name,
+            CallExpr { Callee: IdentifierExpr cid } => cid.Name,
+            _ => null
+        };
+        if (name is null || !env.TryLookup(name, out var v)) return false;
+        return v switch
+        {
+            CopFunction f => f.Declaration.Body is not IntrinsicBody,
+            CopFunctionGroup g => g.Functions.Any(o => o.Declaration.Body is not IntrinsicBody),
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// True if `name` resolves to a user function of arity (1 + argCount) whose FIRST parameter is
+    /// a collection type — e.g. `containsAny(items:[string], values:[string])`. Such a
+    /// `coll:name(args)` call is collection-level: invoke once with the whole collection as the
+    /// first argument. If a same-arity overload's scalar first parameter matches the item type,
+    /// per-item dispatch is preferred instead.
+    /// </summary>
+    private bool FirstParamIsCollectionFunction(string name, int argCount, CopValue collection, Environment env)
+    {
+        if (!env.TryLookup(name, out var binding)) return false;
+        var overloads = OverloadsOf(binding);
+        bool hasCollectionFirst = overloads.Any(o =>
+            o.Declaration.Params.Count == argCount + 1 && o.Declaration.Params[0].Type is { IsCollection: true });
+        if (!hasCollectionFirst) return false;
+
+        var itemType = FirstItemTypeName(collection);
+        if (itemType is null) return true;
+        var registry = TypeRegistry;
+        foreach (var o in overloads)
+        {
+            if (o.Declaration.Params.Count != argCount + 1) continue;
+            var pt = o.Declaration.Params[0].Type;
+            if (pt is null || pt.IsCollection) continue;
+            if (string.Equals(pt.Name, itemType, StringComparison.OrdinalIgnoreCase)) return false;
+            if (registry is not null && (registry.IsSubtypeOf(itemType, pt.Name) || registry.ConformsTo(itemType, pt.Name)))
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// The overload (if any) whose sole parameter is a collection type — e.g.
+    /// `empty(items:[T])`, `distinct(items:[T])`. Used to invoke a bare `:name` filter at the
+    /// collection level rather than per item.
+    /// </summary>
+    private static CopFunction? CollectionParamOverload(CopValue binding)
+        => OverloadsOf(binding).FirstOrDefault(o =>
+            o.Declaration.Params.Count == 1 && o.Declaration.Params[0].Type is { IsCollection: true });
+
+    /// <summary>Type name of the first item in a collection, or null if empty/unknown.</summary>
+    private string? FirstItemTypeName(CopValue collection)
+    {
+        var first = CoerceToEnumerable(collection).FirstOrDefault();
+        if (first is CopThunk t) first = t.Force();
+        return first switch
+        {
+            CopDynamicObject dyn => dyn.TypeName,
+            CopObject obj => obj.TypeName,
+            CopString => "string",
+            CopInt => "int",
+            CopNumber => "float",
+            CopBool => "bool",
+            CopList or CopLazyCollection => "collection",
+            _ => null
+        };
+    }
+
     private static bool EvalInMembership(CopValue subject, CopList list)
     {
         var subjectStr = subject is CopString cs ? cs.Value
@@ -1336,6 +1543,20 @@ public sealed class Evaluator
     {
         // Validate arguments before dispatch (arity + parameter types)
         TypeValidator.ValidateArguments(func.Declaration, args, TypeRegistry);
+
+        // First-parameter guard (e.g. `predicate isMissingNamespace(Type:isCSharp)`): a guarded
+        // predicate only applies to arguments its guard accepts; for others it is simply false and
+        // does NOT run its body. Multi-overload guard dispatch lives in CopFunctionGroup; this
+        // covers a single overload bound directly as a CopFunction so the guard isn't ignored
+        // (issue #35 — otherwise `isMissingNamespace(Type:isCSharp)` ran on non-C# types too).
+        if (args.Count > 0 && func.Declaration.IsPredicate
+            && func.Declaration.Params.Count > 0
+            && func.Declaration.Params[0].Type?.Constraint is { } guardName)
+        {
+            if (func.Closure.TryLookup(guardName, out var guardVal) && guardVal is ICopCallable guard
+                && !guard.Invoke([args[0]], this, func.Closure).IsTruthy)
+                return CopBool.False;
+        }
 
         var funcEnv = func.Closure.Extend();
 

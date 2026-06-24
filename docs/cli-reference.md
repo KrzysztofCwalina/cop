@@ -293,16 +293,16 @@ cop init --checks [--claude]
 |--------|-------------|
 | `--checks` | Generate cop checks from your existing instructions by shelling out to a coding agent (see below) |
 | `--claude` | Generate Claude Code instructions instead of GitHub Copilot (or, with `--checks`, drive Claude Code instead of Copilot) |
-| `--al` | Generate a local Claude Code hook (`.claude/settings.local.json`); implies `--claude` |
+| `--al` | Generate a local Claude Code hook (`.claude/settings.local.json`) and matching GitHub Copilot CLI hook (`.github/hooks/cop-check.*`); implies `--claude` |
 | `--ag` | Generate a shared Claude Code hook (`.claude/settings.json`); implies `--claude` |
-| `--ch` | Generate a GitHub Copilot CLI hook (`.github/hooks/cop.json`) |
+| `--ch` | Generate a GitHub Copilot CLI hook (`.github/hooks/cop-check.json` and `.github/hooks/cop-check.sh`) |
 
 Always creates `AGENTS.md` (the cross-agent standard, merged in-place and never clobbering your own content).
 
 **Default (`cop init`) — GitHub Copilot:**
 - `.github/copilot-instructions.md` — cop language context, discovered automatically by GitHub Copilot
 - `.github/skills/cop/SKILL.md` — GitHub Copilot CLI agent skill to run cop checks
-- `.github/hooks/cop.json` — GitHub Copilot CLI hook (with `--ch`)
+- `.github/hooks/cop-check.json` and `.github/hooks/cop-check.sh` — GitHub Copilot CLI hook (with `--ch`, or alongside the Claude hook with `--al`)
 
 **`cop init --claude` — Claude Code:**
 - `.claude/commands/cop.md` — Claude Code custom `/cop` command to run cop checks
@@ -310,9 +310,9 @@ Always creates `AGENTS.md` (the cross-agent standard, merged in-place and never 
 
 The instruction files contain a concise cop language overview, common patterns, pointers to `cop help language` and `cop help <package>`, and guidance for reporting issues back to the cop project.
 
-The optional hooks run `cop cop-checks/main.cop -t . -om` automatically after the agent finishes a turn (Claude's `Stop` event / Copilot CLI's `agentStop` event), surfacing any violations back to the agent. They are non-blocking — a failing run or pre-existing violations never trap the agent — and `-om` skips analysis when the git working tree is unmodified.
+The optional hooks run `cop cop-checks/main.cop -t . -om` automatically after the agent finishes a turn (Claude's `Stop` event / Copilot CLI's `agentStop` event), surfacing any violations back to the agent. The Claude hook is non-blocking; the Copilot CLI hook emits the `{"decision":"block","reason":"..."}` response expected by Copilot CLI when checks fail. `-om` skips analysis when the git working tree is unmodified.
 
-> GitHub Copilot CLI loads hook files at startup, so restart any running CLI session after `cop init --ch`.
+> GitHub Copilot CLI loads hook files at startup, so restart any running CLI session after `cop init --ch` or `cop init --al`.
 
 The instruction and command/skill files are safe to run repeatedly; cop sections are updated in place. Commit the generated files so your whole team benefits.
 
@@ -324,8 +324,9 @@ cop init --ch
 # Updated: AGENTS.md
 # Created: .github/copilot-instructions.md
 # Updated: .github/skills/cop/SKILL.md
-# Wrote: .../.github/hooks/cop.json
-# 4 file(s) updated. Agents will now discover cop language context automatically.
+# Wrote: .../.github/hooks/cop-check.json
+# Wrote: .../.github/hooks/cop-check.sh
+# 5 file(s) updated. Agents will now discover cop language context automatically.
 
 cop init --claude
 # Updated: AGENTS.md

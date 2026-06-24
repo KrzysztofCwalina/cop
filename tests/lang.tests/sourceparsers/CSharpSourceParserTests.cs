@@ -232,6 +232,58 @@ public class CSharpSourceParserTests
         Assert.That(result.Namespace, Is.Null);
     }
 
+    [Test]
+    public void Parse_NestedControlFlow_DoesNotDuplicateStatements()
+    {
+        // Regression (#31): each statement/call must appear exactly once in the flat Statements
+        // list. Statements inside switch sections, try/catch blocks and else clauses were being
+        // added to their parent's _children list twice (results.Add + parent._children.Add when
+        // results IS parent._children), so flattening emitted them combinatorially with nesting
+        // depth (e.g. a 3x-duplicated call deep inside switch>if/else).
+        var source = """
+            namespace Demo;
+            public class Dispatch {
+                public void Run(string cmd, int x) {
+                    switch (cmd) {
+                        case "a":
+                            if (x > 0) {
+                                System.Console.WriteLine("a-pos");
+                            } else {
+                                System.Console.WriteLine("a-neg");
+                            }
+                            break;
+                        case "b":
+                            try {
+                                if (x > 1) {
+                                    System.Console.WriteLine("b-deep");
+                                }
+                            } catch (System.Exception) {
+                                System.Console.WriteLine("b-catch");
+                            }
+                            break;
+                    }
+                }
+            }
+            """;
+        var result = _parser.Parse("Dispatch.cs", source)!;
+
+        var writeLines = result.Statements
+            .Where(s => s.Kind == "call" && s.MemberName == "WriteLine")
+            .ToList();
+        // Four distinct WriteLine calls, each must appear exactly once (total == distinct).
+        Assert.That(writeLines, Has.Count.EqualTo(4),
+            "each WriteLine call should be emitted exactly once, not duplicated by nesting depth");
+        Assert.That(writeLines.Select(s => s.Line).Distinct().Count(), Is.EqualTo(4));
+
+        // No statement (identified by kind+line) should be duplicated anywhere in the flat list.
+        var dupes = result.Statements
+            .GroupBy(s => (s.Kind, s.Line, s.MemberName, s.TypeName))
+            .Where(g => g.Count() > 1)
+            .Select(g => $"{g.Key.Kind}@{g.Key.Line}")
+            .ToList();
+        Assert.That(dupes, Is.Empty, $"duplicated statements: {string.Join(", ", dupes)}");
+    }
+
     private static string SamplePath(string fileName) =>
         Path.Combine(AppContext.BaseDirectory, "samples", fileName);
 

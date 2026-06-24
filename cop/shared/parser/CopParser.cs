@@ -1365,9 +1365,13 @@ public class CopParser
                 if (afterIdent.Kind == TokenKind.LParen || afterIdent.Kind == TokenKind.Colon
                     || afterIdent.Kind == TokenKind.RParen || afterIdent.Kind == TokenKind.Comma)
                 {
-                    // This is "Type:constraint" — skip the constraint chain
+                    // This is "Type:constraint" (e.g. `Statement:isCSharp`). Capture the first bare
+                    // constraint predicate so guarded overloads can dispatch on it (issue #35);
+                    // call-form constraints (`Type:isInRange(0,9)`) are not captured. Then skip any
+                    // remaining chained constraints.
+                    string? constraint = afterIdent.Kind == TokenKind.LParen ? null : nextToken.Value;
                     SkipConstraintChain();
-                    return new Parameter(first, new TypeRef(first, false, line), line);
+                    return new Parameter(first, new TypeRef(first, false, line, constraint), line);
                 }
             }
 

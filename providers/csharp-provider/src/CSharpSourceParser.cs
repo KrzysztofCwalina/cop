@@ -529,7 +529,6 @@ public class CSharpSourceParser : ISourceParser
                         Expression = v.Initializer?.Value.ToString()
                     };
                     results.Add(declStmt);
-                    parent?._children.Add(declStmt);
                     // Also extract expressions from initializers (e.g., await, invocations)
                     if (v.Initializer?.Value != null)
                         ExtractExpressionStatement(v.Initializer.Value, results, line, isInMethod, method, parent);
@@ -546,7 +545,6 @@ public class CSharpSourceParser : ISourceParser
                 var throwInfo = new CSharpStatementInfo("throw", [], typeName, null, [], line, isInMethod)
                     { Method = method, Parent = parent };
                 results.Add(throwInfo);
-                parent?._children.Add(throwInfo);
                 break;
             }
             case ReturnStatementSyntax returnStmt:
@@ -557,7 +555,6 @@ public class CSharpSourceParser : ISourceParser
                     Expression = returnStmt.Expression?.ToString()
                 };
                 results.Add(retInfo);
-                parent?._children.Add(retInfo);
                 if (returnStmt.Expression != null)
                     ExtractExpressionStatement(returnStmt.Expression, results, line, isInMethod, method, parent);
                 break;
@@ -567,7 +564,6 @@ public class CSharpSourceParser : ISourceParser
                 var usingInfo = new CSharpStatementInfo("using", [], null, null, [], line, isInMethod)
                     { Method = method, Parent = parent };
                 results.Add(usingInfo);
-                parent?._children.Add(usingInfo);
                 if (usingStmt.Statement != null)
                     ExtractStatementBody(usingStmt.Statement, usingInfo._children, isInMethod, method, usingInfo);
                 break;
@@ -583,7 +579,6 @@ public class CSharpSourceParser : ISourceParser
                     IsAwaitForeach = forEach.AwaitKeyword.IsKind(SyntaxKind.AwaitKeyword)
                 };
                 results.Add(feInfo);
-                parent?._children.Add(feInfo);
                 ExtractStatementBody(forEach.Statement, feInfo._children, isInMethod, method, feInfo);
                 break;
             }
@@ -592,7 +587,6 @@ public class CSharpSourceParser : ISourceParser
                 var tryInfo = new CSharpStatementInfo("try", [], null, null, [], line, isInMethod)
                     { Method = method, Parent = parent };
                 results.Add(tryInfo);
-                parent?._children.Add(tryInfo);
                 if (tryStmt.Block != null)
                     ExtractStatements(tryStmt.Block, tryInfo._children, isInMethod, method, tryInfo);
                 foreach (var c in tryStmt.Catches)
@@ -607,7 +601,6 @@ public class CSharpSourceParser : ISourceParser
                         HasCatchFilter = c.Filter != null
                     };
                     results.Add(catchInfo);
-                    parent?._children.Add(catchInfo);
                     if (c.Block != null)
                         ExtractStatements(c.Block, catchInfo._children, isInMethod, method, catchInfo);
                 }
@@ -622,7 +615,6 @@ public class CSharpSourceParser : ISourceParser
                     IsBraced = ifStmt.Statement is BlockSyntax
                 };
                 results.Add(ifInfo);
-                parent?._children.Add(ifInfo);
                 ExtractStatementBody(ifStmt.Statement, ifInfo._children, isInMethod, method, ifInfo);
                 if (ifStmt.Else != null)
                 {
@@ -633,7 +625,6 @@ public class CSharpSourceParser : ISourceParser
                         Method = method, Parent = ifInfo,
                         IsBraced = ifStmt.Else.Statement is BlockSyntax
                     };
-                    results.Add(elseInfo);
                     ifInfo._children.Add(elseInfo);
                     ExtractStatementBody(ifStmt.Else.Statement, elseInfo._children, isInMethod, method, elseInfo);
                 }
@@ -648,7 +639,6 @@ public class CSharpSourceParser : ISourceParser
                     IsBraced = ws.Statement is BlockSyntax
                 };
                 results.Add(whileInfo);
-                parent?._children.Add(whileInfo);
                 ExtractStatementBody(ws.Statement, whileInfo._children, isInMethod, method, whileInfo);
                 break;
             }
@@ -661,7 +651,6 @@ public class CSharpSourceParser : ISourceParser
                     IsBraced = fs.Statement is BlockSyntax
                 };
                 results.Add(forInfo);
-                parent?._children.Add(forInfo);
                 ExtractStatementBody(fs.Statement, forInfo._children, isInMethod, method, forInfo);
                 break;
             }
@@ -673,7 +662,6 @@ public class CSharpSourceParser : ISourceParser
                     Expression = sw.Expression.ToString()
                 };
                 results.Add(switchInfo);
-                parent?._children.Add(switchInfo);
                 foreach (var section in sw.Sections)
                     foreach (var sectionStmt in section.Statements)
                         ExtractStatement(sectionStmt, switchInfo._children, isInMethod, method, switchInfo);
@@ -687,7 +675,6 @@ public class CSharpSourceParser : ISourceParser
                 var info = new CSharpStatementInfo("lock", [], null, null, [], line, isInMethod)
                     { Method = method, Parent = parent, Expression = lockStmt.Expression.ToString() };
                 results.Add(info);
-                parent?._children.Add(info);
                 ExtractStatementBody(lockStmt.Statement, info._children, isInMethod, method, info);
                 break;
             }
@@ -696,7 +683,6 @@ public class CSharpSourceParser : ISourceParser
                 var info = new CSharpStatementInfo("unsafe", [], null, null, [], line, isInMethod)
                     { Method = method, Parent = parent };
                 results.Add(info);
-                parent?._children.Add(info);
                 if (unsafeStmt.Block != null)
                     ExtractStatements(unsafeStmt.Block, info._children, isInMethod, method, info);
                 break;
@@ -706,7 +692,6 @@ public class CSharpSourceParser : ISourceParser
                 var info = new CSharpStatementInfo("fixed", [], null, null, [], line, isInMethod)
                     { Method = method, Parent = parent };
                 results.Add(info);
-                parent?._children.Add(info);
                 ExtractStatementBody(fixedStmt.Statement, info._children, isInMethod, method, info);
                 break;
             }
@@ -716,7 +701,6 @@ public class CSharpSourceParser : ISourceParser
                 var info = new CSharpStatementInfo(isUnchecked ? "unchecked" : "checked", [], null, null, [], line, isInMethod)
                     { Method = method, Parent = parent };
                 results.Add(info);
-                parent?._children.Add(info);
                 if (checkedStmt.Block != null)
                     ExtractStatements(checkedStmt.Block, info._children, isInMethod, method, info);
                 break;
@@ -726,7 +710,6 @@ public class CSharpSourceParser : ISourceParser
                 var info = new CSharpStatementInfo("yield", [], null, null, [], line, isInMethod)
                     { Method = method, Parent = parent, Expression = yieldStmt.Expression?.ToString() };
                 results.Add(info);
-                parent?._children.Add(info);
                 if (yieldStmt.Expression != null)
                     ExtractExpressionStatement(yieldStmt.Expression, results, line, isInMethod, method, parent);
                 break;
@@ -736,7 +719,6 @@ public class CSharpSourceParser : ISourceParser
                 var info = new CSharpStatementInfo("goto", [], null, null, [], line, isInMethod)
                     { Method = method, Parent = parent };
                 results.Add(info);
-                parent?._children.Add(info);
                 break;
             }
         }
@@ -768,7 +750,6 @@ public class CSharpSourceParser : ISourceParser
                     Expression = invocation.ToString()
                 };
                 results.Add(callInfo);
-                parent?._children.Add(callInfo);
                 break;
             }
             case AwaitExpressionSyntax awaitExpr:
@@ -780,7 +761,6 @@ public class CSharpSourceParser : ISourceParser
                     Expression = awaitExpr.Expression.ToString()
                 };
                 results.Add(awaitInfo);
-                parent?._children.Add(awaitInfo);
                 ExtractExpressionStatement(awaitExpr.Expression, results, line, isInMethod, method, parent);
                 break;
             }
@@ -798,7 +778,6 @@ public class CSharpSourceParser : ISourceParser
                     Expression = objCreate.ToString()
                 };
                 results.Add(ctorInfo);
-                parent?._children.Add(ctorInfo);
                 break;
             }
         }
