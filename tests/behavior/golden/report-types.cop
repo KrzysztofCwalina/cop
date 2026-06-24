@@ -1,0 +1,7 @@
+import code
+import csharp
+
+let cb = csharp.parse()
+
+command MAIN = foreach cb.Types.OrderBy(item.Name) =>
+    '{item.Name}|{item.Kind}|methods={item.Methods.Count}'

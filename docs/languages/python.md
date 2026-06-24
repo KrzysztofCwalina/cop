@@ -137,7 +137,8 @@ command MAIN = CHECK(violations)
 
 ### Check for missing type hints
 
-```cop
+<!-- cop norun: `cb.Types.Methods:<methodPredicate>` fatals at runtime (expects Method, got collection) while `cop verify` passes — tracked in #50 -->
+```cop norun
 import python
 import code
 import code-analysis

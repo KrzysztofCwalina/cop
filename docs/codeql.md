@@ -76,7 +76,8 @@ The `csharp-codeql-export` package provides functions for constructing CodeQL `.
 
 ### Usage
 
-```cop
+<!-- cop norun: csharp-codeql-export package is not runtime-loadable in the offline test feed (fatals 'Undefined variable csharp-codeql-export') -->
+```cop norun
 import csharp-codeql-export
 
 # Build a query that finds public abstract classes
@@ -155,7 +156,8 @@ select c, "Class " + c.getName() + " is public and abstract"
 
 ### Example: Multiple Queries
 
-```cop
+<!-- cop norun: csharp-codeql-export package is not runtime-loadable in the offline test feed (fatals 'Undefined variable csharp-codeql-export') -->
+```cop norun
 import csharp-codeql-export
 
 # Query 1: Find classes with no documentation
@@ -195,7 +197,8 @@ A typical workflow combining both packages:
 2. **Export key checks to CodeQL** (using `csharp-codeql-export` for CI/CD integration)
 3. **Query CodeQL results in cop** (using `analysis-codeql` to analyze/report on findings)
 
-```cop
+<!-- cop norun: analysis-codeql/csharp-codeql-export not runtime-loadable offline (fatals on '.count' / Undefined variable) -->
+```cop norun
 import analysis-codeql
 import csharp-codeql-export
 

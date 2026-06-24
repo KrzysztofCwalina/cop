@@ -2911,6 +2911,14 @@ const packages = {
         "appliesTo": "[string]",
         "desc": "Returns true if collection contains any of the values in the second collection.\nExample: tags:containsAny(['api', 'public'])",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/core/src/string_collections.cop#L11"
+      },
+      {
+        "name": "text",
+        "params": "items: [T], separator: string",
+        "returns": "string",
+        "appliesTo": "[T]",
+        "desc": "Joins a collection's items into a single string separated by `separator`.\nWithout this overload a 2-arg `coll.text(sep)` resolved to the 1-arg `text(value)`\noverloads and failed (\"'text' expects 1 argument(s), got 2\").\nExample: names.text(', ')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/core/src/text.cop#L14"
       }
     ],
     "checks": [],

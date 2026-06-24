@@ -1,0 +1,2 @@
+AlphaClient.cs(3): error: Client type AlphaClient has 2 methods
+BetaClient.cs(3): error: Client type BetaClient has 1 methods

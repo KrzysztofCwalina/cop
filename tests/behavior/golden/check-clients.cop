@@ -1,0 +1,13 @@
+import code
+import code-analysis
+import csharp
+
+let cb = csharp.parse()
+
+predicate isClientType(Type) => Type.Name:endsWith('Client')
+
+let client-violations = cb.Types:isClientType
+    .OrderBy(item.Name)
+    :toError('Client type {item.Name} has {item.Methods.Count} methods')
+
+command MAIN = CHECK(client-violations)

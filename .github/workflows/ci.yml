@@ -1,0 +1,71 @@
+name: CI
+
+# There was previously NO automated CI in this repo: tests were never run on push/PR and
+# the self-contained cop.exe (which the end-to-end tests spawn) was never gated. This
+# workflow makes the holistic test suite a required gate.
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Build, publish & test (windows)
+    # windows-latest: the end-to-end tests spawn install/win-x64/cop.exe by that exact path.
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # Publishes the self-contained win-x64 cop.exe AND builds every provider DLL.
+      # The E2E tests (DocSnippet*/Walkthrough/DocExamples/Sample/Demo/CliCommand) run this
+      # exact published binary, so publishing first is what makes them meaningful. A publish
+      # failure (e.g. a provider that no longer builds) fails CI here.
+      - name: Publish cop.exe (win-x64) + providers
+        shell: pwsh
+        run: ./install/publish.ps1 -Runtimes win-x64
+
+      # NOTE: do NOT `dotnet test cop.sln` — the solution has two projects named "cop"
+      # (MSB5004). Test each project file directly.
+      - name: Core tests (Cop.Tests)
+        shell: pwsh
+        run: dotnet test tests/Cop.Tests/Cop.Tests.csproj -c Debug --logger "console;verbosity=normal"
+
+      - name: Language tests (Lang.Tests)
+        shell: pwsh
+        run: dotnet test tests/lang.tests/Lang.Tests.csproj -c Debug --logger "console;verbosity=normal"
+
+  # Informational, NON-blocking: runs the tests that pin documented-but-currently-broken
+  # behavior (tagged [Category("PendingFix")] + [Explicit]). These are runnable specs for
+  # filed bugs; they fail until the bug is fixed, so this job never gates merges — it is the
+  # live "known broken behavior" ledger. When a fix lands, remove the [Explicit] tag so the
+  # test moves into the blocking `test` job above and can never silently regress again.
+  pending-fix-ledger:
+    name: Known-bug ledger (non-blocking)
+    runs-on: windows-latest
+    needs: test
+    continue-on-error: true
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish cop.exe (win-x64) + providers
+        shell: pwsh
+        run: ./install/publish.ps1 -Runtimes win-x64
+
+      - name: Run PendingFix specs (expected red until fixed)
+        shell: pwsh
+        run: |
+          dotnet test tests/Cop.Tests/Cop.Tests.csproj -c Debug --filter "TestCategory=PendingFix" --logger "console;verbosity=normal"

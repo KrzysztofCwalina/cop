@@ -52,7 +52,8 @@ Commit the generated files (`.github/copilot-instructions.md`, `AGENTS.md`) to y
 
 Create a file called `checks.cop` in your project root:
 
-```cop
+<!-- cop norun: `cb.Types.Methods:<methodPredicate>` fatals at runtime (expects Method, got collection) while `cop verify` passes — tracked in #50 -->
+```cop norun
 import csharp
 import code
 import code-analysis

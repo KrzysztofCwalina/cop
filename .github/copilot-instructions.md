@@ -127,6 +127,48 @@ Always commit the regenerated `docs/reference.html` alongside the package change
 - If you cannot successfully run a functional test, **tell the user explicitly** that the feature is untested and should not be shipped.
 - Passing `cop verify` only proves syntax/type correctness — it does NOT prove runtime behavior works.
 
+## Regression Tests Are Mandatory For Every Bug Fix
+
+**Every bug fix MUST ship a test that fails before the fix and passes after it.** A fix without
+a regression test is incomplete — the bug will silently come back (it already has: issues #12
+and #13 were regressions of #6).
+
+- Put the test in the C# NUnit suites under `tests/Cop.Tests/` (end-to-end, runs the real
+  engine/exe) or `tests/lang.tests/` (unit). Prefer asserting on the behavior the **user**
+  observes (program output / exit code), not internal state.
+- **Assert exact expected values**, never just `Is.GreaterThan(0)`. A check that silently
+  returns ZERO must FAIL the test — that "silent-empty / false-green" pattern is the single
+  most common way bugs slipped through (#1, #3, #4, #16, #22, #32, #36).
+- If you are writing a test for a bug that is **not yet fixed** (documenting it as a runnable
+  spec), keep the exact assertion but tag the test `[Explicit("Issue #N: <desc> — remove when
+  fixed")]` and `[Category("PendingFix")]`. CI runs these in a separate non-blocking job. When
+  the bug is fixed, **remove the `[Explicit]` tag** so the test joins the blocking suite and can
+  never regress again.
+- New tracked bug → add it to `tests/Cop.Tests/regression/` so the issue-coverage index test
+  stays complete.
+
+### How the C# test suite is organized
+
+- `DocSnippetVerifyTests` — every ```cop snippet in `docs/` must `cop verify`.
+- `DocSnippetRunTests` — every **complete** documented ```cop program must **execute** without a
+  fatal error (exit 2). `cop verify` does not run code, so this is what actually catches the
+  "verifies but crashes at runtime" bugs. Annotate snippets in the docs:
+  - ` ```cop skip ` — ignored by both harnesses (illustrative/partial fragment).
+  - ` ```cop norun ` — verified but not executed (needs network/specific files, or tracks a
+    known runtime bug — cite the issue).
+  - `# => SUBSTRING` inside a fence — asserts the program's stdout contains `SUBSTRING`.
+- `LanguageFeatureExecutionTests` — executes every documented operator/intrinsic and asserts the
+  produced value.
+- `CodebaseModelPopulationTests` / `EngineProviderIntegrationTests` — assert the unified Codebase
+  model fields and provider integration are correctly populated at runtime.
+- `DeterminismAndScaleTests` — guards intermittent false-green (same input → same non-empty
+  result, across repeats, after edits, and at scale).
+- `tests/Cop.Tests/regression/` — one executing test per filed issue + an index asserting every
+  issue number is tracked.
+
+CI (`.github/workflows/ci.yml`) publishes `cop.exe` then runs both test projects on every push
+and PR. Do not `dotnet test cop.sln` (MSB5004 — two projects named `cop`); test each `.csproj`.
+
 ## cop-checks/ Convention
 
 All cop check files live in `cop-checks/` at the repository root. Structure:

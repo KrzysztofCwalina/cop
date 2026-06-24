@@ -1,0 +1,3 @@
+AlphaClient|Class|methods=2
+BetaClient|Class|methods=1
+Widget|Class|methods=1

@@ -43,6 +43,17 @@
         "TypeScript: `.tsx`/`.jsx` files are now analyzed and `interface`/`enum` declarations are modeled as types.",
         "Language fixes: a `!somePredicate` predicate body and `:any`/`:all`/`:none`/`:count(item ...)` inline expressions now evaluate correctly."
       ]
+    },
+    {
+      "version": "2026.6.24.1",
+      "approved": true,
+      "features": [
+        "Language fixes: string interpolation now evaluates expressions like `{1 + 2}`; `match` supports the `_` wildcard and case-insensitive arms; verbatim strings `@'\\bx\\b'` work for regex.",
+        "Documented string and object features now work: `.Lower`/`.Upper`/`.Normalized`/`.Words`, object `.Get`/`.Keys`/`.Values`/`:containsKey` with quoted keys, and list `+` append, `.Distinct`/`.Sum`/`.Min`/`.Max`/`.Average`/`.ElementAt`.",
+        "`value:function` now invokes the function on the value (e.g. `5:inc`), curried/free-`item` predicates filter correctly, and `foreach` can chain after `&`.",
+        "C# provider: `csharp.parse('path')` returns a Codebase and a single `<TargetFramework>` is captured in `Project.Frameworks`.",
+        "`cop verify` no longer reports false duplicates for a package overloading or self-importing its own exports, and `cop init` now sets up Copilot CLI hooks."
+      ]
     }
   ]
 }

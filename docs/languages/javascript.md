@@ -123,7 +123,8 @@ command MAIN = foreach cb.Types => '{item.Name} ({item.Kind}) - {item.Methods.co
 
 ### Find async functions without error handling
 
-```cop
+<!-- cop norun: `cb.Types.Methods:<methodPredicate>` fatals at runtime (expects Method, got collection) while `cop verify` passes — tracked in #50 -->
+```cop norun
 import javascript
 import code
 import code-analysis

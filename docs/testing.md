@@ -165,3 +165,67 @@ Run from the test directory so providers scan the sample files:
 cd my-package/tests
 cop test test-checks.cop
 ```
+
+## Maintainer Test Suite (C# / NUnit)
+
+The `test` keyword above is for **package authors** testing their `.cop` rules. The cop
+**product itself** (parser, evaluator, providers, CLI) is tested by C# NUnit suites under
+`tests/Cop.Tests/` (end-to-end, runs the real engine and published `cop.exe`) and
+`tests/lang.tests/` (focused unit tests).
+
+### The golden rule: execute, don't just verify
+
+`cop verify` only checks syntax and types — it **never runs the program**. Historically almost
+every shipped bug had the shape *"`cop verify` passes but the program crashes, returns null, or
+silently produces nothing at runtime."* So the suite is built to **execute** documented behavior
+and assert **exact** output. A check that silently returns zero results must make a test fail.
+
+### Suites
+
+| Suite | What it guarantees |
+|---|---|
+| `DocSnippetVerifyTests` | Every ```` ```cop ```` snippet in `docs/` passes `cop verify`. |
+| `DocSnippetRunTests` | Every **complete** documented program **executes** without a fatal error, and matches its `# =>` expectations. |
+| `LanguageFeatureExecutionTests` | Every documented operator/intrinsic runs and yields the documented value. |
+| `CodebaseModelPopulationTests`, `EngineProviderIntegrationTests` | The unified Codebase model and provider integration are correctly populated at runtime. |
+| `DeterminismAndScaleTests` | Same input → same non-empty result across repeats, after source edits, and at scale (no intermittent false-green). |
+| `tests/Cop.Tests/regression/` | One executing test per filed issue, plus an index asserting every issue number is tracked. |
+
+### Documentation annotations
+
+Inside a ```` ```cop ```` fence in the docs you can steer the harnesses:
+
+```cop skip
+# 'skip'  → ignored by both harnesses (illustrative/partial fragment)
+# 'norun' → verified but not executed (needs network/specific files, or tracks a known bug)
+# '# => SUBSTRING' → assert the program's stdout contains SUBSTRING
+```
+
+Example of an executable, output-checked doc program:
+
+```cop skip
+command MAIN = print('hello')
+# => hello
+```
+
+### Running and the PendingFix ledger
+
+```bash
+# Do NOT use cop.sln (MSB5004 — two projects named "cop"). Test each project directly:
+dotnet test tests/Cop.Tests/Cop.Tests.csproj
+dotnet test tests/lang.tests/Lang.Tests.csproj
+```
+
+Tests that pin a **documented-but-currently-broken** behavior are tagged
+`[Explicit("Issue #N …")]` + `[Category("PendingFix")]`. They are runnable specs for filed bugs:
+skipped by default, run in a separate **non-blocking** CI job as a live "known broken behavior"
+ledger. **When you fix the bug, remove the `[Explicit]` tag** so the test joins the blocking
+suite and can never silently regress again.
+
+### Every fix ships a test
+
+Every bug fix MUST include a test that fails before the fix and passes after it. See
+`.github/copilot-instructions.md` → *Regression Tests Are Mandatory For Every Bug Fix*.
+CI (`.github/workflows/ci.yml`) publishes `cop.exe` and runs both test projects on every push
+and PR.
+
