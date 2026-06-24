@@ -1,6 +1,6 @@
 # Runtime must not reference providers
 
-import code-layering
+import code
 
 let runtime-projects = ['runtime']
 let provider-projects = [

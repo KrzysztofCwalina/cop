@@ -1,0 +1,43 @@
+# YAML Package — types for analyzing YAML configuration files.
+# Provides YamlEntry (a flattened mapping key with its dotted path, value, and line) and
+# YamlDocument. Import with: import yaml
+
+import code
+
+## A single mapping key, flattened with its dotted Path (sequence elements appear as '[]',
+## e.g. 'jobs.build.steps[].uses'), its scalar Value, and 1-based Line number.
+export type YamlEntry = {
+    Path : string,
+    Key : string,
+    Value : string,
+    Line : int,
+    Document : int,
+    File : File?,
+    Source : string
+}
+
+## A YAML document. A file may contain several documents separated by '---'; Index is the
+## 0-based position of the document within the file.
+export type YamlDocument = {
+    Index : int,
+    Line : int,
+    File : File?,
+    Source : string
+}
+
+export type YamlContent = {
+    Entries : [YamlEntry],
+    Documents : [YamlDocument]
+}
+
+## Parses YAML files in the target directory and returns their flattened content.
+## Example: let y = yaml.parse()
+export function parse() : YamlContent => provider('yaml')
+
+## Parses YAML files in the specified directory and returns their flattened content.
+## Example: let y = yaml.parse('.github/workflows')
+export function parse(path : string) : YamlContent => provider('yaml', path)
+
+# Violation overloads for YAML types — via TextFilePosition trait conformance.
+export type YamlEntry : TextFilePosition = { filePath => item.File.Path, line => item.Line }
+export type YamlDocument : TextFilePosition = { filePath => item.File.Path, line => item.Line }

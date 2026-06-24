@@ -89,59 +89,59 @@ Each package includes samples in its `samples/` directory showing real-world usa
 
 | Sample | Description |
 |--------|-------------|
-| [list-public-types](../packages/dotnet/csharp/samples/list-public-types.cop) | List all public C# types |
-| [run-csharp-style-checks](../packages/dotnet/csharp-checks/samples/run-csharp-style-checks.cop) | Run built-in C# style checks |
-| [check-client-conventions](../packages/dotnet/csharp-library-checks/samples/check-client-conventions.cop) | Check SDK client library conventions |
-| [run-azure-sdk-checks](../packages/dotnet/csharp-library-azure-checks/samples/run-azure-sdk-checks.cop) | Run Azure SDK-specific checks |
-| [api-listing](../packages/dotnet/csharp-lister/samples/api-listing.cop) | Generate API listing |
-| [api-diff](../packages/dotnet/csharp-lister/samples/api-diff.cop) | Generate API diff |
-| [run-format](../packages/dotnet/csharp-format/samples/run-format.cop) | Run dotnet format checks |
-| [run-stylecop](../packages/dotnet/csharp-stylecop/samples/run-stylecop.cop) | Run StyleCop analysis |
-| [run-snippet-checks](../packages/dotnet/csharp-snippets-checks/samples/run-snippet-checks.cop) | Verify C# snippet sync with docs |
+| [list-public-types](../packages/languages/csharp/samples/list-public-types.cop) | List all public C# types |
+| [run-csharp-style-checks](../packages/checks/csharp-checks/samples/run-csharp-style-checks.cop) | Run built-in C# style checks |
+| [check-client-conventions](../packages/checks/csharp-library-checks/samples/check-client-conventions.cop) | Check SDK client library conventions |
+| [run-azure-sdk-checks](../packages/checks/csharp-library-azure-checks/samples/run-azure-sdk-checks.cop) | Run Azure SDK-specific checks |
+| [api-listing](../packages/languages/csharp/samples/api-listing.cop) | Generate API listing |
+| [api-diff](../packages/languages/csharp/samples/api-diff.cop) | Generate API diff |
+| [run-format](../packages/tools/csharp-format/samples/run-format.cop) | Run dotnet format checks |
+| [run-stylecop](../packages/tools/csharp-stylecop/samples/run-stylecop.cop) | Run StyleCop analysis |
+| [run-snippet-checks](../packages/checks/csharp-snippets-checks/samples/run-snippet-checks.cop) | Verify C# snippet sync with docs |
 
 ### JavaScript / TypeScript
 
 | Sample | Description |
 |--------|-------------|
-| [list-public-types](../packages/js/javascript/samples/list-public-types.cop) | List all public JS/TS types |
-| [run-js-ts-checks](../packages/js/javascript-checks/samples/run-js-ts-checks.cop) | Run built-in JS/TS style checks |
-| [check-client-conventions](../packages/js/javascript-library-checks/samples/check-client-conventions.cop) | Check SDK client library conventions |
-| [run-azure-sdk-checks](../packages/js/javascript-library-azure-checks/samples/run-azure-sdk-checks.cop) | Run Azure SDK-specific checks |
-| [api-listing](../packages/js/javascript-lister/samples/api-listing.cop) | Generate API listing |
-| [api-diff](../packages/js/javascript-lister/samples/api-diff.cop) | Generate API diff |
-| [run-biome](../packages/js/javascript-biome/samples/run-biome.cop) | Run Biome linting |
-| [run-eslint](../packages/js/javascript-eslint/samples/run-eslint.cop) | Run ESLint checks |
-| [run-tsc](../packages/js/typescript-tsc/samples/run-tsc.cop) | Run TypeScript compiler checks |
-| [run-snippet-checks](../packages/js/javascript-snippets-checks/samples/run-snippet-checks.cop) | Verify JS snippet sync with docs |
+| [list-public-types](../packages/languages/javascript/samples/list-public-types.cop) | List all public JS/TS types |
+| [run-js-ts-checks](../packages/checks/javascript-checks/samples/run-js-ts-checks.cop) | Run built-in JS/TS style checks |
+| [check-client-conventions](../packages/checks/javascript-library-checks/samples/check-client-conventions.cop) | Check SDK client library conventions |
+| [run-azure-sdk-checks](../packages/checks/javascript-library-azure-checks/samples/run-azure-sdk-checks.cop) | Run Azure SDK-specific checks |
+| [api-listing](../packages/languages/javascript/samples/api-listing.cop) | Generate API listing |
+| [api-diff](../packages/languages/javascript/samples/api-diff.cop) | Generate API diff |
+| [run-biome](../packages/tools/javascript-biome/samples/run-biome.cop) | Run Biome linting |
+| [run-eslint](../packages/tools/javascript-eslint/samples/run-eslint.cop) | Run ESLint checks |
+| [run-tsc](../packages/tools/typescript-tsc/samples/run-tsc.cop) | Run TypeScript compiler checks |
+| [run-snippet-checks](../packages/checks/javascript-snippets-checks/samples/run-snippet-checks.cop) | Verify JS snippet sync with docs |
 
 ### Python
 
 | Sample | Description |
 |--------|-------------|
-| [list-public-types](../packages/python/python/samples/list-public-types.cop) | List all public Python types |
-| [run-python-style-checks](../packages/python/python-checks/samples/run-python-style-checks.cop) | Run built-in Python style checks |
-| [check-client-conventions](../packages/python/python-library-checks/samples/check-client-conventions.cop) | Check SDK client library conventions |
-| [run-azure-sdk-checks](../packages/python/python-library-azure-checks/samples/run-azure-sdk-checks.cop) | Run Azure SDK-specific checks |
-| [api-listing](../packages/python/python-lister/samples/api-listing.cop) | Generate API listing |
-| [api-diff](../packages/python/python-lister/samples/api-diff.cop) | Generate API diff |
-| [run-bandit](../packages/python/python-bandit/samples/run-bandit.cop) | Run Bandit security scanner |
-| [run-mypy](../packages/python/python-mypy/samples/run-mypy.cop) | Run mypy type checker |
-| [run-pylint](../packages/python/python-pylint/samples/run-pylint.cop) | Run Pylint checks |
-| [run-ruff](../packages/python/python-ruff/samples/run-ruff.cop) | Run Ruff linter |
-| [run-snippet-checks](../packages/python/python-snippets-checks/samples/run-snippet-checks.cop) | Verify Python snippet sync with docs |
+| [list-public-types](../packages/languages/python/samples/list-public-types.cop) | List all public Python types |
+| [run-python-style-checks](../packages/checks/python-checks/samples/run-python-style-checks.cop) | Run built-in Python style checks |
+| [check-client-conventions](../packages/checks/python-library-checks/samples/check-client-conventions.cop) | Check SDK client library conventions |
+| [run-azure-sdk-checks](../packages/checks/python-library-azure-checks/samples/run-azure-sdk-checks.cop) | Run Azure SDK-specific checks |
+| [api-listing](../packages/languages/python/samples/api-listing.cop) | Generate API listing |
+| [api-diff](../packages/languages/python/samples/api-diff.cop) | Generate API diff |
+| [run-bandit](../packages/tools/python-bandit/samples/run-bandit.cop) | Run Bandit security scanner |
+| [run-mypy](../packages/tools/python-mypy/samples/run-mypy.cop) | Run mypy type checker |
+| [run-pylint](../packages/tools/python-pylint/samples/run-pylint.cop) | Run Pylint checks |
+| [run-ruff](../packages/tools/python-ruff/samples/run-ruff.cop) | Run Ruff linter |
+| [run-snippet-checks](../packages/checks/python-snippets-checks/samples/run-snippet-checks.cop) | Verify Python snippet sync with docs |
 
 ### Java
 
 | Sample | Description |
 |--------|-------------|
-| [run-java-checks](../packages/java/java-checks/samples/run-java-checks.cop) | Run built-in Java style checks |
+| [run-java-checks](../packages/checks/java-checks/samples/run-java-checks.cop) | Run built-in Java style checks |
 
 ### Rust
 
 | Sample | Description |
 |--------|-------------|
-| [list-public-types](../packages/rust/rust/samples/list-public-types.cop) | List all public Rust types |
-| [run-rust-checks](../packages/rust/rust-checks/samples/run-rust-checks.cop) | Run built-in Rust correctness and style checks |
+| [list-public-types](../packages/languages/rust/samples/list-public-types.cop) | List all public Rust types |
+| [run-rust-checks](../packages/checks/rust-checks/samples/run-rust-checks.cop) | Run built-in Rust correctness and style checks |
 
 ### Formats, Config & Scripts
 
@@ -149,26 +149,26 @@ Native C# providers for configuration formats and scripting languages.
 
 | Sample | Description |
 |--------|-------------|
-| [pin-actions-to-sha](../packages/yaml/samples/pin-actions-to-sha.cop) | YAML: require GitHub Actions pinned to a commit SHA |
-| [pin-base-images](../packages/dockerfile/samples/pin-base-images.cop) | Dockerfile: require base images pinned to a non-`latest` tag |
-| [floating-package-versions](../packages/xml/samples/floating-package-versions.cop) | XML: flag floating `PackageReference` versions in `.csproj` |
-| [undocumented-operations](../packages/openapi/samples/undocumented-operations.cop) | OpenAPI: flag operations missing a summary or responses |
-| [remote-pipe-to-shell](../packages/bash/samples/remote-pipe-to-shell.cop) | Bash: flag piping a remote download into a shell |
-| [dangerous-dynamic-exec](../packages/powershell/samples/dangerous-dynamic-exec.cop) | PowerShell: flag `Invoke-Expression` / download-and-run |
-| [risky-dml-and-select-star](../packages/sql/samples/risky-dml-and-select-star.cop) | SQL: flag `UPDATE`/`DELETE` without `WHERE` and `SELECT *` |
+| [pin-actions-to-sha](../packages/formats/yaml/samples/pin-actions-to-sha.cop) | YAML: require GitHub Actions pinned to a commit SHA |
+| [pin-base-images](../packages/formats/dockerfile/samples/pin-base-images.cop) | Dockerfile: require base images pinned to a non-`latest` tag |
+| [floating-package-versions](../packages/formats/xml/samples/floating-package-versions.cop) | XML: flag floating `PackageReference` versions in `.csproj` |
+| [undocumented-operations](../packages/formats/openapi/samples/undocumented-operations.cop) | OpenAPI: flag operations missing a summary or responses |
+| [remote-pipe-to-shell](../packages/formats/bash/samples/remote-pipe-to-shell.cop) | Bash: flag piping a remote download into a shell |
+| [dangerous-dynamic-exec](../packages/formats/powershell/samples/dangerous-dynamic-exec.cop) | PowerShell: flag `Invoke-Expression` / download-and-run |
+| [risky-dml-and-select-star](../packages/formats/sql/samples/risky-dml-and-select-star.cop) | SQL: flag `UPDATE`/`DELETE` without `WHERE` and `SELECT *` |
 
 ### Specialized
 
 | Sample | Description |
 |--------|-------------|
 | [find-files](../packages/files/samples/find-files.cop) | Find empty folders and large files |
-| [load-and-query-json-data](../packages/json/samples/load-and-query-json-data.cop) | Load and query JSON data |
-| [check-for-broken-links](../packages/markdown/samples/check-for-broken-links.cop) | Check for broken links in markdown |
+| [load-and-query-json-data](../packages/formats/json/samples/load-and-query-json-data.cop) | Load and query JSON data |
+| [check-for-broken-links](../packages/formats/markdown/samples/check-for-broken-links.cop) | Check for broken links in markdown |
 | [list-all-models](../packages/typespec/samples/list-all-models.cop) | List all TypeSpec models |
 | [find-get-operations](../packages/typespec-http/samples/find-get-operations.cop) | Find HTTP GET operations |
 | [http-server](../packages/http/samples/http-server.cop) | Simple HTTP server |
 | [http-client](../packages/http/samples/http-client.cop) | HTTP client with API calls |
-| [list-cop-types](../packages/cop/samples/list-types.cop) | List types in .cop files |
+| [list-cop-types](../packages/languages/cop/samples/list-types.cop) | List types in .cop files |
 | [query-results](../packages/analysis-codeql/samples/query-results.cop) | Query CodeQL SARIF results |
 | [generate-query](../packages/csharp-codeql-export/samples/generate-query.cop) | Generate a CodeQL query |
 | [run-checkov](../packages/analysis-checkov/samples/run-checkov.cop) | Run Checkov security checks |

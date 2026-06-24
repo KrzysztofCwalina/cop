@@ -54,7 +54,7 @@ The agent reads the instruction files setup using `cop init`, which tell it how 
 
 ```ruby
 import csharp
-import code-analysis
+import code
 
 predicate tooManyMethods(Type) => Type.Methods.Count > 20
 

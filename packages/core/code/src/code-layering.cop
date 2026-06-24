@@ -1,0 +1,108 @@
+# Architecture Layering Package v1.0
+# Defines types and predicates for architectural layer enforcement.
+# Import with: import code
+
+
+# A LayerViolation represents a project referencing another project
+# in a disallowed layer.
+export type LayerViolation = {
+    Name : string,
+    Path : string,
+    SourceLayer : string,
+    Target : string,
+    TargetLayer : string,
+    Source : string
+}
+
+# A project that is not assigned to any defined layer.
+export type UncategorizedProject = {
+    Name : string,
+    Path : string,
+    Source : string
+}
+
+# Violation formatting functions
+export function toError(Project, message: string) => Violation {
+    Severity = 1.0,
+    Certainty = 1.0,
+    Message = message,
+    File = item.Path,
+    Line = 0,
+    Source = item.Path
+}
+
+export function toWarning(Project, message: string) => Violation {
+    Severity = 0.5,
+    Certainty = 1.0,
+    Message = message,
+    File = item.Path,
+    Line = 0,
+    Source = item.Path
+}
+
+export function toInfo(Project, message: string) => Violation {
+    Severity = 0.2,
+    Certainty = 1.0,
+    Message = message,
+    File = item.Path,
+    Line = 0,
+    Source = item.Path
+}
+
+# Predicate: project is not in any known layer.
+# Users must define 'all-known-projects' as a let-bound list of all project names
+# that belong to a defined layer.
+export predicate isNotInLayer(Project) => !Project.Name:in(all-known-projects)
+
+# Architecture Layering Checks
+# This file provides predicates for detecting layering violations.
+#
+# Usage pattern:
+# 1. Define your layers as project name lists
+# 2. Use the predicates below to detect violations
+# 3. Combine with toError/toWarning for CHECK output
+#
+# Example:
+#
+#   import code
+#
+#   # Define layer membership (project names)
+#   let presentation-projects = ['MyApp.Web' 'MyApp.Api']
+#   let business-projects     = ['MyApp.Services' 'MyApp.Domain']
+#   let data-projects         = ['MyApp.Data' 'MyApp.EF']
+#   let infra-projects        = ['MyApp.Logging' 'MyApp.Config']
+#
+#   # Combine all known projects for uncategorized detection
+#   let all-known-projects = presentation-projects + business-projects + data-projects + infra-projects
+#
+#   # Define violations: which layers must NOT reference which
+#   # Presentation must not reference Data directly (must go through Business)
+#   predicate presentationReferencesData(Project) =>
+#       Project.Name:in(presentation-projects)
+#       && Project.References:containsAny(data-projects)
+#
+#   # Data must not reference Presentation
+#   predicate dataReferencesPresentation(Project) =>
+#       Project.Name:in(data-projects)
+#       && Project.References:containsAny(presentation-projects)
+#
+#   # Business must not reference Presentation
+#   predicate businessReferencesPresentation(Project) =>
+#       Project.Name:in(business-projects)
+#       && Project.References:containsAny(presentation-projects)
+#
+#   # Detect projects not in any layer
+#   predicate isNotInLayer(Project) => !Project.Name:in(all-known-projects)
+#
+#   # Produce violations
+#   export let layer-violations = csharp.projects():presentationReferencesData
+#       :toError('Presentation project {item.Name} must not reference Data layer directly')
+#       + csharp.projects():dataReferencesPresentation
+#       :toError('Data project {item.Name} must not reference Presentation layer')
+#       + csharp.projects():businessReferencesPresentation
+#       :toError('Business project {item.Name} must not reference Presentation layer')
+#
+#   export let uncategorized = csharp.projects():isNotInLayer
+#       :toWarning('Project {item.Name} is not assigned to any architectural layer')
+#
+#   CHECK code-layering => layer-violations + uncategorized

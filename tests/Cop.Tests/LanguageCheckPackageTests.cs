@@ -127,24 +127,30 @@ public class LanguageCheckPackageTests
             Directory.Delete(fixtureDir, recursive: true);
         }
     }
-    /// go/, rust/) may build its codebase from Program.Providers — it must hardcode
-    /// its provider so it works without a -p flag.
+
+    /// <summary>
+    /// Every language-specific check package (now under checks/ and languages/) must
+    /// hardcode its provider via codebase(&lt;lang&gt;.parse()) so it works without a -p
+    /// flag — it must not build from Program.Providers. code-metrics is exempt: it is a
+    /// language-agnostic report that intentionally uses the ambient codebase.
     /// </summary>
     [Test]
     public void LanguageCheckPackages_DoNotUseProgramProviders()
     {
         var packagesDir = Path.Combine(RepoRoot, "packages");
-        string[] languageDirs = ["dotnet", "js", "python", "java", "go", "rust"];
+        string[] checkDirs = ["checks", "languages"];
 
         var offenders = new List<string>();
-        foreach (var lang in languageDirs)
+        foreach (var lang in checkDirs)
         {
             var langDir = Path.Combine(packagesDir, lang);
             if (!Directory.Exists(langDir)) continue;
 
             foreach (var copFile in Directory.GetFiles(langDir, "*.cop", SearchOption.AllDirectories))
             {
-                if (copFile.Replace('\\', '/').Contains("/samples/")) continue;
+                var rel = copFile.Replace('\\', '/');
+                if (rel.Contains("/samples/")) continue;
+                if (rel.Contains("/code-metrics/")) continue; // language-agnostic report; intentionally ambient
                 if (File.ReadAllText(copFile).Contains("codebase(Program.Providers)"))
                     offenders.Add(Path.GetRelativePath(RepoRoot, copFile).Replace('\\', '/'));
             }

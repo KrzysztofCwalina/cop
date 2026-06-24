@@ -1,7 +1,7 @@
 # Projects use a single <TargetFramework>, never multi-targeting (<TargetFrameworks>).
 # The repo builds one framework everywhere; multi-targeting would complicate build/publish.
 
-import code-layering
+import code
 
 predicate stHasMultiTfm(ProjectProperty) => ProjectProperty.Name:equals('TargetFrameworks')
 predicate stIsMultiTargeted(Project) => Project.Properties:any(stHasMultiTfm)

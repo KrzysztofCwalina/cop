@@ -55,7 +55,7 @@ Create a file called `checks.cop` in your project root:
 ```cop
 import javascript
 import code
-import code-analysis
+import code
 
 let cb = javascript.parse()
 
@@ -121,7 +121,7 @@ Create `layering.cop`:
 ```cop
 import javascript
 import code
-import code-layering
+import code
 
 let cb = codebase(javascript.parse())
 
@@ -171,7 +171,7 @@ command MAIN = foreach cb.Types => '{item.Name} ({item.Kind}) - {item.Methods.co
 ```cop norun
 import javascript
 import code
-import code-analysis
+import code
 
 let cb = javascript.parse()
 
@@ -187,7 +187,7 @@ command MAIN = CHECK(violations)
 
 ```cop
 import javascript
-import code-analysis
+import code
 
 let cb = javascript.parse()
 

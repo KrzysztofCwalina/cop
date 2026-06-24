@@ -32,10 +32,10 @@ public class IssueRegressionTests
     public void Issue005_SingleFileRunIsIsolatedButFolderVerifyRejectsDuplicateMain()
     {
         File.WriteAllText(Path.Combine(_workDir, "target.cop"),
-            "import code-analysis\n" +
+            "import code\n" +
             "command MAIN = CHECK([])\n");
         File.WriteAllText(Path.Combine(_workDir, "colliding.cop"),
-            "import code-analysis\n" +
+            "import code\n" +
             "command MAIN = CHECK(filesystem.Folders:toError('WRONG FILE RAN'))\n");
 
         var run = RunCop($"\"{Path.Combine(_workDir, "target.cop")}\" -t \"{_workDir}\"");
@@ -56,7 +56,7 @@ public class IssueRegressionTests
         File.WriteAllText(Path.Combine(_workDir, "Issue8Target.cs"), "class Issue8Target { }\n");
         File.WriteAllText(Path.Combine(checksDir, "main.cop"),
             "import code\n" +
-            "import code-analysis\n" +
+            "import code\n" +
             "import csharp\n" +
             "let cb = codebase(csharp.parse())\n" +
             "predicate isIssue8Target(Type) => Type.Name == 'Issue8Target'\n" +
@@ -78,12 +78,12 @@ public class IssueRegressionTests
         Directory.CreateDirectory(checksDir);
         Directory.CreateDirectory(Path.Combine(_workDir, "empty"));
         File.WriteAllText(Path.Combine(checksDir, "target.cop"),
-            "import code-analysis\n" +
+            "import code\n" +
             "predicate isIssue10Folder(Folder) => Folder.Path == 'empty'\n" +
             "let violations = filesystem.Folders:isIssue10Folder:toError('ISSUE10 VIOLATION {item.Path}')\n" +
             "command MAIN = CHECK(violations)\n");
         File.WriteAllText(Path.Combine(checksDir, "other.cop"),
-            "import code-analysis\n" +
+            "import code\n" +
             "command MAIN = CHECK([])\n");
 
         var result = RunCop($"\"{Path.Combine(checksDir, "target.cop")}\" -t \"{_workDir}\"", _workDir);

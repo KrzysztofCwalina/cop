@@ -1,7 +1,7 @@
 # Every C# project must enable nullable reference types. There is no central
 # Directory.Build.props, so this stops a newly-added project from silently turning it off.
 
-import code-layering
+import code
 
 predicate neBadNullable(ProjectProperty) => ProjectProperty.Name:equals('Nullable') && ProjectProperty.Value:notEquals('enable')
 predicate neNullableNotEnabled(Project) => Project.Properties:any(neBadNullable)

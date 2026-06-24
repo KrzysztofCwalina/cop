@@ -33,7 +33,7 @@ public class EngineProviderIntegrationTests
 
             var messages = RunCop(fixture, """
                 import code
-                import code-analysis
+                import code
                 import csharp
 
                 let cb = csharp.parse()

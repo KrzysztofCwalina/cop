@@ -1,0 +1,13 @@
+# dotnet format integration — runs dotnet format and produces cop violations
+# Prerequisites: dotnet format must be installed
+
+import code
+
+let data = provider('csharp-format')
+
+## Returns the dotnet format violations collection
+export function violations() : [Violation] => data.Violations
+export function diagnostics() : [Violation] => data.Violations
+export let csharp-format-checks = data.Violations
+
+command MAIN = CHECK(csharp-format-checks)

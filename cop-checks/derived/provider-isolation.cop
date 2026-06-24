@@ -1,7 +1,7 @@
 # Derived rule: provider projects must not reference other provider projects.
 # Providers may reference the core cop project, but must stay isolated from each other.
 
-import code-layering
+import code
 
 let pi-provider-projects = [
     'AiProvider'

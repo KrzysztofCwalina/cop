@@ -1,0 +1,41 @@
+# Bash/Shell Package — types for analyzing shell scripts.
+# Provides ShellCommand (simple commands) and ShellScript (per-file metadata).
+
+import code
+
+## A simple command found in a shell script. Name is the command token after simple
+## wrappers such as sudo/env and environment assignments. Text is the full logical
+## command line that contained it.
+export type ShellCommand = {
+    Name : string,
+    Text : string,
+    Line : int,
+    File : File?,
+    Source : string
+}
+
+## Summary information for a shell script.
+export type ShellScript = {
+    HasStrictMode : bool,
+    Line : int,
+    File : File?,
+    Source : string
+}
+
+export type ShellContent = {
+    Commands : [ShellCommand],
+    Scripts : [ShellScript]
+}
+
+## Parses .sh and .bash files in the target directory.
+## Example: let sh = bash.parse()
+export function parse() : ShellContent => provider('bash')
+
+## Parses .sh and .bash files in the specified directory.
+## Example: let sh = bash.parse('scripts')
+export function parse(path : string) : ShellContent => provider('bash', path)
+
+# Violation overloads for shell types — via TextFilePosition trait conformance.
+export type ShellCommand : TextFilePosition = { filePath => item.File.Path, line => item.Line }
+export type ShellScript : TextFilePosition = { filePath => item.File.Path, line => item.Line }
+

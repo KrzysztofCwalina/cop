@@ -55,7 +55,7 @@ public class CSharpProviderFunctionsTests
         var packageSource = File.ReadAllText(Path.Combine(
             FindRepoRoot(),
             "packages",
-            "dotnet",
+            "languages",
             "csharp",
             "src",
             "csharp.cop"));

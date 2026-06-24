@@ -1,0 +1,14 @@
+# Trivy integration — runs Trivy and produces cop Violations
+# Prerequisites: Trivy must be installed
+
+import code
+
+let data = provider('analysis-trivy')
+
+## Returns the Trivy violations collection.
+export function diagnostics() : [Violation] => data.Violations
+
+## All Trivy violations as a collection.
+export let trivy-checks = data.Violations
+
+command MAIN = CHECK(trivy-checks)

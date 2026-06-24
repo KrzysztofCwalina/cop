@@ -1,0 +1,42 @@
+# XML Package — types for analyzing XML and XML-based project/config files.
+# Provides XmlElement and XmlAttribute collections. Import with: import xml
+
+import code
+
+## An XML element with its local Name, dotted Path from the root, direct text Value, and 1-based Line number.
+export type XmlElement = {
+    Name : string,
+    Path : string,
+    Value : string,
+    Line : int,
+    File : File?,
+    Source : string
+}
+
+## An XML attribute with its local Name, Value, owning ElementName, owning ElementPath, and 1-based Line number.
+export type XmlAttribute = {
+    Name : string,
+    Value : string,
+    ElementName : string,
+    ElementPath : string,
+    Line : int,
+    File : File?,
+    Source : string
+}
+
+export type XmlContent = {
+    Elements : [XmlElement],
+    Attributes : [XmlAttribute]
+}
+
+## Parses XML files in the target directory and returns their elements and attributes.
+## Example: let x = xml.parse()
+export function parse() : XmlContent => provider('xml')
+
+## Parses XML files in the specified directory or file and returns their elements and attributes.
+## Example: let x = xml.parse('src/MyProject.csproj')
+export function parse(path : string) : XmlContent => provider('xml', path)
+
+# Violation overloads for XML types — via TextFilePosition trait conformance.
+export type XmlElement : TextFilePosition = { filePath => item.File.Path, line => item.Line }
+export type XmlAttribute : TextFilePosition = { filePath => item.File.Path, line => item.Line }

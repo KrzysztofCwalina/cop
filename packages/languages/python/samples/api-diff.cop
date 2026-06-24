@@ -1,0 +1,24 @@
+import code
+import python-library-checks
+import code
+
+let cb : Codebase = provider('python')
+
+# Baseline: stub files in api/ directory
+predicate isBaselineApi(Api) => isPublicApi && Api.File.Path:matches('[/\\]api[/\\]')
+# Source: everything NOT in api/
+predicate isSourceApi(Api) => isPublicApi && !Api.File.Path:matches('[/\\]api[/\\]')
+
+# Build lookup lists from current source and baseline
+let baselineSignatures = cb.Api:isBaselineApi.Select(item.Signature)
+let currentSignatures = cb.Api:isSourceApi.Select(item.Signature)
+
+# Diff predicates
+predicate isRemovedApi(Api) => isBaselineApi && !Api.Signature:in(currentSignatures)
+predicate isAddedApi(Api) => isSourceApi && !Api.Signature:in(baselineSignatures)
+
+# Report results
+export let api-removed = cb.Api:isRemovedApi
+    :toError('API REMOVED (breaking): {item.Signature}')
+export let api-added = cb.Api:isAddedApi
+    :toInfo('API ADDED: {item.Signature}')

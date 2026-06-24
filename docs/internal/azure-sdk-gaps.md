@@ -1,7 +1,7 @@
 # Azure SDK for .NET — Check Coverage Gap Analysis
 
 This report maps every significant automated check enforced in `azure-sdk-for-net` to coverage
-in the Agent Cop packages (`packages/dotnet/csharp*`) and Roslyn analyzers (`analyzers/`).
+in the Agent Cop packages (`packages/checks/csharp*`) and Roslyn analyzers (`analyzers/`).
 
 **Legend:**  ✅ Covered  |  ⚠️ Partial  |  ❌ Gap  |  🔵 Agent Cop-only (no Azure SDK equivalent)
 

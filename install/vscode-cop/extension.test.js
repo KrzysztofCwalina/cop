@@ -107,7 +107,7 @@ describe('scanDocument', () => {
     test('parses imports', () => {
         const doc = mockDoc([
             'import code',
-            'import code-analysis',
+            'import code',
             'export import files',
         ]);
         const symbols = scanDocument(doc);
@@ -600,7 +600,7 @@ describe('getGeneralCompletions', () => {
     });
 
     test('includes imported packages', () => {
-        const doc = mockDoc(['import code', 'import code-analysis', '']);
+        const doc = mockDoc(['import code', 'import code', '']);
         const items = getGeneralCompletions(doc);
         const lbls = labels(items);
         expect(lbls).toContain('code');

@@ -3,8 +3,8 @@
 # (This is the guard that should have caught CHECK being moved into the runtime.)
 
 import code
-import code-analysis
-import code-layering
+import code
+import code
 
 # Approved built-in FFI names. The argument text includes the surrounding quotes.
 let approved-ffi-names = [

@@ -23,16 +23,16 @@
     <ItemGroup>
       <ProviderDlls Include="$(OutputPath)tool-providers.dll" />
       <ProviderDlls Include="$(OutputPath)tool-providers.deps.json" />
-      <TargetLibDirs Include="$(PkgRoot)dotnet\csharp-format\lib\" />
-      <TargetLibDirs Include="$(PkgRoot)dotnet\csharp-stylecop\lib\" />
-      <TargetLibDirs Include="$(PkgRoot)python\python-ruff\lib\" />
-      <TargetLibDirs Include="$(PkgRoot)python\python-pylint\lib\" />
-      <TargetLibDirs Include="$(PkgRoot)python\python-bandit\lib\" />
-      <TargetLibDirs Include="$(PkgRoot)python\python-mypy\lib\" />
-      <TargetLibDirs Include="$(PkgRoot)analysis\analysis-trivy\lib\" />
-      <TargetLibDirs Include="$(PkgRoot)analysis\analysis-checkov\lib\" />
-      <TargetLibDirs Include="$(PkgRoot)analysis\analysis-semgrep\lib\" />
-      <TargetLibDirs Include="$(PkgRoot)analysis\analysis-spectral\lib\" />
+      <TargetLibDirs Include="$(PkgRoot)tools\csharp-format\lib\" />
+      <TargetLibDirs Include="$(PkgRoot)tools\csharp-stylecop\lib\" />
+      <TargetLibDirs Include="$(PkgRoot)tools\python-ruff\lib\" />
+      <TargetLibDirs Include="$(PkgRoot)tools\python-pylint\lib\" />
+      <TargetLibDirs Include="$(PkgRoot)tools\python-bandit\lib\" />
+      <TargetLibDirs Include="$(PkgRoot)tools\python-mypy\lib\" />
+      <TargetLibDirs Include="$(PkgRoot)tools\analysis-trivy\lib\" />
+      <TargetLibDirs Include="$(PkgRoot)tools\analysis-checkov\lib\" />
+      <TargetLibDirs Include="$(PkgRoot)tools\analysis-semgrep\lib\" />
+      <TargetLibDirs Include="$(PkgRoot)tools\analysis-spectral\lib\" />
     </ItemGroup>
     <MakeDir Directories="@(TargetLibDirs)" />
     <Copy SourceFiles="@(ProviderDlls)" DestinationFolder="%(TargetLibDirs.Identity)" SkipUnchangedFiles="true" />

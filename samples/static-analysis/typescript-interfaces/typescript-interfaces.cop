@@ -6,7 +6,7 @@
 
 import code
 import javascript
-import code-analysis
+import code
 
 let codebase = codebase(javascript.parse())
 

@@ -1,0 +1,13 @@
+import code
+import csharp
+import code
+
+let cb : Codebase = provider('csharp')
+
+predicate isTooLarge(Type) =>
+    Type.Methods.Count:greaterThan(20)
+
+let violations = cb.Types:isTooLarge
+    :toWarning('Type {item.Name} has too many methods')
+
+command main = CHECK violations

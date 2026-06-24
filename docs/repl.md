@@ -226,7 +226,7 @@ Edit `main.cop` to add your new check:
 
 ```cop
 import csharp-checks
-import code-analysis
+import code
 
 let publicTypes = Code.Types:isPublic
 

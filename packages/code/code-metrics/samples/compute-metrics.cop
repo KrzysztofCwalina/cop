@@ -1,9 +1,0 @@
-import code
-import csharp
-import code-analysis
-import code-metrics
-
-let cb : Codebase = provider('csharp')
-
-# Use the built-in curated slop collection
-command main = METRICS(slop, cb.Lines)

@@ -1,0 +1,7 @@
+# Azure SDK client library checks — all combined
+
+import code
+
+export let csharp-library-azure-checks = client-design + options-design + naming + method-design + code-quality
+
+command MAIN = CHECK(csharp-library-azure-checks)

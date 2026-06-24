@@ -19,7 +19,7 @@ public class PythonLayeringTests
     private const string LayeringCheck = """
         import python
         import code
-        import code-layering
+        import code
 
         let cb = codebase(python.parse())
 

@@ -1,5 +1,0 @@
-# API Surface listing and diff commands for Python
-# Predicates (isPublicApi, isApiType, etc.) are in python-library-checks
-
-import python-library-checks
-import code-analysis

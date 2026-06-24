@@ -118,7 +118,7 @@ A `.cop` file imports a package by name:
 
 ```cop
 import csharp
-import code-analysis
+import code
 import files
 
 command main = foreach csharp.Types
@@ -143,7 +143,7 @@ Given a feed path and a package name, cop searches as follows:
    Example: looking for `code` in `~/.cop/packages/` → checks `~/.cop/packages/code/`
 
 2. If not found, recursively enter each child directory that is a **group folder** (i.e., not itself a package) and repeat the search.
-   Example: looking for `csharp-checks` in `packages/` → enters group folder `packages/dotnet/` → finds `packages/dotnet/csharp-checks/`
+   Example: looking for `csharp-checks` in `packages/` → enters group folder `packages/checks/` → finds `packages/checks/csharp-checks/`
 
 ---
 
@@ -160,7 +160,7 @@ Here is the complete sequence, step by step, starting from a fresh machine where
 
 ```cop
 import csharp
-import code-analysis
+import code
 
 command main = foreach csharp.Types
     => '{item.Name} has {item.Methods.Count} methods'
@@ -209,7 +209,7 @@ Cop loads the list of GitHub feeds from `~/.cop/feeds.json`. If that file does n
 For each missing package, cop tries each GitHub feed in order:
 
 1. Construct a reference: `github.com/KrzysztofCwalina/cop/code-analysis`
-2. Use the GitHub API to locate the package directory in the repository (searching `packages/code-analysis`, then group folders like `packages/dotnet/code-analysis`, etc.)
+2. Use the GitHub API to locate the package directory in the repository (searching `packages/csharp-checks`, then group folders like `packages/checks/csharp-checks`, etc.)
 3. Download all files in the package directory
 4. Save them to `~/.cop/packages/code-analysis/` (creating `~/.cop/` and `~/.cop/packages/` if they don't exist)
 

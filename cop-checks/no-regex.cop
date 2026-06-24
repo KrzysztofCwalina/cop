@@ -2,7 +2,7 @@
 # Regex-based parsing is not acceptable — use recursive descent parsers.
 
 import code
-import code-analysis
+import code
 import csharp
 
 # A type is in a file that uses regex if the file imports RegularExpressions

@@ -1,0 +1,32 @@
+# Java checks — correctness and style
+
+import java
+import code
+
+let cb = codebase(java.parse())
+
+## Java Correctness
+
+## Avoid System.out / System.err console output in production code
+predicate isConsolePrint(Statement) => (Statement.TypeName == 'out' || Statement.TypeName == 'err')
+    && (Statement.MemberName == 'println'
+        || Statement.MemberName == 'print'
+        || Statement.MemberName == 'printf')
+export let console-output = cb.Calls:isConsolePrint
+    :toWarning('Avoid System.{item.TypeName}.{item.MemberName}() — use a logging framework instead')
+
+## Do not call printStackTrace() — log exceptions through a logger
+predicate isPrintStackTrace(Statement) => Statement.MemberName == 'printStackTrace'
+export let print-stack-trace = cb.Calls:isPrintStackTrace
+    :toWarning('Do not call printStackTrace() — log the exception via a logger')
+
+## Avoid System.exit() in library and application code
+predicate isSystemExit(Statement) => Statement.TypeName == 'System'
+    && Statement.MemberName == 'exit'
+export let system-exit = cb.Calls:isSystemExit
+    :toError('Avoid System.exit() — throw an exception or return an error instead')
+
+## All Java checks combined
+export let java-checks = console-output + print-stack-trace + system-exit
+
+command MAIN = CHECK(java-checks)

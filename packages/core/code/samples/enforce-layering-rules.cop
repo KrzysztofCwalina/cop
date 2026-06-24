@@ -1,0 +1,16 @@
+import code
+import code
+
+let cb = codebase(Program.Providers)
+
+let ui-projects = ['MyApp.Web' 'MyApp.Api']
+let data-projects = ['MyApp.Data' 'MyApp.EF']
+
+predicate isUiRefsData(Project) =>
+    Project.Name:in(ui-projects)
+    && Project.References:containsAny(data-projects)
+
+let violations = cb.Projects:isUiRefsData
+    :toError('UI must not reference Data directly')
+
+CHECK violations

@@ -1,7 +1,7 @@
 # Every C# project must target net10.0. There is no central Directory.Build.props, so this
 # guards against a newly-added project silently using a different framework.
 
-import code-layering
+import code
 
 predicate tfBadTfm(ProjectProperty) => ProjectProperty.Name:equals('TargetFramework') && ProjectProperty.Value:notEquals('net10.0')
 predicate tfNotNet10(Project) => Project.Properties:any(tfBadTfm)

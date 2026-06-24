@@ -46,7 +46,7 @@ import → define predicates → filter collections → produce output
 
 ```cop
 import code
-import code-analysis
+import code
 
 # 1. Define a predicate (boolean filter)
 predicate isTooLong(Method) => Method.Statements.count() > 50
@@ -115,7 +115,7 @@ items:count(predicate)            # count matching
 ### Producing Violations (with code-analysis package)
 
 ```cop
-import code-analysis
+import code
 
 # Convert filtered items to violations:
 let v = filteredItems:toError('message with {item.Name}')
@@ -130,8 +130,7 @@ CHECK v
 
 | Package | Provides | Key Collections |
 |---------|----------|-----------------|
-| `code` | Source code analysis | Types, Methods, Statements, Lines, Files |
-| `code-analysis` | Violation type + CHECK | Violation, toError, toWarning, toInfo |
+| `code` | Source code analysis + Violation/CHECK | Types, Methods, Statements, Lines, Files, Violation, toError, toWarning, toInfo |
 | `files` | Filesystem analysis | Folders, Files |
 | `csharp` | C# language provider | csharp.types(), csharp.statements() |
 | `python` | Python language provider | python.types(), python.statements() |
@@ -142,7 +141,7 @@ CHECK v
 ```cop
 feed 'github.com/KrzysztofCwalina/cop'
 import code
-import code-analysis
+import code
 import csharp
 
 # Flag methods longer than 50 statements
@@ -237,7 +236,7 @@ command MAIN = CHECK(all-violations)
 
 ```cop
 import csharp-checks
-import code-analysis
+import code
 
 predicate hasBadName(Type) => Type.Name:startsWith('_')
 
@@ -353,7 +352,7 @@ let my-violations = codebase.Types:isViolating
 # Run all checks: cop cop-checks/main.cop -t .
 
 import code
-import code-analysis
+import code
 import csharp
 import cop
 
@@ -387,7 +386,7 @@ let types-without-namespace = codebase.Types:isMissingNamespace
 ```cop
 # Runtime must not reference providers
 
-import code-layering
+import code
 
 let runtime-projects = ['runtime']
 let provider-projects = ['code', 'csharp-provider', 'python-provider']
@@ -437,10 +436,8 @@ When using a package, run `cop help <package-name>` to see its types and API.
 
 | Package | Provides | Usage |
 |---------|----------|-------|
-| `code` | Codebase model + `codebase()` | `codebase.Types`, `codebase.Statements`, ... |
-| `code-analysis` | Violation type + CHECK | `toError`, `toWarning`, `toInfo` |
-| `code-metrics` | Slop metrics (JSON) | `METRICS(violations, lines)` |
-| `code-layering` | Dependency rules | `containsAny`, `in` |
+| `code` | Codebase model + Violation/CHECK + layering | `codebase.Types`, `toError`, `toWarning`, `toInfo`, `containsAny`, `in` |
+| `code-metrics` | Slop metrics report (in `checks/`) | `METRICS(violations, lines)` |
 | `csharp` | C# parser | `csharp.parse()` |
 | `python` | Python parser | `python.parse()` |
 | `javascript` | JS/TS parser | `javascript.parse()` |

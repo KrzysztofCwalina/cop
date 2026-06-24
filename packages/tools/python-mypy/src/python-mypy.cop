@@ -1,0 +1,15 @@
+# Mypy type checker integration — runs mypy and produces cop Violations
+# Prerequisites: mypy must be installed (pip install mypy)
+# Usage: import python-mypy
+
+import code
+
+let data = provider('python-mypy')
+
+## Returns all mypy violations.
+export function diagnostics() : [Violation] => data.Violations
+
+## All mypy type-checking violations as a collection.
+export let mypy-checks = data.Violations
+
+command MAIN = CHECK(mypy-checks)

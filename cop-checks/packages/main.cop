@@ -7,7 +7,7 @@
 # It only parses .cop source (cop.parse()); no language provider / -p flag needed.
 
 import code
-import code-analysis
+import code
 import cop
 
 let codebase = codebase(cop.parse())

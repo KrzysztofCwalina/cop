@@ -159,7 +159,7 @@ For persistent customization, create a `.cop` file (e.g., `cop-checks/main.cop`)
 
 ```ruby
 import csharp-checks
-import code-analysis
+import code
 
 # We allow var — remove that check entirely
 let my-checks = csharp-checks - var-declarations
@@ -171,7 +171,7 @@ Run with `cop cop-checks/main.cop`. The `-` operator removes checks from a set. 
 
 ```ruby
 import csharp-checks
-import code-analysis
+import code
 
 # Our style: allow var, allow tabs, don't require file headers
 let my-checks = csharp-checks - var-declarations - no-tabs - file-header-required
@@ -185,7 +185,7 @@ Packages organize checks into named groups. You can compose a custom set from ju
 
 ```ruby
 import csharp-checks
-import code-analysis
+import code
 
 # Only run correctness and FDG checks — skip all style checks
 let my-checks = csharp-correctness-checks + fdg-checks
@@ -199,7 +199,7 @@ Use predicates to skip violations in specific directories:
 
 ```ruby
 import csharp-checks
-import code-analysis
+import code
 
 # Don't flag var usage in test code
 predicate isTestFile(Statement) => Statement.File.Path:contains('/test/')
@@ -249,7 +249,7 @@ A check is three things: a predicate (what to match), a collection (what to sear
 
 ```ruby
 import csharp
-import code-analysis
+import code
 
 # 1. Predicate: what pattern are we looking for?
 predicate usesDateTime(Statement) => Statement.Kind == call
@@ -281,7 +281,7 @@ Each file declares its violations (no `export` needed — cop-checks files load 
 ```ruby
 # naming.cop
 import csharp
-import code-analysis
+import code
 
 predicate hasBadName(Type) => Type.Name:startsWith('_')
 
@@ -311,7 +311,7 @@ cop cop-checks/main.cop -t .
 
 ```ruby
 import csharp-checks
-import code-analysis
+import code
 
 # Start with all built-in checks, minus the ones we don't want
 let my-checks = csharp-checks - var-declarations
@@ -414,7 +414,7 @@ All produce the same unified output format.
 ```ruby
 import python-ruff
 import python-checks
-import code-analysis
+import code
 
 # Combine ruff findings with native cop checks
 let all-checks = ruff-checks + python-checks

@@ -118,7 +118,7 @@ let my-violations = codebase.Types:isViolating
 # Run all checks: {{COP}} cop-checks/main.cop -t .
 
 import code
-import code-analysis
+import code
 import csharp
 import cop
 
@@ -152,7 +152,7 @@ let types-without-namespace = codebase.Types:isMissingNamespace
 ```cop
 # Runtime must not reference providers
 
-import code-layering
+import code
 
 let runtime-projects = ['runtime']
 let provider-projects = ['code', 'csharp-provider', 'python-provider']

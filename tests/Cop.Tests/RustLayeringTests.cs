@@ -25,7 +25,7 @@ public class RustLayeringTests
     private const string LayeringCheck = """
         import rust
         import code
-        import code-layering
+        import code
 
         let cb = codebase(rust.parse())
 

@@ -542,7 +542,7 @@ Create a personal check that ensures all public C# types have XML doc comments:
 ```cop
 # ~/.cop/checks/require-docs.cop
 import csharp-checks
-import code-analysis
+import code
 
 predicate needsDocs(Type) => Type.IsPublic && Type.DocComment.Length == 0
 

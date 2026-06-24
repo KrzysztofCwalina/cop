@@ -8,7 +8,7 @@
 import code
 import python
 import javascript
-import code-analysis
+import code
 
 let codebase = codebase(python.parse(), javascript.parse())
 

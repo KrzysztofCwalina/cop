@@ -772,7 +772,7 @@ define_provider(schema=get_schema, query=query)
 
 **src/python-ruff.cop:**
 ```ruby
-import code-analysis
+import code
 
 let data = provider('python-ruff', nic)
 
@@ -817,7 +817,7 @@ Key considerations:
 ```ruby
 import python-ruff
 import python-checks
-import code-analysis
+import code
 
 # All findings from both ruff and native cop checks
 let all-checks = ruff-checks + python-checks

@@ -3,7 +3,7 @@
 # Run AI checks:  cop cop-checks/main.cop -t . -c ai
 
 import code
-import code-analysis
+import code
 import csharp
 import cop
 

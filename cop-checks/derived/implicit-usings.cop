@@ -1,7 +1,7 @@
 # Every C# project must enable implicit usings. There is no central Directory.Build.props,
 # so each project sets this itself; the check keeps them consistent.
 
-import code-layering
+import code
 
 predicate iuBadImplicit(ProjectProperty) => ProjectProperty.Name:equals('ImplicitUsings') && ProjectProperty.Value:notEquals('enable')
 predicate iuNotEnabled(Project) => Project.Properties:any(iuBadImplicit)

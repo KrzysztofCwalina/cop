@@ -208,7 +208,7 @@ public static class ChecksCommand
             WORKED EXAMPLES (verified cop — adapt these exact patterns)
             # cop-checks/main.cop  (the ONLY file with a command)
             import code
-            import code-analysis
+            import code
             import csharp
             let codebase = codebase(csharp.parse())
             let all-violations = public-type-namespace-violations + empty-catch-violations

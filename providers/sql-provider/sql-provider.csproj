@@ -16,7 +16,7 @@
   <!-- Copy provider DLL to package lib/ folder after build -->
   <Target Name="CopyToPackageLib" AfterTargets="Build">
     <PropertyGroup>
-      <PackageLibDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\packages\sql\lib\'))</PackageLibDir>
+      <PackageLibDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\packages\formats\sql\lib\'))</PackageLibDir>
     </PropertyGroup>
     <MakeDir Directories="$(PackageLibDir)" />
     <Copy SourceFiles="$(OutputPath)sql-provider.dll" DestinationFolder="$(PackageLibDir)" SkipUnchangedFiles="true" />

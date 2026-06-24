@@ -19,7 +19,7 @@ public class GoLayeringTests
     private const string LayeringCheck = """
         import go
         import code
-        import code-layering
+        import code
 
         let cb = codebase(go.parse())
 

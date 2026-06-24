@@ -17,7 +17,7 @@
   <!-- Copy provider DLL to package lib/ folder after build -->
   <Target Name="CopyToPackageLib" AfterTargets="Build">
     <PropertyGroup>
-      <PackageLibDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\packages\rust\rust\lib\'))</PackageLibDir>
+      <PackageLibDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\packages\languages\rust\lib\'))</PackageLibDir>
     </PropertyGroup>
     <MakeDir Directories="$(PackageLibDir)" />
     <Copy SourceFiles="$(OutputPath)rust-provider.dll" DestinationFolder="$(PackageLibDir)" SkipUnchangedFiles="true" />

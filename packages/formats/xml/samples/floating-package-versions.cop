@@ -1,0 +1,15 @@
+# Flags PackageReference Version attributes that use floating versions such as '*'.
+# Run: cop packages/xml/samples/floating-package-versions.cop -t packages/xml/samples/fixtures
+
+import xml
+import code
+
+predicate isFloatingPackageVersion(XmlAttribute) =>
+    XmlAttribute.ElementName:equals('PackageReference')
+    && XmlAttribute.Name:equals('Version')
+    && XmlAttribute.Value:contains('*')
+
+let floating-package-versions = xml.parse().Attributes:isFloatingPackageVersion
+    :toError('PackageReference {item.ElementPath} uses floating version {item.Value}')
+
+command MAIN = CHECK(floating-package-versions)

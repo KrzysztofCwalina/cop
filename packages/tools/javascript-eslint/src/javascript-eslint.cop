@@ -1,0 +1,13 @@
+# ESLint integration — runs eslint and produces cop violations
+# Prerequisites: eslint must be installed (npm install eslint)
+
+import code
+
+let data = provider('javascript-eslint')
+
+## Returns the ESLint violations collection
+export function violations() : [Violation] => data.Violations
+export function diagnostics() : [Violation] => data.Violations
+export let eslint-checks = data.Violations
+
+command MAIN = CHECK(eslint-checks)

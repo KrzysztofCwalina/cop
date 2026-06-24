@@ -179,7 +179,7 @@ public class TypeRegistryTests
     public void LoadTypeDefinitions_FromCodeAlan()
     {
         var source = File.ReadAllText(Path.Combine(TestContext.CurrentContext.TestDirectory,
-            "..", "..", "..", "..", "..", "packages", "code", "code", "src", "code.cop"));
+            "..", "..", "..", "..", "..", "packages", "core", "code", "src", "code.cop"));
         var parsed = Cop.Lang.Parser.CopParser.ParseFile(source, "code.cop");
 
         var registry = new TypeRegistry();

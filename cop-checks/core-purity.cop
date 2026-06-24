@@ -15,7 +15,7 @@
 
 import code
 import ai
-import code-analysis
+import code
 
 predicate isCoreType(Type) =>
     Type.File.Path:contains('cop/shared/') || Type.File.Path:contains('cop/runtime/')

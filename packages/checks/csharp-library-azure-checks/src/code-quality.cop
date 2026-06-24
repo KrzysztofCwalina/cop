@@ -1,0 +1,84 @@
+# Code quality — internal API rules and code quality checks
+
+import csharp
+import csharp-library-checks
+import csharp-checks
+import code
+
+## Public API should not expose types from banned internal namespaces
+export let no-banned-internal-types = types():isPublic:hasBannedParams
+    :toWarning('{item.Name} uses types from banned namespace in public API')
+
+predicate hasBannedAzureCoreType(Parameter) => Parameter.Type.Namespace == 'Azure.Core.Pipeline'
+predicate hasBannedAzureCoreParam(Method) => Method:isPublic && Method.Parameters:any(hasBannedAzureCoreType)
+predicate hasBannedAzureCoreParams(Type) => Type.Methods:any(hasBannedAzureCoreParam)
+
+## Public API should not expose Azure.Core.Pipeline internal types
+export let no-pipeline-types-in-api = types():isPublic:hasBannedAzureCoreParams
+    :toWarning('{item.Name} uses banned Azure.Core.Pipeline type in public API')
+
+predicate isInternalsVisibleTo(Statement) => Statement.Kind == 'attribute'
+    && Statement.TypeName == 'InternalsVisibleTo'
+
+## InternalsVisibleTo — export for project-level filtering
+export let internals-visible-to = statements():isInternalsVisibleTo
+    :toWarning('InternalsVisibleTo targets non-test assembly — internal APIs become public surface')
+
+# AZC0112: InternalsVisibleTo targeting non-test assemblies
+predicate isInternalsVisibleToNonTest(Statement) => isInternalsVisibleTo
+    && !Statement.Arguments.First:contains('Test')
+
+## InternalsVisibleTo targeting non-test assemblies (AZC0112)
+export let internals-visible-to-non-test = statements():isInternalsVisibleToNonTest
+    :toWarning('InternalsVisibleTo should only target test assemblies')
+
+predicate isModelReaderWriterRead(Statement) => Statement.Kind == 'call'
+    && Statement.TypeName == 'ModelReaderWriter' && Statement.MemberName == 'Read'
+predicate isMissingContextArg(Statement) => Statement.Arguments.Count < 3
+
+## ModelReaderWriter.Read should include the ModelReaderWriterOptions context parameter
+export let model-reader-writer-context = statements():isModelReaderWriterRead:isMissingContextArg
+    :toWarning('ModelReaderWriter.Read should pass ModelReaderWriterOptions context')
+
+# AZC0035: Output model types need a ModelFactory method
+predicate isModelFactory(Type) => Type.Name:endsWith('ModelFactory')
+let factoryTypes = types():isModelFactory
+predicate isFactoryMethod(Method) => Method:isStatic && Method:isPublic && Method.ReturnType.Name == Type.Name
+predicate hasFactoryMethodFor(FactoryType) => FactoryType.Methods:any(isFactoryMethod)
+predicate hasFactory(Type) => factoryTypes:any(hasFactoryMethodFor)
+predicate isMissingFactory(Type) => isModel && !hasFactory
+
+## Output model types should have a corresponding ModelFactory method (AZC0035)
+export let model-needs-factory = Models:isMissingFactory
+    :toWarning('{item.Name} has no corresponding ModelFactory method — add one for testability')
+
+# AZC0104: Use EnsureCompleted() instead of GetAwaiter().GetResult() in sync methods
+predicate isGetResultInSyncMethod(Statement) => Statement.Kind == 'call'
+    && Statement.MemberName == 'GetResult' && isInSyncMethod
+
+## Use EnsureCompleted() instead of GetAwaiter().GetResult() in sync methods (AZC0104)
+export let use-ensure-completed = statements():isGetResultInSyncMethod
+    :toWarning('Use EnsureCompleted() instead of GetAwaiter().GetResult()')
+
+# AZC0107: Don't call *Async methods from sync context
+predicate isAsyncCallInSyncMethod(Statement) => Statement.Kind == 'call'
+    && Statement.MemberName:endsWith('Async') && isInSyncMethod
+
+## Don't call *Async methods from sync context (AZC0107)
+export let no-public-async-in-sync = statements():isAsyncCallInSyncMethod
+    :toWarning('Do not call {item.MemberName} from sync method')
+
+# AZC0020: Async calls/awaits should propagate CancellationToken or RequestContext
+predicate isInMethodWithCancellation(Statement) => Statement.Method != nic
+    && Statement.Method.Parameters:any(isCancellation)
+predicate isReferringToToken(Argument) => Argument:contains('cancellationToken')
+    || Argument:contains('cancellation') || Argument:contains('context')
+predicate isAsyncCallMissingToken(Statement) => Statement.Kind == 'await'
+    && isInMethodWithCancellation
+    && !Statement.Arguments:any(isReferringToToken)
+
+## Async calls should propagate CancellationToken or RequestContext (AZC0020)
+export let cancellation-token-propagation = statements():isAsyncCallMissingToken
+    :toWarning('Async call should propagate CancellationToken or RequestContext')
+
+let code-quality = no-banned-internal-types + no-pipeline-types-in-api + internals-visible-to + internals-visible-to-non-test + model-reader-writer-context + model-needs-factory + use-ensure-completed + no-public-async-in-sync + cancellation-token-propagation

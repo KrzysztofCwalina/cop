@@ -1,0 +1,15 @@
+# Pylint integration — runs pylint and produces cop Violations
+# Prerequisites: pylint must be installed (pip install pylint)
+# Usage: import python-pylint
+
+import code
+
+let data = provider('python-pylint')
+
+## Returns all pylint violations.
+export function diagnostics() : [Violation] => data.Violations
+
+## All pylint violations as a collection.
+export let pylint-checks = data.Violations
+
+command MAIN = CHECK(pylint-checks)

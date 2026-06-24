@@ -123,7 +123,7 @@ Create a file called `checks.cop` in your project root:
 ```cop
 import rust
 import code
-import code-analysis
+import code
 
 let cb = rust.parse()
 
@@ -178,7 +178,7 @@ Create `layering.cop`:
 ```cop
 import rust
 import code
-import code-layering
+import code
 
 let cb = codebase(rust.parse())
 
@@ -237,7 +237,7 @@ command MAIN = foreach cb.Types => '{item.Name}: {item.MethodNames}'
 ```cop
 import rust
 import code
-import code-analysis
+import code
 
 let cb = rust.parse()
 

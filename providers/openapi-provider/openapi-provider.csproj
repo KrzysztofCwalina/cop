@@ -16,7 +16,7 @@
   <!-- Copy provider DLL to package lib/ folder after build -->
   <Target Name="CopyToPackageLib" AfterTargets="Build">
     <PropertyGroup>
-      <PackageLibDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\packages\openapi\lib\'))</PackageLibDir>
+      <PackageLibDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\packages\formats\openapi\lib\'))</PackageLibDir>
     </PropertyGroup>
     <MakeDir Directories="$(PackageLibDir)" />
     <Copy SourceFiles="$(OutputPath)openapi-provider.dll" DestinationFolder="$(PackageLibDir)" SkipUnchangedFiles="true" />

@@ -1,0 +1,45 @@
+# AI Judge Package
+# Reviews code against a natural-language requirement using an LLM.
+#
+# Usage:
+#   import ai
+#   import code
+#   let violations = ai.judge('the requirement', codeToReview)
+#   command MAIN = CHECK(violations)
+#
+#   # code may also be a collection — e.g. judge an abstract rule over the codebase:
+#   import code
+#   let violations = ai.judge('the core must stay general-purpose ...', Types)
+#
+# ai.judge(requirement: string, code: string | collection) returns [Violation].
+#
+# Configuration: create ~/.cop/ai.json (an OpenAI-compatible chat-completions
+# endpoint). See ai.example.json for the format:
+#   { "endpoint": "...", "model": "...", "apiKey": "..." }
+#
+# Example using GitHub Models (free with a GitHub account):
+#   endpoint: https://models.github.ai/inference/chat/completions
+#   model:    openai/gpt-4.1   (recommended — large context + strong judgment;
+#             avoid gpt-4o-mini for codebase-scale checks: its ~8000-token
+#             request cap is too small and its judgment is weaker)
+#   apiKey:   a GitHub token with the 'models' scope
+#            (e.g. run `gh auth token`, or create a PAT at
+#             https://github.com/settings/tokens with Models access)
+#
+# ai.judge's second argument may be a literal code string OR a collection
+# (e.g. Types / Lines / Files); collections are summarized for the LLM.
+#
+# Transparency: pass --ai-log <path> to append a full
+# transcript of each agent↔judge interaction (the request the runtime sent and
+# the raw judge response) — useful for debugging and auditing LLM rules.
+#
+# ~/.cop/ai.json lives outside any repo and must never be committed.
+
+import code
+
+## Reviews `code` against a natural-language `requirement` using an LLM and returns a
+## list of Violations (empty if the code satisfies the requirement). `code` may be a
+## literal string or a collection (e.g. Types, Lines, Files), which is summarized for
+## the model. Requires ~/.cop/ai.json (see ai.example.json). Pass --ai-log <path>
+## to record the full agent↔judge interaction.
+export function judge(requirement : string, code : string) : [Violation] => intrinsic

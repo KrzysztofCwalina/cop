@@ -16,7 +16,7 @@
   <!-- Copy provider DLL to package lib/ folder after build -->
   <Target Name="CopyToPackageLib" AfterTargets="Build">
     <PropertyGroup>
-      <PackageLibDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\packages\yaml\lib\'))</PackageLibDir>
+      <PackageLibDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\packages\formats\yaml\lib\'))</PackageLibDir>
     </PropertyGroup>
     <MakeDir Directories="$(PackageLibDir)" />
     <Copy SourceFiles="$(OutputPath)yaml-provider.dll" DestinationFolder="$(PackageLibDir)" SkipUnchangedFiles="true" />

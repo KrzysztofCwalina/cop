@@ -6,7 +6,7 @@
 #
 # Run from this folder with:  cop custom-slop.cop -t .
 import csharp
-import code-analysis
+import code
 import code-metrics
 
 let cb = codebase(csharp.parse())

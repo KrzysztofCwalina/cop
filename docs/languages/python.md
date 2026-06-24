@@ -54,7 +54,7 @@ Create a file called `checks.cop` in your project root:
 ```cop
 import python
 import code
-import code-analysis
+import code
 
 let cb = python.parse()
 
@@ -119,7 +119,7 @@ Create `layering.cop`:
 ```cop
 import python
 import code
-import code-layering
+import code
 
 let cb = codebase(python.parse())
 
@@ -167,7 +167,7 @@ command MAIN = foreach cb.Types => '{item.Name} ({item.Kind}) - {item.Methods.co
 
 ```cop
 import python
-import code-analysis
+import code
 
 let cb = python.parse()
 
@@ -185,7 +185,7 @@ command MAIN = CHECK(violations)
 ```cop norun
 import python
 import code
-import code-analysis
+import code
 
 let cb = python.parse()
 

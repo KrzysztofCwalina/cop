@@ -23,7 +23,7 @@ The agent creates a `.cop` file in the project's `cop-checks/` folder:
 
 ```cop
 import csharp
-import code-analysis
+import code
 
 predicate isUnsealedClass(Type) => Type.Kind == Class && Type.IsSealed == false
 
@@ -57,7 +57,7 @@ Now show that cop can analyze multiple languages in one pass — C#, Python, and
 ```cop
 import csharp
 import python
-import code-analysis
+import code
 
 # Unified codebase from both providers
 let codebase = codebase(csharp, python)

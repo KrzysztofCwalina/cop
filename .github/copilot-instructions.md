@@ -98,7 +98,7 @@ Always commit the regenerated `docs/reference.html` alongside the package change
   - **cop/runtime/** — Runtime engine (namespace `Cop.Providers`). Engine orchestrator, source parsers (C#, Python, JavaScript), provider loading and registration.
   - **cop/shared/** — Core library (Cop.Core): package models, ObjectProvider base class, DataObject binary format, feed manager, dependency resolver, restore engine, checksum manager.
 - **providers/** — Data providers (files, code, typespec, etc.). Each provider extends `ObjectProvider` and supplies typed collections to the language runtime. Built-in providers compile into `cop.exe`; external providers ship as separate DLLs.
-- **packages/** — Seed packages organized by language (general at root, language-specific in dotnet/, js/, python/).
+- **packages/** — Seed packages grouped into `checks/` (ready-made checks), `tools/` (external-tool wrappers), `core/` (framework APIs: code, files, http, ai), `languages/` (per-language parsers), and `formats/` (data/config/spec parsers).
 - **tests/cop.tests/** — NUnit 4.x tests for core library.
 - **tests/lang.tests/** — NUnit 4.x tests for Cop language runtime.
 - **install/** — Publish script, platform subfolders for self-contained binaries, VS Code extension.
@@ -277,7 +277,7 @@ let my-violations = codebase.Types:isViolating
 # Run all checks: cop cop-checks/main.cop -t .
 
 import code
-import code-analysis
+import code
 import csharp
 import cop
 
@@ -311,7 +311,7 @@ let types-without-namespace = codebase.Types:isMissingNamespace
 ```cop
 # Runtime must not reference providers
 
-import code-layering
+import code
 
 let runtime-projects = ['runtime']
 let provider-projects = ['code', 'csharp-provider', 'python-provider']
@@ -361,10 +361,8 @@ When using a package, run `cop help <package-name>` to see its types and API.
 
 | Package | Provides | Usage |
 |---------|----------|-------|
-| `code` | Codebase model + `codebase()` | `codebase.Types`, `codebase.Statements`, ... |
-| `code-analysis` | Violation type + CHECK | `toError`, `toWarning`, `toInfo` |
-| `code-metrics` | Slop metrics (JSON) | `METRICS(violations, lines)` |
-| `code-layering` | Dependency rules | `containsAny`, `in` |
+| `code` | Codebase model + Violation/CHECK + layering | `codebase.Types`, `toError`, `toWarning`, `toInfo`, `containsAny`, `in` |
+| `code-metrics` | Slop metrics report (in `checks/`) | `METRICS(violations, lines)` |
 | `csharp` | C# parser | `csharp.parse()` |
 | `python` | Python parser | `python.parse()` |
 | `javascript` | JS/TS parser | `javascript.parse()` |

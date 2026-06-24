@@ -52,7 +52,7 @@ public class CSharpNarrowingTests
 
         const string program = """
             import code
-            import code-analysis
+            import code
             import csharp
 
             let codebase = codebase(csharp.parse())
@@ -101,7 +101,7 @@ public class CSharpNarrowingTests
 
         const string program = """
             import code
-            import code-analysis
+            import code
             import csharp
 
             let codebase = codebase(csharp.parse())

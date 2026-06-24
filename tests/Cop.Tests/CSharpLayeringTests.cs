@@ -19,7 +19,7 @@ public class CSharpLayeringTests
     private const string LayeringCheck = """
         import csharp
         import code
-        import code-layering
+        import code
 
         let cb = codebase(csharp.parse())
 

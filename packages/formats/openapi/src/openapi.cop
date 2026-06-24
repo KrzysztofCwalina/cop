@@ -1,0 +1,42 @@
+# OpenAPI Package — types for analyzing OpenAPI/Swagger specifications.
+# Import with: import openapi
+
+import code
+
+## An HTTP operation declared under an OpenAPI path item.
+export type OpenApiOperation = {
+    Method : string,
+    Path : string,
+    OperationId : string,
+    HasSummary : bool,
+    HasResponses : bool,
+    Line : int,
+    File : File?,
+    Source : string
+}
+
+## A path item declared under the top-level OpenAPI paths mapping.
+export type OpenApiPath = {
+    Path : string,
+    Line : int,
+    File : File?,
+    Source : string
+}
+
+export type OpenApiContent = {
+    Operations : [OpenApiOperation],
+    Paths : [OpenApiPath]
+}
+
+## Parses OpenAPI YAML/YML/JSON files in the target directory.
+## Files without a top-level openapi: or swagger: marker are ignored.
+export function parse() : OpenApiContent => provider('openapi')
+
+## Parses OpenAPI YAML/YML/JSON files in the specified directory.
+## Files without a top-level openapi: or swagger: marker are ignored.
+export function parse(path : string) : OpenApiContent => provider('openapi', path)
+
+# Violation overloads for OpenAPI types — via TextFilePosition trait conformance.
+export type OpenApiOperation : TextFilePosition = { filePath => item.File.Path, line => item.Line }
+export type OpenApiPath : TextFilePosition = { filePath => item.File.Path, line => item.Line }
+

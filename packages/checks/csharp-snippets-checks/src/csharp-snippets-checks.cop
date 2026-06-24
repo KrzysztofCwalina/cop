@@ -1,0 +1,63 @@
+# C# snippet and documentation checks
+
+import code
+import markdown
+import code
+import csharp
+import csharp-checks
+
+# Snippet identification
+
+# A region whose name starts with 'Snippet:'
+predicate isSnippetRegion(Region) => Region.Name:startsWith('Snippet:')
+
+# A fence block whose tag starts with 'Snippet:'
+predicate isSnippetFence(FenceBlock) => FenceBlock.Tag:startsWith('Snippet:')
+
+# Cached collections of snippet regions and fences
+let snippetRegions = csharp.regions():isSnippetRegion
+let snippetFences  = markdown.parse().FenceBlocks:markdown:isSnippetFence
+
+# Cross-collection matching
+
+# Cross-collection: does a markdown fence reference this region's snippet name?
+predicate isFenceMatchingRegion(FenceBlock) => FenceBlock.Tag:equals(Region.Name)
+predicate hasDocumentation(Region) => snippetFences:any(isFenceMatchingRegion)
+
+# Cross-collection: does a C# region define this fence's snippet name?
+predicate isRegionMatchingFence(Region) => Region.Name:equals(FenceBlock.Tag)
+predicate hasSource(FenceBlock) => snippetRegions:any(isRegionMatchingFence)
+
+# Duplicate detection
+
+# Duplicate detection: another region with the same name at a different source location
+predicate isSameNameDifferentSource(Region2) => Region2.Name:equals(Region.Name) && Region2.Source != Region.Source
+predicate isDuplicateSnippet(Region) => snippetRegions:any(isSameNameDifferentSource)
+
+# Content freshness
+
+# Content freshness: fence content hash matches source region hash
+predicate isRegionContentMatchingFence(Region) => Region.Name:equals(FenceBlock.Tag)
+    && Region.ContentHash == FenceBlock.ContentHash
+predicate isContentMatchingSource(FenceBlock) => snippetRegions:any(isRegionContentMatchingFence)
+
+## C# snippet has no corresponding markdown fence
+export let snippet-missing-docs = snippetRegions:!hasDocumentation
+    :toWarning('{item.Name} has no corresponding markdown code fence')
+
+## Markdown fence references a snippet that does not exist in C# source
+export let snippet-orphaned-ref = snippetFences:!hasSource
+    :toWarning('{item.Tag} references a snippet not found in C# source')
+
+## Same snippet name defined in multiple C# locations
+export let snippet-duplicate-name = snippetRegions:isDuplicateSnippet
+    :toWarning('{item.Name} is defined in multiple locations')
+
+## Markdown snippet content is out of sync with C# source
+export let snippet-stale-content = snippetFences:hasSource:!isContentMatchingSource
+    :toWarning('{item.Tag} content is out of sync with C# source')
+
+## All snippet checks combined
+export let csharp-snippets-checks = snippet-missing-docs + snippet-orphaned-ref + snippet-duplicate-name + snippet-stale-content
+
+command MAIN = CHECK(csharp-snippets-checks)

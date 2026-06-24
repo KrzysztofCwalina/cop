@@ -102,7 +102,7 @@ Create a file called `checks.cop` in your project root:
 ```cop
 import go
 import code
-import code-analysis
+import code
 
 let cb = go.parse()
 
@@ -158,7 +158,7 @@ Create `layering.cop`:
 ```cop
 import go
 import code
-import code-layering
+import code
 
 let cb = codebase(go.parse())
 
@@ -216,7 +216,7 @@ command MAIN = foreach cb.Statements => '{item.Kind}: {item.MemberName} (line {i
 ```cop
 import go
 import code
-import code-analysis
+import code
 
 let cb = go.parse()
 

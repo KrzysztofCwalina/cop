@@ -36,7 +36,7 @@ For example, an architect who wants "don't use console calls — use proper logg
 
 ```ruby
 import code
-import code-analysis
+import code
 
 predicate isConsoleCall(Statement:python) =>
     Statement.Kind == call && Statement.MemberName == 'print'
@@ -52,7 +52,7 @@ This is the entire specification — not a plugin, not a code review checklist i
 Another common example — enforcing dependency direction in a layered architecture:
 
 ```ruby
-import code-layering
+import code
 
 let ui-projects   = ['MyApp.Web' 'MyApp.Api']
 let data-projects = ['MyApp.Data' 'MyApp.EF']

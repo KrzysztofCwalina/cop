@@ -1,0 +1,25 @@
+import code
+import csharp
+import csharp-checks
+import code
+import code-metrics
+
+let cb : Codebase = provider('csharp')
+
+# Start with built-in slop and customize:
+# - Filter out generated code
+# - Add a custom rule with chosen severity
+# - Override weight for an existing rule
+
+predicate isSourceViolation(Violation) => Violation.File:contains('Generated') == false
+predicate isSourceLine(Line) => Line.File.Path:contains('Generated') == false
+
+# Add custom rule: flag methods with more than 50 statements
+predicate isTooLong(Method) => Method.Statements.count() > 50
+let long-methods = cb.Types:Methods:isTooLong
+    :toViolation('Method {item.Name} has {item.Statements.count()} statements', 0.7, 0.9)
+
+# Combine: curated slop (filtered) + custom rule
+let my-slop = slop:isSourceViolation + long-methods
+
+command main = METRICS(my-slop, cb.Lines:isSourceLine)

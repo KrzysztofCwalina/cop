@@ -6,7 +6,7 @@
 #
 # Run from this folder with:  cop cross-language.cop -t .
 import code
-import code-analysis
+import code
 import csharp
 import python
 import javascript

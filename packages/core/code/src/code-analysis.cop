@@ -1,0 +1,105 @@
+# Code Analysis Package v1.0
+# Defines Violation type and severity functions for structured analysis results.
+# Import with: import code
+
+import files
+
+export type Violation = {
+    Severity : float,
+    Certainty : float,
+    Message : string,
+    File : string,
+    Line : int,
+    Source : string
+}
+
+## Maps numeric severity to a display label (error / warning / info), aligned with the
+## values toError (1.0), toWarning (0.5), and toInfo (0.2) set.
+export function severityLabel(Violation) : string =>
+    item.Severity >= 0.7 ? 'error' :
+    item.Severity >= 0.4 ? 'warning' : 'info'
+
+## A type that has a source location (file path and line number).
+export type TextFilePosition = {
+  filePath : (item: T) => string,
+  line : (item: T) => int
+}
+
+# Trait conformances — map TextFilePosition properties for each type
+export type Statement : TextFilePosition = { filePath => item.File.Path, line => item.Line }
+export type Type : TextFilePosition = { filePath => item.File.Path, line => item.Line }
+export type Method : TextFilePosition = { filePath => item.File.Path, line => item.Line }
+export type Api : TextFilePosition = { filePath => item.File.Path, line => item.Line }
+export type Line : TextFilePosition = { filePath => item.File.Path, line => item.Number }
+export type Region : TextFilePosition = { filePath => item.File.Path, line => item.StartLine }
+export type Folder : TextFilePosition = { filePath => item.Path, line => 0 }
+
+# Violation creation functions
+
+## Creates an error-severity violation (Severity = 1.0).
+export function toError(TextFilePosition, message: string) : Violation => Violation {
+    Severity = 1.0,
+    Certainty = 1.0,
+    Message = message,
+    File = item.filePath,
+    Line = item.line,
+    Source = item.Source
+}
+
+## Creates a warning-severity violation (Severity = 0.5).
+export function toWarning(TextFilePosition, message: string) : Violation => Violation {
+    Severity = 0.5,
+    Certainty = 1.0,
+    Message = message,
+    File = item.filePath,
+    Line = item.line,
+    Source = item.Source
+}
+
+## Creates an info-severity violation (Severity = 0.2).
+export function toInfo(TextFilePosition, message: string) : Violation => Violation {
+    Severity = 0.2,
+    Certainty = 1.0,
+    Message = message,
+    File = item.filePath,
+    Line = item.line,
+    Source = item.Source
+}
+
+## Creates a violation with explicit severity and certainty.
+export function toViolation(TextFilePosition, message: string, severity: float, certainty: float) : Violation => Violation {
+    Severity = severity,
+    Certainty = certainty,
+    Message = message,
+    File = item.filePath,
+    Line = item.line,
+    Source = item.Source
+}
+
+## Re-stamps an existing violation with a new severity (for weight adjustment).
+export function withSeverity(Violation, s: float) : Violation => Violation {
+    Severity = s,
+    Certainty = item.Certainty,
+    Message = item.Message,
+    File = item.File,
+    Line = item.Line,
+    Source = item.Source
+}
+
+
+# CHECK prints each violation; the engine exits non-zero when any violations are printed.
+# CHECK does NO filtering — suppression is done by filtering the collection before CHECK
+# (e.g. Statements:isViolating:notIgnored:toError(...)).
+export function checkLine(Violation, level: string) : string =>
+    '{item.File@dim}({item.Line@dim}): {level}: {item.Message}'
+
+export command CHECK(violations) = foreach violations => checkLine(item, severityLabel(item))
+
+
+# Common predicates
+
+# Flags sync method calls when an async variant exists on any type in the codebase
+export predicate isSyncWhenAsyncExists(Statement) =>
+    Statement.Kind:equals('call')
+    && Statement.MemberName:endsWith('Async') == false
+    && Types.MethodNames:contains(Statement.MemberName + 'Async')

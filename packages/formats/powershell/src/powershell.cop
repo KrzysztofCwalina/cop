@@ -1,0 +1,39 @@
+# PowerShell Package — types for analyzing PowerShell scripts.
+# Provides PowerShellCommand (simple commands) and PowerShellScript (per-file metadata).
+
+import code
+
+## A simple command found in a PowerShell script. Name is the invoked command or cmdlet.
+## Text is the full logical command line that contained it.
+export type PowerShellCommand = {
+    Name : string,
+    Text : string,
+    Line : int,
+    File : File?,
+    Source : string
+}
+
+## Summary information for a PowerShell script.
+export type PowerShellScript = {
+    UsesStrictMode : bool,
+    Line : int,
+    File : File?,
+    Source : string
+}
+
+export type PowerShellContent = {
+    Commands : [PowerShellCommand],
+    Scripts : [PowerShellScript]
+}
+
+## Parses .ps1, .psm1, and .psd1 files in the target directory.
+## Example: let ps = powershell.parse()
+export function parse() : PowerShellContent => provider('powershell')
+
+## Parses .ps1, .psm1, and .psd1 files in the specified directory.
+## Example: let ps = powershell.parse('scripts')
+export function parse(path : string) : PowerShellContent => provider('powershell', path)
+
+# Violation overloads for PowerShell types — via TextFilePosition trait conformance.
+export type PowerShellCommand : TextFilePosition = { filePath => item.File.Path, line => item.Line }
+export type PowerShellScript : TextFilePosition = { filePath => item.File.Path, line => item.Line }

@@ -29,7 +29,7 @@ The `analysis-codeql` package reads SARIF output from `codeql database analyze` 
 
 ```cop
 import analysis-codeql
-import code-analysis
+import code
 
 # Load results from a SARIF file
 let results = analysis-codeql.Load('results.sarif')
@@ -78,7 +78,7 @@ The `csharp-codeql-export` package provides functions for constructing CodeQL `.
 
 <!-- cop norun: csharp-codeql-export package is not runtime-loadable in the offline test feed (fatals 'Undefined variable csharp-codeql-export') -->
 ```cop norun
-import csharp-codeql-export
+import csharp-codeql
 
 # Build a query that finds public abstract classes
 let query = csharp-codeql-export.qlQuery(
@@ -158,7 +158,7 @@ select c, "Class " + c.getName() + " is public and abstract"
 
 <!-- cop norun: csharp-codeql-export package is not runtime-loadable in the offline test feed (fatals 'Undefined variable csharp-codeql-export') -->
 ```cop norun
-import csharp-codeql-export
+import csharp-codeql
 
 # Query 1: Find classes with no documentation
 let undocumented = csharp-codeql-export.qlQuery(
@@ -200,7 +200,7 @@ A typical workflow combining both packages:
 <!-- cop norun: analysis-codeql/csharp-codeql-export not runtime-loadable offline (fatals on '.count' / Undefined variable) -->
 ```cop norun
 import analysis-codeql
-import csharp-codeql-export
+import csharp-codeql
 
 # Read existing CodeQL results
 let results = analysis-codeql.Load('results.sarif')

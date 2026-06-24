@@ -56,7 +56,7 @@ Create a file called `checks.cop` in your project root:
 ```cop norun
 import csharp
 import code
-import code-analysis
+import code
 
 let cb = csharp.parse()
 
@@ -120,7 +120,7 @@ Create `layering.cop`:
 ```cop
 import csharp
 import code
-import code-layering
+import code
 
 let cb = codebase(csharp.parse())
 
@@ -179,7 +179,7 @@ command MAIN = foreach cb.Types => '{item.Name}: {item.Interfaces}'
 ```cop
 import csharp
 import code
-import code-analysis
+import code
 
 let cb = csharp.parse()
 

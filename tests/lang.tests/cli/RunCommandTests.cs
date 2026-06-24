@@ -66,7 +66,7 @@ public class RunCommandTests
     public void CheckWithViolations_ExitsOne()
     {
         var result = RunProgram("""
-            import code-analysis
+            import code
             let violations = [Violation { Severity = 1.0, Certainty = 1.0, Message = 'bad', File = 'program.cop', Line = 1, Source = 'x' }]
             command MAIN = CHECK(violations)
             """);

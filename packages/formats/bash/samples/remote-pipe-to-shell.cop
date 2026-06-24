@@ -1,0 +1,22 @@
+# Flags downloader commands piped directly into a shell.
+#
+# Run: cop packages/bash/samples/remote-pipe-to-shell.cop -t packages/bash/samples/fixtures
+
+import bash
+import code
+
+predicate isRemotePipeToShell(ShellCommand) =>
+    (ShellCommand.Name:equals('curl') || ShellCommand.Name:equals('wget'))
+    && (ShellCommand.Text:matches('.*\\|\\s*(sh|bash)(\\s|$).*') || ShellCommand.Text:contains('| bash'))
+
+predicate isMissingStrictMode(ShellScript) =>
+    ShellScript.HasStrictMode == false
+
+let remote-pipe-shell = bash.parse().Commands:isRemotePipeToShell
+    :toError('Avoid piping remote downloads directly to a shell: {item.Text}')
+
+let missing-strict-mode = bash.parse().Scripts:isMissingStrictMode
+    :toWarning('Shell script should enable strict mode near the top')
+
+command MAIN = CHECK(remote-pipe-shell + missing-strict-mode)
+

@@ -112,7 +112,7 @@ Create a file called `checks.cop` in your project root:
 ```cop
 import java
 import code
-import code-analysis
+import code
 
 let cb = java.parse()
 
@@ -183,7 +183,7 @@ foreach types => '{item.Name}: {item.Methods.Count} methods'
 
 ```cop
 import java
-import code-analysis
+import code
 
 predicate hasTooManyMethods(Type) => Type.Methods.Count > 10
 
@@ -207,7 +207,7 @@ Create `layering.cop`:
 ```cop
 import java
 import code
-import code-layering
+import code
 
 let cb = codebase(java.parse())
 
