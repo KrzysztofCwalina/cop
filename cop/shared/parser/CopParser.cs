@@ -824,7 +824,12 @@ public class CopParser
         while (Match(TokenKind.Ampersand))
         {
             int line = Previous().Line;
-            var right = ParseAdditive();
+            // `a & foreach xs => body` runs a loop as the right operand (issue #42's `& foreach`
+            // chaining). `foreach` is only a loop keyword here — directly after `&` — so its use as
+            // an enum-member identifier elsewhere (e.g. `Statement.Kind == foreach`) is unaffected.
+            Expression right = IsKeyword(Peek(), "foreach")
+                ? new ForEachExpr(ParseForEachStatement(), CurrentLine())
+                : ParseAdditive();
             left = new BinaryExpr(left, BinaryOp.BitwiseAnd, right, line);
         }
         return left;
@@ -1000,17 +1005,24 @@ public class CopParser
 
         if (Match(TokenKind.Arrow))
         {
-            // Match expression
+            // Match expression. Arm RESULTS are parsed with ParseBitwiseAnd so the `|` arm
+            // separator is not swallowed as a bitwise-or (which would pull the next arm's `_`
+            // pattern into the result expression and evaluate it — issue #40). Wrap a result in
+            // parentheses if it genuinely needs `|` or `||`.
             var arms = new List<MatchArm>();
-            var firstResult = ParseExpression();
+            var firstResult = ParseBitwiseAnd();
             var firstPattern = ExprToPattern(firstExpr);
             arms.Add(new MatchArm(firstPattern, firstResult, line));
 
             while (Match(TokenKind.Pipe))
             {
-                var patExpr = ParseExpression();
+                // Parse the arm pattern with ParseBitwiseAnd (like the first arm) so that `_ => x`
+                // is NOT consumed as a lambda — `_` must become a WildcardPattern (issue #40).
+                _suppressFilterColon = true;
+                var patExpr = ParseBitwiseAnd();
+                _suppressFilterColon = false;
                 Expect(TokenKind.Arrow, "'=>'");
-                var result = ParseExpression();
+                var result = ParseBitwiseAnd();
                 arms.Add(new MatchArm(ExprToPattern(patExpr), result, CurrentLine()));
             }
 
@@ -1039,6 +1051,13 @@ public class CopParser
             Advance();
             if (token.Value.Contains('{'))
                 return ParseInterpolatedString(token.Value, line);
+            return new LiteralExpr(token.Value, line);
+        }
+
+        // Verbatim string literal @'...': literal backslashes, never interpolated.
+        if (token.Kind == TokenKind.VerbatimStringLiteral)
+        {
+            Advance();
             return new LiteralExpr(token.Value, line);
         }
 
@@ -1198,7 +1217,9 @@ public class CopParser
         {
             ParseObjectField(fields, line);
 
-            while (Match(TokenKind.Comma) || (!Check(TokenKind.RBrace) && !IsAtEnd() && IsIdentifierLike(Peek())))
+            while (Match(TokenKind.Comma)
+                || (!Check(TokenKind.RBrace) && !IsAtEnd()
+                    && (IsIdentifierLike(Peek()) || Check(TokenKind.StringLiteral))))
             {
                 ParseObjectField(fields, CurrentLine());
             }
@@ -1211,7 +1232,8 @@ public class CopParser
     private void ParseObjectField(List<FieldInit> fields, int line)
     {
         if (Check(TokenKind.RBrace)) return;
-        var fieldName = ExpectIdentifier("field name");
+        // Accept a quoted key for names with special characters (issue #43): `'content-type' = ...`.
+        var fieldName = ExpectIdentifierOrString("field name");
         // Accept both ':' and '=' as field separator
         if (!Match(TokenKind.Colon) && !Match(TokenKind.Equals))
         {
@@ -1250,8 +1272,11 @@ public class CopParser
 
                 var inner = raw[(i + 1)..end];
 
-                // Only interpolate if content starts with a letter (valid identifier start)
-                if (inner.Length == 0 || !char.IsLetter(inner[0]))
+                // Regex quantifiers like {2}, {1,3}, {2,} contain only digits/commas/spaces — keep
+                // them literal. Anything else (identifiers, operators, calls) is an interpolated
+                // expression: `{1 + 2}` → 3, `{xs.Where(item.N > 1).Count}` → count (issue #39).
+                bool isRegexQuantifier = inner.Length > 0 && inner.All(c => char.IsDigit(c) || c == ',' || char.IsWhiteSpace(c));
+                if (inner.Length == 0 || isRegexQuantifier)
                 {
                     // Literal brace content (e.g., {2}, {1,3})
                     parts.Add(new TextPart(raw[i..(end + 1)]));
@@ -1267,22 +1292,17 @@ public class CopParser
                     var exprPart = inner[..atIndex];
                     var stylePart = inner[(atIndex + 1)..];
 
-                    if (exprPart.Contains('.'))
-                    {
-                        // Dotted path → expression with styling (e.g., {item.File@dim})
-                        var expr = ParseDottedPath(exprPart, line);
-                        parts.Add(new ExpressionPart(expr, stylePart));
-                    }
-                    else
-                    {
-                        // Simple word → literal styled text (e.g., {Hello@red})
+                    // A bare word (single identifier) is literal styled text (e.g., {Hello@red});
+                    // anything with member access / operators / calls is an expression to evaluate.
+                    bool isBareWord = exprPart.Length > 0 && exprPart.All(c => char.IsLetterOrDigit(c) || c == '_');
+                    if (isBareWord)
                         parts.Add(new TextPart(exprPart));
-                    }
+                    else
+                        parts.Add(new ExpressionPart(ParseEmbeddedExpression(exprPart, line), stylePart));
                 }
                 else
                 {
-                    var expr = ParseDottedPath(inner, line);
-                    parts.Add(new ExpressionPart(expr));
+                    parts.Add(new ExpressionPart(ParseEmbeddedExpression(inner, line)));
                 }
 
                 i = end + 1;
@@ -1302,6 +1322,26 @@ public class CopParser
         }
 
         return new InterpolatedStringExpr(parts, line);
+    }
+
+    /// <summary>
+    /// Parses an interpolation placeholder's content (e.g. <c>1 + 2</c> or
+    /// <c>xs.Where(item.N > 1).Count</c>) as a full expression by tokenizing and parsing it with a
+    /// sub-parser. Falls back to a dotted-path parse if it isn't a valid expression, so malformed
+    /// placeholders degrade gracefully rather than throwing.
+    /// </summary>
+    private Expression ParseEmbeddedExpression(string inner, int line)
+    {
+        try
+        {
+            var tokens = new Tokenizer(inner, _filePath).Tokenize();
+            var sub = new CopParser(tokens, _filePath, inner);
+            return sub.ParseExpression();
+        }
+        catch
+        {
+            return ParseDottedPath(inner, line);
+        }
     }
 
     private Expression ParseDottedPath(string path, int line)
@@ -1554,15 +1594,12 @@ public class CopParser
     }
 
     /// <summary>
-    /// Returns true if the expression could be a collection that supports filter syntax.
-    /// Literals (numbers, strings, booleans) are never filterable — this disambiguates
-    /// filter colon from ternary else colon in expressions like `cond ? 1 : x`.
+    /// Returns true if the expression supports `:` syntax — collection filter or scalar value pipe
+    /// (`value:func` → `func(value)`, issue #44). Ternary-else colons (`cond ? 1 : x`) are
+    /// disambiguated by <c>_suppressFilterColon</c> (set while parsing the then-branch) and by
+    /// <see cref="IsFilterColonFollowed"/> requiring an identifier (not a literal) after ':'.
     /// </summary>
-    private static bool IsFilterableExpression(Expression expr) => expr switch
-    {
-        LiteralExpr => false,
-        _ => true
-    };
+    private static bool IsFilterableExpression(Expression expr) => true;
 
     private static bool IsCommandLike(FunctionDecl functionDecl)
         => IsCommandName(functionDecl.Name);
@@ -2047,7 +2084,8 @@ public class CopParser
     private string ExpectIdentifierOrString(string context)
     {
         var token = Peek();
-        if (token.Kind == TokenKind.StringLiteral || token.Kind == TokenKind.IntLiteral
+        if (token.Kind == TokenKind.StringLiteral || token.Kind == TokenKind.VerbatimStringLiteral
+            || token.Kind == TokenKind.IntLiteral
             || token.Kind == TokenKind.NumberLiteral || IsIdentifierLike(token))
         {
             Advance();

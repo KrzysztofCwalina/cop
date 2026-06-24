@@ -7,7 +7,7 @@ export function parse() : Codebase => provider('csharp')
 
 ## Parses C# source files in the specified directory and returns a Codebase.
 ## Example: let cb = csharp.parse('/path/to/project')
-export function parse(path : string) : Codebase => provider('csharp', path)
+export function parse(path : string) : Codebase => provider('csharp').toCodebase(provider('csharp', path))
 
 ## Loads a .NET assembly binary and returns its code model.
 ## Example: csharp.load('lib/MyLib.dll')

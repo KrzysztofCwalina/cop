@@ -86,7 +86,10 @@ public static class CSharpProjectDiscovery
                     var elName = el.Name.LocalName;
                     var elValue = el.Value;
                     if (!string.IsNullOrWhiteSpace(elValue) && PropertyNames.Contains(elName))
+                    {
                         properties[elName] = elValue.Trim();
+                        AddTargetFrameworks(frameworks, elName, elValue);
+                    }
                 }
             }
 
@@ -125,6 +128,30 @@ public static class CSharpProjectDiscovery
         }
 
         return (name, refPaths, packages, frameworks, properties);
+    }
+
+    private static void AddTargetFrameworks(List<string> frameworks, string propertyName, string propertyValue)
+    {
+        if (propertyName.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase))
+        {
+            AddFramework(frameworks, propertyValue);
+            return;
+        }
+
+        if (!propertyName.Equals("TargetFrameworks", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        foreach (var framework in propertyValue.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            AddFramework(frameworks, framework);
+    }
+
+    private static void AddFramework(List<string> frameworks, string framework)
+    {
+        framework = framework.Trim();
+        if (framework.Length == 0 || frameworks.Contains(framework, StringComparer.OrdinalIgnoreCase))
+            return;
+
+        frameworks.Add(framework);
     }
 
     private static void CollectCsprojFiles(string dir, IReadOnlySet<string>? excluded, List<string> result)

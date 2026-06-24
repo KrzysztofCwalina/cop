@@ -61,6 +61,24 @@ public class CSharpProjectDiscoveryTests
     }
 
     [Test]
+    public void Discover_Frameworks_IncludeSingleTargetFramework()
+    {
+        var csproj = Path.Combine(_tempDir, "MyApp.csproj");
+        File.WriteAllText(csproj, """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0</TargetFramework>
+              </PropertyGroup>
+            </Project>
+            """);
+
+        var projects = CSharpProjectDiscovery.Discover(_tempDir, null);
+
+        Assert.That(projects, Has.Count.EqualTo(1));
+        Assert.That(projects[0].Frameworks, Is.EqualTo(new[] { "net10.0" }));
+    }
+
+    [Test]
     public void Discover_ProjectReferences_ResolvedByPath()
     {
         // Create two projects: Web references Core

@@ -20,6 +20,11 @@ public class CSharpProvider : DataProvider
 
     public override RuntimeBindings GetRuntimeBindings() => CSharpBindings.Build();
 
+    public override Dictionary<string, Func<List<object?>, Task<object?>>>? GetFunctions() => new()
+    {
+        ["toCodebase"] = args => Task.FromResult<object?>(ToCodebase(args.Count > 0 ? args[0] : null))
+    };
+
     public override object? Query(ProviderQuery query)
     {
         if (query.RootPath is null)
@@ -164,6 +169,59 @@ public class CSharpProvider : DataProvider
 
         return collections;
     }
+
+    private static DataObject ToCodebase(object? value)
+    {
+        if (value is System.Collections.IList { Count: > 0 } list)
+            value = list[0];
+
+        var fields = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var collection in CodebaseCollectionNames)
+            fields[collection] = value is DataObject data ? WrapProviderValue(data.GetField(collection)) ?? new List<object>() : new List<object>();
+
+        return new DataObject("Codebase", fields);
+    }
+
+    private static object? WrapProviderValue(object? value)
+    {
+        if (value is null or string or bool or int or long or double or float or decimal)
+            return value;
+
+        if (value is DataObject)
+            return value;
+
+        if (value is System.Collections.IEnumerable enumerable)
+        {
+            var items = new List<object?>();
+            foreach (var item in enumerable)
+                items.Add(WrapProviderValue(item));
+            return items;
+        }
+
+        var clrType = value.GetType();
+        if (!ProviderBindings.ClrTypeMappings.TryGetValue(clrType, out var typeName)
+            || !ProviderBindings.Accessors.TryGetValue(typeName, out var accessors))
+        {
+            return value;
+        }
+
+        return new DataObject(typeName).WithFieldResolver(fieldName =>
+            accessors.TryGetValue(fieldName, out var accessor) ? WrapProviderValue(accessor(value)) : null);
+    }
+
+    private static readonly string[] CodebaseCollectionNames =
+    [
+        "Files",
+        "Types",
+        "Statements",
+        "Methods",
+        "Calls",
+        "Lines",
+        "Regions",
+        "Projects"
+    ];
+
+    private static readonly RuntimeBindings ProviderBindings = CSharpBindings.Build();
 
     public override void RegisterCapabilities(TypeRegistry registry, string rootPath)
     {

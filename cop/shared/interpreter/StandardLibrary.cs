@@ -338,6 +338,19 @@ public static class StandardLibrary
             return CopBool.Of(!items.Any());
         });
 
+        // Object operations (issue #43): obj.Get('key') / obj:containsKey('key') — dynamic,
+        // case-insensitive property access on object literals and provider objects.
+        ffi.Register("Get", (args, env) =>
+        {
+            if (args.Count < 2) return CopNull.Instance;
+            return GetObjectKey(args[0], args[1].Display());
+        });
+        ffi.Register("containsKey", (args, env) =>
+        {
+            if (args.Count < 2) return CopBool.False;
+            return CopBool.Of(GetObjectKey(args[0], args[1].Display()) is not CopNull);
+        });
+
         // single: collection.single(predicate?) — single matching item or null
         ffi.RegisterEx("single", (args, evaluator, env) =>
         {
@@ -629,6 +642,24 @@ public static class StandardLibrary
         CopNumber n => (long)n.Value,
         _ => 0
     };
+
+    /// <summary>Case-insensitive dynamic property lookup for object literals and provider objects.</summary>
+    private static CopValue GetObjectKey(CopValue obj, string key)
+    {
+        switch (obj)
+        {
+            case CopThunk t: return GetObjectKey(t.Force(), key);
+            case CopObject co:
+                foreach (var kv in co.Fields)
+                    if (string.Equals(kv.Key, key, StringComparison.OrdinalIgnoreCase))
+                        return kv.Value;
+                return CopNull.Instance;
+            case CopDynamicObject dyn:
+                return dyn.HasField(key) ? dyn.GetField(key) : CopNull.Instance;
+            default:
+                return CopNull.Instance;
+        }
+    }
 
     /// <summary>
     /// Normalize an identifier for convention-insensitive comparison (sameAs / sm).

@@ -297,14 +297,86 @@ let x : int = 2");
     [Test]
     public void DuplicateFunctionIsAllowed_Overloading()
     {
-        // In Cop, multiple predicates with same name (different guards) are common
+        // In Cop, multiple predicates with same name and distinct parameter guards are common.
         var result = Bind(@"
 type Item = { Score : int, Rating : string }
-predicate isGood(x : Item) => x.Score > 80
-predicate isGood(x : Item) => x.Rating == 'A'");
+predicate hasHighScore(x : Item) => x.Score > 80
+predicate hasGoodRating(x : Item) => x.Rating == 'A'
+predicate isGood(Item:hasHighScore) => true
+predicate isGood(Item:hasGoodRating) => true");
 
         // Should not produce errors (overloading is allowed)
         Assert.That(result.HasErrors, Is.False);
+    }
+
+    [Test]
+    public void PredicateCanOverloadImportedCallableWithDifferentParameterType()
+    {
+        var externals = new Symbol[]
+        {
+            new TypeSymbol("A", null, []),
+            new TypeSymbol("B", null, []),
+            new FunctionSymbol("p", CallableKind.Function,
+                [new ParameterSymbol("value", new TypeRef("A"), 0)])
+        };
+
+        var result = Bind("predicate p(B) => true", externals);
+
+        Assert.That(result.HasErrors, Is.False,
+            "a local predicate should be able to overload an imported same-name predicate with a different parameter type: "
+            + string.Join("; ", result.Diagnostics.Select(d => d.Message)));
+    }
+
+    [Test]
+    public void PredicateCannotDuplicateImportedCallableWithSameParameterType()
+    {
+        var externals = new Symbol[]
+        {
+            new TypeSymbol("A", null, []),
+            new FunctionSymbol("p", CallableKind.Function,
+                [new ParameterSymbol("value", new TypeRef("A"), 0)])
+        };
+
+        var result = Bind("predicate p(A) => true", externals);
+
+        Assert.That(result.Diagnostics.Select(d => d.Message),
+            Has.Some.Contains("Duplicate declaration 'p'"));
+    }
+
+    [Test]
+    public void Function_RedeclaringZeroArgImportedStub_IsNotDuplicate()
+    {
+        // Issue #51: when a package's own source is verified alongside a sample that imports the
+        // package, each export is injected as a signature-less stub (no declaration, empty params).
+        // A real 0-arg declaration such as `parse()` coincides exactly with its stub — not a
+        // duplicate, just the package re-declaring itself.
+        var externals = new Symbol[]
+        {
+            new FunctionSymbol("parse", CallableKind.Function, []),
+        };
+
+        var result = Bind("function parse() => 1", externals);
+
+        Assert.That(result.HasErrors, Is.False,
+            "a 0-arg declaration coinciding with its imported stub must not be a duplicate: "
+            + string.Join("; ", result.Diagnostics.Select(d => d.Message)));
+    }
+
+    [Test]
+    public void Type_RedeclaringImportedStub_IsNotDuplicate()
+    {
+        // Issue #51: a package type collides with its own injected import stub (DeclarationLine 0)
+        // when the package is verified alongside a self-importing sample. Not a duplicate.
+        var externals = new Symbol[]
+        {
+            new TypeSymbol("Heading", null, []),
+        };
+
+        var result = Bind("type Heading = { Name : string }", externals);
+
+        Assert.That(result.HasErrors, Is.False,
+            "a type coinciding with its imported stub must not be a duplicate: "
+            + string.Join("; ", result.Diagnostics.Select(d => d.Message)));
     }
 
     // ========================================================================

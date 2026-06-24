@@ -82,13 +82,13 @@ predicate swallowsException(Statement) => Statement.ErrorHandler == true
     && Statement.Generic == true && !Statement.Rethrows
 test swallows = assert(python.Statements:swallowsException.Count > 0)
 
-predicate consoleOutput(Statement) => Statement.Kind == 'call'
+predicate consoleOutput(Statement) => Statement.Kind == call
     && (Statement.TypeName == 'Console'
         || Statement.TypeName == 'console'
         || Statement.MemberName == 'print')
 test console = assert(python.Statements:consoleOutput.Count > 0)
 
-predicate isCall(Statement) => Statement.Kind == 'call'
+predicate isCall(Statement) => Statement.Kind == call
 test cs-calls = assert(csharp.Statements:isCall.Count > 0)
 test py-calls = assert(python.Statements:isCall.Count > 0)
 test js-calls = assert(javascript.Statements:isCall.Count > 0)

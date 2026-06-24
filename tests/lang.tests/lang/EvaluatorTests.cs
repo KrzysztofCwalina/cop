@@ -343,6 +343,52 @@ public class EvaluatorTests
         Assert.That(values, Is.EqualTo(new[] { "[A]", "[B]" }));
     }
 
+    [Test]
+    public void EvalMember_AccessOnNull_PropagatesNullInsteadOfCrashing()
+    {
+        // Regression: accessing a member of a null/absent value yields null rather than crashing,
+        // so checks over real-world data with missing fields stay robust (e.g. a global-namespace
+        // C# type's null File.Namespace.Length). Previously threw "Cannot access member 'X' on CopNull".
+        Assert.That(EvalExpr("nic.Length"), Is.EqualTo(CopNull.Instance));
+        Assert.That(EvalExpr("nic.Anything.Nested"), Is.EqualTo(CopNull.Instance));
+    }
+
+    [Test]
+    public void EvalFilter_PredicateAccessingNullMember_DoesNotCrashAndIsFalse()
+    {
+        // Robustness: a predicate that reaches through a null field must not crash — null propagates
+        // and the comparison is simply false, so the item is filtered out rather than aborting the run.
+        var result = Eval("""
+            type Box : object = { Inner : object }
+            predicate hasName(Box) => Box.Inner.Name == 'x'
+            let boxes = [Box { Inner = nic }]
+            command main = boxes:hasName.Count
+            """);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void EvalFilter_SingleGuardedPredicate_FiltersByGuard()
+    {
+        // Regression (#35): a SINGLE guarded predicate overload (bound as a CopFunction, not a
+        // function group) must also honor its guard — `predicate isBig(Box:isReal)` is false for
+        // items the guard rejects, instead of running its body on them. Previously the guard was a
+        // no-op for single overloads (e.g. `isMissingNamespace(Type:isCSharp)` ran on non-C# types).
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = Eval("""
+            type Box : object = { Real : bool, Value : int }
+            predicate isReal(Box) => Box.Real
+            predicate isBig(Box:isReal) => Box.Value:greaterThan(10)
+            let boxes = [Box { Real = true, Value = 20 }, Box { Real = false, Value = 99 }, Box { Real = true, Value = 5 }]
+            command main = boxes:isBig.Count
+            """, ffi);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(1),
+            "guard isReal excludes the Real=false box even though its Value>10; only {Real=true,Value=20} qualifies");
+    }
+
     // ========================================================================
     // Arithmetic
     // ========================================================================
@@ -1446,5 +1492,179 @@ command main = wrap('only')";
         var result = Eval(source, ffi);
         Assert.That(result, Is.InstanceOf<CopInt>());
         Assert.That(((CopInt)result).Value, Is.EqualTo(1));
+    }
+
+    // ========================================================================
+    // Regression tests for filed language issues (#34, #39–#46, #50)
+    // ========================================================================
+
+    [Test]
+    public void Interpolation_EvaluatesArithmeticExpression()
+    {
+        // Issue #39: '{1 + 2}' should evaluate the embedded expression, not print literal braces.
+        var result = EvalExpr("'{1 + 2}'");
+        Assert.That(result, Is.InstanceOf<CopString>());
+        Assert.That(((CopString)result).Value, Is.EqualTo("3"));
+    }
+
+    [Test]
+    public void MatchExpression_WildcardArm_IsSelected()
+    {
+        // Issue #40: a `_` wildcard arm matches when no literal arm does.
+        var result = EvalExpr("'x' ? 'y' => 'no' | _ => 'yes'");
+        Assert.That(result, Is.InstanceOf<CopString>());
+        Assert.That(((CopString)result).Value, Is.EqualTo("yes"));
+    }
+
+    [Test]
+    public void MatchExpression_LiteralArm_IsCaseInsensitive()
+    {
+        // Issue #40: literal arm matching is case-insensitive.
+        var result = EvalExpr("'HELLO' ? 'hello' => 'hi' | _ => 'other'");
+        Assert.That(result, Is.InstanceOf<CopString>());
+        Assert.That(((CopString)result).Value, Is.EqualTo("hi"));
+    }
+
+    [Test]
+    public void VerbatimString_KeepsBackslashesLiteral()
+    {
+        // Issue #41: @'...' is a verbatim string — backslashes are literal, braces are not interpolated.
+        var result = EvalExpr(@"@'a\nb'");
+        Assert.That(result, Is.InstanceOf<CopString>());
+        Assert.That(((CopString)result).Value, Is.EqualTo(@"a\nb"));
+    }
+
+    [Test]
+    public void VerbatimString_DoesNotInterpolateBraces()
+    {
+        // Issue #41: regex quantifiers like {3} stay literal in a verbatim string.
+        var result = EvalExpr(@"@'\d{3}'");
+        Assert.That(result, Is.InstanceOf<CopString>());
+        Assert.That(((CopString)result).Value, Is.EqualTo(@"\d{3}"));
+    }
+
+    [Test]
+    public void StringProperties_LowerUpperNormalized()
+    {
+        // Issue #42: documented string properties Lower/Upper/Normalized.
+        Assert.That(((CopString)EvalExpr("'Foo_Bar'.Lower")).Value, Is.EqualTo("foo_bar"));
+        Assert.That(((CopString)EvalExpr("'Foo_Bar'.Upper")).Value, Is.EqualTo("FOO_BAR"));
+        Assert.That(((CopString)EvalExpr("'Foo_Bar'.Normalized")).Value, Is.EqualTo("foobar"));
+    }
+
+    [Test]
+    public void StringProperty_Words_SplitsOnCamelCaseAndSeparators()
+    {
+        // Issue #42: .Words splits an identifier into lowercase words.
+        var result = EvalExpr("'fooBar_baz'.Words");
+        Assert.That(result, Is.InstanceOf<CopList>());
+        var words = ((CopList)result).Items.Select(i => ((CopString)i).Value).ToArray();
+        Assert.That(words, Is.EqualTo(new[] { "foo", "bar", "baz" }));
+    }
+
+    [Test]
+    public void ObjectLiteral_QuotedKey_IsAccessibleViaGet()
+    {
+        // Issue #43: object literals accept quoted keys; .Get retrieves them.
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var q = Eval("let o = { Name: 'Ada' 'quoted-key': 7 }\ncommand main = o.Get('quoted-key')", ffi);
+        var n = Eval("let o = { Name: 'Ada' 'quoted-key': 7 }\ncommand main = o.Get('Name')", ffi);
+        Assert.That(((CopInt)q).Value, Is.EqualTo(7));
+        Assert.That(((CopString)n).Value, Is.EqualTo("Ada"));
+    }
+
+    [Test]
+    public void ObjectLiteral_KeysCount()
+    {
+        // Issue #43: .Keys exposes all field names, including quoted ones.
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = Eval("let o = { Name: 'Ada' 'quoted-key': 7 }\ncommand main = o.Keys.Count", ffi);
+        Assert.That(((CopInt)result).Value, Is.EqualTo(2));
+    }
+
+    [Test]
+    public void Object_ContainsKey_PipeForm()
+    {
+        // Issue #43: o:containsKey('x') tests for a field.
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var has = Eval("let o = { Name = 'Ada' }\ncommand main = o:containsKey('Name')", ffi);
+        var missing = Eval("let o = { Name = 'Ada' }\ncommand main = o:containsKey('Nope')", ffi);
+        Assert.That(has.IsTruthy, Is.True);
+        Assert.That(missing.IsTruthy, Is.False);
+    }
+
+    [Test]
+    public void ValuePipe_InvokesFunctionOnScalar()
+    {
+        // Issue #44: a scalar piped through a function invokes it (5:inc => 6).
+        var result = Eval("function inc(n) => n + 1\ncommand main = 5:inc");
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(6));
+    }
+
+    [Test]
+    public void ListPlusScalar_AppendsElement()
+    {
+        // Issue #45: [1 2] + 3 appends the scalar.
+        var result = EvalExpr("[1 2] + 3");
+        Assert.That(result, Is.InstanceOf<CopList>());
+        var items = ((CopList)result).Items;
+        Assert.That(items.Count, Is.EqualTo(3));
+        Assert.That(((CopInt)items[2]).Value, Is.EqualTo(3));
+    }
+
+    [Test]
+    public void ScalarPlusList_PrependsElement()
+    {
+        // Issue #45: 0 + [1 2] prepends the scalar.
+        var result = EvalExpr("0 + [1 2]");
+        Assert.That(result, Is.InstanceOf<CopList>());
+        var items = ((CopList)result).Items;
+        Assert.That(items.Count, Is.EqualTo(3));
+        Assert.That(((CopInt)items[0]).Value, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void DistinctOnListValue_DedupesByValue()
+    {
+        // Issue #46: .Distinct() dedupes a list value.
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var result = EvalExpr("[1 2 2 3].Distinct().Count", ffi);
+        Assert.That(((CopInt)result).Value, Is.EqualTo(3));
+    }
+
+    [Test]
+    public void CurriedFreeItemFunction_UsedAsFilter_FiltersPerItem()
+    {
+        // Issue #34: `greaterThan(limit) => item > limit` used as `coll:greaterThan(1)` binds the
+        // explicit arg to the param and `item` to each element, instead of overflowing arity.
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var source = @"
+function greaterThan(limit) => item > limit
+let r = [1 2 3]:greaterThan(1)
+command main = r.Count";
+        var result = Eval(source, ffi);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(2));
+    }
+
+    [Test]
+    public void CollectionMemberProjection_FlattensCollectionValuedFields()
+    {
+        // Issue #50: projecting a collection-valued field (`data.Items`) over a collection flattens
+        // into one collection so a following per-item predicate binds per element, not per sub-list.
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var source = @"
+let data = [ { Items = [1 2 3] }, { Items = [4] } ]
+command main = data.Items.Count";
+        var result = Eval(source, ffi);
+        Assert.That(result, Is.InstanceOf<CopInt>());
+        Assert.That(((CopInt)result).Value, Is.EqualTo(4));
     }
 }

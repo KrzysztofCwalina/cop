@@ -200,6 +200,7 @@ public static class RunCommand
             commandFilter = commands.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         // When a specific .cop file is named, scope commands to that file only
+        string? implicitCommandFile = null;
         if (scopeToFile != null && commandFilter == null && commandName == null)
         {
             var fileCommands = GetCommandNamesFromFile(scopeToFile);
@@ -213,8 +214,14 @@ public static class RunCommand
             }
             else
             {
-                Console.Error.WriteLine($"Error: No commands defined in '{command}'");
-                return 1;
+                implicitCommandFile = TryCreateImplicitMainFile(scopeToFile);
+                if (implicitCommandFile is not null)
+                    commandFilter = ["MAIN"];
+                else
+                {
+                    Console.Error.WriteLine($"Error: No commands defined in '{command}'");
+                    return 1;
+                }
             }
         }
 
@@ -253,7 +260,9 @@ public static class RunCommand
             {
                 // Single-file mode with user checks: load only the target file + user checks.
                 // No need to load all sibling .cop files — they would trigger unnecessary provider loading.
-                allScriptFiles = [scopeToFile, .. userCheckFiles];
+                allScriptFiles = implicitCommandFile is not null
+                    ? [scopeToFile, .. userCheckFiles, implicitCommandFile]
+                    : [scopeToFile, .. userCheckFiles];
             }
             else
             {
@@ -271,8 +280,12 @@ public static class RunCommand
             // Place the target file LAST so its command definitions take priority.
             var siblingFiles = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
             Array.Sort(siblingFiles, StringComparer.Ordinal);
-            var others = siblingFiles.Where(f => !string.Equals(f, scopeToFile, StringComparison.OrdinalIgnoreCase)).ToArray();
-            allScriptFiles = [.. others, scopeToFile];
+            var others = siblingFiles.Where(f =>
+                !string.Equals(f, scopeToFile, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(f, implicitCommandFile, StringComparison.OrdinalIgnoreCase)).ToArray();
+            allScriptFiles = implicitCommandFile is not null
+                ? [.. others, scopeToFile, implicitCommandFile]
+                : [.. others, scopeToFile];
         }
 
         // Resolve -p provider packages to directories
@@ -308,9 +321,19 @@ public static class RunCommand
             }
         }
 
-        var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog, additionalFeedPaths: FindFeedPathsFromCwd(), scriptFiles: allScriptFiles, providerPackages: providerPackages);
-
-        return HandleResult(result, format, rootPath);
+        try
+        {
+            var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog, additionalFeedPaths: FindFeedPathsFromCwd(), scriptFiles: allScriptFiles, providerPackages: providerPackages);
+            return HandleResult(result, format, rootPath);
+        }
+        finally
+        {
+            if (implicitCommandFile is not null)
+            {
+                try { File.Delete(implicitCommandFile); }
+                catch { /* best-effort cleanup */ }
+            }
+        }
     }
 
     /// <summary>
@@ -470,6 +493,9 @@ public static class RunCommand
                 Console.Error.WriteLine(warning);
         }
 
+        if (result.HasParseErrors)
+            return 2;
+
         if (result.HasFatalErrors)
         {
             // Only print string errors that aren't already represented by diagnostics
@@ -530,9 +556,125 @@ public static class RunCommand
         if (result.ExitCode is not null)
             return result.ExitCode.Value != 0 ? 1 : 0;
 
-        // Fallback: exit non-zero when output was produced or when warnings indicate unreliable results
+        // Fallback: report output is success; CHECK-style violation output is failure.
         bool hasUnreliableWarnings = result.Warnings is { Count: > 0 } && result.Warnings.Any(w => w.StartsWith("Error:"));
-        return result.Outputs.Count > 0 || result.HasParseErrors || hasUnreliableWarnings ? 1 : 0;
+        return hasUnreliableWarnings || result.Outputs.Any(IsViolationOutput) ? 1 : 0;
+    }
+
+    private static bool IsViolationOutput(PrintOutput output)
+    {
+        var message = output.Message;
+        return message.Contains("): error:", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("): warning:", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("): info:", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? TryCreateImplicitMainFile(string sourceFile)
+    {
+        string source;
+        try
+        {
+            source = File.ReadAllText(sourceFile);
+        }
+        catch
+        {
+            return null;
+        }
+
+        var expressions = ExtractTopLevelExpressions(source);
+        if (expressions.Count == 0)
+            return null;
+
+        var generatedSource = string.Join(Environment.NewLine,
+        [
+            "command MAIN = {",
+            .. expressions.Select(e => $"print({e})"),
+            "}"
+        ]);
+
+        var scriptsDir = Path.GetDirectoryName(sourceFile) ?? Directory.GetCurrentDirectory();
+        var generatedPath = Path.Combine(scriptsDir, $".cop-implicit-{Guid.NewGuid():N}.cop");
+
+        try
+        {
+            Cop.Lang.Parser.CopParser.Parse(generatedSource, generatedPath);
+            File.WriteAllText(generatedPath, generatedSource);
+            return generatedPath;
+        }
+        catch
+        {
+            try { if (File.Exists(generatedPath)) File.Delete(generatedPath); }
+            catch { /* best-effort cleanup */ }
+            return null;
+        }
+    }
+
+    private static List<string> ExtractTopLevelExpressions(string source)
+    {
+        var expressions = new List<string>();
+        foreach (var rawLine in source.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n'))
+        {
+            var line = StripLineComment(rawLine).Trim();
+            if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal))
+                continue;
+
+            if (IsTopLevelDeclarationLine(line))
+                continue;
+
+            if (line.StartsWith(":", StringComparison.Ordinal) ||
+                line.StartsWith(".", StringComparison.Ordinal) ||
+                line.StartsWith("&&", StringComparison.Ordinal) ||
+                line.StartsWith("||", StringComparison.Ordinal) ||
+                line.StartsWith(")", StringComparison.Ordinal) ||
+                line.StartsWith("]", StringComparison.Ordinal) ||
+                line.StartsWith("}", StringComparison.Ordinal))
+                return [];
+
+            expressions.Add(line);
+        }
+
+        return expressions;
+    }
+
+    private static string StripLineComment(string line)
+    {
+        var inString = false;
+        for (var i = 0; i < line.Length; i++)
+        {
+            if (line[i] == '\'' && (i == 0 || line[i - 1] != '\\'))
+                inString = !inString;
+            else if (!inString && line[i] == '#')
+                return line[..i];
+        }
+
+        return line;
+    }
+
+    private static bool IsTopLevelDeclarationLine(string line)
+    {
+        if (line.StartsWith("export ", StringComparison.Ordinal))
+            line = line["export ".Length..].TrimStart();
+
+        return StartsWithWord(line, "import") ||
+               StartsWithWord(line, "feed") ||
+               StartsWithWord(line, "type") ||
+               StartsWithWord(line, "enum") ||
+               StartsWithWord(line, "flags") ||
+               StartsWithWord(line, "function") ||
+               StartsWithWord(line, "predicate") ||
+               StartsWithWord(line, "let") ||
+               StartsWithWord(line, "command") ||
+               StartsWithWord(line, "test") ||
+               StartsWithWord(line, "RUN") ||
+               StartsWithWord(line, "foreach") ||
+               (StartsWithWord(line, "async") && line.Contains("foreach", StringComparison.Ordinal));
+    }
+
+    private static bool StartsWithWord(string value, string word)
+    {
+        if (!value.StartsWith(word, StringComparison.Ordinal))
+            return false;
+        return value.Length == word.Length || !char.IsLetterOrDigit(value[word.Length]) && value[word.Length] != '_';
     }
 
     private static void WriteOutputsAsJson(List<PrintOutput> outputs)

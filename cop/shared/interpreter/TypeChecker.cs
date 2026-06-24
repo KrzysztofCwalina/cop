@@ -207,6 +207,10 @@ public sealed class TypeChecker
                 WalkExpr(fe.Collection);
                 CheckFilter(fe);
                 break;
+            case ForEachExpr fee:
+                WalkExpr(fee.Loop.Collection);
+                foreach (var s in fee.Loop.Body) CheckStatement(s);
+                break;
         }
     }
 

@@ -318,8 +318,19 @@ public sealed class Evaluator
             ObjectExpr obj => EvalObject(obj, env),
             InterpolatedStringExpr interp => EvalInterpolation(interp, env),
             FilterExpr filter => EvalFilter(filter, env),
+            ForEachExpr fe => EvalForEachExpr(fe, env),
             _ => throw new CopEvaluationException($"Unknown expression type: {expr.GetType().Name}", expr.Line, _filePath)
         };
+    }
+
+    /// <summary>
+    /// Evaluate a foreach used in expression position: run the loop for its side effects (the body's
+    /// auto-printed results) and yield nil so it can sit as an operand of `&` or similar.
+    /// </summary>
+    private CopValue EvalForEachExpr(ForEachExpr fe, Environment env)
+    {
+        ExecForEach(fe.Loop, env);
+        return CopNull.Instance;
     }
 
     private CopValue EvalLiteral(LiteralExpr lit) => lit.Value switch
@@ -559,6 +570,58 @@ public sealed class Evaluator
                 result = agg;
                 return true;
             }
+            case "ElementAt" or "elementAt":
+            {
+                if (argExprs.Count != 1) return false;
+                var items = CoerceToEnumerable(collection).ToList();
+                var idxVal = ForceValue(Eval(argExprs[0], env));
+                int idx = idxVal is CopInt ci ? ci.Value : -1;
+                result = idx >= 0 && idx < items.Count ? items[idx] : CopNull.Instance;
+                return true;
+            }
+            case "Distinct" or "distinct":
+            {
+                // Distinct() dedupes by value; Distinct(expr) dedupes by a per-item key expression.
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                var outp = new List<CopValue>();
+                foreach (var item in CoerceToEnumerable(collection))
+                {
+                    var key = argExprs.Count == 1 ? ForceValue(EvalElementExpr(argExprs[0], item, env)) : item;
+                    if (seen.Add(key.Display())) outp.Add(item);
+                }
+                result = new CopList(outp);
+                return true;
+            }
+            case "Sum" or "sum" or "Average" or "average":
+            {
+                double total = 0; int n = 0;
+                foreach (var item in CoerceToEnumerable(collection))
+                {
+                    var v = argExprs.Count == 1 ? ForceValue(EvalElementExpr(argExprs[0], item, env)) : item;
+                    total += ToNumber(v) ?? 0; n++;
+                }
+                bool isAvg = member.Equals("Average", StringComparison.OrdinalIgnoreCase) || member == "average";
+                // The average of an empty collection is undefined → null (Sum stays 0).
+                if (isAvg && n == 0) { result = CopNull.Instance; return true; }
+                double val = isAvg ? total / n : total;
+                result = !isAvg && val == Math.Floor(val) ? new CopInt((int)val) : new CopNumber(val);
+                return true;
+            }
+            case "Min" or "min" or "Max" or "max":
+            {
+                bool isMax = member.Equals("Max", StringComparison.OrdinalIgnoreCase) || member == "max";
+                double? best = null;
+                foreach (var item in CoerceToEnumerable(collection))
+                {
+                    var v = argExprs.Count == 1 ? ForceValue(EvalElementExpr(argExprs[0], item, env)) : item;
+                    var num = ToNumber(v);
+                    if (num is null) continue;
+                    best = best is null ? num : (isMax ? Math.Max(best.Value, num.Value) : Math.Min(best.Value, num.Value));
+                }
+                if (best is null) { result = CopNull.Instance; return true; }
+                result = best.Value == Math.Floor(best.Value) ? new CopInt((int)best.Value) : new CopNumber(best.Value);
+                return true;
+            }
             default:
                 return false;
         }
@@ -660,7 +723,7 @@ public sealed class Evaluator
 
         var result = obj switch
         {
-            CopObject co => co.GetField(mem.Member),
+            CopObject co => EvalObjectMember(co, mem.Member),
             CopDynamicObject dyn => dyn.GetField(mem.Member),
             CopProviderProxy proxy => proxy.GetField(mem.Member),
             CopList list => EvalListMember(list, mem.Member, mem.Line),
@@ -811,6 +874,20 @@ public sealed class Evaluator
         _ => ProjectCollection(list.Items, member)
     };
 
+    /// <summary>Object member access including dynamic operations `.Keys`, `.Values`, `.Count`
+    /// (issue #43). A real field of that name takes precedence over the operation.</summary>
+    private static CopValue EvalObjectMember(CopObject obj, string member)
+    {
+        if (obj.HasField(member)) return obj.GetField(member);
+        return member switch
+        {
+            "Keys" or "keys" => new CopList(obj.Fields.Keys.Select(k => (CopValue)new CopString(k)).ToList()),
+            "Values" or "values" => new CopList(obj.Fields.Values.ToList()),
+            "Count" or "count" => new CopInt(obj.Fields.Count),
+            _ => obj.GetField(member)
+        };
+    }
+
     private CopValue EvalLazyMember(CopLazyCollection lazy, string member, int line) => member switch
     {
         "Count" or "count" or "Length" or "length" => new CopInt(lazy.Enumerate().Count()),
@@ -822,9 +899,42 @@ public sealed class Evaluator
     private CopValue EvalStringMember(CopString str, string member, int line) => member switch
     {
         "Length" or "length" => new CopInt(str.Value.Length),
+        "Lower" or "lower" => new CopString(str.Value.ToLowerInvariant()),
+        "Upper" or "upper" => new CopString(str.Value.ToUpperInvariant()),
+        "Normalized" or "normalized" => new CopString(NormalizeConvention(str.Value)),
+        "Words" or "words" => new CopList(SplitWords(str.Value).Select(w => (CopValue)new CopString(w)).ToList()),
         "Type" => new CopString("string"),
         _ => throw new CopEvaluationException($"Unknown string member '{member}'", line, _filePath)
     };
+
+    /// <summary>Convention-insensitive canonical form: lowercase with separators removed (Foo_Bar → foobar).</summary>
+    private static string NormalizeConvention(string s)
+    {
+        var sb = new System.Text.StringBuilder(s.Length);
+        foreach (var c in s)
+            if (c is not ('_' or '-' or ' '))
+                sb.Append(char.ToLowerInvariant(c));
+        return sb.ToString();
+    }
+
+    /// <summary>Splits an identifier into lowercase words, breaking on camelCase, digits, and separators.</summary>
+    private static List<string> SplitWords(string s)
+    {
+        var words = new List<string>();
+        var cur = new System.Text.StringBuilder();
+        void Flush() { if (cur.Length > 0) { words.Add(cur.ToString().ToLowerInvariant()); cur.Clear(); } }
+        for (int i = 0; i < s.Length; i++)
+        {
+            char c = s[i];
+            if (c is '_' or '-' or ' ') { Flush(); continue; }
+            // Break before an uppercase letter that starts a new word (camelCase boundary).
+            if (i > 0 && char.IsUpper(c) && (char.IsLower(s[i - 1]) || char.IsDigit(s[i - 1])))
+                Flush();
+            cur.Append(c);
+        }
+        Flush();
+        return words;
+    }
 
     /// <summary>
     /// Project a member across all items in a collection: items.Name → [item1.Name, item2.Name, ...]
@@ -836,12 +946,26 @@ public sealed class Evaluator
         {
             var field = item switch
             {
+                CopThunk th => th.Force() switch
+                {
+                    CopDynamicObject d2 => d2.GetField(member),
+                    CopObject o2 => o2.GetField(member),
+                    _ => CopNull.Instance
+                },
                 CopDynamicObject dyn => dyn.GetField(member),
                 CopObject obj => obj.GetField(member),
                 _ => CopNull.Instance
             };
-            if (field is not CopNull)
-                projected.Add(field);
+            if (field is CopNull) continue;
+            // Flatten collection-valued projections so e.g. `Types.Methods` is the union of all
+            // methods (not a list of per-type method lists). `Types.Methods:isLong` then dispatches
+            // per Method instead of per collection (issue #50).
+            switch (field)
+            {
+                case CopList fl: projected.AddRange(fl.Items); break;
+                case CopLazyCollection flz: projected.AddRange(flz.Enumerate()); break;
+                default: projected.Add(field); break;
+            }
         }
         return new CopList(projected);
     }
@@ -1012,12 +1136,17 @@ public sealed class Evaluator
         // predicate Clients(Types) => ... used bare as `Clients:filter` means Types:Clients:filter
         collection = TryResolveNamedSubset(collection, env);
 
-        // If collection is a scalar (not a list/collection), apply predicate as a test
+        // If collection is a scalar (not a list/collection), apply the predicate/function as a
+        // VALUE PIPE: `value:func` returns `func(value)` (issue #44). Member-field and string
+        // predicates still work because they yield their natural result (a bool for predicates).
+        // Negation (`!value:pred`) coerces to a bool.
         if (collection is not CopList and not CopLazyCollection)
         {
             _traceLog?.Invoke($"[trace] EvalFilter: scalar branch, collection={collection?.Display()?.Substring(0, Math.Min(collection?.Display()?.Length ?? 0, 80))}");
-            var result = ApplyFilterPredicate(filter.Predicate, collection, env);
-            return CopBool.Of(negated ? !result : result);
+            var raw = ApplyFilterPredicateValue(filter.Predicate, collection, env);
+            if (negated)
+                return CopBool.Of(!raw.IsTruthy);
+            return raw;
         }
 
         // Bare identifier on a collection: a function whose SOLE parameter is a collection
@@ -1209,6 +1338,28 @@ public sealed class Evaluator
     }
 
     /// <summary>
+    /// When a filtered call such as <c>coll:greaterThan(1)</c> supplies exactly as many explicit
+    /// arguments as the callable declares parameters, the function uses a free <c>item</c> variable
+    /// for the subject (e.g. <c>function greaterThan(limit) =&gt; item &gt; limit</c>). In that case
+    /// invoke it with just the explicit args while binding <c>item</c> to the subject, instead of
+    /// prepending the subject as an extra positional argument (which overflows arity). Returns null
+    /// when the call is not this free-item shape, so the caller falls back to subject-as-first-arg.
+    /// </summary>
+    private CopValue? TryInvokeFreeItemFilterCall(ICopCallable callable, IReadOnlyList<CopValue> args, CopValue subject)
+    {
+        switch (callable)
+        {
+            case CopFunction f when f.Arity == args.Count:
+                return CallUserFunction(f, args, itemOverride: subject);
+            case CopFunctionGroup g:
+                var overload = g.Functions.FirstOrDefault(o => o.Arity == args.Count);
+                return overload is not null ? CallUserFunction(overload, args, itemOverride: subject) : null;
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
     /// Apply a filter predicate expression to a subject value, returning the raw CopValue result
     /// (not just bool). Used by EvalFilter to distinguish filter vs map semantics.
     /// </summary>
@@ -1255,7 +1406,10 @@ public sealed class Evaluator
                     allArgs.AddRange(args);
 
                     if (env.TryLookup(methodName, out var mfn) && ForceValue(mfn) is ICopCallable mc)
-                        return mc.Invoke(allArgs, this, env);
+                    {
+                        var freeItem = TryInvokeFreeItemFilterCall(mc, args, subject);
+                        return freeItem ?? mc.Invoke(allArgs, this, env);
+                    }
                     var mffi = _ffi.Resolve(methodName);
                     if (mffi is ICopCallable mfc)
                         return mfc.Invoke(allArgs, this, env);
@@ -1327,7 +1481,10 @@ public sealed class Evaluator
                     allArgs.AddRange(args);
 
                     if (env.TryLookup(methodName, out var mfn) && mfn is ICopCallable mc)
-                        return mc.Invoke(allArgs, this, env).IsTruthy;
+                    {
+                        var freeItem = TryInvokeFreeItemFilterCall(mc, args, subject);
+                        return (freeItem ?? mc.Invoke(allArgs, this, env)).IsTruthy;
+                    }
                     var mffi = _ffi.Resolve(methodName);
                     if (mffi is ICopCallable mfc)
                         return mfc.Invoke(allArgs, this, env).IsTruthy;
@@ -1539,7 +1696,7 @@ public sealed class Evaluator
     /// <summary>
     /// Call a user-defined function with given arguments.
     /// </summary>
-    public CopValue CallUserFunction(CopFunction func, IReadOnlyList<CopValue> args)
+    public CopValue CallUserFunction(CopFunction func, IReadOnlyList<CopValue> args, CopValue? itemOverride = null)
     {
         // Validate arguments before dispatch (arity + parameter types)
         TypeValidator.ValidateArguments(func.Declaration, args, TypeRegistry);
@@ -1598,8 +1755,12 @@ public sealed class Evaluator
                 funcEnv.Define(func.Declaration.Params[i].Name, CopNull.Instance);
         }
 
-        // Bind "item" to first argument (Cop convention: item references the context object)
-        if (args.Count > 0)
+        // Bind "item" to the context object. In a filter such as `coll:greaterThan(1)` the explicit
+        // args fill the declared params and `item` is the per-element subject (itemOverride); the
+        // usual convention otherwise is that `item` aliases the first argument (issue #34).
+        if (itemOverride is not null)
+            funcEnv.Define("item", itemOverride);
+        else if (args.Count > 0)
             funcEnv.Define("item", args[0]);
 
         // TRACE: debug isPublic
@@ -1741,10 +1902,19 @@ public sealed class Evaluator
         return pattern switch
         {
             WildcardPattern => true,
-            LiteralPattern lp => ValuesEqual(EvalLiteral(new LiteralExpr(lp.Value)), value),
+            LiteralPattern lp => MatchLiteral(EvalLiteral(new LiteralExpr(lp.Value)), value),
             IdentifierPattern ip => BindPatternVar(ip, value, env),
             _ => false
         };
+    }
+
+    /// <summary>Pattern equality for a match arm. String patterns compare case-insensitively
+    /// (documented), everything else uses normal value equality.</summary>
+    private static bool MatchLiteral(CopValue pattern, CopValue value)
+    {
+        if (pattern is CopString ps && value is CopString vs)
+            return string.Equals(ps.Value, vs.Value, StringComparison.OrdinalIgnoreCase);
+        return ValuesEqual(pattern, value);
     }
 
     private bool BindPatternVar(IdentifierPattern pattern, CopValue value, Environment env)
@@ -1813,8 +1983,14 @@ public sealed class Evaluator
 
         var left = AsEnumerable(l);
         var right = AsEnumerable(r);
-        if (left is null || right is null) return null;
-        return new CopList(left.Concat(right).ToList());
+        if (left is not null && right is not null)
+            return new CopList(left.Concat(right).ToList());
+        // Append/prepend a scalar to a list — documented: `[1 2] + 3` → `[1 2 3]` (issue #45).
+        if (left is not null && right is null && r is not CopNull)
+            return new CopList(left.Append(r).ToList());
+        if (left is null && right is not null && l is not CopNull)
+            return new CopList(right.Prepend(l).ToList());
+        return null;
 
         static IEnumerable<CopValue>? AsEnumerable(CopValue v) => v switch
         {

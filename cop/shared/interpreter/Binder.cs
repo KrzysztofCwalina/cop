@@ -121,6 +121,11 @@ public sealed class Binder
             {
                 // trait-conformance overload — OK
             }
+            else if (IsExternalStub(existing))
+            {
+                // imported stub — a package's own source verified alongside a self-importing
+                // sample (issue #51); not a real duplicate.
+            }
             else
             {
                 ReportDuplicate(decl.Name, decl.Line);
@@ -142,7 +147,10 @@ public sealed class Binder
         };
 
         if (!_currentScope.Declare(symbol))
-            ReportDuplicate(decl.Name, decl.Line);
+        {
+            if (!IsExternalStub(_currentScope.ResolveLocal(decl.Name)))
+                ReportDuplicate(decl.Name, decl.Line);
+        }
 
         // Enum members are injected into module scope (Cop convention)
         foreach (var member in members)
@@ -164,7 +172,10 @@ public sealed class Binder
         };
 
         if (!_currentScope.Declare(symbol))
-            ReportDuplicate(decl.Name, decl.Line);
+        {
+            if (!IsExternalStub(_currentScope.ResolveLocal(decl.Name)))
+                ReportDuplicate(decl.Name, decl.Line);
+        }
 
         foreach (var member in members)
             _currentScope.Declare(member);
@@ -193,41 +204,93 @@ public sealed class Binder
 
         if (!_currentScope.Declare(symbol))
         {
-            // Overloading rules:
-            // 1. Predicates: always allowed (dispatched by input type/guard)
-            // 2. Functions: allowed if different arity (parameter count)
-            // 3. Commands: never allowed
             var existing = _currentScope.ResolveLocal(decl.Name);
-            if (existing is FunctionSymbol existingFn
-                && existingFn.CallableKind == CallableKind.Predicate
-                && callableKind == CallableKind.Predicate)
-            {
-                // Predicate overloading — always OK
-            }
-            else if (decl.IsPredicate
-                && existing is FunctionSymbol existingPred
-                && existingPred.Declaration?.IsPredicate == true)
-            {
-                // Narrowing-predicate overloading by parameter type. A narrowing predicate
-                // (`predicate asX(T) : XType => ...`) has a non-bool return type and no
-                // parameter guard, so it is classified as a Function above — but the
-                // `predicate` keyword means it dispatches by parameter type like any other
-                // predicate, so overloading it across parameter types is allowed.
-            }
-            else if (existing is FunctionSymbol existingFunc
-                && callableKind == CallableKind.Function
-                && existingFunc.CallableKind == CallableKind.Function
-                && existingFunc.Parameters.Count != symbol.Parameters.Count)
-            {
-                // Function overloading by arity — OK
-            }
-            else
-            {
+            if (!IsAllowedFunctionOverload(existing, symbol, decl, callableKind))
                 ReportDuplicate(decl.Name, decl.Line);
-            }
         }
 
         _result.RecordResolution(decl, symbol);
+    }
+
+    private static bool IsAllowedFunctionOverload(
+        Symbol? existing,
+        FunctionSymbol candidate,
+        FunctionDecl candidateDecl,
+        CallableKind candidateKind)
+    {
+        if (existing is not FunctionSymbol existingFn)
+            return false;
+
+        // A self-import injects a signature-less stub (no AST declaration, empty parameter list)
+        // for each of the package's own exports. The arity-difference rule below already tolerates
+        // a real local declaration that takes parameters (its arity differs from the 0-arity stub),
+        // but a 0-parameter export such as `parse()` collides exactly with its stub. Allow that —
+        // it is the package re-declaring itself, not a true duplicate (issue #51). A genuine attempt
+        // to duplicate an imported callable that carries a real signature is still handled by the
+        // signature-aware rules below.
+        if (IsImportedCallableWithoutDeclaration(existingFn)
+            && existingFn.Parameters.Count == 0 && candidateDecl.Params.Count == 0)
+            return true;
+
+        // Overloading rules:
+        // 1. Predicates: allowed when their parameter signatures differ. This includes
+        //    narrowing predicates (`predicate asX(T) : XType => ...`), which are classified
+        //    as functions but still use predicate dispatch semantics.
+        // 2. Imported package exports may be represented as generic Function symbols with
+        //    no AST declaration; a local predicate with a distinct signature can still
+        //    overload them, but an identical signature remains a duplicate.
+        // 3. Functions: allowed if different arity (parameter count).
+        // 4. Commands: never allowed.
+        var candidateIsPredicate = candidateDecl.IsPredicate || candidateKind == CallableKind.Predicate;
+        var existingIsPredicate = existingFn.CallableKind == CallableKind.Predicate
+            || existingFn.Declaration?.IsPredicate == true;
+
+        if (candidateIsPredicate && (existingIsPredicate || IsImportedCallableWithoutDeclaration(existingFn)))
+            return !HaveSameParameterSignature(existingFn.Parameters, candidate.Parameters);
+
+        return candidateKind == CallableKind.Function
+            && existingFn.CallableKind == CallableKind.Function
+            && existingFn.Parameters.Count != candidate.Parameters.Count;
+    }
+
+    private static bool IsImportedCallableWithoutDeclaration(FunctionSymbol symbol) =>
+        symbol.Declaration is null
+        && (symbol.CallableKind == CallableKind.Function || symbol.CallableKind == CallableKind.External);
+
+    /// <summary>
+    /// True when a colliding symbol is an external stub injected by the import/verify harness
+    /// (it carries no real source line) rather than a genuine in-source declaration. This happens
+    /// when a package's own source is verified alongside a sample that imports that same package:
+    /// the package's real types/enums/flags coincide with the injected import stub. That is not a
+    /// duplicate declaration (issue #51).
+    /// </summary>
+    private static bool IsExternalStub(Symbol? existing) =>
+        existing is not null && existing.DeclarationLine == 0;
+
+    private static bool HaveSameParameterSignature(
+        IReadOnlyList<ParameterSymbol> left,
+        IReadOnlyList<ParameterSymbol> right)
+    {
+        if (left.Count != right.Count)
+            return false;
+
+        for (var i = 0; i < left.Count; i++)
+        {
+            if (!HaveSameType(left[i].DeclaredType, right[i].DeclaredType))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static bool HaveSameType(TypeRef? left, TypeRef? right)
+    {
+        if (left is null || right is null)
+            return left is null && right is null;
+
+        return left.Name == right.Name
+            && left.IsCollection == right.IsCollection
+            && left.Constraint == right.Constraint;
     }
 
     private void RegisterLet(LetDecl decl)
@@ -487,6 +550,20 @@ public sealed class Binder
                 BindExpression(filter.Collection);
                 BindExpression(filter.Predicate);
                 break;
+
+            case ForEachExpr fe:
+                BindExpression(fe.Loop.Collection);
+                var feScope = _currentScope.CreateChild("foreach");
+                feScope.Declare(new VariableSymbol(fe.Loop.Variable, null, isReadOnly: true)
+                {
+                    DeclarationLine = fe.Loop.Line
+                });
+                var feOuter = _currentScope;
+                _currentScope = feScope;
+                foreach (var s in fe.Loop.Body)
+                    BindStatement(s);
+                _currentScope = feOuter;
+                break;
         }
     }
 
@@ -648,6 +725,11 @@ public sealed class Binder
             case FilterExpr filter:
                 ValidateExpression(filter.Collection);
                 ValidateExpression(filter.Predicate);
+                break;
+            case ForEachExpr fe:
+                ValidateExpression(fe.Loop.Collection);
+                foreach (var s in fe.Loop.Body)
+                    ValidateStatement(s);
                 break;
         }
     }

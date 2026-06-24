@@ -4,6 +4,7 @@ public enum TokenKind
 {
     Identifier,
     StringLiteral,
+    VerbatimStringLiteral,
     IntLiteral,
     NumberLiteral,
     True,
@@ -184,6 +185,9 @@ public class Tokenizer
             case '%': _pos++; return new Token(TokenKind.Percent, "%", line);
         }
 
+        if (c == '@' && _pos + 1 < _source.Length && _source[_pos + 1] == '\'')
+            return ReadVerbatimString(line);
+
         if (c == '\'')
             return ReadString(line);
 
@@ -238,6 +242,37 @@ public class Tokenizer
             _pos++;
         }
         throw new ParseException("Unterminated string literal", _filePath, line);
+    }
+
+    /// <summary>
+    /// Reads a verbatim string @'...': backslashes are literal (no escape processing) and the
+    /// content is exempt from {…} interpolation, which makes it ideal for regex patterns such as
+    /// @'\bvar\b' or @'\d{3}'. A doubled '' inside the string yields a single literal quote.
+    /// </summary>
+    private Token ReadVerbatimString(int line)
+    {
+        _pos += 2; // skip @'
+
+        var sb = new System.Text.StringBuilder();
+        while (_pos < _source.Length)
+        {
+            char c = _source[_pos];
+            if (c == '\'')
+            {
+                if (_pos + 1 < _source.Length && _source[_pos + 1] == '\'')
+                {
+                    sb.Append('\'');
+                    _pos += 2;
+                    continue;
+                }
+                _pos++;
+                return new Token(TokenKind.VerbatimStringLiteral, sb.ToString(), line);
+            }
+            if (c == '\n') _line++;
+            sb.Append(c);
+            _pos++;
+        }
+        throw new ParseException("Unterminated verbatim string literal", _filePath, line);
     }
 
     private Token ReadTripleQuoteString(int line)
