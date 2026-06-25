@@ -27,12 +27,20 @@ public class StartupNoticesTests
     public void SelfDescribingCommands_SuppressNotices(string verb)
         => Assert.That(Show(new[] { verb }), Is.False);
 
-    [TestCase("run")]
     [TestCase("verify")]
     [TestCase("test")]
     [TestCase("init")]
     public void KnownVerbs_ShowNotices(string verb)
         => Assert.That(Show(new[] { verb }), Is.True);
+
+    // `cop run` with no target is a usage error, so it must show ONLY that error — not the notices.
+    [Test]
+    public void RunWithoutTarget_SuppressesNotices()
+        => Assert.That(Show(new[] { "run" }), Is.False);
+
+    [Test]
+    public void RunWithTarget_ShowsNotices()
+        => Assert.That(Show(new[] { "run", "somepkg" }), Is.True);
 
     [Test]
     public void OptionLedInvocation_ShowsNotices()

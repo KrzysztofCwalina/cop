@@ -6,9 +6,10 @@ namespace Cop.Cli.Commands;
 /// should be shown for a given invocation.
 ///
 /// The notices must never appear for a command that produces its own output (help, version,
-/// update) or — crucially — for an unknown/misspelled command. Showing them before resolving the
-/// command meant a typo like <c>cop updater</c> printed a stale "what's new" summary above the
-/// "Unknown command" error; gating on this predicate keeps a typo's output to just the error.
+/// update), for an unknown/misspelled command, or for <c>cop run</c> with no target — all of
+/// which print just an error or their own text. Showing them before resolving the command meant a
+/// typo like <c>cop updater</c> printed a stale "what's new" summary above the "unknown command"
+/// error; gating on this predicate keeps such output to just the error.
 /// </summary>
 internal static class StartupNotices
 {
@@ -32,6 +33,8 @@ internal static class StartupNotices
         if (args.Length == 0) return true;                          // bare `cop` runs local files / getting-started
         var first = args[0];
         if (SelfDescribing.Contains(first)) return false;           // help/version/update print their own output
+        // `cop run` with no target is a usage error — show only that error, not the notices.
+        if (first.Equals("run", StringComparison.OrdinalIgnoreCase) && args.Length == 1) return false;
         if (knownVerbs.Contains(first)) return true;                // a recognized verb will run
         if (first.StartsWith('-') || first.StartsWith('/')) return true; // option-led (root-command options)
         // A bare token only runs if it names something runnable; an unknown/misspelled command

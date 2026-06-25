@@ -203,8 +203,11 @@ static int ResolveAndRun(string[] runArgs, bool diag, bool allowPackages)
 {
     if (runArgs.Length == 0)
     {
-        // `cop run` with no target behaves like a bare `cop`: run local .cop files.
-        return ExecuteDefault();
+        // `cop run` exists to run a *named* target, so with nothing to resolve it's a usage error.
+        // (A bare `cop` — with no `run` — is what runs local .cop files / shows getting-started.)
+        WriteError("'cop run' needs a target: a package, a .cop file, or a url.");
+        PrintRunUsage();
+        return 2;
     }
 
     var firstArg = runArgs[0];

@@ -82,6 +82,17 @@ public class CliCommandTests
         Assert.That(stdout, Does.Contain("cop verify"));
     }
 
+    // Regression: `cop run` with no target is a usage error (exit 2) — it must NOT fall through to
+    // the getting-started screen or run local files.
+    [Test]
+    public void Run_NoTarget_PrintsError_ExitTwo()
+    {
+        var (exit, stdout, stderr) = RunCop("run");
+        Assert.That(exit, Is.EqualTo(2));
+        Assert.That(stderr.ToLowerInvariant(), Does.Contain("needs a target"));
+        Assert.That(stdout, Does.Not.Contain("getting started"));
+    }
+
     [Test]
     public void HelpLanguage_PrintsLanguageReference_ExitZero()
     {

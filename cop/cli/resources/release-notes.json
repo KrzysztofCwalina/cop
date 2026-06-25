@@ -83,6 +83,13 @@
         "The post-update notice is now a single concise line that links to the full release notes, instead of printing the whole feature list (and no longer shows broken characters on Windows consoles).",
         "Error messages are lower-case, with the `error:` prefix highlighted."
       ]
+    },
+    {
+      "version": "2026.6.25.2",
+      "approved": true,
+      "features": [
+        "`cop run` with no target now prints a clear usage error instead of silently showing the getting-started screen, and the post-update notice no longer appears before that error."
+      ]
     }
   ]
 }
