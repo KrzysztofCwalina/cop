@@ -6,61 +6,6 @@ namespace Cop.Tests.Lang.Cli;
 [TestFixture]
 public class VersionNotifierTests
 {
-    private static VersionNotifier.ReleaseNote Note(string version, bool approved, params string[] features)
-        => new(version, approved, features);
-
-    // ── SelectNewFeatures ────────────────────────────────────────────
-
-    [Test]
-    public void SelectNewFeatures_ReturnsApprovedVersionsAbovePrevious_IncludingSkipped_OldestFirst()
-    {
-        var notes = new[]
-        {
-            Note("2026.6.22.1", true, "f1"),
-            Note("2026.6.22.2", true, "f2"),
-            Note("2026.6.22.3", true, "f3"),
-        };
-        // User was on .1 and jumped to .3 — both .2 and .3 (the skipped + newest) must show.
-        var result = VersionNotifier.SelectNewFeatures(notes, new Version("2026.6.22.1"), new Version("2026.6.22.3"));
-
-        Assert.That(result.Select(n => n.Version), Is.EqualTo(new[] { "2026.6.22.2", "2026.6.22.3" }));
-    }
-
-    [Test]
-    public void SelectNewFeatures_ExcludesUnapprovedVersions()
-    {
-        var notes = new[]
-        {
-            Note("2026.6.22.2", true, "f2"),
-            Note("2026.6.22.3", false, "f3-unapproved"),
-        };
-        var result = VersionNotifier.SelectNewFeatures(notes, new Version("2026.6.22.1"), new Version("2026.6.22.3"));
-
-        Assert.That(result.Select(n => n.Version), Is.EqualTo(new[] { "2026.6.22.2" }));
-    }
-
-    [Test]
-    public void SelectNewFeatures_ExcludesSeenAndFutureVersions()
-    {
-        var notes = new[]
-        {
-            Note("2026.6.22.1", true, "f1"),   // == seen, excluded
-            Note("2026.6.22.2", true, "f2"),   // in range
-            Note("2026.6.22.9", true, "f9"),   // > current, excluded
-        };
-        var result = VersionNotifier.SelectNewFeatures(notes, new Version("2026.6.22.1"), new Version("2026.6.22.2"));
-
-        Assert.That(result.Select(n => n.Version), Is.EqualTo(new[] { "2026.6.22.2" }));
-    }
-
-    [Test]
-    public void SelectNewFeatures_SkipsEntriesWithNoFeatures()
-    {
-        var notes = new[] { Note("2026.6.22.2", true /* no features */) };
-        var result = VersionNotifier.SelectNewFeatures(notes, new Version("2026.6.22.1"), new Version("2026.6.22.2"));
-        Assert.That(result, Is.Empty);
-    }
-
     // ── ShouldCheckRemote (daily throttle) ───────────────────────────
 
     [Test]
@@ -109,65 +54,14 @@ public class VersionNotifierTests
         Assert.That(VersionNotifier.ParseVersion(null), Is.Null);
     }
 
-    // ── Run (orchestration) ──────────────────────────────────────────
-
-    private static readonly VersionNotifier.ReleaseNote[] SampleNotes =
-    {
-        new("2026.6.22.1", true, new[] { "f1" }),
-        new("2026.6.22.2", true, new[] { "f2" }),
-        new("2026.6.22.3", true, new[] { "f3" }),
-    };
-
-    [Test]
-    public void Run_OnUpgrade_EmitsWhatsNewIncludingSkipped_AndAdvancesSeenVersion()
-    {
-        var now = DateTime.UtcNow;
-        var state = new VersionNotifier.State(now, "v2026.6.22.3", "2026.6.22.1"); // recent check; seen .1
-        var (newState, messages) = VersionNotifier.Run(state, SampleNotes, new Version("2026.6.22.3"), now, () => null);
-
-        var text = string.Join("\n", messages.Select(m => m.Text));
-        Assert.That(text, Does.Contain("updated to cop 2026.6.22.3"));
-        // The notice is concise: it links to the full notes instead of inlining every feature.
-        Assert.That(text, Does.Contain("what's new: https://github.com/KrzysztofCwalina/cop/releases/tag/v2026.6.22.3"));
-        Assert.That(text, Does.Not.Contain("f2"), "features are not dumped inline anymore");
-        Assert.That(text, Does.Not.Contain("f3"));
-        Assert.That(newState.SeenVersion, Is.EqualTo("2026.6.22.3"));
-    }
-
-    [Test]
-    public void Run_WhatsNew_IsConcise_DoesNotInlineFeatures()
-    {
-        var now = DateTime.UtcNow;
-        // A single version carrying many features must still produce a short, fixed-size notice.
-        var notes = new[] { Note("2026.6.22.2", true, "a", "b", "c", "d", "e", "f", "g") }; // 7 features
-        var state = new VersionNotifier.State(now, "v2026.6.22.2", "2026.6.22.1");
-        var (_, messages) = VersionNotifier.Run(state, notes, new Version("2026.6.22.2"), now, () => null);
-
-        // Exactly: header + link + blank spacer — independent of how many features the version has.
-        Assert.That(messages.Count, Is.EqualTo(3), "the notice must stay concise regardless of feature count");
-        var text = string.Join("\n", messages.Select(m => m.Text));
-        Assert.That(text, Does.Contain("updated to cop 2026.6.22.2"));
-        Assert.That(text, Does.Contain("/releases/tag/v2026.6.22.2"), "must link to the full notes");
-        Assert.That(text, Does.Not.Contain('\u2022'), "no inline bullet list");
-    }
-
-    [Test]
-    public void Run_FirstRun_NoWhatsNew_RecordsSeenVersion()
-    {
-        var now = DateTime.UtcNow;
-        var state = new VersionNotifier.State(now, null, null); // never seen before
-        var (newState, messages) = VersionNotifier.Run(state, SampleNotes, new Version("2026.6.22.3"), now, () => null);
-
-        Assert.That(messages.Any(m => m.Text.Contains("updated to cop")), Is.False);
-        Assert.That(newState.SeenVersion, Is.EqualTo("2026.6.22.3"));
-    }
+    // ── Run (orchestration): only the "update available" reminder ────
 
     [Test]
     public void Run_UpdateAvailable_EmitsYellowReminder()
     {
         var now = DateTime.UtcNow;
-        var state = new VersionNotifier.State(now, "v2026.6.22.9", "2026.6.22.3"); // cached newer tag
-        var (_, messages) = VersionNotifier.Run(state, SampleNotes, new Version("2026.6.22.3"), now, () => null);
+        var state = new VersionNotifier.State(now, "v2026.6.22.9"); // cached newer tag, recent check
+        var (_, messages) = VersionNotifier.Run(state, new Version("2026.6.22.3"), now, () => null);
 
         var update = messages.SingleOrDefault(m => m.Color == ConsoleColor.Yellow);
         Assert.That(update, Is.Not.Null);
@@ -176,12 +70,33 @@ public class VersionNotifierTests
     }
 
     [Test]
+    public void Run_UpToDate_EmitsNoMessages()
+    {
+        var now = DateTime.UtcNow;
+        var state = new VersionNotifier.State(now, "v2026.6.22.3"); // on the latest, recent check
+        var (_, messages) = VersionNotifier.Run(state, new Version("2026.6.22.3"), now, () => null);
+        Assert.That(messages, Is.Empty);
+    }
+
+    // Regression: cop must NEVER claim "updated to cop ..." / "what's new" just because the running
+    // build is newer than last time. That misleading post-update notice has been removed entirely.
+    [Test]
+    public void Run_NeverAnnouncesAnUpdateJustHappened()
+    {
+        var now = DateTime.UtcNow;
+        var state = new VersionNotifier.State(now, "v2026.6.25.1");
+        var (_, messages) = VersionNotifier.Run(state, new Version("2026.6.25.2"), now, () => null);
+        Assert.That(messages.Any(m => m.Text.Contains("updated to cop", StringComparison.OrdinalIgnoreCase)), Is.False);
+        Assert.That(messages.Any(m => m.Text.Contains("what's new", StringComparison.OrdinalIgnoreCase)), Is.False);
+    }
+
+    [Test]
     public void Run_Throttled_DoesNotFetch_WhenLastCheckRecent()
     {
         var now = DateTime.UtcNow;
         bool fetched = false;
-        var state = new VersionNotifier.State(now.AddHours(-1), "v2026.6.22.3", "2026.6.22.3");
-        var (newState, _) = VersionNotifier.Run(state, SampleNotes, new Version("2026.6.22.3"), now,
+        var state = new VersionNotifier.State(now.AddHours(-1), "v2026.6.22.3");
+        var (newState, _) = VersionNotifier.Run(state, new Version("2026.6.22.3"), now,
             () => { fetched = true; return "v2026.6.99.9"; });
 
         Assert.That(fetched, Is.False, "must not hit the network within the throttle window");
@@ -192,8 +107,8 @@ public class VersionNotifierTests
     public void Run_Stale_Fetches_UpdatesLatestTagAndLastCheck()
     {
         var now = DateTime.UtcNow;
-        var state = new VersionNotifier.State(now.AddHours(-48), "v2026.6.22.3", "2026.6.22.3");
-        var (newState, messages) = VersionNotifier.Run(state, SampleNotes, new Version("2026.6.22.3"), now,
+        var state = new VersionNotifier.State(now.AddHours(-48), "v2026.6.22.3");
+        var (newState, messages) = VersionNotifier.Run(state, new Version("2026.6.22.3"), now,
             () => "v2026.6.99.9");
 
         Assert.That(newState.LastCheck, Is.EqualTo(now));
@@ -201,51 +116,7 @@ public class VersionNotifierTests
         Assert.That(messages.Any(m => m.Color == ConsoleColor.Yellow && m.Text.Contains("2026.6.99.9")), Is.True);
     }
 
-    // ── Embedded data + state I/O ────────────────────────────────────
-
-    [Test]
-    public void EmbeddedReleaseNotes_LoadAndDriveWhatsNew()
-    {
-        var notes = VersionNotifier.LoadReleaseNotes();
-        Assert.That(notes.Count, Is.GreaterThanOrEqualTo(4), "release-notes.json must be embedded and parsed");
-
-        var v3 = notes.Single(n => n.Version == "2026.6.22.3");
-        Assert.That(v3.Approved, Is.True);
-        Assert.That(v3.Features, Is.Not.Empty);
-
-        var current = notes.Single(n => n.Version == "2026.6.23.1");
-        Assert.That(current.Approved, Is.True, "the released version must be approved");
-
-        // Upgrading .2 -> .3 surfaces .3's real, approved features in the selected data (shown on
-        // the linked release page), and the concise notice links to that version's release page.
-        var selected = VersionNotifier.SelectNewFeatures(notes, new Version("2026.6.22.2"), new Version("2026.6.22.3"));
-        Assert.That(selected.SelectMany(n => n.Features), Has.Some.Contains("cop init --checks"));
-
-        var now = DateTime.UtcNow;
-        var state = new VersionNotifier.State(now, "v2026.6.22.3", "2026.6.22.2");
-        var (_, messages) = VersionNotifier.Run(state, notes, new Version("2026.6.22.3"), now, () => null);
-        var text = string.Join("\n", messages.Select(m => m.Text));
-        Assert.That(text, Does.Contain("/releases/tag/v2026.6.22.3"));
-    }
-
-    [Test]
-    public void WhatsNew_UpgradeTo_2026_6_23_2_SelectsFormatSupportAndLinksToNotes()
-    {
-        // Upgrading from the previous release must select the new format/script features (shown on
-        // the linked release page), and the concise notice must link to that release.
-        var notes = VersionNotifier.LoadReleaseNotes();
-        var feats = string.Join(" ",
-            VersionNotifier.SelectNewFeatures(notes, new Version("2026.6.23.1"), new Version("2026.6.23.2"))
-                .SelectMany(n => n.Features));
-        Assert.That(feats, Does.Contain("YAML").And.Contain("Dockerfile").And.Contain("XML").And.Contain("SQL"));
-
-        var now = DateTime.UtcNow;
-        var state = new VersionNotifier.State(now, "v2026.6.23.2", "2026.6.23.1");
-        var (_, messages) = VersionNotifier.Run(state, notes, new Version("2026.6.23.2"), now, () => null);
-        var text = string.Join("\n", messages.Select(m => m.Text));
-        Assert.That(text, Does.Contain("updated to cop 2026.6.23.2"));
-        Assert.That(text, Does.Contain("/releases/tag/v2026.6.23.2"));
-    }
+    // ── State I/O ────────────────────────────────────────────────────
 
     [Test]
     public void State_RoundTripsThroughFile()
@@ -254,11 +125,10 @@ public class VersionNotifierTests
         try
         {
             var when = new DateTime(2026, 6, 22, 10, 0, 0, DateTimeKind.Utc);
-            VersionNotifier.WriteState(path, new VersionNotifier.State(when, "v2026.6.22.9", "2026.6.22.4"));
+            VersionNotifier.WriteState(path, new VersionNotifier.State(when, "v2026.6.22.9"));
             var read = VersionNotifier.ReadState(path);
 
             Assert.That(read.LatestTag, Is.EqualTo("v2026.6.22.9"));
-            Assert.That(read.SeenVersion, Is.EqualTo("2026.6.22.4"));
             Assert.That(read.LastCheck, Is.EqualTo(when));
         }
         finally { File.Delete(path); }

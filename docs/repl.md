@@ -1,6 +1,6 @@
 # Working with the REPL
 
-The Agent Cop REPL (Read-Eval-Print Loop) lets you develop `.cop` files while testing progress interactively, try new expressions, and prototype checks before committing them to a file. Start it by running `cop` with no arguments in any directory.
+The Agent Cop REPL (Read-Eval-Print Loop) lets you develop `.cop` files while testing progress interactively, try new expressions, and prototype checks before committing them to a file. Start it by running `cop repl` in any directory.
 
 ## Getting Started
 

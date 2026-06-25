@@ -422,52 +422,12 @@ static bool IsLocalCommand(string name, string[] copFiles)
 }
 
 /// <summary>
-/// Bare invocation: run local .cop files if present, or show getting-started message.
+/// Bare invocation (`cop` with no command): show the getting-started screen. It never runs
+/// anything — running requires an explicit `cop run <target>` or `cop <file.cop>`.
 /// </summary>
 static int ExecuteDefault()
 {
-    var cwd = Directory.GetCurrentDirectory();
-    var copFiles = Directory.GetFiles(cwd, "*.cop", SearchOption.TopDirectoryOnly);
-
-    if (copFiles.Length == 0)
-    {
-        CliHelp.PrintGettingStarted();
-        return 0;
-    }
-
-    // Parse .cop files to understand what they contain
-    var imports = new List<string>();
-    bool hasOwnLogic = false;
-
-    foreach (var file in copFiles)
-    {
-        try
-        {
-            var source = File.ReadAllText(file);
-            var module = Cop.Lang.Parser.CopParser.Parse(source, file);
-            foreach (var decl in module.Declarations)
-            {
-                if (decl is Cop.Lang.Ast.ImportDecl imp)
-                    imports.Add(imp.ModuleName);
-                else if (decl is Cop.Lang.Ast.FunctionDecl || decl is Cop.Lang.Ast.LetDecl || decl is Cop.Lang.Ast.CommandDecl)
-                    hasOwnLogic = true;
-            }
-        }
-        catch { /* skip unparseable files */ }
-    }
-
-    if (hasOwnLogic)
-    {
-        // Local .cop files define their own logic — run as a program
-        return RunCommand.Execute(null);
-    }
-
-    if (imports.Count > 0)
-    {
-        // Config-only: just imports — run those packages
-        return RunCommand.ExecutePackages(imports.ToArray(), cwd, null, "text", false);
-    }
-
+    CliHelp.PrintGettingStarted();
     return 0;
 }
 

@@ -6,16 +6,14 @@ using System.Text.Json;
 namespace Cop.Cli.Commands;
 
 /// <summary>
-/// Shows two interactive, non-blocking notices on cop startup:
-///  1. A once-a-day check for a newer release, with a persistent yellow reminder to run
-///     `cop update` (the network check is throttled to at most once per day; the reminder shows
-///     every run until the user is up to date, using the cached latest tag).
-///  2. After an update, a concise "what's new" notice — a one-line confirmation plus a link to the
-///     full release notes — shown when any version newer than the one the user last ran has
-///     approved notes (so skipped versions count too).
+/// Shows a single interactive, non-blocking startup notice: a once-a-day check for a newer
+/// release, with a persistent yellow reminder to run `cop update`. The network check is throttled
+/// to at most once per day; the reminder shows every run until the user is up to date, using the
+/// cached latest tag.
 ///
-/// Everything is fail-silent and only runs when stderr is an interactive terminal, so it never
-/// blocks, breaks, or pollutes scripted/CI output.
+/// It is fail-silent and only runs when stderr is an interactive terminal, so it never blocks,
+/// breaks, or pollutes scripted/CI output. cop deliberately does NOT print a post-update
+/// "what's new" summary — release notes live on the GitHub releases page.
 /// </summary>
 internal static class VersionNotifier
 {
@@ -23,11 +21,7 @@ internal static class VersionNotifier
     private const string RepoName = "cop";
     private static readonly TimeSpan CheckInterval = TimeSpan.FromHours(24);
 
-    // Post-update "what's new" presentation: a one-line confirmation plus a link to the full notes.
-    private static readonly string ReleasesUrl = $"https://github.com/{RepoOwner}/{RepoName}/releases";
-
-    internal sealed record ReleaseNote(string Version, bool Approved, string[] Features);
-    internal sealed record State(DateTime? LastCheck, string? LatestTag, string? SeenVersion);
+    internal sealed record State(DateTime? LastCheck, string? LatestTag);
     internal sealed record Message(ConsoleColor? Color, string Text);
 
     /// <summary>Entry point — call once at startup. Never throws.</summary>
@@ -41,7 +35,7 @@ internal static class VersionNotifier
             if (current is null) return;
 
             var path = StatePath();
-            var (newState, messages) = Run(ReadState(path), LoadReleaseNotes(), current, DateTime.UtcNow, TryFetchLatestTag);
+            var (newState, messages) = Run(ReadState(path), current, DateTime.UtcNow, TryFetchLatestTag);
             foreach (var m in messages) WriteColored(m.Color, m.Text);
             WriteState(path, newState);
         }
@@ -52,29 +46,16 @@ internal static class VersionNotifier
     }
 
     /// <summary>
-    /// Pure orchestration (unit-tested): given the persisted state, the release notes, the
-    /// running version and "now", produces the messages to show and the next state. The only
-    /// impure input is <paramref name="fetchLatest"/> (the network call), which is injected.
+    /// Pure orchestration (unit-tested): given the persisted state, the running version and "now",
+    /// produces the messages to show and the next state. The only impure input is
+    /// <paramref name="fetchLatest"/> (the network call), which is injected.
     /// </summary>
     internal static (State NewState, List<Message> Messages) Run(
-        State state, IReadOnlyList<ReleaseNote> notes, Version current, DateTime now, Func<string?> fetchLatest)
+        State state, Version current, DateTime now, Func<string?> fetchLatest)
     {
         var messages = new List<Message>();
 
-        // 1. What's new since the version the user last ran (includes skipped versions). Kept
-        //    deliberately concise — a one-line confirmation plus a link to the full notes — rather
-        //    than dumping every feature inline, which is noisy and renders poorly on plain terminals.
-        var seen = ParseVersion(state.SeenVersion);
-        if (seen is not null && current > seen && SelectNewFeatures(notes, seen, current).Count > 0)
-        {
-            var link = $"{ReleasesUrl}/tag/v{current}";
-            messages.Add(new Message(ConsoleColor.Green, $"updated to cop {current}"));
-            messages.Add(new Message(ConsoleColor.DarkGray, $"  what's new: {link}"));
-            messages.Add(new Message(null, ""));
-        }
-        var newSeen = seen is null || current > seen ? current.ToString() : state.SeenVersion;
-
-        // 2. Throttled remote check + persistent "update available" reminder.
+        // Throttled remote check + persistent "update available" reminder.
         var lastCheck = state.LastCheck;
         var latestTag = state.LatestTag;
         if (ShouldCheckRemote(lastCheck, now))
@@ -87,19 +68,10 @@ internal static class VersionNotifier
             messages.Add(new Message(ConsoleColor.Yellow,
                 $"a new version of cop is available ({latestTag}). run 'cop update' to upgrade."));
 
-        return (new State(lastCheck, latestTag, newSeen), messages);
+        return (new State(lastCheck, latestTag), messages);
     }
 
     // ── Pure logic (unit-tested) ─────────────────────────────────────────────
-
-    /// <summary>Approved release notes for versions in (seen, current], oldest first.</summary>
-    internal static List<ReleaseNote> SelectNewFeatures(IEnumerable<ReleaseNote> notes, Version seen, Version current)
-        => notes
-            .Select(n => (Note: n, Ver: ParseVersion(n.Version)))
-            .Where(x => x.Ver is not null && x.Ver > seen && x.Ver <= current && x.Note.Approved && x.Note.Features.Length > 0)
-            .OrderBy(x => x.Ver)
-            .Select(x => x.Note)
-            .ToList();
 
     /// <summary>True when no check has happened yet or the last one was at least a day ago.</summary>
     internal static bool ShouldCheckRemote(DateTime? lastCheck, DateTime now)
@@ -148,7 +120,7 @@ internal static class VersionNotifier
     {
         try
         {
-            if (!File.Exists(path)) return new State(null, null, null);
+            if (!File.Exists(path)) return new State(null, null);
             using var doc = JsonDocument.Parse(File.ReadAllText(path));
             var root = doc.RootElement;
             DateTime? last = null;
@@ -156,12 +128,11 @@ internal static class VersionNotifier
                 DateTime.TryParse(lc.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var d))
                 last = d.ToUniversalTime();
             var tag = root.TryGetProperty("latestTag", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
-            var seen = root.TryGetProperty("seenVersion", out var s) && s.ValueKind == JsonValueKind.String ? s.GetString() : null;
-            return new State(last, tag, seen);
+            return new State(last, tag);
         }
         catch
         {
-            return new State(null, null, null);
+            return new State(null, null);
         }
     }
 
@@ -174,42 +145,12 @@ internal static class VersionNotifier
             {
                 lastCheck = state.LastCheck?.ToString("o"),
                 latestTag = state.LatestTag,
-                seenVersion = state.SeenVersion,
             };
             File.WriteAllText(path, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
         }
         catch
         {
             // best-effort
-        }
-    }
-
-    internal static List<ReleaseNote> LoadReleaseNotes()
-    {
-        try
-        {
-            using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Cop.Cli.ReleaseNotes.json");
-            if (stream is null) return [];
-            using var doc = JsonDocument.Parse(stream);
-            var result = new List<ReleaseNote>();
-            if (doc.RootElement.TryGetProperty("releases", out var releases) && releases.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var r in releases.EnumerateArray())
-                {
-                    if (!r.TryGetProperty("version", out var v) || v.GetString() is not { } version) continue;
-                    var approved = r.TryGetProperty("approved", out var a) && a.ValueKind == JsonValueKind.True;
-                    var features = new List<string>();
-                    if (r.TryGetProperty("features", out var fs) && fs.ValueKind == JsonValueKind.Array)
-                        foreach (var f in fs.EnumerateArray())
-                            if (f.GetString() is { } feature) features.Add(feature);
-                    result.Add(new ReleaseNote(version, approved, features.ToArray()));
-                }
-            }
-            return result;
-        }
-        catch
-        {
-            return [];
         }
     }
 

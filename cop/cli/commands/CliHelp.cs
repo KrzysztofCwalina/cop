@@ -24,7 +24,6 @@ internal static class CliHelp
         Rows(
             ("cop run <package>", "run a package from a feed (auto-restores)"),
             ("cop <file.cop>", "run a local .cop file"),
-            ("cop", "run local .cop files in the current directory"),
             ("cop package list", "browse available packages"),
             ("cop help language", "full language reference"),
             ("cop help <package>", "package documentation"),
@@ -56,8 +55,8 @@ internal static class CliHelp
             ("cop package list", "browse available packages"),
             ("cop repl", "interactive repl"));
         Section("getting started");
-        Console.WriteLine("  1. run a package:  cop run <package-name>");
-        Console.WriteLine("  2. or write a .cop file with 'import <package>', then run 'cop'");
+        Console.WriteLine("  1. run a package:   cop run <package-name>");
+        Console.WriteLine("  2. run a .cop file: cop run <file.cop>");
         Console.WriteLine();
         WriteLine("  cop -h for more options", Label);
     }

@@ -90,6 +90,14 @@
       "features": [
         "`cop run` with no target now prints a clear usage error instead of silently showing the getting-started screen, and the post-update notice no longer appears before that error."
       ]
+    },
+    {
+      "version": "2026.6.25.3",
+      "approved": true,
+      "features": [
+        "Removed the misleading post-update \"updated to cop … / what's new\" startup notice. (The \"a new version is available\" reminder, shown only when you're actually behind the latest release, stays.)",
+        "A bare `cop` (no command) now just shows help — it never runs local .cop files. Run something explicitly with `cop run <package>` or `cop <file.cop>`."
+      ]
     }
   ]
 }

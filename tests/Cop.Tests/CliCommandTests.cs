@@ -82,8 +82,8 @@ public class CliCommandTests
         Assert.That(stdout, Does.Contain("cop verify"));
     }
 
-    // Regression: `cop run` with no target is a usage error (exit 2) — it must NOT fall through to
-    // the getting-started screen or run local files.
+    // Regression: a bare `cop` (no command) must NOT fall through to the getting-started screen
+    // or run local files.
     [Test]
     public void Run_NoTarget_PrintsError_ExitTwo()
     {
@@ -91,6 +91,21 @@ public class CliCommandTests
         Assert.That(exit, Is.EqualTo(2));
         Assert.That(stderr.ToLowerInvariant(), Does.Contain("needs a target"));
         Assert.That(stdout, Does.Not.Contain("getting started"));
+    }
+
+    // Regression: a bare `cop` (no command) shows help and NEVER runs local .cop files.
+    [Test]
+    public void BareCop_WithLocalCopFile_DoesNotRun_ShowsHelp()
+    {
+        var dir = WriteTempCop("command MAIN = error('RAN_THE_FILE')");
+        try
+        {
+            var (exit, stdout, stderr) = RunCop("", dir);
+            Assert.That(exit, Is.EqualTo(0));
+            Assert.That(stdout, Does.Contain("getting started"));
+            Assert.That(stdout + stderr, Does.Not.Contain("RAN_THE_FILE"), "bare cop must not execute local .cop files");
+        }
+        finally { Directory.Delete(dir, recursive: true); }
     }
 
     [Test]
