@@ -74,6 +74,15 @@
         "Glob matching now supports `**`, `**/`, and `?` wildcards, and the Rust parser understands `use path as alias;`.",
         "The `code` package now also provides `Violation`/`CHECK`/`toError`/`toWarning`/`toInfo` and module-layering helpers (the former `code-analysis` and `code-layering` packages were merged into it) — use `import code`."
       ]
+    },
+    {
+      "version": "2026.6.25.1",
+      "approved": true,
+      "features": [
+        "Refreshed CLI output: help, usage, and the getting-started screen are now consistent, lower-case, and colorized.",
+        "The post-update notice is now a single concise line that links to the full release notes, instead of printing the whole feature list (and no longer shows broken characters on Windows consoles).",
+        "Error messages are lower-case, with the `error:` prefix highlighted."
+      ]
     }
   ]
 }

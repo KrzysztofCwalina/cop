@@ -77,7 +77,7 @@ public class CliCommandTests
     {
         var (exit, stdout, _) = RunCop("-h");
         Assert.That(exit, Is.EqualTo(0));
-        Assert.That(stdout, Does.Contain("Usage"));
+        Assert.That(stdout, Does.Contain("usage"));
         Assert.That(stdout, Does.Contain("cop test"));
         Assert.That(stdout, Does.Contain("cop verify"));
     }

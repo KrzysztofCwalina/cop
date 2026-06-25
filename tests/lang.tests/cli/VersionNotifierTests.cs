@@ -126,30 +126,29 @@ public class VersionNotifierTests
         var (newState, messages) = VersionNotifier.Run(state, SampleNotes, new Version("2026.6.22.3"), now, () => null);
 
         var text = string.Join("\n", messages.Select(m => m.Text));
-        Assert.That(text, Does.Contain("What's new"));
-        Assert.That(text, Does.Contain("f2"), "skipped version's feature must show");
-        Assert.That(text, Does.Contain("f3"));
-        Assert.That(text, Does.Not.Contain("f1"), "the already-seen version must not show");
-        Assert.That(text, Does.Contain("Full release notes: https://github.com/KrzysztofCwalina/cop/releases/tag/v2026.6.22.3"),
-            "the summary must link to the full release notes");
+        Assert.That(text, Does.Contain("updated to cop 2026.6.22.3"));
+        // The notice is concise: it links to the full notes instead of inlining every feature.
+        Assert.That(text, Does.Contain("what's new: https://github.com/KrzysztofCwalina/cop/releases/tag/v2026.6.22.3"));
+        Assert.That(text, Does.Not.Contain("f2"), "features are not dumped inline anymore");
+        Assert.That(text, Does.Not.Contain("f3"));
         Assert.That(newState.SeenVersion, Is.EqualTo("2026.6.22.3"));
     }
 
     [Test]
-    public void Run_WhatsNew_CapsInlineFeatures_AndPointsToFullNotesForTheRest()
+    public void Run_WhatsNew_IsConcise_DoesNotInlineFeatures()
     {
         var now = DateTime.UtcNow;
-        // A single version carrying more features than fit inline (e.g. a large or skipped span).
+        // A single version carrying many features must still produce a short, fixed-size notice.
         var notes = new[] { Note("2026.6.22.2", true, "a", "b", "c", "d", "e", "f", "g") }; // 7 features
         var state = new VersionNotifier.State(now, "v2026.6.22.2", "2026.6.22.1");
         var (_, messages) = VersionNotifier.Run(state, notes, new Version("2026.6.22.2"), now, () => null);
 
-        var bullets = messages.Count(m => m.Text.Contains('\u2022'));
-        Assert.That(bullets, Is.EqualTo(5), "inline features must be capped at 5 to stay readable");
-
+        // Exactly: header + link + blank spacer — independent of how many features the version has.
+        Assert.That(messages.Count, Is.EqualTo(3), "the notice must stay concise regardless of feature count");
         var text = string.Join("\n", messages.Select(m => m.Text));
-        Assert.That(text, Does.Contain("and 2 more"), "the remaining feature count must be shown");
-        Assert.That(text, Does.Contain("/releases/tag/v2026.6.22.2"), "and link to the full notes");
+        Assert.That(text, Does.Contain("updated to cop 2026.6.22.2"));
+        Assert.That(text, Does.Contain("/releases/tag/v2026.6.22.2"), "must link to the full notes");
+        Assert.That(text, Does.Not.Contain('\u2022'), "no inline bullet list");
     }
 
     [Test]
@@ -159,7 +158,7 @@ public class VersionNotifierTests
         var state = new VersionNotifier.State(now, null, null); // never seen before
         var (newState, messages) = VersionNotifier.Run(state, SampleNotes, new Version("2026.6.22.3"), now, () => null);
 
-        Assert.That(messages.Any(m => m.Text.Contains("What's new")), Is.False);
+        Assert.That(messages.Any(m => m.Text.Contains("updated to cop")), Is.False);
         Assert.That(newState.SeenVersion, Is.EqualTo("2026.6.22.3"));
     }
 
@@ -217,26 +216,35 @@ public class VersionNotifierTests
         var current = notes.Single(n => n.Version == "2026.6.23.1");
         Assert.That(current.Approved, Is.True, "the released version must be approved");
 
-        // Upgrading .2 -> .3 surfaces .3's real, approved features (but not the unapproved .4).
+        // Upgrading .2 -> .3 surfaces .3's real, approved features in the selected data (shown on
+        // the linked release page), and the concise notice links to that version's release page.
+        var selected = VersionNotifier.SelectNewFeatures(notes, new Version("2026.6.22.2"), new Version("2026.6.22.3"));
+        Assert.That(selected.SelectMany(n => n.Features), Has.Some.Contains("cop init --checks"));
+
         var now = DateTime.UtcNow;
         var state = new VersionNotifier.State(now, "v2026.6.22.3", "2026.6.22.2");
         var (_, messages) = VersionNotifier.Run(state, notes, new Version("2026.6.22.3"), now, () => null);
         var text = string.Join("\n", messages.Select(m => m.Text));
-        Assert.That(text, Does.Contain("cop init --checks"));
+        Assert.That(text, Does.Contain("/releases/tag/v2026.6.22.3"));
     }
 
     [Test]
-    public void WhatsNew_UpgradeTo_2026_6_23_2_AnnouncesFormatSupport()
+    public void WhatsNew_UpgradeTo_2026_6_23_2_SelectsFormatSupportAndLinksToNotes()
     {
-        // The user upgrading from the previous release must see the new format/script support
-        // in the "what's new" output.
+        // Upgrading from the previous release must select the new format/script features (shown on
+        // the linked release page), and the concise notice must link to that release.
         var notes = VersionNotifier.LoadReleaseNotes();
+        var feats = string.Join(" ",
+            VersionNotifier.SelectNewFeatures(notes, new Version("2026.6.23.1"), new Version("2026.6.23.2"))
+                .SelectMany(n => n.Features));
+        Assert.That(feats, Does.Contain("YAML").And.Contain("Dockerfile").And.Contain("XML").And.Contain("SQL"));
+
         var now = DateTime.UtcNow;
         var state = new VersionNotifier.State(now, "v2026.6.23.2", "2026.6.23.1");
         var (_, messages) = VersionNotifier.Run(state, notes, new Version("2026.6.23.2"), now, () => null);
         var text = string.Join("\n", messages.Select(m => m.Text));
-        Assert.That(text, Does.Contain("What's new"));
-        Assert.That(text, Does.Contain("YAML").And.Contain("Dockerfile").And.Contain("XML").And.Contain("SQL"));
+        Assert.That(text, Does.Contain("updated to cop 2026.6.23.2"));
+        Assert.That(text, Does.Contain("/releases/tag/v2026.6.23.2"));
     }
 
     [Test]

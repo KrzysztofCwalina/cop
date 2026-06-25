@@ -8,9 +8,9 @@ namespace Cop.Cli.Commands;
 
 public static class HelpCommand
 {
-    /// <summary>Banner shown at the top of usage/help output, e.g. "Agent Cop - 2026.6.24.2".</summary>
+    /// <summary>Banner shown at the top of usage/help output, e.g. "agent cop 2026.6.24.3".</summary>
     public static string Banner =>
-        $"Agent Cop - {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version}";
+        $"agent cop {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version}";
 
     public static Command Create()
     {
@@ -32,30 +32,7 @@ public static class HelpCommand
         // Bare "cop help" with no argument — show general help
         if (file == null)
         {
-            Console.WriteLine($"""
-                {Banner}
-
-                Usage:
-                  cop run <package>                  Run a package from a feed (auto-restores)
-                  cop <file.cop>                     Run a local .cop file
-                  cop                                Run local .cop files in the current directory
-                  cop package list                   Browse available packages
-                  cop help language                  Full language reference
-                  cop help <package>                 Package documentation
-                  cop init                           Generate agent instruction files
-                  cop update                         Update cop to the latest release
-                  cop vscode                         Install VS Code extension
-                  cop test [<file>]                  Run tests
-                  cop verify [<path>]                Verify program correctness
-                  cop repl                           Interactive REPL
-
-                Options:
-                  -t <dir>      Target directory
-                  -c <commands> Filter to specific commands (comma-separated)
-                  -f <format>   Output format: text or json
-                  -h            Show help
-                  -v            Show version
-                """);
+            CliHelp.PrintMainHelp();
             return 0;
         }
 

@@ -10,9 +10,9 @@ namespace Cop.Cli.Commands;
 ///  1. A once-a-day check for a newer release, with a persistent yellow reminder to run
 ///     `cop update` (the network check is throttled to at most once per day; the reminder shows
 ///     every run until the user is up to date, using the cached latest tag).
-///  2. After an update, a concise "what's new" summary — a short bulleted list plus a link to the
-///     full release notes — covering every version newer than the one the user last ran (so
-///     skipped versions are included). Only <c>approved</c> release notes are shown.
+///  2. After an update, a concise "what's new" notice — a one-line confirmation plus a link to the
+///     full release notes — shown when any version newer than the one the user last ran has
+///     approved notes (so skipped versions count too).
 ///
 /// Everything is fail-silent and only runs when stderr is an interactive terminal, so it never
 /// blocks, breaks, or pollutes scripted/CI output.
@@ -23,9 +23,8 @@ internal static class VersionNotifier
     private const string RepoName = "cop";
     private static readonly TimeSpan CheckInterval = TimeSpan.FromHours(24);
 
-    // Post-update "what's new" presentation: a short bulleted list plus a link to the full notes.
+    // Post-update "what's new" presentation: a one-line confirmation plus a link to the full notes.
     private static readonly string ReleasesUrl = $"https://github.com/{RepoOwner}/{RepoName}/releases";
-    private const int MaxInlineFeatures = 5;
 
     internal sealed record ReleaseNote(string Version, bool Approved, string[] Features);
     internal sealed record State(DateTime? LastCheck, string? LatestTag, string? SeenVersion);
@@ -62,26 +61,16 @@ internal static class VersionNotifier
     {
         var messages = new List<Message>();
 
-        // 1. What's new since the version the user last ran (includes skipped versions).
+        // 1. What's new since the version the user last ran (includes skipped versions). Kept
+        //    deliberately concise — a one-line confirmation plus a link to the full notes — rather
+        //    than dumping every feature inline, which is noisy and renders poorly on plain terminals.
         var seen = ParseVersion(state.SeenVersion);
-        if (seen is not null && current > seen)
+        if (seen is not null && current > seen && SelectNewFeatures(notes, seen, current).Count > 0)
         {
-            var newNotes = SelectNewFeatures(notes, seen, current);
-            if (newNotes.Count > 0)
-            {
-                // Show a short, readable bulleted list (header coloured, bullets plain) and link
-                // to the full release notes rather than dumping every feature inline.
-                var features = newNotes.SelectMany(n => n.Features).ToList();
-                messages.Add(new Message(ConsoleColor.Cyan, $"\u2728 Updated to cop {current}. What's new:"));
-                foreach (var feature in features.Take(MaxInlineFeatures))
-                    messages.Add(new Message(null, $"   \u2022 {feature}"));
-                var more = features.Count - Math.Min(features.Count, MaxInlineFeatures);
-                var link = $"{ReleasesUrl}/tag/v{current}";
-                messages.Add(new Message(ConsoleColor.Cyan, more > 0
-                    ? $"   \u2026and {more} more \u2014 full release notes: {link}"
-                    : $"   Full release notes: {link}"));
-                messages.Add(new Message(null, ""));
-            }
+            var link = $"{ReleasesUrl}/tag/v{current}";
+            messages.Add(new Message(ConsoleColor.Green, $"updated to cop {current}"));
+            messages.Add(new Message(ConsoleColor.DarkGray, $"  what's new: {link}"));
+            messages.Add(new Message(null, ""));
         }
         var newSeen = seen is null || current > seen ? current.ToString() : state.SeenVersion;
 
@@ -96,7 +85,7 @@ internal static class VersionNotifier
         }
         if (IsUpdateAvailable(latestTag, current))
             messages.Add(new Message(ConsoleColor.Yellow,
-                $"A new version of cop is available ({latestTag}). Run 'cop update' to upgrade."));
+                $"a new version of cop is available ({latestTag}). run 'cop update' to upgrade."));
 
         return (new State(lastCheck, latestTag, newSeen), messages);
     }

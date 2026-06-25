@@ -53,32 +53,7 @@ if (args.Length == 0)
 // Intercept help flags before System.CommandLine to show clean single-section help
 if (args.Length == 1 && (args[0] == "-h" || args[0] == "-help" || args[0] == "--help"))
 {
-    Console.WriteLine($"""
-        {HelpCommand.Banner}
-
-        Usage:
-          cop run <package>                  Run a package from a feed (auto-restores)
-          cop <file.cop>                     Run a local .cop file
-          cop                                Run local .cop files in the current directory
-          cop package list                   Browse available packages
-          cop help language                  Full language reference
-          cop help <package>                 Package documentation
-          cop init                           Generate Copilot instructions (--claude for Claude Code)
-          cop init --checks                  Generate cop checks from existing instructions (via a coding agent)
-          cop update                         Update cop to the latest release
-          cop vscode                         Install VS Code extension
-          cop test [<file>]                  Run tests
-          cop verify [<path>]                Verify program correctness
-          cop repl                           Interactive REPL
-
-        Options:
-          -t <dir>      Target directory
-          -p <provider> Load a provider package (multiple allowed)
-          -c <commands> Filter to specific commands (comma-separated)
-          -f <format>   Output format: text or json
-          -h            Show help
-          -v            Show version
-        """);
+    CliHelp.PrintMainHelp();
     return 0;
 }
 
@@ -168,14 +143,14 @@ var rootCommand = new RootCommand
     Description = $"""
         {HelpCommand.Banner}
 
-        Quick reference:
-          cop run <package>                Run a package from a feed (auto-restores)
-          cop <file.cop>                   Run a local .cop file
-          cop package list                 Browse available packages
-          cop help <package>               Package documentation
-          cop test [<file>]               Run tests
-          cop repl                        Interactive REPL
-          cop <command> -h for details
+        quick reference
+          cop run <package>     run a package from a feed (auto-restores)
+          cop <file.cop>        run a local .cop file
+          cop package list      browse available packages
+          cop help <package>    package documentation
+          cop test [<file>]     run tests
+          cop repl              interactive repl
+          cop <command> -h      details for a command
         """
 };
 
@@ -328,21 +303,38 @@ static int ResolveAndRun(string[] runArgs, bool diag, bool allowPackages)
 static int UnknownCommandError(string[] tokens)
 {
     var name = tokens.Length > 0 ? tokens[0] : "";
-    Console.Error.WriteLine($"Error: Unknown command '{name}'.");
+    WriteError($"unknown command '{name}'.");
 
     var suggestion = SuggestVerb(name);
     if (suggestion != null)
-        Console.Error.WriteLine($"Did you mean 'cop {suggestion}'?");
+        Console.Error.WriteLine($"did you mean 'cop {suggestion}'?");
 
-    Console.Error.WriteLine($"To run a package, use: cop run {string.Join(' ', tokens)}");
-    Console.Error.WriteLine("Run 'cop -h' to see available commands.");
+    Console.Error.WriteLine($"to run a package, use: cop run {string.Join(' ', tokens)}");
+    Console.Error.WriteLine("run 'cop -h' to see available commands.");
     return 2;
 }
 
 static void PrintRunUsage()
 {
-    Console.Error.WriteLine("Usage: cop run <package|file.cop|url> [args] [options]");
-    Console.Error.WriteLine("Run 'cop -h' for more options.");
+    Console.Error.WriteLine("usage: cop run <package|file.cop|url> [args] [options]");
+    Console.Error.WriteLine("run 'cop -h' for more options.");
+}
+
+/// <summary>Writes a lower-case "error: &lt;message&gt;" to stderr, with the prefix in red when colour is enabled.</summary>
+static void WriteError(string message)
+{
+    if (!Console.IsErrorRedirected && !ConsoleMarkdown.NoColor)
+    {
+        var prev = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.Error.Write("error: ");
+        Console.ForegroundColor = prev;
+        Console.Error.WriteLine(message);
+    }
+    else
+    {
+        Console.Error.WriteLine($"error: {message}");
+    }
 }
 
 /// <summary>
@@ -436,20 +428,7 @@ static int ExecuteDefault()
 
     if (copFiles.Length == 0)
     {
-        Console.WriteLine(HelpCommand.Banner);
-        Console.WriteLine();
-        Console.WriteLine("Usage:");
-        Console.WriteLine("  cop run <package>      Run a package from a feed");
-        Console.WriteLine("  cop <file.cop>         Run a local .cop file");
-        Console.WriteLine("  cop package list       Browse available packages");
-        Console.WriteLine("  cop repl              Launch interactive REPL");
-        Console.WriteLine();
-        Console.WriteLine("Getting started:");
-        Console.WriteLine("  1. Run a package:  cop run <package-name>");
-        Console.WriteLine("  2. Customize:      Create a .cop file with 'import <package>'");
-        Console.WriteLine("                     then just run 'cop' with no arguments");
-        Console.WriteLine();
-        Console.WriteLine("  cop -h for more options");
+        CliHelp.PrintGettingStarted();
         return 0;
     }
 
