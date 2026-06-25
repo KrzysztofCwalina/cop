@@ -129,6 +129,11 @@ public class RestoreEngine
         List<(string Id, string Version)> nugetAnalyzers,
         Dictionary<string, string> diagnosticRules)
     {
+        // Place package instructions once (gather-then-write) so repeated restores are idempotent
+        // and the placed file carries an applyTo front-matter block. Instruction files are skipped
+        // in the per-file loop below.
+        PlaceInstructions(packageFiles, package, repoRoot, placedFiles, warnings);
+
         foreach (var (relativePath, content) in packageFiles)
         {
             try
@@ -142,25 +147,11 @@ public class RestoreEngine
 
                 string targetPath = null;
 
-                // Instructions: instructions/*.md → .github/instructions/{packageName}.instructions.md
+                // Instructions are placed once before this loop (see PlaceInstructions). Skip here.
                 if (relativePath.StartsWith("instructions/", StringComparison.OrdinalIgnoreCase) &&
                     relativePath.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
                 {
-                    var instructionsDir = Path.Combine(repoRoot, ".github", "instructions");
-                    Directory.CreateDirectory(instructionsDir);
-                    targetPath = Path.Combine(instructionsDir, $"{package.PackageName}.instructions.md");
-
-                    // Append to existing file if it exists
-                    if (File.Exists(targetPath))
-                    {
-                        var existingContent = await File.ReadAllBytesAsync(targetPath);
-                        var newContent = Encoding.UTF8.GetString(existingContent) + "\n\n" + Encoding.UTF8.GetString(content);
-                        await File.WriteAllBytesAsync(targetPath, Encoding.UTF8.GetBytes(newContent));
-                    }
-                    else
-                    {
-                        await File.WriteAllBytesAsync(targetPath, content);
-                    }
+                    continue;
                 }
                 // Skills: skills/*.md → .github/skills/{packageName}/SKILL.md
                 else if (relativePath.StartsWith("skills/", StringComparison.OrdinalIgnoreCase) &&
@@ -243,6 +234,49 @@ public class RestoreEngine
             {
                 warnings.Add($"Failed to place file {relativePath} from package {package.PackageName}: {ex.Message}");
             }
+        }
+    }
+
+    /// <summary>
+    /// Places a package's instructions/*.md into .github/instructions/{packageName}.instructions.md
+    /// once, with an applyTo front-matter block (from the package's cop.json), idempotently.
+    /// </summary>
+    private static void PlaceInstructions(
+        Dictionary<string, byte[]> packageFiles,
+        PackageReference package,
+        string repoRoot,
+        List<string> placedFiles,
+        List<string> warnings)
+    {
+        try
+        {
+            var instructionFiles = packageFiles
+                .Where(kv => kv.Key.StartsWith("instructions/", StringComparison.OrdinalIgnoreCase)
+                          && kv.Key.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+                .Select(kv => (Path.GetFileName(kv.Key), Encoding.UTF8.GetString(kv.Value)))
+                .ToList();
+
+            if (instructionFiles.Count == 0)
+                return;
+
+            var applyTo = string.Empty;
+            var metaEntry = packageFiles.FirstOrDefault(kv =>
+                kv.Key.Equals(PackageMetadata.MetadataFileName, StringComparison.OrdinalIgnoreCase));
+            if (metaEntry.Value != null)
+            {
+                try { applyTo = PackageMetadata.ParseFromJson(Encoding.UTF8.GetString(metaEntry.Value)).ApplyTo; }
+                catch { /* fall back to default ** */ }
+            }
+
+            var targetPath = InstructionPlacement.Place(
+                repoRoot, package.PackageName, applyTo, instructionFiles, out _);
+
+            if (targetPath != null && !placedFiles.Contains(targetPath))
+                placedFiles.Add(targetPath);
+        }
+        catch (Exception ex)
+        {
+            warnings.Add($"Failed to place instructions from package {package.PackageName}: {ex.Message}");
         }
     }
 

@@ -9,5 +9,6 @@
     "nunit",
     "unit-tests"
   ],
-  "language": "C#"
+  "language": "C#",
+  "applyTo": "**/*.cs"
 }

@@ -79,6 +79,17 @@ public class PackageMetadata
     public string Language { get; set; } = string.Empty;
 
     /// <summary>
+    /// Glob that scopes this package's instructions when they are placed into
+    /// <c>.github/instructions/{name}.instructions.md</c>. Emitted as the <c>applyTo</c>
+    /// YAML front-matter that coding agents (e.g. GitHub Copilot) read to decide which files
+    /// the instructions apply to. When empty, placement defaults to <c>**</c> (all files).
+    /// Example: <c>**/*.cs</c> for a C#-only package.
+    /// </summary>
+    [YamlMember(Alias = "applyTo")]
+    [JsonPropertyName("applyTo")]
+    public string ApplyTo { get; set; } = string.Empty;
+
+    /// <summary>
     /// Provider type. When set to "clr", this package contains a CLR assembly
     /// that implements <see cref="DataProvider"/>. Defaults to empty (no provider).
     /// </summary>

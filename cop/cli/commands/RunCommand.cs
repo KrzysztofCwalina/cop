@@ -230,6 +230,11 @@ public static class RunCommand
         // Auto-restore missing imports before execution
         AutoRestoreImports(scriptsDir, diagLog);
 
+        // Surface imported packages' instructions to coding agents by placing their
+        // instructions/*.md into the analysis target's .github/instructions/ (idempotent — a no-op
+        // when the content is unchanged, so this does not churn the working tree on repeated runs).
+        PlaceInstructionsForImports(scriptsDir, rootPath, diagLog);
+
         // Discover user-global check files (~/.cop/checks/) to include alongside project checks
         var userCheckFiles = GetUserCheckFiles(diagLog);
 
@@ -1062,6 +1067,77 @@ public static class RunCommand
         if (restoredCount > 0)
         {
             Console.Error.WriteLine($"{restoredCount} package(s) restored successfully");
+        }
+    }
+
+    /// <summary>
+    /// Places the instructions of every package imported (transitively) by the .cop files in
+    /// <paramref name="scriptsDir"/> into <paramref name="repoRoot"/>/.github/instructions/, so
+    /// coding agents pick them up. Resolves each import to a package directory across the known
+    /// feed paths, then delegates to <see cref="InstructionPlacement.PlaceFromPackageDir"/>
+    /// (which is idempotent and a no-op for packages without an instructions/ folder).
+    /// </summary>
+    private static void PlaceInstructionsForImports(string scriptsDir, string repoRoot, Action<string>? diagLog)
+    {
+        try
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var queue = new Queue<string>();
+
+            void EnqueueImportsFrom(string dir)
+            {
+                if (!Directory.Exists(dir)) return;
+                foreach (var path in Directory.GetFiles(dir, "*.cop", SearchOption.AllDirectories))
+                {
+                    try
+                    {
+                        var sf = Cop.Lang.Parser.CopParser.ParseFile(File.ReadAllText(path), path);
+                        foreach (var imp in sf.Imports)
+                            if (seen.Add(imp)) queue.Enqueue(imp);
+                    }
+                    catch { /* skip unparseable files */ }
+                }
+            }
+
+            EnqueueImportsFrom(scriptsDir);
+            if (queue.Count == 0) return;
+
+            var feedPaths = PackageResolver.GetFeedPaths();
+            foreach (var p in PackageResolver.GetFeedPaths(scriptsDir))
+                if (!feedPaths.Contains(p, StringComparer.OrdinalIgnoreCase))
+                    feedPaths.Add(p);
+
+            while (queue.Count > 0)
+            {
+                var name = queue.Dequeue();
+
+                string? pkgDir = null;
+                foreach (var feed in feedPaths)
+                {
+                    pkgDir = ImportResolver.FindPackageDir(feed, name);
+                    if (pkgDir != null) break;
+                }
+                if (pkgDir == null) continue;
+
+                try
+                {
+                    var target = InstructionPlacement.PlaceFromPackageDir(repoRoot, pkgDir, out var wrote);
+                    if (target != null && wrote)
+                        diagLog?.Invoke($"[diag] Placed instructions for '{name}' -> {target}");
+                }
+                catch (Exception ex)
+                {
+                    diagLog?.Invoke($"[diag] Failed to place instructions for '{name}': {ex.Message}");
+                }
+
+                // Follow the package's own imports (types/ takes priority over src/).
+                var typesDir = Path.Combine(pkgDir, "types");
+                EnqueueImportsFrom(Directory.Exists(typesDir) ? typesDir : Path.Combine(pkgDir, "src"));
+            }
+        }
+        catch (Exception ex)
+        {
+            diagLog?.Invoke($"[diag] Instruction placement skipped: {ex.Message}");
         }
     }
 

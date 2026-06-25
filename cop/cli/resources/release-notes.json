@@ -64,6 +64,16 @@
         "Quieter startup: the once-a-day update reminder and post-update \"what's new\" summary no longer print before `help`/`--version`/`update` output or before an \"unknown command\" error — a typo now shows just the error.",
         "`cop update` now skips the download when you're already on the latest release (and says so); use `cop update --force` to reinstall."
       ]
+    },
+    {
+      "version": "2026.6.24.3",
+      "approved": true,
+      "features": [
+        "A package's coding-agent guidance is now installed automatically: running or restoring a package writes its instructions to `.github/instructions/{package}.instructions.md`, scoped by an `applyTo` glob from the package manifest, so GitHub Copilot and compatible agents pick it up. Placement is idempotent — unchanged files don't churn your working tree.",
+        "More documented built-ins now work at runtime: `isError`, `Path`, `Matches`, and `Text`.",
+        "Glob matching now supports `**`, `**/`, and `?` wildcards, and the Rust parser understands `use path as alias;`.",
+        "The `code` package now also provides `Violation`/`CHECK`/`toError`/`toWarning`/`toInfo` and module-layering helpers (the former `code-analysis` and `code-layering` packages were merged into it) — use `import code`."
+      ]
     }
   ]
 }

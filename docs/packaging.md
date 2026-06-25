@@ -73,6 +73,7 @@ Fields:
 | `authors` | Yes | Author name(s). |
 | `tags` | No | Array of string tags for search/discoverability. |
 | `language` | No | Primary programming language (e.g., `csharp`, `python`, `rust`, `go`, `java`). |
+| `applyTo` | No | Glob that scopes this package's instructions when they are placed into `.github/instructions/` (emitted as the `applyTo` front-matter that coding agents read). Defaults to `**` (all files). Example: `**/*.cs`. |
 | `provider` | No | Set to `clr` if the package contains a .NET data provider assembly. |
 | `providerEntry` | No | Fully-qualified class name of the data provider (required when `provider` is `clr`). |
 | `providerAssembly` | No | Filename of the provider DLL (e.g., `csharp-provider.dll`). Required when `lib/` contains multiple DLLs. |
@@ -128,6 +129,44 @@ command main = foreach csharp.Types
 Import statements must appear at the top of the file, after any `feed` declarations and before any type definitions, predicates, or UPPERCASE functions.
 
 When cop processes an import, it finds the package directory, parses all `.cop` files in it, and makes the package's definitions available. Imports are **transitive**: if `code-analysis` imports `code` and `files`, those packages are automatically resolved too.
+
+---
+
+## Instructions for Coding Agents
+
+A package may include an `instructions/` folder containing one or more Markdown files with
+natural-language guidance (coding standards, design rules, API conventions, etc.) intended for AI
+coding agents.
+
+Whenever a package is restored — both by the explicit `cop package restore` command **and** by
+auto-restore (when you run `cop <file>.cop` or `cop run <package>`) — cop places that guidance
+into your repository at:
+
+```
+.github/instructions/{packageName}.instructions.md
+```
+
+This is the location GitHub Copilot and compatible agents read automatically. All of a package's
+`instructions/*.md` files are combined into that single file, prefixed with an `applyTo` YAML
+front-matter block:
+
+```
+---
+applyTo: '**/*.cs'
+---
+
+<combined instruction text>
+```
+
+The `applyTo` glob comes from the package's `cop.json` `applyTo` field and tells the agent which
+files the instructions apply to — so, for example, C# guidance is only loaded when the agent is
+working on `.cs` files. When `applyTo` is omitted from the manifest it defaults to `**`, meaning
+the instructions always apply.
+
+Placement is **idempotent**: if the target file already contains identical content it is left
+untouched, so repeated runs never churn your working tree. Instructions are written under the
+analysis target — the `-t` directory, or the current directory by default — so running
+`cop cop-checks/main.cop -t .` from your repository root places them at the repository root.
 
 ---
 
@@ -242,6 +281,14 @@ After auto-restore on a fresh machine, `~/.cop/packages/` contains:
     cop.json
     src/files.cop
 ```
+
+#### Step 2f: Place Package Instructions
+
+For each imported package that ships an `instructions/` folder — whether just downloaded or
+already cached — cop writes its combined guidance to
+`<repo>/.github/instructions/{packageName}.instructions.md` so coding agents pick it up. See
+[Instructions for Coding Agents](#instructions-for-coding-agents). This step is idempotent —
+unchanged files are left as-is.
 
 ---
 

@@ -3,6 +3,10 @@ bin/
 obj/
 publish-linux/
 
+# Test outputs
+TestResults/
+*.trx
+
 # IDE
 .vs/
 *.user

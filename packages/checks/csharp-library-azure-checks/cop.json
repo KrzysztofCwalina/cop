@@ -12,5 +12,6 @@
     "library",
     "token-credential"
   ],
-  "language": "C#"
+  "language": "C#",
+  "applyTo": "**/*.cs"
 }
