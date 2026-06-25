@@ -149,96 +149,63 @@ const categories = [
     "name": "Core",
     "packages": [
       "ai",
-      "bash",
+      "code",
       "core",
-      "csharp",
-      "csharp-format",
-      "csharp-stylecop",
-      "dockerfile",
       "files",
+      "http"
+    ]
+  },
+  {
+    "name": "Languages",
+    "packages": [
+      "cop",
+      "csharp",
       "go",
       "java",
       "javascript",
-      "javascript-biome",
-      "javascript-eslint",
-      "json",
-      "markdown",
-      "openapi",
-      "powershell",
       "python",
-      "python-bandit",
-      "python-mypy",
-      "python-pylint",
-      "python-ruff",
       "rust",
-      "sql",
-      "typescript-tsc",
-      "xml",
-      "yaml"
-    ]
-  },
-  {
-    "name": "Code",
-    "packages": [
-      "code",
-      "code-metrics"
-    ]
-  },
-  {
-    "name": ".NET",
-    "packages": [
-      "csharp-checks",
-      "csharp-library-azure-checks",
-      "csharp-library-checks",
-      "csharp-nunit-checks",
-      "csharp-snippets-checks"
-    ]
-  },
-  {
-    "name": "Python",
-    "packages": [
-      "python-checks",
-      "python-library-azure-checks",
-      "python-library-checks",
-      "python-snippets-checks"
-    ]
-  },
-  {
-    "name": "JavaScript",
-    "packages": [
-      "javascript-checks",
-      "javascript-library-azure-checks",
-      "javascript-library-checks",
-      "javascript-snippets-checks"
-    ]
-  },
-  {
-    "name": "Rust",
-    "packages": [
-      "rust-checks"
-    ]
-  },
-  {
-    "name": "Java",
-    "packages": [
-      "java-checks"
-    ]
-  },
-  {
-    "name": "Cop",
-    "packages": [
-      "cop"
-    ]
-  },
-  {
-    "name": "TypeSpec",
-    "packages": [
       "typespec",
       "typespec-http"
     ]
   },
   {
-    "name": "Misc",
+    "name": "Formats",
+    "packages": [
+      "bash",
+      "dockerfile",
+      "json",
+      "markdown",
+      "openapi",
+      "powershell",
+      "sql",
+      "xml",
+      "yaml"
+    ]
+  },
+  {
+    "name": "Checks",
+    "packages": [
+      "code-metrics",
+      "csharp-checks",
+      "csharp-library-azure-checks",
+      "csharp-library-checks",
+      "csharp-nunit-checks",
+      "csharp-snippets-checks",
+      "java-checks",
+      "javascript-checks",
+      "javascript-library-azure-checks",
+      "javascript-library-checks",
+      "javascript-snippets-checks",
+      "python-checks",
+      "python-library-azure-checks",
+      "python-library-checks",
+      "python-snippets-checks",
+      "rust-checks"
+    ]
+  },
+  {
+    "name": "Tools",
     "packages": [
       "analysis-checkov",
       "analysis-codeql",
@@ -246,7 +213,15 @@ const categories = [
       "analysis-spectral",
       "analysis-trivy",
       "csharp-codeql",
-      "http"
+      "csharp-format",
+      "csharp-stylecop",
+      "javascript-biome",
+      "javascript-eslint",
+      "python-bandit",
+      "python-mypy",
+      "python-pylint",
+      "python-ruff",
+      "typescript-tsc"
     ]
   }
 ];

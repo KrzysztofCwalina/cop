@@ -119,8 +119,11 @@ if (overridesPath != null && File.Exists(overridesPath))
 
 // Extract data from all packages
 var referenceData = new ReferenceData();
-var categoryOrder = new[] { "Core", "Code", ".NET", "Python", "JavaScript", "Rust", "Go", "Java", "Cop", "TypeSpec", "Misc" };
-var categoryPackages = categoryOrder.ToDictionary(c => c, _ => new List<string>());
+
+// Categories mirror the top-level folders under packages/. Preferred groups are listed first
+// in a natural reading order; any other discovered folder is appended alphabetically.
+var preferredOrder = new[] { "Core", "Languages", "Formats", "Checks", "Tools" };
+var categoryPackages = new Dictionary<string, List<string>>();
 
 foreach (var (pkgDir, pkgId, category) in discoveredPackages.OrderBy(p => p.Id))
 {
@@ -135,23 +138,24 @@ foreach (var (pkgDir, pkgId, category) in discoveredPackages.OrderBy(p => p.Id))
 
     referenceData.Packages[pkgId] = entry;
 
-    if (categoryPackages.ContainsKey(category))
-        categoryPackages[category].Add(pkgId);
-    else
-        categoryPackages["Misc"].Add(pkgId);
+    if (!categoryPackages.TryGetValue(category, out var list))
+        categoryPackages[category] = list = [];
+    list.Add(pkgId);
 }
 
-// Build categories (skip empty ones)
-foreach (var catName in categoryOrder)
+// Build categories: preferred folders first, then any others alphabetically.
+var orderedCategories = preferredOrder
+    .Where(categoryPackages.ContainsKey)
+    .Concat(categoryPackages.Keys.Where(k => !preferredOrder.Contains(k)).OrderBy(k => k))
+    .ToList();
+
+foreach (var catName in orderedCategories)
 {
-    if (categoryPackages[catName].Count > 0)
+    referenceData.Categories.Add(new Category
     {
-        referenceData.Categories.Add(new Category
-        {
-            Name = catName,
-            PackageIds = categoryPackages[catName]
-        });
-    }
+        Name = catName,
+        PackageIds = categoryPackages[catName]
+    });
 }
 
 // Determine output path
@@ -181,7 +185,7 @@ static void DiscoverPackages(string rootDir, List<(string Dir, string Id, string
     {
         var manifest = extractor.GetManifest(rootDir);
         var id = manifest.Name ?? Path.GetFileName(rootDir);
-        var category = PackageExtractor.GetCategory(rootDir, manifest);
+        var category = PackageExtractor.GetCategory(rootDir);
         packages.Add((rootDir, id, category));
         return;
     }
@@ -193,7 +197,7 @@ static void DiscoverPackages(string rootDir, List<(string Dir, string Id, string
         {
             var manifest = extractor.GetManifest(subDir);
             var id = manifest.Name ?? Path.GetFileName(subDir);
-            var category = PackageExtractor.GetCategory(subDir, manifest);
+            var category = PackageExtractor.GetCategory(subDir);
             packages.Add((subDir, id, category));
         }
         else
@@ -205,7 +209,7 @@ static void DiscoverPackages(string rootDir, List<(string Dir, string Id, string
                 {
                     var manifest = extractor.GetManifest(nestedDir);
                     var id = manifest.Name ?? Path.GetFileName(nestedDir);
-                    var category = PackageExtractor.GetCategory(nestedDir, manifest);
+                    var category = PackageExtractor.GetCategory(nestedDir);
                     packages.Add((nestedDir, id, category));
                 }
             }

@@ -454,43 +454,18 @@ public class PackageExtractor
     }
 
     /// <summary>
-    /// Determine category for a package based on its path and manifest.
+    /// Determine the category for a package from the top-level folder it lives in under
+    /// packages/ (e.g. checks, core, formats, languages, tools), so the reference doc's
+    /// grouping mirrors the repository's folder layout. Returns a title-cased display name.
     /// </summary>
-    public static string GetCategory(string packageDir, PackageManifest? manifest)
+    public static string GetCategory(string packageDir)
     {
-        var normalized = packageDir.Replace('\\', '/');
+        var parent = Path.GetDirectoryName(packageDir);
+        var group = parent != null ? Path.GetFileName(parent) : null;
+        if (string.IsNullOrEmpty(group))
+            return "Misc";
 
-        if (normalized.Contains("/dotnet/")) return ".NET";
-        if (normalized.Contains("/python/")) return "Python";
-        if (normalized.Contains("/js/")) return "JavaScript";
-        if (normalized.Contains("/rust/")) return "Rust";
-        if (normalized.Contains("/go/")) return "Go";
-        if (normalized.Contains("/java/")) return "Java";
-
-        var dirName = Path.GetFileName(packageDir);
-        if (dirName.StartsWith("code")) return "Code";
-        if (dirName == "cop") return "Cop";
-        if (dirName.StartsWith("typespec")) return "TypeSpec";
-        if (dirName == "http") return "Misc";
-        if (dirName.StartsWith("analysis-")) return "Misc";
-        if (dirName.StartsWith("csharp-codeql")) return "Misc";
-
-        if (manifest?.Language != null)
-        {
-            return manifest.Language switch
-            {
-                "C#" or "csharp" => ".NET",
-                "Python" or "python" => "Python",
-                "JavaScript" or "javascript" or "TypeScript" or "typescript" => "JavaScript",
-                "Rust" or "rust" => "Rust",
-                "Go" or "go" or "golang" => "Go",
-                "Java" or "java" => "Java",
-                "TypeSpec" or "typespec" => "TypeSpec",
-                _ => "Core"
-            };
-        }
-
-        return "Core";
+        return char.ToUpperInvariant(group[0]) + group[1..];
     }
 
     public PackageManifest GetManifest(string packageDir)
