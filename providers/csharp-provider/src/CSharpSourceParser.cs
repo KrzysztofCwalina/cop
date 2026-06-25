@@ -94,8 +94,26 @@ public class CSharpSourceParser : ISourceParser
             Usings = usings,
             Namespace = ns,
             Regions = ExtractRegions(root, sourceText),
-            CommentLines = ExtractCommentLines(root, sourceText)
+            CommentLines = ExtractCommentLines(root, sourceText),
+            ParseErrors = CollectSyntaxErrors(filePath, tree)
         };
+    }
+
+    /// <summary>
+    /// Collects Roslyn SYNTAX errors (parse-level only — taken from the syntax tree, not a semantic
+    /// model, so missing-reference noise is excluded). A genuinely malformed C# file is reported
+    /// instead of being silently modelled as partial/incorrect data.
+    /// </summary>
+    private static List<string> CollectSyntaxErrors(string filePath, SyntaxTree tree)
+    {
+        var errors = new List<string>();
+        foreach (var diag in tree.GetDiagnostics())
+        {
+            if (diag.Severity != DiagnosticSeverity.Error) continue;
+            var pos = diag.Location.GetLineSpan().StartLinePosition;
+            errors.Add($"{filePath}({pos.Line + 1},{pos.Character + 1}): error: {diag.GetMessage()} ({diag.Id})");
+        }
+        return errors;
     }
 
     /// <summary>

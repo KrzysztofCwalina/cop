@@ -225,11 +225,29 @@ public class CopParser
             return null;
         }
 
+        // A stray closing delimiter or operator at a declaration boundary — an unmatched '}' / ')' /
+        // ']', or a dangling ':' / '=>' / ',' / '=' left behind by a malformed expression — is never
+        // valid. Fail loudly instead of silently skipping it. Other unrecognized lines are tolerated
+        // as bare expressions (the CLI wraps those into an implicit command).
+        if (IsStrayTopLevelToken(token))
+            throw new ParseException(
+                $"Unexpected token '{token.Value}' ({token.Kind})",
+                _filePath, CurrentLine(), sourceLine: ParseException.GetSourceLine(_source ?? "", CurrentLine()));
+
         // Bare expression at top level → expression statement in implicit "main"
         // For now, skip unrecognized lines
         SkipToEndOfLine();
         return null;
     }
+
+    /// <summary>
+    /// Tokens that can never legitimately begin a declaration or a bare top-level expression: stray
+    /// closing delimiters and dangling separators/operators. Reaching the declaration loop with one
+    /// of these means a malformed program (an unmatched brace, an empty filter, a missing '=', ...).
+    /// </summary>
+    private static bool IsStrayTopLevelToken(Token token) => token.Kind is
+        TokenKind.RBrace or TokenKind.RParen or TokenKind.RBracket
+        or TokenKind.Colon or TokenKind.Arrow or TokenKind.Comma or TokenKind.Equals;
 
     private Declaration ParseImportDecl(int line)
     {
@@ -591,6 +609,14 @@ public class CopParser
                 var stmts = stmt is not null ? new List<Statement> { stmt } : new List<Statement>();
                 body = new BlockBody(stmts);
             }
+        }
+        else if (!IsAtEnd() && !IsDeclarationStart())
+        {
+            // `command NAME` must be followed by '=' and a body. Anything else left on the line is a
+            // syntax error — e.g. `command main print('x')` (the '=' is missing).
+            throw new ParseException(
+                $"Expected '=' after command name '{name}', but found '{Peek().Value}'",
+                _filePath, CurrentLine(), sourceLine: ParseException.GetSourceLine(_source ?? "", CurrentLine()));
         }
         else
         {

@@ -209,6 +209,11 @@ public static class Engine
         var fileOutputLines = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         var setupSw = Stopwatch.StartNew();
 
+        // Reset the provider-error sink for this run. Providers (which share this static) report a
+        // file that failed to parse here; it is drained below and surfaced — providers must not hide
+        // errors behind an incomplete or partial model.
+        Cop.Core.ProviderErrors.Clear();
+
         var bridge = CreateBridge(outputs, fileOutputLines, asserts, diagLog);
         // Per-item evaluator trace ([trace] lines) is a deep-debug firehose (millions of lines on
         // large repos). Enabled only at -ddd (CopDiagnostics.Trace); -d/-dd stay focused on [diag].
@@ -240,6 +245,16 @@ public static class Engine
         }
 
         warnings.AddRange(moduleLoader.Errors);
+
+        // A package whose SOURCE failed to load (e.g. a syntax error in its .cop files) is a FATAL
+        // error: a program that imports a broken package must not silently succeed just because it
+        // doesn't reference the package's (now-missing) exports. Such diagnostics carry the failing
+        // file path; unresolved-import diagnostics (no file) are handled by the CLI auto-restore flow.
+        foreach (var diag in moduleLoader.Diagnostics)
+        {
+            if (diag.Severity == CopDiagnosticSeverity.Error && diag.FilePath is not null)
+                errors.Add($"{diag.FilePath}({diag.Line}): error: {diag.Message}");
+        }
 
         // Validate user modules (same checks as 'cop verify') before execution.
         // This catches issues like enum-vs-string comparisons that would silently fail at runtime.
@@ -562,7 +577,55 @@ public static class Engine
             ? commandsToRun.Count == 1 ? commandsToRun[0] : null
             : commandName ?? "main";
 
+        // Upgrade bare runtime errors ("line N: message") to the same rich form `cop verify` uses
+        // for parse errors — "file(N): error: message" plus the offending source line — so a runtime
+        // failure reads as nicely as a syntax error.
+        EnrichRuntimeErrorsWithSource(errors, modules);
+
+        // Surface errors a provider reported while producing data (e.g. a source file that failed to
+        // parse). These were previously swallowed entirely, so a run produced an incomplete/partial
+        // model with no indication. They are reported as prominent WARNINGS rather than fatal errors:
+        // a repo legitimately contains .cs files that aren't complete compilable units (snippet/region
+        // fixtures), so blocking the whole analysis on them would be wrong — but they must be visible.
+        var providerErrors = Cop.Core.ProviderErrors.Drain();
+        if (providerErrors.Count > 0)
+        {
+            warnings.Add($"Warning: {providerErrors.Count} source file parse error(s) — the analysis model may be incomplete:");
+            warnings.AddRange(providerErrors);
+        }
+
         return new EngineResult(outputs, parseErrors, errors, resultCommandName, fileOutputs, warnings, asserts, diagnostics, exitCode);
+    }
+
+    /// <summary>
+    /// Rewrites runtime error strings of the form "line N: message" into
+    /// "file(N): error: message\n  N | &lt;source line&gt;" using the program's source. Only applies
+    /// when there is a single unambiguous source file; multi-file programs are left untouched.
+    /// </summary>
+    private static void EnrichRuntimeErrorsWithSource(List<string> errors, List<ParsedModule> modules)
+    {
+        if (errors.Count == 0 || modules.Count != 1) return;
+
+        var file = modules[0].FilePath;
+        if (string.IsNullOrEmpty(file)) return;
+
+        string source;
+        try { source = File.ReadAllText(file); }
+        catch { return; }
+
+        var rx = new System.Text.RegularExpressions.Regex(
+            @"^line (\d+): (.+)$", System.Text.RegularExpressions.RegexOptions.Singleline);
+        for (int i = 0; i < errors.Count; i++)
+        {
+            var m = rx.Match(errors[i]);
+            if (!m.Success || !int.TryParse(m.Groups[1].Value, out int line) || line < 1) continue;
+
+            var message = m.Groups[2].Value;
+            var snippet = ParseException.GetSourceLine(source, line);
+            errors[i] = snippet is not null
+                ? $"{file}({line}): error: {message}\n  {line} | {snippet}"
+                : $"{file}({line}): error: {message}";
+        }
     }
 
     /// <summary>

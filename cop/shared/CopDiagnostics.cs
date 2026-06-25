@@ -27,3 +27,35 @@ public static class CopDiagnostics
     /// <summary>-ddd and up: emit the per-item evaluator [trace] firehose.</summary>
     public static bool Trace => Level >= 3;
 }
+
+/// <summary>
+/// A process-wide sink for errors detected INSIDE a provider (e.g. a source file that fails to parse).
+/// Providers run in a shared assembly context with the host, so this static is the same instance in
+/// both — it lets a provider surface an error to the engine, which drains it after querying and
+/// reports it. Without this, provider-side failures were swallowed (printed to stderr at best) and a
+/// run "succeeded" (exit 0) despite an incomplete or wrong model.
+/// </summary>
+public static class ProviderErrors
+{
+    private static readonly System.Collections.Concurrent.ConcurrentQueue<string> _errors = new();
+
+    /// <summary>Reports a provider-side error so the engine can surface it.</summary>
+    public static void Report(string message) => _errors.Enqueue(message);
+
+    /// <summary>Removes and returns all reported provider errors (deduplicated, order-preserving).</summary>
+    public static IReadOnlyList<string> Drain()
+    {
+        var result = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        while (_errors.TryDequeue(out var e))
+            if (seen.Add(e))
+                result.Add(e);
+        return result;
+    }
+
+    /// <summary>Discards any pending provider errors (used to reset state between runs/tests).</summary>
+    public static void Clear()
+    {
+        while (_errors.TryDequeue(out _)) { }
+    }
+}

@@ -151,6 +151,11 @@ public class CSharpProvider : DataProvider
             var normalized = sourceFile with { Path = relativePath };
             LinkReferences(normalized);
             sourceFiles.Add(normalized);
+
+            // Surface Roslyn syntax errors so a malformed file is reported, not silently modelled as
+            // partial/incorrect data. The engine drains the shared sink after querying and fails the run.
+            foreach (var parseError in normalized.ParseErrors)
+                Cop.Core.ProviderErrors.Report(parseError);
         }
 
         sourceFiles.Sort((a, b) => string.Compare(a.Path, b.Path, StringComparison.Ordinal));

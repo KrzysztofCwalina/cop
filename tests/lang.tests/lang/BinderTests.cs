@@ -518,6 +518,61 @@ let x : helper = 1");
         Assert.That(result.HasErrors, Is.False);
     }
 
+    [Test]
+    public void CommandBodyTooManyArguments_ReportsArityError()
+    {
+        // Regression: command bodies are a BlockBody, which Pass-3 validation previously skipped — so
+        // `command main = print('a', 'b', 'c')` silently passed verify with too many arguments.
+        var externals = new List<Symbol>
+        {
+            new FunctionSymbol("print", CallableKind.External,
+                new List<ParameterSymbol> { new("value", null, 0) })
+        };
+
+        var result = Bind("command main = print('a', 'b', 'c')", externals);
+        Assert.That(result.HasErrors, Is.True, "a command body must be arity-validated");
+        Assert.That(result.Diagnostics[0].Message, Does.Contain("expects 1 argument(s) but got 3"));
+    }
+
+    [Test]
+    public void CommandBodyCorrectArity_NoError()
+    {
+        var externals = new List<Symbol>
+        {
+            new FunctionSymbol("print", CallableKind.External,
+                new List<ParameterSymbol> { new("value", null, 0) })
+        };
+
+        var result = Bind("command main = print('a')", externals);
+        Assert.That(result.HasErrors, Is.False,
+            string.Join("; ", result.Diagnostics.Select(d => d.Message)));
+    }
+
+    [Test]
+    public void CircularInheritance_ReportsError()
+    {
+        var result = Bind("type A : B\ntype B : A");
+        Assert.That(result.HasErrors, Is.True, "circular type inheritance must be reported");
+        Assert.That(result.Diagnostics.Any(d => d.Message.Contains("Circular type inheritance")), Is.True,
+            string.Join("; ", result.Diagnostics.Select(d => d.Message)));
+    }
+
+    [Test]
+    public void SelfInheritance_ReportsError()
+    {
+        var result = Bind("type A : A");
+        Assert.That(result.HasErrors, Is.True, "self-inheritance must be reported");
+        Assert.That(result.Diagnostics.Any(d => d.Message.Contains("Circular type inheritance")), Is.True);
+    }
+
+    [Test]
+    public void ValidInheritanceChain_NoCycleError()
+    {
+        var result = Bind("type Base = { Name : string }\ntype Child : Base");
+        Assert.That(result.Diagnostics.Any(d => d.Message.Contains("Circular")), Is.False,
+            "a valid base chain must not be flagged as a cycle");
+    }
+
     // ========================================================================
     // Integration: Real .cop files
     // ========================================================================

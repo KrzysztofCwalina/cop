@@ -611,9 +611,33 @@ public sealed class Binder
         if (decl.BaseType is not null)
             ValidateTypeName(decl.BaseType, decl.Line);
 
+        // Detect circular inheritance (e.g. `type A : B` with `type B : A`, or `type A : A`).
+        DetectInheritanceCycle(decl);
+
         // Validate property types
         foreach (var prop in decl.Properties)
             ValidateTypeRef(prop.Type);
+    }
+
+    private void DetectInheritanceCycle(TypeDecl decl)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal) { decl.Name };
+        var current = decl.BaseType;
+        while (current is not null)
+        {
+            if (!seen.Add(current))
+            {
+                _result.ReportDiagnostic(
+                    DiagnosticSeverity.Error,
+                    $"Circular type inheritance: '{decl.Name}' eventually inherits from itself (via '{current}')",
+                    decl.Line,
+                    _filePath);
+                return;
+            }
+            // Walk to the next base in the chain. An unresolved base (already reported by
+            // ValidateTypeName) simply ends the walk.
+            current = (_currentScope.Resolve(current) as TypeSymbol)?.BaseTypeName;
+        }
     }
 
     private void ValidateFunctionDecl(FunctionDecl decl)
@@ -638,6 +662,13 @@ public sealed class Binder
             case MappingBody mb:
                 foreach (var mapping in mb.Mappings)
                     ValidateExpression(mapping.Value);
+                break;
+            case BlockBody bb:
+                // Commands and brace-bodied functions carry a BlockBody. Without validating it,
+                // Pass 3 checks (arity, type references, enum-vs-string comparisons) never ran on a
+                // command body — e.g. `command main = print(f(1, 2, 3))` silently passed verify.
+                foreach (var stmt in bb.Statements)
+                    ValidateStatement(stmt);
                 break;
         }
 

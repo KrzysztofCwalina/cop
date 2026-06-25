@@ -42,7 +42,7 @@ internal static class CliHelp
     {
         Title();
         Section("usage");
-        Rows(Command, MainListing);
+        CommandRows(MainListing);
         Console.WriteLine();
         WriteLine("run 'cop <command> -h' for command details, 'cop -v' for the version", Label);
     }
@@ -51,7 +51,7 @@ internal static class CliHelp
     {
         Title();
         Section("usage");
-        Rows(Command,
+        CommandRows(
             ("cop run <package>", "run a package from a feed"),
             ("cop <file.cop>", "run a local .cop file"),
             ("cop package list", "browse available packages"),
@@ -182,21 +182,30 @@ internal static class CliHelp
 
         Title();
         Section("usage");
-        WriteLine("  " + c.Usage, Command);
+        Console.Write("  ");
+        WriteSignature(c.Usage);
+        Console.WriteLine();
         Console.WriteLine();
         Console.WriteLine("  " + c.About);
 
         // Options (or, for `package`, subcommands), always including the universal -h. Option flags
-        // use a distinct colour from commands; a `commands` list is coloured like commands.
-        var leftColor = c.OptionsLabel == "commands" ? Command : Option;
+        // are green; subcommands get the same command-word emphasis as the main list.
         Section(c.OptionsLabel);
-        Rows(leftColor, c.Options.Append(("-h", "show this help")).ToArray());
+        var opts = c.Options.Append(("-h", "show this help")).ToArray();
+        if (c.OptionsLabel == "commands")
+            CommandRows(opts);
+        else
+            Rows(Option, opts);
 
         if (c.Examples.Length > 0)
         {
             Section("examples");
             foreach (var ex in c.Examples)
-                WriteLine("  " + ex, Command);
+            {
+                Console.Write("  ");
+                WriteSignature(ex);
+                Console.WriteLine();
+            }
         }
         Console.WriteLine();
     }
@@ -220,6 +229,42 @@ internal static class CliHelp
             Write(left, leftColor);
             Console.Write(new string(' ', width - left.Length + 3));
             Console.WriteLine(right);
+        }
+    }
+
+    // Rows whose left column is a command signature: only the command word is emphasized (see
+    // WriteSignature), so the commands form a scannable coloured column.
+    private static void CommandRows(params (string Left, string Right)[] rows)
+    {
+        int width = rows.Max(r => r.Left.Length);
+        foreach (var (left, right) in rows)
+        {
+            Console.Write("  ");
+            WriteSignature(left);
+            Console.Write(new string(' ', width - left.Length + 3));
+            Console.WriteLine(right);
+        }
+    }
+
+    /// <summary>
+    /// Writes a command signature such as "cop run &lt;package&gt; [-t &lt;target&gt;]" with only the
+    /// command word emphasized: a leading "cop" is dimmed, the command word (the next token, or the
+    /// first token when there is no "cop" prefix) is shown in the command colour, and the remaining
+    /// arguments/options are left in the default colour so the command itself stands out.
+    /// </summary>
+    private static void WriteSignature(string signature)
+    {
+        if (!Color) { Console.Write(signature); return; }
+
+        var parts = signature.Split(' ');
+        bool hasCopPrefix = parts.Length > 0 && parts[0] == "cop";
+        int cmdIndex = hasCopPrefix ? 1 : 0;
+        for (int i = 0; i < parts.Length; i++)
+        {
+            if (i > 0) Console.Write(' ');
+            if (i == 0 && hasCopPrefix) Write(parts[i], Label);   // dim the repeated "cop"
+            else if (i == cmdIndex) Write(parts[i], Command);     // the command word — emphasized
+            else Console.Write(parts[i]);                         // arguments/options — default colour
         }
     }
 

@@ -85,9 +85,21 @@ public sealed class ModuleLoader
                         allImports.Add(imp.ModuleName);
                 }
             }
+            catch (ParseException pex)
+            {
+                // A syntax error inside an imported package must SURFACE, not be silently swallowed.
+                // Record it as a structured diagnostic so `cop verify` reports it (it only shows
+                // _diagnostics) and so the failure isn't downgraded to a mere warning.
+                _errors.Add($"in package '{packageName}': {pex.Message}");
+                _diagnostics.Add(pex.ToDiagnostic());
+            }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 _errors.Add($"{file}: {ex.Message}");
+                _diagnostics.Add(new CopDiagnostic(
+                    CopDiagnosticSeverity.Error,
+                    $"Failed to load package '{packageName}': {ex.Message}",
+                    file));
             }
         }
 

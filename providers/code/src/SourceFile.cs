@@ -26,4 +26,12 @@ public record SourceFile(
     /// Line numbers (1-based) that are comment lines, populated by source parsers.
     /// </summary>
     public HashSet<int> CommentLines { get; init; } = [];
+
+    /// <summary>
+    /// Syntax errors the parser detected in this file. Populated by parsers that can report them
+    /// (e.g. the C# parser surfaces Roslyn's syntax diagnostics). The collection builder forwards
+    /// these to the engine so a file that fails to parse is reported instead of being silently
+    /// skipped or partially/incorrectly modelled.
+    /// </summary>
+    public List<string> ParseErrors { get; init; } = [];
 }

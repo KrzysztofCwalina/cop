@@ -68,9 +68,15 @@ public static class CodeCollectionBuilder
             // Cache miss: parse all files
             sorted = ParseAllFiles(filePaths, rootPath, parsers);
 
-            // Save to cache for next run
-            try { SourceCacheSerializer.Save(cachePath, fingerprint, sorted); }
-            catch { /* cache save failure is non-fatal */ }
+            // Don't cache a parse that produced errors: the file-stats fingerprint won't change until
+            // the file is fixed, so re-parsing each run keeps the error surfaced (a cached run would
+            // restore the partial model with no error).
+            if (!sorted.Any(f => f.ParseErrors.Count > 0))
+            {
+                // Save to cache for next run
+                try { SourceCacheSerializer.Save(cachePath, fingerprint, sorted); }
+                catch { /* cache save failure is non-fatal */ }
+            }
         }
 
         return ExtractCollections(sorted, query.Collection, query.CollectionFilters);
@@ -113,7 +119,7 @@ public static class CodeCollectionBuilder
                 }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
-                    parseErrors.Add($"Failed to parse '{filePath}': {ex.Message}");
+                    parseErrors.Add($"{filePath}: error: failed to parse — {ex.Message}");
                     return;
                 }
 
@@ -123,12 +129,21 @@ public static class CodeCollectionBuilder
                 var normalizedFile = sourceFile with { Path = relativePath };
                 LinkReferences(normalizedFile);
                 sourceFiles.Add(normalizedFile);
+
+                // A parser that detected syntax errors (e.g. Roslyn) reports them here so they are
+                // not hidden behind the partial model it still produced.
+                foreach (var pe in normalizedFile.ParseErrors)
+                    parseErrors.Add(pe);
             });
 
+        // Forward parse errors to the engine via the shared sink so a file that failed to parse is
+        // surfaced as a prominent warning instead of being silently skipped or modelled as partial
+        // data. (The engine drains the sink into result.Warnings — visible but non-fatal, because a
+        // repo may legitimately contain .cs snippet/region fixtures that aren't compilable units.)
         if (!parseErrors.IsEmpty)
         {
             foreach (var err in parseErrors)
-                Console.Error.WriteLine(err);
+                Cop.Core.ProviderErrors.Report(err);
         }
 
         return sourceFiles.OrderBy(f => f.Path, StringComparer.Ordinal).ToList();

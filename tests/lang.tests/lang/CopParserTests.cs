@@ -566,6 +566,91 @@ command main = print('done')
             Assert.Fail($"Failed to parse {errors.Count}/{copFiles.Length} files:\n{string.Join("\n", errors.Take(20))}");
     }
 
+    // ========================================================================
+    // Parser strictness — malformed programs must be rejected, not silently skipped
+    // ========================================================================
+
+    [Test]
+    public void Parse_CommandMissingEquals_Throws()
+    {
+        var ex = Assert.Throws<Cop.Lang.ParseException>(
+            () => CopParser.Parse("command main print('x')", "test.cop"));
+        Assert.That(ex!.Message, Does.Contain("'='"));
+        Assert.That(ex.Line, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Parse_CommandWithParamsMissingEquals_Throws()
+    {
+        Assert.Throws<Cop.Lang.ParseException>(
+            () => CopParser.Parse("command main(a) print('x')", "test.cop"));
+    }
+
+    [Test]
+    public void Parse_EmptyFilterBeforeArrow_Throws()
+    {
+        // `[1 2]:` with no predicate leaves a dangling ':' that must not be silently skipped.
+        Assert.Throws<Cop.Lang.ParseException>(
+            () => CopParser.Parse("command main = foreach [1 2]: => '{item}'", "test.cop"));
+    }
+
+    [Test]
+    public void Parse_StrayClosingBrace_Throws()
+    {
+        var ex = Assert.Throws<Cop.Lang.ParseException>(
+            () => CopParser.Parse("command main = print('x') }", "test.cop"));
+        Assert.That(ex!.Message, Does.Contain("Unexpected token"));
+    }
+
+    [Test]
+    public void Parse_StrayClosingParen_Throws()
+    {
+        Assert.Throws<Cop.Lang.ParseException>(
+            () => CopParser.Parse("command main = print('x') )", "test.cop"));
+    }
+
+    [Test]
+    public void Parse_StrayClosingBracket_Throws()
+    {
+        Assert.Throws<Cop.Lang.ParseException>(
+            () => CopParser.Parse("command main = print('x') ]", "test.cop"));
+    }
+
+    // ---- Valid programs that must STILL parse (guards against false positives) ----
+
+    [Test]
+    public void Parse_NormalCommand_DoesNotThrow()
+    {
+        Assert.DoesNotThrow(() => CopParser.Parse("command main = print('ok')", "test.cop"));
+    }
+
+    [Test]
+    public void Parse_EmptyCommandFollowedByDecl_DoesNotThrow()
+    {
+        // `command foo` with no body is allowed when followed by EOF or another declaration.
+        Assert.DoesNotThrow(() => CopParser.Parse("command noop\ncommand main = print('ok')", "test.cop"));
+    }
+
+    [Test]
+    public void Parse_TernaryWithColonElse_DoesNotThrow()
+    {
+        // The ternary-else ':' is consumed inside the expression, not left at the declaration boundary.
+        Assert.DoesNotThrow(() => CopParser.Parse("let x = 5 > 1 ? 'a' : 'b'\ncommand main = print(x)", "test.cop"));
+    }
+
+    [Test]
+    public void Parse_ObjectLiteral_DoesNotThrow()
+    {
+        Assert.DoesNotThrow(() => CopParser.Parse("let o = { Name = 'x' Age = 1 }\ncommand main = print(o.Name)", "test.cop"));
+    }
+
+    [Test]
+    public void Parse_BlockBodyAndMatchExpression_DoNotThrow()
+    {
+        Assert.DoesNotThrow(() => CopParser.Parse("command main = {\n  print('a')\n  print('b')\n}", "test.cop"));
+        Assert.DoesNotThrow(() => CopParser.Parse("let r = 'x' ? 'y' => 'no' | _ => 'yes'\ncommand main = print(r)", "test.cop"));
+    }
+
     private static string FindRepoRoot()
     {
         var dir = TestContext.CurrentContext.TestDirectory;

@@ -204,6 +204,8 @@ public static class RunCommand
         if (scopeToFile != null && commandFilter == null && commandName == null)
         {
             var fileCommands = GetCommandNamesFromFile(scopeToFile);
+            if (fileCommands is null)
+                return 2; // the file failed to parse; the parse error was already reported.
             if (fileCommands.Length > 0)
             {
                 // Default to the primary MAIN command when present, so a bare run does
@@ -711,7 +713,12 @@ public static class RunCommand
     /// Extracts command names defined in a specific .cop file (for single-file scoping).
     /// Commands are desugared to uppercase FunctionDecl by the parser.
     /// </summary>
-    private static string[] GetCommandNamesFromFile(string filePath)
+    /// <summary>
+    /// Returns the UPPERCASE command names declared in a .cop file, an empty array if it parses but
+    /// declares none, or <c>null</c> if the file fails to parse (the parse error is reported here and
+    /// the caller should exit with the fatal code).
+    /// </summary>
+    private static string[]? GetCommandNamesFromFile(string filePath)
     {
         try
         {
@@ -723,10 +730,16 @@ public static class RunCommand
                 .Select(c => c.Name)
                 .ToArray();
         }
+        catch (ParseException ex)
+        {
+            // Surface the parse error in the same "file(line): message" form as `cop verify`.
+            Console.Error.WriteLine(ex.Message);
+            return null;
+        }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Error parsing '{filePath}': {ex.Message}");
-            return [];
+            return null;
         }
     }
 
