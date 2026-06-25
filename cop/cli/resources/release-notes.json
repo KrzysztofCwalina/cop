@@ -98,6 +98,15 @@
         "Removed the misleading post-update \"updated to cop … / what's new\" startup notice. (The \"a new version is available\" reminder, shown only when you're actually behind the latest release, stays.)",
         "A bare `cop` (no command) now just shows help — it never runs local .cop files. Run something explicitly with `cop run <package>` or `cop <file.cop>`."
       ]
+    },
+    {
+      "version": "2026.6.25.4",
+      "approved": true,
+      "features": [
+        "Every command now has detailed help: `cop <command> -h` (e.g. `cop run -h`, `cop init -h`) shows that command's usage, options, and examples. (`cop init -h` previously errored.)",
+        "Cleaner `cop -h`: the command list shows key options inline — optional ones in [ ], e.g. `cop run <package> [-t <target>]` — and drops the separate global options section.",
+        "Commands and option flags are shown in distinct colors so commands stand out."
+      ]
     }
   ]
 }

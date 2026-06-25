@@ -10,11 +10,15 @@ public sealed class CopEvaluationException : Exception
     public int Line { get; }
     public string? FilePath { get; }
 
+    /// <summary>The message without the "line N:" / "file(line):" location prefix.</summary>
+    public string RawMessage { get; }
+
     public CopEvaluationException(string message, int line = 0, string? filePath = null)
         : base(filePath is not null ? $"{filePath}({line}): {message}" : $"line {line}: {message}")
     {
         Line = line;
         FilePath = filePath;
+        RawMessage = message;
     }
 }
 
@@ -446,14 +450,14 @@ public sealed class Evaluator
             // First, try resolving as a member that is callable
             CopValue? memberVal = TryGetMember(obj, mem.Member);
             if (memberVal is ICopCallable memberCallable)
-                return memberCallable.Invoke(args, this, env);
+                return InvokeWithLine(memberCallable, args, env, call.Line);
 
             // Method dispatch: look up method name as an FFI/env function, pass obj as first arg
             if (env.TryLookup(mem.Member, out var fn) && fn is ICopCallable methodFn)
             {
                 var methodArgs = new List<CopValue> { obj };
                 methodArgs.AddRange(args);
-                return methodFn.Invoke(methodArgs, this, env);
+                return InvokeWithLine(methodFn, methodArgs, env, call.Line);
             }
 
             // Try FFI registry directly
@@ -462,11 +466,11 @@ public sealed class Evaluator
             {
                 var methodArgs = new List<CopValue> { obj };
                 methodArgs.AddRange(args);
-                return ffiFn.Invoke(methodArgs, this, env);
+                return InvokeWithLine(ffiFn, methodArgs, env, call.Line);
             }
 
             throw new CopEvaluationException(
-                $"Cannot call '{mem.Member}' on {obj.GetType().Name}",
+                $"Cannot call '{mem.Member}' on a {CopTypeNameOf(obj)} value",
                 call.Line, _filePath);
         }
 
@@ -498,11 +502,28 @@ public sealed class Evaluator
         }
 
         if (callee is ICopCallable callable)
-            return callable.Invoke(callArgs, this, env);
+            return InvokeWithLine(callable, callArgs, env, call.Line);
 
         throw new CopEvaluationException(
-            $"Value of type {callee.GetType().Name} is not callable",
+            $"Value of type {CopTypeNameOf(callee)} is not callable",
             call.Line, _filePath);
+    }
+
+    /// <summary>
+    /// Invokes a callable, re-attaching the call site's line to any error thrown without a location
+    /// (FFI builtins such as read()/fail() throw with Line == 0). This gives users a real line number
+    /// instead of "line 0".
+    /// </summary>
+    private CopValue InvokeWithLine(ICopCallable callable, List<CopValue> args, Environment env, int line)
+    {
+        try
+        {
+            return callable.Invoke(args, this, env);
+        }
+        catch (CopEvaluationException ex) when (ex.Line == 0 && line > 0)
+        {
+            throw new CopEvaluationException(ex.RawMessage, line, _filePath);
+        }
     }
 
     /// <summary>
@@ -1309,6 +1330,31 @@ public sealed class Evaluator
         if (collResult is not null)
             return collResult;
 
+        // A bare lowercase identifier predicate (`coll:isFoo`) that resolves to nothing — not a
+        // defined predicate/function, not an FFI/enum, and not a field on the data — is almost
+        // certainly a typo. Without this guard the per-item loop silently treats it as false for
+        // every item and returns an empty result: a silent false-green. Fail loudly instead.
+        if (filter.Predicate is IdentifierExpr unresolvedPred
+            && unresolvedPred.Name.Length > 0 && char.IsLower(unresolvedPred.Name[0])
+            && unresolvedPred.Name != "empty"
+            && !IsResolvablePredicateName(unresolvedPred.Name, env))
+        {
+            var firstItem = CoerceToEnumerable(collection).FirstOrDefault();
+            if (firstItem is CopThunk ft) firstItem = ft.Force();
+            bool itemHasField = firstItem switch
+            {
+                CopObject co => co.HasField(unresolvedPred.Name),
+                CopDynamicObject dyn => dyn.HasField(unresolvedPred.Name),
+                CopProviderProxy proxy => proxy.HasField(unresolvedPred.Name),
+                _ => false
+            };
+            if (firstItem is not null && !itemHasField)
+                throw new CopEvaluationException(
+                    $"Unknown predicate '{unresolvedPred.Name}': it is not a defined predicate, " +
+                    "function, or a field on the items being filtered. Check the spelling or add an import.",
+                    unresolvedPred.Line, _filePath);
+        }
+
         // For collections: apply predicate to each item.
         // If predicate returns a non-bool object (map semantic), collect those results.
         // Otherwise filter items by truthiness (filter semantic).
@@ -1740,6 +1786,14 @@ public sealed class Evaluator
             _ => false
         };
     }
+
+    /// <summary>
+    /// True if a bare predicate name resolves to something callable/known: a defined predicate or
+    /// function, an enum member or let-binding (env), or an FFI builtin. Used to detect typo'd
+    /// predicates so they fail loudly instead of silently filtering everything out.
+    /// </summary>
+    private bool IsResolvablePredicateName(string name, Environment env)
+        => env.TryLookup(name, out _) || _ffi.Resolve(name) is not null;
 
     /// <summary>
     /// True if `name` resolves to a user function of arity (1 + argCount) whose FIRST parameter is

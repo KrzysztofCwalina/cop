@@ -108,6 +108,41 @@ public class CliCommandTests
         finally { Directory.Delete(dir, recursive: true); }
     }
 
+    // `cop <command> -h` prints detailed per-command help (options + examples) for every command.
+    [TestCase("run", "-t <dir>")]
+    [TestCase("test", "-d")]
+    [TestCase("update", "--force")]
+    [TestCase("package", "feed")]
+    public void CommandHelp_PrintsDetails_ExitZero(string verb, string expected)
+    {
+        var (exit, stdout, _) = RunCop($"{verb} -h");
+        Assert.That(exit, Is.EqualTo(0));
+        Assert.That(stdout, Does.Contain("usage"));
+        Assert.That(stdout, Does.Contain(expected));
+        Assert.That(stdout, Does.Contain("-h"));
+    }
+
+    // Regression: `cop init -h` previously errored ("Unknown option '-h'"); now it prints help.
+    [Test]
+    public void CommandHelp_Init_PrintsHelp_NotAnError_ExitZero()
+    {
+        var (exit, stdout, _) = RunCop("init -h");
+        Assert.That(exit, Is.EqualTo(0));
+        Assert.That(stdout, Does.Contain("--claude"));
+        Assert.That(stdout, Does.Contain("--checks"));
+    }
+
+    // The main help shows options inline (in [ ]) and has NO separate global "options" section.
+    [Test]
+    public void MainHelp_ShowsInlineOptions_NoGlobalOptionsSection()
+    {
+        var (exit, stdout, _) = RunCop("-h");
+        Assert.That(exit, Is.EqualTo(0));
+        Assert.That(stdout, Does.Contain("[-t <target>]"), "key options should appear inline in the command list");
+        var lines = stdout.Replace("\r", "").Split('\n').Select(l => l.Trim());
+        Assert.That(lines, Has.None.EqualTo("options"), "main help must not have a global options section");
+    }
+
     [Test]
     public void HelpLanguage_PrintsLanguageReference_ExitZero()
     {

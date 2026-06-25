@@ -44,16 +44,23 @@ if (diag)
     Console.Error.WriteLine($"[diag] Process startup: {clrStartupMs}ms");
 }
 
-// Bare invocation (no arguments): look for local .cop files to run or show getting-started
+// Bare invocation (no command): show the getting-started screen (never runs anything).
 if (args.Length == 0)
 {
     return ExecuteDefault();
 }
 
-// Intercept help flags before System.CommandLine to show clean single-section help
-if (args.Length == 1 && (args[0] == "-h" || args[0] == "-help" || args[0] == "--help"))
+// Help is uniform across every command, intercepted before any dispatch:
+//   cop -h / cop --help     -> the command list (main help)
+//   cop <command> -h        -> detailed help for that command (options + examples)
+if (args.Length == 1 && IsHelpFlag(args[0]))
 {
     CliHelp.PrintMainHelp();
+    return 0;
+}
+if (args.Length >= 2 && IsHelpFlag(args[1]) && knownVerbs.Contains(args[0]))
+{
+    CliHelp.PrintCommandHelp(args[0]);
     return 0;
 }
 
@@ -303,6 +310,8 @@ static int ResolveAndRun(string[] runArgs, bool diag, bool allowPackages)
 /// Prints an "Unknown command" error for a bare invocation, suggesting a close known verb
 /// (if any) and the explicit `cop run` form for actually running a package.
 /// </summary>
+static bool IsHelpFlag(string arg) => arg is "-h" or "--help" or "-help";
+
 static int UnknownCommandError(string[] tokens)
 {
     var name = tokens.Length > 0 ? tokens[0] : "";
