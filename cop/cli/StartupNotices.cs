@@ -30,7 +30,7 @@ internal static class StartupNotices
     /// </param>
     public static bool ShouldShow(string[] args, IReadOnlySet<string> knownVerbs, Func<string, bool> resolvesToRunnable)
     {
-        if (args.Length == 0) return true;                          // bare `cop` runs local files / getting-started
+        if (args.Length == 0) return true;                          // bare `cop` shows the main help; still surface the update reminder
         var first = args[0];
         if (SelfDescribing.Contains(first)) return false;           // help/version/update print their own output
         // `cop run` with no target is a usage error — show only that error, not the notices.

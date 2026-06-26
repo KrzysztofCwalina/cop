@@ -102,10 +102,22 @@ public class CliCommandTests
         {
             var (exit, stdout, stderr) = RunCop("", dir);
             Assert.That(exit, Is.EqualTo(0));
-            Assert.That(stdout, Does.Contain("getting started"));
+            Assert.That(stdout, Does.Contain("help language"), "bare cop must show the full -h help");
             Assert.That(stdout + stderr, Does.Not.Contain("RAN_THE_FILE"), "bare cop must not execute local .cop files");
         }
         finally { Directory.Delete(dir, recursive: true); }
+    }
+
+    // Regression: bare `cop` must print the same usage screen as `cop -h`.
+    [Test]
+    public void BareCop_PrintsSameUsageAs_DashH()
+    {
+        var (exitBare, bareOut, _) = RunCop("");
+        var (exitDashH, dashHOut, _) = RunCop("-h");
+        Assert.That(exitBare, Is.EqualTo(0));
+        Assert.That(exitDashH, Is.EqualTo(0));
+        Assert.That(bareOut.Trim(), Is.EqualTo(dashHOut.Trim()),
+            "bare `cop` must print the same usage as `cop -h`");
     }
 
     // `cop <command> -h` prints detailed per-command help (options + examples) for every command.

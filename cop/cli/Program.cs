@@ -431,12 +431,12 @@ static bool IsLocalCommand(string name, string[] copFiles)
 }
 
 /// <summary>
-/// Bare invocation (`cop` with no command): show the getting-started screen. It never runs
-/// anything — running requires an explicit `cop run <target>` or `cop <file.cop>`.
+/// Bare invocation (`cop` with no command): show the main help (identical to `cop -h`). It
+/// never runs anything — running requires an explicit `cop run <target>` or `cop <file.cop>`.
 /// </summary>
 static int ExecuteDefault()
 {
-    CliHelp.PrintGettingStarted();
+    CliHelp.PrintMainHelp();
     return 0;
 }
 

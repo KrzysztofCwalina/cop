@@ -4,8 +4,7 @@ namespace Cop.Cli.Commands;
 
 /// <summary>
 /// Renders the CLI's help screens with a single, consistent, lower-case design:
-///   - <see cref="PrintMainHelp"/>        the command list (`cop -h`, `cop help`)
-///   - <see cref="PrintGettingStarted"/>  the friendly intro for a bare `cop`
+///   - <see cref="PrintMainHelp"/>        the command list (`cop -h`, `cop help`, bare `cop`)
 ///   - <see cref="PrintCommandHelp"/>     detailed per-command help (`cop &lt;command&gt; -h`)
 ///
 /// The main list shows each command with its most useful option inline (optional parts in
@@ -45,22 +44,6 @@ internal static class CliHelp
         CommandRows(MainListing);
         Console.WriteLine();
         WriteLine("run 'cop <command> -h' for command details, 'cop -v' for the version", Label);
-    }
-
-    public static void PrintGettingStarted()
-    {
-        Title();
-        Section("usage");
-        CommandRows(
-            ("cop run <package>", "run a package from a feed"),
-            ("cop <file.cop>", "run a local .cop file"),
-            ("cop package list", "browse available packages"),
-            ("cop repl", "interactive repl"));
-        Section("getting started");
-        Console.WriteLine("  1. run a package:   cop run <package-name>");
-        Console.WriteLine("  2. run a .cop file: cop run <file.cop>");
-        Console.WriteLine();
-        WriteLine("  run 'cop -h' for all commands", Label);
     }
 
     // ── per-command help (`cop <command> -h`) ────────────────────────────────
