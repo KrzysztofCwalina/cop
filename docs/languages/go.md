@@ -43,24 +43,19 @@ forgotten, ask your agent to capture the problem as a cop rule. Because `cop ini
 agent how cop works, it writes the rule into your `cop-checks/` folder, runs it, and fixes the
 violations — just like a compiler error.
 
-Just ask:
+Phrase the request as a cop check, so the agent reaches for a permanent rule instead of a
+one-off edit:
 
-> "Flag `panic()` — return an error instead"
+> "Add a cop check that flags `panic()` — return an error instead"
 
 > "Create a cop rule that every exported type has a doc comment"
 
-> "Ban `fmt.Println` in library code — use a logger"
+> "Add a cop check that bans `fmt.Println` in library code — use a logger"
 
-### The self-check loop
-
-When your agent produces code in a shape you don't like, turn that feedback into a permanent rule:
-
-1. The agent writes code with a pattern you dislike (e.g. it calls `panic()` on a bad input).
-2. You say: **"Add a self-check that flags `panic()` — we return an `error` here."**
-3. The agent adds a focused check to your `cop-checks/` folder.
-4. From now on, `cop` catches that pattern before it reaches code review.
-
-The next section shows what such a rule looks like and how to run it yourself.
+It works as a tight feedback loop: the moment your agent writes code in a shape you don't
+like, ask it to add a cop check — `cop` then catches that pattern on every future run, before
+it reaches code review. The next sections show what such a rule looks like and how to run it
+yourself.
 
 ---
 

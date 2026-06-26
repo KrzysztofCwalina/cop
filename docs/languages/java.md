@@ -43,24 +43,19 @@ ask your agent to capture the problem as a cop rule. Because `cop init` taught t
 works, it writes the rule into your `cop-checks/` folder, runs it, and fixes the violations —
 just like a compiler error.
 
-Just ask:
+Phrase the request as a cop check, so the agent reaches for a permanent rule instead of a
+one-off edit:
 
-> "Flag raw `throw new RuntimeException(...)` — use a specific exception type"
+> "Add a cop check that flags raw `throw new RuntimeException(...)` — use a specific exception type"
 
 > "Create a cop rule that every public type has a Javadoc comment"
 
-> "Ban `System.out.println` — use a logger"
+> "Add a cop check that bans `System.out.println` — use a logger"
 
-### The self-check loop
-
-When your agent produces code in a shape you don't like, turn that feedback into a permanent rule:
-
-1. The agent writes code with a pattern you dislike (e.g. it leaves a `System.out.println` behind).
-2. You say: **"Add a self-check that flags `System.out.println` — we use a logger here."**
-3. The agent adds a focused check to your `cop-checks/` folder.
-4. From now on, `cop` catches that pattern before it reaches code review.
-
-The next sections show what such a rule looks like and how to run it yourself.
+It works as a tight feedback loop: the moment your agent writes code in a shape you don't
+like, ask it to add a cop check — `cop` then catches that pattern on every future run, before
+it reaches code review. The next sections show what such a rule looks like and how to run it
+yourself.
 
 ---
 

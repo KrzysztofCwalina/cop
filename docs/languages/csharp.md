@@ -43,7 +43,8 @@ your agent to capture the problem as a cop rule. Because `cop init` taught the a
 works, it writes the rule into your `cop-checks/` folder, runs it, and fixes the violations —
 just like a compiler error.
 
-Just ask:
+Phrase the request as a cop check, so the agent reaches for a permanent rule instead of a
+one-off edit:
 
 > "Write a cop rule that flags any method longer than 30 statements"
 
@@ -51,18 +52,12 @@ Just ask:
 
 > "Add a cop rule that all `*Client` types must be sealed"
 
-> "Ban `DateTime.Now` — we use `DateTimeOffset.UtcNow`"
+> "Add a cop check that bans `DateTime.Now` — we use `DateTimeOffset.UtcNow`"
 
-### The self-check loop
-
-When your agent produces code in a shape you don't like, turn that feedback into a permanent rule:
-
-1. The agent writes code with a pattern you dislike (e.g. it uses `DateTime.Now`).
-2. You say: **"Add a self-check that flags `DateTime.Now` — we use `DateTimeOffset.UtcNow` here."**
-3. The agent adds a focused check to your `cop-checks/` folder.
-4. From now on, `cop` catches that pattern before it reaches code review.
-
-The next sections show what such a rule looks like and how to run it yourself.
+It works as a tight feedback loop: the moment your agent writes code in a shape you don't
+like, ask it to add a cop check — `cop` then catches that pattern on every future run, before
+it reaches code review. The next sections show what such a rule looks like and how to run it
+yourself.
 
 ---
 

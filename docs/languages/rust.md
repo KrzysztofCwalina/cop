@@ -43,24 +43,19 @@ capture the problem as a cop rule. Because `cop init` taught the agent how cop w
 writes the rule into your `cop-checks/` folder, runs it, and fixes the violations — just like
 a compiler error.
 
-Just ask:
+Phrase the request as a cop check, so the agent reaches for a permanent rule instead of a
+one-off edit:
 
-> "Flag `panic!`, `unwrap()`, and `expect()` in library code — propagate errors with `?`"
+> "Add a cop check that flags `panic!`, `unwrap()`, and `expect()` in library code — propagate errors with `?`"
 
-> "Ban `println!` and `dbg!` — use the `log` or `tracing` crate"
+> "Add a cop check that bans `println!` and `dbg!` — use the `log` or `tracing` crate"
 
 > "Create a cop rule that every public type has a `///` doc comment"
 
-### The self-check loop
-
-When your agent produces code in a shape you don't like, turn that feedback into a permanent rule:
-
-1. The agent writes code with a pattern you dislike (e.g. it calls `.unwrap()` on a `Result`).
-2. You say: **"Add a self-check that flags `.unwrap()` — we propagate errors with `?` here."**
-3. The agent adds a focused check to your `cop-checks/` folder.
-4. From now on, `cop` catches that pattern before it reaches code review.
-
-The next sections show what such a rule looks like and how to run it yourself.
+It works as a tight feedback loop: the moment your agent writes code in a shape you don't
+like, ask it to add a cop check — `cop` then catches that pattern on every future run, before
+it reaches code review. The next sections show what such a rule looks like and how to run it
+yourself.
 
 ---
 
