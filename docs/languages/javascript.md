@@ -135,10 +135,61 @@ Cop ships with comprehensive JavaScript/TypeScript check packages — no `.cop` 
 
 ```bash
 cop run javascript-checks                  # all JS/TS conventions
-cop run javascript-checks -c no-console    # just the "no console" check
 cop run javascript-library-checks          # library API design rules
 cop run javascript-library-azure-checks    # Azure SDK conventions
 ```
+
+### Excluding checks and violations
+
+You won't want every rule on every project. There are two ways to opt out.
+
+Each violation in the output ends with the **name of the check** that produced it, in brackets — e.g.
+`app.ts(5): error: Do not use eval() — it is a security risk [eval-calls]`. That bracketed name is
+exactly the identifier you subtract.
+
+**Exclude a whole rule** — take that bracketed name and subtract one or more checks (or whole groups) from the package in
+a small `.cop` file. The `-` operator removes those violations; everything else still runs:
+
+```cop
+import javascript-checks
+import code
+
+# run every javascript-checks rule except console-calls and var-declarations
+let my-checks = javascript-checks - console-calls - var-declarations
+
+command MAIN = CHECK(my-checks)
+```
+
+```bash
+cop my-checks.cop -t .
+```
+
+Checks are also grouped, so you can compose just the groups you want with `+`
+(`javascript-correctness-checks`, `typescript-checks`):
+
+```cop
+import javascript-checks
+import code
+
+# only the core correctness checks
+let my-checks = javascript-correctness-checks
+
+command MAIN = CHECK(my-checks)
+```
+
+**Exclude a single violation** — add a `// cop-ignore: <check>` comment on the line directly
+above the one to exempt. Only that line is silenced; the rule keeps firing everywhere else:
+
+```javascript
+function save() {
+    // cop-ignore: console-calls
+    console.log("debug");  // exempted — NOT flagged
+    console.log("more");   // still flagged
+}
+```
+
+`cop-ignore` works for all of these statement-level checks (console, alert, eval, debugger,
+var, swallowed exceptions, await-thenable).
 
 ---
 

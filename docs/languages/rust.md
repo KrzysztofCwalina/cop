@@ -179,8 +179,10 @@ run `cop cop-checks/main.cop -t .` (this is exactly what your agent does for you
 
 ## 6. Use the Built-In Rust Checks
 
-Beyond your own rules, the **`rust-checks`** package is a curated set of Rust correctness,
-style, and documentation checks. It hardcodes the Rust provider, so no `-p` flag is needed:
+Beyond your own rules, the **`rust-checks`** package is a curated set of
+[Clippy](https://doc.rust-lang.org/clippy/)-inspired correctness, style, complexity, safety,
+performance, and documentation checks. It hardcodes the Rust provider, so no `-p` flag is
+needed:
 
 ```bash
 cop run rust-checks -t .
@@ -190,18 +192,81 @@ It flags common issues such as:
 
 - `.unwrap()` / `.expect()` — panicking APIs that should propagate errors with `?`
 - `panic!` / `todo!` / `unimplemented!` — aborts and unfinished code
+- `mem::forget` and `transmute` — leaks and undefined-behavior hazards
+- `== None` / `!= None` — prefer `.is_none()` / `.is_some()`
 - `println!` / `eprintln!` / `dbg!` — console output that belongs in a logging framework
-- Types that are not `UpperCamelCase` and functions that are not `snake_case`
-- Public types and methods missing doc comments
+- `use path::*` wildcard imports; types not `UpperCamelCase`; functions not `snake_case`
+- functions with more than 7 parameters, and very large function bodies
+- public `unsafe fn`s missing a `# Safety` doc section
+- `.clone()` calls worth reviewing for unnecessary allocation
+- public types and methods missing doc comments
 
 Example output:
 
 ```
-src/main.rs(33): warning: Avoid panic! in library code — return a Result instead
-src/main.rs(40): warning: Avoid println! — use a logging framework (log/tracing)
-src/main.rs(25): warning: Public type Status is missing a doc comment
-src/main.rs(11): warning: User (impl) has public methods without doc comments
+src/main.rs(33): warning: Avoid panic! in library code — return a Result instead [panic-macros]
+src/main.rs(40): warning: Avoid println! — use a logging framework (log/tracing) [console-output]
+src/main.rs(25): warning: Public type Status is missing a doc comment [undocumented-types]
+src/main.rs(11): warning: User (impl) has public methods without doc comments [undocumented-methods]
 ```
+
+Each line ends with the **name of the check** in brackets (e.g. `[panic-macros]`). That bracketed
+name is exactly the identifier you subtract to turn the rule off — so you never have to read the
+package source to find it.
+
+### Excluding checks and violations
+
+You won't want every rule on every project. There are two ways to opt out.
+
+**Exclude a whole rule** — take the bracketed name from the output and subtract one or more checks
+(or whole groups) from the package in a small `.cop` file. The `-` operator removes those
+violations; everything else still runs:
+
+```cop
+import rust-checks
+import code
+
+# run every rust-checks rule except panic-macros and needless-clone
+let my-checks = rust-checks - panic-macros - needless-clone
+
+command MAIN = CHECK(my-checks)
+```
+
+```bash
+cop my-checks.cop -t .
+```
+
+Checks are also grouped, so you can compose just the groups you want with `+`
+(`rust-correctness-checks`, `rust-style-checks`, `rust-complexity-checks`,
+`rust-safety-checks`, `rust-perf-checks`, `rust-doc-checks`):
+
+```cop
+import rust-checks
+import code
+
+# only correctness and safety — skip style, complexity, perf, and docs
+let my-checks = rust-correctness-checks + rust-safety-checks
+
+command MAIN = CHECK(my-checks)
+```
+
+**Exclude a single violation** — add a `// cop-ignore: <check>` comment on the line directly
+above the one you want to exempt. Only that line is silenced; the rule keeps firing
+everywhere else:
+
+```rust
+pub fn load_config(path: &str) -> Config {
+    // cop-ignore: unwrap-calls
+    let raw = std::fs::read_to_string(path).unwrap();  // exempted — NOT flagged
+    parse(&raw).unwrap()                               // still flagged
+}
+```
+
+`cop-ignore` works for the statement- and line-level checks (`unwrap-calls`, `expect-calls`,
+`panic-macros`, `unfinished-code`, `mem-forget`, `transmute-calls`, `console-output`,
+`needless-clone`, `eq-to-none`, `wildcard-imports`). Type- and method-level checks (naming,
+docs, `too-many-arguments`, `large-function`, `missing-safety-doc`) have no per-line anchor —
+exclude those with the whole-rule approach above.
 
 ---
 
@@ -300,6 +365,7 @@ The `rust.parse()` function returns a `Codebase` with these collections:
 | `cb.Types` | All structs, enums, traits, and impl blocks |
 | `cb.Statements` | Function calls, macro invocations, panic!/todo! |
 | `cb.Calls` | Just the call statements (method/function/macro calls) |
+| `cb.Methods` | All functions and methods (free functions and `impl` methods) |
 | `cb.Files` | Source files with metadata |
 | `cb.Lines` | Every line of code (with kind: code/comment/blank) |
 | `cb.Projects` | Cargo crates with their dependencies (from `Cargo.toml`) |

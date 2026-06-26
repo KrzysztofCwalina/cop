@@ -202,11 +202,59 @@ Cop ships a built-in Java check package — no `.cop` files needed:
 
 ```bash
 cop run java-checks                        # all Java conventions
-cop run java-checks -c console-output      # just the "no System.out.println" check
 cop run java-checks -t src/                # analyze a specific directory
 ```
 
 Run `cop help java-checks` to see every check the package provides.
+
+### Excluding checks and violations
+
+You won't want every rule on every project. There are two ways to opt out.
+
+Each violation in the output ends with the **name of the check** that produced it, in brackets — e.g.
+`Main.java(8): error: Avoid System.exit() — throw an exception or return an error instead [system-exit]`.
+That bracketed name is exactly the identifier you subtract.
+
+**Exclude a whole rule** — take that bracketed name and subtract one or more checks from the package in a small `.cop`
+file. The `-` operator removes those violations; everything else still runs:
+
+```cop
+import java-checks
+import code
+
+# run every java-checks rule except console-output and print-stack-trace
+let my-checks = java-checks - console-output - print-stack-trace
+
+command MAIN = CHECK(my-checks)
+```
+
+```bash
+cop my-checks.cop -t .
+```
+
+You can also compose just the checks you want with `+` (`console-output`,
+`print-stack-trace`, `system-exit`):
+
+```cop
+import java-checks
+import code
+
+# only flag System.exit()
+let my-checks = system-exit
+
+command MAIN = CHECK(my-checks)
+```
+
+**Exclude a single violation** — add a `// cop-ignore: <check>` comment on the line directly
+above the one to exempt. Only that line is silenced; the rule keeps firing everywhere else:
+
+```java
+void save() {
+    // cop-ignore: console-output
+    System.out.println("debug");  // exempted — NOT flagged
+    System.out.println("more");   // still flagged
+}
+```
 
 ---
 

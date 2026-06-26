@@ -10,7 +10,8 @@ export type Violation = {
     Message : string,
     File : string,
     Line : int,
-    Source : string
+    Source : string,
+    Check : string
 }
 
 ## Maps numeric severity to a display label (error / warning / info), aligned with the
@@ -43,7 +44,22 @@ export function toError(TextFilePosition, message: string) : Violation => Violat
     Message = message,
     File = item.filePath,
     Line = item.line,
-    Source = item.Source
+    Source = item.Source,
+    Check = ''
+}
+
+## Same as toError, but tags the violation with the check NAME (shown dimmed as `[name]` after
+## the message). The name is exactly the identifier a consumer subtracts to exclude the check.
+## Use `nameof(<check>)` so the tag stays in sync with the binding if it is renamed:
+##     export let no-var = cb.Statements:isVar :toError('Do not use var', nameof(no-var))
+export function toError(TextFilePosition, message: string, check: string) : Violation => Violation {
+    Severity = 1.0,
+    Certainty = 1.0,
+    Message = message,
+    File = item.filePath,
+    Line = item.line,
+    Source = item.Source,
+    Check = check
 }
 
 ## Creates a warning-severity violation (Severity = 0.5).
@@ -53,7 +69,20 @@ export function toWarning(TextFilePosition, message: string) : Violation => Viol
     Message = message,
     File = item.filePath,
     Line = item.line,
-    Source = item.Source
+    Source = item.Source,
+    Check = ''
+}
+
+## Same as toWarning, but tags the violation with the check NAME (shown dimmed as `[name]`).
+## Use `nameof(<check>)` so the tag stays in sync with the binding if it is renamed.
+export function toWarning(TextFilePosition, message: string, check: string) : Violation => Violation {
+    Severity = 0.5,
+    Certainty = 1.0,
+    Message = message,
+    File = item.filePath,
+    Line = item.line,
+    Source = item.Source,
+    Check = check
 }
 
 ## Creates an info-severity violation (Severity = 0.2).
@@ -63,7 +92,20 @@ export function toInfo(TextFilePosition, message: string) : Violation => Violati
     Message = message,
     File = item.filePath,
     Line = item.line,
-    Source = item.Source
+    Source = item.Source,
+    Check = ''
+}
+
+## Same as toInfo, but tags the violation with the check NAME (shown dimmed as `[name]`).
+## Use `nameof(<check>)` so the tag stays in sync with the binding if it is renamed.
+export function toInfo(TextFilePosition, message: string, check: string) : Violation => Violation {
+    Severity = 0.2,
+    Certainty = 1.0,
+    Message = message,
+    File = item.filePath,
+    Line = item.line,
+    Source = item.Source,
+    Check = check
 }
 
 ## Creates a violation with explicit severity and certainty.
@@ -73,7 +115,8 @@ export function toViolation(TextFilePosition, message: string, severity: float, 
     Message = message,
     File = item.filePath,
     Line = item.line,
-    Source = item.Source
+    Source = item.Source,
+    Check = ''
 }
 
 ## Re-stamps an existing violation with a new severity (for weight adjustment).
@@ -83,15 +126,21 @@ export function withSeverity(Violation, s: float) : Violation => Violation {
     Message = item.Message,
     File = item.File,
     Line = item.Line,
-    Source = item.Source
+    Source = item.Source,
+    Check = item.Check
 }
 
 
 # CHECK prints each violation; the engine exits non-zero when any violations are printed.
 # CHECK does NO filtering — suppression is done by filtering the collection before CHECK
 # (e.g. Statements:isViolating:notIgnored:toError(...)).
+
+## The dimmed ` [check]` suffix shown after a violation message when it was tagged with
+## `named(...)`. Empty when the violation has no check name, so untagged output is unchanged.
+export function ruleTag(Violation) : string => item.Check == '' ? '' : ' [{item.Check@dim}]'
+
 export function checkLine(Violation, level: string) : string =>
-    '{item.File@dim}({item.Line@dim}): {level}: {item.Message}'
+    '{item.File@dim}({item.Line@dim}): {level}: {item.Message}' + ruleTag(item)
 
 export command CHECK(violations) = foreach violations => checkLine(item, severityLabel(item))
 

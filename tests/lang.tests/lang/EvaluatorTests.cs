@@ -1628,6 +1628,125 @@ command main = wrap('only')";
     }
 
     [Test]
+    public void ListMinusList_RemovesMatchingElements()
+    {
+        // `-` on collections is set difference (powers `rust-checks - <check>` exclusion).
+        var result = EvalExpr("[1 2 3] - [2]");
+        Assert.That(result, Is.InstanceOf<CopList>());
+        var items = ((CopList)result).Items.Select(i => ((CopInt)i).Value).ToArray();
+        Assert.That(items, Is.EqualTo(new[] { 1, 3 }));
+    }
+
+    [Test]
+    public void ListMinusScalar_RemovesMatchingElement()
+    {
+        var result = EvalExpr("[1 2 3 2] - 2");
+        Assert.That(result, Is.InstanceOf<CopList>());
+        var items = ((CopList)result).Items.Select(i => ((CopInt)i).Value).ToArray();
+        Assert.That(items, Is.EqualTo(new[] { 1, 3 }));
+    }
+
+    [Test]
+    public void ListMinusNonMatching_IsNoOp()
+    {
+        var result = EvalExpr("[1 2 3] - [9]");
+        Assert.That(result, Is.InstanceOf<CopList>());
+        var items = ((CopList)result).Items.Select(i => ((CopInt)i).Value).ToArray();
+        Assert.That(items, Is.EqualTo(new[] { 1, 2, 3 }));
+    }
+
+    [Test]
+    public void ListMinusEmptyList_ReturnsAll()
+    {
+        var result = EvalExpr("[1 2 3] - []");
+        Assert.That(result, Is.InstanceOf<CopList>());
+        var items = ((CopList)result).Items.Select(i => ((CopInt)i).Value).ToArray();
+        Assert.That(items, Is.EqualTo(new[] { 1, 2, 3 }));
+    }
+
+    [Test]
+    public void ListMinusList_RemovesStructurallyEqualObjects()
+    {
+        // Violation-style objects are removed by value (e.g. same Line/Msg), which is what
+        // lets `rust-checks - panic-macros` drop a whole rule's violations.
+        var result = EvalExpr("[ { Line = 1, Msg = 'a' }, { Line = 2, Msg = 'b' } ] - [ { Line = 1, Msg = 'a' } ]");
+        Assert.That(result, Is.InstanceOf<CopList>());
+        var items = ((CopList)result).Items;
+        Assert.That(items.Count, Is.EqualTo(1));
+        Assert.That(((CopString)((CopObject)items[0]).GetField("Msg")).Value, Is.EqualTo("b"));
+    }
+
+    [Test]
+    public void NameOf_ReturnsIdentifierNameAsString()
+    {
+        // `nameof(x)` yields the NAME of the identifier as a string (like C#/JS nameof). This is
+        // what lets a check stamp its violations with the exact identifier a user can subtract.
+        var result = EvalExpr("nameof(panic-macros)");
+        Assert.That(result, Is.InstanceOf<CopString>());
+        Assert.That(((CopString)result).Value, Is.EqualTo("panic-macros"));
+    }
+
+    [Test]
+    public void NameOf_DoesNotEvaluateArgument_SoSelfReferenceIsAllowed()
+    {
+        // The argument is taken syntactically, never evaluated — so a binding may name itself
+        // (`let x = ... nameof(x)`) without a self-reference cycle. This is the real usage:
+        // `export let unwrap-calls = ... :named(nameof(unwrap-calls))`.
+        var result = Eval("""
+            let unwrap-calls = nameof(unwrap-calls)
+            command main = unwrap-calls
+            """);
+        Assert.That(result, Is.InstanceOf<CopString>());
+        Assert.That(((CopString)result).Value, Is.EqualTo("unwrap-calls"));
+    }
+
+    [Test]
+    public void NameOf_WorksInsideInterpolation()
+    {
+        var result = Eval("""
+            command main = 'check={nameof(my-check)}'
+            """);
+        Assert.That(result, Is.InstanceOf<CopString>());
+        Assert.That(((CopString)result).Value, Is.EqualTo("check=my-check"));
+    }
+
+    [Test]
+    public void NameOf_WithoutSingleIdentifier_Throws()
+    {
+        Assert.That(() => EvalExpr("nameof('literal')"),
+            Throws.InstanceOf<CopEvaluationException>());
+    }
+
+    [Test]
+    public void PipeCall_SelectsOverloadByArity_AmongSameFirstTypedOverloads()
+    {
+        // Regression: two overloads sharing the first (item-type) parameter but differing in arity
+        // must be distinguished by the explicit-arg count in a pipe call. Before the fix the group
+        // always dispatched to the first same-typed overload, so `:tag('x','y')` hit the 2-arg
+        // overload ("expects 2 arguments, got 3"). This powers `:toWarning('msg', nameof(check))`.
+        const string defs = """
+            type Box : object = { N : int }
+            function tag(Box, a: string) : string => '{Box.N}:{a}'
+            function tag(Box, a: string, b: string) : string => '{Box.N}:{a}:{b}'
+            let boxes = [Box { N = 7 }]
+            command main =
+            """;
+        Assert.That(FirstString(Eval(defs + " boxes:tag('x')")), Is.EqualTo("7:x"));
+        Assert.That(FirstString(Eval(defs + " boxes:tag('x', 'y')")), Is.EqualTo("7:x:y"));
+    }
+
+    private static string FirstString(CopValue v)
+    {
+        var items = v switch
+        {
+            CopList list => list.Items,
+            CopLazyCollection lazy => lazy.Enumerate().ToList(),
+            _ => throw new AssertionException($"Expected a collection, got {v.GetType().Name}")
+        };
+        return ((CopString)items[0]).Value;
+    }
+
+    [Test]
     public void DistinctOnListValue_DedupesByValue()
     {
         // Issue #46: .Distinct() dedupes a list value.

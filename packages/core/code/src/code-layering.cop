@@ -28,7 +28,19 @@ export function toError(Project, message: string) => Violation {
     Message = message,
     File = item.Path,
     Line = 0,
-    Source = item.Path
+    Source = item.Path,
+    Check = ''
+}
+
+# Project-based overloads that also tag the violation with the check NAME (use nameof(<check>)).
+export function toError(Project, message: string, check: string) => Violation {
+    Severity = 1.0,
+    Certainty = 1.0,
+    Message = message,
+    File = item.Path,
+    Line = 0,
+    Source = item.Path,
+    Check = check
 }
 
 export function toWarning(Project, message: string) => Violation {
@@ -37,7 +49,18 @@ export function toWarning(Project, message: string) => Violation {
     Message = message,
     File = item.Path,
     Line = 0,
-    Source = item.Path
+    Source = item.Path,
+    Check = ''
+}
+
+export function toWarning(Project, message: string, check: string) => Violation {
+    Severity = 0.5,
+    Certainty = 1.0,
+    Message = message,
+    File = item.Path,
+    Line = 0,
+    Source = item.Path,
+    Check = check
 }
 
 export function toInfo(Project, message: string) => Violation {
@@ -46,7 +69,18 @@ export function toInfo(Project, message: string) => Violation {
     Message = message,
     File = item.Path,
     Line = 0,
-    Source = item.Path
+    Source = item.Path,
+    Check = ''
+}
+
+export function toInfo(Project, message: string, check: string) => Violation {
+    Severity = 0.2,
+    Certainty = 1.0,
+    Message = message,
+    File = item.Path,
+    Line = 0,
+    Source = item.Path,
+    Check = check
 }
 
 # Predicate: project is not in any known layer. Pass the combined list of all

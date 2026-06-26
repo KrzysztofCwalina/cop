@@ -27,35 +27,75 @@ predicate isProdType(Type) => !Type.File.Path:contains('/tests/')
     && !Type.File.Path:startsWith('examples/')
     && !Type.File.Path:endsWith('build.rs')
 
+# Production-source scoping for methods and lines (mirrors isProdStatement/isProdType).
+predicate isProdMethod(Method) => !Method.File.Path:contains('/tests/')
+    && !Method.File.Path:contains('/benches/')
+    && !Method.File.Path:contains('/examples/')
+    && !Method.File.Path:startsWith('tests/')
+    && !Method.File.Path:startsWith('benches/')
+    && !Method.File.Path:startsWith('examples/')
+    && !Method.File.Path:endsWith('build.rs')
+
+predicate isProdLine(Line) => !Line.File.Path:contains('/tests/')
+    && !Line.File.Path:contains('/benches/')
+    && !Line.File.Path:contains('/examples/')
+    && !Line.File.Path:startsWith('tests/')
+    && !Line.File.Path:startsWith('benches/')
+    && !Line.File.Path:startsWith('examples/')
+    && !Line.File.Path:endsWith('build.rs')
+
+# Suppression: honor `// cop-ignore: <check>` comments. A statement/line whose preceding
+# comment set CopIgnore is exempted. (Type/Method carry no CopIgnore, so only the
+# statement/call/line checks below are line-suppressible — use composition or path
+# predicates to exclude the type/method checks.)
+predicate notIgnored(Statement) => Statement.CopIgnore == ''
+predicate lineNotIgnored(Line) => Line.CopIgnore == ''
+
 ## Correctness
 
 # Avoid .unwrap()/.unwrap_err()/.unwrap_unchecked() — they panic (or are UB). Use ? or matching.
 predicate isUnwrapCall(Statement) => Statement.MemberName == 'unwrap'
     || Statement.MemberName == 'unwrap_err'
     || Statement.MemberName == 'unwrap_unchecked'
-export let unwrap-calls = cb.Calls:isUnwrapCall:isProdStatement
-    :toWarning('Avoid .unwrap() — handle the Option/Result or propagate with ?')
+export let unwrap-calls = cb.Calls:isUnwrapCall:isProdStatement:notIgnored
+    :toWarning('Avoid .unwrap() — handle the Option/Result or propagate with ?', nameof(unwrap-calls))
 
 # .expect()/.expect_err() also panic — prefer propagating errors with `?`.
 predicate isExpectCall(Statement) => Statement.MemberName == 'expect'
     || Statement.MemberName == 'expect_err'
-export let expect-calls = cb.Calls:isExpectCall:isProdStatement
-    :toInfo('.expect() panics on None/Err — prefer propagating errors with ?')
+export let expect-calls = cb.Calls:isExpectCall:isProdStatement:notIgnored
+    :toInfo('.expect() panics on None/Err — prefer propagating errors with ?', nameof(expect-calls))
 
 # panic!/unreachable! abort execution — return a Result in library code instead.
 predicate isPanicMacro(Statement) => Statement.Kind == throw
     && (Statement.MemberName == 'panic' || Statement.MemberName == 'unreachable')
-export let panic-macros = cb.Statements:isPanicMacro:isProdStatement
-    :toWarning('Avoid panic!/unreachable! in library code — return a Result instead')
+export let panic-macros = cb.Statements:isPanicMacro:isProdStatement:notIgnored
+    :toWarning('Avoid panic!/unreachable! in library code — return a Result instead', nameof(panic-macros))
 
 # todo!/unimplemented! mark unfinished code that will panic at runtime.
 predicate isUnfinishedMacro(Statement) => Statement.Kind == throw
     && (Statement.MemberName == 'todo' || Statement.MemberName == 'unimplemented')
-export let unfinished-code = cb.Statements:isUnfinishedMacro:isProdStatement
-    :toWarning('Unfinished code — todo!/unimplemented! will panic at runtime')
+export let unfinished-code = cb.Statements:isUnfinishedMacro:isProdStatement:notIgnored
+    :toWarning('Unfinished code — todo!/unimplemented! will panic at runtime', nameof(unfinished-code))
+
+# mem::forget skips Drop and leaks resources — drop explicitly or use a scope.
+predicate isMemForget(Statement) => Statement.MemberName == 'forget'
+    && Statement.TypeName != nic && Statement.TypeName:endsWith('mem')
+export let mem-forget = cb.Calls:isMemForget:isProdStatement:notIgnored
+    :toWarning('mem::forget leaks resources and skips Drop — drop() deliberately or use a scope', nameof(mem-forget))
+
+# transmute is a frequent source of undefined behavior — review for a safe conversion.
+predicate isTransmute(Statement) => Statement.MemberName == 'transmute'
+export let transmute-calls = cb.Calls:isTransmute:isProdStatement:notIgnored
+    :toWarning('transmute is a common source of undefined behavior — prefer a safe conversion', nameof(transmute-calls))
+
+# Compare Option with .is_none()/.is_some() rather than == None / != None.
+predicate isEqToNone(Line) => Line.Text:matches('==\\s*None') || Line.Text:matches('!=\\s*None')
+export let eq-to-none = cb.Lines:isProdLine:isEqToNone:lineNotIgnored
+    :toWarning('Use .is_none()/.is_some() instead of == None / != None', nameof(eq-to-none))
 
 ## Combined correctness checks
-export let rust-correctness-checks = unwrap-calls + expect-calls + panic-macros + unfinished-code
+export let rust-correctness-checks = unwrap-calls + expect-calls + panic-macros + unfinished-code + mem-forget + transmute-calls + eq-to-none
 
 ## Style
 
@@ -65,41 +105,83 @@ predicate isConsolePrint(Statement) => Statement.MemberName == 'println!'
     || Statement.MemberName == 'eprintln!'
     || Statement.MemberName == 'eprint!'
     || Statement.MemberName == 'dbg!'
-export let console-output = cb.Calls:isConsolePrint:isProdStatement
-    :toWarning('Avoid {item.MemberName} — use a logging framework (log/tracing)')
+export let console-output = cb.Calls:isConsolePrint:isProdStatement:notIgnored
+    :toWarning('Avoid {item.MemberName} — use a logging framework (log/tracing)', nameof(console-output))
 
 # Types (struct/enum/trait) should use UpperCamelCase.
 predicate isDeclaredType(Type) => Type.Kind == Struct || Type.Kind == Enum || Type.Kind == Interface
 predicate isBadTypeName(Type) => isDeclaredType && !Type.Name:matches('^[A-Z][A-Za-z0-9]*$')
 export let type-naming = cb.Types:isProdType:isBadTypeName
-    :toWarning('{item.Name} — Rust types should use UpperCamelCase')
+    :toWarning('{item.Name} — Rust types should use UpperCamelCase', nameof(type-naming))
 
 # Functions and methods should use snake_case.
 predicate isBadMethodName(Method) => !Method.Name:matches('^[a-z_][a-z0-9_]*$')
 predicate hasBadMethodName(Type) => Type.Methods:any(isBadMethodName)
 export let method-naming = cb.Types:isProdType:hasBadMethodName
-    :toWarning('{item.Name} has methods that do not follow snake_case naming')
+    :toWarning('{item.Name} has methods that do not follow snake_case naming', nameof(method-naming))
+
+# Avoid wildcard imports (`use path::*`) — import specific names. super::*/prelude allowed.
+predicate isWildcardImport(Line) => Line.Text:matches('use\\s+.*::\\*')
+    && !Line.Text:contains('super::*') && !Line.Text:contains('prelude')
+export let wildcard-imports = cb.Lines:isProdLine:isWildcardImport:lineNotIgnored
+    :toWarning('Avoid wildcard imports (use path::*) — import specific names instead', nameof(wildcard-imports))
 
 ## Combined style checks
-export let rust-style-checks = console-output + type-naming + method-naming
+export let rust-style-checks = console-output + type-naming + method-naming + wildcard-imports
 
 ## Documentation
 
 # Public types (struct/enum/trait) should have a doc comment.
 predicate isUndocumentedType(Type) => isDeclaredType && isPublic && !Type.Documented
 export let undocumented-types = cb.Types:isProdType:isUndocumentedType
-    :toWarning('Public type {item.Name} is missing a doc comment')
+    :toWarning('Public type {item.Name} is missing a doc comment', nameof(undocumented-types))
 
 # Public methods should have a doc comment.
 predicate isUndocumentedMethod(Method) => isPublic && !Method.Documented
 predicate hasUndocumentedMethods(Type) => Type.Methods:any(isUndocumentedMethod)
 export let undocumented-methods = cb.Types:isProdType:hasUndocumentedMethods
-    :toWarning('{item.Name} has public methods without doc comments')
+    :toWarning('{item.Name} has public methods without doc comments', nameof(undocumented-methods))
 
 ## Combined documentation checks
 export let rust-doc-checks = undocumented-types + undocumented-methods
 
+## Complexity
+
+# Functions with more than 7 parameters are hard to call — group them into a struct.
+predicate hasTooManyArgs(Method) => Method.Parameters.Count > 7
+export let too-many-arguments = cb.Methods:isProdMethod:hasTooManyArgs
+    :toWarning('{item.Name} has more than 7 parameters — group them into a struct', nameof(too-many-arguments))
+
+# Very large function bodies are hard to read — consider splitting (counts call/macro
+# statements, since the Rust model exposes those per method).
+predicate isLargeFunction(Method) => Method.Statements.Count > 50
+export let large-function = cb.Methods:isProdMethod:isLargeFunction
+    :toInfo('{item.Name} is large (> 50 statements) — consider splitting it', nameof(large-function))
+
+## Combined complexity checks
+export let rust-complexity-checks = too-many-arguments + large-function
+
+## Safety
+
+# Public `unsafe fn`s must document their invariants in a `# Safety` doc section.
+predicate isUndocumentedUnsafeFn(RustMethod) => isUnsafeFn && isPublic && !RustMethod.Documented
+export let missing-safety-doc = cb.Methods:isProdMethod:asRust:isUndocumentedUnsafeFn
+    :toWarning('public unsafe fn {item.Name} needs a doc comment with a # Safety section', nameof(missing-safety-doc))
+
+## Combined safety checks
+export let rust-safety-checks = missing-safety-doc
+
+## Performance
+
+# Review .clone() calls for unnecessary allocations (heuristic; Clippy: redundant_clone).
+predicate isCloneCall(Statement) => Statement.MemberName == 'clone'
+export let needless-clone = cb.Calls:isCloneCall:isProdStatement:notIgnored
+    :toInfo('Review .clone() — it allocates; borrow or move if the clone is unnecessary', nameof(needless-clone))
+
+## Combined performance checks
+export let rust-perf-checks = needless-clone
+
 ## All Rust checks combined
-export let rust-checks = rust-correctness-checks + rust-style-checks + rust-doc-checks
+export let rust-checks = rust-correctness-checks + rust-style-checks + rust-complexity-checks + rust-safety-checks + rust-perf-checks + rust-doc-checks
 
 command MAIN = CHECK(rust-checks)

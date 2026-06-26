@@ -123,6 +123,15 @@
         "`cop verify <file.cop>` now verifies the whole program — every `.cop` file in the file's directory, like `cop run` — and flags undefined references (e.g. a typo in `CHECK(...)`) that previously passed verify but failed at runtime.",
         "A bare `cop` (no command) now prints the same full command list as `cop -h`."
       ]
+    },
+    {
+      "version": "2026.6.26.3",
+      "approved": true,
+      "features": [
+        "Built-in check violations now show the check's name in brackets — e.g. `[var-declarations]` — which is exactly the identifier you subtract to turn that rule off.",
+        "Turn off a whole built-in rule by name: `let mine = csharp-checks - var-declarations` (works for the C#, Python, JavaScript/TypeScript, Rust, and Java check packages), or silence a single line with a `// cop-ignore: <check>` comment.",
+        "New `nameof(<identifier>)` language intrinsic returns an identifier's name as a string."
+      ]
     }
   ]
 }

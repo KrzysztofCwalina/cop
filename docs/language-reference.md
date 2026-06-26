@@ -998,10 +998,38 @@ Types.Select(item.Methods.Count > 0 ? item.Name | 'empty')
 | `read(path)` | string → string | Reads a file and returns its content (sandboxed, 10MB max). Also: `path:read` |
 | `Path(pattern)` | string → bool | Tests if the current file path matches a glob pattern |
 | `Matches(pattern)` | string → bool | Tests if the current item text matches a regex |
+| `nameof(identifier)` | identifier → string | Yields the NAME of an identifier as a string, without evaluating it |
 
 `Text` and `read` can be called via colon pipe: `response.Body:Text` is equivalent to `Text(response.Body)`.
 
 `Path` uses glob patterns: `*` matches within a segment, `**` matches across segments, `?` matches one character.
+
+#### Compile-time names: `nameof()`
+
+`nameof(x)` evaluates to the string `'x'` — the name of the identifier, taken **syntactically**.
+The argument is never evaluated, so:
+
+- it works even when the identifier names the very binding being defined
+  (`let unwrap-calls = ... nameof(unwrap-calls)` is not a self-reference), and
+- a misspelled name is reported by `cop verify` (it must resolve to a real binding).
+
+This is how a check package labels each rule with the exact identifier a user can subtract to
+turn it off. Pass the name as the optional last argument to `toError` / `toWarning` / `toInfo`;
+the `code` package shows it dimmed as `[name]` after the message:
+
+```ruby
+import code
+import rust
+
+let cb = codebase(rust.parse())
+
+# The bracketed `[unwrap-calls]` in the output is exactly what a consumer subtracts:
+#   let my-checks = rust-checks - unwrap-calls
+export let unwrap-calls = cb.Calls:isUnwrap
+    :toWarning('Avoid .unwrap() — propagate with ?', nameof(unwrap-calls))
+```
+
+`nameof` takes a single identifier; `nameof('literal')` or `nameof(a.b)` is an error.
 
 #### Provider Accessors: `provider()`
 

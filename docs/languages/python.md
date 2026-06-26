@@ -133,10 +133,63 @@ Cop ships with comprehensive Python check packages — no `.cop` files needed:
 
 ```bash
 cop run python-checks                      # all Python conventions
-cop run python-checks -c no-print          # just the "no print" check
 cop run python-library-checks              # library API design rules
 cop run python-library-azure-checks        # Azure SDK conventions
 ```
+
+### Excluding checks and violations
+
+You won't want every rule on every project. There are two ways to opt out.
+
+Each violation in the output ends with the **name of the check** that produced it, in brackets — e.g.
+`app.py(3): warning: Avoid print() — use logging instead [print-calls]`. That bracketed name is
+exactly the identifier you subtract.
+
+**Exclude a whole rule** — take that bracketed name and subtract one or more checks (or whole groups) from the package in
+a small `.cop` file. The `-` operator removes those violations; everything else still runs:
+
+```cop
+import python-checks
+import code
+
+# run every python-checks rule except print-calls and trailing-whitespace
+let my-checks = python-checks - print-calls - trailing-whitespace
+
+command MAIN = CHECK(my-checks)
+```
+
+```bash
+cop my-checks.cop -t .
+```
+
+Checks are also grouped, so you can compose just the groups you want with `+`
+(`python-correctness-checks`, `python-style-checks`, `python-idiom-checks`,
+`python-quality-checks`, `python-doc-checks`):
+
+```cop
+import python-checks
+import code
+
+# only correctness and idioms — skip style, quality, and docs
+let my-checks = python-correctness-checks + python-idiom-checks
+
+command MAIN = CHECK(my-checks)
+```
+
+**Exclude a single violation** — add a `# cop-ignore: <check>` comment on the line directly
+above the one to exempt. Only that line is silenced; the rule keeps firing everywhere else:
+
+```python
+def save():
+    # cop-ignore: print-calls
+    print("debug")   # exempted — NOT flagged
+    print("more")    # still flagged
+```
+
+`cop-ignore` works for the statement- and line-level checks (print/eval calls, bare/empty
+except, imports, whitespace, idioms). Type- and method-level checks (naming, docstrings,
+mutable defaults, parameter counts) have no per-line anchor — exclude those with the
+whole-rule approach above.
 
 ---
 

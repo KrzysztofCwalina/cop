@@ -400,6 +400,43 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
 
             var subjectTypeName = GetTypeName(subject);
 
+            // Arity-aware type dispatch: among overloads whose FIRST parameter type matches the
+            // subject (preferring exact name, then subtype, then trait conformance — the same
+            // priority used by the loops below), pick the one whose arity matches the supplied
+            // argument count. This distinguishes same-first-typed overloads that differ only by
+            // arity — e.g. `toWarning(TextFilePosition, message)` vs
+            // `toWarning(TextFilePosition, message, check)` — so `:toWarning('m', nameof(x))`
+            // resolves to the 3-arg overload instead of always the first-registered one. When no
+            // arity-matching type overload exists, falls through to the type-only dispatch below
+            // (unchanged behaviour for single-arity overload sets and param-array/variadic forms).
+            if (subjectTypeName is not null)
+            {
+                var arityRegistry = evaluator.TypeRegistry;
+                CopFunction? best = null;
+                int bestTier = int.MaxValue;
+                foreach (var overload in _overloads)
+                {
+                    if (overload.Arity != args.Count || overload.Declaration.Params.Count == 0)
+                        continue;
+                    var paramType = overload.Declaration.Params[0].Type?.Name;
+                    if (paramType is null)
+                        continue;
+                    int tier =
+                        string.Equals(paramType, subjectTypeName, StringComparison.OrdinalIgnoreCase) ? 0 :
+                        (arityRegistry is not null && arityRegistry.IsSubtypeOf(subjectTypeName, paramType)) ? 1 :
+                        (arityRegistry is not null && arityRegistry.ConformsTo(subjectTypeName, paramType)) ? 2 :
+                        -1;
+                    if (tier >= 0 && tier < bestTier)
+                    {
+                        best = overload;
+                        bestTier = tier;
+                        if (tier == 0) break;
+                    }
+                }
+                if (best is not null)
+                    return evaluator.CallUserFunction(best, args);
+            }
+
             if (subjectTypeName is not null)
             {
                 foreach (var overload in _overloads)

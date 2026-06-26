@@ -63,6 +63,7 @@ public class DocumentedFeatureCoverageTests
             ["Matches"] = CoveredBy("DocumentedOperationsExecutionTests"),
             ["Max"] = CoveredBy("LanguageFeatureExecutionTests"),
             ["Min"] = CoveredBy("DocumentedOperationsExecutionTests"),
+            ["nameof"] = CoveredBy("EvaluatorTests"),
             ["none"] = CoveredBy("doc-samples"),
             ["Normalized"] = CoveredBy("LanguageFeatureExecutionTests"),
             ["notEquals"] = CoveredBy("DocumentedOperationsExecutionTests"),

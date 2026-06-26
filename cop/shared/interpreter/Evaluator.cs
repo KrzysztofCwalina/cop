@@ -383,6 +383,7 @@ public sealed class Evaluator
                             ?? CollectionConcat(l, r)
                             ?? StringConcat(l, r, bin.Line),
             BinaryOp.Subtract => NumericOp(l, r, (a, b) => a - b, bin.Line)
+                            ?? CollectionDifference(l, r)
                             ?? throw new CopEvaluationException("Cannot subtract non-numeric values", bin.Line, _filePath),
             BinaryOp.Multiply => NumericOp(l, r, (a, b) => a * b, bin.Line)
                             ?? throw new CopEvaluationException("Cannot multiply non-numeric values", bin.Line, _filePath),
@@ -425,6 +426,19 @@ public sealed class Evaluator
 
     private CopValue EvalCall(CallExpr call, Environment env)
     {
+        // `nameof(x)` is a compile-time intrinsic: it yields the NAME of its single identifier
+        // argument as a string WITHOUT evaluating it. Check authors use it to stamp a violation
+        // list with the exact binding name a user subtracts to exclude it (`package - that-name`);
+        // because the argument is never evaluated, `let x = ... nameof(x)` is not a self-reference.
+        // This is a general language feature (like C#/JS `nameof`), not check-specific machinery.
+        if (call.Callee is IdentifierExpr { Name: "nameof" })
+        {
+            if (call.Args.Count == 1 && call.Args[0] is IdentifierExpr nameArg)
+                return new CopString(nameArg.Name);
+            throw new CopEvaluationException(
+                "nameof expects a single identifier, e.g. nameof(my-check)", call.Line, _filePath);
+        }
+
         // Method call dispatch: obj.method(args) → try method(obj, args) via FFI
         if (call.Callee is MemberExpr mem)
         {
@@ -1522,15 +1536,21 @@ public sealed class Evaluator
     /// invoke it with just the explicit args while binding <c>item</c> to the subject, instead of
     /// prepending the subject as an extra positional argument (which overflows arity). Returns null
     /// when the call is not this free-item shape, so the caller falls back to subject-as-first-arg.
+    ///
+    /// A function whose FIRST parameter is the item-type parameter (e.g. <c>toWarning(Statement,
+    /// message)</c>) is NOT free-item — its item is the first positional parameter, filled by the
+    /// subject. Excluding those is essential so an N-explicit-arg call resolves to the
+    /// (N+1)-arity item-param overload rather than colliding with an N-arity item-param overload
+    /// (e.g. <c>:toWarning('msg', nameof(x))</c> must pick the 3-arg overload, not the 2-arg one).
     /// </summary>
     private CopValue? TryInvokeFreeItemFilterCall(ICopCallable callable, IReadOnlyList<CopValue> args, CopValue subject)
     {
         switch (callable)
         {
-            case CopFunction f when f.Arity == args.Count:
+            case CopFunction f when f.Arity == args.Count && !IsItemParameterFirst(f):
                 return CallUserFunction(f, args, itemOverride: subject);
             case CopFunctionGroup g:
-                var overload = g.Functions.FirstOrDefault(o => o.Arity == args.Count);
+                var overload = g.Functions.FirstOrDefault(o => o.Arity == args.Count && !IsItemParameterFirst(o));
                 return overload is not null ? CallUserFunction(overload, args, itemOverride: subject) : null;
             default:
                 return null;
@@ -2188,6 +2208,60 @@ public sealed class Evaluator
             CopLazyCollection lazy => lazy.Enumerate(),
             _ => null
         };
+    }
+
+    /// <summary>
+    /// `list - list` removes every left element equal to any right element; `list - scalar`
+    /// removes matching scalars. Returns null when the left is not a collection so the caller
+    /// falls through to the numeric/throw path. Mirrors <see cref="CollectionConcat"/>.
+    /// </summary>
+    private CopValue? CollectionDifference(CopValue l, CopValue r)
+    {
+        if (l is CopThunk lt) l = lt.Force();
+        if (r is CopThunk rt) r = rt.Force();
+
+        var left = AsEnumerable(l);
+        if (left is null) return null;
+
+        var leftItems = left.ToList();
+        var rightItems = AsEnumerable(r)?.ToList();
+        if (rightItems is null)
+        {
+            // list - scalar → drop every element equal to the scalar (null right is a no-op).
+            if (r is CopNull) return new CopList(leftItems);
+            return new CopList(leftItems.Where(x => !ElementsEqual(x, r)).ToList());
+        }
+        // list - list → drop every left element equal to any right element.
+        return new CopList(leftItems.Where(x => !rightItems.Any(y => ElementsEqual(x, y))).ToList());
+
+        static IEnumerable<CopValue>? AsEnumerable(CopValue v) => v switch
+        {
+            CopList list => list.Items,
+            CopLazyCollection lazy => lazy.Enumerate(),
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Element equality for collection difference: two <see cref="CopObject"/>s (e.g. Violations)
+    /// are equal when they share a type name and have field-by-field equal values; everything
+    /// else defers to <see cref="ValuesEqual"/> (scalars by value, other objects by reference).
+    /// </summary>
+    private static bool ElementsEqual(CopValue a, CopValue b)
+    {
+        if (a is CopThunk at) a = at.Force();
+        if (b is CopThunk bt) b = bt.Force();
+        if (a is CopObject oa && b is CopObject ob)
+        {
+            if (oa.TypeName != ob.TypeName || oa.Fields.Count != ob.Fields.Count) return false;
+            foreach (var kv in oa.Fields)
+            {
+                if (!ob.Fields.TryGetValue(kv.Key, out var bv) || !ElementsEqual(kv.Value, bv))
+                    return false;
+            }
+            return true;
+        }
+        return ValuesEqual(a, b);
     }
 
     private CopValue CompareOp(CopValue l, CopValue r, Func<int, bool> predicate, int line)

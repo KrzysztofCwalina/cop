@@ -135,10 +135,64 @@ Cop ships with comprehensive C# check packages — no `.cop` files needed:
 
 ```bash
 cop run csharp-checks                      # all C# conventions
-cop run csharp-checks -c no-var            # just the "no var" check
 cop run csharp-library-checks              # library API design rules
 cop run csharp-library-azure-checks        # Azure SDK conventions
 ```
+
+### Excluding checks and violations
+
+You won't want every rule on every project. There are two ways to opt out.
+
+Each violation in the output ends with the **name of the check** that produced it, in brackets — e.g.
+`Program.cs(12): error: Do not use 'var' for total [var-declarations]`. That bracketed name is
+exactly the identifier you subtract.
+
+**Exclude a whole rule** — take that bracketed name and subtract one or more checks (or whole groups) from the package in
+a small `.cop` file. The `-` operator removes those violations; everything else still runs:
+
+```cop
+import csharp-checks
+import code
+
+# run every csharp-checks rule except var-declarations and no-tabs
+let my-checks = csharp-checks - var-declarations - no-tabs
+
+command MAIN = CHECK(my-checks)
+```
+
+```bash
+cop my-checks.cop -t .
+```
+
+Checks are also grouped, so you can compose just the groups you want with `+`
+(`csharp-correctness-checks`, `csharp-style-checks`, `fdg-checks`):
+
+```cop
+import csharp-checks
+import code
+
+# only correctness and FDG — skip style checks
+let my-checks = csharp-correctness-checks + fdg-checks
+
+command MAIN = CHECK(my-checks)
+```
+
+**Exclude a single violation** — add a `// cop-ignore: <check>` comment on the line directly
+above the one to exempt. Only that line is silenced; the rule keeps firing everywhere else:
+
+```csharp
+public void Save()
+{
+    // cop-ignore: var-declarations
+    var client = Factory.Create();  // exempted — NOT flagged
+    var other = Build();            // still flagged
+}
+```
+
+`cop-ignore` works for the statement- and line-level checks (var/dynamic declarations,
+console calls, exception handling, banned APIs, whitespace, braces). Type-level checks
+(naming, documentation, FDG type/member design) have no per-line anchor — exclude those with
+the whole-rule approach above.
 
 ---
 

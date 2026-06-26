@@ -396,6 +396,28 @@ public class RustSourceParserTests
         Assert.That(container.Methods.First(m => m.Name == "add").IsPublic, Is.True);
     }
 
+    [Test]
+    public void Parse_FreeUnsafeFn_IsMarkedUnsafe()
+    {
+        // Regression: the item-level dispatch consumes `unsafe` (for unsafe trait/impl) and
+        // previously failed to apply it to a free `unsafe fn`, so RustMethod.IsUnsafe was
+        // false and rust-checks' missing-safety-doc rule could never fire on free functions.
+        var result = Parse("""
+            pub unsafe fn danger() {
+                let _ = 1;
+            }
+
+            pub fn safe_fn() {
+                let _ = 2;
+            }
+            """);
+        var container = result.Types.First(t => t.Name.Contains("(functions)"));
+        var danger = (RustMethodDeclaration)container.Methods.First(m => m.Name == "danger");
+        var safe = (RustMethodDeclaration)container.Methods.First(m => m.Name == "safe_fn");
+        Assert.That(danger.IsUnsafe, Is.True, "free `unsafe fn` must be marked unsafe");
+        Assert.That(safe.IsUnsafe, Is.False, "a non-unsafe free fn must not be marked unsafe");
+    }
+
     // ================================================================
     // Statements
     // ================================================================

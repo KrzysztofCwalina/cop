@@ -543,6 +543,15 @@ public sealed class Binder
                 break;
 
             case CallExpr ce:
+                // `nameof(x)` (see Evaluator.EvalCall) takes the NAME of its identifier argument,
+                // not its value — so don't bind the argument as a value reference. Binding it would
+                // emit a false "Undefined variable" and, for `let x = ... nameof(x)`, a spurious
+                // self-reference. Still validate the name resolves so a typo'd check name is caught.
+                if (IsNameOf(ce, out var nameofTarget))
+                {
+                    ValidateNameOfTarget(nameofTarget);
+                    break;
+                }
                 // The callee (an intrinsic like CHECK/print, a user function, or a short
                 // predicate used as a function) is resolved dynamically — don't flag it.
                 BindCalleeOrDynamic(ce.Callee);
@@ -646,6 +655,48 @@ public sealed class Binder
         else
         {
             BindExpression(expr);
+        }
+    }
+
+    /// <summary>
+    /// True when <paramref name="ce"/> is a `nameof(identifier)` call — a compile-time intrinsic
+    /// that yields the argument's NAME (not its value). The single identifier argument is reported
+    /// via <paramref name="target"/> so the binder can validate it without binding it as a value.
+    /// </summary>
+    private static bool IsNameOf(CallExpr ce, out IdentifierExpr target)
+    {
+        if (ce.Callee is IdentifierExpr { Name: "nameof" }
+            && ce.Args.Count == 1 && ce.Args[0] is IdentifierExpr id)
+        {
+            target = id;
+            return true;
+        }
+        target = null!;
+        return false;
+    }
+
+    /// <summary>
+    /// Validates the identifier named inside `nameof(...)`. Records the resolution when the name is
+    /// known (so go-to-definition works), and reports an error for an unknown name when undefined-
+    /// identifier reporting is on — catching a typo'd check name. The name is never treated as a
+    /// value reference, so a self-referential `let x = ... nameof(x)` is not flagged.
+    /// </summary>
+    private void ValidateNameOfTarget(IdentifierExpr id)
+    {
+        var symbol = _currentScope.Resolve(id.Name);
+        if (symbol is not null)
+        {
+            _result.RecordResolution(id, symbol);
+        }
+        else if (_reportUndefinedIdentifiers
+            && !IsImplicitlyAvailable(id.Name)
+            && !_programNames.Contains(id.Name))
+        {
+            _result.ReportDiagnostic(
+                DiagnosticSeverity.Error,
+                $"nameof refers to unknown name '{id.Name}'",
+                id.Line,
+                _filePath);
         }
     }
 

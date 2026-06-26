@@ -497,6 +497,9 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
             if (m != null)
             {
                 if (vis != Modifier.Private) m = m with { Modifiers = m.Modifiers | vis };
+                // `unsafe` was consumed by the item-level dispatch above (for unsafe trait/impl);
+                // propagate it onto a free `unsafe fn` so RustMethod.IsUnsafe is correct.
+                if (isUnsafe && m is RustMethodDeclaration rm) m = rm with { IsUnsafe = true };
                 freeFunctions.Add(m);
             }
             return null;

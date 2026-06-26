@@ -5,43 +5,46 @@ import code
 
 let cb = codebase(javascript.parse())
 
+# Honor `// cop-ignore: <check>` comments — exempt the next statement from these checks.
+predicate notIgnored(Statement) => Statement.CopIgnore == ''
+
 ## JavaScript Correctness
 
 ## Avoid console output in production code
 predicate isConsoleCall(Statement) => Statement.Kind == 'call'
     && Statement.TypeName == 'console'
-export let console-calls = cb.Statements:isConsoleCall
-    :toWarning('Avoid console.{item.MemberName} in production code')
+export let console-calls = cb.Statements:isConsoleCall:notIgnored
+    :toWarning('Avoid console.{item.MemberName} in production code', nameof(console-calls))
 
 ## Do not use alert()
 predicate isAlertCall(Statement) => Statement.Kind == 'call'
     && Statement.MemberName == 'alert'
-export let alert-calls = cb.Statements:isAlertCall
-    :toError('Do not use alert()')
+export let alert-calls = cb.Statements:isAlertCall:notIgnored
+    :toError('Do not use alert()', nameof(alert-calls))
 
 ## Do not use eval()
 predicate isEvalCall(Statement) => Statement.Kind == 'call'
     && Statement.MemberName == 'eval'
-export let eval-calls = cb.Statements:isEvalCall
-    :toError('Do not use eval() — it is a security risk')
+export let eval-calls = cb.Statements:isEvalCall:notIgnored
+    :toError('Do not use eval() — it is a security risk', nameof(eval-calls))
 
 ## Remove debugger statements
 predicate isDebuggerStatement(Statement) => Statement.Kind == 'call'
     && Statement.MemberName == 'debugger'
-export let debugger-statements = cb.Statements:isDebuggerStatement
-    :toError('Remove debugger statement')
+export let debugger-statements = cb.Statements:isDebuggerStatement:notIgnored
+    :toError('Remove debugger statement', nameof(debugger-statements))
 
 ## Use const or let instead of var
 predicate isUsingVar(Statement) => Statement.Kind == 'declaration'
     && Statement.Keywords:contains('var')
-export let var-declarations = cb.Statements:isUsingVar
-    :toWarning('Use const or let instead of var')
+export let var-declarations = cb.Statements:isUsingVar:notIgnored
+    :toWarning('Use const or let instead of var', nameof(var-declarations))
 
 ## Catch blocks should rethrow or handle errors explicitly
 predicate isCatchWithoutRethrow(Statement) => Statement.ErrorHandler == true
     && Statement.Generic == true && !Statement.Rethrows
-export let swallowed-exceptions = cb.Statements:isCatchWithoutRethrow
-    :toWarning('Do not swallow errors — rethrow or handle explicitly')
+export let swallowed-exceptions = cb.Statements:isCatchWithoutRethrow:notIgnored
+    :toWarning('Do not swallow errors — rethrow or handle explicitly', nameof(swallowed-exceptions))
 
 ## Combined JavaScript correctness checks
 export let javascript-correctness-checks = console-calls + alert-calls + eval-calls + debugger-statements + var-declarations + swallowed-exceptions
@@ -63,8 +66,8 @@ predicate isAwaitOfNonThenable(Statement) =>
         || Statement.Expression:startsWith('{'))
 
 ## Disallow awaiting a value that is not a Thenable (@typescript-eslint/await-thenable)
-export let await-thenable = cb.Statements:isAwaitOfNonThenable
-    :toError('Unexpected await of a non-Promise (non-Thenable) value')
+export let await-thenable = cb.Statements:isAwaitOfNonThenable:notIgnored
+    :toError('Unexpected await of a non-Promise (non-Thenable) value', nameof(await-thenable))
 
 ## Combined TypeScript checks
 export let typescript-checks = await-thenable
