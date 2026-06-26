@@ -143,6 +143,13 @@ Each package includes samples in its `samples/` directory showing real-world usa
 | [list-public-types](../packages/languages/rust/samples/list-public-types.cop) | List all public Rust types |
 | [run-rust-checks](../packages/checks/rust-checks/samples/run-rust-checks.cop) | Run built-in Rust correctness and style checks |
 
+### Go
+
+| Sample | Description |
+|--------|-------------|
+| [list-public-types](../packages/languages/go/samples/list-public-types.cop) | List all public Go types |
+| [run-go-checks](../packages/checks/go-checks/samples/run-go-checks.cop) | Run built-in Go correctness and style checks |
+
 ### Formats, Config & Scripts
 
 Native C# providers for configuration formats and scripting languages.

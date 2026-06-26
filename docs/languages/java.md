@@ -19,87 +19,9 @@ cop --version
 
 ---
 
-## 2. Initialize a Java Project
+## 2. Set Up Agent Context
 
-Create (or navigate to) a Java project:
-
-```bash
-mkdir my-project && cd my-project
-mkdir -p src/main/java/com/example
-```
-
-Add some code to `src/main/java/com/example/User.java`:
-
-```java
-package com.example;
-
-import java.util.Objects;
-
-/**
- * Represents a user in the system.
- */
-public class User {
-    private String name;
-    private int age;
-    public String email;
-
-    public User(String name, int age, String email) {
-        this.name = Objects.requireNonNull(name);
-        this.age = age;
-        this.email = email;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public boolean isAdult() {
-        return age >= 18;
-    }
-
-    private void validate() {
-        if (name.isEmpty()) {
-            throw new IllegalArgumentException("Name cannot be empty");
-        }
-    }
-}
-```
-
-Add another file `src/main/java/com/example/Status.java`:
-
-```java
-package com.example;
-
-public enum Status {
-    ACTIVE,
-    INACTIVE,
-    SUSPENDED
-}
-```
-
-And an interface `src/main/java/com/example/Repository.java`:
-
-```java
-package com.example;
-
-import java.util.List;
-
-public interface Repository<T> {
-    T findById(String id);
-    List<T> findAll();
-    void save(T entity);
-    void delete(String id);
-}
-```
-
-That's the code we'll analyze — cop reads your source files in place, with nothing to add or
-configure. There's nothing to run yet, though: cop needs a rule first (section 4 or 5).
-
----
-
-## 3. Set Up Agent Context
-
-Run `cop init` once, in your **repository root** (the project root above — not a subfolder like `src/`):
+Run `cop init` once, in your **repository root** (not in `src/` or any other subfolder):
 
 ```bash
 cop init
@@ -112,7 +34,7 @@ This generates instruction files (`.github/copilot-instructions.md`, `AGENTS.md`
 
 ---
 
-## 4. Create Rules with Your Agent
+## 3. Create Rules with Your Agent
 
 This is the primary way to use cop. As you build, you (or your coding agent) will notice
 patterns you want to ban going forward — a raw `throw new RuntimeException`, a `System.out.println`,
@@ -142,10 +64,22 @@ The next sections show what such a rule looks like and how to run it yourself.
 
 ---
 
-## 5. Write and Run a Rule by Hand
+## 4. Write and Run a Rule by Hand
 
-You don't need an agent — you can author `.cop` files directly. Create a file called
-`checks.cop` in your project root:
+You don't need an agent — you can author `.cop` files directly. cop analyzes the `.java` files
+you already have; a typical Java project looks like this:
+
+```
+src/
+  main/
+    java/
+      com/example/
+        User.java
+        Status.java
+pom.xml
+```
+
+Create a file called `checks.cop` in your project root:
 
 ```cop
 import java
@@ -169,16 +103,12 @@ let throws = cb.Statements:isThrowStmt
 command MAIN = CHECK(undocumented + throws)
 ```
 
-This rule does two things:
-1. **Finds public types without Javadoc** (`/** ... */` above the declaration)
-2. **Finds throw statements** — which might indicate missing validation
-
-Verify it, then run it from your project root. cop analyzes the current directory by default;
-`-t <path>` points it at another folder:
+Verify it, then run it from your project root. By default cop analyzes the current directory;
+`-t <path>` narrows analysis to a subfolder (here `src/`):
 
 ```bash
 cop verify checks.cop      # catch syntax/type errors first
-cop checks.cop -t .
+cop checks.cop -t src/
 ```
 
 Example output:
@@ -196,7 +126,7 @@ run `cop cop-checks/main.cop -t .` (this is exactly what your agent does for you
 
 ---
 
-## 6. Use Built-In Checks
+## 5. Use Built-In Checks
 
 Cop ships a built-in Java check package — no `.cop` files needed:
 
@@ -258,7 +188,7 @@ void save() {
 
 ---
 
-## 7. Enforce Module Layering
+## 6. Enforce Module Layering
 
 Cop discovers your Maven/Gradle modules and their dependencies (from each `pom.xml` or
 `build.gradle`). The language-agnostic **`code-layering`** package lets you enforce
@@ -302,7 +232,7 @@ references a service module, so you can wire it into CI.
 
 ---
 
-## 8. Explore Further
+## 7. Explore Further
 
 ### List all types in your project
 

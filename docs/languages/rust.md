@@ -19,69 +19,9 @@ cop --version
 
 ---
 
-## 2. Initialize a Rust Project
+## 2. Set Up Agent Context
 
-Create (or navigate to) a Rust project:
-
-```bash
-cargo init my-project
-cd my-project
-```
-
-Add some code to `src/main.rs`:
-
-```rust
-use std::collections::HashMap;
-
-/// A public user struct.
-#[derive(Debug, Clone)]
-pub struct User {
-    pub name: String,
-    pub age: u32,
-    email: String,
-}
-
-impl User {
-    pub fn new(name: String, age: u32, email: String) -> Self {
-        User { name, age, email }
-    }
-
-    pub fn display_name(&self) -> String {
-        format!("{} (age {})", self.name, self.age)
-    }
-
-    fn validate(&self) -> bool {
-        !self.name.is_empty() && self.age > 0
-    }
-}
-
-pub enum Status {
-    Active,
-    Inactive,
-    Suspended,
-}
-
-fn helper(x: i32) -> i32 {
-    if x < 0 {
-        panic!("x must be non-negative");
-    }
-    x * 2
-}
-
-fn main() {
-    let user = User::new("Alice".to_string(), 30, "alice@example.com".to_string());
-    println!("{}", user.display_name());
-}
-```
-
-That's the code we'll analyze — cop reads your source files in place, with nothing to add or
-configure. There's nothing to run yet, though: cop needs a rule first (section 4 or 5).
-
----
-
-## 3. Set Up Agent Context
-
-Run `cop init` once, in your **repository root** (the project root above — not a subfolder like `src/`):
+Run `cop init` once, in your **repository root** (not in `src/` or any other subfolder):
 
 ```bash
 cop init
@@ -94,7 +34,7 @@ This generates instruction files (`.github/copilot-instructions.md`, `AGENTS.md`
 
 ---
 
-## 4. Create Rules with Your Agent
+## 3. Create Rules with Your Agent
 
 This is the primary way to use cop. As you build, you (or your coding agent) will notice
 patterns you want to ban going forward — a `panic!`, an `unwrap()`, a missing `///` doc
@@ -124,10 +64,19 @@ The next sections show what such a rule looks like and how to run it yourself.
 
 ---
 
-## 5. Write and Run a Rule by Hand
+## 4. Write and Run a Rule by Hand
 
-You don't need an agent — you can author `.cop` files directly. Create a file called
-`checks.cop` in your project root:
+You don't need an agent — you can author `.cop` files directly. cop analyzes the `.rs` files
+you already have; a typical Rust project looks like this:
+
+```
+src/
+  main.rs
+  user.rs
+Cargo.toml
+```
+
+Create a file called `checks.cop` in your project root:
 
 ```cop
 import rust
@@ -152,16 +101,12 @@ let panics = cb.Statements:isPanicCall
 command MAIN = CHECK(undocumented + panics)
 ```
 
-This rule does two things:
-1. **Finds public types without doc comments** (`///` above the declaration)
-2. **Finds uses of `panic!`** — a common code smell in library code
-
-Verify it, then run it from your project root. cop analyzes the current directory by default;
-`-t <path>` points it at another folder:
+Verify it, then run it from your project root. By default cop analyzes the current directory;
+`-t <path>` narrows analysis to a subfolder (here `src/`):
 
 ```bash
 cop verify checks.cop      # catch syntax/type errors first
-cop checks.cop -t .
+cop checks.cop -t src/
 ```
 
 Example output:
@@ -177,7 +122,7 @@ run `cop cop-checks/main.cop -t .` (this is exactly what your agent does for you
 
 ---
 
-## 6. Use the Built-In Rust Checks
+## 5. Use the Built-In Rust Checks
 
 Beyond your own rules, the **`rust-checks`** package is a curated set of
 [Clippy](https://doc.rust-lang.org/clippy/)-inspired correctness, style, complexity, safety,
@@ -270,7 +215,7 @@ exclude those with the whole-rule approach above.
 
 ---
 
-## 7. Enforce Crate Layering
+## 6. Enforce Crate Layering
 
 Cop discovers your Cargo crates and their dependencies (from each `Cargo.toml`, including
 workspace-shorthand `dep.workspace = true` and `[dependencies.<name>]` forms). The
@@ -314,7 +259,7 @@ references a service crate, so you can wire it into CI.
 
 ---
 
-## 8. Explore Further
+## 7. Explore Further
 
 ### List all types in your project
 
@@ -393,7 +338,7 @@ rest of that file and every other file. Malformed sources are reported, never si
 
 - Use `cop verify checks.cop` to check your rule for syntax/type errors before running
 - Run the built-in `cop run rust-checks -t .` alongside your own rules
-- Enforce crate dependency rules with the `code-layering` package (see section 7)
+- Enforce crate dependency rules with the `code-layering` package (see section 6)
 - Use `-t path/` to target a specific subdirectory
 - Combine with other providers: `import rust` + `import python` to analyze polyglot projects
 - Run `cop help code` to see all available predicates and types

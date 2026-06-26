@@ -19,77 +19,9 @@ cop --version
 
 ---
 
-## 2. Initialize a Go Project
+## 2. Set Up Agent Context
 
-Create (or navigate to) a Go project:
-
-```bash
-mkdir myapp && cd myapp
-go mod init github.com/example/myapp
-```
-
-Add some code to `main.go`:
-
-```go
-package main
-
-import (
-	"fmt"
-	"net/http"
-)
-
-// User represents an application user.
-type User struct {
-	Name  string
-	Age   int
-	email string
-}
-
-// Greeter defines greeting behavior.
-type Greeter interface {
-	Greet(name string) string
-	Farewell(name string) string
-}
-
-// NewUser creates a new User instance.
-func NewUser(name string, age int, email string) *User {
-	return &User{Name: name, Age: age, email: email}
-}
-
-// DisplayName returns the user's formatted display name.
-func (u *User) DisplayName() string {
-	return fmt.Sprintf("%s (age %d)", u.Name, u.Age)
-}
-
-func (u *User) validate() bool {
-	return u.Name != "" && u.Age > 0
-}
-
-type RequestStatus int
-
-func processData(data []byte) error {
-	if len(data) == 0 {
-		panic("empty data")
-	}
-	fmt.Println("processing...")
-	http.Get("http://example.com")
-	return nil
-}
-
-func main() {
-	user := NewUser("Alice", 30, "alice@example.com")
-	fmt.Println(user.DisplayName())
-}
-```
-
-That's the code we'll analyze — cop reads your source files in place, with nothing to add or
-configure. There's nothing to run yet, though: cop needs a rule first (section 4 or 5).
-
----
-
-## 3. Set Up Agent Context
-
-Run `cop init` once, in your **repository root** (the project root above — not a subfolder):
+Run `cop init` once, in your **repository root** (not in `src/` or any other subfolder):
 
 ```bash
 cop init
@@ -102,7 +34,7 @@ This generates instruction files (`.github/copilot-instructions.md`, `AGENTS.md`
 
 ---
 
-## 4. Create Rules with Your Agent
+## 3. Create Rules with Your Agent
 
 This is the primary way to use cop. As you build, you (or your coding agent) will notice
 patterns you want to ban going forward — a `panic()`, an exported type without a doc comment,
@@ -132,10 +64,17 @@ The next section shows what such a rule looks like and how to run it yourself.
 
 ---
 
-## 5. Write and Run a Rule by Hand
+## 4. Write and Run a Rule by Hand
 
-You don't need an agent — you can author `.cop` files directly. Create a file called
-`checks.cop` in your project root:
+You don't need an agent — you can author `.cop` files directly. cop analyzes the `.go` files
+you already have; a typical Go project looks like this:
+
+```
+main.go
+go.mod
+```
+
+Create a file called `checks.cop` in your project root:
 
 ```cop
 import go
@@ -159,10 +98,6 @@ let panics = cb.Statements:isPanic
 command MAIN = CHECK(undocumented + panics)
 ```
 
-This rule checks two common Go conventions:
-1. **Exported types should have doc comments** (per `go vet` / `golint`)
-2. **Avoid `panic()` in library code** — idiomatic Go returns errors
-
 Verify it, then run it from your project root. cop analyzes the current directory by default;
 `-t <path>` points it at another folder:
 
@@ -184,9 +119,87 @@ Exit code is `0` when clean and `1` when violations are found — suitable for C
 many rules, put one check per file in a `cop-checks/` folder with a `main.cop` entry point and
 run `cop cop-checks/main.cop -t .` (this is exactly what your agent does for you).
 
-> Note: There is no prebuilt `go-checks` package yet, so Go rules are authored per project —
-> either with your agent (section 4) or by hand (above). You can still run the language-agnostic
-> packages such as `code-metrics` and `code-layering`.
+---
+
+## 5. Use the Built-In Go Checks
+
+Beyond your own rules, the **`go-checks`** package is a curated set of
+[go vet](https://pkg.go.dev/cmd/vet) / [staticcheck](https://staticcheck.dev/) /
+[revive](https://revive.run/)-inspired correctness, style, complexity, and documentation
+checks. It hardcodes the Go provider, so no `-p` flag is needed:
+
+```bash
+cop run go-checks -t .
+```
+
+It flags common issues such as:
+
+- `panic()` in library code — return an error instead
+- `os.Exit()` outside `main` — skips deferred cleanup and is hard to test
+- `time.Sleep()` — often a concurrency smell; prefer channels/contexts
+- `fmt.Print` / `Printf` / `Println` in library code — use a logging framework (log/slog)
+- names that use `snake_case` instead of MixedCaps, and initialisms like `Id`/`Url`/`Http`
+  that should be `ID`/`URL`/`HTTP`
+- `interface{}` that can be written as `any` (Go 1.18+)
+- functions with more than 7 parameters, and very large function bodies
+- exported types and functions missing doc comments
+
+Example output:
+
+```
+main.go(43): warning: Avoid panic() in library code — return an error instead
+main.go(40): warning: Avoid fmt.Println in library code — use a logging framework (log/slog)
+main.go(12): warning: Exported type RequestStatus is missing a doc comment
+```
+
+### Excluding checks and violations
+
+You won't want every rule on every project. There are two ways to opt out.
+
+**Exclude a whole rule** — subtract one or more checks (or whole groups) from the package in
+a small `.cop` file. The `-` operator removes those violations; everything else still runs:
+
+```cop
+import go-checks
+import code
+
+# run every go-checks rule except panic-calls and time-sleep
+let my-checks = go-checks - panic-calls - time-sleep
+
+command MAIN = CHECK(my-checks)
+```
+
+```bash
+cop my-checks.cop -t .
+```
+
+Checks are also grouped, so you can compose just the groups you want with `+`
+(`go-correctness-checks`, `go-style-checks`, `go-complexity-checks`, `go-doc-checks`):
+
+```cop
+import go-checks
+import code
+
+# only correctness and documentation — skip style and complexity
+let my-checks = go-correctness-checks + go-doc-checks
+
+command MAIN = CHECK(my-checks)
+```
+
+**Exclude a single violation** — add a `// cop-ignore: <check>` comment on the line directly
+above the one to exempt. Only that line is silenced; the rule keeps firing everywhere else:
+
+```go
+func mustLoad(path string) Config {
+    // cop-ignore: panic-calls
+    panic("config is required")  // exempted — NOT flagged
+}
+```
+
+`cop-ignore` works for the statement- and line-level checks (`panic-calls`, `os-exit`,
+`time-sleep`, `console-output`, `use-any`). Type- and function-level checks (naming,
+initialisms, documentation, parameter/length limits) have no per-line anchor — exclude those
+with the whole-rule approach above.
 
 ---
 

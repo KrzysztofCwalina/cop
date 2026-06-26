@@ -404,6 +404,29 @@ lambda_expr     = '(' [ param { ',' param } ] ')' '=>' expression ;
 Lambda detection uses backtracking: if `(ident [: type], ...) =>` is found, it's a lambda;
 otherwise, the parenthesized content is a grouped expression.
 
+### 5.7 Compile-time Intrinsic: `nameof`
+
+`nameof(x)` is **syntactically** an ordinary call — a `postfix_op` `'(' arg_list ')'` whose
+callee is the identifier `nameof` (§5.2, §8). It is *not* a distinct grammar production, and
+`nameof` is *not* a reserved keyword (it is absent from §1.2); like an enum constructor in
+§5.5, it is a plain `IDENTIFIER` that the evaluator treats specially.
+
+The evaluator recognizes this call shape as a **compile-time intrinsic**: it yields the **name**
+of its argument identifier as a string, taken syntactically, *without evaluating the argument*.
+
+```cop
+# the 3rd argument is the literal string 'unwrap-calls', not the value of the binding
+export let unwrap-calls = cb.Calls:isUnwrap
+    :toWarning('Avoid .unwrap()', nameof(unwrap-calls))
+```
+
+These constraints are enforced **semantically** (by the binder/evaluator, not the grammar), so a
+violation is a binding/evaluation error rather than a parse error:
+
+- the argument must be a **single `IDENTIFIER`** — `nameof('literal')` and `nameof(a.b)` are errors;
+- that identifier must resolve to a real binding, so a misspelled name is caught by `cop verify`;
+- the argument is never evaluated, so `let x = ... nameof(x)` is **not** a self-reference.
+
 ---
 
 ## 6. Type References
