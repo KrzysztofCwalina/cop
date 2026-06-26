@@ -39,8 +39,12 @@ public static class VerifyCommand
 
         if (File.Exists(path) && path.EndsWith(".cop", StringComparison.OrdinalIgnoreCase))
         {
-            files = [path];
             scriptsDir = Path.GetDirectoryName(path) ?? Directory.GetCurrentDirectory();
+            // A single .cop file is part of the program formed by all .cop files in its directory
+            // (the cop-checks/ pattern, where main.cop references lets defined in sibling files).
+            // Verify them together — matching `cop run` — so cross-file references resolve and the
+            // reported file count reflects the whole program, not just the named file.
+            files = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
         }
         else if (Directory.Exists(path))
         {
@@ -121,9 +125,50 @@ public static class VerifyCommand
         // Collect symbols from imports that the binder should know about
         var externalSymbols = CollectExternalSymbols(evaluator.GlobalEnvironment, moduleLoader.LoadedModules);
 
+        // All top-level names declared across every file of this program. A reference in one file
+        // to a let/function/etc. declared in a sibling file (the cop-checks/ pattern) must not be
+        // flagged as undefined. Used as a fallback only — not added to any scope, so it never
+        // triggers a duplicate-declaration diagnostic.
+        var programNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (programModule, _, _) in modules)
+            foreach (var decl in programModule.Declarations)
+            {
+                var declName = decl switch
+                {
+                    TypeDecl td => td.Name,
+                    EnumDecl ed => ed.Name,
+                    FlagsDecl fd => fd.Name,
+                    FunctionDecl fd => fd.Name,
+                    LetDecl ld => ld.Name,
+                    CommandDecl cd => cd.Name,
+                    _ => null
+                };
+                if (declName is not null) programNames.Add(declName);
+            }
+
+        // Names exported by imported packages are also usable as bare values
+        // (e.g. METRICS(slop, ...), CHECK(csharp-library-checks)). Add them to the same
+        // fallback set so they are not flagged as undefined. They are NOT added to the scope, so
+        // a program may still re-declare one (shadowing) without a duplicate-declaration error.
+        foreach (var loaded in moduleLoader.LoadedModules)
+            foreach (var decl in loaded.Declarations)
+            {
+                var exportedName = decl switch
+                {
+                    TypeDecl { IsExported: true } td => td.Name,
+                    EnumDecl { IsExported: true } ed => ed.Name,
+                    FlagsDecl { IsExported: true } fd => fd.Name,
+                    FunctionDecl { IsExported: true } fd => fd.Name,
+                    LetDecl { IsExported: true } ld => ld.Name,
+                    CommandDecl { IsExported: true } cd => cd.Name,
+                    _ => null
+                };
+                if (exportedName is not null) programNames.Add(exportedName);
+            }
+
         foreach (var (module, filePath, source) in modules)
         {
-            var binder = new Binder(filePath, externalSymbols);
+            var binder = new Binder(filePath, externalSymbols, programNames, reportUndefinedIdentifiers: true);
             var bindingResult = binder.Bind(module);
 
             foreach (var bd in bindingResult.Diagnostics)

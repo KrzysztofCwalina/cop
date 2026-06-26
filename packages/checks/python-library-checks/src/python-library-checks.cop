@@ -53,7 +53,7 @@ export let async-client-bad-name = Clients:hasBadAsyncName
 
 # Constructor conventions
 predicate isKwargsParam(Parameter) => Parameter.Kwargs
-predicate isCredentialParam(Parameter) => Parameter.Name == 'credential'
+export predicate isCredentialParam(Parameter) => Parameter.Name == 'credential'
 predicate isConnectionStringParam(Parameter) => Parameter.Name:contains('connection_string')
     || Parameter.Name:contains('conn_str')
 

@@ -1981,9 +1981,9 @@ const packages = {
       },
       {
         "name": "codebase",
-        "params": "providers: [Provider]",
+        "params": "providers: [Codebase]",
         "returns": "Codebase",
-        "appliesTo": "[Provider]",
+        "appliesTo": "[Codebase]",
         "desc": "Creates a unified Codebase from one or more language providers.\nExample: let cb = codebase(Program.Providers)",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L255"
       }
@@ -2362,13 +2362,13 @@ const packages = {
       },
       {
         "name": "text",
-        "appliesTo": "object",
+        "appliesTo": "string",
         "desc": "Converts a string to text (identity — returns string as-is).",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/core/src/text.cop#L5"
       },
       {
         "name": "text",
-        "appliesTo": "object",
+        "appliesTo": "bool",
         "desc": "Converts a bool to text: true => 'true', false => 'false'.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/core/src/text.cop#L8"
       }
@@ -2448,14 +2448,14 @@ const packages = {
       },
       {
         "name": "text",
-        "params": "",
+        "params": "int: int",
         "returns": "string",
         "desc": "Converts an integer to its decimal text representation.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/core/src/intrinsics.cop#L78"
       },
       {
         "name": "text",
-        "params": "",
+        "params": "bytes: bytes",
         "returns": "string",
         "desc": "Decodes a byte array as UTF-8 text.",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/core/src/intrinsics.cop#L81"
@@ -2769,11 +2769,11 @@ const packages = {
     "samples": [
       {
         "title": "Api diff",
-        "code": "import code\nimport csharp-library-checks\nimport code\n\nlet cb : Codebase = provider('csharp')\n\n# Baseline: C# stub files in api/ directory\npredicate isBaselineApi(Api) => publicApi && Api.File.Path:matches('[/\\\\]api[/\\\\]')\n# Source: everything NOT in api/\npredicate isSourceApi(Api) => publicApi && !Api.File.Path:matches('[/\\\\]api[/\\\\]')\n\n# Build lookup lists from current source and baseline\nlet baselineSignatures = cb.Api:isBaselineApi.Select(item.Signature)\nlet currentSignatures = cb.Api:isSourceApi.Select(item.Signature)\n\n# Diff predicates\npredicate isRemovedApi(Api) => isBaselineApi && !Api.Signature:in(currentSignatures)\npredicate isAddedApi(Api) => isSourceApi && !Api.Signature:in(baselineSignatures)\n\n# Report results\nexport let api-removed = cb.Api:isRemovedApi\n    :toError('API REMOVED (breaking): {item.Signature}')\nexport let api-added = cb.Api:isAddedApi\n    :toInfo('API ADDED: {item.Signature}')"
+        "code": "import code\nimport csharp-library-checks\nimport code\n\nlet cb : Codebase = provider('csharp')\n\n# Baseline: C# stub files in api/ directory\npredicate isBaselineApi(Api) => Api.File.Path:matches('[/\\\\]api[/\\\\]')\n# Source: everything NOT in api/\npredicate isSourceApi(Api) => !Api.File.Path:matches('[/\\\\]api[/\\\\]')\n\n# Build lookup lists from current source and baseline\nlet baselineSignatures = cb.Api:isBaselineApi.Select(item.Signature)\nlet currentSignatures = cb.Api:isSourceApi.Select(item.Signature)\n\n# Diff predicates\npredicate isRemovedApi(Api) => isBaselineApi && !Api.Signature:in(currentSignatures)\npredicate isAddedApi(Api) => isSourceApi && !Api.Signature:in(baselineSignatures)\n\n# Report results\nexport let api-removed = cb.Api:isRemovedApi\n    :toError('API REMOVED (breaking): {item.Signature}')\nexport let api-added = cb.Api:isAddedApi\n    :toInfo('API ADDED: {item.Signature}')"
       },
       {
         "title": "Api listing",
-        "code": "import code\nimport csharp-library-checks\n\nlet cb : Codebase = provider('csharp')\n\n# print API surface as C# stubs\nexport command api-listing = foreach cb.Api:publicApi => '{item.ApiAsText}'\n\n# save API surface to a file\nlet apiText = cb.Api:publicApi.text('{item.ApiAsText}')\nexport command save-api = save('api-surface.txt', apiText)"
+        "code": "import code\nimport csharp-library-checks\n\nlet cb : Codebase = provider('csharp')\n\n# print API surface as C# stubs\nexport command api-listing = foreach cb.Api => '{item.ApiAsText}'\n\n# save API surface to a file\nlet apiText = cb.Api.text('{item.ApiAsText}')\nexport command save-api = save('api-surface.txt', apiText)"
       },
       {
         "title": "List public types",
@@ -4675,7 +4675,7 @@ const packages = {
     "samples": [
       {
         "title": "Http client",
-        "code": "import http\n\nfunction complete(string) =>\n    http.Post('https://api.example.com/v1/completions', {\n        Content-Type: 'application/json'\n    }, {\n        model = 'gpt-4o',\n        messages = [{ role = 'user', content = string }]\n    })\n\nfunction handle(Request) =>\n    Request.Uri:equals('/chat') ? Request.Body:text:complete.Body:text:ok : notFound\n\nasync foreach requests() => handle => responses()"
+        "code": "import http\n\n# Route requests: answer /chat, otherwise 404.\nfunction handle(Request) =>\n    Request.Uri:equals('/chat') ? ok(Request, 'chat ready') : notFound\n\nasync foreach requests() => handle => responses()"
       },
       {
         "title": "Http server",
@@ -4785,7 +4785,7 @@ const packages = {
       },
       {
         "name": "ok",
-        "params": "",
+        "params": "string: string",
         "returns": "",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/http/src/http.cop#L43"
@@ -4834,7 +4834,7 @@ const packages = {
       },
       {
         "name": "serverError",
-        "params": "Error: Error",
+        "params": "string: string",
         "returns": "",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/http/src/http.cop#L92"
@@ -6689,6 +6689,12 @@ const packages = {
         "appliesTo": "Type",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/checks/python-library-checks/src/python-library-checks.cop#L48"
+      },
+      {
+        "name": "isCredentialParam",
+        "appliesTo": "Parameter",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/checks/python-library-checks/src/python-library-checks.cop#L56"
       },
       {
         "name": "hasNameTooLong",

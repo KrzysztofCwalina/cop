@@ -33,11 +33,38 @@ public sealed class Binder
     /// </summary>
     private readonly IReadOnlyList<Symbol> _externalSymbols;
 
-    public Binder(string? filePath = null, IReadOnlyList<Symbol>? externalSymbols = null)
+    /// <summary>
+    /// Names of all top-level declarations across every file of the same program
+    /// (the cop-checks/ pattern, where main.cop references lets defined in sibling files).
+    /// Used only as a fallback so the undefined-identifier check does not flag a name that
+    /// resolves in another file of the same program. Not added to the scope, so it never
+    /// triggers duplicate-declaration diagnostics.
+    /// </summary>
+    private readonly IReadOnlySet<string> _programNames;
+
+    /// <summary>
+    /// When true, a bare identifier used in a value position that resolves to nothing is
+    /// reported as an error (it would fatal at runtime with "Undefined variable"). Verify sets
+    /// this; the run path leaves it false because the evaluator reports the same error at
+    /// runtime with a source snippet.
+    /// </summary>
+    private readonly bool _reportUndefinedIdentifiers;
+
+    public Binder(string? filePath = null, IReadOnlyList<Symbol>? externalSymbols = null,
+        IReadOnlySet<string>? programNames = null, bool reportUndefinedIdentifiers = false)
     {
         _filePath = filePath;
         _externalSymbols = externalSymbols ?? [];
+        _programNames = programNames ?? new HashSet<string>(StringComparer.Ordinal);
+        _reportUndefinedIdentifiers = reportUndefinedIdentifiers;
     }
+
+    /// <summary>
+    /// Names that are always implicitly available in a value position even without a scope
+    /// declaration (e.g. the per-item variable in filters, per-item transforms, and foreach).
+    /// </summary>
+    private static bool IsImplicitlyAvailable(string name) =>
+        name is "item";
 
     /// <summary>
     /// Bind a parsed module, producing a BindingResult with resolved symbols and diagnostics.
@@ -221,6 +248,13 @@ public sealed class Binder
         if (existing is not FunctionSymbol existingFn)
             return false;
 
+        // A builtin/intrinsic stub injected by the verify harness (CallableKind.External, carrying
+        // no real source declaration) is authoritatively replaced by the package's own in-source
+        // declaration of that intrinsic — that is not a duplicate. A signature-bearing imported
+        // callable (Function/Predicate) is still subject to the overload rules below.
+        if (existingFn.CallableKind == CallableKind.External)
+            return true;
+
         // A self-import injects a signature-less stub (no AST declaration, empty parameter list)
         // for each of the package's own exports. The arity-difference rule below already tolerates
         // a real local declaration that takes parameters (its arity differs from the 0-arity stub),
@@ -250,7 +284,7 @@ public sealed class Binder
 
         return candidateKind == CallableKind.Function
             && existingFn.CallableKind == CallableKind.Function
-            && existingFn.Parameters.Count != candidate.Parameters.Count;
+            && !HaveSameParameterSignature(existingFn.Parameters, candidate.Parameters);
     }
 
     private static bool IsImportedCallableWithoutDeclaration(FunctionSymbol symbol) =>
@@ -380,6 +414,14 @@ public sealed class Binder
                 foreach (var mapping in mb.Mappings)
                     BindExpression(mapping.Value);
                 break;
+            case BlockBody bb:
+                // Commands (and brace-bodied functions) desugar to a FunctionDecl with a
+                // BlockBody. Without binding its statements, Pass 2 never resolved identifiers in
+                // a command body, so an undefined reference such as `command main = CHECK(missing)`
+                // was silently ignored by verify (Pass 3 validates the same body for arity).
+                foreach (var stmt in bb.Statements)
+                    BindStatement(stmt);
+                break;
         }
 
         _currentScope = previousScope;
@@ -467,11 +509,24 @@ public sealed class Binder
             case IdentifierExpr id:
                 var symbol = _currentScope.Resolve(id.Name);
                 if (symbol is not null)
+                {
                     _result.RecordResolution(id, symbol);
-                // Note: unresolved identifiers are NOT errors in Cop because
-                // they may be runtime-provided (dynamic provider fields, 
-                // external module exports, or short predicate names).
-                // The evaluator handles missing bindings at runtime.
+                }
+                else if (_reportUndefinedIdentifiers
+                    && !IsImplicitlyAvailable(id.Name)
+                    && !_programNames.Contains(id.Name))
+                {
+                    // A bare identifier in a value position that resolves to nothing anywhere in
+                    // the program is a real error — it fatals at runtime with "Undefined variable".
+                    // Dynamic positions (call callees, member-access roots, filter predicates) are
+                    // routed through BindCalleeOrDynamic below and never reach here, so short
+                    // predicate names and provider/module roots are not flagged.
+                    _result.ReportDiagnostic(
+                        DiagnosticSeverity.Error,
+                        $"Undefined variable '{id.Name}'",
+                        id.Line,
+                        _filePath);
+                }
                 break;
 
             case LiteralExpr:
@@ -488,14 +543,18 @@ public sealed class Binder
                 break;
 
             case CallExpr ce:
-                BindExpression(ce.Callee);
+                // The callee (an intrinsic like CHECK/print, a user function, or a short
+                // predicate used as a function) is resolved dynamically — don't flag it.
+                BindCalleeOrDynamic(ce.Callee);
                 foreach (var arg in ce.Args)
                     BindExpression(arg);
                 break;
 
             case MemberExpr me:
-                BindExpression(me.Object);
-                // Member names are resolved dynamically (provider fields, type properties)
+                // The root of a member chain (e.g. `codebase` in `codebase.Types`, a module
+                // like `csharp`, `item`, or a provider root) is resolved dynamically; member
+                // names themselves are resolved dynamically (provider fields, type properties).
+                BindCalleeOrDynamic(me.Object);
                 break;
 
             case IndexExpr ie:
@@ -548,7 +607,9 @@ public sealed class Binder
 
             case FilterExpr filter:
                 BindExpression(filter.Collection);
-                BindExpression(filter.Predicate);
+                // A bare predicate name (`:isPublic`) is resolved dynamically by the evaluator,
+                // which reports unknown predicates itself — don't flag it as an undefined value.
+                BindCalleeOrDynamic(filter.Predicate);
                 break;
 
             case ForEachExpr fe:
@@ -564,6 +625,27 @@ public sealed class Binder
                     BindStatement(s);
                 _currentScope = feOuter;
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Binds an expression that appears in a "dynamic" position — a call callee, a member-access
+    /// root, or a filter predicate — where a bare identifier may legitimately be resolved at
+    /// runtime (intrinsics, provider/module roots, short predicate names). Such a bare identifier
+    /// is recorded if known but never reported as undefined. Non-identifier expressions are bound
+    /// normally so their inner value references are still validated.
+    /// </summary>
+    private void BindCalleeOrDynamic(Expression expr)
+    {
+        if (expr is IdentifierExpr id)
+        {
+            var symbol = _currentScope.Resolve(id.Name);
+            if (symbol is not null)
+                _result.RecordResolution(id, symbol);
+        }
+        else
+        {
+            BindExpression(expr);
         }
     }
 

@@ -5,9 +5,9 @@ import code
 let cb : Codebase = provider('csharp')
 
 # Baseline: C# stub files in api/ directory
-predicate isBaselineApi(Api) => publicApi && Api.File.Path:matches('[/\\]api[/\\]')
+predicate isBaselineApi(Api) => Api.File.Path:matches('[/\\]api[/\\]')
 # Source: everything NOT in api/
-predicate isSourceApi(Api) => publicApi && !Api.File.Path:matches('[/\\]api[/\\]')
+predicate isSourceApi(Api) => !Api.File.Path:matches('[/\\]api[/\\]')
 
 # Build lookup lists from current source and baseline
 let baselineSignatures = cb.Api:isBaselineApi.Select(item.Signature)

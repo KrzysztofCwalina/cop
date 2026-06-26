@@ -308,6 +308,71 @@ public class ErrorReportingTests
         Assert.That(stderr, Does.Contain("Unknown predicate 'typoPredicate'"));
     }
 
+    // ---- Verify: loads siblings and flags undefined references (false-green fix) -----------------
+
+    [Test]
+    public void Cli_Verify_UndefinedReference_Exits1_NotSilentlyClean()
+    {
+        // The false-green: `cop verify` previously reported success for a program that fatals at
+        // run with "Undefined variable". It must now flag the undefined reference (exit 1).
+        var (exit, stdout, stderr) = RunCli("verify", "command main = print(does-not-exist)");
+        Assert.That(exit, Is.EqualTo(1), $"stdout={stdout} stderr={stderr}");
+        Assert.That(stderr + stdout, Does.Contain("Undefined variable 'does-not-exist'"));
+    }
+
+    [Test]
+    public void Cli_Verify_KnownProgram_StillVerifiesClean_NoFalsePositive()
+    {
+        // Positive control: a valid program (filter predicate + implicit item) must still pass.
+        var (exit, stdout, stderr) = RunCli("verify",
+            "predicate isBig(int) => item > 1\ncommand main = foreach [1 2 3]:isBig => '{item}'");
+        Assert.That(exit, Is.EqualTo(0), $"stdout={stdout} stderr={stderr}");
+    }
+
+    [Test]
+    public void Cli_Verify_SingleFile_LoadsSiblingFiles()
+    {
+        // `cop verify main.cop` must verify the whole program (every .cop file in its directory),
+        // matching `cop run`, so a reference in main.cop to a let declared in a sibling resolves
+        // and the reported file count covers the whole program.
+        if (!File.Exists(CopExe)) Assert.Ignore("Published cop.exe not found");
+        var root = Path.Combine(TestContext.CurrentContext.WorkDirectory,
+            "verify-siblings", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "lib.cop"), "let helper-list = [1 2 3]");
+            File.WriteAllText(Path.Combine(root, "main.cop"), "command main = print(helper-list)");
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = CopExe,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WorkingDirectory = RepoRoot,
+            };
+            psi.ArgumentList.Add("verify");
+            psi.ArgumentList.Add(Path.Combine(root, "main.cop"));
+            using var p = Process.Start(psi)!;
+            var outTask = p.StandardOutput.ReadToEndAsync();
+            var errTask = p.StandardError.ReadToEndAsync();
+            if (!p.WaitForExit(30_000)) { try { p.Kill(entireProcessTree: true); } catch { } Assert.Fail("cop.exe timed out."); }
+            var outStr = outTask.GetAwaiter().GetResult();
+            var errStr = errTask.GetAwaiter().GetResult();
+
+            Assert.That(p.ExitCode, Is.EqualTo(0),
+                $"verify of main.cop should load sibling lib.cop and pass. stdout={outStr} stderr={errStr}");
+            Assert.That(outStr, Does.Contain("2 file(s)"),
+                "single-file verify should report every sibling file in the program");
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
     // ---- Binder: command bodies are validated (arity) -------------------------------------------
 
     [Test]

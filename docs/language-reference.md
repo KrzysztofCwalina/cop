@@ -1073,8 +1073,13 @@ foreach List:filter1:filter2 => 'template expression'
 Output functions are **named** with UPPERCASE `function` declarations, which makes them invocable by name with `cop <name>`:
 
 ```cop
-function LIST-TYPES() = { foreach Types => '{item.Name}' }
-function EXPORT-NAMES() = { foreach Types:isCSharp:client => save('names.txt', '{item.Name}') }
+import csharp
+import code
+
+let cb = csharp.parse()
+
+function LIST-TYPES() = { foreach cb.Types => '{item.Name}' }
+function EXPORT-NAMES() = { foreach cb.Types:isCSharp => save('names.txt', '{item.Name}') }
 ```
 
 Tests are declared with the `test` keyword:

@@ -1446,8 +1446,11 @@ public class CopParser
             return new Parameter(first, type, line);
         }
 
-        // If it starts with uppercase, it's likely just a type name (anonymous param)
-        if (char.IsUpper(first[0]))
+        // If it starts with uppercase, or is a primitive type name (int, string, ...), it is a
+        // type used as an anonymous parameter (e.g. `text(int)`, `isPublic(Type)`). Lowercase
+        // primitives must be treated as types so overloads like `text(int)` vs `text(bytes)` have
+        // distinct signatures rather than collapsing to "one untyped parameter".
+        if (char.IsUpper(first[0]) || IsPrimitiveTypeName(first))
         {
             return new Parameter(first, new TypeRef(first, false, line), line);
         }
@@ -1455,6 +1458,9 @@ public class CopParser
         // Otherwise it's an untyped parameter name
         return new Parameter(first, null, line);
     }
+
+    private static bool IsPrimitiveTypeName(string name) =>
+        name is "string" or "int" or "float" or "bool" or "byte" or "bytes" or "object";
 
     private void SkipConstraintChain()
     {

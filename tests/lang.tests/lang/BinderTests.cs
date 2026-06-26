@@ -617,6 +617,97 @@ let x : helper = 1");
             $"Expected to bind at least 5 files, but only bound {boundCount}");
     }
 
+    // ========================================================================
+    // Regression: verify-time undefined-identifier detection (the false-green fix)
+    // ========================================================================
+
+    private static BindingResult BindForVerify(string source, IEnumerable<string>? programNames = null)
+    {
+        var module = CopParser.Parse(source, "test.cop");
+        var externals = new List<Symbol>
+        {
+            new TypeSymbol("object", null, []),
+            new TypeSymbol("string", "object", []),
+            new TypeSymbol("int", "object", []),
+            new FunctionSymbol("print", CallableKind.External, []),
+            new FunctionSymbol("CHECK", CallableKind.External, []),
+        };
+        var names = new HashSet<string>(programNames ?? [], StringComparer.Ordinal);
+        var binder = new Binder("test.cop", externals, names, reportUndefinedIdentifiers: true);
+        return binder.Bind(module);
+    }
+
+    [Test]
+    public void Verify_FlagsUndefinedValueReference()
+    {
+        // The false-green fix: a bare value reference that resolves to nothing must be reported
+        // (it fatals at runtime with "Undefined variable"). Before, verify silently passed.
+        var result = BindForVerify("command main = print(undefinedThing)");
+        Assert.That(result.Diagnostics.Select(d => d.Message),
+            Has.Some.Contains("Undefined variable 'undefinedThing'"));
+    }
+
+    [Test]
+    public void Verify_FlagsUndefinedInCommandBody_BlockBodyIsBound()
+    {
+        // Regression: a command body (a FunctionDecl carrying a BlockBody) was never bound in
+        // Pass 2, so verify silently ignored undefined references inside it.
+        var result = BindForVerify("command MAIN = CHECK(missing-violations)");
+        Assert.That(result.Diagnostics.Select(d => d.Message),
+            Has.Some.Contains("Undefined variable 'missing-violations'"));
+    }
+
+    [Test]
+    public void Verify_DoesNotFlagImplicitItemVariable()
+    {
+        // `item` is the implicit per-item variable in filters/transforms/foreach.
+        var result = BindForVerify("command main = foreach [1 2 3] => '{item}'");
+        Assert.That(result.Diagnostics.Where(d => d.Message.Contains("Undefined")), Is.Empty,
+            string.Join("; ", result.Diagnostics.Select(d => d.Message)));
+    }
+
+    [Test]
+    public void Verify_DoesNotFlagBareFilterPredicateName()
+    {
+        // A bare predicate name in filter position is resolved dynamically by the evaluator
+        // (which reports unknown predicates itself) — verify must NOT flag it as an undefined value.
+        var result = BindForVerify("command main = foreach [1 2 3]:isBig => '{item}'");
+        Assert.That(result.Diagnostics.Where(d => d.Message.Contains("Undefined")), Is.Empty,
+            string.Join("; ", result.Diagnostics.Select(d => d.Message)));
+    }
+
+    [Test]
+    public void Verify_DoesNotFlagSiblingProgramName()
+    {
+        // A reference to a let declared in a sibling file of the same program (the cop-checks/
+        // pattern, where main.cop references lets defined elsewhere) resolves via programNames.
+        var result = BindForVerify("command main = CHECK(sibling-violations)",
+            programNames: ["sibling-violations"]);
+        Assert.That(result.Diagnostics.Where(d => d.Message.Contains("Undefined")), Is.Empty,
+            string.Join("; ", result.Diagnostics.Select(d => d.Message)));
+    }
+
+    [Test]
+    public void Verify_FunctionOverload_SameArityDifferentType_IsAllowed()
+    {
+        // Overloads differing only by parameter TYPE (same arity) must be allowed — e.g.
+        // `text(int)` vs `text(bytes)`. Previously only a differing arity was permitted, and a
+        // lowercase primitive parameter parsed as an untyped name, collapsing the signatures.
+        var result = Bind("export function f(int) => 1\nexport function f(bytes) => 2");
+        Assert.That(result.Diagnostics.Where(d => d.Message.Contains("Duplicate")), Is.Empty,
+            string.Join("; ", result.Diagnostics.Select(d => d.Message)));
+    }
+
+    [Test]
+    public void Verify_DoesNotFlagModuleOrProviderRootInMemberAccess()
+    {
+        // The root of a member chain (a module like `csharp`, a provider/let root) is resolved
+        // dynamically and must not be flagged, even when unknown to the binder.
+        var result = BindForVerify("command main = print(csharp.parse())");
+        Assert.That(result.Diagnostics.Where(d => d.Message.Contains("Undefined")), Is.Empty,
+            string.Join("; ", result.Diagnostics.Select(d => d.Message)));
+    }
+
     private static string? FindPackagesDir()
     {
         var dir = TestContext.CurrentContext.TestDirectory;

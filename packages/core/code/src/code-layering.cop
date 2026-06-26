@@ -49,10 +49,10 @@ export function toInfo(Project, message: string) => Violation {
     Source = item.Path
 }
 
-# Predicate: project is not in any known layer.
-# Users must define 'all-known-projects' as a let-bound list of all project names
-# that belong to a defined layer.
-export predicate isNotInLayer(Project) => !Project.Name:in(all-known-projects)
+# Predicate: project is not in any known layer. Pass the combined list of all
+# layered project names (e.g. `presentation-projects + business-projects + ...`)
+# as the second argument.
+export predicate isNotInLayer(Project, known: [string]) => !Project.Name:in(known)
 
 # Architecture Layering Checks
 # This file provides predicates for detecting layering violations.
@@ -102,7 +102,7 @@ export predicate isNotInLayer(Project) => !Project.Name:in(all-known-projects)
 #       + csharp.projects():businessReferencesPresentation
 #       :toError('Business project {item.Name} must not reference Presentation layer')
 #
-#   export let uncategorized = csharp.projects():isNotInLayer
+#   export let uncategorized = csharp.projects():isNotInLayer(all-known-projects)
 #       :toWarning('Project {item.Name} is not assigned to any architectural layer')
 #
 #   CHECK code-layering => layer-violations + uncategorized

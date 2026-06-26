@@ -34,7 +34,7 @@ predicate isMissingServiceVersionEnum(Type) => Type.NestedTypes:!any(isServiceVe
 export let options-needs-service-version-enum = ClientOptions:isMissingServiceVersionEnum
     :toWarning('{item.Name} should contain a nested ServiceVersion enum')
 
-predicate hasBadVersionName(Name) => !Name:matches('^V\\d+(_\\d+)*$')
+predicate hasBadVersionName(string) => !string:matches('^V\\d+(_\\d+)*$')
 predicate hasServiceVersionBadNames(Type) => Type.Kind == 'Enum' && Type.Name == 'ServiceVersion'
     && Type.EnumValues:any(hasBadVersionName)
 predicate hasBadServiceVersionNames(Type) => Type.NestedTypes:any(hasServiceVersionBadNames)

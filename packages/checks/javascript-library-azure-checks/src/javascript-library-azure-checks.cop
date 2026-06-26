@@ -36,7 +36,7 @@ export let copyright-header = javascript.lines():isMissingCopyright
 
 # Azure Core imports: clients should use @azure/core-client
 predicate isImportingAzureCore(File) => File.Imports:any(isAzureCoreImport)
-predicate isAzureCoreImport(Import) => Import:contains('@azure/core')
+predicate isAzureCoreImport(string) => string:contains('@azure/core')
 
 ## Client methods must only throw Error, TypeError, RangeError, or RestError
 predicate isThrowingCustomError(Statement) => Statement.Kind == 'throw'

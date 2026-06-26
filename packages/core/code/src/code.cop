@@ -252,7 +252,7 @@ export type Codebase = {
 
 ## Creates a unified Codebase from one or more language providers.
 ## Example: let cb = codebase(Program.Providers)
-export function codebase(providers : [Provider]) : Codebase => {
+export function codebase(providers : [Codebase]) : Codebase => {
     Types: reduce(providers, (acc, p) => acc + p.Types, []),
     Lines: reduce(providers, (acc, p) => acc + p.Lines, []),
     Statements: reduce(providers, (acc, p) => acc + p.Statements, []),

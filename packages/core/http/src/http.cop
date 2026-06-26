@@ -4,8 +4,8 @@
 # Usage:
 #   async foreach requests() => handle => responses()
 
-let req : [Request] = source('http', nic)
-let resp : [Response] = sink('http', nic)
+let req : [Request] = source('http', { })
+let resp : [Response] = sink('http', { })
 
 ## Returns the stream of incoming HTTP requests.
 export function requests() : [Request] => req
@@ -56,41 +56,41 @@ export function ok(Request, body: string) => Response {
 # Creates a 200 OK response with empty body
 export function ok(Request) => Response {
     StatusCode = 200,
-    Body = '{"status": "ok"}',
+    Body = 'OK',
     ContentType = 'application/json'
 }
 
 # Creates a 404 Not Found response
-export function notFound(Request) => {
-    StatusCode = 404
-    Body = '{"error": "Not Found"}'
+export function notFound(Request) => Response {
+    StatusCode = 404,
+    Body = 'Not Found',
     ContentType = 'application/json'
 }
 
 # Creates a 201 Created response
-export function created(Request) => {
-    StatusCode = 201
-    Body = Body
+export function created(Request) => Response {
+    StatusCode = 201,
+    Body = 'Created',
     ContentType = 'application/json'
 }
 
 # Creates a 400 Bad Request response
-export function badRequest(Request) => {
-    StatusCode = 400
-    Body = '{"error": "Bad Request"}'
+export function badRequest(Request) => Response {
+    StatusCode = 400,
+    Body = 'Bad Request',
     ContentType = 'application/json'
 }
 
 # Creates a 500 Internal Server Error response
-export function serverError(Request) => {
-    StatusCode = 500
-    Body = '{"error": "Internal Server Error"}'
+export function serverError(Request) => Response {
+    StatusCode = 500,
+    Body = 'Internal Server Error',
     ContentType = 'application/json'
 }
 
-# Creates a 500 Internal Server Error response from an Error value
-export function serverError(Error) => Response {
+# Creates a 500 Internal Server Error response from an error message
+export function serverError(string) => Response {
     StatusCode = 500,
-    Body = Error.Message,
+    Body = string,
     ContentType = 'application/json'
 }

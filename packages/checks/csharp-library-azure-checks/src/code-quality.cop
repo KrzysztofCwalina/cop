@@ -44,7 +44,7 @@ export let model-reader-writer-context = statements():isModelReaderWriterRead:is
 predicate isModelFactory(Type) => Type.Name:endsWith('ModelFactory')
 let factoryTypes = types():isModelFactory
 predicate isFactoryMethod(Method) => Method:isStatic && Method:isPublic && Method.ReturnType.Name == Type.Name
-predicate hasFactoryMethodFor(FactoryType) => FactoryType.Methods:any(isFactoryMethod)
+predicate hasFactoryMethodFor(Type) => Type.Methods:any(isFactoryMethod)
 predicate hasFactory(Type) => factoryTypes:any(hasFactoryMethodFor)
 predicate isMissingFactory(Type) => isModel && !hasFactory
 
@@ -71,8 +71,8 @@ export let no-public-async-in-sync = statements():isAsyncCallInSyncMethod
 # AZC0020: Async calls/awaits should propagate CancellationToken or RequestContext
 predicate isInMethodWithCancellation(Statement) => Statement.Method != nic
     && Statement.Method.Parameters:any(isCancellation)
-predicate isReferringToToken(Argument) => Argument:contains('cancellationToken')
-    || Argument:contains('cancellation') || Argument:contains('context')
+predicate isReferringToToken(string) => string:contains('cancellationToken')
+    || string:contains('cancellation') || string:contains('context')
 predicate isAsyncCallMissingToken(Statement) => Statement.Kind == 'await'
     && isInMethodWithCancellation
     && !Statement.Arguments:any(isReferringToToken)

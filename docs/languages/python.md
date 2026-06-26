@@ -189,7 +189,7 @@ import code
 
 let cb = python.parse()
 
-predicate hasNoReturnType(Method) => Method.ReturnType == null && Method:isPublic
+predicate hasNoReturnType(Method) => Method.ReturnType == nic && Method:isPublic
 
 let violations = cb.Types.Methods:hasNoReturnType
     :toInfo('Public method {item.Name} has no return type annotation')
