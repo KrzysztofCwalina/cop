@@ -274,6 +274,14 @@ The `rust.parse()` function returns a `Codebase` with these collections:
 | `trait` | Interface |
 | `impl` block | Class |
 
+### Syntax-error reporting
+
+`rust.parse()` uses a real lexer + recursive-descent parser (not a line scanner). When a `.rs`
+file contains a syntax error — an unterminated string/raw-string, an unterminated (possibly
+nested) block comment, a malformed `fn`/`struct` header, or unbalanced `()`/`[]`/`{}` — cop
+surfaces it as a **warning** of the form `path(line,col): error: message` and still analyzes the
+rest of that file and every other file. Malformed sources are reported, never silently skipped.
+
 ---
 
 ## Tips

@@ -257,6 +257,14 @@ The `go.parse()` function returns a `Codebase` with these collections:
 - **Exported = Public**: In Go, names starting with uppercase are exported. Cop maps this to the `IsPublic` modifier, so `:isPublic` filters for exported identifiers.
 - **Doc comments**: Go doc comments are `//` comments immediately preceding a declaration. Cop detects these via the `Documented` property.
 
+### Syntax-error reporting
+
+`go.parse()` uses a real lexer + recursive-descent parser (not a line scanner). When a `.go`
+file contains a syntax error — an unterminated string, an unterminated comment, a missing closing
+`}`/`)`, or a malformed declaration — cop surfaces it as a **warning** of the form
+`path(line,col): error: message` and still analyzes the rest of that file and every other file.
+Malformed sources are reported, never silently skipped.
+
 ---
 
 ## Tips

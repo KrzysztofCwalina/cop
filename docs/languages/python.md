@@ -219,6 +219,14 @@ The `python.parse()` function returns a `Codebase` with these collections:
 - **Async**: `async def` functions are flagged with the `Async` modifier
 - **Project discovery**: Parses `pyproject.toml` and `setup.py` for dependencies
 
+### Syntax-error reporting
+
+`python.parse()` uses a real lexer + recursive-descent parser (not a line scanner). When a `.py`
+file contains a syntax error — an unterminated string, a malformed `def`/`class` header, or
+unbalanced `()`/`[]`/`{}` — cop surfaces it as a **warning** of the form
+`path(line,col): error: message` and still analyzes the rest of that file and every other file.
+Malformed sources are reported, never silently skipped.
+
 ---
 
 ## Tips

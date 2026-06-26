@@ -9,7 +9,7 @@ namespace Cop.Providers.SourceModel;
 /// </summary>
 public static class MethodTypeRegistry
 {
-    private static readonly Dictionary<string, Func<MethodDeclaration, IReadOnlyDictionary<string, bool>, MethodDeclaration>> _factories = new(StringComparer.Ordinal);
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Func<MethodDeclaration, IReadOnlyDictionary<string, bool>, MethodDeclaration>> _factories = new(StringComparer.Ordinal);
 
     public static void Register(string tag, Func<MethodDeclaration, IReadOnlyDictionary<string, bool>, MethodDeclaration> factory)
         => _factories[tag] = factory;
@@ -24,7 +24,7 @@ public static class MethodTypeRegistry
 /// </summary>
 public static class StatementTypeRegistry
 {
-    private static readonly Dictionary<string, Func<StatementInfo, IReadOnlyDictionary<string, bool>, StatementInfo>> _factories = new(StringComparer.Ordinal);
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Func<StatementInfo, IReadOnlyDictionary<string, bool>, StatementInfo>> _factories = new(StringComparer.Ordinal);
 
     public static void Register(string tag, Func<StatementInfo, IReadOnlyDictionary<string, bool>, StatementInfo> factory)
         => _factories[tag] = factory;

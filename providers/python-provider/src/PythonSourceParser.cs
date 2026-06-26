@@ -2,6 +2,12 @@ using Cop.Providers.SourceModel;
 
 namespace Cop.Providers.SourceParsers;
 
+/// <summary>
+/// Python source parser built on a real lexer (<see cref="PythonLexer"/>) and recursive-descent
+/// parser. Produces the exact same <see cref="SourceFile"/> model as the previous line-scanner
+/// while correctly handling all Python string forms, INDENT/DEDENT block structure, and
+/// reporting genuine syntax errors into <see cref="SourceFile.ParseErrors"/>.
+/// </summary>
 public class PythonSourceParser : ISourceParser
 {
     public override IReadOnlyList<string> Extensions => [".py"];
@@ -9,477 +15,800 @@ public class PythonSourceParser : ISourceParser
 
     public override SourceFile? Parse(string filePath, string sourceText)
     {
-        var lines = sourceText.Split('\n');
-        var types = new List<TypeDeclaration>();
-        var statements = new List<StatementInfo>();
-        var usings = new List<string>();
-        bool inTripleQuote = false;
+        var lexer = new PythonLexer(sourceText, filePath);
+        var tokens = lexer.Tokenize();
+        return new PythonParserCore(filePath, tokens, lexer.CommentLines, lexer.LexErrors)
+            .ParseModule(sourceText);
+    }
+}
 
-        int i = 0;
-        while (i < lines.Length)
+// ─────────────────────────────────────────────────────────────────────────────
+// Internal recursive-descent parser
+// ─────────────────────────────────────────────────────────────────────────────
+
+internal sealed class PythonParserCore
+{
+    private readonly string _filePath;
+    private readonly List<Tok> _toks;
+    private int _pos;
+
+    private readonly List<TypeDeclaration> _types      = [];
+    private readonly List<StatementInfo>   _statements = [];
+    private readonly List<string>          _usings     = [];
+    private readonly List<string>          _errors     = [];
+    private readonly HashSet<int>          _commentLines;
+
+    internal PythonParserCore(string filePath, List<Tok> toks,
+        HashSet<int> commentLines, List<string> lexErrors)
+    {
+        _filePath     = filePath;
+        _toks         = toks;
+        _commentLines = commentLines;
+        _errors.AddRange(lexErrors);
+    }
+
+    // ── Token navigation ────────────────────────────────────────────────────
+
+    private Tok Peek(int offset = 0)
+    {
+        int idx = _pos + offset;
+        return idx < _toks.Count ? _toks[idx] : new Tok(TK.Eof, "", 0, 0);
+    }
+
+    private Tok Consume()
+    {
+        var t = Peek();
+        if (_pos < _toks.Count) _pos++;
+        return t;
+    }
+
+    private bool At(TK k)         => Peek().Kind == k;
+    private bool AtIdent(string s) => Peek().Is(s);
+
+    private void SkipNewlines()
+    {
+        while (At(TK.Newline)) Consume();
+    }
+
+    private void SkipStructural()
+    {
+        while (At(TK.Newline) || At(TK.Indent) || At(TK.Dedent)) Consume();
+    }
+
+    private void SkipToNewline()
+    {
+        while (!At(TK.Newline) && !At(TK.Indent) && !At(TK.Dedent) && !At(TK.Eof))
+            Consume();
+        if (At(TK.Newline)) Consume();
+    }
+
+    private void SkipBlock()
+    {
+        if (!At(TK.Indent)) return;
+        Consume();
+        int depth = 1;
+        while (!At(TK.Eof) && depth > 0)
         {
-            // Track triple-quoted string regions
-            if (IsTripleQuoteToggle(lines[i], ref inTripleQuote))
+            if (At(TK.Indent)) depth++;
+            else if (At(TK.Dedent)) depth--;
+            Consume();
+        }
+    }
+
+    private void AddError(int line, int col, string msg) =>
+        _errors.Add($"{_filePath}({line},{col}): error: {msg}");
+
+    // ── Module-level parse ──────────────────────────────────────────────────
+
+    internal SourceFile ParseModule(string sourceText)
+    {
+        var decorators = new List<string>();
+
+        while (!At(TK.Eof))
+        {
+            SkipStructural();
+            if (At(TK.Eof)) break;
+
+            var tok = Peek();
+
+            // Decorator
+            if (tok.Kind == TK.At)
             {
-                i++;
+                decorators.Add(ParseDecoratorName());
+                SkipToNewline();
                 continue;
             }
-            if (inTripleQuote) { i++; continue; }
 
-            var trimmed = lines[i].TrimStart();
-            if (trimmed.StartsWith('#') || string.IsNullOrWhiteSpace(trimmed))
+            // Class declaration
+            if (tok.Is("class"))
             {
-                i++;
+                var type = ParseClassDecl(decorators);
+                if (type != null) _types.Add(type);
+                decorators = [];
                 continue;
             }
 
-            if (trimmed.StartsWith("class "))
+            // Function declaration (sync)
+            if (tok.Is("def"))
             {
-                var (type, nextLine) = ParseClass(lines, i, statements);
-                if (type != null) types.Add(type);
-                i = nextLine;
+                ParseTopLevelFunc(decorators, isAsync: false);
+                decorators = [];
+                continue;
             }
-            else if (trimmed.StartsWith("def ") || trimmed.StartsWith("async def "))
+
+            // async def (top-level function)
+            if (tok.Is("async") && Peek(1).Is("def"))
             {
-                // Top-level function
-                int indent = lines[i].Length - trimmed.Length;
-                var (method, nextLine) = ParseMethod(lines, i, indent, statements);
-                i = nextLine;
+                Consume(); // "async"
+                ParseTopLevelFunc(decorators, isAsync: true);
+                decorators = [];
+                continue;
             }
-            else
-            {
-                // Extract import statements
-                if (trimmed.StartsWith("import "))
-                {
-                    var modules = trimmed["import ".Length..].Split(',', StringSplitOptions.TrimEntries);
-                    foreach (var m in modules)
-                    {
-                        var name = m.Split(" as ")[0].Trim();
-                        if (!string.IsNullOrWhiteSpace(name)) usings.Add(name);
-                    }
-                }
-                else if (trimmed.StartsWith("from "))
-                {
-                    var moduleName = ParseFromImportModule(trimmed);
-                    if (moduleName is not null) usings.Add(moduleName);
-                }
-                else
-                {
-                    // Module-level statements (invocations, etc.)
-                    ExtractLineStatement(trimmed, i + 1, false, statements);
-                }
-                i++;
-            }
+
+            // Import statements
+            if (tok.Is("import")) { ParseImport();     decorators = []; continue; }
+            if (tok.Is("from"))   { ParseFromImport(); decorators = []; continue; }
+
+            // All other module-level statements
+            var lineToks = CollectLineTokens();
+            AnalyzeBodyLine(lineToks, isInMethod: false, _statements);
+            decorators = [];
         }
 
-        return new SourceFile(filePath, "python", types, statements, sourceText)
+        return new SourceFile(_filePath, "python", _types, _statements, sourceText)
         {
-            Usings = usings,
-            Regions = ExtractRegions(lines),
-            CommentLines = ExtractCommentLines(lines)
+            Usings       = _usings,
+            Regions      = ExtractRegions(sourceText),
+            CommentLines = _commentLines,
+            ParseErrors  = _errors,
         };
     }
 
-    private static (TypeDeclaration?, int) ParseClass(string[] lines, int startLine, List<StatementInfo> statements)
+    // ── Import parsing ──────────────────────────────────────────────────────
+
+    private void ParseImport()
     {
-        int classIndent = lines[startLine].Length - lines[startLine].TrimStart().Length;
+        Consume(); // "import"
+        var lineToks = CollectLineTokens();
 
-        var decorators = CollectDecorators(lines, startLine);
-
-        var classMatch = ParseClassHeader(lines[startLine].TrimStart());
-        if (classMatch is null) return (null, startLine + 1);
-
-        string className = classMatch.Value.Name;
-        var baseTypes = classMatch.Value.BaseTypes is not null
-            ? classMatch.Value.BaseTypes.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList()
-            : [];
-
-        var methods = new List<MethodDeclaration>();
-        var constructors = new List<MethodDeclaration>();
-
-        int i = startLine + 1;
-
-        // Detect class docstring (first non-blank line after class: is a triple-quoted string)
-        bool hasDocstring = false;
-        int docCheckLine = i;
-        while (docCheckLine < lines.Length && string.IsNullOrWhiteSpace(lines[docCheckLine])) docCheckLine++;
-        if (docCheckLine < lines.Length)
-        {
-            var docTrimmed = lines[docCheckLine].TrimStart();
-            if (docTrimmed.StartsWith("\"\"\"") || docTrimmed.StartsWith("'''"))
-                hasDocstring = true;
-        }
-
-        bool hasSlots = false;
-
-        while (i < lines.Length)
-        {
-            if (string.IsNullOrWhiteSpace(lines[i])) { i++; continue; }
-            int indent = lines[i].Length - lines[i].TrimStart().Length;
-            if (indent <= classIndent) break;
-
-            var trimmed = lines[i].TrimStart();
-            if (trimmed.StartsWith("__slots__"))
-                hasSlots = true;
-
-            if (trimmed.StartsWith("def ") || trimmed.StartsWith("async def "))
-            {
-                var (method, nextLine) = ParseMethod(lines, i, indent, statements);
-                if (method != null)
-                {
-                    if (method.Name == "__init__")
-                        constructors.Add(method);
-                    else
-                        methods.Add(method);
-                }
-                i = nextLine;
-            }
-            else
-            {
-                i++;
-            }
-        }
-
-        return (new TypeDeclaration(className, TypeKind.Class, Modifier.Public,
-            baseTypes, decorators, constructors, methods, [], [], startLine + 1)
-        { HasDocComment = hasDocstring }
-            .AsPython(
-                isDataclass: decorators.Exists(d => d.Contains("dataclass")),
-                isEnum: baseTypes.Exists(b => b is "Enum" or "IntEnum" or "StrEnum" or "Flag" or "IntFlag"),
-                isAbstract: baseTypes.Exists(b => b == "ABC" || b == "ABCMeta" || b.EndsWith(".ABC")),
-                isNamedTuple: baseTypes.Exists(b => b == "NamedTuple" || b.EndsWith(".NamedTuple")),
-                isProtocol: baseTypes.Exists(b => b == "Protocol" || b.EndsWith(".Protocol")),
-                isException: baseTypes.Exists(b => b.EndsWith("Exception") || b.EndsWith("Error") || b == "BaseException"),
-                hasSlots: hasSlots), i);
-    }
-
-    private static (MethodDeclaration?, int) ParseMethod(string[] lines, int startLine, int methodIndent,
-        List<StatementInfo> statements)
-    {
-        var line = lines[startLine].TrimStart();
-        bool isAsync = line.StartsWith("async ");
-        if (isAsync) line = line["async ".Length..];
-
-        var decorators = CollectDecorators(lines, startLine);
-
-        // Join multi-line def
-        string fullDef = line;
-        int nextLine = startLine + 1;
-        while (!fullDef.Contains("):") && !fullDef.Contains(") ->") && nextLine < lines.Length)
-        {
-            fullDef += " " + lines[nextLine].Trim();
-            nextLine++;
-        }
-
-        var defMatch = ParseDefHeader(fullDef);
-        if (defMatch is null) return (null, nextLine);
-
-        string methodName = defMatch.Value.Name;
-        var parameters = ParseParameters(defMatch.Value.Parameters);
-
-        var modifiers = Modifier.None;
-        if (isAsync) modifiers |= Modifier.Async;
-        if (decorators.Contains("staticmethod")) modifiers |= Modifier.Static;
-        if (decorators.Contains("abstractmethod")) modifiers |= Modifier.Abstract;
-        if (!methodName.StartsWith("_")) modifiers |= Modifier.Public;
-        else modifiers |= Modifier.Private;
-
-        // Extract statements from method body — collect per-method and add to global list
-        int bodyStart = nextLine;
-
-        // Detect method docstring
-        bool hasDocstring = false;
-        int docLine = bodyStart;
-        while (docLine < lines.Length && string.IsNullOrWhiteSpace(lines[docLine])) docLine++;
-        if (docLine < lines.Length)
-        {
-            var docTrimmed = lines[docLine].TrimStart();
-            if (docTrimmed.StartsWith("\"\"\"") || docTrimmed.StartsWith("'''"))
-                hasDocstring = true;
-        }
-
-        while (nextLine < lines.Length)
-        {
-            if (string.IsNullOrWhiteSpace(lines[nextLine])) { nextLine++; continue; }
-            int indent = lines[nextLine].Length - lines[nextLine].TrimStart().Length;
-            if (indent <= methodIndent) break;
-            nextLine++;
-        }
-        var methodStatements = new List<StatementInfo>();
-        ExtractBodyStatements(lines, bodyStart, nextLine, methodIndent, methodStatements, isInMethod: true);
-        statements.AddRange(methodStatements);
-
-        string? returnType = null;
-        returnType = ParseReturnType(fullDef);
-
-        var retRef = returnType != null ? new TypeReference(returnType, null, [], returnType) : null;
-        return (new MethodDeclaration(methodName, modifiers, decorators,
-            retRef, parameters, startLine + 1) { Statements = methodStatements, HasDocComment = hasDocstring }
-            .AsPython(isGenerator: methodStatements.Exists(s => s.Kind == "yield")), nextLine);
-    }
-
-    /// <summary>
-    /// Extract statements from a block of code lines (method body or except body).
-    /// </summary>
-    private static void ExtractBodyStatements(string[] lines, int start, int end, int parentIndent,
-        List<StatementInfo> statements, bool isInMethod)
-    {
-        bool inTripleQuote = false;
-        for (int i = start; i < end; i++)
-        {
-            if (IsTripleQuoteToggle(lines[i], ref inTripleQuote)) continue;
-            if (inTripleQuote) continue;
-
-            var trimmed = lines[i].TrimStart();
-            if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith('#')) continue;
-
-            int lineIndent = lines[i].Length - trimmed.Length;
-            if (lineIndent <= parentIndent) continue;
-
-            // except clauses
-            if (trimmed.StartsWith("except") && (trimmed.Length == 6 || trimmed[6] is ' ' or ':'))
-            {
-                string? caughtType = null;
-                var exceptMatch = ParseExceptClause(trimmed);
-                if (exceptMatch.Success)
-                {
-                    // Group 1: tuple form (Foo, Bar), Group 2: single type
-                    caughtType = exceptMatch.TupleTypes is not null
-                        ? exceptMatch.TupleTypes.Split(',')[0].Trim()
-                        : exceptMatch.SingleType;
-                }
-
-                // Check for bare raise in the except body (same indentation level as the except block's children)
-                bool hasRethrow = HasBareRaise(lines, i + 1, end, lineIndent);
-
-                statements.Add(new PythonStatementInfo("catch", [], caughtType, null, [], i + 1, isInMethod)
-                {
-                    HasRethrow = hasRethrow,
-                    IsErrorHandler = true,
-                    IsGenericErrorHandler = caughtType is null or "Exception" or "BaseException"
-                });
-                continue;
-            }
-
-            ExtractLineStatement(trimmed, i + 1, isInMethod, statements);
-        }
-    }
-
-    /// <summary>
-    /// Check if there's a bare 'raise' (without arguments) in the block following an except clause.
-    /// Only checks lines at the immediate child indent level.
-    /// </summary>
-    private static bool HasBareRaise(string[] lines, int start, int end, int exceptIndent)
-    {
-        for (int i = start; i < end; i++)
-        {
-            if (string.IsNullOrWhiteSpace(lines[i])) continue;
-            int indent = lines[i].Length - lines[i].TrimStart().Length;
-            if (indent <= exceptIndent) break;
-            var trimmed = lines[i].TrimStart();
-            if (trimmed == "raise" || trimmed.StartsWith("raise #") || trimmed.StartsWith("raise\r"))
-                return true;
-        }
-        return false;
-    }
-
-    /// <summary>
-    /// Extract a statement from a single line of code (invocations, raise, etc.).
-    /// </summary>
-    private static void ExtractLineStatement(string trimmed, int lineNumber, bool isInMethod,
-        List<StatementInfo> statements)
-    {
-        if (StartsKeyword(trimmed, "async with"))
-        {
-            statements.Add(new PythonStatementInfo("async with", [], null, null, [], lineNumber, isInMethod));
-            return;
-        }
-
-        if (StartsKeyword(trimmed, "with"))
-        {
-            statements.Add(new PythonStatementInfo("with", [], null, null, [], lineNumber, isInMethod));
-            return;
-        }
-
-        if (StartsKeyword(trimmed, "assert"))
-        {
-            statements.Add(new PythonStatementInfo("assert", [], null, null, [], lineNumber, isInMethod));
-            return;
-        }
-
-        if (StartsKeyword(trimmed, "global"))
-        {
-            statements.Add(new PythonStatementInfo("global", [], null, null, [], lineNumber, isInMethod));
-            return;
-        }
-
-        if (StartsKeyword(trimmed, "nonlocal"))
-        {
-            statements.Add(new PythonStatementInfo("nonlocal", [], null, null, [], lineNumber, isInMethod));
-            return;
-        }
-
-        if (ContainsYield(trimmed))
-        {
-            statements.Add(new PythonStatementInfo("yield", [], null, null, [], lineNumber, isInMethod));
-            return;
-        }
-
-        if (ContainsComprehension(trimmed))
-            statements.Add(new PythonStatementInfo("comprehension", [], null, null, [], lineNumber, isInMethod));
-
-        // raise with type: raise SomeException(...)
-        if (trimmed.StartsWith("raise "))
-        {
-            string? typeName = ParseRaisedType(trimmed);
-            statements.Add(new PythonStatementInfo("throw", [], typeName, null, [], lineNumber, isInMethod));
-            return;
-        }
-        // bare raise (re-raise)
-        if (trimmed is "raise" or "raise\r")
-        {
-            statements.Add(new PythonStatementInfo("throw", [], null, null, [], lineNumber, isInMethod));
-            return;
-        }
-
-        // Function/method call: name(...) or module.name(...)
-        var callMatch = ParseCall(trimmed);
-        if (callMatch.Success)
-        {
-            string? typeName = callMatch.TypeName;
-            string memberName = callMatch.MemberName!;
-
-            // Skip control flow keywords that look like calls
-            if (memberName is "if" or "for" or "while" or "with" or "elif" or "def" or "class"
-                or "return" or "assert" or "del" or "except" or "raise" or "yield" or "import" or "from")
-                return;
-
-            // Extract simple arguments
-            var argsText = ParseParenthesizedArguments(trimmed);
-            var args = argsText is not null && !string.IsNullOrWhiteSpace(argsText)
-                ? argsText.Split(',', StringSplitOptions.TrimEntries).ToList()
-                : new List<string>();
-
-            statements.Add(new PythonStatementInfo("call", [], typeName, memberName, args, lineNumber, isInMethod));
-        }
-    }
-
-    /// <summary>
-    /// Checks if a line toggles a triple-quoted string region.
-    /// Returns true if the line is a pure triple-quote boundary (e.g., docstring delimiters).
-    /// </summary>
-    private static bool IsTripleQuoteToggle(string line, ref bool inTripleQuote)
-    {
-        var trimmed = line.TrimStart();
-        int count = CountTripleQuotes(trimmed);
-        if (count > 0 && count % 2 == 1)
-        {
-            inTripleQuote = !inTripleQuote;
-            return true;
-        }
-        if (count >= 2)
-            return true; // Single-line docstring like """text"""
-        return false;
-    }
-
-    private static int CountTripleQuotes(string line)
-    {
-        int count = 0;
         int i = 0;
-        while (i < line.Length - 2)
+        while (i < lineToks.Count)
         {
-            if ((line[i] == '"' && line[i + 1] == '"' && line[i + 2] == '"') ||
-                (line[i] == '\'' && line[i + 1] == '\'' && line[i + 2] == '\''))
+            // Collect dotted module name tokens (Names and Dots), stop at "as"/Comma
+            var parts = new List<string>();
+            while (i < lineToks.Count
+                   && !lineToks[i].Is("as")
+                   && lineToks[i].Kind != TK.Comma)
             {
-                count++;
-                i += 3;
-            }
-            else
-            {
+                if (lineToks[i].Kind == TK.Name) parts.Add(lineToks[i].Text);
                 i++;
             }
+
+            if (parts.Count > 0) _usings.Add(string.Join(".", parts));
+
+            // Skip "as alias"
+            if (i < lineToks.Count && lineToks[i].Is("as"))
+            {
+                i++; // "as"
+                if (i < lineToks.Count) i++; // alias name
+            }
+
+            // Skip comma separator
+            if (i < lineToks.Count && lineToks[i].Kind == TK.Comma) i++;
         }
-        return count;
     }
 
-    private static List<string> CollectDecorators(string[] lines, int startLine)
+    private void ParseFromImport()
     {
-        var decorators = new List<string>();
-        for (int d = startLine - 1; d >= 0; d--)
+        Consume(); // "from"
+        var lineToks = CollectLineTokens();
+
+        // Collect module name (Names + Dots) until "import"
+        var parts = new List<string>();
+        int i = 0;
+        while (i < lineToks.Count && !lineToks[i].Is("import"))
         {
-            var trimmed = lines[d].TrimStart();
-            if (trimmed.StartsWith("@"))
-                decorators.Insert(0, trimmed[1..].Split('(')[0].Trim());
-            else if (string.IsNullOrWhiteSpace(lines[d]))
+            if (lineToks[i].Kind == TK.Name) parts.Add(lineToks[i].Text);
+            i++;
+        }
+
+        // Only register if "import" keyword was found
+        if (i < lineToks.Count && lineToks[i].Is("import") && parts.Count > 0)
+            _usings.Add(string.Join(".", parts));
+    }
+
+    // ── Class declaration ───────────────────────────────────────────────────
+
+    private TypeDeclaration? ParseClassDecl(List<string> decorators)
+    {
+        var classTok = Consume(); // "class"
+
+        if (!At(TK.Name))
+        {
+            AddError(classTok.Line, classTok.Col, "expected class name after 'class'");
+            SkipToNewline();
+            if (At(TK.Indent)) SkipBlock();
+            return null;
+        }
+        string className = Consume().Text;
+
+        // Optional base types: (Base1, Base2, ...)
+        var baseTypes = new List<string>();
+        if (At(TK.LParen))
+        {
+            Consume();
+            baseTypes = ParseBaseTypes(CollectUntilBalanced(TK.RParen));
+            if (At(TK.RParen)) Consume(); else AddError(classTok.Line, classTok.Col, $"unclosed '(' in class '{className}'");
+        }
+
+        if (!At(TK.Colon))
+        {
+            AddError(classTok.Line, classTok.Col, $"expected ':' after class '{className}'");
+            SkipToNewline();
+            if (At(TK.Indent)) SkipBlock();
+            return null;
+        }
+        Consume(); // ':'
+        SkipToNewline();
+        SkipNewlines();
+
+        if (!At(TK.Indent))
+        {
+            AddError(classTok.Line, classTok.Col, $"expected indented block for class '{className}'");
+            return BuildClassDecl(className, classTok.Line, baseTypes, decorators, [], [], false, false);
+        }
+        Consume(); // INDENT
+
+        var methods      = new List<MethodDeclaration>();
+        var constructors = new List<MethodDeclaration>();
+        bool hasDocstring = false;
+        bool hasSlots     = false;
+        bool firstItem    = true;
+        var  innerDecs    = new List<string>();
+
+        while (!At(TK.Dedent) && !At(TK.Eof))
+        {
+            SkipNewlines();
+            if (At(TK.Dedent) || At(TK.Eof)) break;
+
+            var tok = Peek();
+
+            // Decorator
+            if (tok.Kind == TK.At)
+            {
+                innerDecs.Add(ParseDecoratorName());
+                SkipToNewline();
                 continue;
-            else
-                break;
+            }
+
+            // Docstring (first non-blank item in class body that is a string literal)
+            if (firstItem && tok.Kind == TK.Str)
+            {
+                hasDocstring = true;
+                Consume();
+                SkipToNewline();
+                firstItem = false;
+                innerDecs = [];
+                continue;
+            }
+
+            firstItem = false;
+
+            // Method definition
+            if (tok.Is("def") || (tok.Is("async") && Peek(1).Is("def")))
+            {
+                bool isAsync = tok.Is("async");
+                if (isAsync) Consume(); // "async"
+
+                var m = ParseMethodDecl(innerDecs, isAsync);
+                if (m != null)
+                {
+                    (m.Name == "__init__" ? constructors : methods).Add(m);
+                    _statements.AddRange(m.Statements);
+                }
+                innerDecs = [];
+                continue;
+            }
+
+            // Nested class → skip its body
+            if (tok.Is("class"))
+            {
+                innerDecs = [];
+                SkipToNewline();
+                if (At(TK.Indent)) SkipBlock();
+                continue;
+            }
+
+            // __slots__ detection
+            if (tok.Kind == TK.Name && tok.Text == "__slots__") hasSlots = true;
+
+            innerDecs = [];
+            SkipToNewline();
         }
-        return decorators;
+
+        if (At(TK.Dedent)) Consume();
+
+        return BuildClassDecl(className, classTok.Line, baseTypes, decorators,
+            constructors, methods, hasDocstring, hasSlots);
     }
 
-    private static List<ParameterDeclaration> ParseParameters(string paramString)
+    private TypeDeclaration BuildClassDecl(string name, int line, List<string> baseTypes,
+        List<string> decorators, List<MethodDeclaration> constructors,
+        List<MethodDeclaration> methods, bool hasDocstring, bool hasSlots)
+        => new TypeDeclaration(name, TypeKind.Class, Modifier.Public,
+                baseTypes, decorators, constructors, methods, [], [], line)
+            { HasDocComment = hasDocstring }
+            .AsPython(
+                isDataclass:  decorators.Exists(d => d.Contains("dataclass")),
+                isEnum:       baseTypes.Exists(b => b is "Enum" or "IntEnum" or "StrEnum" or "Flag" or "IntFlag"),
+                isAbstract:   baseTypes.Exists(b => b == "ABC" || b == "ABCMeta" || b.EndsWith(".ABC")),
+                isNamedTuple: baseTypes.Exists(b => b == "NamedTuple" || b.EndsWith(".NamedTuple")),
+                isProtocol:   baseTypes.Exists(b => b == "Protocol" || b.EndsWith(".Protocol")),
+                isException:  baseTypes.Exists(b => b.EndsWith("Exception") || b.EndsWith("Error") || b == "BaseException"),
+                hasSlots:     hasSlots);
+
+    // ── Function / method declaration ───────────────────────────────────────
+
+    private void ParseTopLevelFunc(List<string> decorators, bool isAsync)
     {
-        var parameters = new List<ParameterDeclaration>();
-        if (string.IsNullOrWhiteSpace(paramString)) return parameters;
-
-        foreach (var part in SplitParameters(paramString))
-        {
-            var trimmed = part.Trim();
-            if (string.IsNullOrWhiteSpace(trimmed) || trimmed == "self" || trimmed == "cls") continue;
-
-            bool isKwargs = trimmed.StartsWith("**");
-            bool isVariadic = !isKwargs && trimmed.StartsWith("*");
-            if (isKwargs) trimmed = trimmed[2..];
-            else if (isVariadic) trimmed = trimmed[1..];
-
-            var colonIdx = trimmed.IndexOf(':');
-            string name;
-            string? type = null;
-            if (colonIdx > 0)
-            {
-                name = trimmed[..colonIdx].Trim();
-                var afterColon = trimmed[(colonIdx + 1)..];
-                var eqIdx = afterColon.IndexOf('=');
-                type = (eqIdx > 0 ? afterColon[..eqIdx] : afterColon).Trim();
-            }
-            else
-            {
-                var eqIdx = trimmed.IndexOf('=');
-                name = (eqIdx > 0 ? trimmed[..eqIdx] : trimmed).Trim();
-            }
-
-            var typeRef = type != null ? new TypeReference(type, null, [], type) : null;
-            parameters.Add(new ParameterDeclaration(name, typeRef, isVariadic, isKwargs, false, 0));
-        }
-
-        return parameters;
+        var m = ParseMethodDecl(decorators, isAsync);
+        if (m != null) _statements.AddRange(m.Statements);
     }
 
-    private static List<string> SplitParameters(string s)
+    private MethodDeclaration? ParseMethodDecl(List<string> decorators, bool isAsync)
     {
-        var result = new List<string>();
-        int depth = 0;
-        int start = 0;
-        for (int i = 0; i < s.Length; i++)
+        var defTok = Consume(); // "def"
+
+        if (!At(TK.Name))
         {
-            if (s[i] is '(' or '[' or '{') depth++;
-            else if (s[i] is ')' or ']' or '}') depth--;
-            else if (s[i] == ',' && depth == 0)
-            {
-                result.Add(s[start..i]);
-                start = i + 1;
-            }
+            AddError(defTok.Line, defTok.Col, "expected function name after 'def'");
+            SkipToNewline();
+            if (At(TK.Indent)) SkipBlock();
+            return null;
         }
-        result.Add(s[start..]);
+        string methodName = Consume().Text;
+
+        if (!At(TK.LParen))
+        {
+            AddError(defTok.Line, defTok.Col, $"expected '(' after function name '{methodName}'");
+            SkipToNewline();
+            if (At(TK.Indent)) SkipBlock();
+            return null;
+        }
+        Consume(); // '('
+        var paramToks = CollectUntilBalanced(TK.RParen);
+        if (At(TK.RParen)) Consume();
+        else AddError(defTok.Line, defTok.Col, $"unclosed '(' in function '{methodName}'");
+
+        // Optional return annotation
+        string? returnType = null;
+        if (At(TK.Arrow)) { Consume(); returnType = CollectReturnType(); }
+
+        if (!At(TK.Colon))
+            AddError(defTok.Line, defTok.Col, $"expected ':' at end of function definition '{methodName}'");
+        else
+            Consume();
+
+        SkipToNewline();
+        SkipNewlines();
+
+        // Check for docstring (first non-newline token in body is a Str)
+        bool hasDocstring = false;
+        if (At(TK.Indent))
+        {
+            int la = _pos + 1; // past INDENT
+            while (la < _toks.Count && _toks[la].Kind == TK.Newline) la++;
+            if (la < _toks.Count && _toks[la].Kind == TK.Str) hasDocstring = true;
+        }
+
+        // Build modifiers
+        var modifiers = Modifier.None;
+        if (isAsync)                               modifiers |= Modifier.Async;
+        if (decorators.Contains("staticmethod"))   modifiers |= Modifier.Static;
+        if (decorators.Contains("abstractmethod")) modifiers |= Modifier.Abstract;
+        if (!methodName.StartsWith('_'))           modifiers |= Modifier.Public;
+        else                                       modifiers |= Modifier.Private;
+
+        var parameters   = ParseParameters(paramToks);
+        var retRef       = returnType is not null ? new TypeReference(returnType, null, [], returnType) : null;
+        var bodyStatements = new List<StatementInfo>();
+
+        if (At(TK.Indent)) ParseFlatBody(isInMethod: true, bodyStatements);
+
+        return new MethodDeclaration(methodName, modifiers, decorators, retRef, parameters, defTok.Line)
+        {
+            Statements   = bodyStatements,
+            HasDocComment = hasDocstring,
+        }
+        .AsPython(isGenerator: bodyStatements.Exists(s => s.Kind == "yield"));
+    }
+
+    // ── Flat body scanner ───────────────────────────────────────────────────
+    // Processes ALL tokens inside a block (at any nesting depth) to extract
+    // statements, matching the original line-scanner's flat enumeration.
+
+    private void ParseFlatBody(bool isInMethod, List<StatementInfo> outStatements)
+    {
+        if (!At(TK.Indent)) return;
+        Consume(); // initial INDENT
+
+        int depth = 1;
+
+        while (!At(TK.Eof) && depth > 0)
+        {
+            var tok = Peek();
+
+            if (tok.Kind == TK.Indent)  { depth++;                            Consume(); continue; }
+            if (tok.Kind == TK.Dedent)  { depth--; if (depth > 0) Consume(); continue; }
+            if (tok.Kind == TK.Newline || tok.Kind == TK.Semi) { Consume();  continue; }
+
+            // except clauses are handled specially (need look-ahead for HasRethrow)
+            if (tok.Is("except"))
+            {
+                ParseExceptLine(isInMethod, outStatements);
+                continue;
+            }
+
+            var lineToks = CollectLineTokens();
+            AnalyzeBodyLine(lineToks, isInMethod, outStatements);
+        }
+
+        if (At(TK.Dedent)) Consume();
+    }
+
+    // ── Except clause ───────────────────────────────────────────────────────
+
+    private void ParseExceptLine(bool isInMethod, List<StatementInfo> outStatements)
+    {
+        var exceptTok = Consume(); // "except"
+
+        string? caughtType  = null;
+        bool    isGeneric   = true;   // bare except or Exception/BaseException
+
+        if (At(TK.Colon))
+        {
+            // bare except:
+            Consume();
+        }
+        else if (At(TK.Star))
+        {
+            // except* (Python 3.11+ exception groups) — consume star + type
+            Consume();
+            if (At(TK.Name)) { caughtType = Consume().Text; isGeneric = false; }
+            if (At(TK.Name) && AtIdent("as")) { Consume(); if (At(TK.Name)) Consume(); }
+            if (At(TK.Colon)) Consume();
+            else AddError(exceptTok.Line, exceptTok.Col, "expected ':' after except* clause");
+        }
+        else if (At(TK.LParen))
+        {
+            // Tuple form: except (ValueError, TypeError):
+            Consume();
+            var inner = CollectUntilBalanced(TK.RParen);
+            if (At(TK.RParen)) Consume();
+            int fi = inner.FindIndex(t => t.Kind == TK.Name);
+            caughtType = fi >= 0 ? inner[fi].Text : null;
+            isGeneric  = caughtType is null or "Exception" or "BaseException";
+            if (At(TK.Name) && AtIdent("as")) { Consume(); if (At(TK.Name)) Consume(); }
+            if (At(TK.Colon)) Consume();
+            else AddError(exceptTok.Line, exceptTok.Col, "expected ':' after except clause");
+        }
+        else if (At(TK.Name))
+        {
+            // Single type: except ValueError: or except ValueError as e:
+            caughtType = Consume().Text;
+            // Dotted name: except os.error:
+            while (At(TK.Dot) && Peek(1).Kind == TK.Name)
+            {
+                caughtType += "." + Peek(1).Text;
+                Consume(); Consume();
+            }
+            isGeneric = caughtType is "Exception" or "BaseException";
+            // Optional "as alias"
+            if (AtIdent("as")) { Consume(); if (At(TK.Name)) Consume(); }
+            if (At(TK.Colon)) Consume();
+            else AddError(exceptTok.Line, exceptTok.Col, "expected ':' after except clause");
+        }
+
+        // Consume trailing newlines before the except body block
+        while (At(TK.Newline)) Consume();
+
+        // Look ahead (without consuming) to detect a bare re-raise in the body
+        bool hasRethrow = HasBareRaiseInNextBlock();
+
+        outStatements.Add(new PythonStatementInfo(
+            "catch", [], caughtType, null, [], exceptTok.Line, isInMethod)
+        {
+            IsErrorHandler         = true,
+            IsGenericErrorHandler  = isGeneric,
+            HasRethrow             = hasRethrow,
+        });
+    }
+
+    /// <summary>
+    /// Non-consuming look-ahead: scans the upcoming INDENT...DEDENT block to find
+    /// a bare <c>raise</c> statement (i.e., <c>raise</c> followed by NEWLINE or end-of-block).
+    /// </summary>
+    private bool HasBareRaiseInNextBlock()
+    {
+        int i = _pos;
+        // Skip any stray newlines before INDENT
+        while (i < _toks.Count && _toks[i].Kind == TK.Newline) i++;
+        if (i >= _toks.Count || _toks[i].Kind != TK.Indent) return false;
+        i++; // past INDENT
+
+        int  depth     = 1;
+        bool lineStart = true;
+
+        while (i < _toks.Count && depth > 0)
+        {
+            var t = _toks[i];
+            switch (t.Kind)
+            {
+                case TK.Indent:  depth++; i++; lineStart = true;  continue;
+                case TK.Dedent:  depth--; i++; lineStart = true;  continue;
+                case TK.Newline: i++;          lineStart = true;  continue;
+                case TK.Eof:     goto Done;
+            }
+
+            if (lineStart && t.Is("raise"))
+            {
+                // Bare raise = Name("raise") immediately followed by Newline / Dedent / EOF
+                int j = i + 1;
+                while (j < _toks.Count && _toks[j].Kind == TK.Newline) j++;
+                if (j >= _toks.Count) return true;
+                if (_toks[j].Kind is TK.Dedent or TK.Eof) return true;
+                // raise <something> → not bare
+            }
+
+            lineStart = false;
+            i++;
+        }
+        Done:
+        return false;
+    }
+
+    // ── Line collection & analysis ──────────────────────────────────────────
+
+    /// <summary>Consume tokens up to (and including) the next NEWLINE or SEMI.</summary>
+    private List<Tok> CollectLineTokens()
+    {
+        var result = new List<Tok>();
+        while (!At(TK.Newline) && !At(TK.Indent) && !At(TK.Dedent) && !At(TK.Semi) && !At(TK.Eof))
+            result.Add(Consume());
+        if (At(TK.Newline) || At(TK.Semi)) Consume();
         return result;
     }
 
-    // Extracts regions from # [START name] / # [END name] comment markers
-    private static List<RegionInfo> ExtractRegions(string[] lines)
+    /// <summary>
+    /// Analyse tokens on one logical line and emit the appropriate statement(s),
+    /// replicating the semantics of the original ExtractLineStatement / ExtractBodyStatements.
+    /// </summary>
+    private void AnalyzeBodyLine(List<Tok> lt, bool isInMethod, List<StatementInfo> out_)
     {
+        if (lt.Count == 0) return;
+        int lineNum = lt[0].Line;
+        var first   = lt[0];
+
+        // yield anywhere on the line → yield statement (return early, matches original)
+        if (lt.Any(t => t.Is("yield")))
+        {
+            out_.Add(new PythonStatementInfo("yield", [], null, null, [], lineNum, isInMethod));
+            return;
+        }
+
+        // Comprehension: 'for' inside brackets (can co-exist with a call below)
+        if (HasForInBrackets(lt))
+            out_.Add(new PythonStatementInfo("comprehension", [], null, null, [], lineNum, isInMethod));
+
+        // async with
+        if (first.Is("async") && lt.Count > 1 && lt[1].Is("with"))
+        {
+            out_.Add(new PythonStatementInfo("async with", [], null, null, [], lineNum, isInMethod));
+            return;
+        }
+
+        if (first.Is("with"))     { out_.Add(new PythonStatementInfo("with",     [], null, null, [], lineNum, isInMethod)); return; }
+        if (first.Is("assert"))   { out_.Add(new PythonStatementInfo("assert",   [], null, null, [], lineNum, isInMethod)); return; }
+        if (first.Is("global"))   { out_.Add(new PythonStatementInfo("global",   [], null, null, [], lineNum, isInMethod)); return; }
+        if (first.Is("nonlocal")) { out_.Add(new PythonStatementInfo("nonlocal", [], null, null, [], lineNum, isInMethod)); return; }
+
+        // raise
+        if (first.Is("raise"))
+        {
+            string? typeName = lt.Count > 1 && lt[1].Kind == TK.Name ? lt[1].Text : null;
+            out_.Add(new PythonStatementInfo("throw", [], typeName, null, [], lineNum, isInMethod));
+            return;
+        }
+
+        // Call detection (at start of line, optionally preceded by await)
+        var (ok, tn, mn) = DetectCall(lt);
+        if (ok) out_.Add(new PythonStatementInfo("call", [], tn, mn, [], lineNum, isInMethod));
+    }
+
+    // ── Call and comprehension detection ────────────────────────────────────
+
+    private static (bool Ok, string? TypeName, string? MemberName) DetectCall(List<Tok> lt)
+    {
+        if (lt.Count == 0) return (false, null, null);
+        int i = 0;
+
+        // Optional "await"
+        if (lt[i].Is("await") && lt.Count > 1) i++;
+
+        // Must start with a Name token
+        if (i >= lt.Count || lt[i].Kind != TK.Name) return (false, null, null);
+
+        // Collect dotted path: Name (.Name)*
+        var parts = new List<string> { lt[i].Text };
+        i++;
+        while (i + 1 < lt.Count && lt[i].Kind == TK.Dot && lt[i + 1].Kind == TK.Name)
+        {
+            parts.Add(lt[i + 1].Text);
+            i += 2;
+        }
+
+        // Must be followed by '('
+        if (i >= lt.Count || lt[i].Kind != TK.LParen) return (false, null, null);
+
+        string member = parts[^1];
+
+        // Exclude control-flow keywords
+        if (member is "if" or "for" or "while" or "with" or "elif" or "def" or "class"
+                   or "return" or "assert" or "del" or "except" or "raise"
+                   or "yield" or "import" or "from")
+            return (false, null, null);
+
+        string? typeName = parts.Count > 1 ? string.Join(".", parts[..^1]) : null;
+        return (true, typeName, member);
+    }
+
+    private static bool HasForInBrackets(List<Tok> lt)
+    {
+        int depth = 0;
+        foreach (var t in lt)
+        {
+            if (t.Kind is TK.LParen or TK.LBrack or TK.LBrace) depth++;
+            else if (t.Kind is TK.RParen or TK.RBrack or TK.RBrace) depth--;
+            else if (depth > 0 && t.Is("for")) return true;
+        }
+        return false;
+    }
+
+    // ── Decorator / parameter / type helpers ────────────────────────────────
+
+    private string ParseDecoratorName()
+    {
+        Consume(); // '@'
+        var parts = new List<string>();
+        while (At(TK.Name))
+        {
+            parts.Add(Consume().Text);
+            if (At(TK.Dot)) { Consume(); continue; }
+            break;
+        }
+        return string.Join(".", parts);
+    }
+
+    /// <summary>Collect tokens until a matching close bracket (without consuming it).</summary>
+    private List<Tok> CollectUntilBalanced(TK closeKind)
+    {
+        var result = new List<Tok>();
+        int depth  = 0;
+        while (!At(TK.Eof))
+        {
+            var t = Peek();
+            if (t.Kind == closeKind && depth == 0) break;
+            if (t.Kind is TK.LParen or TK.LBrack or TK.LBrace) depth++;
+            if (t.Kind is TK.RParen or TK.RBrack or TK.RBrace) { if (depth == 0) break; depth--; }
+            result.Add(Consume());
+        }
+        return result;
+    }
+
+    private List<string> ParseBaseTypes(List<Tok> tokens)
+    {
+        var result     = new List<string>();
+        var nameParts  = new List<string>();
+        int depth      = 0;
+        bool inKwarg   = false;
+
+        foreach (var t in tokens)
+        {
+            if (t.Kind is TK.LParen or TK.LBrack or TK.LBrace) { depth++;   continue; }
+            if (t.Kind is TK.RParen or TK.RBrack or TK.RBrace) { depth--;   continue; }
+            if (depth > 0) continue;
+            if (t.Kind == TK.Eq)    { inKwarg = true; continue; }
+            if (inKwarg)             { continue; }
+            if (t.Kind == TK.Comma)
+            {
+                if (nameParts.Count > 0) result.Add(string.Join(".", nameParts));
+                nameParts = []; inKwarg = false;
+                continue;
+            }
+            if (t.Kind == TK.Name) nameParts.Add(t.Text);
+        }
+        if (nameParts.Count > 0 && !inKwarg) result.Add(string.Join(".", nameParts));
+        return result;
+    }
+
+    private List<ParameterDeclaration> ParseParameters(List<Tok> paramToks)
+    {
+        var result = new List<ParameterDeclaration>();
+
+        // Split on top-level commas
+        var segments = new List<List<Tok>>();
+        var cur      = new List<Tok>();
+        int depth    = 0;
+        foreach (var t in paramToks)
+        {
+            if (t.Kind is TK.LParen or TK.LBrack or TK.LBrace) { depth++; cur.Add(t); }
+            else if (t.Kind is TK.RParen or TK.RBrack or TK.RBrace) { depth--; cur.Add(t); }
+            else if (t.Kind == TK.Comma && depth == 0) { segments.Add(cur); cur = []; }
+            else cur.Add(t);
+        }
+        if (cur.Count > 0) segments.Add(cur);
+
+        foreach (var seg in segments)
+        {
+            if (seg.Count == 0) continue;
+            int i        = 0;
+            bool isKw    = false;
+            bool isVar   = false;
+
+            if (i < seg.Count && seg[i].Kind == TK.StarStar) { isKw  = true; i++; }
+            else if (i < seg.Count && seg[i].Kind == TK.Star) { isVar = true; i++; }
+
+            if (i >= seg.Count || seg[i].Kind != TK.Name) continue;
+            string name = seg[i].Text; i++;
+
+            if (name is "self" or "cls") continue;
+
+            // Optional type annotation: name: Type = default
+            string? typeName = null;
+            if (i < seg.Count && seg[i].Kind == TK.Colon)
+            {
+                i++;
+                var tp = new List<string>();
+                while (i < seg.Count && seg[i].Kind != TK.Eq)
+                {
+                    if (seg[i].Kind == TK.Name) tp.Add(seg[i].Text);
+                    i++;
+                }
+                if (tp.Count > 0) typeName = string.Join("", tp);
+            }
+
+            var typeRef = typeName is not null ? new TypeReference(typeName, null, [], typeName) : null;
+            result.Add(new ParameterDeclaration(name, typeRef, isVar, isKw, false, 0));
+        }
+
+        return result;
+    }
+
+    /// <summary>Collect tokens for a return type annotation (up to ':' or NEWLINE).</summary>
+    private string? CollectReturnType()
+    {
+        if (!At(TK.Name)) { SkipToNewline(); return null; }
+        string rt = Consume().Text;
+        int depth = 0;
+        while (!At(TK.Eof))
+        {
+            var t = Peek();
+            if (t.Kind == TK.Colon && depth == 0) break;
+            if (t.Kind == TK.Newline) break;
+            if (t.Kind is TK.LParen or TK.LBrack or TK.LBrace) depth++;
+            if (t.Kind is TK.RParen or TK.RBrack or TK.RBrace) depth--;
+            Consume();
+        }
+        return rt;
+    }
+
+    // ── Region extraction (same logic as original) ───────────────────────────
+
+    private static List<RegionInfo> ExtractRegions(string sourceText)
+    {
+        var lines   = sourceText.Split('\n');
         var regions = new List<RegionInfo>();
-        var stack = new Stack<(string Name, int Line)>();
+        var stack   = new Stack<(string Name, int Line)>();
 
         for (int i = 0; i < lines.Length; i++)
         {
@@ -487,29 +816,24 @@ public class PythonSourceParser : ISourceParser
             if (trimmed.StartsWith("# [START"))
             {
                 var name = ParseRegionMarker(trimmed, "START");
-                if (name is not null)
-                    stack.Push((name, i + 1));
+                if (name is not null) stack.Push((name, i + 1));
             }
             else if (trimmed.StartsWith("# [END") && stack.Count > 0)
             {
                 var endName = ParseRegionMarker(trimmed, "END");
                 if (endName is not null)
                 {
-                    // Pop matching region from stack
                     var items = new List<(string Name, int Line)>();
                     while (stack.Count > 0)
                     {
                         var top = stack.Pop();
                         if (top.Name == endName)
                         {
-                            int startLine = top.Line;
-                            int endLine = i + 1;
                             var contentLines = new List<string>();
-                            for (int j = startLine; j < endLine - 1 && j < lines.Length; j++)
+                            for (int j = top.Line; j < i && j < lines.Length; j++)
                                 contentLines.Add(lines[j].TrimEnd('\r'));
-                            var content = string.Join('\n', contentLines);
-                            regions.Add(new RegionInfo(endName, startLine, endLine, content));
-                            // Push back any items that weren't the match
+                            regions.Add(new RegionInfo(endName, top.Line, i + 1,
+                                string.Join('\n', contentLines)));
                             for (int k = items.Count - 1; k >= 0; k--)
                                 stack.Push(items[k]);
                             break;
@@ -519,325 +843,22 @@ public class PythonSourceParser : ISourceParser
                 }
             }
         }
-
         return regions;
-    }
-
-    private static string? ParseFromImportModule(string text)
-    {
-        var index = "from".Length;
-        if (!text.StartsWith("from", StringComparison.Ordinal) || !HasWhitespaceAt(text, index))
-            return null;
-
-        index = SkipWhitespace(text, index);
-        var start = index;
-        while (index < text.Length && !char.IsWhiteSpace(text[index]))
-            index++;
-        if (index == start || !HasWhitespaceAt(text, index))
-            return null;
-
-        var module = text[start..index];
-        index = SkipWhitespace(text, index);
-        return StartsWithAt(text, index, "import") ? module : null;
-    }
-
-    private static (string Name, string? BaseTypes)? ParseClassHeader(string text)
-    {
-        var classIndex = text.IndexOf("class", StringComparison.Ordinal);
-        if (classIndex < 0)
-            return null;
-
-        var index = classIndex + "class".Length;
-        if (!HasWhitespaceAt(text, index))
-            return null;
-        index = SkipWhitespace(text, index);
-
-        var nameStart = index;
-        while (index < text.Length && IsWordChar(text[index]))
-            index++;
-        if (index == nameStart)
-            return null;
-
-        var name = text[nameStart..index];
-        index = SkipWhitespace(text, index);
-
-        string? baseTypes = null;
-        if (index < text.Length && text[index] == '(')
-        {
-            var baseStart = index + 1;
-            var close = text.IndexOf(')', baseStart);
-            if (close < 0)
-                return null;
-            baseTypes = text[baseStart..close];
-            index = close + 1;
-            index = SkipWhitespace(text, index);
-        }
-
-        return index < text.Length && text[index] == ':' ? (name, baseTypes) : null;
-    }
-
-    private static (string Name, string Parameters)? ParseDefHeader(string text)
-    {
-        var defIndex = text.IndexOf("def", StringComparison.Ordinal);
-        if (defIndex < 0)
-            return null;
-
-        var index = defIndex + "def".Length;
-        if (!HasWhitespaceAt(text, index))
-            return null;
-        index = SkipWhitespace(text, index);
-
-        var nameStart = index;
-        while (index < text.Length && IsWordChar(text[index]))
-            index++;
-        if (index == nameStart)
-            return null;
-
-        var name = text[nameStart..index];
-        index = SkipWhitespace(text, index);
-        if (index >= text.Length || text[index] != '(')
-            return null;
-
-        var parametersStart = index + 1;
-        var close = text.IndexOf(')', parametersStart);
-        return close >= 0 ? (name, text[parametersStart..close]) : null;
-    }
-
-    private static string? ParseReturnType(string text)
-    {
-        var searchIndex = 0;
-        while (searchIndex < text.Length)
-        {
-            var closeParen = text.IndexOf(')', searchIndex);
-            if (closeParen < 0)
-                return null;
-
-            var index = SkipWhitespace(text, closeParen + 1);
-            if (!StartsWithAt(text, index, "->"))
-            {
-                searchIndex = closeParen + 1;
-                continue;
-            }
-
-            index = SkipWhitespace(text, index + 2);
-            var typeStart = index;
-            while (index < text.Length && !char.IsWhiteSpace(text[index]))
-                index++;
-
-            for (var end = index; end > typeStart; end--)
-            {
-                var afterType = SkipWhitespace(text, end);
-                if (afterType < text.Length && text[afterType] == ':')
-                    return text[typeStart..end];
-            }
-
-            searchIndex = closeParen + 1;
-        }
-
-        return null;
-    }
-
-    private static (bool Success, string? TupleTypes, string? SingleType) ParseExceptClause(string text)
-    {
-        var index = "except".Length;
-        if (!text.StartsWith("except", StringComparison.Ordinal))
-            return (false, null, null);
-
-        index = SkipWhitespace(text, index);
-        string? tupleTypes = null;
-        string? singleType = null;
-
-        if (index < text.Length && text[index] == '(')
-        {
-            var tupleStart = index + 1;
-            var close = text.IndexOf(')', tupleStart);
-            if (close < 0 || close == tupleStart)
-                return (false, null, null);
-            tupleTypes = text[tupleStart..close];
-            index = close + 1;
-        }
-        else if (index < text.Length && IsWordChar(text[index]))
-        {
-            var typeStart = index;
-            index++;
-            while (index < text.Length && (IsWordChar(text[index]) || text[index] == '.'))
-                index++;
-            singleType = text[typeStart..index];
-        }
-
-        if (HasWhitespaceAt(text, index))
-        {
-            var asIndex = SkipWhitespace(text, index);
-            if (StartsWithAt(text, asIndex, "as") && HasWhitespaceAt(text, asIndex + "as".Length))
-            {
-                var nameIndex = SkipWhitespace(text, asIndex + "as".Length);
-                if (nameIndex >= text.Length || !IsWordChar(text[nameIndex]))
-                    return (false, null, null);
-                nameIndex++;
-                while (nameIndex < text.Length && IsWordChar(text[nameIndex]))
-                    nameIndex++;
-                index = nameIndex;
-            }
-        }
-
-        index = SkipWhitespace(text, index);
-        return index < text.Length && text[index] == ':'
-            ? (true, tupleTypes, singleType)
-            : (false, null, null);
-    }
-
-    private static string? ParseRaisedType(string text)
-    {
-        var index = "raise".Length;
-        if (!text.StartsWith("raise", StringComparison.Ordinal) || !HasWhitespaceAt(text, index))
-            return null;
-
-        index = SkipWhitespace(text, index);
-        var start = index;
-        while (index < text.Length && IsWordChar(text[index]))
-            index++;
-
-        return index > start ? text[start..index] : null;
-    }
-
-    private static (bool Success, string? TypeName, string? MemberName) ParseCall(string text)
-    {
-        var withPrefix = ParseCallCore(text, allowAwait: true);
-        return withPrefix.Success ? withPrefix : ParseCallCore(text, allowAwait: false);
-    }
-
-    private static (bool Success, string? TypeName, string? MemberName) ParseCallCore(string text, bool allowAwait)
-    {
-        var index = 0;
-        if (allowAwait && StartsWithAt(text, 0, "await") && HasWhitespaceAt(text, "await".Length))
-            index = SkipWhitespace(text, "await".Length);
-
-        var tokenStart = index;
-        if (index >= text.Length || !IsWordChar(text[index]))
-            return (false, null, null);
-
-        while (index < text.Length && (IsWordChar(text[index]) || text[index] == '.'))
-            index++;
-
-        var token = text[tokenStart..index];
-        index = SkipWhitespace(text, index);
-        if (index >= text.Length || text[index] != '(')
-            return (false, null, null);
-
-        var dot = token.LastIndexOf('.');
-        if (dot >= 0)
-        {
-            if (dot == 0 || dot == token.Length - 1)
-                return (false, null, null);
-
-            var member = token[(dot + 1)..];
-            if (!AllWordChars(member))
-                return (false, null, null);
-
-            return (true, token[..dot], member);
-        }
-
-        return AllWordChars(token) ? (true, null, token) : (false, null, null);
-    }
-
-    private static string? ParseParenthesizedArguments(string text)
-    {
-        var open = text.IndexOf('(');
-        if (open < 0)
-            return null;
-
-        var close = text.IndexOf(')', open + 1);
-        return close >= 0 ? text[(open + 1)..close] : null;
-    }
-
-    private static bool StartsKeyword(string text, string keyword) =>
-        StartsWithAt(text, 0, keyword)
-        && (text.Length == keyword.Length || char.IsWhiteSpace(text[keyword.Length]));
-
-    private static bool ContainsYield(string text) =>
-        ContainsWord(text, "yield");
-
-    private static bool ContainsComprehension(string text) =>
-        text.Contains(" for ", StringComparison.Ordinal)
-        && ((text.IndexOf('[') >= 0 && text.IndexOf(']') >= 0)
-            || (text.IndexOf('(') >= 0 && text.IndexOf(')') >= 0)
-            || (text.IndexOf('{') >= 0 && text.IndexOf('}') >= 0));
-
-    private static bool ContainsWord(string text, string word)
-    {
-        var index = text.IndexOf(word, StringComparison.Ordinal);
-        while (index >= 0)
-        {
-            var before = index == 0 || !IsWordChar(text[index - 1]);
-            var afterIndex = index + word.Length;
-            var after = afterIndex >= text.Length || !IsWordChar(text[afterIndex]);
-            if (before && after)
-                return true;
-            index = text.IndexOf(word, index + word.Length, StringComparison.Ordinal);
-        }
-        return false;
     }
 
     private static string? ParseRegionMarker(string text, string marker)
     {
-        var index = 0;
-        if (index >= text.Length || text[index] != '#')
-            return null;
-        index++;
-        index = SkipWhitespace(text, index);
-
+        int i = 0;
+        if (i >= text.Length || text[i] != '#') return null;
+        i++;
+        while (i < text.Length && char.IsWhiteSpace(text[i])) i++;
         var prefix = "[" + marker;
-        if (!StartsWithAt(text, index, prefix))
-            return null;
-        index += prefix.Length;
-        if (!HasWhitespaceAt(text, index))
-            return null;
-        index = SkipWhitespace(text, index);
-
-        var end = text.IndexOf(']', index);
-        return end > index ? text[index..end] : null;
-    }
-
-    private static int SkipWhitespace(string text, int index)
-    {
-        while (index < text.Length && char.IsWhiteSpace(text[index]))
-            index++;
-        return index;
-    }
-
-    private static bool HasWhitespaceAt(string text, int index) =>
-        index < text.Length && char.IsWhiteSpace(text[index]);
-
-    private static bool StartsWithAt(string text, int index, string value) =>
-        index >= 0
-        && index <= text.Length - value.Length
-        && string.CompareOrdinal(text, index, value, 0, value.Length) == 0;
-
-    private static bool IsWordChar(char ch) =>
-        ch is >= 'a' and <= 'z'
-            or >= 'A' and <= 'Z'
-            or >= '0' and <= '9'
-            or '_';
-
-    private static bool AllWordChars(string text)
-    {
-        foreach (var ch in text)
-        {
-            if (!IsWordChar(ch))
-                return false;
-        }
-        return text.Length > 0;
-    }
-
-    private static HashSet<int> ExtractCommentLines(string[] lines)
-    {
-        var commentLines = new HashSet<int>();
-        for (int i = 0; i < lines.Length; i++)
-        {
-            var trimmed = lines[i].TrimStart();
-            if (trimmed.StartsWith('#'))
-                commentLines.Add(i + 1);
-        }
-        return commentLines;
+        if (i + prefix.Length > text.Length) return null;
+        if (!text.AsSpan(i, prefix.Length).SequenceEqual(prefix)) return null;
+        i += prefix.Length;
+        if (i >= text.Length || !char.IsWhiteSpace(text[i])) return null;
+        while (i < text.Length && char.IsWhiteSpace(text[i])) i++;
+        var end = text.IndexOf(']', i);
+        return end > i ? text[i..end] : null;
     }
 }

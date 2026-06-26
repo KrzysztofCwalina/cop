@@ -222,6 +222,14 @@ The `javascript.parse()` function returns a `Codebase` with these collections:
 - **JSDoc detection**: `/** ... */` comments preceding declarations are detected
 - **Project discovery**: Parses `package.json` for dependencies and devDependencies
 
+### Syntax-error reporting
+
+`javascript.parse()` uses a real lexer + recursive-descent parser (not a line scanner). When a
+`.js`/`.ts` file contains a syntax error — an unterminated string/template/regex, an unterminated
+comment, or unbalanced `()`/`[]`/`{}` — cop surfaces it as a **warning** of the form
+`path(line,col): error: message` and still analyzes the rest of that file and every other file.
+Malformed sources are reported, never silently skipped.
+
 ---
 
 ## Tips

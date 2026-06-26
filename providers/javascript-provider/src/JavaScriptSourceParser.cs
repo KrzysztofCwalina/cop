@@ -9,1303 +9,903 @@ public class JavaScriptSourceParser : ISourceParser
 
     public override SourceFile? Parse(string filePath, string sourceText)
     {
-        var lines = sourceText.Split('\n');
-        var types = new List<TypeDeclaration>();
-        var statements = new List<StatementInfo>();
-        var usings = new List<string>();
-
-        int i = 0;
-        while (i < lines.Length)
+        var lexer = new JsLexer(sourceText, filePath);
+        var allToks = lexer.Tokenize();
+        var p = new JsParser(allToks, lexer.Errors, filePath, sourceText);
+        p.Parse();
+        return new SourceFile(filePath, "javascript", p.Types, p.Statements, sourceText)
         {
-            var trimmed = lines[i].TrimStart();
-
-            // Skip blank lines and comments
-            if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("//"))
-            {
-                i++;
-                continue;
-            }
-
-            // Skip block comments
-            if (trimmed.StartsWith("/*"))
-            {
-                i = SkipBlockComment(lines, i);
-                continue;
-            }
-
-            // Import statements: import ... from '...' or import '...'
-            if (trimmed.StartsWith("import "))
-            {
-                ParseImport(trimmed, usings);
-                i++;
-                continue;
-            }
-
-            // Require: const x = require('...')
-            if (TryParseRequireModule(trimmed, out var requireModule))
-            {
-                usings.Add(requireModule);
-                i++;
-                continue;
-            }
-
-            // Class declaration
-            if (IsClassDeclaration(trimmed))
-            {
-                var (type, nextLine) = ParseClass(lines, i, statements);
-                if (type != null) types.Add(type);
-                i = nextLine;
-                continue;
-            }
-
-            // TypeScript interface / enum declarations
-            if (IsTsTypeDeclaration(trimmed))
-            {
-                var (tsType, tsNext) = ParseTsType(lines, i);
-                if (tsType != null) types.Add(tsType);
-                i = tsNext;
-                continue;
-            }
-
-            // Top-level function declaration
-            if (IsFunctionDeclaration(trimmed))
-            {
-                var (_, nextLine) = ParseFunction(lines, i, statements);
-                i = nextLine;
-                continue;
-            }
-
-            // Top-level statements
-            ExtractLineStatement(trimmed, i + 1, false, statements);
-            i++;
-        }
-
-        return new SourceFile(filePath, "javascript", types, statements, sourceText)
-        {
-            Usings = usings,
-            Regions = ExtractRegions(lines),
-            CommentLines = ExtractCommentLines(lines)
+            Usings = p.Usings,
+            Regions = p.Regions,
+            CommentLines = p.CommentLines,
+            ParseErrors = p.Errors
         };
     }
 
-    private static void ParseImport(string trimmed, List<string> usings)
+    private sealed class JsParser
     {
-        // import ... from 'module'
-        if (TryParseImportFrom(trimmed, out var fromModule))
+        private readonly List<JsToken> _tok;
+        private readonly string _fp;
+        private readonly string _src;
+        private int _idx;
+
+        public List<TypeDeclaration> Types { get; } = [];
+        public List<StatementInfo> Statements { get; } = [];
+        public List<string> Usings { get; } = [];
+        public List<string> Errors { get; }
+        public HashSet<int> CommentLines { get; } = [];
+        public List<RegionInfo> Regions { get; } = [];
+
+        public JsParser(List<JsToken> allToks, List<string> lexErrors, string fp, string src)
         {
-            usings.Add(fromModule);
-            return;
-        }
-        // import 'module' (side-effect)
-        if (TryParseSideEffectImport(trimmed, out var sideEffectModule))
-        {
-            usings.Add(sideEffectModule);
-        }
-    }
-
-    private static bool IsClassDeclaration(string trimmed)
-    {
-        // export class, export default class, abstract class, class
-        return IsClassDeclarationPattern(trimmed);
-    }
-
-    private static bool IsFunctionDeclaration(string trimmed)
-    {
-        return IsFunctionDeclarationPattern(trimmed);
-    }
-
-    // Recognizes TypeScript 'interface' / 'enum' declarations, ignoring leading modifiers
-    // (export, default, declare, abstract, const).
-    private static bool IsTsTypeDeclaration(string trimmed)
-    {
-        var t = StripTypeModifiers(trimmed);
-        return t.StartsWith("interface ") || t.StartsWith("enum ");
-    }
-
-    private static string StripTypeModifiers(string trimmed)
-    {
-        var t = trimmed;
-        bool changed = true;
-        while (changed)
-        {
-            changed = false;
-            foreach (var kw in new[] { "export ", "default ", "declare ", "abstract ", "const " })
-            {
-                if (t.StartsWith(kw)) { t = t[kw.Length..].TrimStart(); changed = true; }
-            }
-        }
-        return t;
-    }
-
-    // Parses a TypeScript interface/enum into a TypeDeclaration with the matching TypeKind.
-    // The body is skipped (members are not individually modeled). Requires an opening brace
-    // on the declaration line, mirroring class parsing.
-    private static (TypeDeclaration?, int) ParseTsType(string[] lines, int startLine)
-    {
-        var trimmed = lines[startLine].TrimStart();
-        bool isExported = trimmed.StartsWith("export");
-        var t = StripTypeModifiers(trimmed);
-
-        TypeKind kind;
-        string keyword;
-        if (t.StartsWith("interface ")) { kind = TypeKind.Interface; keyword = "interface "; }
-        else if (t.StartsWith("enum ")) { kind = TypeKind.Enum; keyword = "enum "; }
-        else return (null, startLine + 1);
-
-        var rest = t[keyword.Length..].TrimStart();
-        int end = 0;
-        while (end < rest.Length && (char.IsLetterOrDigit(rest[end]) || rest[end] == '_' || rest[end] == '$'))
-            end++;
-        if (end == 0) return (null, startLine + 1);
-        var name = rest[..end];
-
-        if (FindCharOnLine(lines[startLine], '{') < 0)
-            return (null, startLine + 1);
-
-        int bodyEnd = SkipBracedBlock(lines, startLine);
-        var mods = isExported ? Modifier.Public : Modifier.None;
-        var type = new TypeDeclaration(name, kind, mods,
-            new List<string>(), [], [], [], [], [], startLine + 1)
-            .AsJavaScript(isExported: isExported);
-        return (type, bodyEnd);
-    }
-
-    private static (TypeDeclaration?, int) ParseClass(string[] lines, int startLine, List<StatementInfo> statements)
-    {
-        var trimmed = lines[startLine].TrimStart();
-        bool isExported = trimmed.StartsWith("export");
-
-        if (!TryParseClassDeclaration(trimmed, out var className, out var baseType,
-            out var isAbstract, out var isGeneric, out var hasImplements))
-            return (null, startLine + 1);
-
-        var baseTypes = baseType != null
-            ? [baseType]
-            : new List<string>();
-
-        // Find the opening brace
-        int braceStart = FindCharOnLine(lines[startLine], '{');
-        if (braceStart < 0) return (null, startLine + 1);
-
-        int braceDepth = 1;
-        var methods = new List<MethodDeclaration>();
-        var constructors = new List<MethodDeclaration>();
-
-        int i = startLine + 1;
-        while (i < lines.Length && braceDepth > 0)
-        {
-            var line = lines[i].TrimStart();
-
-            if (string.IsNullOrWhiteSpace(line) || line.StartsWith("//"))
-            {
-                i++;
-                continue;
-            }
-            if (line.StartsWith("/*"))
-            {
-                i = SkipBlockComment(lines, i);
-                continue;
-            }
-
-            // Track braces
-            braceDepth += CountUnquotedChar(lines[i], '{') - CountUnquotedChar(lines[i], '}');
-            if (braceDepth <= 0) { i++; break; }
-
-            // Method: name(...) {, async name(...) {, static name(...) {, get/set name(...) {
-            if (TryParseMethodDeclaration(line, out var methodName, out var parameterText, out var isStatic,
-                    out var methodIsAsync, out var isGenerator, out var isArrow, out var isGetter, out var isSetter)
-                && !line.StartsWith("if") && !line.StartsWith("for") && !line.StartsWith("while"))
-            {
-                var modifiers = Modifier.Public;
-                if (isStatic) modifiers |= Modifier.Static;
-                if (methodIsAsync) modifiers |= Modifier.Async;
-
-                var parameters = ParseParameters(parameterText);
-
-                // Extract method body statements
-                var methodStatements = new List<StatementInfo>();
-                int bodyEnd = SkipBracedBlock(lines, i);
-                ExtractInlineBody(lines[i], i + 1, true, methodStatements);
-                ExtractBodyStatements(lines, i + 1, bodyEnd, methodStatements);
-                statements.AddRange(methodStatements);
-
-                var method = NewMethod(methodName, modifiers, [], null, parameters, i + 1, methodStatements)
-                    .AsJavaScript(isGenerator: isGenerator, isArrow: isArrow, isGetter: isGetter, isSetter: isSetter);
-
-                if (methodName == "constructor")
-                    constructors.Add(method);
-                else
-                    methods.Add(method);
-
-                // Undo the brace count from line 148 for this line — SkipBracedBlock
-                // already handled all braces from this line through the method's closing }.
-                braceDepth -= CountUnquotedChar(lines[i], '{') - CountUnquotedChar(lines[i], '}');
-                i = bodyEnd;
-                continue;
-            }
-
-            i++;
+            _fp = fp; _src = src;
+            Errors = new List<string>(lexErrors);
+            PreProcess(allToks);
+            _tok = allToks.Where(t => !t.IsComment && !t.IsEof).ToList();
         }
 
-        var classModifiers = isExported ? Modifier.Public : Modifier.None;
-        return (new TypeDeclaration(className, TypeKind.Class, classModifiers,
-            baseTypes, [], constructors, methods, [], [], startLine + 1)
-            .AsJavaScript(isExported: isExported, hasBaseClass: baseTypes.Count > 0,
-                isAbstract: isAbstract, isGeneric: isGeneric, hasImplements: hasImplements), i);
-    }
-
-    private static (MethodDeclaration?, int) ParseFunction(string[] lines, int startLine,
-        List<StatementInfo> statements)
-    {
-        var trimmed = lines[startLine].TrimStart();
-
-        bool isExported = trimmed.StartsWith("export");
-        bool isAsync = trimmed.Contains("async ");
-
-        if (!TryParseFunctionDeclaration(trimmed, out var funcName, out var parameterText, out var isGenerator)) return (null, startLine + 1);
-
-        var parameters = ParseParameters(parameterText);
-
-        var modifiers = isExported ? Modifier.Public : Modifier.None;
-        if (isAsync) modifiers |= Modifier.Async;
-
-        var methodStatements = new List<StatementInfo>();
-        int bodyEnd = SkipBracedBlock(lines, startLine);
-
-        // Handle single-line bodies: function f() { stmt; }
-        ExtractInlineBody(lines[startLine], startLine + 1, true, methodStatements);
-        ExtractBodyStatements(lines, startLine + 1, bodyEnd, methodStatements);
-        statements.AddRange(methodStatements);
-
-        return (NewMethod(funcName, modifiers, [], null, parameters, startLine + 1, methodStatements)
-            .AsJavaScript(isGenerator: isGenerator), bodyEnd);
-    }
-
-    private static void ExtractBodyStatements(string[] lines, int start, int end,
-        List<StatementInfo> statements)
-    {
-        for (int i = start; i < end && i < lines.Length; i++)
+        public void Parse()
         {
-            var trimmed = lines[i].TrimStart();
-            if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("//")) continue;
-            if (trimmed.StartsWith("/*"))
-            {
-                i = SkipBlockComment(lines, i) - 1;
-                continue;
-            }
+            while (_idx < _tok.Count) ParseTopLevel();
+            CheckBracketBalance();
+        }
+        private void PreProcess(List<JsToken> all)
+        {
+            var lines = _src.Split('\n');
+            var stack = new Stack<(string Name, int Line)>();
 
-            // catch clause
-            if (IsCatchClause(trimmed))
+            foreach (var t in all)
             {
-                // JS catch is always untyped — capture the variable name for reference but TypeName is null
-                bool hasRethrow = HasRethrow(lines, i + 1, end);
-                statements.Add(new JavaScriptStatementInfo("catch", [], null, null, [], i + 1, true)
+                if (t.Kind == JsTok.LineComment)
                 {
-                    HasRethrow = hasRethrow,
-                    IsErrorHandler = true,
-                    IsGenericErrorHandler = true // JS catch is always untyped/generic
-                });
-                continue;
-            }
-
-            if (trimmed.StartsWith("try") && (trimmed.Length == 3 || trimmed[3] is ' ' or '{'))
-            {
-                statements.Add(NewStatement("try", [], null, null, [], i + 1, true));
-                continue;
-            }
-
-            if (TryParseForKind(trimmed, out var forKind))
-            {
-                statements.Add(NewStatement(forKind, ["for"], null, null, [], i + 1, true));
-                continue;
-            }
-
-            // debugger statement
-            if (trimmed.StartsWith("debugger"))
-            {
-                statements.Add(NewStatement("call", ["debugger"], null, "debugger", [], i + 1, true));
-                continue;
-            }
-
-            // throw statement
-            if (trimmed.StartsWith("throw "))
-            {
-                string? typeName = TryParseThrowNewType(trimmed, out var parsedTypeName) ? parsedTypeName : null;
-                statements.Add(NewStatement("throw", [], typeName, null, [], i + 1, true));
-                continue;
-            }
-
-            // await statement (standalone or return await)
-            if (trimmed.StartsWith("return await ") || trimmed.StartsWith("await "))
-            {
-                var awaitStart = trimmed.StartsWith("return await ") ? 13 : 6;
-                var awaitExpr = trimmed[awaitStart..].TrimEnd(';').Trim();
-                ExtractAwaitStatement(awaitExpr, i + 1, true, statements);
-                continue;
-            }
-
-            ExtractLineStatement(trimmed, i + 1, true, statements);
-        }
-    }
-
-    /// <summary>
-    /// Extract statements from inline body content (e.g., function f() { alert('x'); })
-    /// Looks for content between the first { and last } on the same line.
-    /// </summary>
-    private static void ExtractInlineBody(string line, int lineNumber, bool isInMethod,
-        List<StatementInfo> statements)
-    {
-        int braceOpen = FindCharOnLine(line, '{');
-        if (braceOpen < 0) return;
-
-        int braceClose = line.LastIndexOf('}');
-        if (braceClose <= braceOpen) return;
-
-        var body = line[(braceOpen + 1)..braceClose].Trim();
-        if (string.IsNullOrWhiteSpace(body)) return;
-
-        // Split on semicolons for multiple statements
-        foreach (var part in body.Split(';', StringSplitOptions.TrimEntries))
-        {
-            if (string.IsNullOrWhiteSpace(part)) continue;
-
-            if (part.StartsWith("debugger"))
-            {
-                statements.Add(NewStatement("call", ["debugger"], null, "debugger", [], lineNumber, isInMethod));
-                continue;
-            }
-            if (part.StartsWith("throw "))
-            {
-                string? typeName = TryParseThrowNewType(part, out var parsedTypeName) ? parsedTypeName : null;
-                statements.Add(NewStatement("throw", [], typeName, null, [], lineNumber, isInMethod));
-                continue;
-            }
-            if (part.StartsWith("return await ") || part.StartsWith("await "))
-            {
-                var awaitStart = part.StartsWith("return await ") ? 13 : 6;
-                var awaitExpr = part[awaitStart..].Trim();
-                ExtractAwaitStatement(awaitExpr, lineNumber, isInMethod, statements);
-                continue;
-            }
-            ExtractLineStatement(part, lineNumber, isInMethod, statements);
-        }
-    }
-
-    private static void ExtractLineStatement(string trimmed, int lineNumber, bool isInMethod,
-        List<StatementInfo> statements)
-    {
-        if (trimmed.StartsWith("try") && (trimmed.Length == 3 || trimmed[3] is ' ' or '{'))
-        {
-            statements.Add(NewStatement("try", [], null, null, [], lineNumber, isInMethod));
-            return;
-        }
-
-        if (TryParseForKind(trimmed, out var forKind))
-        {
-            statements.Add(NewStatement(forKind, ["for"], null, null, [], lineNumber, isInMethod));
-            return;
-        }
-
-        // Variable declarations: const/let/var name = ...
-        if (TryParseVariableDeclaration(trimmed, out var variableName))
-        {
-            var keywords = new List<string>();
-            if (trimmed.Contains("const ")) keywords.Add("const");
-            if (trimmed.Contains("let ")) keywords.Add("let");
-            if (trimmed.Contains("var ")) keywords.Add("var");
-
-            statements.Add(NewStatement("declaration", keywords, null, variableName, [], lineNumber, isInMethod));
-
-            // Also extract calls on the right-hand side (e.g., const x = console.log(...))
-            var afterEq = trimmed.IndexOf('=');
-            if (afterEq > 0)
-            {
-                var rhs = trimmed[(afterEq + 1)..].TrimStart();
-                if (rhs.StartsWith("await "))
-                {
-                    var awaitExpr = rhs[6..].TrimEnd(';').Trim();
-                    ExtractAwaitStatement(awaitExpr, lineNumber, isInMethod, statements);
-                }
-                else
-                {
-                    ExtractCallFromExpression(rhs, lineNumber, isInMethod, statements);
-                }
-            }
-            return;
-        }
-
-        // eval() call
-        if (ContainsEvalCall(trimmed))
-        {
-            statements.Add(NewStatement("call", [], null, "eval", [], lineNumber, isInMethod));
-            return;
-        }
-
-        // Function/method call: name(...) or obj.name(...)
-        ExtractCallFromExpression(trimmed, lineNumber, isInMethod, statements);
-    }
-
-    private static void ExtractCallFromExpression(string expr, int lineNumber, bool isInMethod,
-        List<StatementInfo> statements)
-    {
-        // await optional, then obj.method(...) or method(...)
-        if (!TryParseCallExpression(expr, allowAwaitPrefix: true, anchored: false, out var typeName, out var memberName)) return;
-
-        // Skip control flow and declaration keywords
-        if (memberName is "if" or "for" or "while" or "switch" or "function" or "class"
-            or "return" or "new" or "typeof" or "import" or "require" or "catch" or "throw")
-            return;
-
-        // Extract simple arguments
-        var args = TryExtractFirstParenthesizedText(expr, out var argsText) && !string.IsNullOrWhiteSpace(argsText)
-            ? argsText.Split(',', StringSplitOptions.TrimEntries).ToList()
-            : new List<string>();
-
-        statements.Add(NewStatement("call", [], typeName, memberName, args, lineNumber, isInMethod));
-    }
-
-    private static void ExtractAwaitStatement(string awaitExpr, int lineNumber, bool isInMethod,
-        List<StatementInfo> statements)
-    {
-        string? typeName = null;
-        string? memberName = null;
-
-        if (TryParseCallExpression(awaitExpr, allowAwaitPrefix: false, anchored: true, out var parsedTypeName, out var parsedMemberName))
-        {
-            typeName = parsedTypeName;
-            memberName = parsedMemberName;
-
-            if (memberName is "if" or "for" or "while" or "switch" or "function" or "class"
-                or "return" or "new" or "typeof" or "import" or "require" or "catch" or "throw")
-            {
-                typeName = null;
-                memberName = null;
-            }
-        }
-
-        statements.Add(new JavaScriptStatementInfo("await", [], typeName, memberName, [], lineNumber, isInMethod)
-        {
-            Expression = awaitExpr
-        });
-
-        // Also emit the inner call for backward compatibility
-        ExtractCallFromExpression(awaitExpr, lineNumber, isInMethod, statements);
-    }
-
-    private static MethodDeclaration NewMethod(string name, Modifier modifiers, List<string> decorators,
-        TypeReference? returnType, List<ParameterDeclaration> parameters, int line, List<StatementInfo> statements)
-    {
-        MethodDeclaration method = new(name, modifiers, decorators, returnType, parameters, line);
-        method.Statements = statements;
-        return method;
-    }
-
-    private static JavaScriptStatementInfo NewStatement(string kind, List<string> keywords, string? typeName,
-        string? memberName, List<string> arguments, int line, bool isInMethod)
-        => new(kind, keywords, typeName, memberName, arguments, line, isInMethod);
-
-    private static bool TryParseForKind(string text, out string kind)
-    {
-        kind = string.Empty;
-        int pos = 0;
-        if (!TryReadLiteral(text, ref pos, "for") || !IsWordBoundaryAfter(text, pos))
-            return false;
-
-        if (!TryExtractFirstParenthesizedText(text, out var clause))
-            return false;
-
-        if (ContainsWord(clause, "of"))
-        {
-            kind = "for-of";
-            return true;
-        }
-
-        if (ContainsWord(clause, "in"))
-        {
-            kind = "for-in";
-            return true;
-        }
-
-        return false;
-    }
-
-    private static bool TryParseRequireModule(string text, out string module)
-    {
-        module = string.Empty;
-        for (int i = 0; i < text.Length; i++)
-        {
-            if (!StartsWithAt(text, i, "require") || !IsWordBoundaryBefore(text, i))
-                continue;
-
-            int pos = i + "require".Length;
-            SkipWhitespace(text, ref pos);
-            if (!TryReadChar(text, ref pos, '('))
-                continue;
-
-            SkipWhitespace(text, ref pos);
-            if (!TryReadQuotedText(text, ref pos, out module, requireContent: true))
-                continue;
-
-            SkipWhitespace(text, ref pos);
-            if (TryReadChar(text, ref pos, ')'))
-                return true;
-        }
-
-        return false;
-    }
-
-    private static bool TryParseImportFrom(string text, out string module)
-    {
-        module = string.Empty;
-        for (int i = 0; i < text.Length; i++)
-        {
-            if (!StartsWithAt(text, i, "from"))
-                continue;
-
-            int pos = i + "from".Length;
-            if (!SkipRequiredWhitespace(text, ref pos))
-                continue;
-
-            if (TryReadQuotedText(text, ref pos, out module, requireContent: true))
-                return true;
-        }
-
-        return false;
-    }
-
-    private static bool TryParseSideEffectImport(string text, out string module)
-    {
-        module = string.Empty;
-        int pos = 0;
-        if (!TryReadLiteral(text, ref pos, "import") || !SkipRequiredWhitespace(text, ref pos))
-            return false;
-
-        return TryReadQuotedText(text, ref pos, out module, requireContent: true);
-    }
-
-    private static bool IsClassDeclarationPattern(string text)
-    {
-        int pos = 0;
-        TryReadExportDefaultPrefix(text, ref pos);
-        TryReadAbstractPrefix(text, ref pos);
-        if (!TryReadLiteral(text, ref pos, "class") || !SkipRequiredWhitespace(text, ref pos))
-            return false;
-
-        return pos < text.Length && IsWordChar(text[pos]);
-    }
-
-    private static bool IsFunctionDeclarationPattern(string text)
-    {
-        int pos = 0;
-        TryReadExportDefaultPrefix(text, ref pos);
-        TryReadAsyncPrefix(text, ref pos);
-        if (!TryReadLiteral(text, ref pos, "function"))
-            return false;
-
-        int afterFunction = pos;
-        SkipWhitespace(text, ref pos);
-        bool hadWhitespace = pos > afterFunction;
-        if (TryReadChar(text, ref pos, '*'))
-            SkipWhitespace(text, ref pos);
-        else if (!hadWhitespace)
-            return false;
-
-        return pos < text.Length && IsWordChar(text[pos]);
-    }
-
-    private static bool TryParseClassDeclaration(string text, out string className, out string? baseType,
-        out bool isAbstract, out bool isGeneric, out bool hasImplements)
-    {
-        className = string.Empty;
-        baseType = null;
-        isAbstract = false;
-        isGeneric = false;
-        hasImplements = false;
-
-        int pos = 0;
-        TryReadExportDefaultPrefix(text, ref pos);
-        isAbstract = TryReadAbstractPrefix(text, ref pos);
-
-        if (!TryReadLiteral(text, ref pos, "class") || !SkipRequiredWhitespace(text, ref pos))
-            return false;
-
-        if (!TryReadWord(text, ref pos, out className))
-            return false;
-
-        if (pos < text.Length && text[pos] == '<')
-        {
-            isGeneric = true;
-            TrySkipBalancedAngleList(text, ref pos);
-        }
-        SkipWhitespace(text, ref pos);
-
-        int extendsPos = pos;
-        if (TryReadLiteral(text, ref extendsPos, "extends")
-            && SkipRequiredWhitespace(text, ref extendsPos)
-            && TryReadDottedWord(text, ref extendsPos, out var parsedBaseType))
-        {
-            baseType = parsedBaseType;
-        }
-
-        hasImplements = ContainsWord(text, "implements");
-        return true;
-    }
-
-    private static bool TryParseMethodDeclaration(string text, out string methodName, out string parameterText,
-        out bool isStatic, out bool isAsync, out bool isGenerator, out bool isArrow, out bool isGetter, out bool isSetter)
-    {
-        methodName = string.Empty;
-        parameterText = string.Empty;
-        isStatic = false;
-        isAsync = false;
-        isGenerator = false;
-        isArrow = false;
-        isGetter = false;
-        isSetter = false;
-
-        foreach (var staticChoice in GetOptionalPrefixChoices(text, 0, "static"))
-        {
-            foreach (var asyncChoice in GetOptionalPrefixChoices(text, staticChoice.Position, "async"))
-            {
-                foreach (var accessorChoice in GetOptionalPrefixChoices(text, asyncChoice.Position, "get", "set"))
-                {
-                    int pos = accessorChoice.Position;
-                    bool generator = TryReadChar(text, ref pos, '*');
-                    SkipWhitespace(text, ref pos);
-                    if (!TryReadWord(text, ref pos, out methodName))
-                        continue;
-
-                    SkipWhitespace(text, ref pos);
-                    if (!TryReadParenthesizedTextAt(text, ref pos, out parameterText))
-                        continue;
-
-                    isStatic = staticChoice.Consumed;
-                    isAsync = asyncChoice.Consumed;
-                    isGenerator = generator;
-                    isGetter = accessorChoice.Consumed && StartsWithAt(text, asyncChoice.Position, "get");
-                    isSetter = accessorChoice.Consumed && StartsWithAt(text, asyncChoice.Position, "set");
-                    return true;
-                }
-
-                int arrowPos = asyncChoice.Position;
-                if (TryReadWord(text, ref arrowPos, out var arrowName))
-                {
-                    SkipWhitespace(text, ref arrowPos);
-                    if (TryReadChar(text, ref arrowPos, '='))
+                    CommentLines.Add(t.Line);
+                    string txt = t.Value.AsSpan().TrimStart('/').ToString().Trim();
+                    if (txt.StartsWith("[START ") && txt.Contains(']'))
                     {
-                        SkipWhitespace(text, ref arrowPos);
-                        var arrowIsAsync = asyncChoice.Consumed || (TryReadLiteral(text, ref arrowPos, "async") && SkipRequiredWhitespace(text, ref arrowPos));
-                        if (TryReadParenthesizedTextAt(text, ref arrowPos, out var arrowParameters))
+                        int s = txt.IndexOf("[START ") + 7, e = txt.IndexOf(']', s);
+                        if (e > s) stack.Push((txt[s..e], t.Line));
+                    }
+                    else if (txt.StartsWith("[END ") && txt.Contains(']') && stack.Count > 0)
+                    {
+                        int s = txt.IndexOf("[END ") + 5, e = txt.IndexOf(']', s);
+                        if (e > s)
                         {
-                            SkipWhitespace(text, ref arrowPos);
-                            if (TryReadLiteral(text, ref arrowPos, "=>"))
+                            string endName = txt[s..e];
+                            var items = new List<(string, int)>();
+                            while (stack.Count > 0)
                             {
-                                methodName = arrowName;
-                                parameterText = arrowParameters;
-                                isStatic = staticChoice.Consumed;
-                                isAsync = arrowIsAsync;
-                                isArrow = true;
-                                return true;
+                                var top = stack.Pop();
+                                if (top.Name == endName)
+                                {
+                                    int startL = top.Line, endL = t.Line;
+                                    var cl = new List<string>();
+                                    for (int j = startL; j < endL - 1 && j < lines.Length; j++)
+                                        cl.Add(lines[j].TrimEnd('\r'));
+                                    Regions.Add(new RegionInfo(endName, startL, endL, string.Join('\n', cl)));
+                                    for (int k = items.Count - 1; k >= 0; k--) stack.Push(items[k]);
+                                    break;
+                                }
+                                items.Add(top);
                             }
                         }
                     }
                 }
-            }
-        }
-
-        return false;
-    }
-
-    private static bool TryParseFunctionDeclaration(string text, out string functionName, out string parameterText,
-        out bool isGenerator)
-    {
-        functionName = string.Empty;
-        parameterText = string.Empty;
-        isGenerator = false;
-
-        for (int i = 0; i < text.Length; i++)
-        {
-            if (!StartsWithAt(text, i, "function"))
-                continue;
-
-            int pos = i + "function".Length;
-            int afterFunction = pos;
-            SkipWhitespace(text, ref pos);
-            bool hadWhitespace = pos > afterFunction;
-            isGenerator = TryReadChar(text, ref pos, '*');
-            if (isGenerator)
-                SkipWhitespace(text, ref pos);
-            else if (!hadWhitespace)
-                continue;
-
-            if (!TryReadWord(text, ref pos, out functionName))
-                continue;
-
-            SkipWhitespace(text, ref pos);
-            if (TryReadParenthesizedTextAt(text, ref pos, out parameterText))
-                return true;
-        }
-
-        return false;
-    }
-
-    private static bool IsCatchClause(string text)
-    {
-        int pos = 0;
-        if (TryReadChar(text, ref pos, '}'))
-            SkipWhitespace(text, ref pos);
-
-        return StartsWithAt(text, pos, "catch");
-    }
-
-    private static bool TryParseThrowNewType(string text, out string typeName)
-    {
-        typeName = string.Empty;
-        int pos = 0;
-        if (!TryReadLiteral(text, ref pos, "throw") || !SkipRequiredWhitespace(text, ref pos)
-            || !TryReadLiteral(text, ref pos, "new") || !SkipRequiredWhitespace(text, ref pos))
-            return false;
-
-        return TryReadWord(text, ref pos, out typeName);
-    }
-
-    private static bool TryParseVariableDeclaration(string text, out string variableName)
-    {
-        variableName = string.Empty;
-        int pos = 0;
-        if (TryReadLiteral(text, ref pos, "export"))
-        {
-            if (!SkipRequiredWhitespace(text, ref pos))
-                return false;
-        }
-
-        if (!(TryReadLiteral(text, ref pos, "const")
-            || TryReadLiteral(text, ref pos, "let")
-            || TryReadLiteral(text, ref pos, "var")))
-            return false;
-
-        return SkipRequiredWhitespace(text, ref pos) && TryReadWord(text, ref pos, out variableName);
-    }
-
-    private static bool ContainsEvalCall(string text)
-    {
-        for (int i = 0; i < text.Length; i++)
-        {
-            if (!StartsWithAt(text, i, "eval") || !IsWordBoundaryBefore(text, i))
-                continue;
-
-            int pos = i + "eval".Length;
-            SkipWhitespace(text, ref pos);
-            if (pos < text.Length && text[pos] == '(')
-                return true;
-        }
-
-        return false;
-    }
-
-    private static bool ContainsWord(string text, string word)
-    {
-        for (int i = 0; i < text.Length; i++)
-        {
-            if (StartsWithAt(text, i, word) && IsWordBoundaryBefore(text, i) && IsWordBoundaryAfter(text, i + word.Length))
-                return true;
-        }
-
-        return false;
-    }
-
-    private static bool TryParseCallExpression(string text, bool allowAwaitPrefix, bool anchored,
-        out string? typeName, out string memberName)
-    {
-        typeName = null;
-        memberName = string.Empty;
-
-        int start = 0;
-        while (start < text.Length)
-        {
-            if (TryParseCallAt(text, start, allowAwaitPrefix, out typeName, out memberName))
-                return true;
-
-            if (anchored)
-                return false;
-
-            start++;
-        }
-
-        return false;
-    }
-
-    private static bool TryParseCallAt(string text, int start, bool allowAwaitPrefix,
-        out string? typeName, out string memberName)
-    {
-        typeName = null;
-        memberName = string.Empty;
-
-        int pos = start;
-        if (allowAwaitPrefix && StartsWithAt(text, pos, "await"))
-        {
-            int afterAwait = pos + "await".Length;
-            if (SkipRequiredWhitespace(text, ref afterAwait))
-                pos = afterAwait;
-        }
-
-        if (pos >= text.Length || !IsWordChar(text[pos]))
-            return false;
-
-        int sequenceStart = pos;
-        while (pos < text.Length && (IsWordChar(text[pos]) || text[pos] == '.'))
-            pos++;
-
-        int parenPos = pos;
-        SkipWhitespace(text, ref parenPos);
-        if (parenPos >= text.Length || text[parenPos] != '(')
-            return false;
-
-        int memberStart = pos - 1;
-        while (memberStart >= sequenceStart && IsWordChar(text[memberStart]))
-            memberStart--;
-        memberStart++;
-
-        if (memberStart == pos)
-            return false;
-
-        memberName = text[memberStart..pos];
-        if (memberStart > sequenceStart && text[memberStart - 1] == '.')
-            typeName = text[sequenceStart..(memberStart - 1)];
-
-        return true;
-    }
-
-    private static bool TryExtractFirstParenthesizedText(string text, out string value)
-    {
-        value = string.Empty;
-        int open = text.IndexOf('(');
-        if (open < 0)
-            return false;
-
-        int close = text.IndexOf(')', open + 1);
-        if (close < 0)
-            return false;
-
-        value = text[(open + 1)..close];
-        return true;
-    }
-
-    private static bool TryParseSnippetMarker(string text, string marker, out string name)
-    {
-        name = string.Empty;
-        int pos = 0;
-        if (!TryReadLiteral(text, ref pos, "//"))
-            return false;
-
-        SkipWhitespace(text, ref pos);
-        if (!TryReadChar(text, ref pos, '[') || !TryReadLiteral(text, ref pos, marker)
-            || !SkipRequiredWhitespace(text, ref pos))
-            return false;
-
-        int end = text.IndexOf(']', pos);
-        if (end <= pos)
-            return false;
-
-        name = text[pos..end];
-        return true;
-    }
-
-    private static void TryReadExportDefaultPrefix(string text, ref int pos)
-    {
-        int original = pos;
-        if (!TryReadLiteral(text, ref pos, "export") || !SkipRequiredWhitespace(text, ref pos))
-        {
-            pos = original;
-            return;
-        }
-
-        int beforeDefault = pos;
-        if (!TryReadLiteral(text, ref pos, "default") || !SkipRequiredWhitespace(text, ref pos))
-            pos = beforeDefault;
-    }
-
-    private static bool TryReadAbstractPrefix(string text, ref int pos)
-    {
-        int original = pos;
-        if (!TryReadLiteral(text, ref pos, "abstract") || !SkipRequiredWhitespace(text, ref pos))
-        {
-            pos = original;
-            return false;
-        }
-
-        return true;
-    }
-
-    private static bool TrySkipBalancedAngleList(string text, ref int pos)
-    {
-        if (pos >= text.Length || text[pos] != '<')
-            return false;
-
-        int depth = 0;
-        while (pos < text.Length)
-        {
-            if (text[pos] == '<')
-            {
-                depth++;
-            }
-            else if (text[pos] == '>')
-            {
-                depth--;
-                if (depth == 0)
+                else if (t.Kind == JsTok.BlockComment)
                 {
-                    pos++;
-                    return true;
+                    int startL = t.Line, endL = startL;
+                    foreach (char c in t.Value) if (c == '\n') endL++;
+                    for (int l = startL; l <= endL; l++) CommentLines.Add(l);
+                }
+            }
+        }
+
+        private void CheckBracketBalance()
+        {
+            int bd = 0, pd = 0, rd = 0;
+            int bl = 0, bc = 0, pl = 0, pc = 0, rl = 0, rc = 0;
+            foreach (var t in _tok)
+            {
+                if (t.IsPunct("{")) { if (bd++ == 0) { bl = t.Line; bc = t.Col; } }
+                else if (t.IsPunct("}")) { if (--bd < 0) { Errors.Add($"{_fp}({t.Line},{t.Col}): error: Unexpected '}}'"); bd = 0; } }
+                else if (t.IsPunct("(")) { if (pd++ == 0) { pl = t.Line; pc = t.Col; } }
+                else if (t.IsPunct(")")) { if (--pd < 0) { Errors.Add($"{_fp}({t.Line},{t.Col}): error: Unexpected ')'"); pd = 0; } }
+                else if (t.IsPunct("[")) { if (rd++ == 0) { rl = t.Line; rc = t.Col; } }
+                else if (t.IsPunct("]")) { if (--rd < 0) { Errors.Add($"{_fp}({t.Line},{t.Col}): error: Unexpected ']'"); rd = 0; } }
+            }
+            if (bd > 0) Errors.Add($"{_fp}({bl},{bc}): error: Unclosed '{{'");
+            if (pd > 0) Errors.Add($"{_fp}({pl},{pc}): error: Unclosed '('");
+            if (rd > 0) Errors.Add($"{_fp}({rl},{rc}): error: Unclosed '['");
+        }
+        private void ParseTopLevel()
+        {
+            if (_idx >= _tok.Count) return;
+
+            bool isExported = false, isAbstract = false;
+            while (_idx < _tok.Count)
+            {
+                var t = _tok[_idx];
+                if (t.IsWord("export")) { isExported = true; _idx++; }
+                else if (t.IsWord("default") || t.IsWord("declare")) { _idx++; }
+                else if (t.IsWord("abstract")) { isAbstract = true; _idx++; }
+                else break;
+            }
+            if (_idx >= _tok.Count) return;
+
+            var tok = _tok[_idx];
+
+            if (tok.IsWord("import") && !isExported) { ParseImport(); return; }
+            if (tok.IsWord("class")) { var ty = ParseClass(isExported, isAbstract); if (ty != null) Types.Add(ty); return; }
+            if (tok.IsWord("interface") || tok.IsWord("enum")) { ParseTsType(isExported); return; }
+            if (tok.IsWord("type")) { SkipTypeDecl(); return; }
+
+            bool isAsync = false;
+            if (tok.IsWord("async"))
+            {
+                isAsync = true; _idx++;
+                if (_idx < _tok.Count) tok = _tok[_idx]; else return;
+            }
+
+            if (tok.IsWord("function")) { ParseFunction(isExported, isAsync); return; }
+
+            if (tok.IsWord("const") || tok.IsWord("let") || tok.IsWord("var"))
+            {
+                int stmtEnd = FindStatementEnd(_idx);
+                ExtractRequireFromRange(_idx, stmtEnd);
+                _idx = stmtEnd;
+                return;
+            }
+
+            // Unknown top-level token: skip to next statement boundary; always advance at least 1
+            int se = FindStatementEnd(_idx);
+            ExtractRequireFromRange(_idx, se);
+            _idx = se > _idx ? se : _idx + 1;
+        }
+
+        private void ExtractRequireFromRange(int start, int end)
+        {
+            for (int i = start; i + 3 < end && i < _tok.Count; i++)
+            {
+                if (_tok[i].IsWord("require") && _tok[i + 1].IsPunct("(")
+                    && _tok[i + 2].IsStr && _tok[i + 3].IsPunct(")"))
+                {
+                    string m = UnquoteStr(_tok[i + 2].Value);
+                    if (!string.IsNullOrEmpty(m)) { Usings.Add(m); return; }
+                }
+            }
+        }
+
+        private void ParseImport()
+        {
+            _idx++;
+            if (_idx >= _tok.Count) return;
+
+            if (_tok[_idx].IsStr)
+            {
+                string m = UnquoteStr(_tok[_idx].Value);
+                if (!string.IsNullOrEmpty(m)) Usings.Add(m);
+                _idx++;
+                if (_idx < _tok.Count && _tok[_idx].IsPunct(";")) _idx++;
+                return;
+            }
+
+            while (_idx < _tok.Count && !_tok[_idx].IsWord("from") && !_tok[_idx].IsPunct(";"))
+                _idx++;
+
+            if (_idx < _tok.Count && _tok[_idx].IsWord("from"))
+            {
+                _idx++;
+                if (_idx < _tok.Count && _tok[_idx].IsStr)
+                {
+                    string m = UnquoteStr(_tok[_idx].Value);
+                    if (!string.IsNullOrEmpty(m)) Usings.Add(m);
+                    _idx++;
+                }
+            }
+            if (_idx < _tok.Count && _tok[_idx].IsPunct(";")) _idx++;
+        }
+        private TypeDeclaration? ParseClass(bool isExported, bool isAbstract)
+        {
+            int classLine = _tok[_idx].Line;
+            _idx++;
+
+            if (_idx >= _tok.Count || !_tok[_idx].IsIdent)
+            {
+                Errors.Add($"{_fp}({classLine},1): error: Expected class name");
+                SkipToBlockEnd(); return null;
+            }
+
+            string className = _tok[_idx].Value; _idx++;
+
+            bool isGeneric = false;
+            if (_idx < _tok.Count && _tok[_idx].IsPunct("<"))
+            { isGeneric = true; _idx = FindMatchingClose(_idx) + 1; }
+
+            string? baseType = null;
+            if (_idx < _tok.Count && _tok[_idx].IsWord("extends"))
+            {
+                _idx++;
+                if (_idx < _tok.Count && _tok[_idx].IsIdent)
+                {
+                    baseType = _tok[_idx].Value; _idx++;
+                    if (_idx < _tok.Count && _tok[_idx].IsPunct("<"))
+                        _idx = FindMatchingClose(_idx) + 1;
                 }
             }
 
-            pos++;
-        }
-
-        return false;
-    }
-
-    private static List<(int Position, bool Consumed)> GetOptionalPrefixChoices(string text, int pos,
-        params string[] prefixes)
-    {
-        var choices = new List<(int Position, bool Consumed)>();
-        foreach (var prefix in prefixes)
-        {
-            int next = pos;
-            if (TryReadLiteral(text, ref next, prefix) && SkipRequiredWhitespace(text, ref next))
-                choices.Add((next, true));
-        }
-
-        choices.Add((pos, false));
-        return choices;
-    }
-
-    private static void TryReadAsyncPrefix(string text, ref int pos)
-    {
-        int original = pos;
-        if (!TryReadLiteral(text, ref pos, "async") || !SkipRequiredWhitespace(text, ref pos))
-            pos = original;
-    }
-
-    private static bool TryReadQuotedText(string text, ref int pos, out string value, bool requireContent)
-    {
-        value = string.Empty;
-        if (pos >= text.Length || text[pos] is not ('\'' or '"'))
-            return false;
-
-        pos++;
-        int start = pos;
-        while (pos < text.Length && text[pos] is not ('\'' or '"'))
-            pos++;
-
-        if (pos >= text.Length || (requireContent && pos == start))
-            return false;
-
-        value = text[start..pos];
-        pos++;
-        return true;
-    }
-
-    private static bool TryReadParenthesizedTextAt(string text, ref int pos, out string value)
-    {
-        value = string.Empty;
-        if (!TryReadChar(text, ref pos, '('))
-            return false;
-
-        int start = pos;
-        while (pos < text.Length && text[pos] != ')')
-            pos++;
-
-        if (pos >= text.Length)
-            return false;
-
-        value = text[start..pos];
-        pos++;
-        return true;
-    }
-
-    private static bool TryReadDottedWord(string text, ref int pos, out string value)
-    {
-        value = string.Empty;
-        int start = pos;
-        if (pos >= text.Length || !IsWordChar(text[pos]))
-            return false;
-
-        pos++;
-        while (pos < text.Length && (IsWordChar(text[pos]) || text[pos] == '.'))
-            pos++;
-
-        value = text[start..pos];
-        return true;
-    }
-
-    private static bool TryReadWord(string text, ref int pos, out string value)
-    {
-        value = string.Empty;
-        int start = pos;
-        while (pos < text.Length && IsWordChar(text[pos]))
-            pos++;
-
-        if (pos == start)
-            return false;
-
-        value = text[start..pos];
-        return true;
-    }
-
-    private static bool TryReadLiteral(string text, ref int pos, string literal)
-    {
-        if (!StartsWithAt(text, pos, literal))
-            return false;
-
-        pos += literal.Length;
-        return true;
-    }
-
-    private static bool TryReadChar(string text, ref int pos, char ch)
-    {
-        if (pos >= text.Length || text[pos] != ch)
-            return false;
-
-        pos++;
-        return true;
-    }
-
-    private static bool SkipRequiredWhitespace(string text, ref int pos)
-    {
-        int start = pos;
-        SkipWhitespace(text, ref pos);
-        return pos > start;
-    }
-
-    private static void SkipWhitespace(string text, ref int pos)
-    {
-        while (pos < text.Length && IsWhitespace(text[pos]))
-            pos++;
-    }
-
-    private static bool StartsWithAt(string text, int pos, string value)
-    {
-        return pos >= 0 && pos + value.Length <= text.Length
-            && string.CompareOrdinal(text, pos, value, 0, value.Length) == 0;
-    }
-
-    private static bool IsWordBoundaryBefore(string text, int pos)
-    {
-        return pos == 0 || !IsWordChar(text[pos - 1]);
-    }
-
-    private static bool IsWordBoundaryAfter(string text, int pos)
-    {
-        return pos >= text.Length || !IsWordChar(text[pos]);
-    }
-
-    private static bool IsWordChar(char ch)
-    {
-        return ch is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or '_';
-    }
-
-    private static bool IsWhitespace(char ch)
-    {
-        return char.IsWhiteSpace(ch);
-    }
-
-    private static bool HasRethrow(string[] lines, int start, int end)
-    {
-        int depth = 0;
-        for (int i = start; i < end && i < lines.Length; i++)
-        {
-            var trimmed = lines[i].TrimStart();
-            depth += CountUnquotedChar(lines[i], '{') - CountUnquotedChar(lines[i], '}');
-            if (depth < 0) break;
-            if (trimmed.StartsWith("throw") && (trimmed.Length == 5 || trimmed[5] is ' ' or ';'))
-                return true;
-        }
-        return false;
-    }
-
-    private static List<ParameterDeclaration> ParseParameters(string paramString)
-    {
-        var parameters = new List<ParameterDeclaration>();
-        if (string.IsNullOrWhiteSpace(paramString)) return parameters;
-
-        foreach (var part in paramString.Split(',', StringSplitOptions.TrimEntries))
-        {
-            var trimmed = part.Trim();
-            if (string.IsNullOrWhiteSpace(trimmed)) continue;
-
-            bool isVariadic = trimmed.StartsWith("...");
-            if (isVariadic) trimmed = trimmed[3..];
-
-            // Remove TS type annotations: name: Type
-            var colonIdx = trimmed.IndexOf(':');
-            string? typeText = null;
-            if (colonIdx > 0)
+            bool hasImplements = false;
+            if (_idx < _tok.Count && _tok[_idx].IsWord("implements"))
             {
-                typeText = trimmed[(colonIdx + 1)..].Trim();
-                trimmed = trimmed[..colonIdx].Trim();
+                hasImplements = true; _idx++;
+                while (_idx < _tok.Count && !_tok[_idx].IsPunct("{")) _idx++;
             }
 
-            // Remove default values: name = value
-            var eqIdx = trimmed.IndexOf('=');
-            bool hasDefault = eqIdx > 0;
-            if (hasDefault) trimmed = trimmed[..eqIdx].Trim();
+            while (_idx < _tok.Count && !_tok[_idx].IsPunct("{")) _idx++;
 
-            // Remove optional marker: name?
-            if (trimmed.EndsWith('?')) trimmed = trimmed[..^1];
+            if (_idx >= _tok.Count)
+            {
+                Errors.Add($"{_fp}({classLine},1): error: Missing body for class '{className}'");
+                return null;
+            }
 
-            var typeRef = typeText != null ? new TypeReference(typeText, null, [], typeText) : null;
-            parameters.Add(new ParameterDeclaration(trimmed, typeRef, isVariadic, false, hasDefault, 0));
+            int openBrace = _idx;
+            int closeBrace = FindMatchingBrace(openBrace);
+            _idx = closeBrace + 1;
+
+            var methods = new List<MethodDeclaration>();
+            var constructors = new List<MethodDeclaration>();
+            ParseClassBody(openBrace, closeBrace, methods, constructors);
+
+            var baseTypes = baseType != null ? new List<string> { baseType } : new List<string>();
+            var modifiers = isExported ? Modifier.Public : Modifier.None;
+
+            return new TypeDeclaration(className, TypeKind.Class, modifiers,
+                baseTypes, [], constructors, methods, [], [], classLine)
+                .AsJavaScript(isExported: isExported, hasBaseClass: baseTypes.Count > 0,
+                    isAbstract: isAbstract, isGeneric: isGeneric, hasImplements: hasImplements);
         }
 
-        return parameters;
-    }
-
-    private static int SkipBlockComment(string[] lines, int startLine)
-    {
-        for (int i = startLine; i < lines.Length; i++)
+        private void ParseClassBody(int openBrace, int closeBrace,
+            List<MethodDeclaration> methods, List<MethodDeclaration> constructors)
         {
-            if (lines[i].Contains("*/"))
-                return i + 1;
-        }
-        return lines.Length;
-    }
-
-    private static int SkipBracedBlock(string[] lines, int startLine)
-    {
-        int depth = 0;
-        for (int i = startLine; i < lines.Length; i++)
-        {
-            depth += CountUnquotedChar(lines[i], '{') - CountUnquotedChar(lines[i], '}');
-            if (depth <= 0) return i + 1;
-        }
-        return lines.Length;
-    }
-
-    private static int FindCharOnLine(string line, char ch)
-    {
-        bool inString = false;
-        char strChar = '\0';
-        for (int i = 0; i < line.Length; i++)
-        {
-            if (inString)
+            int idx = openBrace + 1;
+            while (idx < closeBrace && idx < _tok.Count)
             {
-                if (line[i] == strChar && (i == 0 || line[i - 1] != '\\'))
-                    inString = false;
-                continue;
-            }
-            if (line[i] is '\'' or '"' or '`')
-            {
-                inString = true;
-                strChar = line[i];
-                continue;
-            }
-            if (line[i] == ch) return i;
-        }
-        return -1;
-    }
-
-    private static int CountUnquotedChar(string line, char ch)
-    {
-        int count = 0;
-        bool inString = false;
-        char strChar = '\0';
-        for (int i = 0; i < line.Length; i++)
-        {
-            if (inString)
-            {
-                if (line[i] == strChar && (i == 0 || line[i - 1] != '\\'))
-                    inString = false;
-                continue;
-            }
-            if (line[i] is '\'' or '"' or '`')
-            {
-                inString = true;
-                strChar = line[i];
-                continue;
-            }
-            if (line[i] == '/') // Skip line comments
-            {
-                if (i + 1 < line.Length && line[i + 1] == '/') break;
-            }
-            if (line[i] == ch) count++;
-        }
-        return count;
-    }
-
-    // Extracts regions from // [START name] / // [END name] comment markers
-    private static List<RegionInfo> ExtractRegions(string[] lines)
-    {
-        var regions = new List<RegionInfo>();
-        var stack = new Stack<(string Name, int Line)>();
-
-        for (int i = 0; i < lines.Length; i++)
-        {
-            var trimmed = lines[i].TrimStart();
-            if (trimmed.StartsWith("// [START"))
-            {
-                if (TryParseSnippetMarker(trimmed, "START", out var startName))
-                    stack.Push((startName, i + 1));
-            }
-            else if (trimmed.StartsWith("// [END") && stack.Count > 0)
-            {
-                if (TryParseSnippetMarker(trimmed, "END", out var endName))
+                while (idx < closeBrace && _tok[idx].IsPunct("@"))
                 {
-                    var items = new List<(string Name, int Line)>();
-                    while (stack.Count > 0)
+                    idx++;
+                    while (idx < closeBrace && (_tok[idx].IsIdent || _tok[idx].IsPunct("."))) idx++;
+                    if (idx < closeBrace && _tok[idx].IsPunct("("))
+                        idx = FindMatchingClose(idx) + 1;
+                }
+                if (idx >= closeBrace) break;
+
+                if (_tok[idx].IsPunct(";")) { idx++; continue; }
+
+                bool isStatic = false, isAsync = false, isAbstractM = false;
+                bool isGenerator = false, isGetter = false, isSetter = false;
+
+                while (idx < closeBrace)
+                {
+                    var t = _tok[idx];
+                    if (t.IsWord("static")) { isStatic = true; idx++; }
+                    else if (t.IsWord("async")) { isAsync = true; idx++; }
+                    else if (t.IsWord("abstract")) { isAbstractM = true; idx++; }
+                    else if (t.IsWord("override") || t.IsWord("readonly")
+                          || t.IsWord("public") || t.IsWord("protected") || t.IsWord("private"))
+                        idx++;
+                    else break;
+                }
+                if (idx >= closeBrace) break;
+
+                if (_tok[idx].IsPunct("*")) { isGenerator = true; idx++; }
+                if (idx >= closeBrace) break;
+
+                if (!isGenerator && (_tok[idx].IsWord("get") || _tok[idx].IsWord("set")))
+                {
+                    if (idx + 2 < closeBrace && _tok[idx + 1].IsIdent && _tok[idx + 2].IsPunct("("))
                     {
-                        var top = stack.Pop();
-                        if (top.Name == endName)
-                        {
-                            int startLine = top.Line;
-                            int endLine = i + 1;
-                            var contentLines = new List<string>();
-                            for (int j = startLine; j < endLine - 1 && j < lines.Length; j++)
-                                contentLines.Add(lines[j].TrimEnd('\r'));
-                            var content = string.Join('\n', contentLines);
-                            regions.Add(new RegionInfo(endName, startLine, endLine, content));
-                            for (int k = items.Count - 1; k >= 0; k--)
-                                stack.Push(items[k]);
-                            break;
-                        }
-                        items.Add(top);
+                        isGetter = _tok[idx].IsWord("get");
+                        isSetter = _tok[idx].IsWord("set");
+                        idx++;
                     }
                 }
+                if (idx >= closeBrace) break;
+
+                if (_tok[idx].IsPunct("["))
+                {
+                    idx = FindMatchingClose(idx) + 1;
+                    SkipMemberRemainder(ref idx, closeBrace);
+                    continue;
+                }
+
+                if (!_tok[idx].IsIdent) { idx++; continue; }
+
+                string memberName = _tok[idx].Value;
+                int memberLine = _tok[idx].Line;
+                idx++;
+
+                // Arrow class field: name = (...) => ...
+                if (idx < closeBrace && _tok[idx].IsPunct("="))
+                {
+                    idx++;
+                    if (idx < closeBrace && _tok[idx].IsWord("async")) { isAsync = true; idx++; }
+
+                    if (idx < closeBrace && _tok[idx].IsPunct("("))
+                    {
+                        int closeP = FindMatchingClose(idx);
+                        var parms = ParseParametersFromTokens(idx, closeP);
+                        idx = closeP + 1;
+
+                        if (idx < closeBrace && _tok[idx].IsPunct(":")) { idx++; SkipTsTypeAt(ref idx, closeBrace); }
+
+                        if (idx < closeBrace && _tok[idx].IsPunct("=>"))
+                        {
+                            idx++;
+                            List<StatementInfo> arrowStmts;
+                            if (idx < closeBrace && _tok[idx].IsPunct("{"))
+                            {
+                                int bc2 = FindMatchingBrace(idx);
+                                arrowStmts = ParseBodyStatements(idx, bc2, isInMethod: true);
+                                Statements.AddRange(arrowStmts);
+                                idx = bc2 + 1;
+                            }
+                            else
+                            {
+                                arrowStmts = [];
+                                while (idx < closeBrace && !_tok[idx].IsPunct(";") && !_tok[idx].IsPunct("}")) idx++;
+                                if (idx < closeBrace && _tok[idx].IsPunct(";")) idx++;
+                            }
+                            var mod2 = Modifier.Public;
+                            if (isStatic) mod2 |= Modifier.Static;
+                            if (isAsync) mod2 |= Modifier.Async;
+                            var m2 = NewMethod(memberName, mod2, [], null, parms, memberLine, arrowStmts)
+                                .AsJavaScript(isArrow: true);
+                            if (memberName == "constructor") constructors.Add(m2); else methods.Add(m2);
+                            continue;
+                        }
+                    }
+                    while (idx < closeBrace && !_tok[idx].IsPunct(";") && !_tok[idx].IsPunct("}")) idx++;
+                    if (idx < closeBrace && _tok[idx].IsPunct(";")) idx++;
+                    continue;
+                }
+
+                // TS class field: name: Type;
+                if (idx < closeBrace && _tok[idx].IsPunct(":") && (idx + 1 >= closeBrace || !_tok[idx + 1].IsPunct(":")))
+                {
+                    idx++;
+                    SkipTsTypeAt(ref idx, closeBrace);
+                    if (idx < closeBrace && _tok[idx].IsPunct("="))
+                    {
+                        idx++;
+                        while (idx < closeBrace && !_tok[idx].IsPunct(";") && !_tok[idx].IsPunct("}")) idx++;
+                    }
+                    if (idx < closeBrace && _tok[idx].IsPunct(";")) idx++;
+                    continue;
+                }
+
+                // Regular method: name(...) { ... }
+                if (idx < closeBrace && _tok[idx].IsPunct("("))
+                {
+                    int closeP = FindMatchingClose(idx);
+                    var parms = ParseParametersFromTokens(idx, closeP);
+                    idx = closeP + 1;
+
+                    if (idx < closeBrace && _tok[idx].IsPunct(":"))
+                    { idx++; SkipTsTypeAt(ref idx, closeBrace); }
+
+                    if (idx >= closeBrace || _tok[idx].IsPunct(";")) { if (idx < closeBrace) idx++; continue; }
+
+                    if (idx < closeBrace && _tok[idx].IsPunct("{"))
+                    {
+                        int bc = FindMatchingBrace(idx);
+                        var bStmts = ParseBodyStatements(idx, bc, isInMethod: true);
+                        Statements.AddRange(bStmts);
+                        idx = bc + 1;
+
+                        var mod = Modifier.Public;
+                        if (isStatic) mod |= Modifier.Static;
+                        if (isAsync) mod |= Modifier.Async;
+                        if (isAbstractM) mod |= Modifier.Abstract;
+
+                        var meth = NewMethod(memberName, mod, [], null, parms, memberLine, bStmts)
+                            .AsJavaScript(isGenerator: isGenerator, isGetter: isGetter, isSetter: isSetter);
+                        if (memberName == "constructor") constructors.Add(meth); else methods.Add(meth);
+                    }
+                    continue;
+                }
+
+                while (idx < closeBrace && !_tok[idx].IsPunct(";") && !_tok[idx].IsPunct("}")) idx++;
+                if (idx < closeBrace && _tok[idx].IsPunct(";")) idx++;
             }
         }
 
-        return regions;
-    }
-
-    private static HashSet<int> ExtractCommentLines(string[] lines)
-    {
-        var commentLines = new HashSet<int>();
-        bool inBlockComment = false;
-
-        for (int i = 0; i < lines.Length; i++)
+        private void SkipMemberRemainder(ref int idx, int closeBrace)
         {
-            var trimmed = lines[i].TrimStart();
-
-            if (inBlockComment)
+            if (idx < closeBrace && _tok[idx].IsPunct("("))
             {
-                commentLines.Add(i + 1);
-                if (trimmed.Contains("*/"))
-                    inBlockComment = false;
-                continue;
+                idx = FindMatchingClose(idx) + 1;
+                if (idx < closeBrace && _tok[idx].IsPunct(":")) { idx++; SkipTsTypeAt(ref idx, closeBrace); }
+                if (idx < closeBrace && _tok[idx].IsPunct("{")) idx = FindMatchingBrace(idx) + 1;
+                else if (idx < closeBrace && _tok[idx].IsPunct(";")) idx++;
+            }
+            else
+            {
+                while (idx < closeBrace && !_tok[idx].IsPunct(";") && !_tok[idx].IsPunct("}")) idx++;
+                if (idx < closeBrace && _tok[idx].IsPunct(";")) idx++;
+            }
+        }
+        private void ParseFunction(bool isExported, bool isAsync)
+        {
+            _idx++;
+            bool isGenerator = false;
+            if (_idx < _tok.Count && _tok[_idx].IsPunct("*")) { isGenerator = true; _idx++; }
+
+            if (_idx >= _tok.Count || !_tok[_idx].IsIdent) { SkipToBlockEnd(); return; }
+            _idx++;
+
+            if (_idx < _tok.Count && _tok[_idx].IsPunct("<"))
+                _idx = FindMatchingClose(_idx) + 1;
+
+            if (_idx >= _tok.Count || !_tok[_idx].IsPunct("(")) { SkipToBlockEnd(); return; }
+
+            int closeP = FindMatchingClose(_idx);
+            _idx = closeP + 1;
+
+            if (_idx < _tok.Count && _tok[_idx].IsPunct(":"))
+            { _idx++; SkipTsTypeGlobal(); }
+
+            if (_idx >= _tok.Count || !_tok[_idx].IsPunct("{")) return;
+
+            int openBrace = _idx;
+            int closeBrace = FindMatchingBrace(openBrace);
+            _idx = closeBrace + 1;
+
+            var bStmts = ParseBodyStatements(openBrace, closeBrace, isInMethod: true);
+            Statements.AddRange(bStmts);
+        }
+
+        private void ParseTsType(bool isExported)
+        {
+            TypeKind kind = _tok[_idx].IsWord("interface") ? TypeKind.Interface : TypeKind.Enum;
+            int typeLine = _tok[_idx].Line;
+            _idx++;
+
+            if (_idx >= _tok.Count || !_tok[_idx].IsIdent) { SkipToBlockOrSemi(); return; }
+
+            string typeName = _tok[_idx].Value; _idx++;
+
+            if (_idx < _tok.Count && _tok[_idx].IsPunct("<"))
+                _idx = FindMatchingClose(_idx) + 1;
+
+            while (_idx < _tok.Count && (_tok[_idx].IsWord("extends") || _tok[_idx].IsWord("implements")))
+            {
+                _idx++;
+                while (_idx < _tok.Count && !_tok[_idx].IsPunct("{") && !_tok[_idx].IsPunct(";")) _idx++;
             }
 
-            if (trimmed.StartsWith("//"))
+            if (_idx < _tok.Count && _tok[_idx].IsPunct("{"))
+            { int cb = FindMatchingBrace(_idx); _idx = cb + 1; }
+            else if (_idx < _tok.Count && _tok[_idx].IsPunct(";"))
+                _idx++;
+
+            var modifiers = isExported ? Modifier.Public : Modifier.None;
+            Types.Add(new TypeDeclaration(typeName, kind, modifiers, [], [], [], [], [], [], typeLine)
+                .AsJavaScript(isExported: isExported));
+        }
+
+        private List<StatementInfo> ParseBodyStatements(int openBrace, int closeBrace, bool isInMethod)
+        {
+            var stmts = new List<StatementInfo>();
+            int idx = openBrace + 1;
+
+            while (idx < closeBrace && idx < _tok.Count)
             {
-                commentLines.Add(i + 1);
+                var t = _tok[idx];
+
+                if (t.IsWord("catch"))
+                {
+                    int catchLine = t.Line; idx++;
+                    if (idx < closeBrace && _tok[idx].IsPunct("("))
+                        idx = FindMatchingClose(idx) + 1;
+                    bool hasRethrow = false;
+                    if (idx < closeBrace && _tok[idx].IsPunct("{"))
+                    {
+                        int catchClose = FindMatchingBrace(idx);
+                        hasRethrow = ScanForRethrow(idx + 1, catchClose);
+                    }
+                    stmts.Add(new JavaScriptStatementInfo("catch", [], null, null, [], catchLine, isInMethod)
+                    { HasRethrow = hasRethrow, IsErrorHandler = true, IsGenericErrorHandler = true });
+                    continue;
+                }
+
+                if (t.IsWord("try"))
+                {
+                    stmts.Add(new JavaScriptStatementInfo("try", [], null, null, [], t.Line, isInMethod));
+                    idx++; continue;
+                }
+
+                if (t.IsWord("for"))
+                {
+                    int forLine = t.Line; idx++;
+                    if (idx < closeBrace && _tok[idx].IsPunct("("))
+                    {
+                        int pe = FindMatchingClose(idx);
+                        bool hasOf = HasWordInRange(idx + 1, pe, "of");
+                        bool hasIn = HasWordInRange(idx + 1, pe, "in");
+                        if (hasOf)
+                            stmts.Add(new JavaScriptStatementInfo("for-of", ["for"], null, null, [], forLine, isInMethod));
+                        else if (hasIn)
+                            stmts.Add(new JavaScriptStatementInfo("for-in", ["for"], null, null, [], forLine, isInMethod));
+                        idx = pe + 1;
+                    }
+                    continue;
+                }
+
+                if (t.IsWord("debugger"))
+                {
+                    stmts.Add(new JavaScriptStatementInfo("call", ["debugger"], null, "debugger", [], t.Line, isInMethod));
+                    idx++; continue;
+                }
+
+                if (t.IsWord("throw"))
+                {
+                    int throwLine = t.Line; idx++;
+                    string? throwType = null;
+                    if (idx < closeBrace && _tok[idx].IsWord("new"))
+                    {
+                        idx++;
+                        if (idx < closeBrace && _tok[idx].IsIdent) throwType = _tok[idx].Value;
+                    }
+                    stmts.Add(new JavaScriptStatementInfo("throw", [], throwType, null, [], throwLine, isInMethod));
+                    idx = SkipToSemi(idx, closeBrace);
+                    continue;
+                }
+
+                if (t.IsWord("return") && idx + 1 < closeBrace && _tok[idx + 1].IsWord("await"))
+                {
+                    int awaitLine = t.Line; idx += 2;
+                    EmitAwait(stmts, idx, closeBrace, isInMethod, awaitLine);
+                    idx = SkipToSemi(idx, closeBrace);
+                    continue;
+                }
+
+                if (t.IsWord("const") || t.IsWord("let") || t.IsWord("var"))
+                {
+                    string kw = t.Value; int declLine = t.Line; idx++;
+                    string? varName = null;
+                    if (idx < closeBrace && _tok[idx].IsIdent) { varName = _tok[idx].Value; idx++; }
+                    else if (idx < closeBrace && (_tok[idx].IsPunct("{") || _tok[idx].IsPunct("[")))
+                        idx = FindMatchingClose(idx) + 1;
+
+                    if (idx < closeBrace && _tok[idx].IsPunct(":"))
+                    { idx++; SkipTsTypeAt(ref idx, closeBrace); }
+
+                    if (varName != null)
+                        stmts.Add(new JavaScriptStatementInfo("declaration", [kw], null, varName, [], declLine, isInMethod));
+
+                    if (idx < closeBrace && _tok[idx].IsPunct("="))
+                    {
+                        idx++;
+                        if (idx < closeBrace && _tok[idx].IsWord("await"))
+                        { int awaitLine = _tok[idx].Line; idx++; EmitAwait(stmts, idx, closeBrace, isInMethod, awaitLine); }
+                        else
+                        { TryEmitCallAt(stmts, idx, closeBrace, isInMethod, declLine, out _); }
+                    }
+                    idx = SkipToSemi(idx, closeBrace);
+                    continue;
+                }
+
+                if (t.IsWord("await") && idx + 1 < closeBrace)
+                {
+                    int awaitLine = t.Line; idx++;
+                    EmitAwait(stmts, idx, closeBrace, isInMethod, awaitLine);
+                    idx = SkipToSemi(idx, closeBrace);
+                    continue;
+                }
+
+                if (t.IsIdent && !IsCtrlKw(t.Value))
+                {
+                    if (TryEmitCallAt(stmts, idx, closeBrace, isInMethod, t.Line, out int afterCall))
+                        idx = afterCall;
+                    else idx++;
+                    continue;
+                }
+
+                idx++;
             }
-            else if (trimmed.StartsWith("/*"))
+
+            return stmts;
+        }
+
+        private void EmitAwait(List<StatementInfo> stmts, int idx, int endIdx, bool isInMethod, int line)
+        {
+            string? typeName = null, memberName = null;
+            if (idx < endIdx && _tok[idx].IsIdent)
             {
-                commentLines.Add(i + 1);
-                if (!trimmed.Contains("*/"))
-                    inBlockComment = true;
+                var parts = new List<string> { _tok[idx].Value };
+                int j = idx + 1;
+                while (j + 1 < endIdx && _tok[j].IsPunct(".") && _tok[j + 1].IsIdent)
+                { parts.Add(_tok[j + 1].Value); j += 2; }
+                if (j < endIdx && _tok[j].IsPunct("("))
+                {
+                    memberName = parts[^1];
+                    typeName = parts.Count > 1 ? string.Join(".", parts[..^1]) : null;
+                }
+            }
+
+            if (memberName != null && !IsCallKw(memberName))
+            {
+                stmts.Add(new JavaScriptStatementInfo("await", [], typeName, memberName, [], line, isInMethod));
+                stmts.Add(new JavaScriptStatementInfo("call", [], typeName, memberName, [], line, isInMethod));
+            }
+            else
+                stmts.Add(new JavaScriptStatementInfo("await", [], null, memberName, [], line, isInMethod));
+        }
+
+        private bool TryEmitCallAt(List<StatementInfo> stmts, int idx, int endIdx,
+            bool isInMethod, int line, out int newIdx)
+        {
+            newIdx = idx + 1;
+            if (idx >= endIdx || !_tok[idx].IsIdent) return false;
+
+            var parts = new List<string> { _tok[idx].Value };
+            int j = idx + 1;
+            while (j + 1 < endIdx && _tok[j].IsPunct(".") && _tok[j + 1].IsIdent)
+            { parts.Add(_tok[j + 1].Value); j += 2; }
+
+            if (j >= endIdx || !_tok[j].IsPunct("(")) return false;
+
+            string memberName = parts[^1];
+            string? typeName = parts.Count > 1 ? string.Join(".", parts[..^1]) : null;
+
+            if (!IsCallKw(memberName))
+                stmts.Add(new JavaScriptStatementInfo("call", [], typeName, memberName, [], line, isInMethod));
+
+            newIdx = FindMatchingClose(j) + 1;
+            return true;
+        }
+        private List<ParameterDeclaration> ParseParametersFromTokens(int openParen, int closeParen)
+        {
+            var result = new List<ParameterDeclaration>();
+            int idx = openParen + 1;
+
+            while (idx < closeParen && idx < _tok.Count)
+            {
+                if (_tok[idx].IsPunct(",")) { idx++; continue; }
+
+                bool isVariadic = false;
+                if (_tok[idx].IsPunct("...")) { isVariadic = true; idx++; }
+
+                if (idx >= closeParen || !_tok[idx].IsIdent) { idx++; continue; }
+
+                string name = _tok[idx].Value; idx++;
+
+                if (idx < closeParen && _tok[idx].IsPunct("?")) idx++;
+
+                TypeReference? typeRef = null;
+                if (idx < closeParen && _tok[idx].IsPunct(":"))
+                { idx++; typeRef = ParseTypeAnnotationAt(ref idx, closeParen); }
+
+                bool hasDefault = false;
+                if (idx < closeParen && _tok[idx].IsPunct("="))
+                {
+                    hasDefault = true; idx++;
+                    int depth = 0;
+                    while (idx < closeParen)
+                    {
+                        if (_tok[idx].IsPunct("(") || _tok[idx].IsPunct("[") || _tok[idx].IsPunct("{")) depth++;
+                        else if (_tok[idx].IsPunct(")") || _tok[idx].IsPunct("]") || _tok[idx].IsPunct("}"))
+                        { if (depth == 0) break; depth--; }
+                        else if (_tok[idx].IsPunct(",") && depth == 0) break;
+                        idx++;
+                    }
+                }
+
+                result.Add(new ParameterDeclaration(name, typeRef, isVariadic, false, hasDefault, 0));
+            }
+
+            return result;
+        }
+
+        private TypeReference? ParseTypeAnnotationAt(ref int idx, int endIdx)
+        {
+            if (idx >= endIdx || !_tok[idx].IsIdent) return null;
+            string name = _tok[idx].Value; idx++;
+
+            if (idx < endIdx && _tok[idx].IsPunct("<"))
+                idx = FindMatchingClose(idx) + 1;
+
+            while (idx < endIdx && _tok[idx].IsPunct("[") && idx + 1 < endIdx && _tok[idx + 1].IsPunct("]"))
+                idx += 2;
+
+            while (idx < endIdx && (_tok[idx].IsPunct("|") || _tok[idx].IsPunct("&")))
+            {
+                idx++;
+                if (idx < endIdx && _tok[idx].IsIdent) { idx++; if (idx < endIdx && _tok[idx].IsPunct("<")) idx = FindMatchingClose(idx) + 1; }
+            }
+
+            return new TypeReference(name, null, [], name);
+        }
+
+        private bool ScanForRethrow(int start, int end)
+        {
+            int depth = 0;
+            for (int i = start; i < end && i < _tok.Count; i++)
+            {
+                var t = _tok[i];
+                if (t.IsPunct("{")) depth++;
+                else if (t.IsPunct("}")) { depth--; if (depth < 0) return false; }
+                else if (t.IsWord("throw")) return true;
+            }
+            return false;
+        }
+
+        private void SkipTsTypeAt(ref int idx, int endIdx)
+        {
+            int depth = 0;
+            while (idx < endIdx && idx < _tok.Count)
+            {
+                var t = _tok[idx];
+                if (t.IsPunct("(") || t.IsPunct("[") || t.IsPunct("<")) { depth++; idx++; continue; }
+                if (t.IsPunct(">") || t.IsPunct(")") || t.IsPunct("]"))
+                { if (depth > 0) { depth--; idx++; continue; } break; }
+                if (t.IsPunct("{") && depth == 0) break;
+                if (t.IsPunct("{")) { depth++; idx++; continue; }
+                if (t.IsPunct("}")) { if (depth > 0) { depth--; idx++; continue; } break; }
+                if ((t.IsPunct(";") || t.IsPunct(",") || t.IsPunct("=")) && depth == 0) break;
+                idx++;
             }
         }
 
-        return commentLines;
+        private void SkipTsTypeGlobal()
+        {
+            int depth = 0;
+            while (_idx < _tok.Count)
+            {
+                var t = _tok[_idx];
+                if (t.IsPunct("(") || t.IsPunct("[") || t.IsPunct("<")) { depth++; _idx++; continue; }
+                if (t.IsPunct(">") || t.IsPunct(")") || t.IsPunct("]"))
+                { if (depth > 0) { depth--; _idx++; continue; } break; }
+                if ((t.IsPunct("{") || t.IsPunct(";")) && depth == 0) break;
+                if (t.IsPunct("{")) { depth++; _idx++; continue; }
+                if (t.IsPunct("}")) { if (depth > 0) { depth--; _idx++; continue; } break; }
+                _idx++;
+            }
+        }
+
+        private int FindMatchingBrace(int openIdx)
+        {
+            int depth = 1, idx = openIdx + 1;
+            while (idx < _tok.Count && depth > 0)
+            {
+                if (_tok[idx].IsPunct("{")) depth++;
+                else if (_tok[idx].IsPunct("}")) depth--;
+                idx++;
+            }
+            return idx - 1;
+        }
+
+        private int FindMatchingClose(int openIdx)
+        {
+            if (openIdx >= _tok.Count) return openIdx;
+            string open = _tok[openIdx].Value;
+            string close = open == "(" ? ")" : open == "[" ? "]" : open == "<" ? ">" : "}";
+            int depth = 1, idx = openIdx + 1;
+            while (idx < _tok.Count && depth > 0)
+            {
+                if (_tok[idx].IsPunct(open)) depth++;
+                else if (_tok[idx].IsPunct(close)) depth--;
+                idx++;
+            }
+            return idx - 1;
+        }
+
+        private int FindStatementEnd(int startIdx)
+        {
+            int depth = 0, idx = startIdx;
+            while (idx < _tok.Count)
+            {
+                var t = _tok[idx];
+                if (t.IsPunct("(") || t.IsPunct("[") || t.IsPunct("{")) depth++;
+                else if (t.IsPunct(")") || t.IsPunct("]")) { if (depth > 0) depth--; }
+                else if (t.IsPunct("}")) { if (depth > 0) depth--; else return idx; }
+                else if (t.IsPunct(";") && depth == 0) return idx + 1;
+                idx++;
+            }
+            return idx;
+        }
+
+        private int SkipToSemi(int idx, int endIdx)
+        {
+            int depth = 0;
+            while (idx < endIdx && idx < _tok.Count)
+            {
+                var t = _tok[idx];
+                if (t.IsPunct("(") || t.IsPunct("[") || t.IsPunct("{")) depth++;
+                else if (t.IsPunct(")") || t.IsPunct("]") || t.IsPunct("}"))
+                { if (depth == 0) return idx; depth--; }
+                else if (t.IsPunct(";") && depth == 0) return idx + 1;
+                idx++;
+            }
+            return idx;
+        }
+
+        private void SkipToSemiConsuming()
+        {
+            int depth = 0;
+            while (_idx < _tok.Count)
+            {
+                var t = _tok[_idx];
+                if (t.IsPunct("{") || t.IsPunct("(") || t.IsPunct("[")) { depth++; _idx++; }
+                else if (t.IsPunct("}") || t.IsPunct(")") || t.IsPunct("]"))
+                { if (depth > 0) { depth--; _idx++; } else break; }
+                else if (t.IsPunct(";") && depth == 0) { _idx++; return; }
+                else _idx++;
+            }
+        }
+
+        // Skip a TypeScript 'type Foo = ...' declaration (may contain { ... } objects)
+        private void SkipTypeDecl()
+        {
+            // _idx currently points to 'type'; skip name and = ... ; (depth-aware)
+            int depth = 0;
+            while (_idx < _tok.Count)
+            {
+                var t = _tok[_idx];
+                if (t.IsPunct("{") || t.IsPunct("(") || t.IsPunct("[")) { depth++; _idx++; }
+                else if (t.IsPunct("}") || t.IsPunct(")") || t.IsPunct("]"))
+                { if (depth > 0) { depth--; _idx++; } else break; }
+                else if (t.IsPunct(";") && depth == 0) { _idx++; return; }
+                else _idx++;
+            }
+        }
+
+        private void SkipToBlockEnd()
+        {
+            while (_idx < _tok.Count && !_tok[_idx].IsPunct("{")) _idx++;
+            if (_idx < _tok.Count && _tok[_idx].IsPunct("{")) _idx = FindMatchingBrace(_idx) + 1;
+        }
+
+        private void SkipToBlockOrSemi()
+        {
+            while (_idx < _tok.Count && !_tok[_idx].IsPunct("{") && !_tok[_idx].IsPunct(";")) _idx++;
+            if (_idx < _tok.Count && _tok[_idx].IsPunct("{")) _idx = FindMatchingBrace(_idx) + 1;
+            else if (_idx < _tok.Count && _tok[_idx].IsPunct(";")) _idx++;
+        }
+
+        private bool HasWordInRange(int start, int end, string word)
+        {
+            for (int i = start; i < end && i < _tok.Count; i++)
+                if (_tok[i].IsWord(word)) return true;
+            return false;
+        }
+
+        private static string UnquoteStr(string s)
+        {
+            if (s.Length < 2) return s;
+            char f = s[0];
+            return (f == '\'' || f == '"' || f == '`') ? s[1..^1] : s;
+        }
+
+        private static bool IsCtrlKw(string name) => name is
+            "if" or "else" or "for" or "while" or "switch" or "do" or "function" or "class"
+            or "return" or "new" or "typeof" or "import" or "require" or "catch" or "throw"
+            or "try" or "const" or "let" or "var" or "this" or "super" or "export"
+            or "default" or "break" or "continue" or "yield" or "async" or "await"
+            or "debugger" or "delete" or "void" or "in" or "instanceof" or "of"
+            or "true" or "false" or "null" or "undefined";
+
+        private static bool IsCallKw(string name) => name is
+            "if" or "for" or "while" or "switch" or "function" or "class"
+            or "return" or "new" or "typeof" or "import" or "require" or "catch" or "throw";
+
+        private static MethodDeclaration NewMethod(string name, Modifier mods,
+            List<string> decorators, TypeReference? returnType,
+            List<ParameterDeclaration> parms, int line, List<StatementInfo> stmts)
+        {
+            var m = new MethodDeclaration(name, mods, decorators, returnType, parms, line);
+            m.Statements = stmts;
+            return m;
+        }
     }
 }

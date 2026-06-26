@@ -9,7 +9,7 @@ namespace Cop.Providers.SourceModel;
 /// </summary>
 public static class LanguageTypeRegistry
 {
-    private static readonly Dictionary<string, Func<TypeDeclaration, IReadOnlyDictionary<string, bool>, TypeDeclaration>> _factories = new(StringComparer.Ordinal);
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Func<TypeDeclaration, IReadOnlyDictionary<string, bool>, TypeDeclaration>> _factories = new(StringComparer.Ordinal);
 
     public static void Register(string tag, Func<TypeDeclaration, IReadOnlyDictionary<string, bool>, TypeDeclaration> factory)
         => _factories[tag] = factory;

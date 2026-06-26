@@ -251,6 +251,14 @@ The `java.parse()` function returns a `Codebase` with these collections:
 | `cb.Lines` | Every line of code (with kind: code/comment/blank) |
 | `cb.Projects` | Maven/Gradle modules (`pom.xml` / `build.gradle`) with their dependencies |
 
+### Syntax-error reporting
+
+`java.parse()` uses a real lexer + recursive-descent parser (not a line scanner). When a `.java`
+file contains a syntax error — an unterminated string/text-block, an unterminated comment, or
+unbalanced `{}`/`()` — cop surfaces it as a **warning** of the form
+`path(line,col): error: message` and still analyzes the rest of that file and every other file.
+Malformed sources are reported, never silently skipped.
+
 ---
 
 ## 8. Next Steps

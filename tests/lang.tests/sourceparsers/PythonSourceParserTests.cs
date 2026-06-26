@@ -218,4 +218,72 @@ public class PythonSourceParserTests
         Assert.That(result.CommentLines, Does.Not.Contain(1));
         Assert.That(result.CommentLines, Does.Not.Contain(3));
     }
+
+    // ── ParseErrors — negative tests (malformed Python) ──
+
+    [Test]
+    public void Parse_UnterminatedStringLiteral_ReportsError()
+    {
+        // Double-quoted string that never closes before end of line
+        var source = "x = \"hello\nprint('done')\n";
+        var result = _parser.Parse("test.py", source)!;
+        Assert.That(result.ParseErrors, Has.Some.Contains("unterminated string literal"),
+            "Should report unterminated string literal");
+        Assert.That(result.ParseErrors, Has.Some.Contains("test.py(1,"),
+            "Error should reference line 1 of test.py");
+    }
+
+    [Test]
+    public void Parse_ClassMissingName_ReportsError()
+    {
+        // 'class' with no name before the colon
+        var source = "class :\n    pass\n";
+        var result = _parser.Parse("test.py", source)!;
+        Assert.That(result.ParseErrors, Has.Some.Contains("test.py(1,"),
+            "Error should reference line 1 of test.py");
+        Assert.That(result.ParseErrors, Has.Some.Contains("class name"),
+            "Error should mention 'class name'");
+    }
+
+    [Test]
+    public void Parse_DefMissingColon_ReportsError()
+    {
+        // def whose parameter list has no closing ':' on the header line
+        var source = "def foo(x)\n    pass\n";
+        var result = _parser.Parse("test.py", source)!;
+        Assert.That(result.ParseErrors, Has.Some.Contains("test.py(1,"),
+            "Error should reference line 1 of test.py");
+        Assert.That(result.ParseErrors, Has.Some.Contains(":"),
+            "Error should mention the missing ':'");
+    }
+
+    [Test]
+    public void Parse_ValidPythonFile_HasEmptyParseErrors()
+    {
+        // A realistic modern Python file — must produce ZERO parse errors
+        var source = """
+            import os
+            import sys
+            from typing import Optional
+
+            class MyService:
+                '''A service class.'''
+
+                def __init__(self, name: str) -> None:
+                    self.name = name
+
+                def process(self, value: Optional[str] = None) -> str:
+                    if value is None:
+                        return self.name
+                    return self.name + ': ' + (value or '')
+
+            def helper(x: int, y: int = 0) -> int:
+                return x + y
+
+            result = helper(1, 2)
+            """;
+        var result = _parser.Parse("test.py", source)!;
+        Assert.That(result.ParseErrors, Is.Empty,
+            "Valid Python should produce no parse errors");
+    }
 }

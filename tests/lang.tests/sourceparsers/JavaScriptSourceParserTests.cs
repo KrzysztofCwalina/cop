@@ -322,4 +322,98 @@ public class JavaScriptSourceParserTests
         Assert.That(result.CommentLines, Does.Contain(2));
         Assert.That(result.CommentLines, Does.Not.Contain(3));
     }
+
+    // ── ParseErrors: negative tests ──
+
+    [Test]
+    public void Parse_ParseErrors_UnterminatedString()
+    {
+        var source = "const x = \"unterminated;\n";
+        var result = _parser.Parse("test.js", source)!;
+        Assert.That(result.ParseErrors, Is.Not.Empty);
+        Assert.That(result.ParseErrors.Any(e => e.Contains("Unterminated")), Is.True);
+    }
+
+    [Test]
+    public void Parse_ParseErrors_UnbalancedBraces()
+    {
+        var source = "function foo() { if (true) { x(); }\n";
+        var result = _parser.Parse("test.js", source)!;
+        Assert.That(result.ParseErrors, Is.Not.Empty);
+        Assert.That(result.ParseErrors.Any(e => e.Contains("Unclosed") || e.Contains("Unterminated")), Is.True);
+    }
+
+    [Test]
+    public void Parse_ParseErrors_UnterminatedBlockComment()
+    {
+        var source = "const x = 1; /* unterminated comment\n";
+        var result = _parser.Parse("test.js", source)!;
+        Assert.That(result.ParseErrors, Is.Not.Empty);
+        Assert.That(result.ParseErrors.Any(e => e.Contains("Unterminated")), Is.True);
+    }
+
+    // ── ParseErrors: positive control (valid modern TS → zero errors) ──
+
+    [Test]
+    public void Parse_ValidModernTypeScript_NoParseErrors()
+    {
+        var source = """
+            import { useState, useEffect } from 'react';
+            import type { FC } from 'react';
+
+            interface User {
+                id: number;
+                name: string;
+                email?: string;
+            }
+
+            type ApiResponse<T> = {
+                data: T;
+                status: number;
+            };
+
+            const greet = (name: string = 'world'): string => `Hello, ${name}!`;
+
+            async function fetchUser(id: number): Promise<User> {
+                const url = `https://api.example.com/users/${id}`;
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP error: ${response.status}`);
+                }
+                return response.json();
+            }
+
+            class UserService {
+                private users: Map<number, User> = new Map();
+
+                async getUser(id: number): Promise<User | null> {
+                    if (this.users.has(id)) {
+                        return this.users.get(id) ?? null;
+                    }
+                    try {
+                        const user = await fetchUser(id);
+                        this.users.set(id, user);
+                        return user;
+                    } catch (err) {
+                        console.error('Failed to fetch user', err);
+                        return null;
+                    }
+                }
+
+                deleteUser = async (id: number): Promise<void> => {
+                    this.users.delete(id);
+                };
+            }
+
+            const service = new UserService();
+            const [count, setCount] = useState<number>(0);
+            const result = await service.getUser(42);
+            const name = result?.name ?? 'unknown';
+            const upper = name?.toUpperCase?.();
+            export default UserService;
+            """;
+        var result = _parser.Parse("test.ts", source)!;
+        Assert.That(result.ParseErrors, Is.Empty,
+            $"Expected no parse errors but got: {string.Join("; ", result.ParseErrors)}");
+    }
 }

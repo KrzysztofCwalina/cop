@@ -11,7 +11,7 @@ public class JavaSourceParser : ISourceParser
     {
         var lexer = new JavaLexer(sourceText);
         var tokens = lexer.Tokenize();
-        var parser = new JavaParser(tokens, sourceText);
+        var parser = new JavaParser(tokens, lexer.Errors, sourceText);
         return parser.Parse(filePath);
     }
 }
@@ -30,6 +30,8 @@ internal class JavaLexer(string source)
 {
     private int _pos;
     private int _line = 1;
+    private readonly List<(int line, int col, string msg)> _errors = [];
+    public IReadOnlyList<(int line, int col, string msg)> Errors => _errors;
 
     private static readonly HashSet<string> Keywords =
     [
@@ -137,13 +139,16 @@ internal class JavaLexer(string source)
         int line = _line;
         bool isDoc = _pos + 2 < source.Length && source[_pos + 2] == '*';
         _pos += 2;
+        bool closed = false;
         while (_pos < source.Length)
         {
             if (source[_pos] == '*' && _pos + 1 < source.Length && source[_pos + 1] == '/')
-            { _pos += 2; break; }
+            { _pos += 2; closed = true; break; }
             if (source[_pos] == '\n') _line++;
             _pos++;
         }
+        if (!closed)
+            _errors.Add((line, 1, "Unterminated block comment"));
         return new JavaToken(isDoc ? JavaTokenKind.DocComment : JavaTokenKind.BlockComment, source[start.._pos], line, start, _pos);
     }
 
@@ -177,23 +182,33 @@ internal class JavaLexer(string source)
         if (_pos + 2 < source.Length && source[_pos + 1] == '"' && source[_pos + 2] == '"')
         {
             _pos += 3;
+            bool closed = false;
             while (_pos + 2 < source.Length)
             {
                 if (source[_pos] == '"' && source[_pos + 1] == '"' && source[_pos + 2] == '"')
-                { _pos += 3; return new JavaToken(JavaTokenKind.StringLiteral, source[start.._pos], line, start, _pos); }
+                { _pos += 3; closed = true; break; }
                 if (source[_pos] == '\n') _line++;
                 _pos++;
             }
-            _pos = source.Length;
+            if (!closed)
+            {
+                _pos = source.Length;
+                _errors.Add((line, 1, "Unterminated text block"));
+            }
             return new JavaToken(JavaTokenKind.StringLiteral, source[start.._pos], line, start, _pos);
         }
-        _pos++; // skip "
-        while (_pos < source.Length && source[_pos] != '"' && source[_pos] != '\n')
+        _pos++; // skip opening "
+        bool stringClosed = false;
+        while (_pos < source.Length)
         {
-            if (source[_pos] == '\\') _pos++;
+            char ch = source[_pos];
+            if (ch == '\\') { _pos++; if (_pos < source.Length) _pos++; continue; }
+            if (ch == '"') { _pos++; stringClosed = true; break; }
+            if (ch == '\n') break; // unterminated on newline
             _pos++;
         }
-        if (_pos < source.Length && source[_pos] == '"') _pos++;
+        if (!stringClosed)
+            _errors.Add((line, 1, "Unterminated string literal"));
         return new JavaToken(JavaTokenKind.StringLiteral, source[start.._pos], line, start, _pos);
     }
 
@@ -260,9 +275,11 @@ internal class JavaLexer(string source)
 
 #region Parser
 
-internal class JavaParser(List<JavaToken> tokens, string sourceText)
+internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int col, string msg)> lexerErrors, string sourceText)
 {
     private int _pos;
+    private string _filePath = "";
+    private readonly List<string> _parseErrors = [];
     private static bool _diag => Cop.Core.CopDiagnostics.Timing;
 
     /// <summary>
@@ -283,6 +300,10 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
 
     public SourceFile Parse(string filePath)
     {
+        _filePath = filePath;
+        foreach (var (line, col, msg) in lexerErrors)
+            _parseErrors.Add($"{filePath}({line},{col}): error: {msg}");
+
         var types = new List<TypeDeclaration>();
         var statements = new List<StatementInfo>();
         var usings = new List<string>();
@@ -315,12 +336,18 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
             }
         }
 
+        // Only check brace balance when the lexer found no unterminated constructs
+        // (lexer errors may truncate the token stream and cause spurious brace mismatches).
+        if (lexerErrors.Count == 0)
+            CheckBraceBalance();
+
         return new SourceFile(filePath, "java", types, statements, sourceText)
         {
             Namespace = ns,
             Usings = usings,
             Regions = [],
-            CommentLines = ExtractCommentLines()
+            CommentLines = ExtractCommentLines(),
+            ParseErrors = [.. _parseErrors]
         };
     }
 
@@ -353,7 +380,11 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
         else return null;
 
         string name = ConsumeIdentifier();
-        if (name == "") return null;
+        if (name == "")
+        {
+            AddError(CurrentLine(), 1, "Expected type name");
+            return null;
+        }
         int line = CurrentLine();
         bool isGeneric = Check("<");
         SkipGenerics(); // type parameters
@@ -369,19 +400,15 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
         var baseTypes = new List<string>();
         if (MatchKeyword("extends"))
         {
-            do
-            {
-                baseTypes.Add(ConsumeQualifiedName());
-                SkipGenerics();
-            } while (Check(",") && Advance() != null);
+            baseTypes.Add(ConsumeQualifiedName());
+            SkipGenerics();
+            while (Check(",")) { Advance(); baseTypes.Add(ConsumeQualifiedName()); SkipGenerics(); }
         }
         if (MatchKeyword("implements") || MatchKeyword("permits"))
         {
-            do
-            {
-                baseTypes.Add(ConsumeQualifiedName());
-                SkipGenerics();
-            } while (Check(",") && Advance() != null);
+            baseTypes.Add(ConsumeQualifiedName());
+            SkipGenerics();
+            while (Check(",")) { Advance(); baseTypes.Add(ConsumeQualifiedName()); SkipGenerics(); }
         }
 
         // Body
@@ -630,8 +657,19 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
             {
                 int stmtLine = CurrentLine();
                 Advance();
-                string excType = Current().Kind == JavaTokenKind.Identifier ? ConsumeIdentifier() : "";
-                statements.Add(new JavaStatementInfo("throw", [], null, excType, [], stmtLine, true));
+                string? excType = null;
+                if (CheckKeyword("new"))
+                {
+                    Advance(); // skip "new"
+                    excType = ConsumeQualifiedName();
+                    SkipGenerics();
+                }
+                else if (Current().Kind == JavaTokenKind.Identifier)
+                {
+                    // throw variable — can't determine type statically; just advance past name
+                    Advance();
+                }
+                statements.Add(new JavaStatementInfo("throw", [], excType, null, [], stmtLine, true));
                 continue;
             }
 
@@ -649,8 +687,14 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
             {
                 int stmtLine = CurrentLine();
                 Advance();
-                if (Check("(")) SkipParens();
-                statements.Add(new JavaStatementInfo("catch", [], null, "catch", [], stmtLine, true));
+                var (exceptionType, catchVar, isGeneric) = ParseCatchClause();
+                bool hasRethrow = LookaheadForRethrow(catchVar);
+                statements.Add(new JavaStatementInfo("catch", [], exceptionType, null, [], stmtLine, true)
+                {
+                    IsErrorHandler = true,
+                    IsGenericErrorHandler = isGeneric,
+                    HasRethrow = hasRethrow
+                });
                 continue;
             }
 
@@ -861,9 +905,10 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
                 Advance();
                 if (Check("."))
                 {
-                    // Check if next is identifier (not ... for varargs)
                     if (Peek().Kind is JavaTokenKind.Identifier or JavaTokenKind.Keyword)
                     { parts.Add("."); Advance(); }
+                    else if (Peek().Value == "*") // wildcard import: java.util.*
+                    { parts.Add(".*"); Advance(); Advance(); break; }
                     else break;
                 }
                 else break;
@@ -990,6 +1035,130 @@ internal class JavaParser(List<JavaToken> tokens, string sourceText)
             if (t.Kind is JavaTokenKind.LineComment or JavaTokenKind.BlockComment or JavaTokenKind.DocComment)
                 lines.Add(t.Line);
         return lines;
+    }
+
+    // ── Catch / throw semantic helpers ───────────────────────────────────────────
+
+    /// <summary>
+    /// Parses a catch clause <c>(ExType var)</c> or multi-catch <c>(A | B var)</c>.
+    /// Advances past the closing <c>)</c>. Returns (firstType, varName, isGenericError).
+    /// </summary>
+    private (string? exceptionType, string? catchVar, bool isGenericError) ParseCatchClause()
+    {
+        if (!Check("(")) return (null, null, false);
+        Advance(); // skip (
+
+        var types = new List<string>();
+        string? catchVar = null;
+
+        while (!IsAtEnd() && !Check(")"))
+        {
+            int g = _pos;
+            SkipComments();
+            SkipAnnotations();
+            if (Check(")")) break;
+            if (MatchKeyword("final")) continue;
+
+            string t = ConsumeTypeName();
+            if (t == "") { if (!Check("|") && !Check(")")) Advance(); Guard(g, "catch-clause"); continue; }
+            types.Add(t);
+            SkipGenerics();
+
+            if (Check("|")) { Advance(); continue; } // multi-catch separator
+
+            // After the type(s) comes the catch variable name
+            if (Current().Kind == JavaTokenKind.Identifier)
+            {
+                catchVar = Current().Value;
+                Advance();
+            }
+            Guard(g, "catch-clause");
+        }
+
+        if (Check(")")) Advance();
+
+        string? exceptionType = types.Count > 0 ? types[0] : null;
+        bool isGeneric = types.Any(static t => t is "Exception" or "Throwable" or "Error"
+            || t.EndsWith(".Exception") || t.EndsWith(".Throwable") || t.EndsWith(".Error"));
+        return (exceptionType, catchVar, isGeneric);
+    }
+
+    /// <summary>
+    /// Peeks into the catch body <c>{ ... }</c> (without consuming) to detect
+    /// a bare rethrow: <c>throw varName;</c> at the top level of that body where
+    /// <paramref name="catchVar"/> is the bound exception variable.
+    /// </summary>
+    private bool LookaheadForRethrow(string? catchVar)
+    {
+        if (!Check("{")) return false;
+        int savedPos = _pos;
+        int depth = 0;
+        bool found = false;
+
+        while (!IsAtEnd())
+        {
+            if (Check("{")) { depth++; _pos++; }
+            else if (Check("}"))
+            {
+                depth--;
+                _pos++;
+                if (depth == 0) break;
+            }
+            else if (depth == 1 && CheckKeyword("throw"))
+            {
+                _pos++; // consume "throw"
+                // bare throw; (not valid Java but defensive)
+                if (Check(";")) { found = true; break; }
+                // throw varName; → rethrow when varName matches the catch variable
+                if (!CheckKeyword("new") && Current().Kind == JavaTokenKind.Identifier)
+                {
+                    string varName = Current().Value;
+                    _pos++;
+                    if (Check(";") && (catchVar == null || varName == catchVar))
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            else _pos++;
+        }
+
+        _pos = savedPos;
+        return found;
+    }
+
+    // ── Error reporting ───────────────────────────────────────────────────────────
+
+    private void AddError(int line, int col, string message)
+        => _parseErrors.Add($"{_filePath}({line},{col}): error: {message}");
+
+    /// <summary>
+    /// Verifies that every <c>{</c> token has a matching <c>}</c> and vice-versa.
+    /// Reports an error for each mismatch. Skips tokens that are not Punctuation
+    /// (strings, comments, annotations already consumed their internal braces).
+    /// </summary>
+    private void CheckBraceBalance()
+    {
+        var stack = new Stack<JavaToken>();
+        foreach (var token in tokens)
+        {
+            if (token.Kind == JavaTokenKind.Eof) break;
+            if (token.Kind != JavaTokenKind.Punctuation) continue;
+            if (token.Value == "{") stack.Push(token);
+            else if (token.Value == "}")
+            {
+                if (stack.Count == 0)
+                    AddError(token.Line, 1, "Unexpected '}' - no matching '{'");
+                else
+                    stack.Pop();
+            }
+        }
+        while (stack.Count > 0)
+        {
+            var t = stack.Pop();
+            AddError(t.Line, 1, "Unclosed '{'");
+        }
     }
 
     #endregion

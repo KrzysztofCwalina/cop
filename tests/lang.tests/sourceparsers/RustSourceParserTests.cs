@@ -1103,6 +1103,119 @@ public class RustSourceParserTests
     }
 
     // ================================================================
+    // ParseErrors — negative tests and positive control
+    // ================================================================
+
+    [Test]
+    public void ParseErrors_MissingStructName_ReportsError()
+    {
+        var result = Parse("struct { x: i32 }");
+        Assert.That(result.ParseErrors, Is.Not.Empty,
+            "a struct with no name should produce at least one parse error");
+        Assert.That(result.ParseErrors.Any(e => e.Contains("struct name")), Is.True,
+            "the error message should mention 'struct name'");
+    }
+
+    [Test]
+    public void ParseErrors_MissingFnName_ReportsError()
+    {
+        var result = Parse("fn () {}");
+        Assert.That(result.ParseErrors, Is.Not.Empty,
+            "a fn with no name should produce at least one parse error");
+        Assert.That(result.ParseErrors.Any(e => e.Contains("function name")), Is.True,
+            "the error message should mention 'function name'");
+    }
+
+    [Test]
+    public void ParseErrors_UnterminatedBlockComment_ReportsError()
+    {
+        var result = Parse("/* this comment never ends\npub struct Foo {}");
+        Assert.That(result.ParseErrors, Is.Not.Empty,
+            "an unterminated block comment should produce a parse error");
+        Assert.That(result.ParseErrors.Any(e => e.Contains("unterminated")), Is.True,
+            "the error message should mention 'unterminated'");
+    }
+
+    [Test]
+    public void ParseErrors_UnterminatedRawString_ReportsError()
+    {
+        var result = Parse("fn f() {\n    let s = r#\"never ends;\n}");
+        Assert.That(result.ParseErrors, Is.Not.Empty,
+            "an unterminated raw string should produce a parse error");
+        Assert.That(result.ParseErrors.Any(e => e.Contains("unterminated")), Is.True,
+            "the error message should mention 'unterminated'");
+    }
+
+    [Test]
+    public void ParseErrors_UnclosedBrace_ReportsError()
+    {
+        // A fn body that is never closed — the structural parser tolerates this, so the
+        // delimiter-balance check must catch it (parity with the other language parsers).
+        var result = Parse("fn f() {\n    let x = 1;\n");
+        Assert.That(result.ParseErrors, Is.Not.Empty,
+            "an unclosed '{' should produce a parse error");
+        Assert.That(result.ParseErrors.Any(e => e.Contains("unclosed")), Is.True,
+            "the error message should mention 'unclosed'");
+    }
+
+    [Test]
+    public void ParseErrors_StrayClosingBrace_ReportsError()
+    {
+        var result = Parse("fn f() {}\n}");
+        Assert.That(result.ParseErrors.Any(e => e.Contains("unmatched")), Is.True,
+            "a stray '}' should be reported as unmatched");
+    }
+
+    [Test]
+    public void ParseErrors_ValidRust_IsEmpty()
+    {
+        // A realistic, modern Rust snippet — generics, lifetimes, closures, macros,
+        // async fn, trait bounds, raw strings.  Must produce ZERO ParseErrors.
+        var result = Parse("""
+            use std::collections::HashMap;
+            use std::fmt;
+
+            /// A generic container.
+            #[derive(Debug, Clone)]
+            pub struct Container<T: Clone + Send + Sync> {
+                inner: Vec<T>,
+                meta: HashMap<String, String>,
+            }
+
+            impl<T: Clone + Send + Sync> Container<T> {
+                pub fn new() -> Self {
+                    Container { inner: Vec::new(), meta: HashMap::new() }
+                }
+                pub fn add(&mut self, item: T) {
+                    self.inner.push(item);
+                }
+                pub fn get(&self, idx: usize) -> Option<&T> {
+                    self.inner.get(idx)
+                }
+                pub async fn fetch(&self, key: &str) -> Option<String> {
+                    self.meta.get(key).cloned()
+                }
+            }
+
+            pub trait Printable: fmt::Display + fmt::Debug {
+                fn print(&self) {
+                    println!("{}", self);
+                }
+            }
+
+            pub fn process<'a>(s: &'a str, items: &[u32]) -> Vec<String> {
+                let prefix = r#"item"#;
+                items.iter()
+                    .filter(|&&x| x > 0)
+                    .map(|&x| format!("{}{}: {}", prefix, s, x))
+                    .collect()
+            }
+            """);
+        Assert.That(result.ParseErrors, Is.Empty,
+            "valid modern Rust must produce zero parse errors");
+    }
+
+    // ================================================================
     // Helper
     // ================================================================
 

@@ -107,6 +107,14 @@
         "Cleaner `cop -h`: the command list shows key options inline — optional ones in [ ], e.g. `cop run <package> [-t <target>]` — and drops the separate global options section.",
         "Commands and option flags are shown in distinct colors so commands stand out."
       ]
+    },
+    {
+      "version": "2026.6.26.1",
+      "approved": true,
+      "features": [
+        "Source files that fail to parse are no longer hidden: cop now reports syntax errors as warnings (`path(line,col): error: message`) and still analyzes the rest of the file instead of silently skipping or mis-modeling it — for C# and now Python, JavaScript/TypeScript, Rust, Go, and Java.",
+        "Python, JavaScript/TypeScript, Rust, Go, and Java are now parsed by real lexer + recursive-descent parsers (replacing the previous line-scanners), improving the accuracy of detected types, methods, statements, and imports."
+      ]
     }
   ]
 }

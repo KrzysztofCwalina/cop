@@ -11,7 +11,7 @@ public class RustSourceParser : ISourceParser
     {
         var lexer = new RustLexer(sourceText);
         var tokens = lexer.Tokenize();
-        var parser = new RustParser(tokens, sourceText);
+        var parser = new RustParser(tokens, sourceText, lexer.Errors);
         return parser.Parse(filePath);
     }
 }
@@ -30,6 +30,16 @@ internal class RustLexer(string source)
 {
     private int _pos;
     private int _line = 1;
+    private readonly List<(int line, int col, string msg)> _errors = [];
+    public IReadOnlyList<(int line, int col, string msg)> Errors => _errors;
+
+    private int ColAt(int pos)
+    {
+        int c = 1;
+        for (int i = pos - 1; i >= 0 && source[i] != '\n'; i--)
+            c++;
+        return c;
+    }
 
     private static readonly HashSet<string> Keywords =
     [
@@ -184,6 +194,7 @@ internal class RustLexer(string source)
                 _pos++;
             }
         }
+        if (depth > 0) _errors.Add((line, ColAt(start), "unterminated block comment"));
         var value = source[start.._pos];
         // /** ... */ is an outer doc and /*! ... */ an inner doc; /**/ and /*** ... */ are not.
         RustTokenKind kind = RustTokenKind.BlockComment;
@@ -229,6 +240,7 @@ internal class RustLexer(string source)
             _pos++;
         }
         if (_pos < source.Length) _pos++; // skip closing "
+        else _errors.Add((line, ColAt(start), "unterminated string literal"));
         return new RustToken(RustTokenKind.StringLiteral, source[start.._pos], line, start, _pos);
     }
 
@@ -256,6 +268,8 @@ internal class RustLexer(string source)
                 _pos++;
             }
         }
+        if (_pos >= source.Length)
+            _errors.Add((line, ColAt(start), "unterminated raw string literal"));
         return new RustToken(RustTokenKind.StringLiteral, source[start.._pos], line, start, _pos);
     }
 
@@ -335,9 +349,43 @@ internal class RustLexer(string source)
 
 #region Parser
 
-internal class RustParser(List<RustToken> tokens, string sourceText)
+internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyList<(int line, int col, string msg)> lexerErrors)
 {
     private int _pos;
+    private readonly List<(int line, int col, string msg)> _errors = [..lexerErrors];
+
+    private void AddError(int line, int col, string msg) => _errors.Add((line, col, msg));
+
+    private int ColAt(int charPos)
+    {
+        int c = 1;
+        for (int i = charPos - 1; i >= 0 && sourceText[i] != '\n'; i--)
+            c++;
+        return c;
+    }
+
+    // Reports unbalanced (), [], {} delimiters. Operates on Punctuation tokens only — brackets
+    // inside strings, char literals, comments, and attributes are separate token kinds, so they
+    // are never miscounted. Generics `<>` are intentionally NOT balanced (ambiguous with the
+    // comparison/shift operators). Pops on any closer to avoid cascading errors, so the common
+    // cases — a missing closer (openers remain) and a stray closer (empty stack) — are reported
+    // without false positives on valid Rust (whose () [] {} token trees are always balanced).
+    private void CheckDelimiterBalance()
+    {
+        var stack = new Stack<RustToken>();
+        foreach (var t in tokens)
+        {
+            if (t.Kind != RustTokenKind.Punctuation) continue;
+            if (t.Value is "(" or "[" or "{") stack.Push(t);
+            else if (t.Value is ")" or "]" or "}")
+            {
+                if (stack.Count == 0) AddError(t.Line, ColAt(t.Start), $"unmatched '{t.Value}'");
+                else stack.Pop();
+            }
+        }
+        foreach (var open in stack)
+            AddError(open.Line, ColAt(open.Start), $"unclosed '{open.Value}'");
+    }
 
     public SourceFile Parse(string filePath)
     {
@@ -392,6 +440,10 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
             if (_pos == loopStart) Advance();
         }
 
+        // Surface unbalanced delimiters (a missing/stray ( [ { } ] )) — a common malformed-source
+        // case the structural parser alone would otherwise tolerate silently.
+        CheckDelimiterBalance();
+
         // Free functions are part of a module's API surface but don't belong to a declared
         // type, so expose them as methods of a synthetic per-file container (a Class, which
         // type-level naming/doc checks deliberately skip).
@@ -405,7 +457,8 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
         {
             Usings = usings,
             Regions = [],
-            CommentLines = ExtractCommentLines()
+            CommentLines = ExtractCommentLines(),
+            ParseErrors = _errors.Select(e => $"{filePath}({e.line},{e.col}): error: {e.msg}").ToList()
         };
     }
 
@@ -491,6 +544,7 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
         int line = CurrentLine();
         Advance(); // skip 'struct'
         string name = ConsumeIdentifier();
+        if (name == "") AddError(line, ColAt(Current().Start), "expected struct name after 'struct'");
         SkipGenerics();
 
         var fields = new List<FieldDeclaration>();
@@ -544,6 +598,7 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
         int line = CurrentLine();
         Advance(); // skip 'enum'
         string name = ConsumeIdentifier();
+        if (name == "") AddError(line, ColAt(Current().Start), "expected enum name after 'enum'");
         SkipGenerics();
         if (CheckKeyword("where")) SkipWhereClause();
 
@@ -579,6 +634,7 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
         int line = CurrentLine();
         Advance(); // skip 'trait'
         string name = ConsumeIdentifier();
+        if (name == "") AddError(line, ColAt(Current().Start), "expected trait name after 'trait'");
         SkipGenerics();
 
         var baseTypes = new List<string>();
@@ -756,6 +812,7 @@ internal class RustParser(List<RustToken> tokens, string sourceText)
 
         int line = PreviousLine();
         string name = ConsumeIdentifier();
+        if (name == "") AddError(line, ColAt(Current().Start), "expected function name after 'fn'");
         SkipGenerics();
 
         // Parameters
