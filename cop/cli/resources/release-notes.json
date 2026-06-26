@@ -115,6 +115,14 @@
         "Source files that fail to parse are no longer hidden: cop now reports syntax errors as warnings (`path(line,col): error: message`) and still analyzes the rest of the file instead of silently skipping or mis-modeling it — for C# and now Python, JavaScript/TypeScript, Rust, Go, and Java.",
         "Python, JavaScript/TypeScript, Rust, Go, and Java are now parsed by real lexer + recursive-descent parsers (replacing the previous line-scanners), improving the accuracy of detected types, methods, statements, and imports."
       ]
+    },
+    {
+      "version": "2026.6.26.2",
+      "approved": true,
+      "features": [
+        "`cop verify <file.cop>` now verifies the whole program — every `.cop` file in the file's directory, like `cop run` — and flags undefined references (e.g. a typo in `CHECK(...)`) that previously passed verify but failed at runtime.",
+        "A bare `cop` (no command) now prints the same full command list as `cop -h`."
+      ]
     }
   ]
 }
