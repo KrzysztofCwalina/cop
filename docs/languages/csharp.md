@@ -19,27 +19,7 @@ cop --version
 
 ---
 
-## 2. Your Code
-
-You don't add anything to your project to use cop — it analyzes the source files you already
-have. A typical C# project looks like this:
-
-```
-src/
-  Models/
-    User.cs
-    Order.cs
-  Services/
-    UserService.cs
-MyProject.csproj
-```
-
-There's nothing to run yet: cop needs a rule first. You'll create one with your agent
-(section 4) or by hand (section 5), then point cop at this code.
-
----
-
-## 3. Set Up Agent Context
+## 2. Set Up Agent Context
 
 Run `cop init` once, in your **repository root** (not in `src/` or any other subfolder):
 
@@ -54,7 +34,7 @@ This generates instruction files (`.github/copilot-instructions.md`, `AGENTS.md`
 
 ---
 
-## 4. Create Rules with Your Agent
+## 3. Create Rules with Your Agent
 
 This is the primary way to use cop. As you build, you (or your coding agent) will notice
 patterns you want to ban going forward — a `var` where you want explicit types, a `DateTime.Now`,
@@ -86,10 +66,22 @@ The next sections show what such a rule looks like and how to run it yourself.
 
 ---
 
-## 5. Write and Run a Rule by Hand
+## 4. Write and Run a Rule by Hand
 
-You don't need an agent — you can author `.cop` files directly. Create a file called
-`checks.cop` in your project root:
+You don't need an agent — you can author `.cop` files directly. cop analyzes the `.cs` files
+you already have; a typical C# project looks like this:
+
+```
+src/
+  Models/
+    User.cs
+    Order.cs
+  Services/
+    UserService.cs
+MyProject.csproj
+```
+
+Create a file called `checks.cop` in your project root:
 
 <!-- cop norun: `cb.Types.Methods:<methodPredicate>` fatals at runtime (expects Method, got collection) while `cop verify` passes — tracked in #50 -->
 ```cop norun
@@ -137,7 +129,7 @@ run `cop cop-checks/main.cop -t .` (this is exactly what your agent does for you
 
 ---
 
-## 6. Use Built-In Checks
+## 5. Use Built-In Checks
 
 Cop ships with comprehensive C# check packages — no `.cop` files needed:
 
@@ -150,7 +142,7 @@ cop run csharp-library-azure-checks        # Azure SDK conventions
 
 ---
 
-## 7. Enforce Project Layering
+## 6. Enforce Project Layering
 
 Cop discovers your C# projects and their dependencies (from each `.csproj`). The
 language-agnostic **`code-layering`** package lets you enforce architectural rules across
@@ -193,7 +185,7 @@ references a data project, so you can wire it into CI.
 
 ---
 
-## 8. Explore Further
+## 7. Explore Further
 
 ### List all public classes
 

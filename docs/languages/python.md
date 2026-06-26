@@ -19,26 +19,7 @@ cop --version
 
 ---
 
-## 2. Your Code
-
-You don't add anything to your project to use cop — it analyzes the source files you already
-have. A typical Python project looks like this:
-
-```
-src/
-  mypackage/
-    __init__.py
-    models.py
-    services.py
-pyproject.toml
-```
-
-There's nothing to run yet: cop needs a rule first. You'll create one with your agent
-(section 4) or by hand (section 5), then point cop at this code.
-
----
-
-## 3. Set Up Agent Context
+## 2. Set Up Agent Context
 
 Run `cop init` once, in your **repository root** (not in `src/` or any other subfolder):
 
@@ -53,7 +34,7 @@ This generates instruction files (`.github/copilot-instructions.md`, `AGENTS.md`
 
 ---
 
-## 4. Create Rules with Your Agent
+## 3. Create Rules with Your Agent
 
 This is the primary way to use cop. As you build, you (or your coding agent) will notice
 patterns you want to ban going forward — a bare `except:`, a stray `print()`, a missing
@@ -85,10 +66,21 @@ The next sections show what such a rule looks like and how to run it yourself.
 
 ---
 
-## 5. Write and Run a Rule by Hand
+## 4. Write and Run a Rule by Hand
 
-You don't need an agent — you can author `.cop` files directly. Create a file called
-`checks.cop` in your project root:
+You don't need an agent — you can author `.cop` files directly. cop analyzes the `.py` files
+you already have; a typical Python project looks like this:
+
+```
+src/
+  mypackage/
+    __init__.py
+    models.py
+    services.py
+pyproject.toml
+```
+
+Create a file called `checks.cop` in your project root:
 
 ```cop
 import python
@@ -135,7 +127,7 @@ run `cop cop-checks/main.cop -t .` (this is exactly what your agent does for you
 
 ---
 
-## 6. Use Built-In Checks
+## 5. Use Built-In Checks
 
 Cop ships with comprehensive Python check packages — no `.cop` files needed:
 
@@ -148,7 +140,7 @@ cop run python-library-azure-checks        # Azure SDK conventions
 
 ---
 
-## 7. Enforce Package Layering
+## 6. Enforce Package Layering
 
 Cop discovers your Python packages/distributions and their dependencies (from each
 `pyproject.toml` or `setup.py`). The language-agnostic **`code-layering`** package lets
@@ -192,7 +184,7 @@ references a service package, so you can wire it into CI.
 
 ---
 
-## 8. Explore Further
+## 7. Explore Further
 
 ### List all classes
 
