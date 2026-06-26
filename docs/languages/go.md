@@ -82,8 +82,8 @@ func main() {
 }
 ```
 
-Cop scans every `.go` file under the directory you point it at. Run cop from your project root;
-narrow analysis to a subfolder with `-t <path>`.
+That's the code we'll analyze — cop reads your source files in place, with nothing to add or
+configure. There's nothing to run yet, though: cop needs a rule first (section 4 or 5).
 
 ---
 
@@ -163,7 +163,8 @@ This rule checks two common Go conventions:
 1. **Exported types should have doc comments** (per `go vet` / `golint`)
 2. **Avoid `panic()` in library code** — idiomatic Go returns errors
 
-Verify it, then run it from your project root:
+Verify it, then run it from your project root. cop analyzes the current directory by default;
+`-t <path>` points it at another folder:
 
 ```bash
 cop verify checks.cop      # catch syntax/type errors first

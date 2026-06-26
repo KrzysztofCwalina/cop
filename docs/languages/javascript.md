@@ -19,12 +19,10 @@ cop --version
 
 ---
 
-## 2. Point Cop at Your Code
+## 2. Your Code
 
-Cop scans every `.js` and `.ts` file under the directory you point it at. Run cop from your
-**repository root**; narrow analysis to a subfolder with `-t <path>` (for example `-t src/`).
-
-Example layout:
+You don't add anything to your project to use cop — it analyzes the source files you already
+have. A typical JavaScript or TypeScript project looks like this:
 
 ```
 src/
@@ -35,6 +33,9 @@ src/
     api.ts
 package.json
 ```
+
+There's nothing to run yet: cop needs a rule first. You'll create one with your agent
+(section 4) or by hand (section 5), then point cop at this code.
 
 ---
 
@@ -112,7 +113,8 @@ let consoleLogs = cb.Statements:isConsoleLog
 command MAIN = CHECK(undocumented + consoleLogs)
 ```
 
-Verify it, then run it from your project root:
+Verify it, then run it from your project root. By default cop analyzes the current directory;
+`-t <path>` narrows analysis to a subfolder (here `src/`):
 
 ```bash
 cop verify checks.cop      # catch syntax/type errors first
