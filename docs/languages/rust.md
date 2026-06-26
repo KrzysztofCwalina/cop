@@ -1,6 +1,9 @@
 # Rust Walkthrough
 
-This guide walks you through installing cop, setting up a Rust project for analysis, writing a simple rule, and running it.
+This guide walks you through analyzing a Rust project with cop. The main workflow is
+**agent-driven**: as you build, you ask your coding agent to turn problems you notice into
+permanent, enforceable cop rules. Later sections cover writing rules by hand, running the
+built-in Rust checks, and enforcing crate layering.
 
 ---
 
@@ -71,54 +74,60 @@ fn main() {
 }
 ```
 
+Cop scans every `.rs` file under the directory you point it at. Run cop from your project root;
+narrow analysis to a subfolder with `-t <path>`.
+
 ---
 
 ## 3. Set Up Agent Context
 
-Run `cop init` to generate instruction files that teach **GitHub Copilot** how to write cop rules in your project:
+Run `cop init` once, in your **repository root** (the project root above — not a subfolder like `src/`):
 
 ```bash
 cop init
 ```
 
-Commit the generated files (`.github/copilot-instructions.md`, `AGENTS.md`) to your repo.
+This generates instruction files (`.github/copilot-instructions.md`, `AGENTS.md`) that teach
+**GitHub Copilot** how to write and run cop rules. Commit them to your repo.
 
 <sub>Using Claude Code? Run `cop init --claude` to generate Claude Code instruction files (`.claude/commands/cop.md`) instead.</sub>
 
 ---
 
-## 4. Run the Built-in Rust Checks
+## 4. Create Rules with Your Agent
 
-The fastest way to get value is the **`rust-checks`** package — a curated set of Rust
-correctness, style, and documentation checks. It hardcodes the Rust provider, so no `-p`
-flag is needed:
+This is the primary way to use cop. As you build, you (or your coding agent) will notice
+patterns you want to ban going forward — a `panic!`, an `unwrap()`, a missing `///` doc
+comment. Instead of leaving a code-review comment that gets forgotten, ask your agent to
+capture the problem as a cop rule. Because `cop init` taught the agent how cop works, it
+writes the rule into your `cop-checks/` folder, runs it, and fixes the violations — just like
+a compiler error.
 
-```bash
-cop run rust-checks -t .
-```
+Just ask:
 
-It flags common issues such as:
+> "Flag `panic!`, `unwrap()`, and `expect()` in library code — propagate errors with `?`"
 
-- `.unwrap()` / `.expect()` — panicking APIs that should propagate errors with `?`
-- `panic!` / `todo!` / `unimplemented!` — aborts and unfinished code
-- `println!` / `eprintln!` / `dbg!` — console output that belongs in a logging framework
-- Types that are not `UpperCamelCase` and functions that are not `snake_case`
-- Public types and methods missing doc comments
+> "Ban `println!` and `dbg!` — use the `log` or `tracing` crate"
 
-Example output:
+> "Create a cop rule that every public type has a `///` doc comment"
 
-```
-src/main.rs(33): warning: Avoid panic! in library code — return a Result instead
-src/main.rs(40): warning: Avoid println! — use a logging framework (log/tracing)
-src/main.rs(25): warning: Public type Status is missing a doc comment
-src/main.rs(11): warning: User (impl) has public methods without doc comments
-```
+### The self-check loop
+
+When your agent produces code in a shape you don't like, turn that feedback into a permanent rule:
+
+1. The agent writes code with a pattern you dislike (e.g. it calls `.unwrap()` on a `Result`).
+2. You say: **"Add a self-check that flags `.unwrap()` — we propagate errors with `?` here."**
+3. The agent adds a focused check to your `cop-checks/` folder.
+4. From now on, `cop` catches that pattern before it reaches code review.
+
+The next sections show what such a rule looks like and how to run it yourself.
 
 ---
 
-## 5. Write a Custom Rule
+## 5. Write and Run a Rule by Hand
 
-Create a file called `checks.cop` in your project root:
+You don't need an agent — you can author `.cop` files directly. Create a file called
+`checks.cop` in your project root:
 
 ```cop
 import rust
@@ -147,13 +156,10 @@ This rule does two things:
 1. **Finds public types without doc comments** (`///` above the declaration)
 2. **Finds uses of `panic!`** — a common code smell in library code
 
----
-
-## 6. Run the Rule
-
-From your project root:
+Verify it, then run it from your project root:
 
 ```bash
+cop verify checks.cop      # catch syntax/type errors first
 cop checks.cop -t .
 ```
 
@@ -162,6 +168,38 @@ Example output:
 ```
 src/main.rs(25): warning: Public type Status is missing documentation
 src/main.rs(33): warning: Avoid panic! at line 33 — prefer returning Result
+```
+
+Exit code is `0` when clean and `1` when violations are found — suitable for CI. To organize
+many rules, put one check per file in a `cop-checks/` folder with a `main.cop` entry point and
+run `cop cop-checks/main.cop -t .` (this is exactly what your agent does for you).
+
+---
+
+## 6. Use the Built-In Rust Checks
+
+Beyond your own rules, the **`rust-checks`** package is a curated set of Rust correctness,
+style, and documentation checks. It hardcodes the Rust provider, so no `-p` flag is needed:
+
+```bash
+cop run rust-checks -t .
+```
+
+It flags common issues such as:
+
+- `.unwrap()` / `.expect()` — panicking APIs that should propagate errors with `?`
+- `panic!` / `todo!` / `unimplemented!` — aborts and unfinished code
+- `println!` / `eprintln!` / `dbg!` — console output that belongs in a logging framework
+- Types that are not `UpperCamelCase` and functions that are not `snake_case`
+- Public types and methods missing doc comments
+
+Example output:
+
+```
+src/main.rs(33): warning: Avoid panic! in library code — return a Result instead
+src/main.rs(40): warning: Avoid println! — use a logging framework (log/tracing)
+src/main.rs(25): warning: Public type Status is missing a doc comment
+src/main.rs(11): warning: User (impl) has public methods without doc comments
 ```
 
 ---
@@ -287,7 +325,7 @@ rest of that file and every other file. Malformed sources are reported, never si
 ## Tips
 
 - Use `cop verify checks.cop` to check your rule for syntax/type errors before running
-- Start with the built-in `cop run rust-checks -t .` before writing custom rules
+- Run the built-in `cop run rust-checks -t .` alongside your own rules
 - Enforce crate dependency rules with the `code-layering` package (see section 7)
 - Use `-t path/` to target a specific subdirectory
 - Combine with other providers: `import rust` + `import python` to analyze polyglot projects

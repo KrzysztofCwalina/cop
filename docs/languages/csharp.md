@@ -1,6 +1,9 @@
 # C# Walkthrough
 
-This guide walks you through analyzing a C# project with cop — from setup to writing and running custom rules.
+This guide walks you through analyzing a C# project with cop. The main workflow is
+**agent-driven**: as you build, you ask your coding agent to turn problems you notice into
+permanent, enforceable cop rules. Later sections cover writing rules by hand, running the
+built-in C# checks, and enforcing project layering.
 
 ---
 
@@ -16,11 +19,12 @@ cop --version
 
 ---
 
-## 2. Target a C# Project
+## 2. Point Cop at Your Code
 
-Navigate to any directory containing C# source files (`.cs`). Cop scans all `.cs` files in the target directory tree.
+Cop scans every `.cs` file under the directory you point it at. Run cop from your
+**repository root**; narrow analysis to a subfolder with `-t <path>` (for example `-t src/`).
 
-Example project structure:
+Example layout:
 
 ```
 src/
@@ -36,21 +40,55 @@ MyProject.csproj
 
 ## 3. Set Up Agent Context
 
-Run `cop init` to generate instruction files that teach **GitHub Copilot** how to write cop rules in your project:
+Run `cop init` once, in your **repository root** (not in `src/` or any other subfolder):
 
 ```bash
 cop init
 ```
 
-Commit the generated files (`.github/copilot-instructions.md`, `AGENTS.md`) to your repo.
+This generates instruction files (`.github/copilot-instructions.md`, `AGENTS.md`) that teach
+**GitHub Copilot** how to write and run cop rules. Commit them to your repo.
 
 <sub>Using Claude Code? Run `cop init --claude` to generate Claude Code instruction files (`.claude/commands/cop.md`) instead.</sub>
 
 ---
 
-## 4. Write a Simple Rule
+## 4. Create Rules with Your Agent
 
-Create a file called `checks.cop` in your project root:
+This is the primary way to use cop. As you build, you (or your coding agent) will notice
+patterns you want to ban going forward — a `var` where you want explicit types, a `DateTime.Now`,
+a missing XML doc comment. Instead of leaving a code-review comment that gets forgotten, ask
+your agent to capture the problem as a cop rule. Because `cop init` taught the agent how cop
+works, it writes the rule into your `cop-checks/` folder, runs it, and fixes the violations —
+just like a compiler error.
+
+Just ask:
+
+> "Write a cop rule that flags any method longer than 30 statements"
+
+> "Create a cop rule that every public type has an XML doc comment"
+
+> "Add a cop rule that all `*Client` types must be sealed"
+
+> "Ban `DateTime.Now` — we use `DateTimeOffset.UtcNow`"
+
+### The self-check loop
+
+When your agent produces code in a shape you don't like, turn that feedback into a permanent rule:
+
+1. The agent writes code with a pattern you dislike (e.g. it uses `DateTime.Now`).
+2. You say: **"Add a self-check that flags `DateTime.Now` — we use `DateTimeOffset.UtcNow` here."**
+3. The agent adds a focused check to your `cop-checks/` folder.
+4. From now on, `cop` catches that pattern before it reaches code review.
+
+The next sections show what such a rule looks like and how to run it yourself.
+
+---
+
+## 5. Write and Run a Rule by Hand
+
+You don't need an agent — you can author `.cop` files directly. Create a file called
+`checks.cop` in your project root:
 
 <!-- cop norun: `cb.Types.Methods:<methodPredicate>` fatals at runtime (expects Method, got collection) while `cop verify` passes — tracked in #50 -->
 ```cop norun
@@ -75,13 +113,10 @@ let longMethods = cb.Types.Methods:isTooLong
 command MAIN = CHECK(undocumented + longMethods)
 ```
 
----
-
-## 5. Run the Rule
-
-From your project root:
+Verify it, then run it from your project root:
 
 ```bash
+cop verify checks.cop      # catch syntax/type errors first
 cop checks.cop -t src/
 ```
 
@@ -94,11 +129,15 @@ src/Services/UserService.cs: warning: Method ProcessBatch has 45 statements (max
 2 violation(s) found.
 ```
 
+Exit code is `0` when clean and `1` when violations are found — suitable for CI. To organize
+many rules, put one check per file in a `cop-checks/` folder with a `main.cop` entry point and
+run `cop cop-checks/main.cop -t .` (this is exactly what your agent does for you).
+
 ---
 
 ## 6. Use Built-In Checks
 
-Cop ships with comprehensive C# check packages:
+Cop ships with comprehensive C# check packages — no `.cop` files needed:
 
 ```bash
 cop run csharp-checks                      # all C# conventions

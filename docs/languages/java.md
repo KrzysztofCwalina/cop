@@ -1,6 +1,9 @@
 # Java Walkthrough
 
-This guide walks you through installing cop, setting up a Java project for analysis, writing a simple rule, and running it.
+This guide walks you through analyzing a Java project with cop. The main workflow is
+**agent-driven**: as you build, you ask your coding agent to turn problems you notice into
+permanent, enforceable cop rules. Later sections cover writing rules by hand, running the
+built-in Java checks, and enforcing module layering.
 
 ---
 
@@ -89,25 +92,60 @@ public interface Repository<T> {
 }
 ```
 
+Cop scans every `.java` file under the directory you point it at. Run cop from your project
+root; narrow analysis to a subfolder with `-t <path>` (for example `-t src/`).
+
 ---
 
 ## 3. Set Up Agent Context
 
-Run `cop init` to generate instruction files that teach **GitHub Copilot** how to write cop rules in your project:
+Run `cop init` once, in your **repository root** (the project root above — not a subfolder like `src/`):
 
 ```bash
 cop init
 ```
 
-Commit the generated files (`.github/copilot-instructions.md`, `AGENTS.md`) to your repo.
+This generates instruction files (`.github/copilot-instructions.md`, `AGENTS.md`) that teach
+**GitHub Copilot** how to write and run cop rules. Commit them to your repo.
 
 <sub>Using Claude Code? Run `cop init --claude` to generate Claude Code instruction files (`.claude/commands/cop.md`) instead.</sub>
 
 ---
 
-## 4. Write a Simple Rule
+## 4. Create Rules with Your Agent
 
-Create a file called `checks.cop` in your project root:
+This is the primary way to use cop. As you build, you (or your coding agent) will notice
+patterns you want to ban going forward — a raw `throw new RuntimeException`, a `System.out.println`,
+a public type without Javadoc. Instead of leaving a code-review comment that gets forgotten,
+ask your agent to capture the problem as a cop rule. Because `cop init` taught the agent how cop
+works, it writes the rule into your `cop-checks/` folder, runs it, and fixes the violations —
+just like a compiler error.
+
+Just ask:
+
+> "Flag raw `throw new RuntimeException(...)` — use a specific exception type"
+
+> "Create a cop rule that every public type has a Javadoc comment"
+
+> "Ban `System.out.println` — use a logger"
+
+### The self-check loop
+
+When your agent produces code in a shape you don't like, turn that feedback into a permanent rule:
+
+1. The agent writes code with a pattern you dislike (e.g. it leaves a `System.out.println` behind).
+2. You say: **"Add a self-check that flags `System.out.println` — we use a logger here."**
+3. The agent adds a focused check to your `cop-checks/` folder.
+4. From now on, `cop` catches that pattern before it reaches code review.
+
+The next sections show what such a rule looks like and how to run it yourself.
+
+---
+
+## 5. Write and Run a Rule by Hand
+
+You don't need an agent — you can author `.cop` files directly. Create a file called
+`checks.cop` in your project root:
 
 ```cop
 import java
@@ -135,13 +173,10 @@ This rule does two things:
 1. **Finds public types without Javadoc** (`/** ... */` above the declaration)
 2. **Finds throw statements** — which might indicate missing validation
 
----
-
-## 5. Run the Rule
-
-From your project root:
+Verify it, then run it from your project root:
 
 ```bash
+cop verify checks.cop      # catch syntax/type errors first
 cop checks.cop -t .
 ```
 
@@ -154,44 +189,23 @@ src/main/java/com/example/User.java: warning: throw at line 32 — consider a ch
 2 violation(s) found.
 ```
 
+Exit code is `0` when clean and `1` when violations are found — suitable for CI. To organize
+many rules, put one check per file in a `cop-checks/` folder with a `main.cop` entry point and
+run `cop cop-checks/main.cop -t .` (this is exactly what your agent does for you).
+
 ---
 
-## 6. Explore Further
+## 6. Use Built-In Checks
 
-### List all types in your project
+Cop ships a built-in Java check package — no `.cop` files needed:
 
-```cop
-import java
-
-let types = java.parse().Types
-
-foreach types => '{item.Name} ({item.Kind})'
+```bash
+cop run java-checks                        # all Java conventions
+cop run java-checks -c console-output      # just the "no System.out.println" check
+cop run java-checks -t src/                # analyze a specific directory
 ```
 
-### Count methods per class
-
-```cop
-import java
-import code
-
-let types = java.parse().Types:isClass
-
-foreach types => '{item.Name}: {item.Methods.Count} methods'
-```
-
-### Find classes with too many methods
-
-```cop
-import java
-import code
-
-predicate hasTooManyMethods(Type) => Type.Methods.Count > 10
-
-let violations = java.parse().Types:hasTooManyMethods
-    :toWarning('{item.Name} has {item.Methods.Count} methods — consider splitting')
-
-command MAIN = CHECK(violations)
-```
+Run `cop help java-checks` to see every check the package provides.
 
 ---
 
@@ -239,6 +253,45 @@ references a service module, so you can wire it into CI.
 
 ---
 
+## 8. Explore Further
+
+### List all types in your project
+
+```cop
+import java
+
+let types = java.parse().Types
+
+foreach types => '{item.Name} ({item.Kind})'
+```
+
+### Count methods per class
+
+```cop
+import java
+import code
+
+let types = java.parse().Types:isClass
+
+foreach types => '{item.Name}: {item.Methods.Count} methods'
+```
+
+### Find classes with too many methods
+
+```cop
+import java
+import code
+
+predicate hasTooManyMethods(Type) => Type.Methods.Count > 10
+
+let violations = java.parse().Types:hasTooManyMethods
+    :toWarning('{item.Name} has {item.Methods.Count} methods — consider splitting')
+
+command MAIN = CHECK(violations)
+```
+
+---
+
 ## Available Collections
 
 The `java.parse()` function returns a `Codebase` with these collections:
@@ -261,8 +314,10 @@ Malformed sources are reported, never silently skipped.
 
 ---
 
-## 8. Next Steps
+## Next Steps
 
+- Use `cop verify checks.cop` to check your rule for errors before running
+- Run `cop help java-checks` to see all built-in Java checks
 - Run `cop help java` to see all available types and functions
 - Run `cop help code` for the full code analysis API
 - Combine with other providers: `import csharp` for polyglot analysis
