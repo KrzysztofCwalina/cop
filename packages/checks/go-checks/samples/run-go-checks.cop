@@ -1,0 +1,3 @@
+import go-checks
+
+CHECK go-checks

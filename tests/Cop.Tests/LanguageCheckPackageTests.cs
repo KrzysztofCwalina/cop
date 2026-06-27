@@ -129,6 +129,41 @@ public class LanguageCheckPackageTests
     }
 
     /// <summary>
+    /// End-to-end: running the go-checks package against Go source must produce
+    /// violations WITHOUT a -p provider flag (the package hardcodes go.parse()).
+    /// This is the exact scenario `cop go-checks -t &lt;dir&gt;` exercises.
+    /// </summary>
+    [Test]
+    public void GoChecks_RunsWithoutProviderFlag_ProducesViolations()
+    {
+        var feedPaths = new List<string> { Path.Combine(RepoRoot, "packages") };
+
+        var fixtureDir = Path.Combine(Path.GetTempPath(), "cop-langcheck-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(fixtureDir);
+        try
+        {
+            // panic() triggers go-checks' panic-calls rule.
+            File.WriteAllText(Path.Combine(fixtureDir, "lib.go"),
+                "package lib\nfunc Run() { panic(\"boom\") }\n");
+
+            // No `providers:` argument — mirrors `cop go-checks -t <dir>` with no -p.
+            var result = Engine.RunProject(feedPaths, ["go-checks"], fixtureDir, []);
+
+            Assert.That(result.HasFatalErrors, Is.False,
+                "go-checks should run without -p. Errors: " + string.Join("; ", result.Errors));
+            Assert.That(result.Outputs, Is.Not.Empty,
+                "go-checks produced no output without -p — the package likely uses " +
+                "codebase(Program.Providers) instead of codebase(go.parse()).");
+            Assert.That(result.Outputs.Any(o => o.Message.Contains("panic", StringComparison.OrdinalIgnoreCase)),
+                Is.True, "Expected a panic() violation from the analyzed Go source.");
+        }
+        finally
+        {
+            Directory.Delete(fixtureDir, recursive: true);
+        }
+    }
+
+    /// <summary>
     /// Every language-specific check package (now under checks/ and languages/) must
     /// hardcode its provider via codebase(&lt;lang&gt;.parse()) so it works without a -p
     /// flag — it must not build from Program.Providers. code-metrics is exempt: it is a

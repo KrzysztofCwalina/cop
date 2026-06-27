@@ -527,7 +527,7 @@ public static class Engine
                 {
                     exitCode = exitInt.Value;
                 }
-                else
+                else if (!TryRouteViolationsThroughCheck(bridge, result))
                 {
                     // If a command returns a collection (e.g., let-binding used as a named rule),
                     // iterate items and produce output for each.
@@ -951,7 +951,58 @@ public static class Engine
         return defaultAdapter;
     }
 
-    private static void CollectCollectionOutputs(CopValue result, List<PrintOutput> outputs)
+    /// <summary>
+    /// When a named rule (e.g. `-c &lt;name&gt;` resolving to a `let` binding) evaluates to a
+    /// collection of Violations, route it through the `CHECK` command so it produces the same
+    /// formatted `file(line): level: message` output — and the same non-zero exit — as
+    /// `CHECK(&lt;name&gt;)`, instead of dumping raw Violation objects with a clean exit (issue #52).
+    /// CHECK prints each violation via the `print` FFI, which appends to the engine's outputs
+    /// list, so both the formatting and the violation exit code follow automatically.
+    /// Returns true when it routed the result (caller should skip the raw-dump path).
+    /// </summary>
+    private static bool TryRouteViolationsThroughCheck(LanguageBridge bridge, CopValue? result)
+    {
+        if (result is null)
+            return false;
+        if (result is CopThunk thunk)
+            result = thunk.Force();
+
+        List<CopValue>? items = result switch
+        {
+            CopList list => list.Items.ToList(),
+            CopLazyCollection lazy => lazy.Enumerate().ToList(),
+            CopQueryable q => q.Enumerate().ToList(),
+            _ => null
+        };
+
+        // Only route non-empty collections whose every item is a Violation. Empty lists fall
+        // through — they produce no output and a clean exit either way.
+        if (items is null || items.Count == 0 || !items.All(IsViolation))
+            return false;
+
+        var env = bridge.Evaluator.GlobalEnvironment;
+        if (env.TryLookup("CHECK", out var check) && check is ICopCallable callable)
+        {
+            callable.Invoke([new CopList(items)], bridge.Evaluator, env);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsViolation(CopValue value)
+    {
+        if (value is CopThunk thunk)
+            value = thunk.Force();
+        return value switch
+        {
+            CopObject obj => string.Equals(obj.TypeName, "Violation", StringComparison.Ordinal),
+            CopDynamicObject dyn => string.Equals(dyn.TypeName, "Violation", StringComparison.Ordinal),
+            _ => false
+        };
+    }
+
+    private static void CollectCollectionOutputs(CopValue? result, List<PrintOutput> outputs)
     {
         try
         {

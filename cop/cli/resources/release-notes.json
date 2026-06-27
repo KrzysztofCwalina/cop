@@ -132,6 +132,14 @@
         "Turn off a whole built-in rule by name: `let mine = csharp-checks - var-declarations` (works for the C#, Python, JavaScript/TypeScript, Rust, and Java check packages), or silence a single line with a `// cop-ignore: <check>` comment.",
         "New `nameof(<identifier>)` language intrinsic returns an identifier's name as a string."
       ]
+    },
+    {
+      "version": "2026.6.26.4",
+      "approved": true,
+      "features": [
+        "VS Code extension: hovering a list of violations (or the `codebase` binding) no longer shows \"unknown\", and files no longer lose syntax coloring after a lone `#` comment line.",
+        "The extension's IntelliSense and syntax highlighting are now generated from cop's own language definitions (types, keywords, predicates), so they stay in sync as the language evolves instead of drifting and breaking."
+      ]
     }
   ]
 }

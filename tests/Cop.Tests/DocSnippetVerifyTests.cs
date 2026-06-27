@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Threading;
 using NUnit.Framework;
 
 namespace Cop.Tests;
@@ -112,7 +113,7 @@ public class DocSnippetVerifyTests
             {
                 verified++;
                 var copFile = Path.Combine(tmpDir, "snippet.cop");
-                File.WriteAllText(copFile, snippet.Content);
+                WriteSnippet(copFile, snippet.Content);
 
                 var psi = new ProcessStartInfo
                 {
@@ -125,9 +126,12 @@ public class DocSnippetVerifyTests
                     WorkingDirectory = RepoRoot,
                 };
                 using var process = Process.Start(psi)!;
-                var stdout = process.StandardOutput.ReadToEnd();
-                var stderr = process.StandardError.ReadToEnd();
-                process.WaitForExit(30_000);
+                var outTask = process.StandardOutput.ReadToEndAsync();
+                var errTask = process.StandardError.ReadToEndAsync();
+                if (!process.WaitForExit(30_000))
+                    try { process.Kill(entireProcessTree: true); } catch { }
+                var stdout = outTask.GetAwaiter().GetResult();
+                var stderr = errTask.GetAwaiter().GetResult();
 
                 if (process.ExitCode != 0)
                     failures.Add($"{snippet.Doc}:{snippet.StartLine}\n    {(stdout + stderr).Trim().Replace("\n", "\n    ")}");
@@ -143,5 +147,19 @@ public class DocSnippetVerifyTests
             Assert.Fail($"{failures.Count} doc ```cop snippet(s) failed `cop verify` " +
                 $"(mark intentionally-partial snippets with ```cop skip):\n\n" +
                 string.Join("\n\n", failures));
+    }
+
+    /// <summary>
+    /// Writes the (reused) snippet file, retrying briefly on transient IOExceptions — a
+    /// previously spawned cop.exe can momentarily hold the file handle, which otherwise makes
+    /// this harness flake with "the process cannot access the file ... snippet.cop".
+    /// </summary>
+    private static void WriteSnippet(string path, string content)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try { File.WriteAllText(path, content); return; }
+            catch (IOException) when (attempt < 20) { Thread.Sleep(100); }
+        }
     }
 }

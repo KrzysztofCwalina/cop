@@ -1,0 +1,122 @@
+# Go checks — correctness, style, complexity, and documentation
+#
+# A curated set of Go static-analysis lints (go vet / staticcheck / revive / golint style)
+# reimplemented as deterministic cop checks. Hardcodes the Go provider via codebase(go.parse())
+# so it runs with just a target directory: `cop go-checks -t .` (no -p flag required).
+
+import go
+import code
+
+let cb = codebase(go.parse())
+
+# Test files (*_test.go) and vendored dependencies legitimately use patterns the checks below
+# flag, so the checks are scoped to production source.
+predicate isProdStatement(Statement) => !Statement.File.Path:endsWith('_test.go')
+    && !Statement.File.Path:contains('/vendor/')
+    && !Statement.File.Path:startsWith('vendor/')
+
+predicate isProdType(Type) => !Type.File.Path:endsWith('_test.go')
+    && !Type.File.Path:contains('/vendor/')
+    && !Type.File.Path:startsWith('vendor/')
+
+predicate isProdMethod(Method) => !Method.File.Path:endsWith('_test.go')
+    && !Method.File.Path:contains('/vendor/')
+    && !Method.File.Path:startsWith('vendor/')
+
+predicate isProdLine(Line) => !Line.File.Path:endsWith('_test.go')
+    && !Line.File.Path:contains('/vendor/')
+    && !Line.File.Path:startsWith('vendor/')
+
+# Suppression: honor `// cop-ignore: <check>` comments. A statement/line whose preceding
+# comment set CopIgnore is exempted. (Type/Method carry no CopIgnore, so only the
+# statement/call/line checks below are line-suppressible — use composition or path
+# predicates to exclude the type/method checks.)
+predicate notIgnored(Statement) => Statement.CopIgnore == ''
+predicate lineNotIgnored(Line) => Line.CopIgnore == ''
+
+## Correctness
+
+# panic() aborts the program — return an error instead in library code.
+predicate isPanicCall(Statement) => Statement.Kind == throw && Statement.MemberName == 'panic'
+export let panic-calls = cb.Statements:isPanicCall:isProdStatement:notIgnored
+    :toWarning('Avoid panic() in library code — return an error instead')
+
+# os.Exit() skips deferred cleanup and is hard to test — reserve it for main().
+predicate isOsExit(Statement) => Statement.TypeName == 'os' && Statement.MemberName == 'Exit'
+export let os-exit = cb.Calls:isOsExit:isProdStatement:notIgnored
+    :toWarning('Avoid os.Exit() outside main — it skips deferred cleanup; return an error instead')
+
+# time.Sleep() in production code is usually a concurrency smell — prefer channels/contexts.
+predicate isTimeSleep(Statement) => Statement.TypeName == 'time' && Statement.MemberName == 'Sleep'
+export let time-sleep = cb.Calls:isTimeSleep:isProdStatement:notIgnored
+    :toInfo('time.Sleep() is often a concurrency smell — prefer channels, contexts, or timers')
+
+## Combined correctness checks
+export let go-correctness-checks = panic-calls + os-exit + time-sleep
+
+## Style
+
+# Avoid fmt console output in library code — use a logging framework (log/slog).
+predicate isConsolePrint(Statement) => Statement.TypeName == 'fmt'
+    && (Statement.MemberName == 'Print' || Statement.MemberName == 'Printf'
+        || Statement.MemberName == 'Println')
+export let console-output = cb.Calls:isConsolePrint:isProdStatement:notIgnored
+    :toWarning('Avoid fmt.{item.MemberName} in library code — use a logging framework (log/slog)')
+
+# Go identifiers should use MixedCaps, not snake_case.
+predicate isDeclaredType(Type) => Type.Kind == Struct || Type.Kind == Interface
+predicate hasUnderscoreName(Type) => isDeclaredType && Type.Name:contains('_')
+export let underscore-naming = cb.Types:isProdType:hasUnderscoreName
+    :toWarning('{item.Name} — Go names should use MixedCaps, not snake_case')
+
+# Common initialisms should be all-caps (ID not Id, URL not Url, HTTP not Http, ...).
+predicate hasBadInitialism(Type) => isDeclaredType && isPublic
+    && (Type.Name:matches('Id([A-Z]|$)') || Type.Name:matches('Url([A-Z]|$)')
+        || Type.Name:matches('Http([A-Z]|$)') || Type.Name:matches('Api([A-Z]|$)')
+        || Type.Name:matches('Json([A-Z]|$)') || Type.Name:matches('Xml([A-Z]|$)'))
+export let initialism-casing = cb.Types:isProdType:hasBadInitialism
+    :toInfo('{item.Name} — use all-caps initialisms (ID/URL/HTTP/API/JSON/XML)')
+
+# interface{} can be written as `any` since Go 1.18.
+predicate isEmptyInterface(Line) => Line.Text:contains('interface{}')
+export let use-any = cb.Lines:isProdLine:isEmptyInterface:lineNotIgnored
+    :toInfo('Use any instead of interface{} (Go 1.18+)')
+
+## Combined style checks
+export let go-style-checks = console-output + underscore-naming + initialism-casing + use-any
+
+## Complexity
+
+# Functions with more than 7 parameters are hard to call — group them into a struct.
+predicate hasTooManyArgs(Method) => Method.Parameters.Count > 7
+export let too-many-arguments = cb.Methods:isProdMethod:hasTooManyArgs
+    :toWarning('{item.Name} has more than 7 parameters — group them into a struct')
+
+# Very large function bodies are hard to read — consider splitting.
+predicate isLargeFunction(Method) => Method.Statements.Count > 50
+export let large-function = cb.Methods:isProdMethod:isLargeFunction
+    :toInfo('{item.Name} is large (> 50 statements) — consider splitting it')
+
+## Combined complexity checks
+export let go-complexity-checks = too-many-arguments + large-function
+
+## Documentation
+
+# Exported types (struct/interface) should have a doc comment.
+predicate isUndocumentedType(Type) => isDeclaredType && isPublic && !Type.Documented
+export let undocumented-types = cb.Types:isProdType:isUndocumentedType
+    :toWarning('Exported type {item.Name} is missing a doc comment')
+
+# Exported functions should have a doc comment.
+predicate isUndocumentedFn(Method) => isPublic && !Method.Documented
+predicate hasUndocumentedFn(Type) => Type.Methods:any(isUndocumentedFn)
+export let undocumented-functions = cb.Types:isProdType:hasUndocumentedFn
+    :toWarning('{item.Name} has exported functions without doc comments')
+
+## Combined documentation checks
+export let go-doc-checks = undocumented-types + undocumented-functions
+
+## All Go checks combined
+export let go-checks = go-correctness-checks + go-style-checks + go-complexity-checks + go-doc-checks
+
+command MAIN = CHECK(go-checks)

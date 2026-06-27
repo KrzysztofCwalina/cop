@@ -44,6 +44,8 @@
     "license": "ISC",
     "type": "commonjs",
     "devDependencies": {
-        "jest": "^30.4.2"
+        "jest": "^30.4.2",
+        "vscode-oniguruma": "^2.0.1",
+        "vscode-textmate": "^9.3.2"
     }
 }

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
+using System.Threading;
 using NUnit.Framework;
 
 namespace Cop.Tests;
@@ -143,7 +144,7 @@ public class DocSnippetRunTests
             {
                 executed++;
                 var copFile = Path.Combine(tmpDir, "snippet.cop");
-                File.WriteAllText(copFile, snippet.Content);
+                WriteSnippet(copFile, snippet.Content);
 
                 var (exit, stdout, stderr) = Run(copFile);
 
@@ -191,5 +192,19 @@ public class DocSnippetRunTests
         if (!p.WaitForExit(60_000))
             try { p.Kill(entireProcessTree: true); } catch { }
         return (p.ExitCode, outTask.GetAwaiter().GetResult(), errTask.GetAwaiter().GetResult());
+    }
+
+    /// <summary>
+    /// Writes the (reused) snippet file, retrying briefly on transient IOExceptions — a
+    /// previously spawned cop.exe can momentarily hold the file handle, which otherwise makes
+    /// this harness flake with "the process cannot access the file ... snippet.cop".
+    /// </summary>
+    private static void WriteSnippet(string path, string content)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try { File.WriteAllText(path, content); return; }
+            catch (IOException) when (attempt < 20) { Thread.Sleep(100); }
+        }
     }
 }

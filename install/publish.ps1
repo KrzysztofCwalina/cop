@@ -281,11 +281,28 @@ foreach ($rid in $Runtimes) {
     Write-Host "  -> $zipPath"
 }
 
-# Package VS Code extension as a zip for release
+# Regenerate the VS Code editor metadata (metadata.json + grammar keyword lists) from cop's own
+# definitions, so the extension's IntelliSense and colorizer can never drift from the language.
+Write-Host "`nGenerating VS Code editor metadata (tools/copmeta)..."
+$copmetaProj = Join-Path $RepoRoot "tools\copmeta\copmeta.csproj"
+& dotnet run --project $copmetaProj -- --repo-root $RepoRoot
+if ($LASTEXITCODE -ne 0) { throw "copmeta failed to generate editor metadata (exit $LASTEXITCODE)" }
+
+# Package VS Code extension as a zip for release. Stage only the files the extension needs at
+# runtime so dev-only artifacts (node_modules, tests, lockfile) never end up in the release.
 $vscodeDir = Join-Path $RepoRoot "install\vscode-cop"
 $vscodeZip = Join-Path $OutputBase "cop-vscode.zip"
 if (Test-Path $vscodeZip) { Remove-Item -Force $vscodeZip }
-[System.IO.Compression.ZipFile]::CreateFromDirectory($vscodeDir, $vscodeZip, [System.IO.Compression.CompressionLevel]::Optimal, $false)
+$vscodeStage = Join-Path $OutputBase "vscode-cop-stage"
+if (Test-Path $vscodeStage) { Remove-Item -Recurse -Force $vscodeStage }
+New-Item -ItemType Directory -Force -Path $vscodeStage | Out-Null
+foreach ($item in @('extension.js', 'package.json', 'language-configuration.json', 'metadata.json', 'syntaxes')) {
+    $src = Join-Path $vscodeDir $item
+    if (-not (Test-Path $src)) { throw "VS Code extension is missing required file: $item" }
+    Copy-Item -Recurse -Force $src (Join-Path $vscodeStage $item)
+}
+[System.IO.Compression.ZipFile]::CreateFromDirectory($vscodeStage, $vscodeZip, [System.IO.Compression.CompressionLevel]::Optimal, $false)
+Remove-Item -Recurse -Force $vscodeStage
 Write-Host "  -> $vscodeZip (VS Code extension)"
 
 Write-Host "`nDone! Published for: $($Runtimes -join ', ')"

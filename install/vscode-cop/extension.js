@@ -228,583 +228,129 @@ function resolveImports(docPath, imports) {
     return { types: mergedTypes, collections: mergedCollections, functions: mergedFunctions, predicates: mergedPredicates };
 }
 
-// ── Type and property definitions ──────────────────────────────────────────
-
-/** @type {Record<string, {properties: {name:string, type:string}[]}>} */
-const TYPES = {
-    Type: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'Kind', type: 'string' },
-        { name: 'Modifiers', type: 'int' },
-        { name: 'BaseTypes', type: '[string]' },
-        { name: 'Constructors', type: '[Method]' },
-        { name: 'Methods', type: '[Method]' },
-        { name: 'MethodNames', type: '[string]' },
-        { name: 'NestedTypes', type: '[Type]' },
-        { name: 'EnumValues', type: '[string]' },
-        { name: 'Decorators', type: '[string]' },
-        { name: 'Line', type: 'int' },
-        { name: 'File', type: 'File?' },
-        { name: 'Source', type: 'string' },
-        { name: 'Documented', type: 'bool' },
-        { name: 'Documentation', type: 'string?' },
-        { name: 'Fields', type: '[Field]' },
-        { name: 'Properties', type: '[Property]' },
-        { name: 'Events', type: '[Event]' },
-    ]},
-    Method: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'Modifiers', type: 'int' },
-        { name: 'ReturnType', type: 'TypeReference?' },
-        { name: 'Parameters', type: '[Parameter]' },
-        { name: 'Statements', type: '[Statement]' },
-        { name: 'Decorators', type: '[string]' },
-        { name: 'Line', type: 'int' },
-        { name: 'Documented', type: 'bool' },
-        { name: 'Documentation', type: 'string?' },
-    ]},
-    Constructor: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'Modifiers', type: 'int' },
-        { name: 'ReturnType', type: 'TypeReference?' },
-        { name: 'Parameters', type: '[Parameter]' },
-        { name: 'Statements', type: '[Statement]' },
-        { name: 'Decorators', type: '[string]' },
-        { name: 'Line', type: 'int' },
-        { name: 'Documented', type: 'bool' },
-    ]},
-    Field: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'Type', type: 'TypeReference?' },
-        { name: 'Modifiers', type: 'int' },
-        { name: 'Line', type: 'int' },
-    ]},
-    Property: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'Type', type: 'TypeReference?' },
-        { name: 'Modifiers', type: 'int' },
-        { name: 'HasGetter', type: 'bool' },
-        { name: 'HasSetter', type: 'bool' },
-        { name: 'Documented', type: 'bool' },
-        { name: 'Documentation', type: 'string?' },
-        { name: 'Line', type: 'int' },
-    ]},
-    Event: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'Type', type: 'TypeReference?' },
-        { name: 'Modifiers', type: 'int' },
-        { name: 'Line', type: 'int' },
-    ]},
-    Api: { properties: [
-        { name: 'Kind', type: 'string' },
-        { name: 'TypeName', type: 'string' },
-        { name: 'MemberName', type: 'string' },
-        { name: 'Signature', type: 'string' },
-        { name: 'ApiAsText', type: 'string' },
-        { name: 'Line', type: 'int' },
-        { name: 'File', type: 'File?' },
-        { name: 'Source', type: 'string' },
-    ]},
-    Member: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'DeclaringType', type: 'string' },
-        { name: 'Line', type: 'int' },
-    ]},
-    Region: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'StartLine', type: 'int' },
-        { name: 'EndLine', type: 'int' },
-        { name: 'Content', type: 'string' },
-        { name: 'ContentHash', type: 'string' },
-        { name: 'File', type: 'File?' },
-        { name: 'Source', type: 'string' },
-    ]},
-    Project: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'Path', type: 'string' },
-        { name: 'Language', type: 'string?' },
-        { name: 'References', type: '[string]' },
-    ]},
-    Parameter: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'Type', type: 'TypeReference?' },
-        { name: 'Variadic', type: 'bool' },
-        { name: 'Kwargs', type: 'bool' },
-        { name: 'Defaulted', type: 'bool' },
-        { name: 'DefaultValue', type: 'string?' },
-        { name: 'Line', type: 'int' },
-    ]},
-    TypeReference: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'Namespace', type: 'string?' },
-        { name: 'Generic', type: 'bool' },
-        { name: 'GenericArguments', type: '[TypeReference]' },
-        { name: 'Length', type: 'int' },
-    ]},
-    Statement: { properties: [
-        { name: 'Kind', type: 'string' },
-        { name: 'Keywords', type: '[string]' },
-        { name: 'TypeName', type: 'string?' },
-        { name: 'MemberName', type: 'string?' },
-        { name: 'Arguments', type: '[string]' },
-        { name: 'Line', type: 'int' },
-        { name: 'InMethod', type: 'bool' },
-        { name: 'Rethrows', type: 'bool' },
-        { name: 'Generic', type: 'bool' },
-        { name: 'ErrorHandler', type: 'bool' },
-        { name: 'File', type: 'File?' },
-        { name: 'Source', type: 'string' },
-        { name: 'Method', type: 'Method?' },
-        { name: 'Parent', type: 'Statement?' },
-        { name: 'Children', type: '[Statement]' },
-        { name: 'Ancestors', type: '[Statement]' },
-        { name: 'Condition', type: 'string?' },
-        { name: 'Expression', type: 'string?' },
-    ]},
-    Call: { properties: [
-        { name: 'Kind', type: 'string' },
-        { name: 'Keywords', type: '[string]' },
-        { name: 'TypeName', type: 'string?' },
-        { name: 'MemberName', type: 'string?' },
-        { name: 'Arguments', type: '[string]' },
-        { name: 'Signature', type: 'string' },
-        { name: 'Line', type: 'int' },
-        { name: 'InMethod', type: 'bool' },
-        { name: 'Rethrows', type: 'bool' },
-        { name: 'Generic', type: 'bool' },
-        { name: 'ErrorHandler', type: 'bool' },
-        { name: 'File', type: 'File?' },
-        { name: 'Source', type: 'string' },
-        { name: 'Method', type: 'Method?' },
-        { name: 'Parent', type: 'Statement?' },
-        { name: 'Children', type: '[Statement]' },
-        { name: 'Ancestors', type: '[Statement]' },
-        { name: 'Condition', type: 'string?' },
-        { name: 'Expression', type: 'string?' },
-    ]},
-    Declaration: { properties: [
-        { name: 'Kind', type: 'string' },
-        { name: 'Keywords', type: '[string]' },
-        { name: 'TypeName', type: 'string?' },
-        { name: 'MemberName', type: 'string?' },
-        { name: 'Arguments', type: '[string]' },
-        { name: 'Line', type: 'int' },
-        { name: 'InMethod', type: 'bool' },
-        { name: 'Rethrows', type: 'bool' },
-        { name: 'Generic', type: 'bool' },
-        { name: 'ErrorHandler', type: 'bool' },
-        { name: 'File', type: 'File?' },
-        { name: 'Source', type: 'string' },
-        { name: 'Method', type: 'Method?' },
-        { name: 'Parent', type: 'Statement?' },
-        { name: 'Children', type: '[Statement]' },
-        { name: 'Ancestors', type: '[Statement]' },
-        { name: 'Condition', type: 'string?' },
-        { name: 'Expression', type: 'string?' },
-    ]},
-    ErrorHandler: { properties: [
-        { name: 'Kind', type: 'string' },
-        { name: 'Keywords', type: '[string]' },
-        { name: 'TypeName', type: 'string?' },
-        { name: 'MemberName', type: 'string?' },
-        { name: 'Arguments', type: '[string]' },
-        { name: 'Line', type: 'int' },
-        { name: 'InMethod', type: 'bool' },
-        { name: 'Rethrows', type: 'bool' },
-        { name: 'Generic', type: 'bool' },
-        { name: 'ErrorHandler', type: 'bool' },
-        { name: 'File', type: 'File?' },
-        { name: 'Source', type: 'string' },
-        { name: 'Method', type: 'Method?' },
-        { name: 'Parent', type: 'Statement?' },
-        { name: 'Children', type: '[Statement]' },
-        { name: 'Ancestors', type: '[Statement]' },
-        { name: 'Condition', type: 'string?' },
-        { name: 'Expression', type: 'string?' },
-    ]},
-    Attribute: { properties: [
-        { name: 'Kind', type: 'string' },
-        { name: 'Keywords', type: '[string]' },
-        { name: 'TypeName', type: 'string?' },
-        { name: 'MemberName', type: 'string?' },
-        { name: 'Arguments', type: '[string]' },
-        { name: 'Line', type: 'int' },
-        { name: 'InMethod', type: 'bool' },
-        { name: 'Rethrows', type: 'bool' },
-        { name: 'Generic', type: 'bool' },
-        { name: 'ErrorHandler', type: 'bool' },
-        { name: 'File', type: 'File?' },
-        { name: 'Source', type: 'string' },
-        { name: 'Method', type: 'Method?' },
-        { name: 'Parent', type: 'Statement?' },
-        { name: 'Children', type: '[Statement]' },
-        { name: 'Ancestors', type: '[Statement]' },
-        { name: 'Condition', type: 'string?' },
-        { name: 'Expression', type: 'string?' },
-    ]},
-    Line: { properties: [
-        { name: 'Text', type: 'string' },
-        { name: 'Number', type: 'int' },
-        { name: 'File', type: 'File?' },
-        { name: 'Source', type: 'string' },
-    ]},
-    File: { properties: [
-        { name: 'Path', type: 'string' },
-        { name: 'Language', type: 'string?' },
-        { name: 'Namespace', type: 'string?' },
-        { name: 'Usings', type: '[string]' },
-        { name: 'Types', type: '[Type]' },
-    ]},
-    Codebase: { properties: [
-        { name: 'Files', type: '[File]' },
-        { name: 'Types', type: '[Type]' },
-        { name: 'Statements', type: '[Statement]' },
-        { name: 'Calls', type: '[Statement]' },
-        { name: 'Lines', type: '[Line]' },
-        { name: 'Members', type: '[Member]' },
-        { name: 'Api', type: '[Api]' },
-        { name: 'Regions', type: '[Region]' },
-        { name: 'Projects', type: '[Project]' },
-    ]},
-    Folder: { properties: [
-        { name: 'Path', type: 'string' },
-        { name: 'Name', type: 'string' },
-        { name: 'Empty', type: 'bool' },
-        { name: 'FileCount', type: 'int' },
-        { name: 'SubfolderCount', type: 'int' },
-        { name: 'Depth', type: 'int' },
-        { name: 'MinutesSinceModified', type: 'int' },
-        { name: 'Source', type: 'string' },
-    ]},
-    File: { properties: [
-        { name: 'Path', type: 'string' },
-        { name: 'Name', type: 'string' },
-        { name: 'Extension', type: 'string' },
-        { name: 'Size', type: 'int' },
-        { name: 'Folder', type: 'string' },
-        { name: 'Depth', type: 'int' },
-        { name: 'MinutesSinceModified', type: 'int' },
-        { name: 'Source', type: 'string' },
-    ]},
-    Filesystem: { properties: [
-        { name: 'Folders', type: '[Folder]' },
-        { name: 'Files', type: '[File]' },
-    ]},
-    // TypeSpec raw types
-    TspDecorator: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'Arguments', type: '[string]' },
-    ]},
-    TspProperty: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'Type', type: 'string' },
-        { name: 'Optional', type: 'bool' },
-        { name: 'Default', type: 'string?' },
-        { name: 'Decorators', type: '[TspDecorator]' },
-    ]},
-    TspModel: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'Namespace', type: 'string?' },
-        { name: 'Properties', type: '[TspProperty]' },
-        { name: 'BaseModel', type: 'string?' },
-        { name: 'Decorators', type: '[TspDecorator]' },
-    ]},
-    TspOperation: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'Namespace', type: 'string?' },
-        { name: 'Interface', type: 'string?' },
-        { name: 'Parameters', type: '[TspProperty]' },
-        { name: 'ReturnType', type: 'string' },
-        { name: 'Decorators', type: '[TspDecorator]' },
-    ]},
-    TspInterface: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'Namespace', type: 'string?' },
-        { name: 'Operations', type: '[TspOperation]' },
-        { name: 'Decorators', type: '[TspDecorator]' },
-    ]},
-    TspEnumMember: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'Value', type: 'string?' },
-        { name: 'Decorators', type: '[TspDecorator]' },
-    ]},
-    TspEnum: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'Namespace', type: 'string?' },
-        { name: 'Members', type: '[TspEnumMember]' },
-        { name: 'Decorators', type: '[TspDecorator]' },
-    ]},
-    TspUnionVariant: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'Type', type: 'string' },
-    ]},
-    TspUnion: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'Namespace', type: 'string?' },
-        { name: 'Variants', type: '[TspUnionVariant]' },
-        { name: 'Decorators', type: '[TspDecorator]' },
-    ]},
-    TspScalar: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'Namespace', type: 'string?' },
-        { name: 'BaseScalar', type: 'string?' },
-        { name: 'Decorators', type: '[TspDecorator]' },
-    ]},
-    TspNamespace: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'FullName', type: 'string' },
-        { name: 'Decorators', type: '[TspDecorator]' },
-    ]},
-    // TypeSpec HTTP types
-    HttpParameter: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'Type', type: 'string' },
-        { name: 'In', type: 'string' },
-        { name: 'Optional', type: 'bool' },
-        { name: 'Style', type: 'string?' },
-    ]},
-    HttpHeader: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'Type', type: 'string' },
-    ]},
-    HttpResponse: { properties: [
-        { name: 'StatusCode', type: 'string' },
-        { name: 'Description', type: 'string?' },
-        { name: 'Body', type: 'string?' },
-        { name: 'Headers', type: '[HttpHeader]' },
-    ]},
-    HttpOperation: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'Verb', type: 'string' },
-        { name: 'Path', type: 'string' },
-        { name: 'UriTemplate', type: 'string' },
-        { name: 'Parameters', type: '[HttpParameter]' },
-        { name: 'Responses', type: '[HttpResponse]' },
-        { name: 'Interface', type: 'string?' },
-        { name: 'Decorators', type: '[TspDecorator]' },
-    ]},
-    HttpService: { properties: [
-        { name: 'Name', type: 'string' },
-        { name: 'Namespace', type: 'string' },
-        { name: 'Operations', type: '[HttpOperation]' },
-        { name: 'Auth', type: 'string?' },
-    ]},
-    // Markdown types
-    Heading: { properties: [
-        { name: 'Text', type: 'string' },
-        { name: 'Level', type: 'int' },
-        { name: 'Line', type: 'int' },
-        { name: 'File', type: 'File?' },
-        { name: 'Source', type: 'string' },
-    ]},
-    Link: { properties: [
-        { name: 'Url', type: 'string' },
-        { name: 'Text', type: 'string?' },
-        { name: 'Line', type: 'int' },
-        { name: 'File', type: 'File?' },
-        { name: 'Source', type: 'string' },
-    ]},
-    Section: { properties: [
-        { name: 'Heading', type: 'string' },
-        { name: 'Level', type: 'int' },
-        { name: 'Content', type: 'string' },
-        { name: 'StartLine', type: 'int' },
-        { name: 'EndLine', type: 'int' },
-        { name: 'File', type: 'File?' },
-        { name: 'Source', type: 'string' },
-    ]},
-    FenceBlock: { properties: [
-        { name: 'Language', type: 'string?' },
-        { name: 'Tag', type: 'string?' },
-        { name: 'StartLine', type: 'int' },
-        { name: 'EndLine', type: 'int' },
-        { name: 'Content', type: 'string' },
-        { name: 'ContentHash', type: 'string' },
-        { name: 'File', type: 'File?' },
-        { name: 'Source', type: 'string' },
-    ]},
-    MarkdownContent: { properties: [
-        { name: 'Headings', type: '[Heading]' },
-        { name: 'Links', type: '[Link]' },
-        { name: 'Sections', type: '[Section]' },
-        { name: 'FenceBlocks', type: '[FenceBlock]' },
-    ]},
-    // Code-analysis Violation type
-    Violation: { properties: [
-        { name: 'Severity', type: 'string' },
-        { name: 'Message', type: 'string' },
-        { name: 'File', type: 'string' },
-        { name: 'Line', type: 'int' },
-        { name: 'Source', type: 'string' },
-    ]},
-};
-
-// ── Completion catalogs ────────────────────────────────────────────────────
+// ── Metadata-driven language model ─────────────────────────────────────────
+// All built-in language knowledge — types, collections, keywords, primitive
+// predicates/properties/transforms, flags and the package list — is generated by
+// tools/copmeta into metadata.json from cop's own C# definitions and core .cop packages.
+// Nothing below is hand-maintained, so editor IntelliSense and colorization can never
+// drift from the language. Regenerate with: dotnet run --project tools/copmeta
 
 const Kind = vscode.CompletionItemKind;
 
-const STRING_PREDICATES = [
-    { label: 'equals', detail: '(value) — case-insensitive equality', kind: Kind.Method },
-    { label: 'notEquals', detail: '(value) — case-insensitive inequality', kind: Kind.Method },
-    { label: 'startsWith', detail: '(value) — prefix match', kind: Kind.Method },
-    { label: 'endsWith', detail: '(value) — suffix match', kind: Kind.Method },
-    { label: 'contains', detail: '(value) — substring match', kind: Kind.Method },
-    { label: 'containsAny', detail: '(list) — any list item is a substring', kind: Kind.Method },
-    { label: 'matches', detail: '(pattern) — regex match', kind: Kind.Method },
-    { label: 'sameAs', detail: '(value) — convention-insensitive comparison', kind: Kind.Method },
-    { label: 'empty', detail: '— string is empty', kind: Kind.Method },
-];
+const META = loadMetadata();
 
-const NUMERIC_PREDICATES = [
-    { label: 'equals', detail: '(value) — equal to', kind: Kind.Method },
-    { label: 'notEquals', detail: '(value) — not equal to', kind: Kind.Method },
-    { label: 'greaterThan', detail: '(value) — greater than', kind: Kind.Method },
-    { label: 'lessThan', detail: '(value) — less than', kind: Kind.Method },
-    { label: 'greaterOrEqual', detail: '(value) — greater or equal', kind: Kind.Method },
-    { label: 'lessOrEqual', detail: '(value) — less or equal', kind: Kind.Method },
-    { label: 'isSet', detail: '(flag) — flags bit is set', kind: Kind.Method },
-    { label: 'isClear', detail: '(flag) — flags bit is clear', kind: Kind.Method },
-];
+function loadMetadata() {
+    const empty = {
+        keywords: [], types: {}, collections: {}, enums: {}, flags: {},
+        predicates: [], functions: [], primitives: {}, packages: [],
+    };
+    try {
+        const raw = fs.readFileSync(path.join(__dirname, 'metadata.json'), 'utf8');
+        return Object.assign(empty, JSON.parse(raw));
+    } catch (err) {
+        console.error('cop: could not load metadata.json -', err && err.message);
+        return empty;
+    }
+}
 
-const COLLECTION_PREDICATES = [
-    { label: 'any', detail: '((object) => bool) — true if any item matches', kind: Kind.Method },
-    { label: 'none', detail: '((object) => bool) — true if no items match', kind: Kind.Method },
-    { label: 'all', detail: '((object) => bool) — true if all items match', kind: Kind.Method },
-    { label: 'count', detail: '((object) => bool) — count items matching predicate', kind: Kind.Method },
-    { label: 'contains', detail: '(value) — list contains value', kind: Kind.Method },
-    { label: 'containsAny', detail: '(values) — list contains any value from list', kind: Kind.Method },
-    { label: 'empty', detail: '— collection is empty', kind: Kind.Method },
-];
+/** Built-in types: { TypeName: { properties: [{name,type}], base? } } */
+const TYPES = (() => {
+    const out = {};
+    for (const [name, def] of Object.entries(META.types)) {
+        out[name] = {
+            properties: (def.properties || []).map(p => ({ name: p.name, type: p.type })),
+            base: def.base || undefined,
+        };
+    }
+    return out;
+})();
 
-const UNIVERSAL_PREDICATES = [
-    { label: 'in', detail: '(list) — value is member of list', kind: Kind.Method },
-    { label: 'isError', detail: '— value is an error', kind: Kind.Method },
-];
+/** Bare collection name → element type (Types → Type), from the unified Codebase model. */
+const COLLECTIONS = META.collections || {};
 
-const OBJECT_PREDICATES = [
-    { label: 'containsKey', detail: '(name) — object has field with given name', kind: Kind.Method },
-];
+const asMethod = e => ({ label: e.name, detail: e.detail, kind: Kind.Method });
+const asProperty = e => ({ label: e.name, detail: e.detail, kind: Kind.Property });
+const PRIM = META.primitives || {};
 
-// All predicates deduped for fallback
+const STRING_PREDICATES = (PRIM.stringPredicates || []).map(asMethod);
+const NUMERIC_PREDICATES = (PRIM.numericPredicates || []).map(asMethod);
+const COLLECTION_PREDICATES = (PRIM.collectionPredicates || []).map(asMethod);
+const UNIVERSAL_PREDICATES = (PRIM.universalPredicates || []).map(asMethod);
+const OBJECT_PREDICATES = (PRIM.objectPredicates || []).map(asMethod);
 const ALL_PREDICATES = dedup([
-    ...STRING_PREDICATES, ...NUMERIC_PREDICATES, ...COLLECTION_PREDICATES, ...UNIVERSAL_PREDICATES, ...OBJECT_PREDICATES
+    ...STRING_PREDICATES, ...NUMERIC_PREDICATES, ...COLLECTION_PREDICATES,
+    ...UNIVERSAL_PREDICATES, ...OBJECT_PREDICATES,
 ]);
 
-const STRING_PROPERTIES = [
-    { label: 'Length', detail: ': int — string length', kind: Kind.Property },
-    { label: 'Lower', detail: ': string — lowercase', kind: Kind.Property },
-    { label: 'Upper', detail: ': string — uppercase', kind: Kind.Property },
-    { label: 'Normalized', detail: ': string — convention-insensitive form', kind: Kind.Property },
-    { label: 'Words', detail: ': [string] — split into words', kind: Kind.Property },
-];
+const STRING_PROPERTIES = (PRIM.stringProperties || []).map(asProperty);
+const STRING_TRANSFORMS = (PRIM.stringTransforms || []).map(asMethod);
+const COLLECTION_PROPERTIES = (PRIM.collectionProperties || []).map(asProperty);
+const COLLECTION_TRANSFORMS = (PRIM.collectionTransforms || []).map(asMethod);
 
-const STRING_TRANSFORMS = [
-    { label: 'Trim', detail: '(suffix) — remove suffix', kind: Kind.Method },
-    { label: 'Replace', detail: '(old, new) — replace substring', kind: Kind.Method },
-];
+const KEYWORDS = (META.keywords || []).map(k => ({
+    label: k.name,
+    detail: k.detail,
+    kind: k.category === 'constant' ? Kind.Constant : Kind.Keyword,
+}));
 
-const COLLECTION_PROPERTIES = [
-    { label: 'Count', detail: ': int — number of items', kind: Kind.Property },
-    { label: 'First', detail: '— first item', kind: Kind.Property },
-    { label: 'Last', detail: '— last item', kind: Kind.Property },
-    { label: 'Single', detail: '— single item (null if not exactly one)', kind: Kind.Property },
-    { label: 'Tail', detail: '— all elements except the first', kind: Kind.Property },
-];
+const isActionName = name => /^[A-Z][A-Z0-9_]*$/.test(name);
 
-const COLLECTION_TRANSFORMS = [
-    { label: 'Where', detail: '((object) => bool) — filter items', kind: Kind.Method },
-    { label: 'First', detail: '((object) => bool?) — first matching item', kind: Kind.Method },
-    { label: 'Last', detail: '((object) => bool?) — last matching item', kind: Kind.Method },
-    { label: 'Single', detail: '((object) => bool?) — single matching item', kind: Kind.Method },
-    { label: 'ElementAt', detail: '(index: int) — item at position', kind: Kind.Method },
-    { label: 'Select', detail: '((object) => object) — project each item', kind: Kind.Method },
-    { label: 'OrderBy', detail: '((object) => object) — sort ascending', kind: Kind.Method },
-    { label: 'OrderByDescending', detail: '((object) => object) — sort descending', kind: Kind.Method },
-    { label: 'Distinct', detail: '— remove duplicates', kind: Kind.Method },
-    { label: 'GroupBy', detail: '((object) => object) — group by key → Key, Items', kind: Kind.Method },
-    { label: 'Sum', detail: '((object) => float) — sum numeric field', kind: Kind.Method },
-    { label: 'Min', detail: '((object) => float) — minimum value', kind: Kind.Method },
-    { label: 'Max', detail: '((object) => float) — maximum value', kind: Kind.Method },
-    { label: 'Average', detail: '((object) => float) — average value', kind: Kind.Method },
-    { label: 'Reduce', detail: '((object, object) => object, initial) — reduce collection', kind: Kind.Method },
-];
+// Exported callables: UPPERCASE ones (CHECK, METRICS, …) are actions; the rest are functions.
+const ACTIONS = (META.functions || [])
+    .filter(f => isActionName(f.name))
+    .map(f => ({ label: f.name, detail: f.params ? `(${f.params})` : 'action', kind: Kind.Function }));
 
-const KEYWORDS = [
-    { label: 'predicate', detail: 'Define a boolean test', kind: Kind.Keyword },
-    { label: 'function', detail: 'Define a transform function', kind: Kind.Keyword },
-    { label: 'type', detail: 'Define a type', kind: Kind.Keyword },
-    { label: 'let', detail: 'Bind a named value', kind: Kind.Keyword },
-    { label: 'command', detail: 'Define a named command', kind: Kind.Keyword },
-    { label: 'import', detail: 'Import a package', kind: Kind.Keyword },
-    { label: 'export', detail: 'Export declarations', kind: Kind.Keyword },
-    { label: 'collection', detail: 'Declare a collection', kind: Kind.Keyword },
-    { label: 'foreach', detail: 'Iterate over a collection', kind: Kind.Keyword },
-    { label: 'feed', detail: 'Specify a package feed directory', kind: Kind.Keyword },
-    { label: 'flags', detail: 'Define flag constants', kind: Kind.Keyword },
-    { label: 'enum', detail: 'Define an enumeration', kind: Kind.Keyword },
-    { label: 'async', detail: 'Run foreach asynchronously', kind: Kind.Keyword },
-    { label: 'RUN', detail: 'Invoke another command', kind: Kind.Keyword },
-    { label: 'true', detail: 'Boolean true', kind: Kind.Constant },
-    { label: 'false', detail: 'Boolean false', kind: Kind.Constant },
-    { label: 'nic', detail: 'Null value', kind: Kind.Constant },
-];
+const BUILTIN_FUNCTIONS = dedup((META.functions || [])
+    .filter(f => !isActionName(f.name))
+    .map(f => ({
+        label: f.name,
+        detail: f.returnType ? `(${f.params}) : ${f.returnType}` : `(${f.params})`,
+        kind: Kind.Function,
+    })));
 
-const ACTIONS = [
-    { label: 'PRINT', detail: '(message) — output to console', kind: Kind.Function },
-    { label: 'SAVE', detail: '(path, template) — write to file', kind: Kind.Function },
-    { label: 'RUN', detail: '(command) — invoke another command', kind: Kind.Function },
-    { label: 'DEBUG', detail: '(collection) — print internal structure', kind: Kind.Function },
-    { label: 'ASSERT', detail: '(collection) — fail if zero items', kind: Kind.Function },
-    { label: 'ASSERT_EMPTY', detail: '(collection) — fail if any items', kind: Kind.Function },
-    { label: 'FAIL', detail: '(message) — terminate with error', kind: Kind.Function },
-];
+// Offered after `runtime::` — any known type may name a provider's data shape.
+const RUNTIME_TYPES = Object.keys(TYPES).sort().map(name => ({
+    label: name, detail: 'runtime type', kind: Kind.Class,
+}));
 
-// Note: toError/toWarning/toInfo are package-level functions from code-analysis,
-// not language built-ins. They are surfaced via dynamic package import resolution.
+// Flag constants (Public, Static, …) used with :isSet()/:isClear().
+const MODIFIER_FLAGS = dedup(Object.values(META.flags || {}).flat().map(name => ({
+    label: name, detail: 'flag', kind: Kind.EnumMember,
+})));
 
-const BUILTIN_FUNCTIONS = [
-    { label: 'Text', detail: '(expr) — convert to string', kind: Kind.Function },
-    { label: 'Path', detail: "(pattern) — test file path against glob", kind: Kind.Function },
-    { label: 'Matches', detail: '(pattern) — test item text against regex', kind: Kind.Function },
-    { label: 'File', detail: '(path) — read file contents as string', kind: Kind.Function },
-    { label: 'Get', detail: '(obj, name) — get property by name dynamically', kind: Kind.Function },
-    { label: 'error', detail: '(message?) — create an error value', kind: Kind.Function },
-];
+/**
+ * Discover importable package names by scanning the real package feeds on disk (the repo's
+ * `packages/` dirs walking up from the document, restored `.cop/packages/`, and the global
+ * `~/.cop/packages`). Kept dynamic — and out of the bundled metadata — so the list always
+ * reflects the actual packages present without any hand-maintained or generated catalog.
+ */
+function getKnownPackages(document) {
+    const names = new Set();
+    const docPath = document && document.uri && document.uri.fsPath;
+    let dir = docPath ? path.dirname(docPath) : null;
+    while (dir) {
+        collectPackageNames(path.join(dir, 'packages'), names, 0);
+        collectPackageNames(path.join(dir, '.cop', 'packages'), names, 0);
+        const parent = path.dirname(dir);
+        if (parent === dir) break;
+        dir = parent;
+    }
+    const home = process.env.USERPROFILE || process.env.HOME;
+    if (home) collectPackageNames(path.join(home, '.cop', 'packages'), names, 0);
+    return [...names].sort().map(name => ({ label: name, detail: 'package', kind: Kind.Module }));
+}
 
-const RUNTIME_TYPES = [
-    { label: 'Codebase', detail: 'Code analysis collections (Types, Statements, Lines, Files)', kind: Kind.Class },
-    { label: 'Filesystem', detail: 'Filesystem collections (Folders, Files)', kind: Kind.Class },
-];
-
-const KNOWN_PACKAGES = [
-    { label: 'code', detail: 'Source code structural analysis', kind: Kind.Module },
-    { label: 'code-analysis', detail: 'Violation reporting framework', kind: Kind.Module },
-    { label: 'code-layering', detail: 'Project dependency analysis', kind: Kind.Module },
-    { label: 'csharp', detail: 'C# source language provider', kind: Kind.Module },
-    { label: 'python', detail: 'Python source language provider', kind: Kind.Module },
-    { label: 'javascript', detail: 'JavaScript/TypeScript source language provider', kind: Kind.Module },
-    { label: 'files', detail: 'Filesystem structural analysis', kind: Kind.Module },
-    { label: 'json',detail: 'JSON document analysis', kind: Kind.Module },
-    { label: 'markdown', detail: 'Markdown document analysis', kind: Kind.Module },
-    { label: 'typespec', detail: 'TypeSpec analysis', kind: Kind.Module },
-    { label: 'typespec-http', detail: 'TypeSpec HTTP analysis', kind: Kind.Module },
-    { label: 'http', detail: 'HTTP request/response provider', kind: Kind.Module },
-];
-
-const MODIFIER_FLAGS = [
-    { label: 'Public', detail: 'Modifier flag', kind: Kind.EnumMember },
-    { label: 'Private', detail: 'Modifier flag', kind: Kind.EnumMember },
-    { label: 'Protected', detail: 'Modifier flag', kind: Kind.EnumMember },
-    { label: 'Internal', detail: 'Modifier flag', kind: Kind.EnumMember },
-    { label: 'Static', detail: 'Modifier flag', kind: Kind.EnumMember },
-    { label: 'Sealed', detail: 'Modifier flag', kind: Kind.EnumMember },
-    { label: 'Abstract', detail: 'Modifier flag', kind: Kind.EnumMember },
-    { label: 'Virtual', detail: 'Modifier flag', kind: Kind.EnumMember },
-    { label: 'Async', detail: 'Modifier flag', kind: Kind.EnumMember },
-    { label: 'Override', detail: 'Modifier flag', kind: Kind.EnumMember },
-    { label: 'Readonly', detail: 'Modifier flag', kind: Kind.EnumMember },
-    { label: 'Const', detail: 'Modifier flag', kind: Kind.EnumMember },
-];
+function collectPackageNames(feedPath, names, depth) {
+    if (depth > 4 || !fs.existsSync(feedPath)) return;
+    let entries;
+    try { entries = fs.readdirSync(feedPath, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+        if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+        const sub = path.join(feedPath, entry.name);
+        if (isPackageDir(sub, entry.name)) names.add(entry.name);
+        else collectPackageNames(sub, names, depth + 1); // recurse through group folders
+    }
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -854,11 +400,12 @@ function scanDocument(doc) {
             imports.push(m[1]);
         }
         // let name : [Type] = expr  OR  let name = expr
-        if ((m = text.match(/^(?:export\s+)?let\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s*(?::\s*(\[[^\]]+\]|[A-Za-z_][A-Za-z0-9_?]*))?\s*=\s*(.+)/))) {
-            // Gather continuation lines so multi-line expressions are captured in full,
-            // e.g. a chained `:toError(...)` on the next line, or a union spread across
-            // lines (`a +` / `b`). Without this the hover would miss the transform and the
-            // inferred type would be wrong (or "unknown").
+        if ((m = text.match(/^(?:export\s+)?let\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s*(?::\s*(\[[^\]]+\]|[A-Za-z_][A-Za-z0-9_?]*))?\s*=\s*(.*)$/))) {
+            // Gather continuation lines so multi-line expressions are captured in full, e.g. a
+            // chained `:toError(...)` on the next line, or a union spread across lines. The value
+            // may even start entirely on the next line (`let all-violations =` then `a +` / `b`),
+            // which is the canonical cop-checks/main.cop shape — without this the binding would be
+            // missed and its hover would show "unknown".
             let letExpr = m[3].trim();
             let j = i + 1;
             while (j < doc.lineCount) {
@@ -866,8 +413,8 @@ function scanDocument(doc) {
                 if (cont === '' || cont.startsWith('#')) break;
                 // Don't swallow a new top-level declaration.
                 if (/^(?:export\s+)?(?:let|predicate|function|command|type|enum|flags|import|feed|test|foreach)\b/.test(cont)) break;
-                if (/^[:.+]/.test(cont) || /[+:(,]$/.test(letExpr)) {
-                    letExpr += ' ' + cont;
+                if (letExpr === '' || /^[:.+]/.test(cont) || /[+:(,]$/.test(letExpr)) {
+                    letExpr = letExpr ? letExpr + ' ' + cont : cont;
                     j++;
                 } else break;
             }
@@ -913,9 +460,6 @@ function scanDocument(doc) {
 }
 
 function resolveIdentifierType(name, symbols) {
-    if (name === 'Code') return 'Codebase';
-    if (name === 'Disk') return 'Filesystem';
-    if (name === 'Markdown') return 'MarkdownContent';
     if (TYPES[name]) return name;
 
     const letEntry = symbols.lets.get(name);
@@ -925,10 +469,13 @@ function resolveIdentifierType(name, symbols) {
         return inferExprType(letEntry.expr, symbols);
     }
 
-    // Check collections from imported packages (dynamic + static fallback)
+    // Check collections from imported packages (dynamic), then the bundled Codebase collections.
     const colls = symbols._resolvedCollections;
     if (colls && colls[name]) {
         return `[${colls[name]}]`;
+    }
+    if (COLLECTIONS[name]) {
+        return `[${COLLECTIONS[name]}]`;
     }
 
     // Check document-defined types and dynamically loaded package types
@@ -942,7 +489,62 @@ function resolveIdentifierType(name, symbols) {
     return undefined;
 }
 
+/**
+ * Split an expression on a top-level operator character, ignoring occurrences inside
+ * (), [], or single-quoted strings. Used to break unions like `a + b + c` into operands.
+ */
+function splitTopLevel(expr, sep) {
+    const parts = [];
+    let depth = 0;
+    let inStr = false;
+    let start = 0;
+    for (let i = 0; i < expr.length; i++) {
+        const c = expr[i];
+        if (inStr) {
+            if (c === '\\') { i++; continue; }
+            if (c === '\'') inStr = false;
+            continue;
+        }
+        if (c === '\'') { inStr = true; continue; }
+        if (c === '(' || c === '[') { depth++; continue; }
+        if (c === ')' || c === ']') { depth--; continue; }
+        if (depth === 0 && c === sep) {
+            parts.push(expr.slice(start, i));
+            start = i + 1;
+        }
+    }
+    parts.push(expr.slice(start));
+    return parts.map(p => p.trim()).filter(p => p.length > 0);
+}
+
+/** Return type of a bare function call `name(...)`, from bundled metadata or imported packages. */
+function lookupFunctionReturnType(name, symbols) {
+    const builtin = (META.functions || []).find(f => f.name === name && f.returnType);
+    if (builtin) return builtin.returnType;
+    const resolved = symbols._resolvedFunctions;
+    if (resolved) {
+        for (const pkg of Object.keys(resolved)) {
+            const fn = (resolved[pkg] || []).find(f => f.name === name && f.returnType);
+            if (fn) return fn.returnType;
+        }
+    }
+    return undefined;
+}
+
 function inferExprType(expr, symbols) {
+    // Union/concat: `a + b + c` combines collections of the same element type (the common
+    // case is joining violation lists, e.g. `let all = v1 + v2 + v3`). Resolve each operand
+    // and, if they agree on a type, return it — otherwise the hover would show "unknown".
+    const unionParts = splitTopLevel(expr, '+');
+    if (unionParts.length > 1) {
+        const resolved = unionParts.map(p => inferExprType(p, symbols)).filter(Boolean);
+        if (resolved.length > 0 && resolved.every(t => t === resolved[0])) return resolved[0];
+        // Mixed but all collections (or some unresolved): prefer a [Violation] union when present,
+        // since to*() transforms commonly feed these unions.
+        if (resolved.includes('[Violation]') && resolved.every(t => isCollection(t))) return '[Violation]';
+        if (resolved.length > 0) return resolved[0];
+    }
+
     // toError / toWarning / toInfo / toViolation transform a filtered collection into a
     // list of Violations, regardless of the source collection type. This must run before
     // the generic filter-chain handling below (which assumes `:` preserves the type).
@@ -964,6 +566,15 @@ function inferExprType(expr, symbols) {
                 if (fn && fn.returnType) return fn.returnType;
             }
         }
+    }
+
+    // Bare function call: func(...) → the function's declared return type. Covers the canonical
+    // `let codebase = codebase(csharp.parse(), ...)` idiom (codebase() returns Codebase) as well
+    // as other builtin/imported functions, so hovering the binding doesn't show "unknown".
+    m = expr.match(/^([a-zA-Z_][A-Za-z0-9_-]*)\s*\(/);
+    if (m) {
+        const ret = lookupFunctionReturnType(m[1], symbols);
+        if (ret) return ret;
     }
 
     // X.Prop (possibly chained)
@@ -1228,7 +839,7 @@ const provider = {
 
         // 2. After `import ` → package names
         if (/^\s*(?:export\s+)?import\s+$/.test(textBefore)) {
-            return toItems(KNOWN_PACKAGES);
+            return toItems(getKnownPackages(document));
         }
 
         // 3. After `:` (but not `::`) → predicates
@@ -1454,17 +1065,9 @@ function getStatementCompletions(document) {
         items.push({ label: name, detail: 'let binding', kind: Kind.Variable });
     }
 
-    items.push(
-        { label: 'Code', detail: 'Codebase runtime variable', kind: Kind.Variable },
-        { label: 'Disk', detail: 'Filesystem runtime variable', kind: Kind.Variable },
-    );
-
-    // Add ambient collections from imported packages (Types, Statements, Lines, Files, etc.)
-    const colls = symbols._resolvedCollections;
-    if (colls) {
-        for (const [collName, elType] of Object.entries(colls)) {
-            items.push({ label: collName, detail: `[${elType}] — collection`, kind: Kind.Variable });
-        }
+    // Ambient collections: bundled Codebase collections plus any resolved from imported packages.
+    for (const [collName, elType] of Object.entries({ ...COLLECTIONS, ...(symbols._resolvedCollections || {}) })) {
+        items.push({ label: collName, detail: `[${elType}] — collection`, kind: Kind.Variable });
     }
 
     return toItems(items);
@@ -1491,18 +1094,13 @@ function getGeneralCompletions(document) {
     }
 
     items.push(
-        { label: 'Code', detail: 'Codebase runtime variable', kind: Kind.Variable },
-        { label: 'Disk', detail: 'Filesystem runtime variable', kind: Kind.Variable },
         { label: 'runtime', detail: 'Runtime namespace', kind: Kind.Module },
         { label: 'item', detail: 'Current iteration variable', kind: Kind.Variable },
     );
 
-    // Add ambient collections from imported packages
-    const colls = symbols._resolvedCollections;
-    if (colls) {
-        for (const [collName, elType] of Object.entries(colls)) {
-            items.push({ label: collName, detail: `[${elType}] — collection`, kind: Kind.Variable });
-        }
+    // Ambient collections: bundled Codebase collections plus any resolved from imported packages.
+    for (const [collName, elType] of Object.entries({ ...COLLECTIONS, ...(symbols._resolvedCollections || {}) })) {
+        items.push({ label: collName, detail: `[${elType}] — collection`, kind: Kind.Variable });
     }
 
     // Add imported package names for namespace-qualified access
@@ -1605,17 +1203,7 @@ const hoverProvider = {
             }
         }
 
-        // 5. Runtime variables and `item`
-        if (word === 'Code') {
-            return new vscode.Hover(
-                new vscode.MarkdownString().appendCodeblock('(runtime) Code: Codebase', 'cop')
-            );
-        }
-        if (word === 'Disk') {
-            return new vscode.Hover(
-                new vscode.MarkdownString().appendCodeblock('(runtime) Disk: Filesystem', 'cop')
-            );
-        }
+        // 5. The iteration variable `item`
         if (word === 'item') {
             const itemType = resolveItemType(document, position, symbols);
             if (itemType) {
@@ -1787,6 +1375,7 @@ module.exports = {
         scanDocument,
         resolveIdentifierType,
         inferExprType,
+        splitTopLevel,
         resolveFullChainType,
         resolveItemType,
         resolvePropertyChain,
@@ -1795,6 +1384,7 @@ module.exports = {
         getPredicateCompletions,
         getStatementCompletions,
         getGeneralCompletions,
+        hoverProvider,
         parseTypesFromCop,
         parsePackageInfo,
         resolveCollectionElementType,
@@ -1803,6 +1393,7 @@ module.exports = {
         isNumeric,
         elementType,
         stripNullable,
+        META,
         TYPES,
         STRING_PREDICATES,
         NUMERIC_PREDICATES,

@@ -121,6 +121,68 @@ public class IssueRegressionTests
         Assert.That(Normalize(result.Stderr), Is.EqualTo(string.Empty), Describe(result));
     }
 
+    // Issue #50 — `cb.Types.Methods:<methodPredicate>` (the canonical "flag long methods" rule
+    // from the getting-started walkthroughs) must flatten and bind per-Method, not hand the
+    // predicate a collection-of-collections and fatal at runtime.
+    [Test]
+    public void Issue050_MethodsOnTypeCollectionFlattensPerMethod()
+    {
+        File.WriteAllText(Path.Combine(_workDir, "Foo.cs"),
+            "class Foo { public void M() { int a = 1; int b = 2; int c = a + b; } }\n");
+        File.WriteAllText(Path.Combine(_workDir, "check.cop"),
+            "import csharp\n" +
+            "import code\n" +
+            "let cb = codebase(csharp.parse())\n" +
+            "predicate isTooLong(Method) => Method.Statements.count() > 1\n" +
+            "let longMethods = cb.Types.Methods:isTooLong :toWarning('Method {item.Name}')\n" +
+            "command MAIN = CHECK(longMethods)\n");
+
+        var result = RunCop($"run \"{Path.Combine(_workDir, "check.cop")}\" -t \"{_workDir}\"");
+
+        Assert.That(result.ExitCode, Is.EqualTo(1), Describe(result));
+        Assert.That(Normalize(result.Stdout), Is.EqualTo("Foo.cs(1): warning: Method M"), Describe(result));
+    }
+
+    // Issue #51 — `cop verify` must accept valid overloaded function declarations (same name,
+    // different arity) instead of rejecting them as a "Duplicate declaration".
+    [Test]
+    public void Issue051_VerifyAcceptsOverloadedFunctions()
+    {
+        var program = Path.Combine(_workDir, "over.cop");
+        File.WriteAllText(program,
+            "function greet() : string => 'hi'\n" +
+            "function greet(name : string) : string => 'hi {name}'\n" +
+            "command MAIN = print(greet())\n");
+
+        var result = RunCop($"verify \"{program}\"");
+
+        Assert.That(result.ExitCode, Is.EqualTo(0), Describe(result));
+        Assert.That(Normalize(result.Stdout + result.Stderr), Does.Not.Contain("Duplicate declaration"), Describe(result));
+        Assert.That(Normalize(result.Stdout + result.Stderr), Does.Contain("verified successfully"), Describe(result));
+    }
+
+    // Issue #52 — selecting a violation `let` binding by name with `-c <name>` must route it
+    // through CHECK (formatted `file(line): level: message` + non-zero exit), not dump the raw
+    // Violation object with a clean exit 0.
+    [Test]
+    public void Issue052_NamedViolationRuleIsRoutedThroughCheck()
+    {
+        Directory.CreateDirectory(Path.Combine(_workDir, "issue52"));
+        File.WriteAllText(Path.Combine(_workDir, "check.cop"),
+            "import code\n" +
+            "predicate isIssue52Folder(Folder) => Folder.Path == 'issue52'\n" +
+            "let issue52-violations = filesystem.Folders:isIssue52Folder:toError('ISSUE52 {item.Path}')\n" +
+            "command MAIN = CHECK(issue52-violations)\n");
+
+        var result = RunCop($"run \"{Path.Combine(_workDir, "check.cop")}\" -t \"{_workDir}\" -c issue52-violations", _workDir);
+
+        Assert.That(result.ExitCode, Is.EqualTo(1), Describe(result));
+        Assert.That(Normalize(result.Stdout), Is.EqualTo("issue52(0): error: ISSUE52 issue52"), Describe(result));
+        // Anti-regression: the raw Violation object dump (e.g. "Severity = ...") must NOT appear.
+        Assert.That(Normalize(result.Stdout), Does.Not.Contain("Severity ="), Describe(result));
+        Assert.That(Normalize(result.Stderr), Is.EqualTo(string.Empty), Describe(result));
+    }
+
     private static string RepoRoot => FindRepoRoot();
 
     private static string CopExe => Path.Combine(RepoRoot, "install", "win-x64", "cop.exe");

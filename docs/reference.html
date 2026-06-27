@@ -192,6 +192,7 @@ const categories = [
       "csharp-library-checks",
       "csharp-nunit-checks",
       "csharp-snippets-checks",
+      "go-checks",
       "java-checks",
       "javascript-checks",
       "javascript-library-azure-checks",
@@ -4721,6 +4722,103 @@ const packages = {
       }
     ],
     "checks": [],
+    "commands": []
+  },
+  "go-checks": {
+    "label": "go-checks",
+    "overview": "Go coding conventions and correctness checks for coding agents",
+    "samples": [
+      {
+        "title": "Run go checks",
+        "code": "import go-checks\n\nCHECK go-checks"
+      }
+    ],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [],
+    "checks": [
+      {
+        "name": "panic-calls",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/checks/go-checks/src/go-checks.cop#L41"
+      },
+      {
+        "name": "os-exit",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/checks/go-checks/src/go-checks.cop#L46"
+      },
+      {
+        "name": "time-sleep",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/checks/go-checks/src/go-checks.cop#L51"
+      },
+      {
+        "name": "go-correctness-checks",
+        "desc": "Combined correctness checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/checks/go-checks/src/go-checks.cop#L55"
+      },
+      {
+        "name": "console-output",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/checks/go-checks/src/go-checks.cop#L63"
+      },
+      {
+        "name": "underscore-naming",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/checks/go-checks/src/go-checks.cop#L69"
+      },
+      {
+        "name": "initialism-casing",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/checks/go-checks/src/go-checks.cop#L77"
+      },
+      {
+        "name": "use-any",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/checks/go-checks/src/go-checks.cop#L82"
+      },
+      {
+        "name": "go-style-checks",
+        "desc": "Combined style checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/checks/go-checks/src/go-checks.cop#L86"
+      },
+      {
+        "name": "too-many-arguments",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/checks/go-checks/src/go-checks.cop#L92"
+      },
+      {
+        "name": "large-function",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/checks/go-checks/src/go-checks.cop#L97"
+      },
+      {
+        "name": "go-complexity-checks",
+        "desc": "Combined complexity checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/checks/go-checks/src/go-checks.cop#L101"
+      },
+      {
+        "name": "undocumented-types",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/checks/go-checks/src/go-checks.cop#L107"
+      },
+      {
+        "name": "undocumented-functions",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/checks/go-checks/src/go-checks.cop#L113"
+      },
+      {
+        "name": "go-doc-checks",
+        "desc": "Combined documentation checks",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/checks/go-checks/src/go-checks.cop#L117"
+      },
+      {
+        "name": "go-checks",
+        "desc": "All Go checks combined",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/checks/go-checks/src/go-checks.cop#L120"
+      }
+    ],
     "commands": []
   },
   "http": {

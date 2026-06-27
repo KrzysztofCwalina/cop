@@ -381,8 +381,119 @@ public class ExclusionRegressionTests
         Assert.That(output, Does.Contain("S.java(4): error: Avoid System.exit()"), Describe(result));
     }
 
-    private void WriteRust(string name, string content) => WriteFile(name, content);
+    [Test]
+    public void Go_Checks_FireAtExpectedLines()
+    {
+        // Lines are significant — assertions below pin each violation to a line number.
+        WriteFile("lib.go",
+            "package lib\n" +                                                   // 1
+            "\n" +                                                              // 2
+            "import (\n" +                                                      // 3
+            "\t\"fmt\"\n" +                                                     // 4
+            "\t\"os\"\n" +                                                      // 5
+            "\t\"time\"\n" +                                                    // 6
+            ")\n" +                                                             // 7
+            "\n" +                                                              // 8
+            "// HttpClient does things.\n" +                                    // 9
+            "type HttpClient struct {\n" +                                      // 10: initialism-casing
+            "\tName string\n" +                                                 // 11
+            "}\n" +                                                             // 12
+            "\n" +                                                              // 13
+            "type user_record struct {\n" +                                     // 14: underscore-naming
+            "\tV int\n" +                                                       // 15
+            "}\n" +                                                             // 16
+            "\n" +                                                              // 17
+            "type Widget struct {\n" +                                          // 18: undocumented-types
+            "\tName string\n" +                                                 // 19
+            "}\n" +                                                             // 20
+            "\n" +                                                              // 21
+            "func Run(a int, b int, c int, d int, e int, f int, g int, h int) {\n" + // 22: too-many-arguments
+            "\tfmt.Println(\"hi\")\n" +                                         // 23: console-output
+            "\tos.Exit(1)\n" +                                                  // 24: os-exit
+            "\ttime.Sleep(1)\n" +                                               // 25: time-sleep
+            "\tpanic(\"boom\")\n" +                                             // 26: panic-calls
+            "\tvar x interface{} = 1\n" +                                       // 27: use-any
+            "\t_ = x\n" +                                                       // 28
+            "}\n");                                                             // 29
 
+        var result = RunCop($"run go-checks -t \"{_workDir}\"");
+        var output = Normalize(result.Stdout);
+
+        Assert.That(result.ExitCode, Is.EqualTo(1), Describe(result));
+        Assert.That(output, Does.Contain("lib.go(10): info: HttpClient"), Describe(result));
+        Assert.That(output, Does.Contain("lib.go(14): warning: user_record"), Describe(result));
+        Assert.That(output, Does.Contain("lib.go(18): warning: Exported type Widget is missing a doc comment"), Describe(result));
+        Assert.That(output, Does.Contain("lib.go(22): warning: Run has more than 7 parameters"), Describe(result));
+        Assert.That(output, Does.Contain("lib.go(23): warning: Avoid fmt.Println"), Describe(result));
+        Assert.That(output, Does.Contain("lib.go(24): warning: Avoid os.Exit()"), Describe(result));
+        Assert.That(output, Does.Contain("lib.go(25): info: time.Sleep()"), Describe(result));
+        Assert.That(output, Does.Contain("lib.go(26): warning: Avoid panic()"), Describe(result));
+        Assert.That(output, Does.Contain("lib.go(27): info: Use any instead of interface{}"), Describe(result));
+        Assert.That(output, Does.Contain("exported functions without doc comments"), Describe(result));
+    }
+
+    [Test]
+    public void Go_LargeFunction_FiresAboveThreshold()
+    {
+        var body = string.Concat(Enumerable.Repeat("\twork()\n", 51));
+        WriteFile("big.go", "package lib\n\n// Big does work.\nfunc Big() {\n" + body + "}\n");
+        WriteFile("small.go", "package lib\n\n// Small does work.\nfunc Small() {\n\twork()\n}\n");
+
+        var result = RunCop($"run go-checks -t \"{_workDir}\"");
+        var output = Normalize(result.Stdout);
+
+        Assert.That(result.ExitCode, Is.EqualTo(1), Describe(result));
+        Assert.That(output, Does.Contain("big.go(4): info: Big is large"), Describe(result));
+        Assert.That(output, Does.Not.Contain("Small is large"), Describe(result));
+    }
+
+    [Test]
+    public void Go_InstanceExclusion_CopIgnore_SuppressesOnlyAnnotatedLine()
+    {
+        WriteFile("lib.go",
+            "package lib\n" +
+            "\n" +
+            "// Run runs.\n" +
+            "func Run() {\n" +
+            "\t// cop-ignore: panic-calls\n" +
+            "\tpanic(\"a\")\n" +  // 6: ignored
+            "\tpanic(\"b\")\n" +  // 7: flagged
+            "}\n");
+
+        var result = RunCop($"run go-checks -t \"{_workDir}\"");
+        var output = Normalize(result.Stdout);
+
+        Assert.That(result.ExitCode, Is.EqualTo(1), Describe(result));
+        Assert.That(CountOccurrences(output, "Avoid panic()"), Is.EqualTo(1), Describe(result));
+        Assert.That(output, Does.Contain("lib.go(7): warning: Avoid panic()"), Describe(result));
+        Assert.That(output, Does.Not.Contain("lib.go(6): warning: Avoid panic()"), Describe(result));
+    }
+
+    [Test]
+    public void Go_RuleExclusion_SubtractOperator_DropsOnlyNamedRule()
+    {
+        WriteFile("lib.go",
+            "package lib\n" +
+            "\n" +
+            "// Run runs.\n" +
+            "func Run() {\n" +
+            "\tfmt.Println(\"a\")\n" +  // 5: console-output (kept)
+            "\tpanic(\"b\")\n" +        // 6: panic-calls (excluded)
+            "}\n");
+        WriteFile("checks.cop",
+            "import go-checks\n" +
+            "import code\n" +
+            "command MAIN = CHECK(go-checks - panic-calls)\n");
+
+        var result = RunCop($"\"{Path.Combine(_workDir, "checks.cop")}\" -t \"{_workDir}\"", _workDir);
+        var output = Normalize(result.Stdout);
+
+        Assert.That(result.ExitCode, Is.EqualTo(1), Describe(result));
+        Assert.That(output, Does.Not.Contain("Avoid panic()"), Describe(result));
+        Assert.That(output, Does.Contain("lib.go(5): warning: Avoid fmt.Println"), Describe(result));
+    }
+
+    private void WriteRust(string name, string content) => WriteFile(name, content);
     private void WriteFile(string name, string content) =>
         File.WriteAllText(Path.Combine(_workDir, name), content);
 

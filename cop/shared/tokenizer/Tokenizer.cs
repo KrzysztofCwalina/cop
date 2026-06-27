@@ -357,36 +357,41 @@ public class Tokenizer
         return new Token(TokenKind.IntLiteral, _source[start.._pos], line);
     }
 
+    /// <summary>
+    /// The complete set of reserved words the tokenizer recognizes, mapped to their token kind.
+    /// This is the single source of truth for cop's keywords — tooling (editor metadata,
+    /// syntax highlighting) is generated from it so it can never drift from the lexer.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, TokenKind> Keywords = new Dictionary<string, TokenKind>(StringComparer.Ordinal)
+    {
+        ["true"] = TokenKind.True,
+        ["false"] = TokenKind.False,
+        ["nic"] = TokenKind.Nic,
+        ["type"] = TokenKind.TypeKeyword,
+        ["collection"] = TokenKind.CollectionKeyword,
+        ["import"] = TokenKind.ImportKeyword,
+        ["let"] = TokenKind.LetKeyword,
+        ["command"] = TokenKind.CommandKeyword,
+        ["export"] = TokenKind.ExportKeyword,
+        ["predicate"] = TokenKind.PredicateKeyword,
+        ["function"] = TokenKind.FunctionKeyword,
+        ["foreach"] = TokenKind.ForeachKeyword,
+        ["test"] = TokenKind.TestKeyword,
+        ["async"] = TokenKind.AsyncKeyword,
+        ["RUN"] = TokenKind.RunKeyword,
+        ["feed"] = TokenKind.FeedKeyword,
+        ["flags"] = TokenKind.FlagsKeyword,
+        ["enum"] = TokenKind.EnumKeyword,
+        ["intrinsic"] = TokenKind.IntrinsicKeyword,
+    };
+
     private Token ReadIdentifierOrKeyword(int line)
     {
         int start = _pos;
         while (_pos < _source.Length && (char.IsLetterOrDigit(_source[_pos]) || _source[_pos] == '_' || _source[_pos] == '-'))
             _pos++;
         string value = _source[start.._pos];
-        var kind = value switch
-        {
-            "true" => TokenKind.True,
-            "false" => TokenKind.False,
-            "nic" => TokenKind.Nic,
-            "type" => TokenKind.TypeKeyword,
-            "collection" => TokenKind.CollectionKeyword,
-            "import" => TokenKind.ImportKeyword,
-            "let" => TokenKind.LetKeyword,
-            "command" => TokenKind.CommandKeyword,
-            "export" => TokenKind.ExportKeyword,
-            "predicate" => TokenKind.PredicateKeyword,
-            "function" => TokenKind.FunctionKeyword,
-            "foreach" => TokenKind.ForeachKeyword,
-            "test" => TokenKind.TestKeyword,
-            "async" => TokenKind.AsyncKeyword,
-            "RUN" => TokenKind.RunKeyword,
-            "feed" => TokenKind.FeedKeyword,
-            "flags" => TokenKind.FlagsKeyword,
-            "enum" => TokenKind.EnumKeyword,
-            "intrinsic" => TokenKind.IntrinsicKeyword,
-
-            _ => TokenKind.Identifier
-        };
+        var kind = Keywords.TryGetValue(value, out var kw) ? kw : TokenKind.Identifier;
         return new Token(kind, value, line);
     }
 }

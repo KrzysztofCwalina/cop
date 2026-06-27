@@ -8,6 +8,7 @@ const {
     scanDocument,
     resolveIdentifierType,
     inferExprType,
+    splitTopLevel,
     resolveFullChainType,
     resolveItemType,
     resolvePropertyChain,
@@ -16,6 +17,7 @@ const {
     getPredicateCompletions,
     getStatementCompletions,
     getGeneralCompletions,
+    hoverProvider,
     parseTypesFromCop,
     resolveCollectionElementType,
     isCollection,
@@ -32,7 +34,7 @@ const {
 function mockDoc(lines, fsPath) {
     return {
         lineCount: lines.length,
-        lineAt(i) { return { text: lines[i] }; },
+        lineAt(i) { const n = (i && typeof i === 'object') ? i.line : i; return { text: lines[n] }; },
         uri: { fsPath: fsPath || '/fake/path/test.cop' },
         getText(range) {
             if (!range) return lines.join('\n');
@@ -40,19 +42,17 @@ function mockDoc(lines, fsPath) {
         },
         getWordRangeAtPosition(pos, regex) {
             const line = lines[pos.line];
-            const match = line.substring(pos.character).match(regex);
-            if (match && match.index === 0) {
-                const vscode = require('vscode');
-                return new vscode.Range(pos.line, pos.character, pos.line, pos.character + match[0].length);
-            }
-            // Try matching at different positions
-            for (let i = 0; i <= pos.character; i++) {
-                const sub = line.substring(i);
-                const m = sub.match(regex);
-                if (m && i + m.index <= pos.character && i + m.index + m[0].length > pos.character) {
-                    const vscode = require('vscode');
-                    return new vscode.Range(pos.line, i + m.index, pos.line, i + m.index + m[0].length);
+            const vscode = require('vscode');
+            // Scan all matches and return the word whose span contains the cursor (as VS Code does).
+            const re = new RegExp(regex.source, 'g');
+            let m;
+            while ((m = re.exec(line)) !== null) {
+                const start = m.index;
+                const end = m.index + m[0].length;
+                if (pos.character >= start && pos.character <= end) {
+                    return new vscode.Range(pos.line, start, pos.line, end);
                 }
+                if (m.index === re.lastIndex) re.lastIndex++;
             }
             return undefined;
         }
@@ -107,11 +107,11 @@ describe('scanDocument', () => {
     test('parses imports', () => {
         const doc = mockDoc([
             'import code',
-            'import code',
+            'import csharp',
             'export import files',
         ]);
         const symbols = scanDocument(doc);
-        expect(symbols.imports).toEqual(['code', 'code-analysis', 'files']);
+        expect(symbols.imports).toEqual(['code', 'csharp', 'files']);
     });
 
     test('parses let bindings without type annotation', () => {
@@ -208,11 +208,12 @@ describe('scanDocument', () => {
 // ── resolveIdentifierType tests ──────────────────────────────────────────
 
 describe('resolveIdentifierType', () => {
-    test('resolves runtime variables', () => {
+    test('resolves bundled codebase collections from metadata', () => {
         const symbols = { lets: new Map(), predicates: new Map(), functions: new Map(), types: new Map(), imports: [] };
-        expect(resolveIdentifierType('Code', symbols)).toBe('Codebase');
-        expect(resolveIdentifierType('Disk', symbols)).toBe('Filesystem');
-        expect(resolveIdentifierType('Markdown', symbols)).toBe('MarkdownContent');
+        // Bare collection names resolve via the bundled Codebase model (metadata.json).
+        expect(resolveIdentifierType('Types', symbols)).toBe('[Type]');
+        expect(resolveIdentifierType('Statements', symbols)).toBe('[Statement]');
+        expect(resolveIdentifierType('Files', symbols)).toBe('[File]');
     });
 
     test('resolves built-in types', () => {
@@ -232,9 +233,10 @@ describe('resolveIdentifierType', () => {
 
     test('resolves let bindings without type annotation via expression inference', () => {
         const symbols = {
-            lets: new Map([['cb', { expr: 'Code', typeAnnotation: null }]]),
+            lets: new Map([['cb', { expr: 'codebase(csharp.parse())', typeAnnotation: null }]]),
             predicates: new Map(), functions: new Map(), types: new Map(), imports: [],
         };
+        // codebase(...) returns Codebase (bare-function-call inference from metadata).
         expect(resolveIdentifierType('cb', symbols)).toBe('Codebase');
     });
 
@@ -274,9 +276,17 @@ describe('inferExprType', () => {
         expect(inferExprType('runtime::Filesystem', baseSymbols)).toBe('Filesystem');
     });
 
-    test('resolves dot property access', () => {
-        expect(inferExprType('Code.Types', baseSymbols)).toBe('[Type]');
-        expect(inferExprType('Code.Files', baseSymbols)).toBe('[File]');
+    test('resolves dot property access on the codebase model', () => {
+        const symbols = {
+            ...baseSymbols,
+            lets: new Map([['codebase', { expr: 'codebase(csharp.parse())', typeAnnotation: null }]]),
+        };
+        expect(inferExprType('codebase.Types', symbols)).toBe('[Type]');
+        expect(inferExprType('codebase.Files', symbols)).toBe('[File]');
+    });
+
+    test('resolves a bare function call to its return type', () => {
+        expect(inferExprType('codebase(csharp.parse())', baseSymbols)).toBe('Codebase');
     });
 
     test('resolves filter chain base type', () => {
@@ -312,20 +322,54 @@ describe('inferExprType', () => {
         expect(inferExprType("Types:isPublic:toWarning('x')", baseSymbols)).toBe('[Violation]');
         expect(inferExprType("Folders:empty:toInfo('x')", baseSymbols)).toBe('[Violation]');
     });
+
+    test('union of violation lets resolves to [Violation] (regression: "unknown" hover)', () => {
+        // Mirrors cop-checks/main.cop: `let all-violations = a + b + c` where each operand is
+        // a let bound to a `:toError(...)` chain. Hovering all-violations must NOT show "unknown".
+        const symbols = {
+            ...baseSymbols,
+            lets: new Map([
+                ['a', { expr: "codebase.Types:isX:toError('a')", typeAnnotation: null }],
+                ['b', { expr: "codebase.Methods:isY:toWarning('b')", typeAnnotation: null }],
+                ['c', { expr: "codebase.Statements:isZ:toInfo('c')", typeAnnotation: null }],
+            ]),
+        };
+        expect(inferExprType('a + b + c', symbols)).toBe('[Violation]');
+        // Spread across continuation lines (as scanDocument joins them).
+        expect(inferExprType('a +\n    b +\n    c', symbols)).toBe('[Violation]');
+    });
+
+    test('union of same-typed collections resolves to that collection type', () => {
+        const symbols = {
+            ...baseSymbols,
+            lets: new Map([
+                ['x', { expr: 'Types', typeAnnotation: null }],
+                ['y', { expr: 'Types', typeAnnotation: null }],
+            ]),
+        };
+        expect(inferExprType('x + y', symbols)).toBe('[Type]');
+    });
+
+    test('splitTopLevel ignores + inside parens and strings', () => {
+        expect(splitTopLevel("a + b", '+')).toEqual(['a', 'b']);
+        expect(splitTopLevel("f('x + y') + g(1 + 2)", '+')).toEqual(["f('x + y')", 'g(1 + 2)']);
+        expect(splitTopLevel("solo", '+')).toEqual(['solo']);
+    });
 });
 
 // ── resolveFullChainType tests ───────────────────────────────────────────
 
 describe('resolveFullChainType', () => {
     const symbols = {
-        lets: new Map(), predicates: new Map(), functions: new Map(), types: new Map(),
+        lets: new Map([['codebase', { expr: 'codebase(csharp.parse())', typeAnnotation: null }]]),
+        predicates: new Map(), functions: new Map(), types: new Map(),
         imports: ['code'],
         _resolvedCollections: { Types: 'Type', Statements: 'Statement', Lines: 'Line', Files: 'File' },
         _resolvedTypes: null, _resolvedFunctions: null,
     };
 
     test('resolves simple identifiers', () => {
-        expect(resolveFullChainType('Code', symbols)).toBe('Codebase');
+        expect(resolveFullChainType('codebase', symbols)).toBe('Codebase');
         expect(resolveFullChainType('Types', symbols)).toBe('[Type]');
     });
 
@@ -336,13 +380,13 @@ describe('resolveFullChainType', () => {
     });
 
     test('resolves dot chains', () => {
-        expect(resolveFullChainType('Code.Types', symbols)).toBe('[Type]');
-        expect(resolveFullChainType('Code.Files', symbols)).toBe('[File]');
+        expect(resolveFullChainType('codebase.Types', symbols)).toBe('[Type]');
+        expect(resolveFullChainType('codebase.Files', symbols)).toBe('[File]');
     });
 
     test('resolves mixed dot+filter chains', () => {
-        // Code.Types:isPublic — base is Code.Types = [Type], filter preserves it
-        expect(resolveFullChainType('Code.Types:isPublic', symbols)).toBe('[Type]');
+        // codebase.Types:isPublic — base is codebase.Types = [Type], filter preserves it
+        expect(resolveFullChainType('codebase.Types:isPublic', symbols)).toBe('[Type]');
     });
 
     test('returns undefined for unknown expressions', () => {
@@ -403,35 +447,32 @@ describe('resolveItemType', () => {
 
 describe('resolvePropertyChain', () => {
     const symbols = {
-        lets: new Map(), predicates: new Map(), functions: new Map(), types: new Map(),
+        lets: new Map([['codebase', { expr: 'codebase(csharp.parse())', typeAnnotation: null }]]),
+        predicates: new Map(), functions: new Map(), types: new Map(),
         imports: [],
         _resolvedCollections: null, _resolvedTypes: null, _resolvedFunctions: null,
     };
 
-    test('resolves Code.Types', () => {
-        expect(resolvePropertyChain('Code.Types', symbols)).toBe('[Type]');
+    test('resolves codebase.Types', () => {
+        expect(resolvePropertyChain('codebase.Types', symbols)).toBe('[Type]');
     });
 
-    test('resolves Code.Types.Count (collection property would be handled differently)', () => {
-        // Code.Types is [Type]; then .Count would look for Count on Type — not found
-        // This is actually a limitation: Count is a collection property not on the element type
-        // But resolvePropertyChain walks through element types
-        // This tests current behavior
-        expect(resolvePropertyChain('Code.Types', symbols)).toBe('[Type]');
+    test('resolves codebase.Types (collection element walk)', () => {
+        expect(resolvePropertyChain('codebase.Types', symbols)).toBe('[Type]');
     });
 
     test('resolves nested property chains', () => {
-        // Code → Codebase.Files → [File]; File.Path → string
-        expect(resolvePropertyChain('Code.Files', symbols)).toBe('[File]');
+        // codebase → Codebase.Files → [File]
+        expect(resolvePropertyChain('codebase.Files', symbols)).toBe('[File]');
     });
 });
 
 // ── getDotCompletions tests ──────────────────────────────────────────────
 
 describe('getDotCompletions', () => {
-    test('provides properties after Code.', () => {
-        const doc = mockDoc(['import code', '    Code.']);
-        const items = getDotCompletions(doc, '    Code.', { line: 1, character: 9 });
+    test('provides properties after codebase.', () => {
+        const doc = mockDoc(['import code', 'let codebase = codebase(csharp.parse())', '    codebase.']);
+        const items = getDotCompletions(doc, '    codebase.', { line: 2, character: 13 });
         const lbls = labels(items);
         expect(lbls).toContain('Types');
         expect(lbls).toContain('Files');
@@ -580,12 +621,12 @@ describe('getStatementCompletions', () => {
         expect(lbls).toContain('my-types');
     });
 
-    test('provides runtime variables', () => {
+    test('provides ambient codebase collections', () => {
         const doc = mockDoc(['import code', '']);
         const items = getStatementCompletions(doc);
         const lbls = labels(items);
-        expect(lbls).toContain('Code');
-        expect(lbls).toContain('Disk');
+        expect(lbls).toContain('Types');
+        expect(lbls).toContain('Statements');
     });
 });
 
@@ -600,11 +641,11 @@ describe('getGeneralCompletions', () => {
     });
 
     test('includes imported packages', () => {
-        const doc = mockDoc(['import code', 'import code', '']);
+        const doc = mockDoc(['import code', 'import csharp', '']);
         const items = getGeneralCompletions(doc);
         const lbls = labels(items);
         expect(lbls).toContain('code');
-        expect(lbls).toContain('code-analysis');
+        expect(lbls).toContain('csharp');
     });
 
     test('includes type names', () => {
@@ -887,3 +928,52 @@ describe('language-specific narrowing', () => {
         expect(lbls).toContain('isPartial');
     });
 });
+
+// ── hoverProvider end-to-end (the reported bug) ──────────────────────────
+
+describe('hoverProvider end-to-end', () => {
+    const { Position } = require('vscode');
+
+    // Mirrors cop-checks/main.cop: a `codebase` binding plus a +-union of violation lets whose
+    // value starts on the *next* line.
+    const mainCop = [
+        'import code',
+        'import csharp',
+        'import cop',
+        'let codebase = codebase(csharp.parse(), cop.parse())',
+        "let interface-violations = codebase.Types:isPublic:toError('x')",
+        "let exception-violations = codebase.Methods:isPublic:toWarning('y')",
+        'export let all-violations =',
+        '    interface-violations +',
+        '    exception-violations',
+        'command MAIN = CHECK(all-violations)',
+    ];
+
+    function hoverWord(lineIndex, word) {
+        const doc = mockDoc(mainCop);
+        const col = mainCop[lineIndex].indexOf(word) + 1;
+        return hoverProvider.provideHover(doc, new Position(lineIndex, col), {});
+    }
+
+    test('hovering all-violations shows [Violation], not "unknown"', () => {
+        const hover = hoverWord(6, 'all-violations');
+        expect(hover).toBeDefined();
+        expect(hover.contents.value).toContain('[Violation]');
+        expect(hover.contents.value).not.toContain('unknown');
+    });
+
+    test('hovering the codebase binding shows Codebase', () => {
+        const hover = hoverWord(3, 'codebase');
+        expect(hover).toBeDefined();
+        expect(hover.contents.value).toContain('Codebase');
+    });
+
+    test('hovering the Violation type shows its full property set (incl. Check)', () => {
+        const doc = mockDoc(['import code', 'let v : [Violation] = nic']);
+        const hover = hoverProvider.provideHover(doc, new Position(1, 'let v : ['.length + 1), {});
+        expect(hover).toBeDefined();
+        expect(hover.contents.value).toContain('Violation');
+        expect(hover.contents.value).toContain('Check');
+    });
+});
+

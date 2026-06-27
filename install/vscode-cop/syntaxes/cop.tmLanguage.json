@@ -5,7 +5,6 @@
     "patterns": [
         { "include": "#triple-quote-string" },
         { "include": "#doc-comment" },
-        { "include": "#block-comment" },
         { "include": "#line-comment" },
         { "include": "#single-quote-string" },
         { "include": "#import-statement" },
@@ -45,17 +44,6 @@
         "doc-comment": {
             "match": "^\\s*##.*$",
             "name": "comment.block.documentation.cop"
-        },
-        "block-comment": {
-            "name": "comment.block.cop",
-            "begin": "^\\s*#\\s*$",
-            "end": "^\\s*#\\s*$",
-            "beginCaptures": {
-                "0": { "name": "punctuation.definition.comment.begin.cop" }
-            },
-            "endCaptures": {
-                "0": { "name": "punctuation.definition.comment.end.cop" }
-            }
         },
         "line-comment": {
             "match": "#.*$",
@@ -195,15 +183,15 @@
             }
         },
         "declaration-keywords": {
-            "match": "\\b(predicate|function|command|type|collection|enum|flags)\\b",
+            "match": "\\b(type|collection|command|predicate|function|enum|flags)\\b",
             "name": "storage.type.cop"
         },
         "control-keywords": {
-            "match": "\\b(import|export|let|foreach|feed|async)\\b",
+            "match": "\\b(import|export|let|foreach|feed|async|test|intrinsic|RUN)\\b",
             "name": "keyword.control.cop"
         },
         "action-invocation": {
-            "match": "\\b(PRINT|SAVE|RUN|DEBUG|ASSERT|ASSERT_EMPTY|FAIL)\\b",
+            "match": "\\b([A-Z][A-Z0-9_]+)\\b(?=\\s*\\()",
             "name": "support.function.builtin.cop"
         },
         "constants": {
