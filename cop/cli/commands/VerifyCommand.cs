@@ -437,9 +437,14 @@ public static class VerifyCommand
                 symbols.Add(new VariableSymbol(name));
         }
 
-        // Add built-in intrinsics that are always available
-        var builtins = new[] { "print", "PRINT", "SAVE", "FAIL", "CHECK", "ASSERT", "provider", "count", "sum", "avg", "min", "max", "first", "last", "distinct", "flatten", "join", "sort", "reverse", "take", "skip", "map", "any", "all", "none", "contains", "where", "groupBy", "format" };
-        foreach (var name in builtins)
+        // Built-in names that are always available to the binder's fallback (so a reference to one
+        // is never flagged "undefined" by `cop verify`). Two sources, unioned:
+        //  - every primitive op from IntrinsicRegistry (the single source of truth) — so this set
+        //    can never drift when an intrinsic is added/renamed;
+        //  - runtime/standard-library/domain names that have no single registry yet (commands like
+        //    CHECK/FAIL, collection combinators, std transforms). Over-inclusion here is harmless.
+        var runtimeBuiltins = new[] { "print", "PRINT", "SAVE", "FAIL", "CHECK", "ASSERT", "provider", "count", "sum", "avg", "min", "max", "first", "last", "distinct", "flatten", "join", "sort", "reverse", "take", "skip", "map", "any", "all", "none", "contains", "where", "groupBy", "format" };
+        foreach (var name in Cop.Lang.IntrinsicRegistry.All.SelectMany(o => o.AllNames).Concat(runtimeBuiltins))
         {
             if (seen.Add(name))
                 symbols.Add(new FunctionSymbol(name, CallableKind.External, []));

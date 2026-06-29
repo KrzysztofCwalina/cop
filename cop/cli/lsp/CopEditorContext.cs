@@ -49,7 +49,7 @@ internal static class CopEditorContext
             if (!m.Success) continue;
             var chainType = model.InferExpressionType(m.Groups[1].Value, locals);
             if (chainType is null) break;
-            locals["item"] = chainType.Value.IsCollection
+            locals[Evaluator.ImplicitItemVariable] = chainType.Value.IsCollection
                 ? new TypeInfo(chainType.Value.Name, false)
                 : chainType.Value;
             break;

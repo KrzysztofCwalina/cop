@@ -129,7 +129,7 @@ internal static class CopCompletion
             entries.Add(c.IsPredicate
                 ? new CompletionEntry(c.Name, PredDetail(c), Method)
                 : new CompletionEntry(c.Name, FnDetail(c), Function));
-        entries.Add(new CompletionEntry("item", "the current element", Variable));
+        entries.Add(new CompletionEntry(Evaluator.ImplicitItemVariable, "the current element", Variable));
         entries.Add(new CompletionEntry("runtime", "runtime providers", Module));
         return Dedupe(entries);
     }

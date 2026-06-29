@@ -20,6 +20,7 @@ public class ArchitectureFitnessTests
     }
 
     private static string InterpreterDir => Path.Combine(RepoRoot(), "cop", "shared", "interpreter");
+    private static string LspDir => Path.Combine(RepoRoot(), "cop", "cli", "lsp");
 
     [Test]
     public void InterpreterCore_HasNoHardcodedDomainTypeNames()
@@ -59,5 +60,24 @@ public class ArchitectureFitnessTests
 
         Assert.That(offenders, Is.Empty,
             "use Evaluator.ImplicitItemVariable instead of the literal \"item\":\n" + string.Join("\n", offenders));
+    }
+
+    [Test]
+    public void EditorServices_ReferenceImplicitItemThroughTheConstant_NotLiterals()
+    {
+        // The LSP hover/completion services also reason about the implicit `item`; they must use
+        // Evaluator.ImplicitItemVariable too, so a rename can't silently break the editor (the kind
+        // of drift this whole effort set out to eliminate).
+        var offenders = new List<string>();
+        foreach (var file in Directory.GetFiles(LspDir, "*.cs"))
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+                if (lines[i].Contains("\"item\""))
+                    offenders.Add($"{Path.GetFileName(file)}:{i + 1}: {lines[i].Trim()}");
+        }
+
+        Assert.That(offenders, Is.Empty,
+            "use Evaluator.ImplicitItemVariable instead of the literal \"item\" in cop/cli/lsp:\n" + string.Join("\n", offenders));
     }
 }

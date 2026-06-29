@@ -1858,8 +1858,10 @@ public sealed class Evaluator
     /// collection-level call. They are FFI builtins (no user declaration), so the declaration-based
     /// <see cref="FirstParamIsCollectionFunction"/> can't recognise them — hence this explicit list.
     /// </summary>
+    private static readonly HashSet<string> CollectionCombinators = IntrinsicRegistry.CollectionCombinatorNames();
+
     private static bool IsCollectionLevelBuiltin(string name, int argCount) =>
-        argCount == 1 && name is "concat" or "push" or "enqueue";
+        argCount == 1 && CollectionCombinators.Contains(name);
 
     private static CopFunction? CollectionParamOverload(CopValue binding)
         => OverloadsOf(binding).FirstOrDefault(o =>

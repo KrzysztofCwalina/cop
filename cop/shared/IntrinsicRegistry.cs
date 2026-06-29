@@ -36,7 +36,8 @@ public sealed record IntrinsicOp(
     string Detail,
     string[] Aliases,
     bool Pushable = false,
-    bool IsBuiltinFilter = false)
+    bool IsBuiltinFilter = false,
+    bool IsCollectionCombinator = false)
 {
     /// <summary>The canonical name plus every alias.</summary>
     public IEnumerable<string> AllNames
@@ -68,6 +69,10 @@ public static class IntrinsicRegistry
         => new(name, kind, detail, aliases ?? []);
 
     private static IntrinsicOp Util(string name) => new(name, IntrinsicKind.Utility, "", []);
+
+    /// <summary>A collection-level combinator verb (e.g. <c>coll:concat(other)</c>) — applied to the
+    /// whole collection rather than per item.</summary>
+    private static IntrinsicOp Combinator(string name) => new(name, IntrinsicKind.Utility, "", [], IsCollectionCombinator: true);
 
     /// <summary>Every built-in operation surface. Order within a kind matches editor presentation.</summary>
     public static readonly IReadOnlyList<IntrinsicOp> All =
@@ -148,7 +153,7 @@ public static class IntrinsicRegistry
         // Only verbs that are never property names belong here — accessor-style builtins like
         // File/Path/Get/Matches/Text collide with real property names (Type.File, Line.Text, …) and
         // must NOT be treated as collection functions by pushdown.
-        Util("take"), Util("skip"), Util("concat"), Util("push"), Util("pop"), Util("enqueue"),
+        Util("take"), Util("skip"), Combinator("concat"), Combinator("push"), Util("pop"), Combinator("enqueue"),
         Util("text"), Util("print"), Util("debug"), Util("save"), Util("read"),
         Util("provider"), Util("source"), Util("sink"), Util("assert"), Util("fail"), Util("error"),
     ];
@@ -159,6 +164,10 @@ public static class IntrinsicRegistry
     /// <summary>The distinct set of names (canonical + aliases) across ops matching <paramref name="filter"/>.</summary>
     public static HashSet<string> NameSet(Func<IntrinsicOp, bool> filter) =>
         All.Where(filter).SelectMany(o => o.AllNames).ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>Collection-level combinator verbs (concat/push/enqueue) — applied to the whole
+    /// collection, not per item.</summary>
+    public static HashSet<string> CollectionCombinatorNames() => NameSet(o => o.IsCollectionCombinator);
 
     /// <summary>
     /// Canonical-name -> short alias pairs for ops that have an alias. Used to register the short

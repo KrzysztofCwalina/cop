@@ -63,8 +63,8 @@ internal static class CopHover
         }
 
         // 4. Implicit `item`.
-        if (word == "item" && locals.TryGetValue("item", out var itemType))
-            return Code($"(variable) item: {itemType.Display}");
+        if (word == Evaluator.ImplicitItemVariable && locals.TryGetValue(Evaluator.ImplicitItemVariable, out var itemType))
+            return Code($"(variable) {Evaluator.ImplicitItemVariable}: {itemType.Display}");
 
         // 5. Type name.
         if (model.IsKnownType(word)) return TypeHover(model, word);
