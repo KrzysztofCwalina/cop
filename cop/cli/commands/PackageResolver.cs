@@ -18,18 +18,16 @@ internal static class PackageResolver
 
     /// <summary>
     /// Discovers all feed paths by walking up from a starting directory
-    /// and including the global cache. This is the standard resolution order:
-    /// 1. ~/.cop/packages/ (global cache for auto-restored packages)
-    /// 2. Walk up from startDir looking for packages/ directories
+    /// and including the global cache. Resolution order (first match wins):
+    /// 1. Local packages/ directories, walking up from startDir — so a developer's in-repo
+    ///    package always shadows a possibly-stale auto-restored copy in the global cache.
+    /// 2. ~/.cop/packages/ (global cache for auto-restored packages) — the fallback.
     /// </summary>
     public static List<string> GetFeedPaths(string? startDir = null)
     {
         var paths = new List<string>();
 
-        var cachePath = GlobalCachePath;
-        if (Directory.Exists(cachePath))
-            paths.Add(cachePath);
-
+        // 1. Local packages/ dirs take precedence.
         var dir = startDir ?? Directory.GetCurrentDirectory();
         while (dir is not null)
         {
@@ -38,6 +36,11 @@ internal static class PackageResolver
                 paths.Add(packagesDir);
             dir = Path.GetDirectoryName(dir);
         }
+
+        // 2. Global cache is the fallback.
+        var cachePath = GlobalCachePath;
+        if (Directory.Exists(cachePath))
+            paths.Add(cachePath);
 
         return paths;
     }

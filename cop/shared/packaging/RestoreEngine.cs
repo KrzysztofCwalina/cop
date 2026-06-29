@@ -189,7 +189,7 @@ public class RestoreEngine
                          relativePath.Equals("checks/nuget-analyzers.yaml", StringComparison.OrdinalIgnoreCase))
                 {
                     var yamlContent = Encoding.UTF8.GetString(content);
-                    ParseNuGetAnalyzersYaml(yamlContent, nugetAnalyzers);
+                    ParseNuGetAnalyzersYaml(yamlContent, nugetAnalyzers, warnings);
                     continue; // Don't place this file
                 }
                 // Rules: src/rules.yaml or checks/rules.yaml → .cop/rules/{packageName}.rules.yaml
@@ -203,7 +203,7 @@ public class RestoreEngine
                     
                     // Parse rules to extract diagnostic IDs
                     var rulesContent = Encoding.UTF8.GetString(content);
-                    ParseRulesYaml(rulesContent, diagnosticRules);
+                    ParseRulesYaml(rulesContent, diagnosticRules, warnings);
                 }
                 // Check files: checks/*.cop → .cop/checks/{packageName}.{filename} (legacy)
                 else if (relativePath.StartsWith("checks/", StringComparison.OrdinalIgnoreCase) &&
@@ -365,7 +365,7 @@ public class RestoreEngine
     ///   - id: NUnit.Analyzers
     ///     version: 4.5.0
     /// </summary>
-    private void ParseNuGetAnalyzersYaml(string yamlContent, List<(string Id, string Version)> nugetAnalyzers)
+    private void ParseNuGetAnalyzersYaml(string yamlContent, List<(string Id, string Version)> nugetAnalyzers, List<string> warnings)
     {
         try
         {
@@ -395,9 +395,10 @@ public class RestoreEngine
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Silently fail on parse errors, continue with other processing
+            // A malformed nuget-analyzers.yaml must not silently produce zero analyzers — surface it.
+            warnings.Add($"Failed to parse nuget-analyzers.yaml: {ex.Message}");
         }
     }
 
@@ -405,7 +406,7 @@ public class RestoreEngine
     /// Parses rules.yaml to extract diagnostic IDs and their severity levels.
     /// Looks for patterns like "dotnet_diagnostic.{id}.severity = {severity}".
     /// </summary>
-    private void ParseRulesYaml(string yamlContent, Dictionary<string, string> diagnosticRules)
+    private void ParseRulesYaml(string yamlContent, Dictionary<string, string> diagnosticRules, List<string> warnings)
     {
         try
         {
@@ -437,9 +438,10 @@ public class RestoreEngine
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Silently fail on parse errors, continue with other processing
+            // A malformed rules.yaml must not silently produce zero rule overrides — surface it.
+            warnings.Add($"Failed to parse rules.yaml: {ex.Message}");
         }
     }
 
@@ -447,19 +449,19 @@ public class RestoreEngine
     /// Validates that a relative path from a package doesn't escape the intended directory.
     /// Prevents path traversal attacks via sequences like ../../ in package file paths.
     /// </summary>
-    private static string ValidatePackagePath(string relativePath, string baseDir)
+    internal static string ValidatePackagePath(string relativePath, string baseDir)
     {
-        // Normalize the path by combining with a dummy base and checking it stays within bounds
-        var testBase = Path.GetFullPath("dummy");
-        var testPath = Path.GetFullPath(Path.Combine("dummy", relativePath));
-        
-        if (!testPath.StartsWith(testBase + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
-            !testPath.Equals(testBase, StringComparison.OrdinalIgnoreCase))
+        // Anchor on the REAL base directory (not a CWD-relative dummy, which made the check depend
+        // on the process working directory). The combined path must stay within baseDir.
+        var fullBase = Path.GetFullPath(baseDir);
+        var combined = Path.GetFullPath(Path.Combine(fullBase, relativePath));
+
+        if (!combined.StartsWith(fullBase + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
+            !combined.Equals(fullBase, StringComparison.OrdinalIgnoreCase))
         {
             throw new SecurityException($"Invalid package path (potential path traversal): {relativePath}");
         }
-        
-        // Return the validated combined path
+
         return Path.Combine(baseDir, relativePath);
     }
 }

@@ -317,7 +317,7 @@ public class GitHubPackageSource
                 return null;
             }
 
-            response.EnsureSuccessStatusCode();
+            EnsureSuccess(response);
 
             var json = await response.Content.ReadAsStringAsync(ct);
             var refs = JsonSerializer.Deserialize<List<GitHubRefResponse>>(
@@ -364,15 +364,13 @@ public class GitHubPackageSource
         Dictionary<string, byte[]> files,
         CancellationToken ct)
     {
-        CheckRateLimit();
-
         var url = BuildContentsUrl(owner, repo, dirPath, version);
 
         try
         {
             using var request = CreateRequestWithAuth(HttpMethod.Get, url);
             var response = await _httpClient.SendAsync(request, ct);
-            response.EnsureSuccessStatusCode();
+            EnsureSuccess(response);
 
             var json = await response.Content.ReadAsStringAsync(ct);
             var items = JsonSerializer.Deserialize<List<GitHubContentItem>>(
@@ -412,8 +410,16 @@ public class GitHubPackageSource
                         // Directory listings don't include content; download each file individually
                         using var fileRequest = CreateRequestWithAuth(HttpMethod.Get, item.DownloadUrl);
                         var fileResponse = await _httpClient.SendAsync(fileRequest, ct);
-                        if (fileResponse.IsSuccessStatusCode)
-                            files[itemRelativePath] = await fileResponse.Content.ReadAsByteArrayAsync(ct);
+                        EnsureSuccess(fileResponse);
+                        files[itemRelativePath] = await fileResponse.Content.ReadAsByteArrayAsync(ct);
+                    }
+                    else
+                    {
+                        // Neither inline content nor a download URL — don't silently drop the file
+                        // (it would produce a corrupt, incomplete package). Surface it loudly.
+                        throw new Exception(
+                            $"Cannot download '{itemRelativePath}': the GitHub API returned neither inline " +
+                            "content nor a download URL (unsupported entry, e.g. a submodule or Git LFS pointer).");
                     }
                 }
             }
@@ -473,18 +479,26 @@ public class GitHubPackageSource
     }
 
     /// <summary>
-    /// Checks the X-RateLimit-Remaining header and throws if rate limit is exceeded.
+    /// Like <see cref="HttpResponseMessage.EnsureSuccessStatusCode"/>, but surfaces a friendly,
+    /// actionable message when the failure is a GitHub API rate limit (403/429 with
+    /// <c>X-RateLimit-Remaining: 0</c> on the RESPONSE). The previous <c>CheckRateLimit</c> inspected
+    /// <c>DefaultRequestHeaders</c> (request headers) for a response-only header, so it never fired.
     /// </summary>
-    private void CheckRateLimit()
+    private static void EnsureSuccess(HttpResponseMessage response)
     {
-        if (_httpClient.DefaultRequestHeaders.TryGetValues("X-RateLimit-Remaining", out var values))
+        if (response.IsSuccessStatusCode) return;
+
+        if ((response.StatusCode == System.Net.HttpStatusCode.Forbidden
+                || response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+            && response.Headers.TryGetValues("X-RateLimit-Remaining", out var values)
+            && int.TryParse(values.FirstOrDefault(), out var remaining) && remaining == 0)
         {
-            if (int.TryParse(values.FirstOrDefault(), out var remaining) && remaining == 0)
-            {
-                throw new Exception(
-                    "GitHub API rate limit exceeded. Please try again later or provide a GitHub token for higher rate limits.");
-            }
+            throw new Exception(
+                "GitHub API rate limit exceeded. Please try again later or set a GitHub token " +
+                "(GITHUB_TOKEN) for higher rate limits.");
         }
+
+        response.EnsureSuccessStatusCode();
     }
 
     /// <summary>
