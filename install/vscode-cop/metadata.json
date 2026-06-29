@@ -118,6 +118,10 @@
           "type": "string"
         },
         {
+          "name": "ApiAsText",
+          "type": "string"
+        },
+        {
           "name": "Line",
           "type": "int"
         },

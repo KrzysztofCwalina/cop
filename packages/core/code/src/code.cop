@@ -81,6 +81,7 @@ export type Api = {
     TypeName : string,
     MemberName : string,
     Signature : string,
+    ApiAsText : string,
     Line : int,
     File : File?,
     Source : string
