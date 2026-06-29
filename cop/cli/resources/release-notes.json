@@ -140,6 +140,14 @@
         "VS Code extension: hovering a list of violations (or the `codebase` binding) no longer shows \"unknown\", and files no longer lose syntax coloring after a lone `#` comment line.",
         "The extension's IntelliSense and syntax highlighting are now generated from cop's own language definitions (types, keywords, predicates), so they stay in sync as the language evolves instead of drifting and breaking."
       ]
+    },
+    {
+      "version": "2026.6.29.1",
+      "approved": true,
+      "features": [
+        "VS Code: diagnostics, hover, and autocomplete now come from a built-in cop language server (`cop langserver`), so they match the compiler exactly and update live as you type — instead of a separate in-extension implementation that kept drifting and breaking.",
+        "Hovering a list of violations now shows its real type (e.g. [Violation]) instead of \"unknown\"."
+      ]
     }
   ]
 }
