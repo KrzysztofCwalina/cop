@@ -21,15 +21,20 @@ public static class VerifyCommand
             Arity = ArgumentArity.ZeroOrOne,
             Description = ".cop file or directory to verify"
         };
+        var jsonOption = new Option<bool>("--json")
+        {
+            Description = "Emit diagnostics as JSON to stdout (for editors and tools)"
+        };
         var command = new Command("verify", "Verify program correctness without executing (syntax, imports, types, bindings)")
         {
-            pathArg
+            pathArg,
+            jsonOption
         };
-        command.SetAction(parseResult => Execute(parseResult.GetValue(pathArg)));
+        command.SetAction(parseResult => Execute(parseResult.GetValue(pathArg), parseResult.GetValue(jsonOption)));
         return command;
     }
 
-    public static int Execute(string? path)
+    public static int Execute(string? path, bool json = false)
     {
         path ??= Directory.GetCurrentDirectory();
         path = Path.GetFullPath(path);
@@ -209,6 +214,12 @@ public static class VerifyCommand
         int errorCount = diagnostics.Count(d => d.Severity == CopDiagnosticSeverity.Error);
         int warningCount = diagnostics.Count(d => d.Severity == CopDiagnosticSeverity.Warning);
 
+        if (json)
+        {
+            WriteDiagnosticsJson(diagnostics, files.Length, errorCount, warningCount);
+            return errorCount > 0 ? 1 : 0;
+        }
+
         if (diagnostics.Count > 0)
         {
             DiagnosticFormatter.WriteAllToStdErr(diagnostics);
@@ -229,6 +240,42 @@ public static class VerifyCommand
             Console.Error.WriteLine($"  {warningCount} warning(s) in {files.Length} file(s)");
 
         return errorCount > 0 ? 1 : 0;
+    }
+
+    /// <summary>
+    /// Emits verification diagnostics as JSON to stdout, for editors and tools to consume the real
+    /// compiler's analysis (the same parse + import-resolution + bind + type-check pipeline).
+    /// </summary>
+    private static void WriteDiagnosticsJson(List<CopDiagnostic> diagnostics, int fileCount, int errors, int warnings)
+    {
+        var payload = new
+        {
+            diagnostics = diagnostics.Select(d => new
+            {
+                severity = d.Severity switch
+                {
+                    CopDiagnosticSeverity.Error => "error",
+                    CopDiagnosticSeverity.Warning => "warning",
+                    _ => "info"
+                },
+                file = d.FilePath,
+                line = d.Line,
+                column = d.Column,
+                length = d.Length,
+                message = d.Message,
+                suggestion = d.Suggestion
+            }).ToList(),
+            files = fileCount,
+            errors,
+            warnings
+        };
+        var options = new System.Text.Json.JsonSerializerOptions
+        {
+            WriteIndented = true,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        };
+        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(payload, options));
     }
 
     /// <summary>
