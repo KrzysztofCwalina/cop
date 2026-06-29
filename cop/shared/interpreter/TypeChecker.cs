@@ -20,7 +20,7 @@ public sealed class TypeChecker
     private sealed record IT(string Name, bool IsCollection);
 
     /// <summary>A callable signature (one overload).</summary>
-    private sealed record Sig(string Name, IReadOnlyList<TypeRef?> Params, bool LastIsVariadic, TypeRef? Return);
+    private sealed record Sig(string Name, IReadOnlyList<TypeRef?> Params, bool LastIsVariadic, TypeRef? Return, bool IsPredicate);
 
     // Merged type model (unioned across every declaration, local + imported).
     private readonly Dictionary<string, HashSet<string>> _bases = new(StringComparer.Ordinal);
@@ -56,20 +56,30 @@ public sealed class TypeChecker
         IEnumerable<(ModuleNode Module, string FilePath, string Source)> filesToCheck)
     {
         var checker = new TypeChecker();
-        foreach (var module in allModules)
-            checker.IndexModule(module);
         var files = filesToCheck.ToList();
-        // Resolve top-level `let` types (two rounds so a let may reference one declared later,
-        // e.g. checks referencing `codebase`).
-        for (int round = 0; round < 2; round++)
-            foreach (var (module, _, _) in files)
-                foreach (var decl in module.Declarations)
-                    if (decl is LetDecl ld)
-                        checker._topLevelLets[ld.Name] =
-                            ld.TypeAnnotation is not null ? ToIT(ld.TypeAnnotation) : checker.InferExpr(ld.Value);
+        checker.BuildModel(allModules, files.Select(f => f.Module));
         foreach (var (module, filePath, source) in files)
             checker.CheckModule(module, filePath, source);
         return checker._diagnostics;
+    }
+
+    /// <summary>
+    /// Indexes every module and resolves top-level <c>let</c> types (two rounds, so a let may
+    /// reference one declared later, e.g. checks referencing <c>codebase</c>). Shared by
+    /// <see cref="Check"/> and the <see cref="SemanticModel"/> facade so <c>cop verify</c> and the
+    /// editor use ONE type model and ONE inference engine.
+    /// </summary>
+    private void BuildModel(IEnumerable<ModuleNode> allModules, IEnumerable<ModuleNode> letScope)
+    {
+        foreach (var module in allModules)
+            IndexModule(module);
+        var scope = letScope.ToList();
+        for (int round = 0; round < 2; round++)
+            foreach (var module in scope)
+                foreach (var decl in module.Declarations)
+                    if (decl is LetDecl ld)
+                        _topLevelLets[ld.Name] =
+                            ld.TypeAnnotation is not null ? ToIT(ld.TypeAnnotation) : InferExpr(ld.Value);
     }
 
     // ── Model building ──────────────────────────────────────────────────────
@@ -104,7 +114,7 @@ public sealed class TypeChecker
                     var sigs = _funcs.TryGetValue(fn.Name, out var s) ? s : (_funcs[fn.Name] = []);
                     var ps = fn.Params.Select(pp => pp.Type).ToList();
                     bool variadic = ps.Count > 0 && ps[^1] is { IsCollection: true };
-                    sigs.Add(new Sig(fn.Name, ps, variadic, fn.ReturnType));
+                    sigs.Add(new Sig(fn.Name, ps, variadic, fn.ReturnType, fn.IsPredicate));
                     // A narrowing predicate (`predicate p(T) : NarrowType => ...`) narrows the
                     // element type when used as a filter. A plain boolean predicate (ReturnType
                     // "bool" or none) does NOT narrow — it preserves the element type. Narrowing
@@ -427,7 +437,12 @@ public sealed class TypeChecker
                 return InferFilter(fe);
 
             case BinaryExpr be:
-                return IsBooleanOp(be.Op) ? new IT("bool", false) : null;
+                if (IsBooleanOp(be.Op)) return new IT("bool", false);
+                // `+` concatenates lists or adds scalars. For violation checks the common shape is
+                // `let all = a + b + c` where each part is `[Violation]`; the result is that same
+                // collection type. Inferring it (instead of giving up) is what lets the editor show
+                // `[Violation]` on hover instead of "unknown", and is consistent for `cop verify`.
+                return be.Op == BinaryOp.Add ? InferAddition(be.Left, be.Right) : null;
 
             case UnaryExpr ue:
                 return ue.Op == UnaryOp.Not ? new IT("bool", false) : null;
@@ -442,6 +457,26 @@ public sealed class TypeChecker
 
             default: return null;
         }
+    }
+
+    /// <summary>
+    /// Infers the type of <c>left + right</c>. <c>+</c> concatenates collections (e.g. unioning
+    /// violation lists) or adds scalars. When both sides agree, that type is the result; when only
+    /// one side is a known collection, the result is that collection (concatenation preserves it).
+    /// </summary>
+    private IT? InferAddition(Expression left, Expression right)
+    {
+        var l = InferExpr(left);
+        var r = InferExpr(right);
+        if (l is not null && r is not null)
+        {
+            if (l == r) return l;
+            if (l.IsCollection && r.IsCollection && string.Equals(l.Name, r.Name, StringComparison.Ordinal))
+                return l;
+        }
+        if (l is { IsCollection: true }) return l;
+        if (r is { IsCollection: true }) return r;
+        return null;
     }
 
     private IT? InferMember(MemberExpr me)
@@ -555,4 +590,95 @@ public sealed class TypeChecker
         var sourceLine = _src is not null ? ParseException.GetSourceLine(_src, line) : null;
         _diagnostics.Add(new CopDiagnostic(CopDiagnosticSeverity.Error, message, _file, line, SourceLine: sourceLine));
     }
+
+    // ── SemanticModel facade hooks ───────────────────────────────────────────
+    // Editor hover/completion run the REAL type model + inference (the same code that powers
+    // `cop verify`), exposed here so tooling never reimplements the compiler.
+
+    /// <summary>Builds a checker populated with the merged type model, for editor queries.</summary>
+    internal static TypeChecker ForModel(IEnumerable<ModuleNode> modules)
+    {
+        var checker = new TypeChecker();
+        var mods = modules.ToList();
+        checker.BuildModel(mods, mods);
+        return checker;
+    }
+
+    /// <summary>Infers the type of an expression with an explicit local scope (e.g. the implicit
+    /// <c>item</c> or a predicate parameter), using the real inference engine.</summary>
+    internal TypeInfo? InferWithLocals(Expression? expr, IReadOnlyDictionary<string, TypeInfo>? locals)
+    {
+        _locals.Clear();
+        if (locals is not null)
+            foreach (var kv in locals)
+                _locals[kv.Key] = new IT(kv.Value.Name, kv.Value.IsCollection);
+        var it = InferExpr(expr);
+        return it is null ? null : new TypeInfo(it.Name, it.IsCollection);
+    }
+
+    /// <summary>Finds a property by name, walking base types/traits; returns its declaring type.</summary>
+    internal PropertyInfo? FindProperty(string typeName, string member)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var stack = new Stack<string>();
+        stack.Push(typeName);
+        while (stack.Count > 0)
+        {
+            var t = stack.Pop();
+            if (!seen.Add(t)) continue;
+            if (_props.TryGetValue(t, out var props) && props.TryGetValue(member, out var pt))
+                return new PropertyInfo(member, pt.IsCollection ? $"[{pt.Name}]" : pt.Name, t);
+            if (_bases.TryGetValue(t, out var bases))
+                foreach (var b in bases) stack.Push(b);
+        }
+        return null;
+    }
+
+    /// <summary>Enumerates all properties of a type, including inherited ones (deduped by name).</summary>
+    internal IReadOnlyList<PropertyInfo> AllProperties(string typeName)
+    {
+        var result = new List<PropertyInfo>();
+        var seenProp = new HashSet<string>(StringComparer.Ordinal);
+        var seenType = new HashSet<string>(StringComparer.Ordinal);
+        var stack = new Stack<string>();
+        stack.Push(typeName);
+        while (stack.Count > 0)
+        {
+            var t = stack.Pop();
+            if (!seenType.Add(t)) continue;
+            if (_props.TryGetValue(t, out var props))
+                foreach (var kv in props)
+                    if (seenProp.Add(kv.Key))
+                        result.Add(new PropertyInfo(kv.Key, kv.Value.IsCollection ? $"[{kv.Value.Name}]" : kv.Value.Name, t));
+            if (_bases.TryGetValue(t, out var bases))
+                foreach (var b in bases) stack.Push(b);
+        }
+        return result;
+    }
+
+    /// <summary>Signature info for a declared predicate or function (first overload).</summary>
+    internal CallableInfo? Callable(string name)
+    {
+        if (!_funcs.TryGetValue(name, out var sigs) || sigs.Count == 0) return null;
+        var sig = sigs[0];
+        var pars = sig.Params.Select(p => p is null ? null : (p.IsCollection ? $"[{p.Name}]" : p.Name)).ToList();
+        string? ret = sig.Return is null ? null : (sig.Return.IsCollection ? $"[{sig.Return.Name}]" : sig.Return.Name);
+        return new CallableInfo(name, sig.IsPredicate, pars, ret, _narrowings.ContainsKey(name));
+    }
+
+    internal TypeInfo? TopLevelLet(string name, out bool found)
+    {
+        if (_topLevelLets.TryGetValue(name, out var it))
+        {
+            found = true;
+            return it is null ? null : new TypeInfo(it.Name, it.IsCollection);
+        }
+        found = false;
+        return null;
+    }
+
+    internal IReadOnlyCollection<string> LetNames() => _topLevelLets.Keys;
+    internal IReadOnlyCollection<string> KnownTypes() => _knownTypes;
+    internal bool IsEnumName(string name) => _enums.Contains(name);
+    internal bool IsKnownType(string name) => _knownTypes.Contains(name);
 }
