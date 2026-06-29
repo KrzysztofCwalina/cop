@@ -259,20 +259,18 @@ public sealed class ModuleLoader
 
     private void DetectProvider(string packageDir, string packageName)
     {
-        // Check for provider metadata (cop.json with provider field, or .md manifest)
-        var metaFile = Path.Combine(packageDir, "cop.json");
-        if (File.Exists(metaFile))
+        // A package is a provider when its manifest (cop.json, or legacy .md front-matter)
+        // explicitly declares a provider. Parse the manifest rather than substring-matching the
+        // raw text, so a description that merely mentions "provider" is not misclassified.
+        try
         {
-            try
-            {
-                var json = File.ReadAllText(metaFile);
-                if (json.Contains("\"provider\"", StringComparison.OrdinalIgnoreCase))
-                    _providerPackages.Add((packageDir, packageName));
-            }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
-            {
-                _errors.Add($"Failed to read provider metadata '{metaFile}': {ex.Message}");
-            }
+            var metadata = Cop.Core.PackageMetadata.TryLoadFromDirectory(packageDir);
+            if (metadata is not null && metadata.IsProvider)
+                _providerPackages.Add((packageDir, packageName));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _errors.Add($"Failed to read provider metadata in '{packageDir}': {ex.Message}");
         }
     }
 

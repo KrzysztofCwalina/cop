@@ -37,22 +37,22 @@ public class PackageReference
         if (string.IsNullOrWhiteSpace(reference))
             throw new ArgumentException("Reference cannot be null or empty", nameof(reference));
 
-        // Split on ": " to separate path from version
+        // The version is separated from the path by ':' (with or without surrounding spaces),
+        // e.g. "host/owner/repo/pkg:1.0.0" or "host/owner/repo/pkg: 1.0.0". Path segments are
+        // separated by '/' and never contain ':', so split on the first ':'.
         string? version = null;
         string path;
 
-        if (reference.Contains(": "))
+        int colon = reference.IndexOf(':');
+        if (colon >= 0)
         {
-            var parts = reference.Split(": ", StringSplitOptions.None);
-            if (parts.Length != 2)
-                throw new ArgumentException($"Invalid reference format: '{reference}'. Expected format: 'host/owner/repo/package' or 'host/owner/repo/package: version'", nameof(reference));
-            
-            path = parts[0];
-            version = parts[1];
+            path = reference[..colon].Trim();
+            var rest = reference[(colon + 1)..].Trim();
+            version = rest.Length > 0 ? rest : null;
         }
         else
         {
-            path = reference;
+            path = reference.Trim();
         }
 
         // Split the path on "/" to extract components

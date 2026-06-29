@@ -105,6 +105,7 @@ public static class CodeBindings
                 ["Kwargs"] = o => (object)((ParameterDeclaration)o).IsKwargs,
                 ["Defaulted"] = o => (object)((ParameterDeclaration)o).HasDefaultValue,
                 ["DefaultValue"] = o => ((ParameterDeclaration)o).DefaultValueText,
+                ["Line"] = o => (object)((ParameterDeclaration)o).Line,
             },
             ["Field"] = new()
             {

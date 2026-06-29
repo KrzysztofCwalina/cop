@@ -318,6 +318,44 @@ public class CodebaseModelPopulationTests
         }
     }
 
+    [Test]
+    public void ParameterLine_IsPopulated()
+    {
+        // Regression: Parameter.Line was declared in code.cop and backed by a real CLR field,
+        // but had no provider-schema entry or CLR accessor, so `parameter.Line` silently returned
+        // null at runtime. It must return the actual source line.
+        var fixture = CreateFixture(nameof(ParameterLine_IsPopulated));
+        try
+        {
+            WriteFile(fixture.TargetDir, "Sample.cs", """
+                namespace ModelPopulation;
+                public class Sample
+                {
+                    public void Known(int value)
+                    {
+                    }
+                }
+                """);
+
+            var messages = RunCop(fixture, """
+                import code
+                import csharp
+
+                let cb = csharp.parse()
+                predicate isKnown(Method) => Method.Name == 'Known'
+
+                command MAIN = foreach cb.Methods:isKnown => 'param-line:{item.Parameters.First.Line}'
+                """);
+
+            // The method (and its `int value` parameter) is on line 4 of Sample.cs.
+            Assert.That(messages, Is.EqualTo(new[] { "param-line:4" }));
+        }
+        finally
+        {
+            fixture.Delete();
+        }
+    }
+
     private static Fixture CreateFixture(string testName)
     {
         var root = Path.Combine(BehaviorRoot, Sanitize(testName) + "-" + Guid.NewGuid().ToString("N")[..8]);

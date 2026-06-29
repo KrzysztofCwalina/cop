@@ -59,7 +59,7 @@ public static class CodeSchema
                 TypeDef("Parameter", null,
                     Prop("Name"), Opt("Type", "TypeReference"),
                     Bool("Variadic"), Bool("Kwargs"), Bool("Defaulted"),
-                    Opt("DefaultValue")),
+                    Opt("DefaultValue"), Prop("Line", "int")),
 
                 TypeDef("Field", null,
                     Prop("Name"), Opt("Type", "TypeReference"),

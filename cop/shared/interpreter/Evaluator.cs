@@ -1973,22 +1973,6 @@ public sealed class Evaluator
         else if (args.Count > 0)
             funcEnv.Define("item", args[0]);
 
-        // TRACE: debug isPublic
-        if (func.Declaration.Name == "isPublic" && _traceLog != null)
-        {
-            var paramName = func.Declaration.Params.Count > 0 ? func.Declaration.Params[0].Name : "(none)";
-            var argDisplay = args.Count > 0 ? $"{args[0].GetType().Name}" : "(no args)";
-            _traceLog($"[trace] CallUserFunction: isPublic, param='{paramName}', arg={argDisplay}");
-            if (args.Count > 0 && args[0] is CopDynamicObject dobj)
-            {
-                var mods = dobj.GetField("Modifiers");
-                _traceLog($"[trace]   arg.Modifiers = {mods?.GetType().Name}({mods?.Display()})");
-                // Check if Public is in scope
-                funcEnv.TryLookup("Public", out var pubVal);
-                _traceLog($"[trace]   'Public' in env = {pubVal?.GetType().Name}({pubVal?.Display()})");
-            }
-        }
-
         // Evaluate body
         var result = func.Declaration.Body switch
         {

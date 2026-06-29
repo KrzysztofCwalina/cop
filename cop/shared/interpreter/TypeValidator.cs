@@ -241,10 +241,11 @@ public static class TypeValidator
         // available, any registered type).
         if (value is CopProviderProxy)
         {
-            if (string.Equals(typeName, "Codebase", StringComparison.OrdinalIgnoreCase))
-                return true;
             if (TypeRegistry.IsCorePrimitive(typeName))
                 return false;
+            // A provider proxy resolves its fields on demand, so it is assignable to any
+            // registered (non-primitive) type. When no registry is available we cannot verify
+            // the type, so we accept it rather than produce a false positive.
             return registry is null || registry.HasType(typeName);
         }
 
