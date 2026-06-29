@@ -64,7 +64,7 @@ public sealed class Binder
     /// declaration (e.g. the per-item variable in filters, per-item transforms, and foreach).
     /// </summary>
     private static bool IsImplicitlyAvailable(string name) =>
-        name is "item";
+        name == Evaluator.ImplicitItemVariable;
 
     /// <summary>
     /// Bind a parsed module, producing a BindingResult with resolved symbols and diagnostics.

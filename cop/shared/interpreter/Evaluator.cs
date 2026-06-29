@@ -39,6 +39,13 @@ public sealed class Evaluator
     public Action<string>? TraceLog { get => _traceLog; set => _traceLog = value; }
     public TypeRegistry? TypeRegistry { get; set; }
 
+    /// <summary>
+    /// The single implicit iteration/subject variable bound inside foreach bodies, pipelines,
+    /// per-element transforms, computed properties and filter predicates. Centralized here so the
+    /// name exists in exactly one place (it was previously a magic string literal at 12+ sites).
+    /// </summary>
+    public const string ImplicitItemVariable = "item";
+
     public Evaluator(ForeignFunctionRegistry? ffi = null, string? filePath = null)
     {
         _ffi = ffi ?? new ForeignFunctionRegistry();
@@ -250,7 +257,7 @@ public sealed class Evaluator
         {
             count++;
             var iterEnv = env.Extend();
-            iterEnv.Define("item", item);
+            iterEnv.Define(ImplicitItemVariable, item);
             iterEnv.Define(stmt.Variable, item);
 
             foreach (var bodyStmt in stmt.Body)
@@ -286,7 +293,7 @@ public sealed class Evaluator
         foreach (var item in items)
         {
             var pipeEnv = env.Extend();
-            pipeEnv.Define("item", item);
+            pipeEnv.Define(ImplicitItemVariable, item);
 
             CopValue current = item;
             foreach (var stage in stmt.Stages)
@@ -731,7 +738,7 @@ public sealed class Evaluator
     private CopValue EvalElementExpr(Expression argExpr, CopValue item, Environment env)
     {
         var elemEnv = env.Extend();
-        elemEnv.Define("item", item);
+        elemEnv.Define(ImplicitItemVariable, item);
         if (argExpr is LambdaExpr lambda)
         {
             if (lambda.Params.Count >= 1)
@@ -908,7 +915,7 @@ public sealed class Evaluator
                 {
                     // Evaluate computed expression with 'item' bound to the object
                     var computedEnv = new Environment(env);
-                    computedEnv.Define("item", obj);
+                    computedEnv.Define(ImplicitItemVariable, obj);
                     result = Eval(computedExpr, computedEnv);
                 }
             }
@@ -1396,7 +1403,7 @@ public sealed class Evaluator
                     if (result is ICopCallable)
                     {
                         var coerceEnv = env.Extend();
-                        coerceEnv.Define("item", item);
+                        coerceEnv.Define(ImplicitItemVariable, item);
                         result = CoerceCallableToBool(result, coerceEnv);
                     }
 
@@ -1598,7 +1605,7 @@ public sealed class Evaluator
 
                     // Evaluate args with item bound to subject (for template interpolation)
                     var argEnv = env.Extend();
-                    argEnv.Define("item", subject);
+                    argEnv.Define(ImplicitItemVariable, subject);
                     var args = call.Args.Select(a => Eval(a, argEnv)).ToList();
                     var allArgs = new List<CopValue> { subject };
                     allArgs.AddRange(args);
@@ -1613,7 +1620,7 @@ public sealed class Evaluator
                         return mfc.Invoke(allArgs, this, env);
                 }
                 var itemEnv = env.Extend();
-                itemEnv.Define("item", subject);
+                itemEnv.Define(ImplicitItemVariable, subject);
                 return Eval(call, itemEnv);
 
             case MemberExpr mem2:
@@ -1673,7 +1680,7 @@ public sealed class Evaluator
                     }
 
                     var argEnv = env.Extend();
-                    argEnv.Define("item", subject);
+                    argEnv.Define(ImplicitItemVariable, subject);
                     var args = call.Args.Select(a => Eval(a, argEnv)).ToList();
                     var allArgs = new List<CopValue> { subject };
                     allArgs.AddRange(args);
@@ -1689,7 +1696,7 @@ public sealed class Evaluator
                 }
                 // Fallback: evaluate the call expression in a context where item is bound
                 var itemEnv = env.Extend();
-                itemEnv.Define("item", subject);
+                itemEnv.Define(ImplicitItemVariable, subject);
                 return Eval(call, itemEnv).IsTruthy;
 
             case MemberExpr mem2:
@@ -1969,9 +1976,9 @@ public sealed class Evaluator
         // args fill the declared params and `item` is the per-element subject (itemOverride); the
         // usual convention otherwise is that `item` aliases the first argument (issue #34).
         if (itemOverride is not null)
-            funcEnv.Define("item", itemOverride);
+            funcEnv.Define(ImplicitItemVariable, itemOverride);
         else if (args.Count > 0)
-            funcEnv.Define("item", args[0]);
+            funcEnv.Define(ImplicitItemVariable, args[0]);
 
         // Evaluate body
         var result = func.Declaration.Body switch
@@ -2124,7 +2131,7 @@ public sealed class Evaluator
     /// </summary>
     private CopValue CoerceCallableToBool(CopValue value, Environment env)
     {
-        if (value is ICopCallable callable && env.TryLookup("item", out var item))
+        if (value is ICopCallable callable && env.TryLookup(ImplicitItemVariable, out var item))
             return callable.Invoke([item], this, env);
         return value;
     }
