@@ -99,4 +99,62 @@ public class CodeModelBindingTests
             "CodeSchema properties with NO runtime accessor (they will silently return null): "
             + string.Join(", ", failures.OrderBy(x => x)));
     }
+
+    [Test]
+    public void CodeCop_And_CodeSchema_AgreeOnProviderProperties_ExceptDocumentedDifferences()
+    {
+        // code.cop (the language surface) and CodeSchema.cs (the provider schema) declare the same
+        // provider types. They must agree on properties so `cop verify`/IntelliSense match runtime,
+        // EXCEPT for these documented, intentional differences:
+        //   - schema-only convenience booleans that code.cop expresses as predicates (isPublic, …)
+        //   - cop-only properties that are not part of the binary provider schema
+        var allowedSchemaOnly = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "Type.IsSealed", "Type.IsAbstract", "Type.IsStatic", "Type.IsPublic",
+            "Method.IsStatic", "Method.IsAbstract", "Method.IsPublic",
+            "Field.IsStatic", "Field.IsPublic",
+            "Property.IsStatic", "Property.IsAbstract", "Property.IsPublic",
+            "Event.IsStatic", "Event.IsPublic",
+            "TypeReference.Generic", "TypeReference.GenericArguments", "TypeReference.Length",
+            "File.Projects",
+            "Statement.Braced",
+        };
+        var allowedCopOnly = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "Statement.CopIgnore", "Line.CopIgnore",
+        };
+
+        var providerTypes = ProviderTypeNames();
+        var schema = CodeSchema.Get();
+        var schemaProps = schema.Types.ToDictionary(
+            t => t.Name,
+            t => t.Properties.Select(p => p.Name).ToHashSet(StringComparer.Ordinal),
+            StringComparer.Ordinal);
+
+        // Merge code.cop declared (non-computed) properties per type.
+        var copProps = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        var srcDir = Path.Combine(RepoRoot(), "packages", "core", "code", "src");
+        foreach (var file in Directory.GetFiles(srcDir, "*.cop"))
+            foreach (var td in CopParser.Parse(File.ReadAllText(file), file).Declarations.OfType<TypeDecl>())
+            {
+                if (!copProps.TryGetValue(td.Name, out var set)) { set = new(StringComparer.Ordinal); copProps[td.Name] = set; }
+                foreach (var p in td.Properties.Where(p => p.ComputedExpr is null)) set.Add(p.Name);
+            }
+
+        var unexpected = new List<string>();
+        foreach (var typeName in providerTypes)
+        {
+            var inSchema = schemaProps.GetValueOrDefault(typeName) ?? [];
+            var inCop = copProps.GetValueOrDefault(typeName) ?? [];
+
+            foreach (var p in inSchema.Except(inCop))
+                if (!allowedSchemaOnly.Contains($"{typeName}.{p}")) unexpected.Add($"schema-only {typeName}.{p}");
+            foreach (var p in inCop.Except(inSchema))
+                if (!allowedCopOnly.Contains($"{typeName}.{p}")) unexpected.Add($"cop-only {typeName}.{p}");
+        }
+
+        Assert.That(unexpected, Is.Empty,
+            "code.cop and CodeSchema drifted on provider properties (add to code.cop/schema, or to the "
+            + "documented allowlist if intentional): " + string.Join(", ", unexpected.OrderBy(x => x)));
+    }
 }

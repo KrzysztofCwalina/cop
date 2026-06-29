@@ -458,6 +458,22 @@
         }
       ]
     },
+    "Member": {
+      "properties": [
+        {
+          "name": "Name",
+          "type": "string"
+        },
+        {
+          "name": "DeclaringType",
+          "type": "string"
+        },
+        {
+          "name": "Line",
+          "type": "int"
+        }
+      ]
+    },
     "Method": {
       "base": "TextFilePosition",
       "properties": [

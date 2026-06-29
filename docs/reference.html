@@ -612,7 +612,7 @@ const packages = {
         ]
       },
       "Statement": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L108",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L114",
         "props": [
           {
             "name": "Kind",
@@ -927,7 +927,7 @@ const packages = {
         ]
       },
       "Line": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L196",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L202",
         "props": [
           {
             "name": "Text",
@@ -972,7 +972,7 @@ const packages = {
         ]
       },
       "Region": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L210",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L216",
         "props": [
           {
             "name": "Name",
@@ -1182,8 +1182,28 @@ const packages = {
           }
         ]
       },
-      "Parameter": {
+      "Member": {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L90",
+        "props": [
+          {
+            "name": "Name",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "DeclaringType",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Line",
+            "type": "int",
+            "desc": ""
+          }
+        ]
+      },
+      "Parameter": {
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L96",
         "props": [
           {
             "name": "Name",
@@ -1223,7 +1243,7 @@ const packages = {
         ]
       },
       "TypeReference": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L100",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L106",
         "props": [
           {
             "name": "Name",
@@ -1253,7 +1273,7 @@ const packages = {
         ]
       },
       "Call": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L132",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L138",
         "baseType": "Statement",
         "props": [
           {
@@ -1264,22 +1284,22 @@ const packages = {
         ]
       },
       "Declaration": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L136",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L142",
         "baseType": "Statement",
         "props": []
       },
       "ErrorHandler": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L138",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L144",
         "baseType": "Statement",
         "props": []
       },
       "Attribute": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L140",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L146",
         "baseType": "Statement",
         "props": []
       },
       "File": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L220",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L226",
         "props": [
           {
             "name": "Path",
@@ -1309,7 +1329,7 @@ const packages = {
         ]
       },
       "ProjectProperty": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L228",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L234",
         "props": [
           {
             "name": "Name",
@@ -1324,7 +1344,7 @@ const packages = {
         ]
       },
       "Project": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L233",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L239",
         "props": [
           {
             "name": "Name",
@@ -1364,7 +1384,7 @@ const packages = {
         ]
       },
       "Codebase": {
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L243",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L249",
         "props": [
           {
             "name": "Files",
@@ -1426,497 +1446,497 @@ const packages = {
         "name": "isPublic",
         "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L143"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L149"
       },
       {
         "name": "isSealed",
         "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L144"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L150"
       },
       {
         "name": "isAbstract",
         "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L145"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L151"
       },
       {
         "name": "isStatic",
         "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L146"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L152"
       },
       {
         "name": "isDocumented",
         "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L147"
-      },
-      {
-        "name": "isPublic",
-        "appliesTo": "Method",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L149"
-      },
-      {
-        "name": "isProtected",
-        "appliesTo": "Method",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L150"
-      },
-      {
-        "name": "isPrivate",
-        "appliesTo": "Method",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L151"
-      },
-      {
-        "name": "isInternal",
-        "appliesTo": "Method",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L152"
-      },
-      {
-        "name": "isAsync",
-        "appliesTo": "Method",
-        "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L153"
       },
       {
-        "name": "isStatic",
-        "appliesTo": "Method",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L154"
-      },
-      {
-        "name": "isAbstract",
+        "name": "isPublic",
         "appliesTo": "Method",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L155"
       },
       {
-        "name": "isVirtual",
+        "name": "isProtected",
         "appliesTo": "Method",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L156"
       },
       {
-        "name": "isOverride",
+        "name": "isPrivate",
         "appliesTo": "Method",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L157"
       },
       {
-        "name": "isDocumented",
+        "name": "isInternal",
         "appliesTo": "Method",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L158"
       },
       {
-        "name": "isPublic",
-        "appliesTo": "Field",
+        "name": "isAsync",
+        "appliesTo": "Method",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L159"
+      },
+      {
+        "name": "isStatic",
+        "appliesTo": "Method",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L160"
       },
       {
-        "name": "isPrivate",
-        "appliesTo": "Field",
+        "name": "isAbstract",
+        "appliesTo": "Method",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L161"
       },
       {
-        "name": "isProtected",
-        "appliesTo": "Field",
+        "name": "isVirtual",
+        "appliesTo": "Method",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L162"
       },
       {
-        "name": "isInternal",
-        "appliesTo": "Field",
+        "name": "isOverride",
+        "appliesTo": "Method",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L163"
       },
       {
-        "name": "isStatic",
-        "appliesTo": "Field",
+        "name": "isDocumented",
+        "appliesTo": "Method",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L164"
       },
       {
-        "name": "isReadonly",
-        "appliesTo": "Field",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L165"
-      },
-      {
-        "name": "isConst",
+        "name": "isPublic",
         "appliesTo": "Field",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L166"
       },
       {
-        "name": "isPublic",
-        "appliesTo": "Property",
+        "name": "isPrivate",
+        "appliesTo": "Field",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L167"
+      },
+      {
+        "name": "isProtected",
+        "appliesTo": "Field",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L168"
       },
       {
-        "name": "isProtected",
-        "appliesTo": "Property",
+        "name": "isInternal",
+        "appliesTo": "Field",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L169"
       },
       {
-        "name": "isPrivate",
-        "appliesTo": "Property",
+        "name": "isStatic",
+        "appliesTo": "Field",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L170"
       },
       {
-        "name": "isInternal",
-        "appliesTo": "Property",
+        "name": "isReadonly",
+        "appliesTo": "Field",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L171"
       },
       {
-        "name": "isStatic",
-        "appliesTo": "Property",
+        "name": "isConst",
+        "appliesTo": "Field",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L172"
       },
       {
-        "name": "isAbstract",
-        "appliesTo": "Property",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L173"
-      },
-      {
-        "name": "isVirtual",
+        "name": "isPublic",
         "appliesTo": "Property",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L174"
       },
       {
-        "name": "isOverride",
+        "name": "isProtected",
         "appliesTo": "Property",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L175"
       },
       {
-        "name": "hasGetter",
+        "name": "isPrivate",
         "appliesTo": "Property",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L176"
       },
       {
-        "name": "hasSetter",
+        "name": "isInternal",
         "appliesTo": "Property",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L177"
       },
       {
-        "name": "isDocumented",
+        "name": "isStatic",
         "appliesTo": "Property",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L178"
       },
       {
+        "name": "isAbstract",
+        "appliesTo": "Property",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L179"
+      },
+      {
+        "name": "isVirtual",
+        "appliesTo": "Property",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L180"
+      },
+      {
+        "name": "isOverride",
+        "appliesTo": "Property",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L181"
+      },
+      {
+        "name": "hasGetter",
+        "appliesTo": "Property",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L182"
+      },
+      {
+        "name": "hasSetter",
+        "appliesTo": "Property",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L183"
+      },
+      {
+        "name": "isDocumented",
+        "appliesTo": "Property",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L184"
+      },
+      {
         "name": "isPublic",
         "appliesTo": "Event",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L180"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L186"
       },
       {
         "name": "isProtected",
         "appliesTo": "Event",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L181"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L187"
       },
       {
         "name": "isPrivate",
         "appliesTo": "Event",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L182"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L188"
       },
       {
         "name": "isInternal",
         "appliesTo": "Event",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L183"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L189"
       },
       {
         "name": "isStatic",
         "appliesTo": "Event",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L184"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L190"
       },
       {
         "name": "isCall",
         "appliesTo": "Statement",
         "narrows": "Call",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L187"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L193"
       },
       {
         "name": "isDeclaration",
         "appliesTo": "Statement",
         "narrows": "Declaration",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L188"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L194"
       },
       {
         "name": "isErrorHandler",
         "appliesTo": "Statement",
         "narrows": "ErrorHandler",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L189"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L195"
       },
       {
         "name": "isAttribute",
         "appliesTo": "Statement",
         "narrows": "Attribute",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L190"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L196"
       },
       {
         "name": "isControlFlow",
         "appliesTo": "Statement",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L191"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L197"
       },
       {
         "name": "isGeneric",
         "appliesTo": "ErrorHandler",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L194"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L200"
       },
       {
         "name": "isComment",
         "appliesTo": "Line",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L207"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L213"
       },
       {
         "name": "isBlank",
         "appliesTo": "Line",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L208"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L214"
       },
       {
         "name": "isCSharp",
         "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L268"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L274"
       },
       {
         "name": "isCSharp",
         "appliesTo": "Statement",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L269"
-      },
-      {
-        "name": "isCSharp",
-        "appliesTo": "Method",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L270"
-      },
-      {
-        "name": "isCSharp",
-        "appliesTo": "Line",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L271"
-      },
-      {
-        "name": "isCSharp",
-        "appliesTo": "Region",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L272"
-      },
-      {
-        "name": "isCSharp",
-        "appliesTo": "Api",
-        "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L273"
-      },
-      {
-        "name": "isPython",
-        "appliesTo": "Type",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L275"
       },
       {
-        "name": "isPython",
-        "appliesTo": "Statement",
+        "name": "isCSharp",
+        "appliesTo": "Method",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L276"
       },
       {
-        "name": "isPython",
-        "appliesTo": "Method",
+        "name": "isCSharp",
+        "appliesTo": "Line",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L277"
       },
       {
-        "name": "isPython",
-        "appliesTo": "Line",
+        "name": "isCSharp",
+        "appliesTo": "Region",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L278"
       },
       {
-        "name": "isPython",
-        "appliesTo": "Region",
+        "name": "isCSharp",
+        "appliesTo": "Api",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L279"
       },
       {
         "name": "isPython",
-        "appliesTo": "Api",
+        "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L280"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L281"
       },
       {
-        "name": "isJavaScript",
-        "appliesTo": "Type",
+        "name": "isPython",
+        "appliesTo": "Statement",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L282"
       },
       {
-        "name": "isJavaScript",
-        "appliesTo": "Statement",
+        "name": "isPython",
+        "appliesTo": "Method",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L283"
       },
       {
-        "name": "isJavaScript",
-        "appliesTo": "Method",
+        "name": "isPython",
+        "appliesTo": "Line",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L284"
       },
       {
-        "name": "isJavaScript",
-        "appliesTo": "Line",
+        "name": "isPython",
+        "appliesTo": "Region",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L285"
       },
       {
-        "name": "isJavaScript",
-        "appliesTo": "Region",
+        "name": "isPython",
+        "appliesTo": "Api",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L286"
       },
       {
         "name": "isJavaScript",
-        "appliesTo": "Api",
+        "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L287"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L288"
       },
       {
-        "name": "isRust",
-        "appliesTo": "Type",
+        "name": "isJavaScript",
+        "appliesTo": "Statement",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L289"
       },
       {
-        "name": "isRust",
-        "appliesTo": "Statement",
+        "name": "isJavaScript",
+        "appliesTo": "Method",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L290"
       },
       {
-        "name": "isRust",
-        "appliesTo": "Method",
+        "name": "isJavaScript",
+        "appliesTo": "Line",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L291"
       },
       {
-        "name": "isRust",
-        "appliesTo": "Line",
+        "name": "isJavaScript",
+        "appliesTo": "Region",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L292"
       },
       {
-        "name": "isRust",
-        "appliesTo": "Region",
+        "name": "isJavaScript",
+        "appliesTo": "Api",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L293"
       },
       {
         "name": "isRust",
-        "appliesTo": "Api",
+        "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L294"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L295"
       },
       {
-        "name": "isGo",
-        "appliesTo": "Type",
+        "name": "isRust",
+        "appliesTo": "Statement",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L296"
       },
       {
-        "name": "isGo",
-        "appliesTo": "Statement",
+        "name": "isRust",
+        "appliesTo": "Method",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L297"
       },
       {
-        "name": "isGo",
-        "appliesTo": "Method",
+        "name": "isRust",
+        "appliesTo": "Line",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L298"
       },
       {
-        "name": "isGo",
-        "appliesTo": "Line",
+        "name": "isRust",
+        "appliesTo": "Region",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L299"
       },
       {
-        "name": "isGo",
-        "appliesTo": "Region",
+        "name": "isRust",
+        "appliesTo": "Api",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L300"
       },
       {
         "name": "isGo",
-        "appliesTo": "Api",
+        "appliesTo": "Type",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L301"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L302"
       },
       {
-        "name": "isJava",
-        "appliesTo": "Type",
+        "name": "isGo",
+        "appliesTo": "Statement",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L303"
       },
       {
-        "name": "isJava",
-        "appliesTo": "Statement",
+        "name": "isGo",
+        "appliesTo": "Method",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L304"
       },
       {
-        "name": "isJava",
-        "appliesTo": "Method",
+        "name": "isGo",
+        "appliesTo": "Line",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L305"
       },
       {
-        "name": "isJava",
-        "appliesTo": "Line",
+        "name": "isGo",
+        "appliesTo": "Region",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L306"
       },
       {
-        "name": "isJava",
-        "appliesTo": "Region",
+        "name": "isGo",
+        "appliesTo": "Api",
         "desc": "",
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L307"
       },
       {
         "name": "isJava",
+        "appliesTo": "Type",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L309"
+      },
+      {
+        "name": "isJava",
+        "appliesTo": "Statement",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L310"
+      },
+      {
+        "name": "isJava",
+        "appliesTo": "Method",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L311"
+      },
+      {
+        "name": "isJava",
+        "appliesTo": "Line",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L312"
+      },
+      {
+        "name": "isJava",
+        "appliesTo": "Region",
+        "desc": "",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L313"
+      },
+      {
+        "name": "isJava",
         "appliesTo": "Api",
         "desc": "",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L308"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L314"
       }
     ],
     "functions": [
@@ -2045,7 +2065,7 @@ const packages = {
         "returns": "Codebase",
         "appliesTo": "[Codebase]",
         "desc": "Creates a unified Codebase from one or more language providers.\nExample: let cb = codebase(Program.Providers)",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L256"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/code/src/code.cop#L262"
       }
     ],
     "checks": [],

@@ -87,6 +87,12 @@ export type Api = {
     Source : string
 }
 
+export type Member = {
+    Name : string,
+    DeclaringType : string,
+    Line : int
+}
+
 export type Parameter = {
     Name : string,
     Type : TypeReference?,
