@@ -26,7 +26,7 @@ if (args.Contains("--no-user-checks"))
 // Known verbs (subcommands) — anything else is treated as a program to run
 var knownVerbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 {
-    "run", "test", "syntax", "verify", "lock", "unlock", "help", "package", "repl", "init", "update", "vscode"
+    "run", "test", "syntax", "verify", "langserver", "lock", "unlock", "help", "package", "repl", "init", "update", "vscode"
 };
 
 // Once-a-day "new version available" notice + a "what's new" summary after an update.
@@ -174,6 +174,7 @@ rootCommand.Options.Add(new VersionOption("-v", "--version"));
 rootCommand.Add(TestCommand.Create());
 rootCommand.Add(SyntaxCommand.Create());
 rootCommand.Add(VerifyCommand.Create());
+rootCommand.Add(LangServerCommand.Create());
 rootCommand.Add(LockCommand.Create());
 rootCommand.Add(UnlockCommand.Create());
 
@@ -355,7 +356,7 @@ static void WriteError(string message)
 /// </summary>
 static string? SuggestVerb(string input)
 {
-    string[] verbs = { "run", "test", "syntax", "verify", "lock", "unlock", "help", "package", "repl", "init", "update", "vscode" };
+    string[] verbs = { "run", "test", "syntax", "verify", "langserver", "lock", "unlock", "help", "package", "repl", "init", "update", "vscode" };
     string? best = null;
     int bestDist = int.MaxValue;
     var lower = input.ToLowerInvariant();

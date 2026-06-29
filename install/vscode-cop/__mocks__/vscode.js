@@ -75,10 +75,47 @@ class Range {
 const languages = {
     registerCompletionItemProvider: () => ({ dispose: () => {} }),
     registerHoverProvider: () => ({ dispose: () => {} }),
+    createDiagnosticCollection: (name) => {
+        const map = new Map();
+        return {
+            name,
+            set: (uri, diags) => map.set(String(uri), diags),
+            delete: (uri) => map.delete(String(uri)),
+            clear: () => map.clear(),
+            dispose: () => map.clear(),
+            // test helper
+            _get: (uri) => map.get(String(uri)),
+        };
+    },
+};
+
+const DiagnosticSeverity = { Error: 0, Warning: 1, Information: 2, Hint: 3 };
+
+class Diagnostic {
+    constructor(range, message, severity) {
+        this.range = range;
+        this.message = message;
+        this.severity = severity;
+        this.source = '';
+    }
+}
+
+const Uri = {
+    parse: (s) => ({ _uri: s, toString: () => s }),
+    file: (p) => ({ _uri: 'file://' + p, fsPath: p, toString: () => 'file://' + p }),
+};
+
+const window = {
+    createOutputChannel: (name) => ({ name, appendLine: () => {}, dispose: () => {} }),
 };
 
 const workspace = {
     onDidSaveTextDocument: () => ({ dispose: () => {} }),
+    onDidOpenTextDocument: () => ({ dispose: () => {} }),
+    onDidChangeTextDocument: () => ({ dispose: () => {} }),
+    onDidCloseTextDocument: () => ({ dispose: () => {} }),
+    getConfiguration: () => ({ get: (_key, def) => def }),
+    textDocuments: [],
 };
 
 module.exports = {
@@ -88,6 +125,10 @@ module.exports = {
     Hover,
     Position,
     Range,
+    Diagnostic,
+    DiagnosticSeverity,
+    Uri,
     languages,
+    window,
     workspace,
 };

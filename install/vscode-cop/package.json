@@ -34,7 +34,22 @@
                 "scopeName": "source.cop",
                 "path": "./syntaxes/cop.tmLanguage.json"
             }
-        ]
+        ],
+        "configuration": {
+            "title": "cop",
+            "properties": {
+                "cop.languageServer.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Run `cop langserver` to show live diagnostics from the cop compiler."
+                },
+                "cop.languageServer.path": {
+                    "type": "string",
+                    "default": "cop",
+                    "description": "Path to the cop executable used to start the language server (`cop langserver`)."
+                }
+            }
+        }
     },
     "scripts": {
         "test": "jest --no-coverage"

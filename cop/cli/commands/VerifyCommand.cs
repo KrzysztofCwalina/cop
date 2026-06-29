@@ -68,6 +68,49 @@ public static class VerifyCommand
         }
 
         Array.Sort(files, StringComparer.Ordinal);
+        var diagnostics = CollectDiagnostics(files, scriptsDir, File.ReadAllText);
+
+        // Output
+        int errorCount = diagnostics.Count(d => d.Severity == CopDiagnosticSeverity.Error);
+        int warningCount = diagnostics.Count(d => d.Severity == CopDiagnosticSeverity.Warning);
+
+        if (json)
+        {
+            WriteDiagnosticsJson(diagnostics, files.Length, errorCount, warningCount);
+            return errorCount > 0 ? 1 : 0;
+        }
+
+        if (diagnostics.Count > 0)
+        {
+            DiagnosticFormatter.WriteAllToStdErr(diagnostics);
+        }
+
+        if (errorCount == 0 && warningCount == 0)
+        {
+            Console.WriteLine($"  \u2713 {files.Length} file(s) verified successfully");
+            return 0;
+        }
+
+        Console.Error.WriteLine();
+        if (errorCount > 0 && warningCount > 0)
+            Console.Error.WriteLine($"  {errorCount} error(s), {warningCount} warning(s) in {files.Length} file(s)");
+        else if (errorCount > 0)
+            Console.Error.WriteLine($"  {errorCount} error(s) in {files.Length} file(s)");
+        else
+            Console.Error.WriteLine($"  {warningCount} warning(s) in {files.Length} file(s)");
+
+        return errorCount > 0 ? 1 : 0;
+    }
+
+    /// <summary>
+    /// Runs the full verification pipeline (syntax parse, import resolution, name binding, type
+    /// checking) over <paramref name="files"/> and returns the structured diagnostics. The whole
+    /// directory is treated as one program. <paramref name="readSource"/> supplies each file's text,
+    /// so callers can substitute an in-memory editor buffer for a file on disk (used by the language
+    /// server). This is the single analysis pipeline shared by `cop verify` and the language service.
+    /// </summary>
+    internal static List<CopDiagnostic> CollectDiagnostics(string[] files, string scriptsDir, Func<string, string> readSource)
+    {
         var diagnostics = new List<CopDiagnostic>();
 
         // Phase 1: Syntax — parse all files
@@ -76,7 +119,7 @@ public static class VerifyCommand
         {
             try
             {
-                var source = File.ReadAllText(file);
+                var source = readSource(file);
                 var module = CopParser.Parse(source, file);
                 modules.Add((module, file, source));
             }
@@ -210,36 +253,7 @@ public static class VerifyCommand
                 Console.Error.WriteLine($"[diag] type checker skipped: {ex.Message}");
         }
 
-        // Output
-        int errorCount = diagnostics.Count(d => d.Severity == CopDiagnosticSeverity.Error);
-        int warningCount = diagnostics.Count(d => d.Severity == CopDiagnosticSeverity.Warning);
-
-        if (json)
-        {
-            WriteDiagnosticsJson(diagnostics, files.Length, errorCount, warningCount);
-            return errorCount > 0 ? 1 : 0;
-        }
-
-        if (diagnostics.Count > 0)
-        {
-            DiagnosticFormatter.WriteAllToStdErr(diagnostics);
-        }
-
-        if (errorCount == 0 && warningCount == 0)
-        {
-            Console.WriteLine($"  \u2713 {files.Length} file(s) verified successfully");
-            return 0;
-        }
-
-        Console.Error.WriteLine();
-        if (errorCount > 0 && warningCount > 0)
-            Console.Error.WriteLine($"  {errorCount} error(s), {warningCount} warning(s) in {files.Length} file(s)");
-        else if (errorCount > 0)
-            Console.Error.WriteLine($"  {errorCount} error(s) in {files.Length} file(s)");
-        else
-            Console.Error.WriteLine($"  {warningCount} warning(s) in {files.Length} file(s)");
-
-        return errorCount > 0 ? 1 : 0;
+        return diagnostics;
     }
 
     /// <summary>

@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Lang.Tests" />
+    <InternalsVisibleTo Include="Cop.Tests" />
   </ItemGroup>
 
   <ItemGroup>
