@@ -154,6 +154,13 @@ public static class StandardLibrary
             var providerName = args[0].Display();
             return new CopProviderProxy(providerName, env);
         });
+
+        // Register short-form aliases (sw, ew, ct, eq, ne, rx, ...) for built-in predicates from the
+        // single IntrinsicRegistry, so e.g. `x:eq('y')` evaluates per-item exactly as it compiles for
+        // provider pushdown. Only adds aliases whose canonical is a registered FFI function and that
+        // are not already registered (skips .cop-defined ops and pre-registered short forms).
+        foreach (var (canonical, alias) in IntrinsicRegistry.AliasPairs)
+            ffi.Alias(alias, canonical);
     }
 
     private static void RegisterCollectionMethods(ForeignFunctionRegistry ffi)

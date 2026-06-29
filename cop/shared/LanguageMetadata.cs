@@ -11,126 +11,54 @@ public readonly record struct MetadataEntry(string Name, string Detail);
 public readonly record struct KeywordEntry(string Name, string Detail, string Category);
 
 /// <summary>
-/// The authoritative catalog of cop language elements that are NOT expressible as ordinary
-/// <c>.cop</c> declarations: the primitive predicates/properties/transforms that operate on
-/// built-in primitive kinds (string, int, bool, collections), the universal predicates, and
-/// keyword presentation metadata.
+/// Editor/REPL presentation of cop's built-in language elements, consumed by the metadata generator
+/// (tools/copmeta) which emits <c>install/vscode-cop/metadata.json</c>.
 ///
-/// This is the single source of truth consumed by the metadata generator (tools/copmeta),
-/// which emits <c>install/vscode-cop/metadata.json</c>. The VS Code extension and TextMate
-/// grammar are driven entirely from that file, so editor IntelliSense and colorization can
-/// never drift from the language. Add a new built-in primitive operation here and it flows to
-/// the editor automatically on the next publish.
+/// The primitive predicate/property/transform catalogs are projected directly from
+/// <see cref="IntrinsicRegistry"/> — the single source of truth — so editor metadata can never drift
+/// from the runtime's set of built-ins. This type only adds the editor shape and keyword
+/// presentation metadata (the keyword <em>names</em> are owned by <see cref="Tokenizer.Keywords"/>).
 ///
-/// Domain concepts (Violation, toError, CHECK, the code model, language providers, …) are NOT
-/// here — those live in <c>.cop</c> packages and are discovered by loading those packages.
+/// Domain concepts (Violation, toError, CHECK, the code model, providers, …) are NOT here — those
+/// live in <c>.cop</c> packages and are discovered by loading those packages.
 /// </summary>
 public static class LanguageMetadata
 {
+    private static MetadataEntry[] Project(IntrinsicKind kind) =>
+        IntrinsicRegistry.OfKind(kind).Select(o => new MetadataEntry(o.Name, o.Detail)).ToArray();
+
     /// <summary>Predicates available on <c>string</c> values (e.g. <c>Name:startsWith('I')</c>).</summary>
-    public static readonly MetadataEntry[] StringPredicates =
-    [
-        new("equals", "(value) - case-insensitive equality"),
-        new("notEquals", "(value) - case-insensitive inequality"),
-        new("startsWith", "(value) - prefix match"),
-        new("endsWith", "(value) - suffix match"),
-        new("contains", "(value) - substring match"),
-        new("containsAny", "(list) - any list item is a substring"),
-        new("matches", "(pattern) - regex match"),
-        new("sameAs", "(value) - convention-insensitive comparison"),
-        new("empty", "- string is empty"),
-    ];
+    public static readonly MetadataEntry[] StringPredicates = Project(IntrinsicKind.StringPredicate);
 
     /// <summary>Predicates available on numeric (<c>int</c>/<c>float</c>) and flags values.</summary>
-    public static readonly MetadataEntry[] NumericPredicates =
-    [
-        new("equals", "(value) - equal to"),
-        new("notEquals", "(value) - not equal to"),
-        new("greaterThan", "(value) - greater than"),
-        new("lessThan", "(value) - less than"),
-        new("greaterOrEqual", "(value) - greater or equal"),
-        new("lessOrEqual", "(value) - less or equal"),
-        new("isSet", "(flag) - flags bit is set"),
-        new("isClear", "(flag) - flags bit is clear"),
-    ];
+    public static readonly MetadataEntry[] NumericPredicates = Project(IntrinsicKind.NumericPredicate);
 
     /// <summary>Predicates available on collections (e.g. <c>BaseTypes:contains('Exception')</c>).</summary>
-    public static readonly MetadataEntry[] CollectionPredicates =
-    [
-        new("any", "((object) => bool) - true if any item matches"),
-        new("none", "((object) => bool) - true if no items match"),
-        new("all", "((object) => bool) - true if all items match"),
-        new("count", "((object) => bool) - count items matching predicate"),
-        new("contains", "(value) - list contains value"),
-        new("containsAny", "(values) - list contains any value from list"),
-        new("empty", "- collection is empty"),
-    ];
+    public static readonly MetadataEntry[] CollectionPredicates = Project(IntrinsicKind.CollectionPredicate);
 
     /// <summary>Predicates available on any value, regardless of type.</summary>
-    public static readonly MetadataEntry[] UniversalPredicates =
-    [
-        new("in", "(list) - value is member of list"),
-        new("isError", "- value is an error"),
-    ];
+    public static readonly MetadataEntry[] UniversalPredicates = Project(IntrinsicKind.UniversalPredicate);
 
     /// <summary>Predicates available on dynamic object values.</summary>
-    public static readonly MetadataEntry[] ObjectPredicates =
-    [
-        new("containsKey", "(name) - object has field with given name"),
-    ];
+    public static readonly MetadataEntry[] ObjectPredicates = Project(IntrinsicKind.ObjectPredicate);
 
     /// <summary>Computed properties available on <c>string</c> values.</summary>
-    public static readonly MetadataEntry[] StringProperties =
-    [
-        new("Length", ": int - string length"),
-        new("Lower", ": string - lowercase"),
-        new("Upper", ": string - uppercase"),
-        new("Normalized", ": string - convention-insensitive form"),
-        new("Words", ": [string] - split into words"),
-    ];
+    public static readonly MetadataEntry[] StringProperties = Project(IntrinsicKind.StringProperty);
 
     /// <summary>Transform functions available on <c>string</c> values.</summary>
-    public static readonly MetadataEntry[] StringTransforms =
-    [
-        new("Trim", "(suffix) - remove suffix"),
-        new("Replace", "(old, new) - replace substring"),
-    ];
+    public static readonly MetadataEntry[] StringTransforms = Project(IntrinsicKind.StringTransform);
 
     /// <summary>Computed properties available on collections.</summary>
-    public static readonly MetadataEntry[] CollectionProperties =
-    [
-        new("Count", ": int - number of items"),
-        new("First", "- first item"),
-        new("Last", "- last item"),
-        new("Single", "- single item (nic if not exactly one)"),
-        new("Tail", "- all elements except the first"),
-    ];
+    public static readonly MetadataEntry[] CollectionProperties = Project(IntrinsicKind.CollectionProperty);
 
     /// <summary>Transform functions available on collections.</summary>
-    public static readonly MetadataEntry[] CollectionTransforms =
-    [
-        new("Where", "((object) => bool) - filter items"),
-        new("First", "((object) => bool?) - first matching item"),
-        new("Last", "((object) => bool?) - last matching item"),
-        new("Single", "((object) => bool?) - single matching item"),
-        new("ElementAt", "(index: int) - item at position"),
-        new("Select", "((object) => object) - project each item"),
-        new("OrderBy", "((object) => object) - sort ascending"),
-        new("OrderByDescending", "((object) => object) - sort descending"),
-        new("Distinct", "- remove duplicates"),
-        new("GroupBy", "((object) => object) - group by key -> Key, Items"),
-        new("Sum", "((object) => float) - sum numeric field"),
-        new("Min", "((object) => float) - minimum value"),
-        new("Max", "((object) => float) - maximum value"),
-        new("Average", "((object) => float) - average value"),
-        new("Reduce", "((object, object) => object, initial) - reduce collection"),
-    ];
+    public static readonly MetadataEntry[] CollectionTransforms = Project(IntrinsicKind.CollectionTransform);
 
     /// <summary>
     /// Presentation metadata (detail text + highlighting category) for keywords. The set of
-    /// keyword <em>names</em> is owned by <see cref="Tokenizer.Keywords"/>; this only supplies
-    /// how each is described and colored. Categories: <c>declaration</c>, <c>control</c>,
-    /// <c>constant</c>. A test asserts these keys exactly match the tokenizer's keyword set.
+    /// keyword <em>names</em> is owned by <see cref="Tokenizer.Keywords"/>; this only supplies how
+    /// each is described and colored. Categories: <c>declaration</c>, <c>control</c>, <c>constant</c>.
+    /// A test asserts these keys exactly match the tokenizer's keyword set.
     /// </summary>
     public static readonly KeywordEntry[] Keywords =
     [

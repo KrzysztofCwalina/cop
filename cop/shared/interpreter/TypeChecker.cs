@@ -32,14 +32,10 @@ public sealed class TypeChecker
 
     // Builtin pseudo-predicates with special filter semantics that may shadow a same-named
     // declared function (e.g. `:empty` is collection-emptiness, not the files package's
-    // `empty(Folder)`). Filter applications using these names are not type-checked.
-    private static readonly HashSet<string> BuiltinFilterNames = new(StringComparer.Ordinal)
-    {
-        "empty", "in", "contains", "containsAny", "isSet", "isClear",
-        "startsWith", "endsWith", "equals", "matches", "sameAs",
-        "any", "all", "none", "count",
-        "sw", "ew", "ct", "ca", "rx", "sm", "eq", "ne", "gt", "lt", "ge", "le"
-    };
+    // `empty(Folder)`). Filter applications using these names are not type-checked. Derived from
+    // the single IntrinsicRegistry so it can never drift from the language's actual built-ins.
+    private static readonly HashSet<string> BuiltinFilterNames =
+        IntrinsicRegistry.NameSet(o => o.IsBuiltinFilter);
 
     private readonly List<CopDiagnostic> _diagnostics = [];
     private string _file = "";

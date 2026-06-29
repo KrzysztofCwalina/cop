@@ -40,6 +40,16 @@ public sealed class ForeignFunctionRegistry
     }
 
     /// <summary>
+    /// Registers <paramref name="alias"/> as an additional name for an already-registered function.
+    /// No-op if the alias already exists or the canonical function is not registered.
+    /// </summary>
+    public void Alias(string alias, string canonical)
+    {
+        if (!_functions.ContainsKey(alias) && _functions.TryGetValue(canonical, out var fn))
+            _functions[alias] = fn;
+    }
+
+    /// <summary>
     /// Resolve a foreign function by name.
     /// Returns null if no function is registered with that name.
     /// </summary>

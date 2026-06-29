@@ -292,6 +292,31 @@ public class EvaluatorTests
     }
 
     [Test]
+    public void EvalFilter_StringPredicateAliases_WorkPerItem()
+    {
+        // Phase 1 regression: the short-form string-predicate aliases (sw/ew/ct/eq/ne/rx) compiled
+        // to provider pushdown and were accepted by the type-checker, but were NOT registered as
+        // runtime functions, so a per-item `name:eq('x')` crashed with "Undefined variable 'eq'".
+        // They are now registered from the single IntrinsicRegistry as aliases of their canonical
+        // FFI functions, so per-item use behaves exactly like the canonical name.
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+
+        CopValue Count(string op, string arg) => Eval($$"""
+            let words = ['Apple', 'Banana', 'Cherry']
+            predicate p(string) => string:{{op}}({{arg}})
+            command main = words:p.Count
+            """, ffi);
+
+        Assert.That(((CopInt)Count("eq", "'apple'")).Value, Is.EqualTo(1), "eq (case-insensitive equals)");
+        Assert.That(((CopInt)Count("sw", "'App'")).Value, Is.EqualTo(1), "sw (startsWith)");
+        Assert.That(((CopInt)Count("ew", "'rry'")).Value, Is.EqualTo(1), "ew (endsWith)");
+        Assert.That(((CopInt)Count("ct", "'an'")).Value, Is.EqualTo(1), "ct (contains)");
+        Assert.That(((CopInt)Count("ne", "'Banana'")).Value, Is.EqualTo(2), "ne (notEquals)");
+        Assert.That(((CopInt)Count("rx", "'^B.*'")).Value, Is.EqualTo(1), "rx (matches)");
+    }
+
+    [Test]
     public void EvalFilter_GuardedPredicateOverloads_DispatchByConstraint()
     {
         // Regression (#35): predicate overloads distinguished only by a first-parameter guard
