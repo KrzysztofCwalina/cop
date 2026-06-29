@@ -11,11 +11,12 @@ public readonly record struct MetadataEntry(string Name, string Detail);
 public readonly record struct KeywordEntry(string Name, string Detail, string Category);
 
 /// <summary>
-/// Editor/REPL presentation of cop's built-in language elements, consumed by the metadata generator
-/// (tools/copmeta) which emits <c>install/vscode-cop/metadata.json</c>.
+/// Editor/REPL presentation of cop's built-in language elements. Consumed by the language server
+/// (hover/completion via <c>cop langserver</c>) and by the grammar generator (tools/copmeta) which
+/// regenerates the colorizer's keyword lists.
 ///
 /// The primitive predicate/property/transform catalogs are projected directly from
-/// <see cref="IntrinsicRegistry"/> — the single source of truth — so editor metadata can never drift
+/// <see cref="IntrinsicRegistry"/> — the single source of truth — so editor features can never drift
 /// from the runtime's set of built-ins. This type only adds the editor shape and keyword
 /// presentation metadata (the keyword <em>names</em> are owned by <see cref="Tokenizer.Keywords"/>).
 ///

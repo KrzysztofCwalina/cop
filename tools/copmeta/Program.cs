@@ -1,13 +1,14 @@
 using CopMeta;
 
-// copmeta - generates install/vscode-cop/metadata.json and the data-driven keyword lists of the
-// TextMate grammar from cop's own C# definitions (tokenizer, LanguageMetadata) and the core
-// packages loaded with the real parser. Run by install/publish.ps1 before packaging the extension.
+// copmeta - regenerates the data-driven keyword lists of the TextMate grammar
+// (install/vscode-cop/syntaxes/cop.tmLanguage.json) from cop's own C# definitions (tokenizer,
+// LanguageMetadata). Run by install/publish.ps1 before packaging the extension. Editor IntelliSense
+// is served live by `cop langserver`, so no static metadata file is generated.
 //
 // Usage:
 //   dotnet run --project tools/copmeta [--repo-root <dir>] [--check]
 //     --repo-root  Repository root (default: auto-detected by walking up for .git).
-//     --check      Verify the committed files are up to date; exit 1 if stale (used by tests/CI).
+//     --check      Verify the committed grammar is up to date; exit 1 if stale (used by tests/CI).
 
 string? repoRoot = null;
 bool check = false;
@@ -19,9 +20,9 @@ for (int i = 0; i < args.Length; i++)
 }
 
 repoRoot ??= FindRepoRoot(Directory.GetCurrentDirectory());
-if (repoRoot is null || !Directory.Exists(Path.Combine(repoRoot, "packages")))
+if (repoRoot is null || !File.Exists(Path.Combine(repoRoot, MetadataGenerator.GrammarRelPath.Replace('/', Path.DirectorySeparatorChar))))
 {
-    Console.Error.WriteLine("Could not locate repository root (no .git with a packages/ dir). Pass --repo-root.");
+    Console.Error.WriteLine("Could not locate repository root (no .git with the extension grammar). Pass --repo-root.");
     return 2;
 }
 
