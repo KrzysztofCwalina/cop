@@ -1,5 +1,8 @@
 using Cop.Cli.Commands;
 using Cop.Lang;
+using Cop.Lang.Ast;
+using Cop.Lang.Interpreter;
+using Cop.Lang.Parser;
 
 namespace Cop.Cli.Lsp;
 
@@ -57,4 +60,45 @@ internal static class CopLanguageService
 
     private static bool PathsEqual(string a, string b)
         => string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Hover markdown for a position in <paramref name="filePath"/> using <paramref name="bufferText"/>
+    /// as its content, resolved against the whole program (so package/provider types resolve). Runs the
+    /// real compiler via <see cref="SemanticModel"/> — no editor-side type inference. Null when there is
+    /// nothing confident to show.
+    /// </summary>
+    public static string? Hover(string filePath, string bufferText, int line, int character)
+    {
+        var full = Path.GetFullPath(filePath);
+        var dir = Path.GetDirectoryName(full) ?? Directory.GetCurrentDirectory();
+
+        string[] files;
+        if (Directory.Exists(dir))
+        {
+            files = Directory.GetFiles(dir, "*.cop");
+            if (!files.Any(f => PathsEqual(f, full)))
+                files = [.. files, full];
+        }
+        else
+        {
+            files = [full];
+        }
+
+        var modules = VerifyCommand.LoadProgramModules(files, dir, f =>
+            PathsEqual(f, full) ? bufferText : SafeRead(f));
+        var model = SemanticModel.Build(modules);
+
+        ModuleNode? fileModule = null;
+        try { fileModule = CopParser.Parse(bufferText, full); }
+        catch { /* an unparseable buffer still allows type/keyword hovers */ }
+
+        return CopHover.Hover(model, fileModule, bufferText, line, character);
+    }
+
+    private static string SafeRead(string file)
+    {
+        try { return File.ReadAllText(file); }
+        catch (IOException) { return string.Empty; }
+        catch (UnauthorizedAccessException) { return string.Empty; }
+    }
 }

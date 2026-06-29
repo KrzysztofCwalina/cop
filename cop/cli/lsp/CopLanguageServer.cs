@@ -90,6 +90,9 @@ internal sealed class CopLanguageServer
             case "textDocument/didClose":
                 OnDidClose(msg["params"] as JsonObject);
                 break;
+            case "textDocument/hover":
+                Respond(id, BuildHover(msg["params"] as JsonObject));
+                break;
             case "shutdown":
                 _shutdownRequested = true;
                 Respond(id, null);
@@ -118,7 +121,8 @@ internal sealed class CopLanguageServer
                 {
                     ["openClose"] = true,
                     ["change"] = 1
-                }
+                },
+                ["hoverProvider"] = true
             },
             ["serverInfo"] = new JsonObject
             {
@@ -264,6 +268,45 @@ internal sealed class CopLanguageServer
             }
         }
         return 1;
+    }
+
+    // ---- hover ------------------------------------------------------------------------
+
+    private JsonNode? BuildHover(JsonObject? p)
+    {
+        var uri = (p?["textDocument"] as JsonObject)?["uri"]?.GetValue<string>();
+        var pos = p?["position"] as JsonObject;
+        if (uri is null || pos is null) return null;
+        int line = pos["line"]?.GetValue<int>() ?? 0;
+        int character = pos["character"]?.GetValue<int>() ?? 0;
+
+        var path = UriToPath(uri);
+        if (path is null) return null;
+        // Prefer the in-memory buffer; fall back to disk if the document isn't open.
+        var text = _documents.TryGetValue(uri, out var t) ? t
+                 : (File.Exists(path) ? File.ReadAllText(path) : null);
+        if (text is null) return null;
+
+        string? markdown;
+        try
+        {
+            markdown = CopLanguageService.Hover(path, text, line, character);
+        }
+        catch (Exception ex)
+        {
+            Log($"hover failed for {uri}: {ex.Message}");
+            return null;
+        }
+        if (markdown is null) return null;
+
+        return new JsonObject
+        {
+            ["contents"] = new JsonObject
+            {
+                ["kind"] = "markdown",
+                ["value"] = markdown
+            }
+        };
     }
 
     // ---- JSON-RPC framing --------------------------------------------------------------

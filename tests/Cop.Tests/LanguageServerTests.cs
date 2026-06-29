@@ -188,6 +188,58 @@ public class LanguageServerTests
         finally { Directory.Delete(dir, recursive: true); }
     }
 
+    [Test]
+    public void Server_HoverRequest_ReturnsCompilerHover()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "cop-langsrv-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var file = Path.Combine(dir, "doc.cop");
+            var text = "let greeting = 'hello'\n";
+            File.WriteAllText(file, text);
+            var uri = PathToUri(file);
+
+            var input = new MemoryStream();
+            var initialize = new JsonObject { ["jsonrpc"] = "2.0", ["id"] = 1, ["method"] = "initialize", ["params"] = new JsonObject() };
+            var didOpen = new JsonObject
+            {
+                ["jsonrpc"] = "2.0",
+                ["method"] = "textDocument/didOpen",
+                ["params"] = new JsonObject
+                {
+                    ["textDocument"] = new JsonObject { ["uri"] = uri, ["languageId"] = "cop", ["version"] = 1, ["text"] = text }
+                }
+            };
+            // Hover over `greeting` (line 0, inside the word).
+            var hover = new JsonObject
+            {
+                ["jsonrpc"] = "2.0",
+                ["id"] = 5,
+                ["method"] = "textDocument/hover",
+                ["params"] = new JsonObject
+                {
+                    ["textDocument"] = new JsonObject { ["uri"] = uri },
+                    ["position"] = new JsonObject { ["line"] = 0, ["character"] = 6 }
+                }
+            };
+            var exit = new JsonObject { ["jsonrpc"] = "2.0", ["method"] = "exit" };
+            WriteAll(input, Frame(initialize), Frame(didOpen), Frame(hover), Frame(exit));
+            input.Position = 0;
+            var output = new MemoryStream();
+
+            new CopLanguageServer(input, output).Run();
+
+            var frames = ParseFrames(output.ToArray());
+            var resp = frames.FirstOrDefault(f => f["id"]?.GetValue<int>() == 5);
+            Assert.That(resp, Is.Not.Null, "must respond to the hover request");
+            var value = resp!["result"]?["contents"]?["value"]?.GetValue<string>();
+            Assert.That(value, Is.Not.Null);
+            Assert.That(value, Does.Contain("let greeting: string"));
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
     // ---- ToLspDiagnostic conversion ---------------------------------------------------
 
     [Test]

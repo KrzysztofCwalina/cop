@@ -1398,6 +1398,7 @@ class CopLanguageClient {
         this.messages = createMessageBuffer();
         this.seq = 0;
         this._debounce = new Map();
+        this._pending = new Map();
     }
 
     start(serverPath, spawnFn) {
@@ -1419,11 +1420,32 @@ class CopLanguageClient {
     }
 
     _onMessage(msg) {
+        // Response to a request we sent (hover, etc.) — resolve the pending promise.
+        if (msg && msg.id !== undefined && msg.id !== null && this._pending.has(msg.id)) {
+            const resolve = this._pending.get(msg.id);
+            this._pending.delete(msg.id);
+            resolve(msg.error ? null : (msg.result ?? null));
+            return;
+        }
         if (msg && msg.method === 'textDocument/publishDiagnostics' && msg.params) {
             const uri = vscode.Uri.parse(msg.params.uri);
             const diags = (msg.params.diagnostics || []).map(lspToVscodeDiagnostic);
             this.diagnostics.set(uri, diags);
         }
+    }
+
+    /** Sends a request and resolves with its result (or null on error/timeout/no server). */
+    sendRequest(method, params) {
+        if (!this.proc) return Promise.resolve(null);
+        const id = ++this.seq;
+        return new Promise((resolve) => {
+            const timer = setTimeout(() => {
+                if (this._pending.has(id)) { this._pending.delete(id); resolve(null); }
+            }, 3000);
+            if (timer && typeof timer.unref === 'function') timer.unref();
+            this._pending.set(id, (value) => { clearTimeout(timer); resolve(value); });
+            this._send({ jsonrpc: '2.0', id, method, params });
+        });
     }
 
     _send(msg) {
@@ -1506,7 +1528,28 @@ function startLanguageServer(context) {
         vscode.workspace.onDidCloseTextDocument(doc => { if (doc.languageId === 'cop') client.didClose(doc); }),
         { dispose: () => client.stop() }
     );
+
+    // Hover comes from the compiler via the server (replaces the JS hover reimplementation).
+    context.subscriptions.push(
+        vscode.languages.registerHoverProvider({ language: 'cop', scheme: 'file' }, makeServerHoverProvider(client))
+    );
     return client;
+}
+
+/** A vscode HoverProvider that asks the language server (the real compiler) for hover content. */
+function makeServerHoverProvider(client) {
+    return {
+        async provideHover(document, position) {
+            const res = await client.sendRequest('textDocument/hover', {
+                textDocument: { uri: document.uri.toString() },
+                position: { line: position.line, character: position.character },
+            });
+            if (res && res.contents && res.contents.value) {
+                return new vscode.Hover(new vscode.MarkdownString(res.contents.value));
+            }
+            return null;
+        }
+    };
 }
 
 function activate(context) {
@@ -1515,12 +1558,6 @@ function activate(context) {
             { language: 'cop', scheme: 'file' },
             provider,
             '.', ':', ' '
-        )
-    );
-    context.subscriptions.push(
-        vscode.languages.registerHoverProvider(
-            { language: 'cop', scheme: 'file' },
-            hoverProvider
         )
     );
 
@@ -1533,8 +1570,19 @@ function activate(context) {
         })
     );
 
-    // Live diagnostics from the real cop compiler (LSP over stdio).
-    startLanguageServer(context);
+    // Live diagnostics + hover from the real cop compiler (LSP over stdio).
+    const client = startLanguageServer(context);
+
+    // Fallback: only use the legacy in-extension hover when the language server is unavailable
+    // (disabled, or `cop` not found). When the server runs, hover comes from the compiler.
+    if (!client) {
+        context.subscriptions.push(
+            vscode.languages.registerHoverProvider(
+                { language: 'cop', scheme: 'file' },
+                hoverProvider
+            )
+        );
+    }
 }
 
 function deactivate() {}
@@ -1579,5 +1627,6 @@ module.exports = {
         createMessageBuffer,
         lspToVscodeDiagnostic,
         startLanguageServer,
+        makeServerHoverProvider,
     }
 };

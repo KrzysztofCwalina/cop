@@ -178,4 +178,56 @@ describe('CopLanguageClient', () => {
         client.stop();
         expect(proc.killed).toBe(true);
     });
+
+    test('sendRequest resolves with the matching response result', async () => {
+        const collection = vscode.languages.createDiagnosticCollection('cop');
+        const client = new CopLanguageClient(collection, { appendLine() {} });
+        const proc = fakeProc();
+        client.start('cop', () => proc);
+        proc.stdin.writes.length = 0;
+
+        const promise = client.sendRequest('textDocument/hover', { x: 1 });
+        // Read the id the client used, then reply with a matching response.
+        const sent = decodeSent(proc);
+        const id = sent[0].id;
+        expect(sent[0].method).toBe('textDocument/hover');
+        proc.stdout.emit('data', frame({ jsonrpc: '2.0', id, result: { contents: { kind: 'markdown', value: 'hi' } } }));
+
+        const result = await promise;
+        expect(result.contents.value).toBe('hi');
+    });
+
+    test('sendRequest resolves null when there is no server', async () => {
+        const collection = vscode.languages.createDiagnosticCollection('cop');
+        const client = new CopLanguageClient(collection, { appendLine() {} });
+        const result = await client.sendRequest('textDocument/hover', {});
+        expect(result).toBeNull();
+    });
+});
+
+describe('server hover provider', () => {
+    test('maps a server hover result to a vscode.Hover', async () => {
+        const { makeServerHoverProvider } = ext._testing;
+        const client = {
+            sendRequest: jest.fn().mockResolvedValue({ contents: { kind: 'markdown', value: 'let greeting: string' } }),
+        };
+        const provider = makeServerHoverProvider(client);
+        const doc = { uri: { toString: () => 'file:///x/a.cop' } };
+        const hover = await provider.provideHover(doc, { line: 0, character: 6 });
+        expect(hover).toBeTruthy();
+        expect(hover.contents.value).toContain('let greeting: string');
+        expect(client.sendRequest).toHaveBeenCalledWith('textDocument/hover', expect.objectContaining({
+            textDocument: { uri: 'file:///x/a.cop' },
+            position: { line: 0, character: 6 },
+        }));
+    });
+
+    test('returns null when the server has no hover', async () => {
+        const { makeServerHoverProvider } = ext._testing;
+        const client = { sendRequest: jest.fn().mockResolvedValue(null) };
+        const provider = makeServerHoverProvider(client);
+        const doc = { uri: { toString: () => 'file:///x/a.cop' } };
+        const hover = await provider.provideHover(doc, { line: 0, character: 0 });
+        expect(hover).toBeNull();
+    });
 });

@@ -257,6 +257,53 @@ public static class VerifyCommand
     }
 
     /// <summary>
+    /// Assembles every <see cref="ModuleNode"/> that forms a program: the local <c>.cop</c> files
+    /// plus the modules of all imported packages. This is the same module set the type checker uses
+    /// (<see cref="CollectDiagnostics"/>'s Phase 5), exposed for the editor's <c>SemanticModel</c> so
+    /// hover/completion resolve provider/package types (e.g. <c>Violation</c>). Unparseable files are
+    /// skipped (the editor still gets a best-effort model). <paramref name="readSource"/> supplies
+    /// each file's text so an in-memory buffer can stand in for a file on disk.
+    /// </summary>
+    internal static List<ModuleNode> LoadProgramModules(string[] files, string scriptsDir, Func<string, string> readSource)
+    {
+        var local = new List<(ModuleNode Module, string FilePath, string Source)>();
+        foreach (var file in files)
+        {
+            string source;
+            try { source = readSource(file); }
+            catch { continue; }
+            try { local.Add((CopParser.Parse(source, file), file, source)); }
+            catch { /* a file with a syntax error contributes nothing to the model */ }
+        }
+
+        var feedPaths = FindFeedPaths(scriptsDir);
+        foreach (var (_, filePath, source) in local)
+        {
+            var fileDir = Path.GetDirectoryName(filePath) ?? scriptsDir;
+            foreach (var fp in ModuleLoader.ExtractFeedPaths(source, fileDir))
+                if (!feedPaths.Contains(fp)) feedPaths.Add(fp);
+        }
+
+        var moduleLoader = new ModuleLoader(feedPaths);
+        var imports = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (module, _, _) in local)
+            foreach (var decl in module.Declarations)
+                if (decl is ImportDecl imp) imports.Add(imp.ModuleName);
+
+        var evaluator = new Evaluator();
+        foreach (var import in imports)
+        {
+            try { moduleLoader.LoadPackage(import, evaluator); }
+            catch { /* a broken import must not crash the editor */ }
+        }
+
+        var all = new List<ModuleNode>(local.Count + 8);
+        all.AddRange(local.Select(m => m.Module));
+        all.AddRange(moduleLoader.LoadedModules);
+        return all;
+    }
+
+    /// <summary>
     /// Emits verification diagnostics as JSON to stdout, for editors and tools to consume the real
     /// compiler's analysis (the same parse + import-resolution + bind + type-check pipeline).
     /// </summary>
