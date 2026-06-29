@@ -71,28 +71,96 @@ internal static class CopLanguageService
     {
         var full = Path.GetFullPath(filePath);
         var dir = Path.GetDirectoryName(full) ?? Directory.GetCurrentDirectory();
-
-        string[] files;
-        if (Directory.Exists(dir))
-        {
-            files = Directory.GetFiles(dir, "*.cop");
-            if (!files.Any(f => PathsEqual(f, full)))
-                files = [.. files, full];
-        }
-        else
-        {
-            files = [full];
-        }
+        var files = ProgramFiles(full, dir);
+        var modelText = ModelText(bufferText, line);
 
         var modules = VerifyCommand.LoadProgramModules(files, dir, f =>
-            PathsEqual(f, full) ? bufferText : SafeRead(f));
+            PathsEqual(f, full) ? modelText : SafeRead(f));
         var model = SemanticModel.Build(modules);
 
-        ModuleNode? fileModule = null;
-        try { fileModule = CopParser.Parse(bufferText, full); }
-        catch { /* an unparseable buffer still allows type/keyword hovers */ }
-
+        var fileModule = TryParse(modelText, full);
         return CopHover.Hover(model, fileModule, bufferText, line, character);
+    }
+
+    /// <summary>
+    /// Completions for a position in <paramref name="filePath"/> using <paramref name="bufferText"/>
+    /// as its content. Driven entirely by the real compiler (<see cref="SemanticModel"/>) and
+    /// <see cref="LanguageMetadata"/>; the editor no longer infers types or scans declarations itself.
+    /// </summary>
+    public static IReadOnlyList<CompletionEntry> Complete(string filePath, string bufferText, int line, int character)
+    {
+        var full = Path.GetFullPath(filePath);
+        var dir = Path.GetDirectoryName(full) ?? Directory.GetCurrentDirectory();
+        var files = ProgramFiles(full, dir);
+        var modelText = ModelText(bufferText, line);
+
+        var modules = VerifyCommand.LoadProgramModules(files, dir,
+            f => PathsEqual(f, full) ? modelText : SafeRead(f),
+            out var namespaces);
+        var model = SemanticModel.Build(modules, namespaces);
+
+        var fileModule = TryParse(modelText, full);
+        var packages = VerifyCommand.ListAvailablePackages(dir);
+        return CopCompletion.Complete(model, fileModule, bufferText, line, character, packages);
+    }
+
+    private static string[] ProgramFiles(string fullPath, string dir)
+    {
+        if (!Directory.Exists(dir)) return [fullPath];
+        var files = Directory.GetFiles(dir, "*.cop");
+        return files.Any(f => PathsEqual(f, fullPath)) ? files : [.. files, fullPath];
+    }
+
+    /// <summary>
+    /// Returns a version of <paramref name="buffer"/> that parses, for building the type model while the
+    /// user is mid-edit. If the buffer parses, it is used as-is; otherwise the in-progress line is
+    /// blanked (and, failing that, the tail from the cursor line is dropped) so the rest of the file's
+    /// declarations still populate the model. Falls back to the original buffer.
+    /// </summary>
+    private static string ModelText(string buffer, int line)
+    {
+        if (Parses(buffer)) return buffer;
+        var lines = buffer.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+        if (line >= 0 && line < lines.Length)
+        {
+            var saved = lines[line];
+
+            // Repair 1: keep a declaration's signature (so its parameters stay in scope for locals)
+            // and give it a trivial body. Turns `predicate p(Dog) => Dog.` into `predicate p(Dog) => true`.
+            int arrow = saved.IndexOf("=>", StringComparison.Ordinal);
+            if (arrow >= 0)
+            {
+                lines[line] = saved[..(arrow + 2)] + " true";
+                var repaired = string.Join("\n", lines);
+                if (Parses(repaired)) return repaired;
+            }
+
+            // Repair 2: blank the in-progress line entirely.
+            lines[line] = "";
+            var blanked = string.Join("\n", lines);
+            if (Parses(blanked)) return blanked;
+            lines[line] = saved;
+        }
+
+        // Repair 3: drop everything from the cursor line onward.
+        if (line > 0 && line <= lines.Length)
+        {
+            var head = string.Join("\n", lines.Take(line));
+            if (Parses(head)) return head;
+        }
+        return buffer;
+    }
+
+    private static bool Parses(string text)
+    {
+        try { CopParser.Parse(text, "probe.cop"); return true; }
+        catch { return false; }
+    }
+
+    private static ModuleNode? TryParse(string text, string path)
+    {
+        try { return CopParser.Parse(text, path); }
+        catch { return null; }
     }
 
     private static string SafeRead(string file)

@@ -93,6 +93,9 @@ internal sealed class CopLanguageServer
             case "textDocument/hover":
                 Respond(id, BuildHover(msg["params"] as JsonObject));
                 break;
+            case "textDocument/completion":
+                Respond(id, BuildCompletion(msg["params"] as JsonObject));
+                break;
             case "shutdown":
                 _shutdownRequested = true;
                 Respond(id, null);
@@ -122,7 +125,11 @@ internal sealed class CopLanguageServer
                     ["openClose"] = true,
                     ["change"] = 1
                 },
-                ["hoverProvider"] = true
+                ["hoverProvider"] = true,
+                ["completionProvider"] = new JsonObject
+                {
+                    ["triggerCharacters"] = new JsonArray { ".", ":", " " }
+                }
             },
             ["serverInfo"] = new JsonObject
             {
@@ -307,6 +314,42 @@ internal sealed class CopLanguageServer
                 ["value"] = markdown
             }
         };
+    }
+
+    private JsonNode? BuildCompletion(JsonObject? p)
+    {
+        var uri = (p?["textDocument"] as JsonObject)?["uri"]?.GetValue<string>();
+        var pos = p?["position"] as JsonObject;
+        if (uri is null || pos is null) return new JsonArray();
+        int line = pos["line"]?.GetValue<int>() ?? 0;
+        int character = pos["character"]?.GetValue<int>() ?? 0;
+
+        var path = UriToPath(uri);
+        if (path is null) return new JsonArray();
+        var text = _documents.TryGetValue(uri, out var t) ? t
+                 : (File.Exists(path) ? File.ReadAllText(path) : null);
+        if (text is null) return new JsonArray();
+
+        IReadOnlyList<CompletionEntry> entries;
+        try
+        {
+            entries = CopLanguageService.Complete(path, text, line, character);
+        }
+        catch (Exception ex)
+        {
+            Log($"completion failed for {uri}: {ex.Message}");
+            return new JsonArray();
+        }
+
+        var items = new JsonArray();
+        foreach (var e in entries)
+            items.Add(new JsonObject
+            {
+                ["label"] = e.Label,
+                ["detail"] = e.Detail,
+                ["kind"] = e.Kind
+            });
+        return items;
     }
 
     // ---- JSON-RPC framing --------------------------------------------------------------

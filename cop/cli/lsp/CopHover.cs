@@ -18,21 +18,18 @@ internal static class CopHover
     private static readonly Regex DotChain =
         new(@"([A-Za-z_][A-Za-z0-9_.:()'\-]*)\.\s*$", RegexOptions.Compiled);
 
-    private static readonly Regex ItemChain =
-        new(@"([A-Za-z_][A-Za-z0-9_.:()'\-]*)\s*:\s*to(?:Error|Warning|Info|Violation)\s*\(", RegexOptions.Compiled);
-
     /// <summary>Returns hover markdown for the token at (<paramref name="line"/>, <paramref name="character"/>),
     /// 0-based, or null when there is nothing confident to show.</summary>
     public static string? Hover(SemanticModel model, ModuleNode? fileModule, string text, int line, int character)
     {
-        var lines = SplitLines(text);
+        var lines = CopEditorContext.SplitLines(text);
         if (line < 0 || line >= lines.Length) return null;
         var lineText = lines[line];
-        var (word, start) = WordAt(lineText, character);
+        var (word, start) = CopEditorContext.WordAt(lineText, character);
         if (word is null) return null;
         var before = lineText[..start];
 
-        var locals = BuildLocals(model, fileModule, lines, line);
+        var locals = CopEditorContext.BuildLocals(model, fileModule, lines, line);
 
         // 1. Declared predicate or function.
         var callable = model.Callable(word);
@@ -128,56 +125,11 @@ internal static class CopHover
 
     /// <summary>Builds the in-scope local types: predicate/function parameters plus the implicit
     /// <c>item</c> (resolved from an enclosing <c>:toError(...)</c> chain when present).</summary>
-    private static Dictionary<string, TypeInfo> BuildLocals(
-        SemanticModel model, ModuleNode? fileModule, string[] lines, int line)
-    {
-        var locals = new Dictionary<string, TypeInfo>(StringComparer.Ordinal);
-
-        var enclosing = EnclosingFunction(fileModule, line);
-        if (enclosing is not null)
-            foreach (var prm in enclosing.Params)
-                if (prm.Type is not null)
-                    locals[prm.Name] = new TypeInfo(prm.Type.Name, prm.Type.IsCollection);
-
-        // `item` is the element of the collection being mapped in a `:toError(...)` (and siblings).
-        for (int i = line; i >= Math.Max(0, line - 6); i--)
-        {
-            var m = ItemChain.Match(lines[i]);
-            if (!m.Success) continue;
-            var chainType = model.InferExpressionType(m.Groups[1].Value, locals);
-            if (chainType is null) break;
-            locals["item"] = chainType.Value.IsCollection
-                ? new TypeInfo(chainType.Value.Name, false)
-                : chainType.Value;
-            break;
-        }
-        return locals;
-    }
-
-    private static FunctionDecl? EnclosingFunction(ModuleNode? module, int line)
-    {
-        if (module is null) return null;
-        FunctionDecl? best = null;
-        foreach (var decl in module.Declarations)
-            if (decl is FunctionDecl fn && fn.Line <= line + 1 && (best is null || fn.Line > best.Line))
-                best = fn;
-        return best;
-    }
 
     private static (string? word, int start) WordAt(string lineText, int ch)
-    {
-        if (ch < 0) ch = 0;
-        if (ch > lineText.Length) ch = lineText.Length;
-        int start = ch, end = ch;
-        while (start > 0 && IsWordChar(lineText[start - 1])) start--;
-        while (end < lineText.Length && IsWordChar(lineText[end])) end++;
-        return start == end ? (null, start) : (lineText[start..end], start);
-    }
+        => CopEditorContext.WordAt(lineText, ch);
 
-    private static bool IsWordChar(char c) => char.IsLetterOrDigit(c) || c == '_' || c == '-';
-
-    private static string[] SplitLines(string text) =>
-        text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+    private static string[] SplitLines(string text) => CopEditorContext.SplitLines(text);
 
     private static string Detail(string detail) => string.IsNullOrEmpty(detail) ? "" : $": {detail}";
 

@@ -240,6 +240,60 @@ public class LanguageServerTests
         finally { Directory.Delete(dir, recursive: true); }
     }
 
+    [Test]
+    public void Server_CompletionRequest_ReturnsCompilerCompletions()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "cop-langsrv-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var file = Path.Combine(dir, "doc.cop");
+            // A dot completion mid-edit: `Dog.` must offer Dog's properties.
+            var text = "type Animal = { Name : string }\ntype Dog : Animal = { Breed : string }\npredicate p(Dog) => Dog.\n";
+            File.WriteAllText(file, text);
+            var uri = PathToUri(file);
+
+            var input = new MemoryStream();
+            var initialize = new JsonObject { ["jsonrpc"] = "2.0", ["id"] = 1, ["method"] = "initialize", ["params"] = new JsonObject() };
+            var didOpen = new JsonObject
+            {
+                ["jsonrpc"] = "2.0",
+                ["method"] = "textDocument/didOpen",
+                ["params"] = new JsonObject
+                {
+                    ["textDocument"] = new JsonObject { ["uri"] = uri, ["languageId"] = "cop", ["version"] = 1, ["text"] = text }
+                }
+            };
+            var completion = new JsonObject
+            {
+                ["jsonrpc"] = "2.0",
+                ["id"] = 7,
+                ["method"] = "textDocument/completion",
+                ["params"] = new JsonObject
+                {
+                    ["textDocument"] = new JsonObject { ["uri"] = uri },
+                    ["position"] = new JsonObject { ["line"] = 2, ["character"] = 24 } // end of `... => Dog.`
+                }
+            };
+            var exit = new JsonObject { ["jsonrpc"] = "2.0", ["method"] = "exit" };
+            WriteAll(input, Frame(initialize), Frame(didOpen), Frame(completion), Frame(exit));
+            input.Position = 0;
+            var output = new MemoryStream();
+
+            new CopLanguageServer(input, output).Run();
+
+            var frames = ParseFrames(output.ToArray());
+            var resp = frames.FirstOrDefault(f => f["id"]?.GetValue<int>() == 7);
+            Assert.That(resp, Is.Not.Null, "must respond to the completion request");
+            var items = resp!["result"] as JsonArray;
+            Assert.That(items, Is.Not.Null);
+            var labels = items!.Select(i => i?["label"]?.GetValue<string>()).ToHashSet();
+            Assert.That(labels, Does.Contain("Breed"));
+            Assert.That(labels, Does.Contain("Name"), "inherited property");
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
     // ---- ToLspDiagnostic conversion ---------------------------------------------------
 
     [Test]

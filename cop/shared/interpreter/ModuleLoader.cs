@@ -17,11 +17,16 @@ public sealed class ModuleLoader
     private readonly List<(string Dir, string PackageName)> _providerPackages = [];
     private readonly List<(LetDecl Decl, string FilePath, Environment ModuleEnv)> _deferredLetBindings = [];
     private readonly List<ModuleNode> _loadedModules = [];
+    private readonly Dictionary<string, List<ModuleNode>> _packageModules = new(StringComparer.Ordinal);
 
     public IReadOnlyList<string> Errors => _errors;
     public IReadOnlyList<CopDiagnostic> Diagnostics => _diagnostics;
     public IReadOnlyList<(string Dir, string PackageName)> ProviderPackages => _providerPackages;
     public IReadOnlyList<ModuleNode> LoadedModules => _loadedModules;
+
+    /// <summary>Maps each imported package name to the modules it contributed (its <c>src/*.cop</c>),
+    /// so tooling can offer namespace-qualified completions like <c>csharp.parse</c>.</summary>
+    public IReadOnlyDictionary<string, List<ModuleNode>> PackageModules => _packageModules;
 
     public ModuleLoader(IEnumerable<string> feedPaths)
     {
@@ -112,6 +117,13 @@ public sealed class ModuleLoader
         {
             _loadedModules.Add(module);
             RegisterExportedDeclarations(module, path, evaluator, packageName);
+        }
+
+        if (modules.Count > 0)
+        {
+            var bucket = _packageModules.TryGetValue(packageName, out var existing)
+                ? existing : (_packageModules[packageName] = []);
+            bucket.AddRange(modules.Select(m => m.Module));
         }
     }
 

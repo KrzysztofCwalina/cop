@@ -679,6 +679,8 @@ public sealed class TypeChecker
 
     internal IReadOnlyCollection<string> LetNames() => _topLevelLets.Keys;
     internal IReadOnlyCollection<string> KnownTypes() => _knownTypes;
+    internal IReadOnlyCollection<string> CallableNames() => _funcs.Keys;
     internal bool IsEnumName(string name) => _enums.Contains(name);
     internal bool IsKnownType(string name) => _knownTypes.Contains(name);
+    internal bool IsSubtypeOf(string sub, string super) => IsSubtypeOrConforms(sub, super);
 }

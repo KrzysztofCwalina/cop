@@ -1529,9 +1529,11 @@ function startLanguageServer(context) {
         { dispose: () => client.stop() }
     );
 
-    // Hover comes from the compiler via the server (replaces the JS hover reimplementation).
+    // Hover + completion come from the compiler via the server (replaces the JS reimplementations).
     context.subscriptions.push(
-        vscode.languages.registerHoverProvider({ language: 'cop', scheme: 'file' }, makeServerHoverProvider(client))
+        vscode.languages.registerHoverProvider({ language: 'cop', scheme: 'file' }, makeServerHoverProvider(client)),
+        vscode.languages.registerCompletionItemProvider(
+            { language: 'cop', scheme: 'file' }, makeServerCompletionProvider(client), '.', ':', ' ')
     );
     return client;
 }
@@ -1552,15 +1554,27 @@ function makeServerHoverProvider(client) {
     };
 }
 
-function activate(context) {
-    context.subscriptions.push(
-        vscode.languages.registerCompletionItemProvider(
-            { language: 'cop', scheme: 'file' },
-            provider,
-            '.', ':', ' '
-        )
-    );
+/** A vscode CompletionItemProvider backed by the language server (the real compiler). */
+function makeServerCompletionProvider(client) {
+    return {
+        async provideCompletionItems(document, position) {
+            const res = await client.sendRequest('textDocument/completion', {
+                textDocument: { uri: document.uri.toString() },
+                position: { line: position.line, character: position.character },
+            });
+            const items = Array.isArray(res) ? res : (res && res.items) || [];
+            return items.map(it => {
+                // The server sends LSP CompletionItemKind (1-based); vscode's enum is 0-based.
+                const kind = typeof it.kind === 'number' ? it.kind - 1 : undefined;
+                const item = new vscode.CompletionItem(it.label, kind);
+                if (it.detail) item.detail = it.detail;
+                return item;
+            });
+        }
+    };
+}
 
+function activate(context) {
     // Clear package cache when .cop files are saved (types may have changed)
     context.subscriptions.push(
         vscode.workspace.onDidSaveTextDocument(doc => {
@@ -1570,13 +1584,18 @@ function activate(context) {
         })
     );
 
-    // Live diagnostics + hover from the real cop compiler (LSP over stdio).
+    // Diagnostics + hover + completion from the real cop compiler (LSP over stdio).
     const client = startLanguageServer(context);
 
-    // Fallback: only use the legacy in-extension hover when the language server is unavailable
-    // (disabled, or `cop` not found). When the server runs, hover comes from the compiler.
+    // Fallback: only use the legacy in-extension hover/completion when the language server is
+    // unavailable (disabled, or `cop` not found). When the server runs, both come from the compiler.
     if (!client) {
         context.subscriptions.push(
+            vscode.languages.registerCompletionItemProvider(
+                { language: 'cop', scheme: 'file' },
+                provider,
+                '.', ':', ' '
+            ),
             vscode.languages.registerHoverProvider(
                 { language: 'cop', scheme: 'file' },
                 hoverProvider
@@ -1628,5 +1647,6 @@ module.exports = {
         lspToVscodeDiagnostic,
         startLanguageServer,
         makeServerHoverProvider,
+        makeServerCompletionProvider,
     }
 };

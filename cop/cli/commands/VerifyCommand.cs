@@ -265,6 +265,11 @@ public static class VerifyCommand
     /// each file's text so an in-memory buffer can stand in for a file on disk.
     /// </summary>
     internal static List<ModuleNode> LoadProgramModules(string[] files, string scriptsDir, Func<string, string> readSource)
+        => LoadProgramModules(files, scriptsDir, readSource, out _);
+
+    internal static List<ModuleNode> LoadProgramModules(
+        string[] files, string scriptsDir, Func<string, string> readSource,
+        out IReadOnlyDictionary<string, List<ModuleNode>> namespaces)
     {
         var local = new List<(ModuleNode Module, string FilePath, string Source)>();
         foreach (var file in files)
@@ -300,7 +305,32 @@ public static class VerifyCommand
         var all = new List<ModuleNode>(local.Count + 8);
         all.AddRange(local.Select(m => m.Module));
         all.AddRange(moduleLoader.LoadedModules);
+        namespaces = moduleLoader.PackageModules;
         return all;
+    }
+
+    /// <summary>Names of packages available to import from the program's feeds (for editor
+    /// import-completion). A directory is a package when it contains a <c>src/</c> folder.</summary>
+    internal static IReadOnlyCollection<string> ListAvailablePackages(string scriptsDir)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var feed in FindFeedPaths(scriptsDir))
+        {
+            if (!Directory.Exists(feed)) continue;
+            foreach (var dir in Directory.GetDirectories(feed))
+            {
+                var name = Path.GetFileName(dir);
+                if (name.StartsWith('.')) continue;
+                if (Directory.Exists(Path.Combine(dir, "src"))) names.Add(name);
+                foreach (var sub in Directory.GetDirectories(dir))
+                {
+                    var subName = Path.GetFileName(sub);
+                    if (!subName.StartsWith('.') && Directory.Exists(Path.Combine(sub, "src")))
+                        names.Add(subName);
+                }
+            }
+        }
+        return names;
     }
 
     /// <summary>

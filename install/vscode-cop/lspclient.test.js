@@ -231,3 +231,36 @@ describe('server hover provider', () => {
         expect(hover).toBeNull();
     });
 });
+
+describe('server completion provider', () => {
+    test('maps server completion entries to vscode.CompletionItems (kind offset by 1)', async () => {
+        const { makeServerCompletionProvider } = ext._testing;
+        const client = {
+            sendRequest: jest.fn().mockResolvedValue([
+                { label: 'Name', detail: 'string', kind: 10 },   // LSP Property -> vscode 9
+                { label: 'isBig', detail: '(Dog) => bool', kind: 2 }, // LSP Method -> vscode 1
+            ]),
+        };
+        const provider = makeServerCompletionProvider(client);
+        const doc = { uri: { toString: () => 'file:///x/a.cop' } };
+        const items = await provider.provideCompletionItems(doc, { line: 3, character: 10 });
+        expect(items).toHaveLength(2);
+        expect(items[0].label).toBe('Name');
+        expect(items[0].detail).toBe('string');
+        expect(items[0].kind).toBe(9);
+        expect(items[1].kind).toBe(1);
+        expect(client.sendRequest).toHaveBeenCalledWith('textDocument/completion', expect.objectContaining({
+            textDocument: { uri: 'file:///x/a.cop' },
+            position: { line: 3, character: 10 },
+        }));
+    });
+
+    test('handles an empty completion result', async () => {
+        const { makeServerCompletionProvider } = ext._testing;
+        const client = { sendRequest: jest.fn().mockResolvedValue(null) };
+        const provider = makeServerCompletionProvider(client);
+        const doc = { uri: { toString: () => 'file:///x/a.cop' } };
+        const items = await provider.provideCompletionItems(doc, { line: 0, character: 0 });
+        expect(items).toEqual([]);
+    });
+});
