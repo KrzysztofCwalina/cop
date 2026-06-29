@@ -49,11 +49,24 @@ public static class PackageListCommand
 
         if (!string.IsNullOrEmpty(feedFilter))
         {
-            feeds = feeds.Where(f => f.Equals(feedFilter, StringComparison.OrdinalIgnoreCase)).ToList();
-            if (feeds.Count == 0)
+            var matched = feeds.Where(f => f.Equals(feedFilter, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (matched.Count == 0)
             {
-                Console.Error.WriteLine($"Feed '{feedFilter}' is not configured. Use 'cop package feed list' to see feeds.");
-                return 1;
+                // Allow `--feed <local dir>` to list an ad-hoc local feed that isn't configured.
+                // This makes listing a local package directory deterministic and offline.
+                if (FeedManager.IsLocalFeed(feedFilter) && Directory.Exists(feedFilter))
+                {
+                    feeds = new List<string> { feedFilter };
+                }
+                else
+                {
+                    Console.Error.WriteLine($"Feed '{feedFilter}' is not configured. Use 'cop package feed list' to see feeds.");
+                    return 1;
+                }
+            }
+            else
+            {
+                feeds = matched;
             }
         }
 

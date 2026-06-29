@@ -178,7 +178,13 @@ public class CliCommandTests
     [Test]
     public void PackageList_ListsBundledPackages_ExitZero()
     {
-        var (exit, stdout, _) = RunCop("package list");
+        // Deterministic + offline: list the repo's local packages/ tree directly via `--feed <dir>`,
+        // so the test never depends on the live GitHub API. The previous version listed the default
+        // remote feed (api.github.com), which is rate-limited in CI and intermittently returned
+        // "(no packages found)". `--feed <local dir>` is an offline, ad-hoc local-feed listing.
+        var localFeed = Path.Combine(RepoRoot, "packages");
+        var (exit, stdout, _) = RunCop($"package list --feed \"{localFeed}\"");
+
         Assert.That(exit, Is.EqualTo(0));
         Assert.That(stdout, Does.Contain("csharp"));
         Assert.That(stdout, Does.Contain("python"));
