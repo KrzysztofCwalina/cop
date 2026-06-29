@@ -96,6 +96,9 @@ internal sealed class CopLanguageServer
             case "textDocument/completion":
                 Respond(id, BuildCompletion(msg["params"] as JsonObject));
                 break;
+            case "textDocument/definition":
+                Respond(id, BuildDefinition(msg["params"] as JsonObject));
+                break;
             case "shutdown":
                 _shutdownRequested = true;
                 Respond(id, null);
@@ -129,7 +132,8 @@ internal sealed class CopLanguageServer
                 ["completionProvider"] = new JsonObject
                 {
                     ["triggerCharacters"] = new JsonArray { ".", ":", " " }
-                }
+                },
+                ["definitionProvider"] = true
             },
             ["serverInfo"] = new JsonObject
             {
@@ -350,6 +354,43 @@ internal sealed class CopLanguageServer
                 ["kind"] = e.Kind
             });
         return items;
+    }
+
+    private JsonNode? BuildDefinition(JsonObject? p)
+    {
+        var uri = (p?["textDocument"] as JsonObject)?["uri"]?.GetValue<string>();
+        var pos = p?["position"] as JsonObject;
+        if (uri is null || pos is null) return null;
+        int line = pos["line"]?.GetValue<int>() ?? 0;
+        int character = pos["character"]?.GetValue<int>() ?? 0;
+
+        var path = UriToPath(uri);
+        if (path is null) return null;
+        var text = _documents.TryGetValue(uri, out var t) ? t
+                 : (File.Exists(path) ? File.ReadAllText(path) : null);
+        if (text is null) return null;
+
+        DefinitionLocation? loc;
+        try
+        {
+            loc = CopLanguageService.Definition(path, text, line, character);
+        }
+        catch (Exception ex)
+        {
+            Log($"definition failed for {uri}: {ex.Message}");
+            return null;
+        }
+        if (loc is null) return null;
+
+        return new JsonObject
+        {
+            ["uri"] = new Uri(Path.GetFullPath(loc.FilePath)).AbsoluteUri,
+            ["range"] = new JsonObject
+            {
+                ["start"] = new JsonObject { ["line"] = loc.Line, ["character"] = loc.Column },
+                ["end"] = new JsonObject { ["line"] = loc.Line, ["character"] = loc.Column + loc.Length }
+            }
+        };
     }
 
     // ---- JSON-RPC framing --------------------------------------------------------------

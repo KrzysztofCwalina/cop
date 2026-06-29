@@ -6,6 +6,9 @@ using Cop.Lang.Parser;
 
 namespace Cop.Cli.Lsp;
 
+/// <summary>A resolved definition site: the file plus a 0-based line/character span of the name.</summary>
+internal sealed record DefinitionLocation(string FilePath, int Line, int Column, int Length);
+
 /// <summary>
 /// Bridges the editor (LSP) surface to the REAL compiler pipeline. Given an open document and
 /// its current (possibly unsaved) buffer text, it runs the exact same
@@ -60,6 +63,57 @@ internal static class CopLanguageService
 
     private static bool PathsEqual(string a, string b)
         => string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Resolves the go-to-definition location for the identifier at the cursor: the top-level
+    /// declaration (let / predicate / function / type / enum / flags / command) with that name,
+    /// anywhere in the program (a cop directory is one program). Returns null when there is no such
+    /// declaration (e.g. a built-in or a provider-supplied name). 0-based line/character for LSP.
+    /// </summary>
+    public static DefinitionLocation? Definition(string filePath, string bufferText, int line, int character)
+    {
+        var bufferLines = CopEditorContext.SplitLines(bufferText);
+        if (line < 0 || line >= bufferLines.Length) return null;
+        var (word, _) = CopEditorContext.WordAt(bufferLines[line], character);
+        if (word is null) return null;
+
+        var full = Path.GetFullPath(filePath);
+        var dir = Path.GetDirectoryName(full) ?? Directory.GetCurrentDirectory();
+        foreach (var f in ProgramFiles(full, dir))
+        {
+            var text = PathsEqual(f, full) ? ModelText(bufferText, line) : SafeRead(f);
+            ModuleNode module;
+            try { module = CopParser.Parse(text, f); }
+            catch { continue; }
+
+            foreach (var decl in module.Declarations)
+            {
+                if (DeclarationName(decl) != word) continue;
+
+                int declLine = decl.Line > 0 ? decl.Line - 1 : 0;
+                int column = 0;
+                var fileLines = CopEditorContext.SplitLines(text);
+                if (declLine >= 0 && declLine < fileLines.Length)
+                {
+                    int idx = fileLines[declLine].IndexOf(word, StringComparison.Ordinal);
+                    if (idx >= 0) column = idx;
+                }
+                return new DefinitionLocation(f, declLine, column, word.Length);
+            }
+        }
+        return null;
+    }
+
+    private static string? DeclarationName(Declaration decl) => decl switch
+    {
+        TypeDecl t => t.Name,
+        EnumDecl e => e.Name,
+        FlagsDecl fl => fl.Name,
+        FunctionDecl fn => fn.Name,
+        LetDecl l => l.Name,
+        CommandDecl c => c.Name,
+        _ => null
+    };
 
     /// <summary>
     /// Hover markdown for a position in <paramref name="filePath"/> using <paramref name="bufferText"/>

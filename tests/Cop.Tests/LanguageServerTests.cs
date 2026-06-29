@@ -294,6 +294,59 @@ public class LanguageServerTests
         finally { Directory.Delete(dir, recursive: true); }
     }
 
+    [Test]
+    public void Server_DefinitionRequest_ResolvesCrossFile()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "cop-langsrv-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(dir);
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "defs.cop"), "let shared = 5\n");
+            var main = Path.Combine(dir, "main.cop");
+            var text = "let x = shared\n";
+            File.WriteAllText(main, text);
+            var uri = PathToUri(main);
+
+            var input = new MemoryStream();
+            var initialize = new JsonObject { ["jsonrpc"] = "2.0", ["id"] = 1, ["method"] = "initialize", ["params"] = new JsonObject() };
+            var didOpen = new JsonObject
+            {
+                ["jsonrpc"] = "2.0",
+                ["method"] = "textDocument/didOpen",
+                ["params"] = new JsonObject
+                {
+                    ["textDocument"] = new JsonObject { ["uri"] = uri, ["languageId"] = "cop", ["version"] = 1, ["text"] = text }
+                }
+            };
+            var definition = new JsonObject
+            {
+                ["jsonrpc"] = "2.0",
+                ["id"] = 9,
+                ["method"] = "textDocument/definition",
+                ["params"] = new JsonObject
+                {
+                    ["textDocument"] = new JsonObject { ["uri"] = uri },
+                    ["position"] = new JsonObject { ["line"] = 0, ["character"] = 9 } // on `shared`
+                }
+            };
+            var exit = new JsonObject { ["jsonrpc"] = "2.0", ["method"] = "exit" };
+            WriteAll(input, Frame(initialize), Frame(didOpen), Frame(definition), Frame(exit));
+            input.Position = 0;
+            var output = new MemoryStream();
+
+            new CopLanguageServer(input, output).Run();
+
+            var frames = ParseFrames(output.ToArray());
+            var resp = frames.FirstOrDefault(f => f["id"]?.GetValue<int>() == 9);
+            Assert.That(resp, Is.Not.Null, "must respond to the definition request");
+            var defUri = resp!["result"]?["uri"]?.GetValue<string>();
+            Assert.That(defUri, Is.Not.Null);
+            Assert.That(defUri, Does.Contain("defs.cop"), "definition is in the other file");
+            Assert.That(resp["result"]?["range"]?["start"]?["line"]?.GetValue<int>(), Is.EqualTo(0));
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
     // ---- ToLspDiagnostic conversion ---------------------------------------------------
 
     [Test]

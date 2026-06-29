@@ -264,3 +264,34 @@ describe('server completion provider', () => {
         expect(items).toEqual([]);
     });
 });
+
+describe('server definition provider', () => {
+    test('maps a server definition result to a vscode.Location', async () => {
+        const { makeServerDefinitionProvider } = ext._testing;
+        const client = {
+            sendRequest: jest.fn().mockResolvedValue({
+                uri: 'file:///x/defs.cop',
+                range: { start: { line: 0, character: 4 }, end: { line: 0, character: 10 } },
+            }),
+        };
+        const provider = makeServerDefinitionProvider(client);
+        const doc = { uri: { toString: () => 'file:///x/main.cop' } };
+        const loc = await provider.provideDefinition(doc, { line: 0, character: 9 });
+        expect(loc).toBeTruthy();
+        expect(loc.uri.toString()).toBe('file:///x/defs.cop');
+        expect(loc.range.start.line).toBe(0);
+        expect(loc.range.start.character).toBe(4);
+        expect(client.sendRequest).toHaveBeenCalledWith('textDocument/definition', expect.objectContaining({
+            textDocument: { uri: 'file:///x/main.cop' },
+            position: { line: 0, character: 9 },
+        }));
+    });
+
+    test('returns null when the server has no definition', async () => {
+        const { makeServerDefinitionProvider } = ext._testing;
+        const client = { sendRequest: jest.fn().mockResolvedValue(null) };
+        const provider = makeServerDefinitionProvider(client);
+        const doc = { uri: { toString: () => 'file:///x/a.cop' } };
+        expect(await provider.provideDefinition(doc, { line: 0, character: 0 })).toBeNull();
+    });
+});

@@ -197,7 +197,9 @@ function startLanguageServer(context) {
     context.subscriptions.push(
         vscode.languages.registerHoverProvider({ language: 'cop', scheme: 'file' }, makeServerHoverProvider(client)),
         vscode.languages.registerCompletionItemProvider(
-            { language: 'cop', scheme: 'file' }, makeServerCompletionProvider(client), '.', ':', ' ')
+            { language: 'cop', scheme: 'file' }, makeServerCompletionProvider(client), '.', ':', ' '),
+        vscode.languages.registerDefinitionProvider(
+            { language: 'cop', scheme: 'file' }, makeServerDefinitionProvider(client))
     );
     return client;
 }
@@ -238,6 +240,26 @@ function makeServerCompletionProvider(client) {
     };
 }
 
+/** A vscode DefinitionProvider backed by the language server (the real compiler). */
+function makeServerDefinitionProvider(client) {
+    return {
+        async provideDefinition(document, position) {
+            const res = await client.sendRequest('textDocument/definition', {
+                textDocument: { uri: document.uri.toString() },
+                position: { line: position.line, character: position.character },
+            });
+            if (res && res.uri && res.range) {
+                const r = res.range;
+                return new vscode.Location(
+                    vscode.Uri.parse(res.uri),
+                    new vscode.Range(r.start.line, r.start.character, r.end.line, r.end.character)
+                );
+            }
+            return null;
+        }
+    };
+}
+
 
 function activate(context) {
     // All language intelligence (diagnostics, hover, completion) comes from the cop compiler
@@ -259,5 +281,6 @@ module.exports = {
         startLanguageServer,
         makeServerHoverProvider,
         makeServerCompletionProvider,
+        makeServerDefinitionProvider,
     }
 };

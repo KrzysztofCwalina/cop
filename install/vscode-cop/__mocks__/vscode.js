@@ -72,9 +72,17 @@ class Range {
     }
 }
 
+class Location {
+    constructor(uri, range) {
+        this.uri = uri;
+        this.range = range;
+    }
+}
+
 const languages = {
     registerCompletionItemProvider: () => ({ dispose: () => {} }),
     registerHoverProvider: () => ({ dispose: () => {} }),
+    registerDefinitionProvider: () => ({ dispose: () => {} }),
     createDiagnosticCollection: (name) => {
         const map = new Map();
         return {
@@ -125,6 +133,7 @@ module.exports = {
     Hover,
     Position,
     Range,
+    Location,
     Diagnostic,
     DiagnosticSeverity,
     Uri,
