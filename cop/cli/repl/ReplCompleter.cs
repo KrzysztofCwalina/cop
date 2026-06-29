@@ -10,31 +10,12 @@ public class ReplCompleter
 {
     private readonly ReplEvaluator _evaluator;
 
-    // Built-in predicate names (general-purpose intrinsics)
-    private static readonly string[] BuiltinPredicates =
-    [
-        "equals", "notEquals", "startsWith", "endsWith", "contains", "containsAny",
-        "matches", "sameAs", "empty", "in", "greaterThan", "lessThan",
-        "greaterOrEqual", "lessOrEqual", "isSet", "isClear", "count",
-        "any", "none", "all", "containsKey"
-    ];
+    // Built-in names for completion, derived from the single IntrinsicRegistry so they cannot drift.
+    private static readonly string[] BuiltinPredicates = Cop.Lang.IntrinsicRegistry.PredicateNames().ToArray();
 
-    // Built-in transforms (general-purpose collection/string operations)
-    private static readonly string[] BuiltinTransforms =
-    [
-        "Trim", "Replace", "Where", "First", "Last",
-        "Single", "ElementAt", "Select", "text", "Count",
-        "OrderBy", "OrderByDescending", "Distinct", "GroupBy",
-        "Sum", "Min", "Max", "Average", "Reduce",
-        "Get", "File", "Path", "Matches"
-    ];
+    private static readonly string[] BuiltinTransforms = Cop.Lang.IntrinsicRegistry.TransformNames().ToArray();
 
-    // Built-in properties
-    private static readonly string[] BuiltinProperties =
-    [
-        "Length", "Count", "Lower", "Upper", "Normalized",
-        "Words", "First", "Last", "Single", "Tail"
-    ];
+    private static readonly string[] BuiltinProperties = Cop.Lang.IntrinsicRegistry.PropertyNames().ToArray();
 
     public ReplCompleter(ReplEvaluator evaluator)
     {

@@ -16,6 +16,14 @@ public enum IntrinsicKind
     CollectionTransform,
     StringProperty,
     CollectionProperty,
+
+    /// <summary>
+    /// A built-in utility function (print, read, text, concat, take, …) — not a primitive
+    /// predicate/transform/property. These are surfaced to the REPL and excluded from being treated
+    /// as property names by provider pushdown. They are NOT projected into editor metadata (the
+    /// editor learns them by parsing the core .cop intrinsic declarations).
+    /// </summary>
+    Utility,
 }
 
 /// <summary>
@@ -58,6 +66,8 @@ public static class IntrinsicRegistry
 
     private static IntrinsicOp Op(string name, IntrinsicKind kind, string detail, string[]? aliases = null)
         => new(name, kind, detail, aliases ?? []);
+
+    private static IntrinsicOp Util(string name) => new(name, IntrinsicKind.Utility, "", []);
 
     /// <summary>Every built-in operation surface. Order within a kind matches editor presentation.</summary>
     public static readonly IReadOnlyList<IntrinsicOp> All =
@@ -133,6 +143,14 @@ public static class IntrinsicRegistry
         Op("Max", IntrinsicKind.CollectionTransform, "((object) => float) - maximum value"),
         Op("Average", IntrinsicKind.CollectionTransform, "((object) => float) - average value"),
         Op("Reduce", IntrinsicKind.CollectionTransform, "((object, object) => object, initial) - reduce collection"),
+
+        // ── collection-level utility verbs (NOT projected into editor metadata; surfaced via .cop) ──
+        // Only verbs that are never property names belong here — accessor-style builtins like
+        // File/Path/Get/Matches/Text collide with real property names (Type.File, Line.Text, …) and
+        // must NOT be treated as collection functions by pushdown.
+        Util("take"), Util("skip"), Util("concat"), Util("push"), Util("pop"), Util("enqueue"),
+        Util("text"), Util("print"), Util("debug"), Util("save"), Util("read"),
+        Util("provider"), Util("source"), Util("sink"), Util("assert"), Util("fail"), Util("error"),
     ];
 
     /// <summary>All operation surfaces of the given kind, in declaration order.</summary>
@@ -149,4 +167,36 @@ public static class IntrinsicRegistry
     public static IEnumerable<(string Canonical, string Alias)> AliasPairs =>
         All.SelectMany(o => o.Aliases.Select(a => (o.Name, a)))
            .Distinct();
+
+    private static readonly IntrinsicKind[] PredicateKinds =
+    [
+        IntrinsicKind.StringPredicate, IntrinsicKind.NumericPredicate, IntrinsicKind.CollectionPredicate,
+        IntrinsicKind.UniversalPredicate, IntrinsicKind.ObjectPredicate,
+    ];
+
+    /// <summary>Distinct canonical names of every built-in predicate (no aliases). For completion.</summary>
+    public static IReadOnlyList<string> PredicateNames() =>
+        All.Where(o => PredicateKinds.Contains(o.Kind)).Select(o => o.Name).Distinct().ToList();
+
+    /// <summary>Distinct canonical names of string/collection transforms plus utility functions. For completion.</summary>
+    public static IReadOnlyList<string> TransformNames() =>
+        All.Where(o => o.Kind is IntrinsicKind.StringTransform or IntrinsicKind.CollectionTransform or IntrinsicKind.Utility)
+           .Select(o => o.Name).Distinct().ToList();
+
+    /// <summary>Distinct canonical names of string/collection computed properties. For completion.</summary>
+    public static IReadOnlyList<string> PropertyNames() =>
+        All.Where(o => o.Kind is IntrinsicKind.StringProperty or IntrinsicKind.CollectionProperty)
+           .Select(o => o.Name).Distinct().ToList();
+
+    /// <summary>
+    /// Collection-level function names (incl. aliases, case-insensitive) that provider pushdown must
+    /// not treat as property names: collection transforms, utility functions, and the collection
+    /// predicates other than the string/collection-dual <c>contains</c>/<c>containsAny</c>.
+    /// </summary>
+    public static HashSet<string> CollectionFunctionNames() =>
+        All.Where(o =>
+                o.Kind is IntrinsicKind.CollectionTransform or IntrinsicKind.Utility
+                || (o.Kind is IntrinsicKind.CollectionPredicate && o.Name is not ("contains" or "containsAny")))
+           .SelectMany(o => o.AllNames)
+           .ToHashSet(StringComparer.OrdinalIgnoreCase);
 }

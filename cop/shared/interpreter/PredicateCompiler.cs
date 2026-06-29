@@ -10,28 +10,18 @@ namespace Cop.Lang.Interpreter;
 /// </summary>
 public static class PredicateCompiler
 {
-    // Known string operation names (long and short forms)
-    private static readonly HashSet<string> StringOps = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "startsWith", "sw", "endsWith", "ew", "contains", "ct",
-        "equals", "eq", "matches", "rx", "same", "sm"
-    };
+    // The name sets below are derived from the single IntrinsicRegistry so provider pushdown can
+    // never drift from the language's actual built-ins. (The name -> StringOp/CompareOp mapping is a
+    // pushdown-specific concern and stays local in NormalizeStringOp / NormalizeCompareOp.)
+    private static readonly HashSet<string> StringOps =
+        new(IntrinsicRegistry.NameSet(o => o.Kind == Cop.Lang.IntrinsicKind.StringPredicate && o.Pushable),
+            StringComparer.OrdinalIgnoreCase);
 
-    // Known comparison operation names
-    private static readonly HashSet<string> ComparisonOps = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "greaterThan", "gt", "lessThan", "lt", "greaterOrEqual", "ge", "lessOrEqual", "le"
-    };
+    private static readonly HashSet<string> ComparisonOps =
+        new(IntrinsicRegistry.NameSet(o => o.Kind == Cop.Lang.IntrinsicKind.NumericPredicate && o.Pushable),
+            StringComparer.OrdinalIgnoreCase);
 
-    // Known collection-level functions that should NOT be treated as property names
-    private static readonly HashSet<string> CollectionFunctions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "any", "all", "none", "count", "where", "select", "first", "last",
-        "single", "orderBy", "orderByDescending", "distinct", "take", "skip",
-        "groupBy", "reduce", "sum", "min", "max", "average", "concat", "push",
-        "pop", "enqueue", "empty", "text", "print", "debug", "save", "read",
-        "provider", "source", "sink", "assert", "fail", "error"
-    };
+    private static readonly HashSet<string> CollectionFunctions = IntrinsicRegistry.CollectionFunctionNames();
 
     /// <summary>
     /// Attempts to compile a predicate expression (from a FilterExpr) into a FilterExpression.
@@ -177,7 +167,7 @@ public static class PredicateCompiler
         "contains" or "ct" => StringOp.Contains,
         "equals" or "eq" => StringOp.Equals,
         "matches" or "rx" => StringOp.Matches,
-        "same" or "sm" => StringOp.Same,
+        "sameas" or "sm" => StringOp.Same,
         _ => null
     };
 

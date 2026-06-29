@@ -69,4 +69,28 @@ public class IntrinsicRegistryTests
             LanguageMetadata.CollectionProperties.Select(e => e.Detail).ToArray(),
             Is.EqualTo(IntrinsicRegistry.OfKind(IntrinsicKind.CollectionProperty).Select(o => o.Detail).ToArray()));
     }
+
+    [Test]
+    public void CollectionFunctionNames_IncludeVerbs_ButExcludePropertyCollidingNames()
+    {
+        var fns = IntrinsicRegistry.CollectionFunctionNames(); // case-insensitive
+
+        foreach (var verb in new[] { "any", "all", "none", "count", "empty", "where", "select", "take", "skip", "concat", "reduce" })
+            Assert.That(fns.Contains(verb), Is.True, $"'{verb}' must be a collection function");
+
+        // These collide with real property names (Type.File, File.Path, …) or are dual
+        // string/collection predicates handled separately — pushdown must NOT treat them as functions.
+        // (Note: the lowercase verb `text` IS a collection function, so `Text` matches case-insensitively.)
+        foreach (var prop in new[] { "File", "Path", "Get", "Matches", "contains", "containsAny" })
+            Assert.That(fns.Contains(prop), Is.False, $"'{prop}' must NOT be a collection function");
+    }
+
+    [Test]
+    public void PushableStringPredicates_UseSameAsNotLegacySame()
+    {
+        var pushable = IntrinsicRegistry.NameSet(o => o.Kind == IntrinsicKind.StringPredicate && o.Pushable);
+        Assert.That(pushable, Does.Contain("sameAs"));
+        Assert.That(pushable, Does.Contain("sm"));
+        Assert.That(pushable, Does.Not.Contain("same"), "the legacy 'same' long-form was reconciled to 'sameAs'");
+    }
 }
