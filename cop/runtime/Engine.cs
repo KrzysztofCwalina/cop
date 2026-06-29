@@ -527,11 +527,21 @@ public static class Engine
                 {
                     exitCode = exitInt.Value;
                 }
-                else if (!TryRouteViolationsThroughCheck(bridge, result))
+                else
                 {
-                    // If a command returns a collection (e.g., let-binding used as a named rule),
-                    // iterate items and produce output for each.
-                    CollectCollectionOutputs(result, outputs);
+                    var routedExitCode = TryRouteViolationsThroughCheck(bridge, result);
+                    if (routedExitCode is not null)
+                    {
+                        // A raw [Violation] result was routed through CHECK; use CHECK's count as the
+                        // exit code structurally, instead of string-sniffing the formatted output.
+                        exitCode = routedExitCode;
+                    }
+                    else
+                    {
+                        // If a command returns a collection (e.g., let-binding used as a named rule),
+                        // iterate items and produce output for each.
+                        CollectCollectionOutputs(result, outputs);
+                    }
                 }
                 diagLog?.Invoke($"[diag] After collect, outputs count = {outputs.Count}");
             }
@@ -958,12 +968,13 @@ public static class Engine
     /// `CHECK(&lt;name&gt;)`, instead of dumping raw Violation objects with a clean exit (issue #52).
     /// CHECK prints each violation via the `print` FFI, which appends to the engine's outputs
     /// list, so both the formatting and the violation exit code follow automatically.
-    /// Returns true when it routed the result (caller should skip the raw-dump path).
+    /// Returns the exit code (CHECK's violation count) when it routed the result, or null when it
+    /// did not (caller should fall back to the raw-dump path).
     /// </summary>
-    private static bool TryRouteViolationsThroughCheck(LanguageBridge bridge, CopValue? result)
+    private static int? TryRouteViolationsThroughCheck(LanguageBridge bridge, CopValue? result)
     {
         if (result is null)
-            return false;
+            return null;
         if (result is CopThunk thunk)
             result = thunk.Force();
 
@@ -978,16 +989,19 @@ public static class Engine
         // Only route non-empty collections whose every item is a Violation. Empty lists fall
         // through — they produce no output and a clean exit either way.
         if (items is null || items.Count == 0 || !items.All(IsViolation))
-            return false;
+            return null;
 
         var env = bridge.Evaluator.GlobalEnvironment;
         if (env.TryLookup(CheckCommandName, out var check) && check is ICopCallable callable)
         {
-            callable.Invoke([new CopList(items)], bridge.Evaluator, env);
-            return true;
+            var checkResult = callable.Invoke([new CopList(items)], bridge.Evaluator, env);
+            if (checkResult is CopThunk t) checkResult = t.Force();
+            // CHECK returns the violation count; fall back to the item count if it returns anything
+            // else, so a non-empty violation list always yields a non-zero (failing) exit code.
+            return checkResult is CopInt count ? count.Value : items.Count;
         }
 
-        return false;
+        return null;
     }
 
     /// <summary>
