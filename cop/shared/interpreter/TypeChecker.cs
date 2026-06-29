@@ -660,7 +660,18 @@ public sealed class TypeChecker
     internal CallableInfo? Callable(string name)
     {
         if (!_funcs.TryGetValue(name, out var sigs) || sigs.Count == 0) return null;
-        var sig = sigs[0];
+        return ToCallableInfo(name, sigs[0]);
+    }
+
+    /// <summary>Signature info for EVERY overload of a declared predicate or function.</summary>
+    internal IReadOnlyList<CallableInfo> AllCallables(string name)
+    {
+        if (!_funcs.TryGetValue(name, out var sigs)) return [];
+        return sigs.Select(sig => ToCallableInfo(name, sig)).ToList();
+    }
+
+    private CallableInfo ToCallableInfo(string name, Sig sig)
+    {
         var pars = sig.Params.Select(p => p is null ? null : (p.IsCollection ? $"[{p.Name}]" : p.Name)).ToList();
         string? ret = sig.Return is null ? null : (sig.Return.IsCollection ? $"[{sig.Return.Name}]" : sig.Return.Name);
         return new CallableInfo(name, sig.IsPredicate, pars, ret, _narrowings.ContainsKey(name));

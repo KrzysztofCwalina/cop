@@ -21,6 +21,7 @@ public class ArchitectureFitnessTests
 
     private static string InterpreterDir => Path.Combine(RepoRoot(), "cop", "shared", "interpreter");
     private static string LspDir => Path.Combine(RepoRoot(), "cop", "cli", "lsp");
+    private static string EnginePath => Path.Combine(RepoRoot(), "cop", "runtime", "Engine.cs");
 
     [Test]
     public void InterpreterCore_HasNoHardcodedDomainTypeNames()
@@ -79,5 +80,27 @@ public class ArchitectureFitnessTests
 
         Assert.That(offenders, Is.Empty,
             "use Evaluator.ImplicitItemVariable instead of the literal \"item\" in cop/cli/lsp:\n" + string.Join("\n", offenders));
+    }
+
+    [Test]
+    public void EngineDomainCoupling_IsLimitedToTheApprovedViolationExitCodeNames()
+    {
+        // The runtime orchestrator (Engine) is allowed ONE narrow, documented coupling: it routes a
+        // [Violation] result through the package's CHECK command for consistent formatting + exit
+        // codes. That permits the names "Violation"/"Violations"/"CHECK". NO OTHER package/domain
+        // name may appear in the engine — that would be coupling creep beyond the agreed contract.
+        // (The narrow coupling itself is slated for a cleaner engine<->package diagnostic contract.)
+        string[] forbidden = ["Codebase", "Filesystem", "MarkdownContent", "toError", "toWarning", "toInfo"];
+
+        var offenders = new List<string>();
+        var lines = File.ReadAllLines(EnginePath);
+        for (int i = 0; i < lines.Length; i++)
+            foreach (var name in forbidden)
+                if (lines[i].Contains($"\"{name}\""))
+                    offenders.Add($"Engine.cs:{i + 1}: {lines[i].Trim()}");
+
+        Assert.That(offenders, Is.Empty,
+            "new domain coupling crept into the runtime engine (only the Violation/CHECK exit-code " +
+            "coupling is sanctioned):\n" + string.Join("\n", offenders));
     }
 }

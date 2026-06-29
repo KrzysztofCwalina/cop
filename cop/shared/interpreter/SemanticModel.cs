@@ -112,15 +112,12 @@ public sealed class SemanticModel
     /// <summary>Signature of a declared predicate or function, or null if not declared.</summary>
     public CallableInfo? Callable(string name) => _checker.Callable(name);
 
-    /// <summary>Every declared predicate and function (for general/colon completion).</summary>
+    /// <summary>Every overload of every declared predicate and function (for general/colon completion).</summary>
     public IReadOnlyList<CallableInfo> Callables()
     {
         var result = new List<CallableInfo>();
         foreach (var name in _checker.CallableNames())
-        {
-            var c = _checker.Callable(name);
-            if (c is not null) result.Add(c);
-        }
+            result.AddRange(_checker.AllCallables(name));
         return result;
     }
 

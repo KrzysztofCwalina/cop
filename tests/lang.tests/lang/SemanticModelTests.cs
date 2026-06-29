@@ -134,6 +134,25 @@ public class SemanticModelTests
     }
 
     [Test]
+    public void Callables_IncludesEveryOverload()
+    {
+        // Overloaded predicates/functions (e.g. isPublic(Type)/(Method)/(Field)) must all be offered
+        // in completion, not just the first.
+        const string src = """
+            type A = { X : int }
+            type B = { Y : int }
+            predicate same(A) => true
+            predicate same(B) => true
+            """;
+        var m = Build(src);
+
+        var overloads = m.Callables().Where(c => c.Name == "same").ToList();
+        Assert.That(overloads.Count, Is.EqualTo(2), "both overloads of 'same' must be offered");
+        Assert.That(overloads.Select(c => c.ParamTypes[0]).ToHashSet(),
+            Is.EquivalentTo(new[] { "A", "B" }));
+    }
+
+    [Test]
     public void KnownTypes_And_Enums()
     {
         var m = Build(Program);

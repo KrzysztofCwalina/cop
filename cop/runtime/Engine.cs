@@ -981,7 +981,7 @@ public static class Engine
             return false;
 
         var env = bridge.Evaluator.GlobalEnvironment;
-        if (env.TryLookup("CHECK", out var check) && check is ICopCallable callable)
+        if (env.TryLookup(CheckCommandName, out var check) && check is ICopCallable callable)
         {
             callable.Invoke([new CopList(items)], bridge.Evaluator, env);
             return true;
@@ -989,6 +989,13 @@ public static class Engine
 
         return false;
     }
+
+    /// <summary>
+    /// The package-defined command the engine routes a <c>[Violation]</c> result through so it is
+    /// formatted and exit-coded consistently. This is the engine's one (narrow, documented) coupling
+    /// to the violation/check domain; see <see cref="TryRouteViolationsThroughCheck"/>.
+    /// </summary>
+    private const string CheckCommandName = "CHECK";
 
     private static bool IsViolation(CopValue value)
     {
