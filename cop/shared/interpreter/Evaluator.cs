@@ -1814,13 +1814,18 @@ public sealed class Evaluator
         };
     }
 
-    /// <summary>
-    /// True if a bare predicate name resolves to something callable/known: a defined predicate or
-    /// function, an enum member or let-binding (env), or an FFI builtin. Used to detect typo'd
-    /// predicates so they fail loudly instead of silently filtering everything out.
+    /// <summary>True if a bare predicate name resolves to something CALLABLE: a defined predicate or
+    /// function (env or a let bound to a callable), or an FFI builtin. A non-callable binding (an enum
+    /// member value, a let-bound number/string) does NOT count — otherwise <c>coll:someEnumValue</c>
+    /// would bypass the typo guard and then silently filter every item out. Used so typo'd predicates
+    /// fail loudly instead of silently filtering everything out.
     /// </summary>
     private bool IsResolvablePredicateName(string name, Environment env)
-        => env.TryLookup(name, out _) || _ffi.Resolve(name) is not null;
+    {
+        if (env.TryLookup(name, out var bound))
+            return ForceValue(bound) is ICopCallable;
+        return _ffi.Resolve(name) is not null;
+    }
 
     /// <summary>
     /// True if `name` resolves to a user function of arity (1 + argCount) whose FIRST parameter is

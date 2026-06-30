@@ -37,25 +37,31 @@ public static class CopDiagnostics
 /// </summary>
 public static class ProviderErrors
 {
-    private static readonly System.Collections.Concurrent.ConcurrentQueue<string> _errors = new();
+    // Per async-context (per Engine.Run) rather than a single process-wide queue. The engine does
+    // Clear() at the start of a run and Drain() at the end; with a shared static queue, two
+    // concurrent runs (parallel tests, or the LSP analyzing in the background while the CLI runs)
+    // corrupted each other's error lists — one run's Clear() discarded the other's reports. An
+    // AsyncLocal isolates each run's queue. Engine.Run calls Clear() first, which establishes the
+    // queue in the run's context so the providers it then invokes report into that same queue.
+    private static readonly System.Threading.AsyncLocal<System.Collections.Concurrent.ConcurrentQueue<string>?> _errors = new();
+
+    private static System.Collections.Concurrent.ConcurrentQueue<string> Queue => _errors.Value ??= new();
 
     /// <summary>Reports a provider-side error so the engine can surface it.</summary>
-    public static void Report(string message) => _errors.Enqueue(message);
+    public static void Report(string message) => Queue.Enqueue(message);
 
     /// <summary>Removes and returns all reported provider errors (deduplicated, order-preserving).</summary>
     public static IReadOnlyList<string> Drain()
     {
+        var queue = Queue;
         var result = new List<string>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        while (_errors.TryDequeue(out var e))
+        while (queue.TryDequeue(out var e))
             if (seen.Add(e))
                 result.Add(e);
         return result;
     }
 
-    /// <summary>Discards any pending provider errors (used to reset state between runs/tests).</summary>
-    public static void Clear()
-    {
-        while (_errors.TryDequeue(out _)) { }
-    }
+    /// <summary>Resets the current run's provider errors (called at the start of each run).</summary>
+    public static void Clear() => _errors.Value = new System.Collections.Concurrent.ConcurrentQueue<string>();
 }

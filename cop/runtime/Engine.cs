@@ -285,6 +285,9 @@ public static class Engine
             {
                 if (diag.Severity == DiagnosticSeverity.Error)
                     errors.Add($"{diag.FilePath ?? module.FilePath}({diag.Line}): error: {diag.Message}");
+                else
+                    // Binder warnings/info were silently dropped; surface them so they reach the user.
+                    warnings.Add($"{diag.FilePath ?? module.FilePath}({diag.Line}): {(diag.Severity == DiagnosticSeverity.Warning ? "warning" : "info")}: {diag.Message}");
             }
         }
         if (errors.Count > 0)
