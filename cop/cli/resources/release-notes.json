@@ -148,6 +148,15 @@
         "VS Code: diagnostics, hover, and autocomplete now come from a built-in cop language server (`cop langserver`), so they match the compiler exactly and update live as you type — instead of a separate in-extension implementation that kept drifting and breaking.",
         "Hovering a list of violations now shows its real type (e.g. [Violation]) instead of \"unknown\"."
       ]
+    },
+    {
+      "version": "2026.6.29.2",
+      "approved": true,
+      "features": [
+        "Editor stays useful mid-edit: a syntax error in one declaration no longer blanks hover, autocomplete, and go-to-definition for the rest of the file — the language server now recovers and keeps the valid declarations.",
+        "Filtering a collection by something that isn't a predicate (e.g. an enum value or a plain let) now fails loudly instead of silently returning nothing, so a typo can't make a check pass by accident.",
+        "Hardened internal compiler diagnostics for reliability under concurrent runs."
+      ]
     }
   ]
 }
