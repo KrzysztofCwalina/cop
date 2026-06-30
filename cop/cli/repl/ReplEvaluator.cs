@@ -158,7 +158,7 @@ public class ReplEvaluator
         var hasCommand = _context.Modules
             .SelectMany(m => m.Module.Declarations)
             .Any(d => (d is CommandDecl cmd && string.Equals(cmd.Name, input, StringComparison.OrdinalIgnoreCase))
-                   || (d is FunctionDecl f && char.IsUpper(f.Name[0]) && f.Body is BlockBody && string.Equals(f.Name, input, StringComparison.OrdinalIgnoreCase)));
+                   || (d is FunctionDecl f && f.IsCommand && string.Equals(f.Name, input, StringComparison.OrdinalIgnoreCase)));
 
         if (!hasCommand)
             return null;
@@ -228,7 +228,7 @@ public class ReplEvaluator
             {
                 if (decl is CommandDecl cmd)
                     candidates.Add(cmd.Name);
-                else if (decl is FunctionDecl f && char.IsUpper(f.Name[0]) && f.Body is BlockBody)
+                else if (decl is FunctionDecl f && f.IsCommand)
                     candidates.Add(f.Name);
                 else if (decl is LetDecl let)
                     candidates.Add(let.Name);

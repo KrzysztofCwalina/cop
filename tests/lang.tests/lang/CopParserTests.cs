@@ -687,6 +687,18 @@ command main = print('done')
         Assert.That(errors, Is.Not.Empty, "the lexer error should be reported");
     }
 
+    [Test]
+    public void FunctionDecl_IsCommand_OnlyForUppercaseBlockBody()
+    {
+        var block = new BlockBody(new List<Statement>());
+        FunctionBody expr = new ExpressionBody(new LiteralExpr(null, 0));
+        var empty = new List<Parameter>();
+        Assert.That(new FunctionDecl("MAIN", empty, null, block).IsCommand, Is.True);
+        Assert.That(new FunctionDecl("main", empty, null, block).IsCommand, Is.False, "lowercase is not a command");
+        Assert.That(new FunctionDecl("MAIN", empty, null, expr).IsCommand, Is.False, "expression body is not a command");
+        Assert.That(new FunctionDecl("", empty, null, block).IsCommand, Is.False, "empty name is not a command");
+    }
+
     private static string FindRepoRoot()
     {
         var dir = TestContext.CurrentContext.TestDirectory;

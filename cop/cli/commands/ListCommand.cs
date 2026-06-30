@@ -96,7 +96,7 @@ public static class ListCommand
                 {
                     commands.Add((cmd.Name, cmd.DocComment, cmd.Parameters));
                 }
-                else if (decl is FunctionDecl func && func.IsExported && char.IsUpper(func.Name[0]) && func.Body is BlockBody)
+                else if (decl is FunctionDecl func && func.IsExported && func.IsCommand)
                 {
                     commands.Add((func.Name, func.DocComment, func.Params.Select(p => p.Name).ToList()));
                 }

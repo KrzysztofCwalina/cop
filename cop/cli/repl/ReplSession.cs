@@ -245,7 +245,7 @@ public class ReplSession
     {
         var commands = _context.Modules
             .SelectMany(m => m.Module.Declarations)
-            .Where(d => d is CommandDecl || (d is FunctionDecl f && char.IsUpper(f.Name[0]) && f.Body is BlockBody))
+            .Where(d => d is CommandDecl || (d is FunctionDecl f && f.IsCommand))
             .Select(d => d is CommandDecl cmd ? cmd.Name : ((FunctionDecl)d).Name)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(s => s)

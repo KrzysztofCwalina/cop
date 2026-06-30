@@ -104,7 +104,7 @@ public static class HelpCommand
                     if (!seen.Add(cmd.Name)) continue;
                     commandEntries.Add((cmd.Name, cmd.DocComment, cmd.Parameters));
                 }
-                else if (decl is FunctionDecl func && char.IsUpper(func.Name[0]) && func.Body is BlockBody)
+                else if (decl is FunctionDecl func && func.IsCommand)
                 {
                     if (!seen.Add(func.Name)) continue;
                     commandEntries.Add((func.Name, func.DocComment, func.Params.Select(p => p.Name).ToList()));

@@ -421,7 +421,7 @@ static bool IsLocalCommand(string name, string[] copFiles)
             {
                 if (decl is Cop.Lang.Ast.CommandDecl cmd && cmd.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
                     return true;
-                if (decl is Cop.Lang.Ast.FunctionDecl func && char.IsUpper(func.Name[0]) && func.Body is Cop.Lang.Ast.BlockBody
+                if (decl is Cop.Lang.Ast.FunctionDecl func && func.IsCommand
                     && func.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
                     return true;
             }
