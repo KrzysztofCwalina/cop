@@ -651,6 +651,42 @@ command main = print('done')
         Assert.DoesNotThrow(() => CopParser.Parse("let r = 'x' ? 'y' => 'no' | _ => 'yes'\ncommand main = print(r)", "test.cop"));
     }
 
+    [Test]
+    public void ParseWithRecovery_RecoversAfterSyntaxErrorInFirstDeclaration()
+    {
+        // First declaration is malformed (a type with a numeric name); the second is valid.
+        // Recovery must record one error and still return the valid second declaration.
+        var source = "type 123Bad\nimport code\n";
+        var module = CopParser.ParseWithRecovery(source, "test.cop", out var errors);
+        Assert.That(errors, Has.Count.EqualTo(1), "expected exactly one parse error");
+        Assert.That(module.Declarations, Has.Count.EqualTo(1), "the valid second declaration should still parse");
+        Assert.That(module.Declarations[0], Is.TypeOf<ImportDecl>());
+        Assert.That(((ImportDecl)module.Declarations[0]).ModuleName, Is.EqualTo("code"));
+    }
+
+    [Test]
+    public void ParseWithRecovery_CleanSource_NoErrors_AllDeclarations()
+    {
+        var source = "import code\nlet x = 5\n";
+        var module = CopParser.ParseWithRecovery(source, "test.cop", out var errors);
+        Assert.That(errors, Is.Empty, "a valid file should produce no errors");
+        Assert.That(module.Declarations, Has.Count.EqualTo(2));
+        Assert.That(module.Declarations[0], Is.TypeOf<ImportDecl>());
+        Assert.That(module.Declarations[1], Is.TypeOf<LetDecl>());
+    }
+
+    [Test]
+    public void ParseWithRecovery_LexerError_ReturnsErrorNotThrow()
+    {
+        // An unterminated string is a lexer error (can't be recovered per-declaration);
+        // ParseWithRecovery must surface it as an error rather than throwing.
+        var source = "let x = 'unterminated\n";
+        ModuleNode module = null!;
+        IReadOnlyList<Cop.Lang.ParseException> errors = null!;
+        Assert.DoesNotThrow(() => module = CopParser.ParseWithRecovery(source, "test.cop", out errors));
+        Assert.That(errors, Is.Not.Empty, "the lexer error should be reported");
+    }
+
     private static string FindRepoRoot()
     {
         var dir = TestContext.CurrentContext.TestDirectory;

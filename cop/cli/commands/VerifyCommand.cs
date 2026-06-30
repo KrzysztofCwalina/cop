@@ -277,8 +277,10 @@ public static class VerifyCommand
             string source;
             try { source = readSource(file); }
             catch { continue; }
-            try { local.Add((CopParser.Parse(source, file), file, source)); }
-            catch { /* a file with a syntax error contributes nothing to the model */ }
+            // Parse with recovery so a file with a syntax error still contributes its other
+            // declarations to the editor model (hover/completion/go-to-def stay useful mid-edit).
+            try { local.Add((CopParser.ParseWithRecovery(source, file, out _), file, source)); }
+            catch { /* a catastrophically broken file contributes nothing to the model */ }
         }
 
         var feedPaths = FindFeedPaths(scriptsDir);

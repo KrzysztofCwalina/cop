@@ -32,6 +32,33 @@ public class CopParser
     }
 
     /// <summary>
+    /// Parses with declaration-level error recovery, returning the partial AST plus any parse errors
+    /// instead of throwing on the first one. For tooling (the language server) that needs a best-effort
+    /// AST from an in-progress, not-yet-valid buffer.
+    /// </summary>
+    public static ModuleNode ParseWithRecovery(string source, string? filePath, out IReadOnlyList<ParseException> errors)
+    {
+        filePath ??= "<unknown>";
+        var tokenizer = new Tokenizer(source, filePath);
+        var errs = new List<ParseException>();
+        List<Token> tokens;
+        try
+        {
+            tokens = tokenizer.Tokenize();
+        }
+        catch (ParseException ex)
+        {
+            // A lexer error (unterminated string/comment) can't be recovered per-declaration.
+            errors = [ex];
+            return new ModuleNode([], 1);
+        }
+        var parser = new CopParser(tokens, filePath, source);
+        var module = parser.ParseModuleWithRecovery(errs);
+        errors = errs;
+        return module;
+    }
+
+    /// <summary>
     /// Compatibility bridge for legacy ScriptFile consumers.
     /// Converts the new AST parser output into the older ScriptFile shape.
     /// </summary>
@@ -139,6 +166,45 @@ public class CopParser
                 declarations.Add(decl);
         }
         return new ModuleNode(declarations, 1);
+    }
+
+    /// <summary>
+    /// Parses a module with declaration-level error recovery: a syntax error in one declaration is
+    /// recorded and the parser synchronizes to the next declaration instead of abandoning the whole
+    /// file. Returns the partial <see cref="ModuleNode"/> (every declaration that parsed) plus the
+    /// errors. Used by the language server so a single typo doesn't blank hover/completion/go-to-def
+    /// for everything after it in the file. Existing callers keep using the throwing <see cref="ParseModule"/>.
+    /// </summary>
+    public ModuleNode ParseModuleWithRecovery(List<ParseException> errors)
+    {
+        var declarations = new List<Declaration>();
+        while (!IsAtEnd())
+        {
+            int before = _pos;
+            try
+            {
+                var decl = ParseDeclaration();
+                if (decl is not null)
+                    declarations.Add(decl);
+            }
+            catch (ParseException ex)
+            {
+                errors.Add(ex);
+                SynchronizeToNextDeclaration();
+            }
+            // Guarantee forward progress so a non-consuming declaration can never spin the loop.
+            if (_pos == before && !IsAtEnd())
+                Advance();
+        }
+        return new ModuleNode(declarations, 1);
+    }
+
+    /// <summary>Skips past the offending token to the next declaration boundary (or EOF).</summary>
+    private void SynchronizeToNextDeclaration()
+    {
+        if (!IsAtEnd()) Advance();
+        while (!IsAtEnd() && !IsDeclarationStart())
+            Advance();
     }
 
     // ========================================================================
