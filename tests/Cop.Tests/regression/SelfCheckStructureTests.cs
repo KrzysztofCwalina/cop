@@ -36,6 +36,18 @@ public class SelfCheckStructureTests
     }
 
     [Test]
+    public void RepositoryHasNoUnapprovedRegexImports()
+    {
+        File.Copy(Path.Combine(_repo, "cop-checks", "no-regex.cop"), Path.Combine(_root, "rule.cop"));
+        File.WriteAllText(Path.Combine(_root, "main.cop"), "command MAIN = CHECK(no-regex)");
+        var result = Engine.Run(_root, _repo, additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+
+        Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
+        Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
+        Assert.That(result.Outputs.Select(o => o.Message), Is.Empty);
+    }
+
+    [Test]
     [Explicit("Issue #55: verifying code/src imports its own CHECK declaration twice - remove when fixed")]
     [Category("PendingFix")]
     public void Issue055_CodePackageSourceVerifiesWithoutSelfImportDuplicates()

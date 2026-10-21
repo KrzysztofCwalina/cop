@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Cop.Lang;
 using Cop.Lang.Ast;
 using Cop.Lang.Interpreter;
@@ -20,9 +19,6 @@ internal static class CopCompletion
     private const int Keyword = 14, Property = 10, Function = 3, Method = 2, Variable = 6,
                       Class = 7, Module = 9, Struct = 22;
 
-    private static readonly Regex DotChain = new(@"([A-Za-z_][A-Za-z0-9_.:()'\-]*)\.\s*$", RegexOptions.Compiled);
-    private static readonly Regex ColonChain = new(@"([A-Za-z_][A-Za-z0-9_.:()'\-]*)\s*:\s*$", RegexOptions.Compiled);
-
     private static readonly string[] DeclarationKeywordNames =
         ["predicate", "function", "type", "let", "command", "flags", "enum", "collection"];
 
@@ -37,12 +33,15 @@ internal static class CopCompletion
         var locals = CopEditorContext.BuildLocals(model, fileModule, lines, line);
 
         // Context detection (mirrors the editor's previous behavior), most specific first.
-        if (Regex.IsMatch(before, @"runtime::\s*$")) return RuntimeTypes(model);
-        if (Regex.IsMatch(before, @"^\s*(?:export\s+)?import\s+$")) return Packages(importablePackages);
-        if (Regex.IsMatch(before, @"(?<!:):\s*$")) return Colon(model, before, locals);
-        if (Regex.IsMatch(before, @"\.\s*$")) return Dot(model, before, locals);
-        if (Regex.IsMatch(before, @"=>\s*$")) return Actions(model);
-        if (Regex.IsMatch(before, @"^\s*export\s+$")) return DeclarationKeywords();
+        var trimmed = before.TrimEnd();
+        var words = before.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        bool afterWhitespace = before.Length > trimmed.Length;
+        if (trimmed.EndsWith("runtime::", StringComparison.Ordinal)) return RuntimeTypes(model);
+        if (afterWhitespace && (words is ["import"] or ["export", "import"])) return Packages(importablePackages);
+        if (trimmed.EndsWith(':') && !trimmed.EndsWith("::", StringComparison.Ordinal)) return Colon(model, before, locals);
+        if (trimmed.EndsWith('.')) return Dot(model, before, locals);
+        if (trimmed.EndsWith("=>", StringComparison.Ordinal)) return Actions(model);
+        if (afterWhitespace && words is ["export"]) return DeclarationKeywords();
         return General(model);
     }
 
@@ -51,9 +50,8 @@ internal static class CopCompletion
     private static IReadOnlyList<CompletionEntry> Dot(
         SemanticModel model, string before, Dictionary<string, TypeInfo> locals)
     {
-        var m = DotChain.Match(before);
-        if (!m.Success) return [];
-        var chain = m.Groups[1].Value;
+        var chain = CopEditorContext.ChainBefore(before, '.');
+        if (chain is null) return [];
 
         // Namespace-qualified: `csharp.` → that package's exported functions.
         if (!chain.Contains('.') && !chain.Contains(':') && model.IsNamespace(chain))
@@ -87,8 +85,8 @@ internal static class CopCompletion
         entries.AddRange(Builtins(LanguageMetadata.UniversalPredicates, Method));
         entries.AddRange(Builtins(LanguageMetadata.ObjectPredicates, Method));
 
-        var m = ColonChain.Match(before);
-        var t = m.Success ? model.InferExpressionType(m.Groups[1].Value, locals) : null;
+        var chain = CopEditorContext.ChainBefore(before, ':');
+        var t = chain is not null ? model.InferExpressionType(chain, locals) : null;
         string? element = t?.Name;
 
         if (t is { IsCollection: true })

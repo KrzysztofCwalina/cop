@@ -9,6 +9,15 @@ public class RegionExtractionTests
     private readonly CSharpSourceParser _parser = new();
 
     [Test]
+    public void Parse_SnippetSource_HasNoParseErrors()
+    {
+        var source = File.ReadAllText(SamplePath("SnippetSource.cs"));
+        var result = _parser.Parse("SnippetSource.cs", source)!;
+
+        Assert.That(result.ParseErrors, Is.Empty);
+    }
+
+    [Test]
     public void Parse_SnippetSource_ExtractsAllRegions()
     {
         var source = File.ReadAllText(SamplePath("SnippetSource.cs"));

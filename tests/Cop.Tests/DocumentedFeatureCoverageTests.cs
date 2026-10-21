@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using NUnit.Framework;
 
 namespace Cop.Tests;
@@ -141,19 +140,54 @@ public class DocumentedFeatureCoverageTests
             "Coverage classifications no longer backed by intrinsics.cop or language-reference.md: " + string.Join(", ", stale));
     }
 
-    private static IReadOnlyCollection<string> ExtractDocumentedIntrinsicNames()
+    private static IReadOnlyCollection<string> ExtractDocumentedIntrinsicNames() =>
+        ExtractDocumentedIntrinsicNames(
+            File.ReadAllText(Path.Combine(RepoRoot, "packages", "core", "core", "src", "intrinsics.cop")));
+
+    private static IReadOnlyCollection<string> ExtractDocumentedIntrinsicNames(string text)
     {
-        var text = File.ReadAllText(Path.Combine(RepoRoot, "packages", "core", "core", "src", "intrinsics.cop"));
         var names = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (Match match in Regex.Matches(text, @"^\s*export\s+(?:function|predicate)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(",
-            RegexOptions.Multiline))
+        for (var lineStart = 0; lineStart < text.Length;)
         {
-            names.Add(match.Groups[1].Value);
+            var declaration = text.AsSpan(lineStart).TrimStart();
+            if (ConsumeKeyword(ref declaration, "export")
+                && (ConsumeKeyword(ref declaration, "function") || ConsumeKeyword(ref declaration, "predicate")))
+            {
+                var length = 0;
+                if (!declaration.IsEmpty && IsIdentifierStart(declaration[0]))
+                {
+                    length++;
+                    while (length < declaration.Length && IsIdentifierPart(declaration[length]))
+                        length++;
+                }
+
+                if (length > 0 && declaration[length..].TrimStart().StartsWith("(", StringComparison.Ordinal))
+                    names.Add(declaration[..length].ToString());
+            }
+
+            var lineEnd = text.IndexOf('\n', lineStart);
+            if (lineEnd < 0)
+                break;
+            lineStart = lineEnd + 1;
         }
 
         return names;
     }
+
+    private static bool ConsumeKeyword(ref ReadOnlySpan<char> text, string keyword)
+    {
+        if (!text.StartsWith(keyword, StringComparison.Ordinal)
+            || text.Length <= keyword.Length || !char.IsWhiteSpace(text[keyword.Length]))
+            return false;
+
+        text = text[keyword.Length..].TrimStart();
+        return true;
+    }
+
+    private static bool IsIdentifierStart(char value) => char.IsAsciiLetter(value) || value == '_';
+
+    private static bool IsIdentifierPart(char value) => IsIdentifierStart(value) || char.IsAsciiDigit(value);
 
     private static IReadOnlyCollection<string> ExtractDocumentedLanguageReferenceFeatureNames()
     {
@@ -200,33 +234,63 @@ public class DocumentedFeatureCoverageTests
                     break;
 
                 var firstCell = cells[0];
-                var codeMatch = Regex.Match(firstCell, @"`([^`]+)`");
-                if (!codeMatch.Success)
+                var code = FirstCodeSpan(firstCell);
+                if (code is null)
                     continue;
 
-                var name = NormalizeFeatureName(codeMatch.Groups[1].Value);
+                var name = NormalizeFeatureName(code);
                 if (name.Length > 0)
                     names.Add(name);
             }
         }
     }
 
+    private static string? FirstCodeSpan(string text)
+    {
+        var start = text.IndexOf('`');
+        while (start >= 0)
+        {
+            var end = text.IndexOf('`', start + 1);
+            if (end < 0)
+                return null;
+            if (end > start + 1)
+                return text[(start + 1)..end];
+            start = end;
+        }
+        return null;
+    }
+
     private static void AddCodeFormattedFeatures(string text, ISet<string> names, IEnumerable<string> candidates)
     {
+        var spans = text.Split('`').Skip(1).ToArray();
         foreach (var candidate in candidates)
         {
-            var pattern = $@"`[^`]*\b{Regex.Escape(candidate)}(?:\b|\()";
-            if (Regex.IsMatch(text, pattern))
+            if (spans.Any(span => ContainsWord(span, candidate)))
                 names.Add(candidate);
         }
     }
 
+    private static bool ContainsWord(string text, string word)
+    {
+        for (var start = text.IndexOf(word, StringComparison.Ordinal); start >= 0;
+            start = text.IndexOf(word, start + 1, StringComparison.Ordinal))
+        {
+            var end = start + word.Length;
+            if ((start == 0 || !TestTextParsing.IsWordCharacter(text[start - 1]))
+                && (end == text.Length || !TestTextParsing.IsWordCharacter(text[end])))
+                return true;
+        }
+        return false;
+    }
+
     private static void AddDocumentedOperators(string text, ISet<string> names)
     {
+        var tokens = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+            .ToHashSet(StringComparer.Ordinal);
         foreach (var op in new[] { ":", ".", "&", "&&", "||", "!", "|", "==", "!=", ">", "<", ">=", "<=", "?", "=>", "+" })
         {
             if (text.Contains($"`{op}`", StringComparison.Ordinal)
-                || Regex.IsMatch(text, $@"(^|\s){Regex.Escape(op)}(\s|$)")
+                || tokens.Contains(op)
                 || (op == "!" && (text.Contains("!A", StringComparison.Ordinal) || text.Contains(":!", StringComparison.Ordinal))))
             {
                 names.Add(op);
@@ -244,7 +308,15 @@ public class DocumentedFeatureCoverageTests
     }
 
     private static bool IsMarkdownSeparatorRow(IEnumerable<string> cells) =>
-        cells.All(cell => Regex.IsMatch(cell, @"^:?-{3,}:?$"));
+        cells.All(cell =>
+        {
+            var dashes = cell.AsSpan();
+            if (dashes.StartsWith(":", StringComparison.Ordinal))
+                dashes = dashes[1..];
+            if (dashes.EndsWith(":", StringComparison.Ordinal))
+                dashes = dashes[..^1];
+            return dashes.Length >= 3 && dashes.IndexOfAnyExcept('-') < 0;
+        });
 
     private static string NormalizeFeatureName(string raw)
     {
@@ -253,7 +325,79 @@ public class DocumentedFeatureCoverageTests
         if (parenIndex >= 0)
             name = name[..parenIndex];
 
-        return Regex.IsMatch(name, @"^[A-Za-z_][A-Za-z0-9_]*$") ? name : string.Empty;
+        return name.Length > 0 && IsIdentifierStart(name[0]) && name.All(IsIdentifierPart)
+            ? name : string.Empty;
+    }
+
+    [Test]
+    public void IntrinsicExtraction_RecognizesOnlyExportedFunctionAndPredicateDeclarations()
+    {
+        var names = ExtractDocumentedIntrinsicNames("""
+             export function read_2 (value) => value
+            export	predicate isGood(value) => true
+            export
+                function multiline
+                (value) => value
+            # export function comment(value) => value
+            let text = 'export function quoted(value)'
+            export function 2invalid(value) => value
+            export function hyphen-name(value) => value
+            export function café(value) => value
+            export functions plural(value) => value
+            function local(value) => value
+            export function read_2(value) => value
+            """);
+
+        Assert.That(names.Order(StringComparer.Ordinal), Is.EqualTo(new[] { "isGood", "multiline", "read_2" }));
+    }
+
+    [Test]
+    public void MarkdownFeatureExtraction_RequiresFeatureTableAndValidIdentifier()
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        AddMarkdownTableFeatures("""
+            | Predicate | Meaning |
+            | :--- | ---: |
+            | `isGood(value)` | valid |
+            | text `other_2()` | valid |
+            | `bad-name()` | invalid identifier |
+            | no code | ignored |
+
+            | Function | Meaning |
+            | :---: | ---- |
+            | `Select` | valid |
+
+            | Predicate | Meaning |
+            | -- | --- |
+            | `badSeparator` | ignored |
+
+            | Type | Meaning |
+            | --- | --- |
+            | `NotAFeature` | ignored |
+            """, names);
+
+        Assert.That(names.Order(StringComparer.Ordinal), Is.EqualTo(new[] { "Select", "isGood", "other_2" }));
+    }
+
+    [Test]
+    public void CodeFormattedFeatures_RequireCaseSensitiveWordBoundaries()
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        AddCodeFormattedFeatures(
+            "`obj.Get(key)` `Select(value)` `Forget` `_Get` `Get2` `ΩSum` `Sum\u0301` `get`",
+            names, ["Get", "Select", "Sum", "Missing"]);
+
+        Assert.That(names.Order(StringComparer.Ordinal), Is.EqualTo(new[] { "Get", "Select" }));
+    }
+
+    [Test]
+    public void Operators_AreRecognizedAsCodeOrWhitespaceDelimitedTokens()
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        AddDocumentedOperators("&&\t>=\n`||` `+` a==b !A :! \t?", names);
+
+        Assert.That(names.Order(StringComparer.Ordinal),
+            Is.EqualTo(new[] { "!", "&&", "+", ">=", "?", "||" }));
     }
 
     private static void ReportCoverageSummary(

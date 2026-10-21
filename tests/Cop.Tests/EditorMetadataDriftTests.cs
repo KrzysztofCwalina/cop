@@ -28,6 +28,23 @@ public class EditorMetadataDriftTests
     private static string Normalize(string s) => s.Replace("\r\n", "\n").TrimEnd('\n') + "\n";
 
     [Test]
+    public void Grammar_generation_handles_nested_sections_and_escaped_strings()
+    {
+        const string grammar = """
+            {"repository":{"declaration-keywords":{"nested":{},"match":"old\"value"},"control-keywords":{"match":"old"},"constants":{"match":"old"}}}
+            """;
+        var generated = MetadataGenerator.BuildGrammar(grammar);
+        using var json = System.Text.Json.JsonDocument.Parse(generated);
+        var repository = json.RootElement.GetProperty("repository");
+        var expected = @"\b(" + string.Join("|", LanguageMetadata.Keywords
+            .Where(k => k.Category == "declaration").Select(k => k.Name)) + @")\b";
+        Assert.That(repository.GetProperty("declaration-keywords").GetProperty("match").GetString(),
+            Is.EqualTo(expected));
+        Assert.That(repository.GetProperty("declaration-keywords").GetProperty("nested")
+            .EnumerateObject().Count(), Is.EqualTo(0));
+    }
+
+    [Test]
     public void Grammar_keyword_lists_are_in_sync_with_the_language()
     {
         var root = RepoRoot();

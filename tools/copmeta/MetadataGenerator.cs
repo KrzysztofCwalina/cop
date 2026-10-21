@@ -1,4 +1,5 @@
-using System.Text.RegularExpressions;
+using System.Text;
+using System.Text.Json;
 using Cop.Lang;
 
 namespace CopMeta;
@@ -58,18 +59,38 @@ public static class MetadataGenerator
     private static string Normalize(string s) => s.Replace("\r\n", "\n").TrimEnd('\n') + "\n";
 
     private static string Alternation(IEnumerable<string> names) =>
-        @"\\b(" + string.Join("|", names) + @")\\b";
+        @"\b(" + string.Join("|", names) + @")\b";
 
     /// <summary>Replaces the <c>"match"</c> value of the named grammar repository section.</summary>
     private static string ReplaceSectionMatch(string grammar, string sectionKey, string newMatch)
     {
-        // Find: "sectionKey": { ... "match": "<value>"
-        var sectionPattern = new Regex(
-            "(\"" + Regex.Escape(sectionKey) + "\"\\s*:\\s*\\{[^}]*?\"match\"\\s*:\\s*\")(.*?)(\")",
-            RegexOptions.Singleline);
-        var m = sectionPattern.Match(grammar);
-        if (!m.Success)
-            throw new InvalidOperationException($"Grammar section '{sectionKey}' with a 'match' field not found.");
-        return grammar[..m.Groups[2].Index] + newMatch + grammar[(m.Groups[2].Index + m.Groups[2].Length)..];
+        var bytes = Encoding.UTF8.GetBytes(grammar);
+        var reader = new Utf8JsonReader(bytes);
+        bool inRepository = false, inSection = false;
+        while (reader.Read())
+        {
+            if (reader.TokenType == JsonTokenType.EndObject)
+            {
+                if (reader.CurrentDepth == 2) inSection = false;
+                if (reader.CurrentDepth == 1) inRepository = false;
+            }
+            if (reader.TokenType != JsonTokenType.PropertyName) continue;
+            if (reader.CurrentDepth == 1)
+                inRepository = reader.ValueTextEquals("repository");
+            else if (inRepository && reader.CurrentDepth == 2)
+                inSection = reader.ValueTextEquals(sectionKey);
+            else if (inSection && reader.CurrentDepth == 3 && reader.ValueTextEquals("match"))
+            {
+                reader.Read();
+                if (reader.TokenType != JsonTokenType.String)
+                    throw new InvalidOperationException($"Grammar section '{sectionKey}' must have a string 'match' field.");
+                int start = checked((int)reader.TokenStartIndex);
+                int end = checked((int)reader.BytesConsumed);
+                return Encoding.UTF8.GetString(bytes.AsSpan(0, start))
+                    + JsonSerializer.Serialize(newMatch)
+                    + Encoding.UTF8.GetString(bytes.AsSpan(end));
+            }
+        }
+        throw new InvalidOperationException($"Grammar section '{sectionKey}' with a 'match' field not found.");
     }
 }

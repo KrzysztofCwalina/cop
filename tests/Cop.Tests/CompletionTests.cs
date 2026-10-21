@@ -39,6 +39,19 @@ public class CompletionTests
 
     private static IEnumerable<string> Labels(IReadOnlyList<CompletionEntry> e) => e.Select(x => x.Label);
 
+    [TestCase("let x = greeting.   ", '.',
+        "greeting")]
+    [TestCase("let x = dogs:isBig :  ", ':',
+        "dogs:isBig")]
+    [TestCase("let x = csharp.parse().", '.',
+        "csharp.parse()")]
+    [TestCase("let x = .", '.', null)]
+    [TestCase("let x = greeting", '.', null)]
+    public void ChainBefore_ExtractsOnlyTheTrailingExpression(string text, char delimiter, string? expected)
+    {
+        Assert.That(CopEditorContext.ChainBefore(text, delimiter), Is.EqualTo(expected));
+    }
+
     [Test]
     public void Dot_OnTypedParameter_OffersProperties_IncludingInherited()
     {

@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text.RegularExpressions;
 using System.Threading;
 using NUnit.Framework;
 
@@ -63,19 +62,46 @@ public class DocSnippetRunTests
         if (File.Exists(readme)) yield return readme;
     }
 
-    private static readonly Regex CommandDecl =
-        new(@"^\s*command\s+\w", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-    private static readonly Regex ExpectLine =
-        new(@"^\s*#\s*=>\s*(.+?)\s*$", RegexOptions.Compiled);
+    private static bool HasCommandDeclaration(string line)
+    {
+        var text = line.AsSpan().TrimStart();
+        const string keyword = "command";
+        if (!text.StartsWith(keyword, StringComparison.OrdinalIgnoreCase)
+            || text.Length <= keyword.Length || !char.IsWhiteSpace(text[keyword.Length]))
+            return false;
+
+        text = text[keyword.Length..].TrimStart();
+        return !text.IsEmpty && TestTextParsing.IsWordCharacter(text[0]);
+    }
+
+    private static string? ExtractExpectation(string line)
+    {
+        var text = line.AsSpan().TrimStart();
+        if (text.IsEmpty || text[0] != '#')
+            return null;
+
+        text = text[1..].TrimStart();
+        if (!text.StartsWith("=>", StringComparison.Ordinal))
+            return null;
+
+        var value = text[2..];
+        var trimmed = value.Trim();
+        if (!trimmed.IsEmpty)
+            return trimmed.ToString();
+
+        // A whitespace-only annotation still asserts output, rather than opting out of execution.
+        return value.IsEmpty ? null : value[^1..].ToString();
+    }
 
     /// <summary>
     /// Extract fenced ```cop blocks that are runnable complete programs. Skips blocks tagged
     /// "skip" or "norun". Captures `# =&gt;` expectation lines.
     /// </summary>
-    private static IEnumerable<Snippet> ExtractRunnableSnippets(string file)
+    private static IEnumerable<Snippet> ExtractRunnableSnippets(string file) =>
+        ExtractRunnableSnippets(File.ReadAllLines(file), Path.GetFileName(file));
+
+    private static IEnumerable<Snippet> ExtractRunnableSnippets(IEnumerable<string> lines, string docName)
     {
-        var lines = File.ReadAllLines(file);
-        var docName = Path.GetFileName(file);
         bool inFence = false, isCop = false, skip = false;
         int start = 0;
         var buf = new List<string>();
@@ -106,11 +132,10 @@ public class DocSnippetRunTests
                     {
                         var content = string.Join('\n', buf);
                         var expectations = buf
-                            .Select(l => ExpectLine.Match(l))
-                            .Where(m => m.Success)
-                            .Select(m => m.Groups[1].Value)
+                            .Select(ExtractExpectation)
+                            .OfType<string>()
                             .ToArray();
-                        bool isProgram = buf.Any(l => CommandDecl.IsMatch(l));
+                        bool isProgram = buf.Any(HasCommandDeclaration);
                         if (isProgram || expectations.Length > 0)
                             yield return new Snippet(docName, start, content, expectations);
                     }
@@ -122,6 +147,44 @@ public class DocSnippetRunTests
                 }
             }
         }
+    }
+
+    [TestCase(" \tCOMMAND MAIN = 'ok'", true)]
+    [TestCase("command\t_c = 'ok'", true)]
+    [TestCase("command Δ = 'ok'", true)]
+    [TestCase("commands MAIN = 'no'", false)]
+    [TestCase("# command MAIN = 'no'", false)]
+    [TestCase("command ", false)]
+    [TestCase("command !", false)]
+    [TestCase("let command = 'no'", false)]
+    public void CommandDeclaration_RequiresKeywordAndName(string line, bool expected) =>
+        Assert.That(HasCommandDeclaration(line), Is.EqualTo(expected));
+
+    [TestCase("  # \t=>  expected output  ", "expected output")]
+    [TestCase("#=>value", "value")]
+    [TestCase("# =>    ", " ")]
+    [TestCase("#=>", null)]
+    [TestCase("# = > value", null)]
+    [TestCase("value # => ignored", null)]
+    public void Expectation_RequiresCommentMarkerAndValue(string line, string? expected) =>
+        Assert.That(ExtractExpectation(line), Is.EqualTo(expected));
+
+    [Test]
+    public void RunnableSnippets_KeepExpectationsAndRespectFenceOptOuts()
+    {
+        var snippets = ExtractRunnableSnippets(
+        [
+            "```cop", "  command MAIN = 'ok'", "# => ok  ", "```",
+            "```cop", "let value = 1", "#=>1", "```",
+            "```cop", "let value = 1", "#=>", "```",
+            "```cop skip", "command MAIN = 'skip'", "```",
+            "```cop NoRun", "#=>skip", "```",
+            "```csharp", "command MAIN = 'skip'", "```"
+        ], "sample.md").ToArray();
+
+        Assert.That(snippets.Select(s => s.StartLine), Is.EqualTo(new[] { 1, 5 }));
+        Assert.That(snippets.Select(s => s.Expectations.Single()), Is.EqualTo(new[] { "ok", "1" }));
+        Assert.That(snippets.Select(s => s.Doc), Is.EqualTo(new[] { "sample.md", "sample.md" }));
     }
 
     [Test]

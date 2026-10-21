@@ -1,14 +1,11 @@
 using System.Diagnostics;
-using System.Text.RegularExpressions;
 using NUnit.Framework;
 
 namespace Cop.Tests;
 
 [TestFixture]
-public partial class GoldenOutputSnapshotTests
+public class GoldenOutputSnapshotTests
 {
-    private static readonly Regex AnsiRegex = AnsiPattern();
-
     private static string RepoRoot => FindRepoRoot();
     private static string CopExe => Path.Combine(RepoRoot, "install", "win-x64", "cop.exe");
     private static string GoldenDir => Path.Combine(RepoRoot, "tests", "behavior", "golden");
@@ -80,7 +77,7 @@ public partial class GoldenOutputSnapshotTests
 
     private static string Normalize(string text)
     {
-        var withoutAnsi = AnsiRegex.Replace(text, string.Empty)
+        var withoutAnsi = TestTextParsing.StripAnsi(text)
             .Replace(RepoRoot, "<repo>", StringComparison.OrdinalIgnoreCase);
 
         var lines = withoutAnsi.Replace("\r\n", "\n").Replace('\r', '\n')
@@ -91,6 +88,14 @@ public partial class GoldenOutputSnapshotTests
         return normalized.Length == 0 ? string.Empty : normalized + "\n";
     }
 
+    [Test]
+    public void Normalize_StripsAnsiAndStabilizesPathsAndLineEndings()
+    {
+        var output = $"\x1b[31m{RepoRoot}\x1b[0m  \r\nvalue\t \r\x1b[2Kdone \r\n\r\n";
+        Assert.That(Normalize(output), Is.EqualTo("<repo>\nvalue\ndone\n"));
+        Assert.That(Normalize("\x1b[0m \r\n"), Is.EqualTo(string.Empty));
+    }
+
     private static string FindRepoRoot()
     {
         var dir = TestContext.CurrentContext.TestDirectory;
@@ -98,7 +103,4 @@ public partial class GoldenOutputSnapshotTests
             dir = Path.GetDirectoryName(dir);
         return dir ?? throw new InvalidOperationException("Could not find repo root (cop.sln)");
     }
-
-    [GeneratedRegex(@"\x1B\[[0-?]*[ -/]*[@-~]")]
-    private static partial Regex AnsiPattern();
 }

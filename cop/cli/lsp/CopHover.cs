@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.RegularExpressions;
 using Cop.Lang;
 using Cop.Lang.Ast;
 using Cop.Lang.Interpreter;
@@ -15,9 +14,6 @@ namespace Cop.Cli.Lsp;
 /// </summary>
 internal static class CopHover
 {
-    private static readonly Regex DotChain =
-        new(@"([A-Za-z_][A-Za-z0-9_.:()'\-]*)\.\s*$", RegexOptions.Compiled);
-
     /// <summary>Returns hover markdown for the token at (<paramref name="line"/>, <paramref name="character"/>),
     /// 0-based, or null when there is nothing confident to show.</summary>
     public static string? Hover(SemanticModel model, ModuleNode? fileModule, string text, int line, int character)
@@ -45,10 +41,10 @@ internal static class CopHover
         // 3. Property in a dot-chain (e.g. `codebase.Types.Name`).
         if (before.TrimEnd().EndsWith('.'))
         {
-            var m = DotChain.Match(before);
-            if (m.Success)
+            var chain = CopEditorContext.ChainBefore(before, '.');
+            if (chain is not null)
             {
-                var parent = model.InferExpressionType(m.Groups[1].Value, locals);
+                var parent = model.InferExpressionType(chain, locals);
                 if (parent is not null)
                 {
                     // A collection projects to its element type; a scalar uses its own type.
