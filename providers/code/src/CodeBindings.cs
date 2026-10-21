@@ -20,6 +20,7 @@ public static class CodeBindings
                 [typeof(ParameterDeclaration)] = "Parameter",
                 [typeof(TypeReference)] = "TypeReference",
                 [typeof(StatementInfo)] = "Statement",
+                [typeof(ExpressionInfo)] = "CodeExpression",
                 [typeof(LineInfo)] = "Line",
                 [typeof(SourceFile)] = "File",
                 [typeof(MemberInfo)] = "Member",
@@ -154,6 +155,8 @@ public static class CodeBindings
                 ["TypeName"] = o => ((StatementInfo)o).TypeName,
                 ["MemberName"] = o => ((StatementInfo)o).MemberName,
                 ["Arguments"] = o => (object)((StatementInfo)o).Arguments,
+                ["CallTarget"] = o => ((StatementInfo)o).CallTarget,
+                ["ArgumentExpressions"] = o => ((StatementInfo)o).ArgumentExpressions,
                 ["Line"] = o => (object)((StatementInfo)o).Line,
                 ["InMethod"] = o => (object)((StatementInfo)o).IsInMethod,
                 ["Rethrows"] = o => (object)((StatementInfo)o).HasRethrow,
@@ -170,6 +173,14 @@ public static class CodeBindings
                 ["Braced"] = o => (object)((StatementInfo)o).IsBraced,
                 ["CopIgnore"] = o => ((StatementInfo)o).CopIgnore,
                 ["ConstructedTypeInterfaces"] = o => (object)((StatementInfo)o).ConstructedTypeInterfaces,
+            },
+            ["CodeExpression"] = new()
+            {
+                ["Kind"] = o => ((ExpressionInfo)o).Kind,
+                ["Name"] = o => ((ExpressionInfo)o).Name,
+                ["StringValue"] = o => ((ExpressionInfo)o).StringValue,
+                ["Target"] = o => ((ExpressionInfo)o).Target,
+                ["Children"] = o => ((ExpressionInfo)o).Children,
             },
             ["Line"] = new()
             {

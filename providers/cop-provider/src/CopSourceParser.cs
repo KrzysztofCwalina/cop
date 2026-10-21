@@ -1,11 +1,11 @@
 using Cop.Lang;
+using Cop.Lang.Ast;
 using Cop.Providers.SourceModel;
 
 namespace Cop.Providers.SourceParsers;
 
 /// <summary>
-/// Source parser for .cop files. Uses the CopParser.ParseFile compatibility bridge to parse
-/// .cop syntax, then maps the AST to the shared code source model.
+/// Maps the Cop AST to the shared code source model.
 /// </summary>
 public class CopSourceParser : ISourceParser
 {
@@ -14,10 +14,10 @@ public class CopSourceParser : ISourceParser
 
     public override SourceFile? Parse(string filePath, string sourceText)
     {
-        ScriptFile script;
+        ModuleNode module;
         try
         {
-            script = Cop.Lang.Parser.CopParser.ParseFile(sourceText, filePath);
+            module = Cop.Lang.Parser.CopParser.Parse(sourceText, filePath);
         }
         catch (ParseException)
         {
@@ -27,14 +27,14 @@ public class CopSourceParser : ISourceParser
 
         var types = new List<TypeDeclaration>();
         var statements = new List<StatementInfo>();
-        var usings = new List<string>(script.Imports);
+        var usings = module.Declarations.OfType<ImportDecl>().Select(i => i.ModuleName).ToList();
 
         // Map type definitions → TypeDeclaration
-        foreach (var td in script.TypeDefinitions)
+        foreach (var td in module.Declarations.OfType<TypeDecl>())
         {
             var modifiers = td.IsExported ? Modifier.Public : Modifier.None;
             var fields = td.Properties.Select(p =>
-                new FieldDeclaration(p.Name, MakeTypeRef(p.TypeName, p.IsCollection), Modifier.Public, p.Line))
+                new FieldDeclaration(p.Name, MakeTypeRef(p.Type.Name, p.Type.IsCollection), Modifier.Public, p.Line))
                 .ToList();
             var baseTypes = td.BaseType is not null ? new List<string> { td.BaseType } : [];
 
@@ -46,65 +46,38 @@ public class CopSourceParser : ISourceParser
         }
 
         // Map flags definitions → TypeDeclaration (Enum)
-        if (script.FlagsDefinitions is not null)
+        foreach (var fd in module.Declarations.OfType<FlagsDecl>())
         {
-            foreach (var fd in script.FlagsDefinitions)
-            {
-                var modifiers = fd.IsExported ? Modifier.Public : Modifier.None;
-                types.Add(new TypeDeclaration(fd.Name, TypeKind.Enum, modifiers,
-                    [], [], [], [], [], fd.Members, fd.Line));
-            }
+            var modifiers = fd.IsExported ? Modifier.Public : Modifier.None;
+            types.Add(new TypeDeclaration(fd.Name, TypeKind.Enum, modifiers,
+                [], [], [], [], [], fd.Members, fd.Line));
         }
 
         // Map enum definitions → TypeDeclaration (Enum)
-        if (script.EnumDefinitions is not null)
+        foreach (var ed in module.Declarations.OfType<EnumDecl>())
         {
-            foreach (var ed in script.EnumDefinitions)
-            {
-                var modifiers = ed.IsExported ? Modifier.Public : Modifier.None;
-                types.Add(new TypeDeclaration(ed.Name, TypeKind.Enum, modifiers,
-                    [], [], [], [], [], ed.Members, ed.Line));
-            }
+            var modifiers = ed.IsExported ? Modifier.Public : Modifier.None;
+            types.Add(new TypeDeclaration(ed.Name, TypeKind.Enum, modifiers,
+                [], [], [], [], [], ed.Members, ed.Line));
         }
 
-        // Map predicates → MethodDeclaration (return type = bool)
-        foreach (var pd in script.Predicates)
+        foreach (var fn in module.Declarations.OfType<FunctionDecl>())
         {
-            var modifiers = pd.IsExported ? Modifier.Public : Modifier.None;
-            var param = new ParameterDeclaration(
-                pd.ParameterType.ToLowerInvariant(), MakeTypeRef(pd.ParameterType), false, false, false, pd.Line);
-            var retType = new TypeReference("bool", null, [], "bool");
-
-            statements.Add(new StatementInfo("declaration", ["predicate"],
-                pd.ParameterType, pd.Name, [], pd.Line, false));
-        }
-
-        // Map functions → MethodDeclaration
-        foreach (var fn in script.Functions)
-        {
-            var modifiers = fn.IsExported ? Modifier.Public : Modifier.None;
-            var retType = MakeTypeRef(fn.ReturnType);
-            var parameters = fn.Parameters.Select(p =>
-                new ParameterDeclaration(p.Name, MakeTypeRef(p.TypeName), false, false, false, fn.Line)).ToList();
-            // Add the implicit input parameter
-            parameters.Insert(0, new ParameterDeclaration(
-                fn.InputType.ToLowerInvariant(), MakeTypeRef(fn.InputType), false, false, false, fn.Line));
-
-            var keywords = new List<string> { "function" };
-            if (fn.IsIntrinsic) keywords.Add("intrinsic");
-
-            statements.Add(new StatementInfo("declaration", keywords,
-                fn.ReturnType, fn.Name, [], fn.Line, false));
+            var keywords = new List<string> { fn.IsPredicate ? "predicate" : "function" };
+            if (fn.Body is IntrinsicBody) keywords.Add("intrinsic");
+            statements.Add(new StatementInfo(fn.IsCommand ? "command" : "declaration", keywords,
+                fn.IsPredicate ? fn.Params.FirstOrDefault()?.Type?.Name : fn.ReturnType?.Name,
+                fn.Name, [], fn.Line, false));
         }
 
         // Map import statements
-        foreach (var imp in script.Imports)
+        foreach (var imp in module.Declarations.OfType<ImportDecl>())
         {
-            statements.Add(new StatementInfo("import", [], null, imp, [], 0, false));
+            statements.Add(new StatementInfo("import", [], null, imp.ModuleName, [], imp.Line, false));
         }
 
         // Map let declarations
-        foreach (var let in script.LetDeclarations)
+        foreach (var let in module.Declarations.OfType<LetDecl>())
         {
             var keywords = new List<string> { "let" };
             if (let.IsExported) keywords.Add("export");
@@ -113,17 +86,62 @@ public class CopSourceParser : ISourceParser
         }
 
         // Map commands → statements
-        foreach (var cmd in script.Commands)
+        foreach (var cmd in module.Declarations.OfType<CommandDecl>())
         {
             statements.Add(new StatementInfo("command", [],
                 null, cmd.Name, [], cmd.Line, false));
         }
+
+        new ExpressionCollector(statements).Visit(module);
 
         return new SourceFile(filePath, "cop", types, statements, sourceText)
         {
             Usings = usings
         };
     }
+
+    private sealed class ExpressionCollector(List<StatementInfo> statements) : AstWalker
+    {
+        public override object? VisitCallExpr(Cop.Lang.Ast.CallExpr node)
+        {
+            var target = ConvertExpression(node.Callee);
+            statements.Add(new StatementInfo("call", [],
+                target.Target?.Name, target.Name, [], node.Line, false)
+            {
+                CallTarget = target,
+                ArgumentExpressions = node.Args.Select(ConvertExpression).ToList()
+            });
+            return base.VisitCallExpr(node);
+        }
+
+        public override object? VisitFunctionDecl(FunctionDecl node)
+        {
+            if (node.Body is BlockBody block)
+                foreach (var statement in block.Statements) Visit(statement);
+            return base.VisitFunctionDecl(node);
+        }
+
+        protected override object? DefaultVisit(AstNode node)
+        {
+            if (node is PropertyDecl { ComputedExpr: not null } property)
+                Visit(property.ComputedExpr);
+            else if (node is ForEachExpr loop)
+                Visit(loop.Loop);
+            return null;
+        }
+    }
+
+    private static ExpressionInfo ConvertExpression(Cop.Lang.Ast.Expression expression) => expression switch
+    {
+        Cop.Lang.Ast.IdentifierExpr id => new("identifier") { Name = id.Name },
+        Cop.Lang.Ast.LiteralExpr { Value: string value } => new("stringLiteral") { StringValue = value },
+        MemberExpr member => new("memberAccess") { Name = member.Member, Target = ConvertExpression(member.Object) },
+        Cop.Lang.Ast.CallExpr call => new("invocation")
+        {
+            Target = ConvertExpression(call.Callee), Children = call.Args.Select(ConvertExpression).ToList()
+        },
+        _ => new("other")
+    };
 
     private static TypeReference MakeTypeRef(string typeName, bool isCollection = false)
     {

@@ -102,6 +102,15 @@ public class SourceCacheSerializerTests
             Assert.That(childCall.TypeName, Is.EqualTo("logger"));
             Assert.That(childCall.MemberName, Is.EqualTo("Log"));
             Assert.That(childCall.Arguments, Is.EqualTo(new[] { "items" }));
+            Assert.That(childCall.CallTarget?.Kind, Is.EqualTo("memberAccess"));
+            Assert.That(childCall.CallTarget?.Name, Is.EqualTo("Log"));
+            Assert.That(childCall.CallTarget?.Target?.Kind, Is.EqualTo("identifier"));
+            Assert.That(childCall.CallTarget?.Target?.Name, Is.EqualTo("logger"));
+            Assert.That(childCall.ArgumentExpressions, Has.Count.EqualTo(1));
+            Assert.That(childCall.ArgumentExpressions[0].Kind, Is.EqualTo("invocation"));
+            Assert.That(childCall.ArgumentExpressions[0].Target?.Name, Is.EqualTo("format"));
+            Assert.That(childCall.ArgumentExpressions[0].Children, Has.Count.EqualTo(1));
+            Assert.That(childCall.ArgumentExpressions[0].Children[0].StringValue, Is.EqualTo("decoded\nvalue"));
             Assert.That(childCall.Expression, Is.EqualTo("logger.Log(items)"));
             Assert.That(childCall.Method, Is.Null);
             Assert.That(childCall.Parent, Is.Null);
@@ -204,6 +213,18 @@ public class SourceCacheSerializerTests
         {
             Method = method,
             Parent = ifStatement,
+            CallTarget = new("memberAccess")
+            {
+                Name = "Log", Target = new("identifier") { Name = "logger" }
+            },
+            ArgumentExpressions =
+            [
+                new("invocation")
+                {
+                    Target = new("identifier") { Name = "format" },
+                    Children = [new("stringLiteral") { StringValue = "decoded\nvalue" }]
+                }
+            ],
             Expression = "logger.Log(items)",
             CopIgnore = "ignore-rule"
         };

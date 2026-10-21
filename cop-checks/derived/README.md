@@ -2,6 +2,13 @@
 
 Run: `cop cop-checks/main.cop -t . -c DERIVED`
 
+All self-checks use parsed model facts, not regex or source-text parsing. Verify the whole
+suite with `cop verify cop-checks/ --strict-structure` (no text-check exceptions).
+Names, paths, imports, project settings, and decoded literal values can still be compared
+as strings. Calls use `CallTarget`/`ArgumentExpressions`; nullable directives use their
+parsed `Kind` and `Keywords`. The environment check exempts secrets only by the actual
+first string argument, never by a comment or unrelated text on the same line.
+
 ## Layering & general-purpose core
 | Rule | Description |
 |------|-------------|

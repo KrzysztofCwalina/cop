@@ -12,6 +12,8 @@ namespace Cop.Providers.SourceModel;
 /// </summary>
 public sealed class CSharpStatementInfo : StatementInfo
 {
+    internal int SyntaxStart { get; set; } = -1;
+
     public CSharpStatementInfo(
         string kind, List<string> keywords, string? typeName, string? memberName,
         List<string> arguments, int line, bool isInMethod)

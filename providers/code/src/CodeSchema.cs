@@ -89,6 +89,7 @@ public static class CodeSchema
                     Prop("Kind"), Coll("Keywords"),
                     Opt("TypeName"), Opt("MemberName"),
                     Coll("Arguments"), Prop("Line", "int"),
+                    Opt("CallTarget", "CodeExpression"), Coll("ArgumentExpressions", "CodeExpression"),
                     Bool("InMethod"), Bool("Rethrows"), Bool("Generic"), Bool("ErrorHandler"),
                     Bool("Braced"),
                     Opt("File", "File"), Prop("Source"),
@@ -96,6 +97,10 @@ public static class CodeSchema
                     Coll("Children", "Statement"), Coll("Ancestors", "Statement"),
                     Opt("Condition"), Opt("Expression"),
                     Coll("ConstructedTypeInterfaces")),
+
+                TypeDef("CodeExpression", null,
+                    Prop("Kind"), Opt("Name"), Opt("StringValue"),
+                    Opt("Target", "CodeExpression"), Coll("Children", "CodeExpression")),
 
                 TypeDef("Line", null,
                     Prop("Text"), Prop("Number", "int"), Prop("Kind"), Opt("File", "File"), Prop("Source"),

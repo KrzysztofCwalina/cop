@@ -14,6 +14,8 @@ public class StatementInfo(
     public string? TypeName { get; set; } = typeName;
     public string? MemberName { get; } = memberName;
     public List<string> Arguments { get; } = arguments;
+    public ExpressionInfo? CallTarget { get; init; }
+    public List<ExpressionInfo> ArgumentExpressions { get; init; } = [];
     public int Line { get; } = line;
     public bool IsInMethod { get; } = isInMethod;
     public SourceFile? File { get; set; }

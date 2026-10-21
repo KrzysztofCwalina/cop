@@ -1,8 +1,9 @@
 # Derived rule: nullable reference types must stay enabled — no `#nullable disable`.
-# Scoped to .cs files (the directive only appears in C#).
+# Uses active Roslyn directives and their parsed keywords, not comments or string literals.
 
-predicate ndInCs(Line) => Line.File.Path:endsWith('.cs')
-predicate ndIsDisable(Line) => Line.Text:contains('#nullable disable')
+predicate ndInCs(Statement) => Statement.File.Language == csharp
+predicate ndIsDisable(Statement) => Statement.Kind == directive
+    && Statement.Keywords:contains('nullable') && Statement.Keywords:contains('disable')
 
-export let derived-no-nullable-disable = codebase.Lines:ndInCs:ndIsDisable
-    :toError('Do not disable nullable reference types ({item.File.Path}:{item.Number})')
+export let derived-no-nullable-disable = codebase.Statements:ndInCs:ndIsDisable
+    :toError('Do not disable nullable reference types ({item.File.Path}:{item.Line})')
