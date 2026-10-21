@@ -80,6 +80,7 @@ Each package includes samples in its `samples/` directory showing real-world usa
 | [find-long-methods](../packages/code/samples/find-long-methods.cop) | Find methods with too many statements |
 | [list-all-public-classes](../packages/code/samples/list-all-public-classes.cop) | List all public classes |
 | [create-a-simple-check](../packages/code-analysis/samples/create-a-simple-check.cop) | Create a simple CHECK violation |
+| [check-nested-throws](../packages/core/code/samples/check-nested-throws.cop) | Query parsed catch blocks and their child throw statements without matching source text |
 | [compute-metrics](../packages/code-metrics/samples/compute-metrics.cop) | Compute aggregate slop metrics as JSON |
 | [exclude-generated](../packages/code-metrics/samples/exclude-generated.cop) | Compute metrics excluding generated code |
 | [custom-slop](../packages/code-metrics/samples/custom-slop.cop) | Customize slop rules and weights |
