@@ -8,7 +8,8 @@ export flags Modifier = Public | Private | Protected | Internal | Static | Seale
 
 # Extensible enums — known values for Kind properties. Providers may return additional values.
 export enum TypeKind = Class | Struct | Interface | Enum
-export enum StatementKind = call | declaration | import | command | attribute | throw | return | using | foreach | try | catch | if | else | while | for | switch | await
+export enum StatementKind = call | declaration | import | command | attribute | throw | return | using | foreach | try | catch | if | else | while | for | switch | await | directive
+export enum ExpressionKind = identifier | stringLiteral | memberAccess | invocation | other
 export enum ApiKind = class | struct | interface | enum | enumvalue | ctor | method | property | event | field
 export enum LineKind = code | comment | blank
 export enum Language = csharp | python | javascript | rust | go | java | cop | text
@@ -117,6 +118,8 @@ export type TypeReference = {
 
 ## Parsed statement: Kind, Keywords, TypeName, MemberName, Method, Parent, Children, Ancestors.
 ## Condition, Expression, Arguments, and Source are text, NOT structured expression trees.
+## C# and Cop calls expose CallTarget and ArgumentExpressions as parsed CodeExpression nodes.
+## C# nullable directives have Kind = directive and parsed Keywords (nullable, setting, target).
 ## If these facts cannot express a rule, ask the user before proposing a text-based check.
 export type Statement = {
     Kind : StatementKind,
@@ -124,6 +127,8 @@ export type Statement = {
     TypeName : string?,
     MemberName : string?,
     Arguments : [string],
+    CallTarget : CodeExpression?,
+    ArgumentExpressions : [CodeExpression],
     Line : int,
     InMethod : bool,
     Rethrows : bool,
@@ -140,6 +145,17 @@ export type Statement = {
     Expression : string?,
     CopIgnore : string,
     ConstructedTypeInterfaces : [string]
+}
+
+## Parsed expression facts supplied by the C# and Cop parsers. StringValue is the decoded
+## string literal value, not source text. Target is a member receiver or invocation callee;
+## Children are invocation arguments. Unsupported expression forms have Kind = other.
+export type CodeExpression = {
+    Kind : ExpressionKind,
+    Name : string?,
+    StringValue : string?,
+    Target : CodeExpression?,
+    Children : [CodeExpression]
 }
 
 export type Call = Statement & {

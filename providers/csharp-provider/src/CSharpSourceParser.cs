@@ -82,6 +82,21 @@ public class CSharpSourceParser : ISourceParser
             }
         }
 
+        AddNestedCalls(root, types, allStatements);
+        foreach (var trivia in root.DescendantTrivia(descendIntoTrivia: true))
+        {
+            if (trivia.GetStructure() is NullableDirectiveTriviaSyntax { IsActive: true } directive)
+            {
+                var keywords = new List<string> { "nullable", directive.SettingToken.ValueText };
+                if (!directive.TargetToken.IsKind(SyntaxKind.None))
+                    keywords.Add(directive.TargetToken.ValueText);
+                allStatements.Add(new CSharpStatementInfo("directive", keywords, null, null, [],
+                    LineOf(directive), false));
+            }
+        }
+        allStatements = allStatements.OrderBy(s => s.Line)
+            .ThenBy(s => (s as CSharpStatementInfo)?.SyntaxStart ?? -1).ToList();
+
         // Enrich with semantic information when model is available
         if (model != null)
         {
@@ -207,10 +222,11 @@ public class CSharpSourceParser : ISourceParser
                             {
                                 foreach (var stmt in stmts)
                                 {
-                                    if (stmt.Kind == "call" || stmt.Kind == "await")
+                                    if (stmt is CSharpStatementInfo cs
+                                        && cs.SyntaxStart == invocation.SpanStart
+                                        && (stmt.Kind == "call" || stmt.Kind == "await"))
                                     {
                                         stmt.TypeName = containingType;
-                                        break;
                                     }
                                 }
                             }
@@ -527,6 +543,7 @@ public class CSharpSourceParser : ISourceParser
     private static void ExtractStatement(StatementSyntax stmt, List<StatementInfo> results,
         bool isInMethod = true, MethodDeclaration? method = null, StatementInfo? parent = null)
     {
+        int first = results.Count;
         int line = LineOf(stmt);
         switch (stmt)
         {
@@ -740,6 +757,9 @@ public class CSharpSourceParser : ISourceParser
                 break;
             }
         }
+        for (int i = first; i < results.Count; i++)
+            if (results[i] is CSharpStatementInfo { SyntaxStart: < 0 } info)
+                info.SyntaxStart = stmt.SpanStart;
     }
 
     private static void ExtractExpressionStatement(ExpressionSyntax expr, List<StatementInfo> results,
@@ -762,9 +782,12 @@ public class CSharpSourceParser : ISourceParser
                 }
                 var args = invocation.ArgumentList.Arguments
                     .Select(a => a.ToString()).ToList();
-                var callInfo = new CSharpStatementInfo("call", [], typeName, memberName, args, line, isInMethod)
+                var callInfo = new CSharpStatementInfo("call", [], typeName, memberName, args, LineOf(invocation), isInMethod)
                 {
                     Method = method, Parent = parent,
+                    SyntaxStart = invocation.SpanStart,
+                    CallTarget = ExtractExpression(invocation.Expression),
+                    ArgumentExpressions = invocation.ArgumentList.Arguments.Select(a => ExtractExpression(a.Expression)).ToList(),
                     Expression = invocation.ToString()
                 };
                 results.Add(callInfo);
@@ -776,6 +799,7 @@ public class CSharpSourceParser : ISourceParser
                 var awaitInfo = new CSharpStatementInfo("await", [], awaitType, awaitMember, awaitArgs, line, isInMethod)
                 {
                     Method = method, Parent = parent,
+                    SyntaxStart = awaitExpr.Expression.SpanStart,
                     Expression = awaitExpr.Expression.ToString()
                 };
                 results.Add(awaitInfo);
@@ -793,11 +817,74 @@ public class CSharpSourceParser : ISourceParser
                 var ctorInfo = new CSharpStatementInfo("call", [], ctorType, null, args, line, isInMethod)
                 {
                     Method = method, Parent = parent,
+                    SyntaxStart = objCreate.SpanStart,
+                    ArgumentExpressions = objCreate.ArgumentList?.Arguments.Select(a => ExtractExpression(a.Expression)).ToList() ?? [],
                     Expression = objCreate.ToString()
                 };
                 results.Add(ctorInfo);
                 break;
             }
+        }
+    }
+
+    private static ExpressionInfo ExtractExpression(ExpressionSyntax expression) => expression switch
+    {
+        ParenthesizedExpressionSyntax p => ExtractExpression(p.Expression),
+        LiteralExpressionSyntax literal when literal.Token.Value is string value =>
+            new("stringLiteral") { StringValue = value },
+        IdentifierNameSyntax id => new("identifier") { Name = id.Identifier.ValueText },
+        GenericNameSyntax name => new("identifier") { Name = name.Identifier.ValueText },
+        MemberAccessExpressionSyntax member => new("memberAccess")
+        {
+            Name = member.Name.Identifier.ValueText, Target = ExtractExpression(member.Expression)
+        },
+        InvocationExpressionSyntax call => new("invocation")
+        {
+            Target = ExtractExpression(call.Expression),
+            Children = call.ArgumentList.Arguments.Select(a => ExtractExpression(a.Expression)).ToList()
+        },
+        _ => new("other")
+    };
+
+    private static void AddNestedCalls(CompilationUnitSyntax root, List<TypeDeclaration> types, List<StatementInfo> statements)
+    {
+        var byStart = statements.OfType<CSharpStatementInfo>()
+            .Where(s => s.SyntaxStart >= 0).GroupBy(s => s.SyntaxStart)
+            .ToDictionary(g => g.Key, g => g.OrderBy(s => s.Kind == "call" ? 0 : 1).First());
+        var methods = new Dictionary<int, MethodDeclaration>();
+        void AddMethods(TypeDeclaration type)
+        {
+            foreach (var method in type.Methods.Concat(type.Constructors))
+                methods.TryAdd(method.Line, method);
+            foreach (var nested in type.NestedTypes)
+                AddMethods(nested);
+        }
+        foreach (var type in types) AddMethods(type);
+
+        // Statement extraction already covers direct calls. Walk syntax to include calls in
+        // conditions, field initializers, arguments, and other nested expressions exactly once.
+        foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            if (byStart.TryGetValue(invocation.SpanStart, out var existing) && existing.Kind == "call")
+                continue;
+            var parent = invocation.Ancestors().Select(n => byStart.GetValueOrDefault(n.SpanStart))
+                .FirstOrDefault(s => s is not null);
+            var methodSyntax = invocation.Ancestors().OfType<BaseMethodDeclarationSyntax>().FirstOrDefault();
+            var method = methodSyntax is null ? null : methods.GetValueOrDefault(LineOf(methodSyntax));
+            var target = ExtractExpression(invocation.Expression);
+            var call = new CSharpStatementInfo("call", [], invocation.Expression is MemberAccessExpressionSyntax member
+                ? member.Expression.ToString() : null, target.Name,
+                invocation.ArgumentList.Arguments.Select(a => a.ToString()).ToList(), LineOf(invocation), method is not null)
+            {
+                SyntaxStart = invocation.SpanStart,
+                CallTarget = target,
+                ArgumentExpressions = invocation.ArgumentList.Arguments.Select(a => ExtractExpression(a.Expression)).ToList(),
+                Method = method, Parent = parent, Expression = invocation.ToString()
+            };
+            statements.Add(call);
+            byStart[invocation.SpanStart] = call;
+            if (parent is not null) parent._children.Add(call);
+            else method?.Statements.Add(call);
         }
     }
 
@@ -914,4 +1001,3 @@ public class CSharpSourceParser : ISourceParser
         return commentLines;
     }
 }
-

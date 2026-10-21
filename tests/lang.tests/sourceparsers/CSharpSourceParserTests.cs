@@ -9,6 +9,36 @@ public class CSharpSourceParserTests
     private readonly CSharpSourceParser _parser = new();
 
     [Test]
+    public void Parse_ArgumentFactsAndNestedCalls_AreDecodedAndNotDuplicated()
+    {
+        var file = _parser.Parse("Input.cs", """
+            class Example {
+                string field = Read("field");
+                void Run() {
+                    Outer(Read("nested"));
+                    if (Ready(Read("condition"))) Read("body");
+                    var value = Read(
+                        "\u0070rint");
+                    var decoy = "Read(\"not a call\")";
+                    // Read("not a call");
+                }
+            }
+            """)!;
+        var calls = file.Statements.Where(s => s.Kind == "call").ToArray();
+        Assert.That(calls.Select(c => c.MemberName),
+            Is.EqualTo(new[] { "Read", "Outer", "Read", "Ready", "Read", "Read", "Read" }));
+        var reads = calls.Where(c => c.MemberName == "Read").ToArray();
+        Assert.That(reads.Select(c => c.ArgumentExpressions[0].StringValue),
+            Is.EqualTo(new[] { "field", "nested", "condition", "body", "print" }));
+        Assert.That(reads.Select(c => c.Line), Is.EqualTo(new[] { 2, 4, 5, 5, 6 }));
+        Assert.That(reads.Select(c => c.Method?.Name),
+            Is.EqualTo(new string?[] { null, "Run", "Run", "Run", "Run" }));
+        Assert.That(reads[1].Parent?.MemberName, Is.EqualTo("Outer"));
+        Assert.That(calls.Single(c => c.MemberName == "Outer").ArgumentExpressions[0].Kind, Is.EqualTo("invocation"));
+        Assert.That(calls.Single(c => c.MemberName == "Outer").ArgumentExpressions[0].Target?.Name, Is.EqualTo("Read"));
+    }
+
+    [Test]
     public void Parse_GoodClient_ExtractsTypes()
     {
         var source = File.ReadAllText(SamplePath("GoodClient.cs"));

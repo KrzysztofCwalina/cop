@@ -10,7 +10,18 @@ providerEntry: Cop.Providers.CSharpProvider
 providerAssembly: csharp-provider.dll
 ---
 # C# Source Language Provider
-Parses C# source code files and provides Types, Statements, and Lines collections.
+Parses C# source code files and provides Types, Statements, Calls, and Lines collections.
+
+Calls include invocations nested in arguments, conditions, and initializers. `CallTarget`
+and `ArgumentExpressions` expose parsed `CodeExpression` nodes with `Kind`, `Name`, `Target`,
+and decoded literal `StringValue`, so checks never need to parse string-valued `Arguments`.
+Invocation expressions expose their arguments through `Children`; unsupported forms have
+`Kind == other`. `CallTarget` preserves the syntactic receiver even when semantic analysis
+resolves `TypeName` to its declaring type.
+
+Active `#nullable` directives appear in `Statements` with `Kind == directive` and parsed
+`Keywords`: `nullable`, `enable`/`disable`/`restore`, and optionally `warnings`/`annotations`.
+Comments, string literals, and inactive preprocessor branches do not produce directives.
 
 ---
 name: csharp-lister

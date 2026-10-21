@@ -6,23 +6,27 @@ import code
 import code
 import code
 
-# Approved built-in FFI names. The argument text includes the surrounding quotes.
+# Approved built-in FFI names, compared to the decoded first string argument.
 let approved-ffi-names = [
-    '"print"', '"debug"', '"save"', '"assert"', '"fail"', '"error"', '"read"',
-    '"pathMatches"', '"provider"', '"distinct"', '"take"', '"skip"', '"first"',
-    '"last"', '"text"', '"concat"', '"push"', '"enqueue"', '"pop"', '"elementAt"',
-    '"empty"', '"startsWith"', '"endsWith"', '"contains"', '"equals"', '"notEquals"',
-    '"matches"', '"length"', '"isSet"', '"isClear"'
+    'print', 'debug', 'save', 'assert', 'fail', 'error', 'read',
+    'pathMatches', 'provider', 'distinct', 'take', 'skip', 'first',
+    'last', 'text', 'concat', 'push', 'enqueue', 'pop', 'elementAt',
+    'empty', 'startsWith', 'endsWith', 'contains', 'equals', 'notEquals',
+    'matches', 'length', 'isSet', 'isClear'
 ]
 
 predicate isFfiRegister(Statement) =>
-    Statement.Kind:equals('call')
+    Statement.Kind == call
     && Statement.MemberName:equals('Register')
-    && Statement.TypeName:equals('ffi')
+    && Statement.CallTarget.Kind == memberAccess
+    && Statement.CallTarget.Target.Kind == identifier
+    && Statement.CallTarget.Target.Name:equals('ffi')
 
-predicate registersApprovedName(Statement) => Statement.Arguments:containsAny(approved-ffi-names)
+predicate registersApprovedName(Statement) => Statement.ArgumentExpressions.Count > 0
+    && Statement.ArgumentExpressions[0].Kind == stringLiteral
+    && Statement.ArgumentExpressions[0].StringValue:in(approved-ffi-names)
 
 predicate isUnapprovedFfi(Statement) => isFfiRegister && !registersApprovedName
 
-export let no-new-ffi = codebase.Statements:isUnapprovedFfi
+export let no-new-ffi = codebase.Calls:isUnapprovedFfi
     :toError('New runtime FFI registered without approval. The FFI surface must not grow — implement the capability as a .cop package, or get sign-off and add its name to approved-ffi-names.')

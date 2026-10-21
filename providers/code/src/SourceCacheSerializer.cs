@@ -7,7 +7,7 @@ namespace Cop.Providers;
 internal static class SourceCacheSerializer
 {
     private static readonly byte[] Magic = [(byte)'C', (byte)'O', (byte)'P', (byte)'C'];
-    private const int FormatVersion = 3;
+    private const int FormatVersion = 4;
 
     public static void Save(string cachePath, byte[] fingerprint, List<SourceFile> sourceFiles)
     {
@@ -218,6 +218,8 @@ internal static class SourceCacheSerializer
         WriteNullableString(writer, statement.Condition);
         WriteNullableString(writer, statement.Expression);
         writer.Write(statement.CopIgnore);
+        WriteExpression(writer, statement.CallTarget);
+        WriteList(writer, statement.ArgumentExpressions, WriteExpression);
         WriteList(writer, statement._children, WriteStatementInfo);
         WriteLanguageSubtype(writer, statement.LanguageTag, statement.LanguageFlags);
     }
@@ -240,10 +242,37 @@ internal static class SourceCacheSerializer
             Condition = ReadNullableString(reader),
             Expression = ReadNullableString(reader),
             CopIgnore = reader.ReadString(),
+            CallTarget = ReadExpression(reader),
+            ArgumentExpressions = ReadList(reader, r => ReadExpression(r)
+                ?? throw new InvalidDataException("Null argument expression."), "StatementInfo.ArgumentExpressions"),
             _children = ReadList(reader, ReadStatementInfo, "StatementInfo.Children")
         };
         var (tag, flags) = ReadLanguageSubtype(reader, "StatementInfo");
         return tag is not null ? StatementTypeRegistry.Reconstruct(tag, statement, flags) : statement;
+    }
+
+    private static void WriteExpression(BinaryWriter writer, ExpressionInfo? expression)
+    {
+        writer.Write(expression is not null);
+        if (expression is null) return;
+        writer.Write(expression.Kind);
+        WriteNullableString(writer, expression.Name);
+        WriteNullableString(writer, expression.StringValue);
+        WriteExpression(writer, expression.Target);
+        WriteList(writer, expression.Children, WriteExpression);
+    }
+
+    private static ExpressionInfo? ReadExpression(BinaryReader reader)
+    {
+        if (!reader.ReadBoolean()) return null;
+        return new ExpressionInfo(reader.ReadString())
+        {
+            Name = ReadNullableString(reader),
+            StringValue = ReadNullableString(reader),
+            Target = ReadExpression(reader),
+            Children = ReadList(reader, r => ReadExpression(r)
+                ?? throw new InvalidDataException("Null child expression."), "CodeExpression.Children")
+        };
     }
 
     /// <summary>Writes a language-specific subtype tag + flags (shared by Type/Method/Statement).</summary>
