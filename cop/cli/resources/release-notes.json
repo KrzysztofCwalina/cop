@@ -157,6 +157,15 @@
         "Filtering a collection by something that isn't a predicate (e.g. an enum value or a plain let) now fails loudly instead of silently returning nothing, so a typo can't make a check pass by accident.",
         "Hardened internal compiler diagnostics for reliability under concurrent runs."
       ]
+    },
+    {
+      "version": "2026.10.21.1",
+      "approved": true,
+      "features": [
+        "New `cop verify --strict-structure` rejects source-text approximations in structural checks, including aliases and helpers; explicitly approved text checks can use named `--allow-text-check` exceptions.",
+        "Agent instructions now require parsed code facts and user approval before writing any text-based check, with improved model discovery and semantic query examples.",
+        "`cop init --checks` now applies strict structural verification automatically."
+      ]
     }
   ]
 }
