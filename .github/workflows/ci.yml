@@ -42,16 +42,15 @@ jobs:
         shell: pwsh
         run: dotnet test tests/lang.tests/Lang.Tests.csproj -c Debug --logger "console;verbosity=normal"
 
-  # Informational, NON-blocking: runs the tests that pin documented-but-currently-broken
+  # Informational: runs the tests that pin documented-but-currently-broken
   # behavior (tagged [Category("PendingFix")] + [Explicit]). These are runnable specs for
-  # filed bugs; they fail until the bug is fixed, so this job never gates merges — it is the
-  # live "known broken behavior" ledger. When a fix lands, remove the [Explicit] tag so the
+  # filed bugs. Assertion failures are reported in the summary without a red check;
+  # build/runner failures still fail the job. When a fix lands, remove the [Explicit] tag so the
   # test moves into the blocking `test` job above and can never silently regress again.
   pending-fix-ledger:
     name: Known-bug ledger (non-blocking)
     runs-on: windows-latest
     needs: test
-    continue-on-error: true
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -65,7 +64,58 @@ jobs:
         shell: pwsh
         run: ./install/publish.ps1 -Runtimes win-x64
 
-      - name: Run PendingFix specs (expected red until fixed)
+      - name: Build known-bug tests
         shell: pwsh
+        run: dotnet build tests/Cop.Tests/Cop.Tests.csproj -c Debug
+
+      - name: Report PendingFix specs
+        shell: pwsh
+        # Only completed test failures are informational, not arbitrary nonzero exit codes.
         run: |
-          dotnet test tests/Cop.Tests/Cop.Tests.csproj -c Debug --filter "TestCategory=PendingFix" --logger "console;verbosity=normal"
+          $resultsDir = Join-Path $env:RUNNER_TEMP ("cop-pending-fix-" + [guid]::NewGuid().ToString('N'))
+          dotnet test tests/Cop.Tests/Cop.Tests.csproj -c Debug --no-build --no-restore --filter "TestCategory=PendingFix" --logger "console;verbosity=normal" --logger "trx;LogFileName=pending-fix.trx" --results-directory $resultsDir
+          $testExit = $LASTEXITCODE
+          if ($testExit -notin 0, 1) { throw "Known-bug test runner failed (exit $testExit)." }
+
+          $trxPath = Join-Path $resultsDir 'pending-fix.trx'
+          if (-not (Test-Path -LiteralPath $trxPath)) { throw 'Known-bug test runner produced no TRX report.' }
+          [xml]$report = Get-Content -LiteralPath $trxPath -Raw
+          $counters = $report.TestRun.ResultSummary.Counters
+          if ($null -eq $counters) { throw 'Known-bug TRX report has no counters.' }
+          $total = [int]$counters.total
+          $passed = [int]$counters.passed
+          $failed = [int]$counters.failed
+          $results = @($report.TestRun.Results.UnitTestResult)
+          $passedResults = @($results | Where-Object outcome -eq 'Passed')
+          $failedResults = @($results | Where-Object outcome -eq 'Failed')
+          if ($total -le 0 -or [int]$counters.executed -ne $total -or
+              $passed + $failed -ne $total -or $results.Count -ne $total -or
+              $passedResults.Count -ne $passed -or $failedResults.Count -ne $failed -or
+              [int]$counters.error -ne 0 -or [int]$counters.timeout -ne 0 -or
+              [int]$counters.aborted -ne 0 -or
+              @($report.TestRun.ResultSummary.RunInfos.RunInfo | Where-Object outcome -eq 'Error').Count -gt 0 -or
+              ($testExit -eq 0) -ne ($failed -eq 0)) {
+            throw "Known-bug test run did not complete normally (exit $testExit). See the TRX artifact."
+          }
+
+          $summary = @(
+            '## Known-bug ledger',
+            '',
+            "$total tests completed: $failed still failing, $passed passing.",
+            'Failures below are documented PendingFix specs, not failures of the required test suites.',
+            'Review passing specs and remove their Explicit/PendingFix tags once the fix is confirmed.',
+            ''
+          )
+          foreach ($result in $failedResults) { $summary += "- Still failing: $($result.testName)" }
+          foreach ($result in $passedResults) { $summary += "- Now passing: $($result.testName)" }
+          $summary | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+          Write-Host "Known-bug ledger: $failed documented failures, $passed passing specs. See the job summary and TRX artifact."
+          exit 0
+
+      - name: Upload known-bug test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: known-bug-test-results
+          path: ${{ runner.temp }}/cop-pending-fix-*/*.trx
+          if-no-files-found: ignore

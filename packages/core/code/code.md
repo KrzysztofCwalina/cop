@@ -14,6 +14,23 @@ Defines the type system for source code structural analysis. Import with `import
 Provides types for: Type, Method, Constructor, Parameter, TypeReference, Statement, Argument, Line, File.
 Provides collections for: Types, Statements, Lines, Files.
 
+## Author structural rules from parsed facts
+
+Start with `cop help code`, then `cop help <language>` for language-specific properties.
+Use `Types` and `Methods` for declarations and modifiers, `Calls` for invocations,
+`Statement.Parent`/`Children`/`Ancestors` for nesting, `Method.Parameters`/`ReturnType` for
+signatures, and `File.Usings`/`Project.References` for dependencies.
+
+Compare parsed names for naming rules. Do not infer code syntax from `Source`, `Line.Text`,
+`Condition`, `Expression`, string-valued `Arguments`, or implicit object-to-text conversions.
+This prohibition includes equality, substring checks, splitting, and helpers, not just regex.
+
+If the model lacks a required fact, explain the gap and **ask the user before writing any
+text-based check**. Without approval, report it as unsupported rather than approximating it.
+Verify with `cop verify cop-checks/ --strict-structure`; use `--allow-text-check <name>`
+only for a specific check the user has explicitly approved. Run the verified checks afterward.
+See `samples/check-nested-throws.cop` for a parent/child query without source-text matching.
+
 
 # code-analysis
 

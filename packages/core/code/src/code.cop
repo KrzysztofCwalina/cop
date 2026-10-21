@@ -13,6 +13,8 @@ export enum ApiKind = class | struct | interface | enum | enumvalue | ctor | met
 export enum LineKind = code | comment | blank
 export enum Language = csharp | python | javascript | rust | go | java | cop | text
 
+## Parsed type declaration: query Name, Kind, Modifiers, BaseTypes, Interfaces, and members.
+## Use Source only for diagnostic excerpts, never to rediscover declaration syntax.
 export type Type = {
     Name : string,
     Kind : TypeKind,
@@ -35,6 +37,8 @@ export type Type = {
     Events : [Event]
 }
 
+## Parsed method: query Modifiers, ReturnType, Parameters, Statements, and Decorators.
+## Use Statements and their Parent/Children relationships instead of searching Source.
 export type Method = {
     Name : string,
     Modifiers : int,
@@ -111,6 +115,9 @@ export type TypeReference = {
     Length : int
 }
 
+## Parsed statement: Kind, Keywords, TypeName, MemberName, Method, Parent, Children, Ancestors.
+## Condition, Expression, Arguments, and Source are text, NOT structured expression trees.
+## If these facts cannot express a rule, ask the user before proposing a text-based check.
 export type Statement = {
     Kind : StatementKind,
     Keywords : [string],
@@ -199,6 +206,8 @@ export predicate isControlFlow(Statement) => Statement.Kind == if || Statement.K
 # ErrorHandler predicates
 export predicate isGeneric(ErrorHandler) => ErrorHandler.Generic == true
 
+## Source lines for genuinely textual requirements, not a substitute for parsed code structure.
+## Text, PreviousText, NextText, and Source require user approval in structural check authoring.
 export type Line = {
     Text : string,
     Number : int,
@@ -246,6 +255,8 @@ export type Project = {
     Properties : [ProjectProperty]
 }
 
+## Unified parsed model: Types/Methods for declarations, Calls for invocations, Statements for
+## control flow and nesting, Files for imports, Projects for dependencies. Prefer these to Lines.
 export type Codebase = {
     Files : [File],
     Types : [Type],

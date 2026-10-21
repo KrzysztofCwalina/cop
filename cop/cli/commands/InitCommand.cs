@@ -605,6 +605,11 @@ public static class InitCommand
 
             If `cop-checks/` doesn't exist, tell the user they need to create cop check files first.
             Run `{{copCmd}} help language` for the full language reference if you need to write or fix cop rules.
+            For structural rules, use parsed facts; discover them with `{{copCmd}} help code`
+            and `{{copCmd}} help <language>`. Before writing ANY text-based check, explain its
+            limitations and ASK THE USER whether it is okay. No approval means do not write it.
+            Verify authored checks with `{{copCmd}} verify cop-checks/ --strict-structure`.
+            Use `--allow-text-check <name>` only for a specific check the user explicitly approved.
             """.Replace("            ", "");
     }
 
@@ -628,6 +633,11 @@ public static class InitCommand
 
             If `cop-checks/` doesn't exist, tell the user they need to create cop check files first.
             Run `{{copCmd}} help language` for the full language reference if you need to write or fix cop rules.
+            For structural rules, use parsed facts; discover them with `{{copCmd}} help code`
+            and `{{copCmd}} help <language>`. Before writing ANY text-based check, explain its
+            limitations and ASK THE USER whether it is okay. No approval means do not write it.
+            Verify authored checks with `{{copCmd}} verify cop-checks/ --strict-structure`.
+            Use `--allow-text-check <name>` only for a specific check the user explicitly approved.
             """.Replace("            ", "");
     }
 }

@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Core type definitions for source code structural analysis",
   "title": "Code Analysis Types",
+  "applyTo": "**/*.cop",
   "authors": "cop-team",
   "tags": [
     "types",

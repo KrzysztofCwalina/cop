@@ -17,12 +17,15 @@ public sealed class ModuleLoader
     private readonly List<(string Dir, string PackageName)> _providerPackages = [];
     private readonly List<(LetDecl Decl, string FilePath, Environment ModuleEnv)> _deferredLetBindings = [];
     private readonly List<ModuleNode> _loadedModules = [];
+    private readonly List<(ModuleNode Module, string FilePath, string Source)> _loadedFiles = [];
     private readonly Dictionary<string, List<ModuleNode>> _packageModules = new(StringComparer.Ordinal);
 
     public IReadOnlyList<string> Errors => _errors;
     public IReadOnlyList<CopDiagnostic> Diagnostics => _diagnostics;
     public IReadOnlyList<(string Dir, string PackageName)> ProviderPackages => _providerPackages;
     public IReadOnlyList<ModuleNode> LoadedModules => _loadedModules;
+    /// <summary>Imported modules with their source locations, for compiler diagnostics.</summary>
+    public IReadOnlyList<(ModuleNode Module, string FilePath, string Source)> LoadedFiles => _loadedFiles;
 
     /// <summary>Maps each imported package name to the modules it contributed (its <c>src/*.cop</c>),
     /// so tooling can offer namespace-qualified completions like <c>csharp.parse</c>.</summary>
@@ -72,7 +75,7 @@ public sealed class ModuleLoader
         var copFiles = Directory.GetFiles(srcDir, "*.cop");
         Array.Sort(copFiles, StringComparer.Ordinal);
 
-        var modules = new List<(ModuleNode Module, string Path)>();
+        var modules = new List<(ModuleNode Module, string Path, string Source)>();
         var allImports = new List<string>();
 
         foreach (var file in copFiles)
@@ -81,7 +84,7 @@ public sealed class ModuleLoader
             {
                 var source = File.ReadAllText(file);
                 var module = CopParser.Parse(source, file);
-                modules.Add((module, file));
+                modules.Add((module, file, source));
 
                 // Collect imports for transitive resolution
                 foreach (var decl in module.Declarations)
@@ -113,9 +116,10 @@ public sealed class ModuleLoader
             LoadPackage(import, evaluator);
 
         // Register exported declarations in the evaluator
-        foreach (var (module, path) in modules)
+        foreach (var (module, path, source) in modules)
         {
             _loadedModules.Add(module);
+            _loadedFiles.Add((module, path, source));
             RegisterExportedDeclarations(module, path, evaluator, packageName);
         }
 

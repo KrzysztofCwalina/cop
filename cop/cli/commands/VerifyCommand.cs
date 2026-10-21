@@ -25,17 +25,33 @@ public static class VerifyCommand
         {
             Description = "Emit diagnostics as JSON to stdout (for editors and tools)"
         };
+        var structuralOption = new Option<bool>("--strict-structure")
+        {
+            Description = "Reject raw-text dependencies in structural checks (including helpers and imports)"
+        };
+        var textCheckOption = new Option<string[]>("--allow-text-check")
+        {
+            Description = "User-approved text check binding or predicate (repeatable; requires --strict-structure)"
+        };
         var command = new Command("verify", "Verify program correctness without executing (syntax, imports, types, bindings)")
         {
             pathArg,
-            jsonOption
+            jsonOption,
+            structuralOption,
+            textCheckOption
         };
-        command.SetAction(parseResult => Execute(parseResult.GetValue(pathArg), parseResult.GetValue(jsonOption)));
+        command.SetAction(parseResult => Execute(parseResult.GetValue(pathArg), parseResult.GetValue(jsonOption),
+            parseResult.GetValue(structuralOption), parseResult.GetValue(textCheckOption)));
         return command;
     }
 
-    public static int Execute(string? path, bool json = false)
+    public static int Execute(string? path, bool json = false, bool strictStructure = false, string[]? allowTextChecks = null)
     {
+        if (!strictStructure && allowTextChecks is { Length: > 0 })
+        {
+            Console.Error.WriteLine("--allow-text-check requires --strict-structure.");
+            return 1;
+        }
         path ??= Directory.GetCurrentDirectory();
         path = Path.GetFullPath(path);
 
@@ -68,7 +84,7 @@ public static class VerifyCommand
         }
 
         Array.Sort(files, StringComparer.Ordinal);
-        var diagnostics = CollectDiagnostics(files, scriptsDir, File.ReadAllText);
+        var diagnostics = CollectDiagnostics(files, scriptsDir, File.ReadAllText, strictStructure, allowTextChecks);
 
         // Output
         int errorCount = diagnostics.Count(d => d.Severity == CopDiagnosticSeverity.Error);
@@ -109,7 +125,8 @@ public static class VerifyCommand
     /// so callers can substitute an in-memory editor buffer for a file on disk (used by the language
     /// server). This is the single analysis pipeline shared by `cop verify` and the language service.
     /// </summary>
-    internal static List<CopDiagnostic> CollectDiagnostics(string[] files, string scriptsDir, Func<string, string> readSource)
+    internal static List<CopDiagnostic> CollectDiagnostics(string[] files, string scriptsDir, Func<string, string> readSource,
+        bool strictStructure = false, string[]? allowTextChecks = null)
     {
         var diagnostics = new List<CopDiagnostic>();
 
@@ -252,6 +269,9 @@ public static class VerifyCommand
             if (Cop.Core.CopDiagnostics.Level >= 1)
                 Console.Error.WriteLine($"[diag] type checker skipped: {ex.Message}");
         }
+
+        if (strictStructure)
+            diagnostics.AddRange(StructuralCheckPolicy.Check(modules, moduleLoader.LoadedFiles, allowTextChecks ?? []));
 
         return diagnostics;
     }

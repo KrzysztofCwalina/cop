@@ -81,8 +81,8 @@ public static class ChecksCommand
             return 1;
         }
 
-        Console.WriteLine("Verifying generated checks: cop verify cop-checks/");
-        int verifyExit = VerifyCommand.Execute(checksDir);
+        Console.WriteLine("Verifying generated checks: cop verify cop-checks/ --strict-structure");
+        int verifyExit = VerifyCommand.Execute(checksDir, strictStructure: true);
         if (verifyExit != 0)
         {
             Console.Error.WriteLine();
@@ -172,7 +172,7 @@ public static class ChecksCommand
             GOAL
             Convert this repository's project coding guidelines into deterministic, STATIC cop
             checks under a `cop-checks/` directory at the repo root. When you are finished,
-            `cop verify cop-checks/` MUST pass cleanly.
+            `cop verify cop-checks/ --strict-structure` MUST pass cleanly.
 
             SOURCE OF GUIDELINES
             Read `.github/copilot-instructions.md` (and `AGENTS.md` if present). Convert the
@@ -195,7 +195,7 @@ public static class ChecksCommand
               entire `cop help language` reference end-to-end; consult `cop help <package>` only
               for a specific field you actually need.
             - Do NOT exhaustively probe the model with throwaway scripts. Write the checks by
-              adapting the verified examples, then run `cop verify cop-checks/` and fix the real
+              adapting the verified examples, then run `cop verify cop-checks/ --strict-structure` and fix the real
               errors it reports. Writing-then-verifying beats probing.
             - Your priority is delivering verified `cop-checks/`, not exploration. Finish the task.
 
@@ -241,8 +241,16 @@ public static class ChecksCommand
             - STATIC, deterministic checks only, built from the codebase model.
             - NEVER use `ai.judge` or any AI/LLM-based check.
             - Skip guidelines that cannot be expressed as a static check (vague/subjective ones).
-            - Prefer semantic codebase elements (`codebase.Types`/`Statements`/`Calls`,
-              `Type.Name`, `Statement.TypeName`/`MemberName`, `File.Usings`) over raw text matching.
+            - MUST use parsed codebase elements (`codebase.Types`/`Methods`/`Statements`/`Calls`,
+              modifiers, names, and parent/child relationships) for structural requirements.
+            - NEVER infer syntax from raw source using regex, contains, equality, splitting,
+              or any other string operation. This includes Source, Text, Condition, Expression,
+              Arguments, and helpers that hide those reads.
+            - If a required fact is missing, explain the capability gap. ASK THE USER for approval
+              before writing ANY text-based check. No approval means leave it unimplemented
+              and report why; do not invent an approximation or disable strict verification.
+            - This non-interactive generation cannot obtain approval: report text-only candidates
+              as skipped so the user can decide separately.
 
             SYNTAX GOTCHAS (do not waste time rediscovering these)
             - Strings use SINGLE quotes only. Verbatim `@'...'` strings are NOT supported.
@@ -259,14 +267,14 @@ public static class ChecksCommand
             ITERATE UNTIL IT COMPILES *AND RUNS*
             `cop verify` only checks syntax/types — it does NOT catch runtime failures. After
             writing the files you MUST do BOTH:
-              1. Run `cop verify cop-checks/` and fix every error until it is clean.
+              1. Run `cop verify cop-checks/ --strict-structure` and fix every error until it is clean.
               2. Run `cop cop-checks/main.cop -t .` and confirm it RUNS without a fatal/runtime
                  error. Printing violations is fine and expected; a crash or "fatal error" is
                  NOT. Fix until it runs cleanly.
             A check that verifies but crashes when run is NOT done.
 
             DELIVERABLE
-            A clean `cop-checks/` that `cop verify cop-checks/` accepts (and nothing stray left in
+            A clean `cop-checks/` that `cop verify cop-checks/ --strict-structure` accepts (and nothing stray left in
             the repo), then print a short summary of which guidelines became checks and which you
             skipped (and why).
             """;

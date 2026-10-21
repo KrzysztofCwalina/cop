@@ -320,6 +320,19 @@ public static class HelpCommand
             }
         }
 
+        if (packageName == "code" || narrowPredicate is not null)
+        {
+            ConsoleMarkdown.WriteHeader("Structural check authoring");
+            Console.WriteLine("  Use parsed Types/Methods, Calls, modifiers, names, and Parent/Children/Ancestors.");
+            Console.WriteLine("  Run 'cop help code' for the common model; use language-specific fields only when needed.");
+            Console.WriteLine("  Never reconstruct syntax from Source/Text, Condition/Expression, or string Arguments.");
+            Console.WriteLine("  This applies to equality, substring checks, splitting, implicit text conversion, and regex.");
+            Console.WriteLine("  If a fact is missing, explain the gap and ASK THE USER before writing any text-based check.");
+            Console.WriteLine("  Verify: cop verify cop-checks/ --strict-structure");
+            Console.WriteLine("  Only after user approval: add --allow-text-check <approved-name>.");
+            Console.WriteLine();
+        }
+
         // Print samples first if available
         var samplesDir = Path.Combine(packageDir, "samples");
         if (Directory.Exists(samplesDir))
