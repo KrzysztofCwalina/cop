@@ -76,10 +76,15 @@ internal static class CliHelp
             new[] { "cop test", "cop test tests/" }),
 
         ["verify"] = new(
-            "cop verify [<path>]",
+            "cop verify [<path>] [--strict-structure]",
             "verify program correctness without running it: syntax, imports, types, and name bindings. with no path, scans the current directory.",
-            Array.Empty<(string, string)>(),
-            new[] { "cop verify", "cop verify cop-checks/" }),
+            new[]
+            {
+                ("--json", "emit structured diagnostics as json"),
+                ("--strict-structure", "reject raw-text dependencies in structural checks"),
+                ("--allow-text-check <name>", "allow one user-approved text check (repeatable; requires strict mode)"),
+            },
+            new[] { "cop verify", "cop verify cop-checks/ --strict-structure" }),
 
         ["syntax"] = new(
             "cop syntax [<path>]",

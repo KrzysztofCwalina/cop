@@ -87,6 +87,9 @@ public class ChecksCommandTests
         Assert.That(prompt, Does.Contain("WORKED EXAMPLES"));
         Assert.That(prompt, Does.Contain("BE EFFICIENT"));
         Assert.That(prompt, Does.Contain("{item.Name}"));
+        Assert.That(prompt, Does.Contain("--strict-structure"));
+        Assert.That(prompt, Does.Contain("ASK THE USER"));
+        Assert.That(prompt, Does.Contain("No approval means"));
     }
 
     // ── Execute guards ───────────────────────────────────────────────
@@ -173,5 +176,37 @@ public class ChecksCommandTests
             Assert.That(File.Exists(Path.Combine(cwd, "cop-checks", "main.cop")), Is.True);
         }
         finally { Directory.Delete(cwd, recursive: true); }
+    }
+
+    [Test]
+    public void Execute_AgentWritesTextBasedCheck_RejectsBeforeRunning()
+    {
+        var cwd = NewTempDir();
+        var original = Console.Out;
+        try
+        {
+            WriteInstructions(cwd);
+            using var output = new StringWriter();
+            Console.SetOut(output);
+            int rc = ChecksCommand.Execute(false, cwd, psi =>
+            {
+                var checks = Path.Combine(psi.WorkingDirectory, "cop-checks");
+                Directory.CreateDirectory(checks);
+                File.WriteAllText(Path.Combine(checks, "main.cop"), """
+                    type Sample = { Source : string }
+                    predicate bad(Sample) => Sample.Source:contains('class')
+                    command MAIN = print('must not run')
+                    """);
+                return 0;
+            });
+            Assert.That(rc, Is.EqualTo(1));
+            Assert.That(output.ToString(), Does.Contain("--strict-structure"));
+            Assert.That(output.ToString(), Does.Not.Contain("Running generated checks"));
+        }
+        finally
+        {
+            Console.SetOut(original);
+            Directory.Delete(cwd, recursive: true);
+        }
     }
 }

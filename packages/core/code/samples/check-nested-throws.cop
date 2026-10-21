@@ -1,0 +1,14 @@
+import code
+import csharp
+
+let cb = codebase(csharp.parse())
+
+# Query the parsed catch block and its children, not source text.
+predicate isThrow(Statement) => Statement.Kind == throw
+predicate isCatchWithThrow(Statement) =>
+    Statement.Kind == catch && Statement.Children:any(isThrow)
+
+let throw-violations = cb.Statements:isCatchWithThrow
+    :toWarning('Catch block contains a throw statement')
+
+command MAIN = CHECK(throw-violations)

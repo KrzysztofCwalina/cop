@@ -445,16 +445,65 @@ Verify `.cop` program correctness without executing. It runs several static pass
 5. **Static type checking** — function-call arguments are checked against the callee's declared signature, accounting for subtyping and trait conformance. This catches mismatches before runtime — for example anchoring `toError` on a value that is not a `TextFilePosition` (such as a `File`, or a collection). It is conservative: only confident, concrete mismatches are reported, so values whose type can't be inferred are never flagged.
 
 ```bash
-cop verify [<path>]
+cop verify [<path>] [--json] [--strict-structure]
 ```
 
 | Argument | Description |
 |----------|-------------|
 | `<path>` | `.cop` file or directory to verify. When omitted, verifies all `.cop` files in the current directory. |
+| `--json` | Emit structured diagnostics to stdout. |
+| `--strict-structure` | Reject raw-text reads in structural checks, including aliases and reachable local/imported helpers. |
+| `--allow-text-check <name>` | Explicit exception for one user-approved local check binding or predicate. Repeat for additional approved names. Requires `--strict-structure`; unknown names and wildcards are errors. |
 
 ```bash
 cop verify checks.cop
 cop verify cop-checks/
+cop verify cop-checks/ --strict-structure
+```
+
+### Structural check authoring
+
+Structural requirements must query parsed facts: declarations in `Types`/`Methods`,
+invocations in `Calls`, modifiers, names, imports, and `Parent`/`Children`/`Ancestors`
+relationships. Discover these with `cop help code`, then `cop help <language>` for
+language-specific fields. String comparisons on parsed names are legitimate; reconstructing
+syntax from source text is not, regardless of whether it uses regex, equality, `contains`,
+or other string operations.
+
+Strict mode is an opt-in, conservative authoring gate. It rejects reads of `Source`, `Text`,
+`PreviousText`, `NextText`, `Content`, `ContentHash`, `Condition`, `Expression`, `Arguments`,
+`Signature`, `ApiAsText`, `DefaultValue`, `Documentation`, and diagnostic `Message` outside
+presentation contexts, plus `read()`, implicit source-object text conversions, unresolved
+text conversions, and dynamic object field lookups/indexing. Add explicit semantic type
+annotations when a conversion's input cannot be inferred. This includes
+unused local declarations and reachable imported helpers, but not unused imported checks.
+These field names are conservatively reserved even on custom objects. Semantic fields such
+as `Name`, `TypeName`, `MemberName`, `Keywords`, `Modifiers`, and `File.Usings` remain available.
+
+Source excerpts are allowed directly in violation messages (`toError`, `toWarning`, `toInfo`,
+`toViolation`) and the `Message`/`Source` fields of `Violation` objects. A raw-text alias
+declared outside a message is still rejected, even if later used only for display. Existing
+programs retain their behavior without `--strict-structure`. This policy is not a security
+sandbox or a proof that an arbitrary external provider implements semantic analysis.
+
+If a required fact is missing, the agent must explain the gap. **Before writing any
+text-based check, it must ask the user whether that is okay**, including the proposed
+approximation's limitations. Without approval, leave that check unimplemented and report
+why. After explicit approval for a named check:
+
+```bash
+cop verify cop-checks/ --strict-structure --allow-text-check approved-check
+```
+
+An exception follows that check's dependencies; it does not exempt other callers of shared
+helpers. The verifier accepts the supplied exception, not proof of user consent: agents must never
+grant themselves approval. `cop init --checks` uses strict verification automatically and,
+because its agent runs non-interactively, reports text-only candidates as skipped.
+
+Use strict verification as a gate before running checks:
+
+```bash
+cop verify cop-checks/ --strict-structure && cop cop-checks/main.cop -t .
 ```
 
 > `cop verify` checks correctness statically; it does not execute the program. Some failures (e.g. a value's runtime shape) can only surface when the checks are run — see `cop init --checks`, whose final gate runs the generated checks, not just verifies them.

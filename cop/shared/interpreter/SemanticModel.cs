@@ -85,6 +85,10 @@ public sealed class SemanticModel
         return _checker.InferWithLocals(let.Value, locals);
     }
 
+    /// <summary>Infers a parsed expression without reparsing source text.</summary>
+    public TypeInfo? InferExpressionType(Expression expression, IReadOnlyDictionary<string, TypeInfo>? locals = null)
+        => _checker.InferWithLocals(expression, locals);
+
     /// <summary>True if <paramref name="name"/> is a top-level <c>let</c> binding in the program.</summary>
     public bool IsLet(string name) { _checker.TopLevelLet(name, out var found); return found; }
 
