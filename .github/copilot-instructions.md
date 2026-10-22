@@ -46,7 +46,7 @@ This validates that Linux/macOS zip archives have the correct ZIP "version made 
 
 So the first release on 2026-06-18 is `2026.6.18.1`; a second release that same day is `2026.6.18.2`. **Never** keep a stale date and only bump `N` (e.g. do NOT ship `2026.6.16.6` on June 18) — always set `Y.M.D` to today's date first. Check today's date before bumping.
 
-**Cutting a release** (always from a clean `master`, after tests pass):
+**Cutting a release** (always from a clean `main`, after tests pass):
 
 ```bash
 # 1. Set cop/cli/cop.csproj <Version> to today's date, e.g. 2026.6.18.1

@@ -94,6 +94,6 @@ This shifts the competitive narrative from "which agent writes code fastest" to 
 
 A working prototype demonstrating the core static analysis engine and DSL is available:
 
-🔗 [Agent Cop Prototype](https://github.com/KrzysztofCwalina/cop/blob/master/docs/static-analysis-with-cop.md)
+🔗 [Agent Cop Prototype](https://github.com/KrzysztofCwalina/cop/blob/main/docs/static-analysis-with-cop.md)
 
 The prototype already supports multi-language analysis (C#, Python, JavaScript, Rust, Go, Java), built-in check packages, custom rule authoring via DSL, and CI integration with standard exit codes.
