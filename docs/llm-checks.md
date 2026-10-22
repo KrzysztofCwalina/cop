@@ -49,7 +49,17 @@ predicate isCoreType(Type) => Type.File.Path:startsWith('src/core/')
 let core-types = codebase.Types:isCoreType
 
 let architecture-violations = ai.judge(
-    'Review this inventory of types in a general-purpose core library. Flag only types whose clear purpose is application-specific business logic, such as order fulfillment or invoice processing. Parsing, collections, diagnostics, and runtime infrastructure are allowed. Judge only the supplied names and paths; do not invent implementation details. For each finding, use the path in brackets as file, line 1, and a message naming the type and the conflicting responsibility. If the inventory provides insufficient evidence, do not report a violation.',
+    'Review this inventory of types in a general-purpose core library. ' +
+    'Flag only types whose clear purpose is application-specific business ' +
+    'logic, such as order fulfillment or invoice processing. ' +
+    'Parsing, collections, diagnostics, ' +
+    'and runtime infrastructure are allowed. ' +
+    'Judge only the supplied names and paths; ' +
+    'do not invent implementation details. ' +
+    'For each finding, use the path in brackets as file, line 1, ' +
+    'and a message naming the type and the conflicting responsibility. ' +
+    'If the inventory provides insufficient evidence, ' +
+    'do not report a violation.',
     core-types)
 ```
 
@@ -132,7 +142,12 @@ import ai
 import code
 
 let violations = ai.judge(
-    'Review invoice_service.py. Flag a function that claims to compute an invoice total but always returns zero. Use file invoice_service.py and the actual line number in the supplied source. Return no findings if there is no such function.',
+    'Review invoice_service.py. ' +
+    'Flag a function that claims to compute an invoice total ' +
+    'but always returns zero. ' +
+    'Use file invoice_service.py and the actual line number ' +
+    'in the supplied source. ' +
+    'Return no findings if there is no such function.',
     'def invoice_total(subtotal): return 0')
 
 command MAIN = CHECK(violations)
