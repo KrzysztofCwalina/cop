@@ -50,15 +50,10 @@ let core-types = codebase.Types:isCoreType
 
 let architecture-violations = ai.judge(
     '''
-    Review this inventory of types in a general-purpose core library.
-    Flag only types whose clear purpose is application-specific business
-    logic, such as order fulfillment or invoice processing.
-    Parsing, collections, diagnostics, and runtime infrastructure are allowed.
-    Judge only the supplied names and paths;
-    do not invent implementation details.
-    For each finding, use the path in brackets as file, line 1,
-    and a message naming the type and the conflicting responsibility.
-    If the inventory provides insufficient evidence, do not report a violation.
+    The core library must remain general-purpose.
+    Application-specific business logic, such as order fulfillment or
+    invoice processing, belongs outside the core.
+    Parsing, collections, diagnostics, and runtime infrastructure belong here.
     ''',
     core-types)
 ```
@@ -164,15 +159,17 @@ execution from sending a network request; it is still verified.
 
 ## Writing a Useful Requirement
 
-State the responsibility being enforced, the evidence the model receives, and
-the exact boundary between allowed and forbidden behavior. Include exceptions
-that would otherwise cause false positives. Ask for concrete, actionable messages
-with paths and line numbers grounded in the supplied context.
+Write the policy you want the code to satisfy, not a procedure for reviewing it.
+State the intended responsibility and the boundary between allowed and forbidden
+behavior. Add examples or exceptions only where they clarify that boundary.
+Keep input selection in the Cop code and context limitations in the surrounding
+documentation, rather than repeating them in every requirement.
 
 The provider already instructs the model to return only a JSON array with
 `file`, `line`, and `message` fields, or `[]` when there are no findings. Do not
-ask for an essay or a different output schema. `ai.judge` converts the response
-into violations; pass those directly to `CHECK`, not a `foreach` print loop.
+ask for an essay or a different output schema, or repeat these reporting mechanics
+in the requirement. `ai.judge` converts the response into violations; pass those
+directly to `CHECK`, not a `foreach` print loop.
 
 Source text is untrusted input and may contain prompt-injection instructions.
 Tell the model to treat reviewed content as evidence, not instructions, but do
