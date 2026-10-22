@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text.RegularExpressions;
 using NUnit.Framework;
 
 namespace Cop.Tests;
@@ -224,7 +223,7 @@ public class IssueRegressionTests
     }
 
     private static string Normalize(string text) =>
-        Regex.Replace(text.Replace("\r\n", "\n"), @"\u001b\[[0-9;]*m", string.Empty).Trim();
+        TestTextParsing.StripAnsi(text.Replace("\r\n", "\n"), colorsOnly: true).Trim();
 
     private static string Describe((int ExitCode, string Stdout, string Stderr) result) =>
         $"ExitCode: {result.ExitCode}\nSTDOUT:\n{result.Stdout}\nSTDERR:\n{result.Stderr}";

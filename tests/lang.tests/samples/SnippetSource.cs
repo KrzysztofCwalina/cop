@@ -2,13 +2,16 @@ using System;
 
 namespace Samples;
 
+public class SnippetSample
+{
+    public void Create()
+    {
 #region Snippet:CreateBlobClient
 var client = new BlobClient("connection", "container", "blob");
 Console.WriteLine(client.Name);
 #endregion
+    }
 
-public class SnippetSample
-{
     #region Snippet:UploadBlob
     public void Upload()
     {

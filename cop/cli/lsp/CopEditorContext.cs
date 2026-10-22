@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Cop.Lang.Ast;
 using Cop.Lang.Interpreter;
 
@@ -12,9 +11,6 @@ namespace Cop.Cli.Lsp;
 /// </summary>
 internal static class CopEditorContext
 {
-    private static readonly Regex ItemChain =
-        new(@"([A-Za-z_][A-Za-z0-9_.:()'\-]*)\s*:\s*to(?:Error|Warning|Info|Violation)\s*\(", RegexOptions.Compiled);
-
     public static string[] SplitLines(string text) =>
         text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
 
@@ -29,6 +25,42 @@ internal static class CopEditorContext
     }
 
     public static bool IsWordChar(char c) => char.IsLetterOrDigit(c) || c == '_' || c == '-';
+
+    public static string? ChainBefore(string text, char delimiter)
+    {
+        var end = text.Length;
+        while (end > 0 && char.IsWhiteSpace(text[end - 1])) end--;
+        if (end == 0 || text[end - 1] != delimiter) return null;
+        end--;
+        while (end > 0 && char.IsWhiteSpace(text[end - 1])) end--;
+        var start = end;
+        while (start > 0 && IsChainChar(text[start - 1])) start--;
+        while (start < end && !IsIdentifierStart(text[start])) start++;
+        return start == end ? null : text[start..end];
+    }
+
+    private static bool IsIdentifierStart(char c) => char.IsAsciiLetter(c) || c == '_';
+
+    private static bool IsChainChar(char c) =>
+        IsIdentifierStart(c) || char.IsAsciiDigit(c) || c is '.' or ':' or '(' or ')' or '\'' or '-';
+
+    private static string? ViolationChain(string text)
+    {
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (text[i] != ':') continue;
+            int start = i + 1;
+            while (start < text.Length && char.IsWhiteSpace(text[start])) start++;
+            int end = start;
+            while (end < text.Length && char.IsAsciiLetter(text[end])) end++;
+            var name = text[start..end];
+            if (name is not ("toError" or "toWarning" or "toInfo" or "toViolation")) continue;
+            while (end < text.Length && char.IsWhiteSpace(text[end])) end++;
+            if (end < text.Length && text[end] == '(' && ChainBefore(text[..(i + 1)], ':') is { } chain)
+                return chain;
+        }
+        return null;
+    }
 
     /// <summary>Resolves the in-scope locals at <paramref name="line"/>: the enclosing predicate/function
     /// parameters plus the implicit <c>item</c> (from an enclosing <c>:toError(...)</c> chain).</summary>
@@ -45,9 +77,9 @@ internal static class CopEditorContext
 
         for (int i = line; i >= Math.Max(0, line - 6) && i < lines.Length; i--)
         {
-            var m = ItemChain.Match(lines[i]);
-            if (!m.Success) continue;
-            var chainType = model.InferExpressionType(m.Groups[1].Value, locals);
+            var chain = ViolationChain(lines[i]);
+            if (chain is null) continue;
+            var chainType = model.InferExpressionType(chain, locals);
             if (chainType is null) break;
             locals[Evaluator.ImplicitItemVariable] = chainType.Value.IsCollection
                 ? new TypeInfo(chainType.Value.Name, false)
