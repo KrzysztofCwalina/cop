@@ -1,8 +1,9 @@
 # How to Write LLM-Based Checks
 
 Use the `ai` package to review code against a natural-language requirement:
-`ai.judge(requirement, code)` returns a list of `Violation` objects that you report
-with `CHECK`.
+`ai.judge(requirement, codebase)` accepts a parsed `Codebase` and returns a list of
+`Violation` objects that you report with `CHECK`. State the policy you want to
+enforce; Cop supplies source and architectural context from that codebase.
 
 Prefer deterministic checks over parsed code facts for naming, dependencies,
 nesting, and other structural rules. Use an LLM when a rule needs judgment, such as
@@ -32,6 +33,8 @@ quotas, context limits, and pricing depend on the service.
 
 Never commit the real configuration or credentials. Only send code to an
 endpoint approved for that code's sensitivity and your organization's policies.
+To select a different configuration file, set `COP_AI_CONFIG` to its path. This
+is useful for CI and isolated tests without changing your personal configuration.
 
 ## 2. Create an Opt-In Check
 
@@ -44,10 +47,6 @@ For example, create `cop-checks/architecture.cop`:
 import ai
 import code
 
-predicate isCoreType(Type) => Type.File.Path:startsWith('src/core/')
-
-let core-types = codebase.Types:isCoreType
-
 let architecture-violations = ai.judge(
     '''
     The core library must remain general-purpose.
@@ -55,13 +54,13 @@ let architecture-violations = ai.judge(
     invoice processing, belongs outside the core.
     Parsing, collections, diagnostics, and runtime infrastructure belong here.
     ''',
-    core-types)
+    codebase)
 ```
 
 This is a partial snippet: it uses the shared `codebase` defined in `main.cop`.
-Adapt `src/core/` and the requirement to your repository. Confirm the filter
-selects the intended types before interpreting an empty result as success.
-This particular rule reviews a type inventory, not method implementations.
+The main program below scopes the codebase to `src/core/`; adapt that path and
+the requirement to your repository. You do not need to decide whether the rule
+should operate on types, files, or lines: the judge receives the parsed codebase.
 The prompt uses a triple-single-quoted multiline string (`'''...'''`).
 Cop removes the opening newline and the indentation set by the closing delimiter,
 so the prompt stays readable without string concatenation.
@@ -73,7 +72,7 @@ import ai
 import code
 import csharp
 
-let codebase = codebase(csharp.parse())
+let codebase = csharp.parse('src/core')
 
 command MAIN = CHECK([])
 command AI = CHECK(architecture-violations)
@@ -113,45 +112,89 @@ cop cop-checks\main.cop -t .
 Keep the AI command opt-in in CI as well. Supply credentials securely and obtain
 approval for network access and code disclosure before enabling it.
 
-## Choosing What to Send
+## Choosing the Codebase Scope
 
-The second argument to `ai.judge` can be a literal string or a collection.
-Although `cop help ai` displays a `string` parameter, the provider also accepts
-collections and summarizes their elements:
+Pass the result of a language's `parse()` function to review the selected target,
+or use `parse('path')` to review a specific directory. Combine parsed scopes with
+`codebase(...)`:
 
-| Input | Context sent to the model |
+```cop skip
+let application = code.codebase(csharp.parse('src'), csharp.parse('tools'))
+let violations = ai.judge('The application must not embed credentials.',
+    application)
+```
+
+The same composition supports different languages when their parsers return a
+`Codebase`. Currently, Python's `parse()` has a known return-shape problem
+([#60](https://github.com/KrzysztofCwalina/cop/issues/60)); the runnable examples
+here use C#.
+
+The provider builds a single JSON context containing the following evidence,
+when supplied by the language parsers:
+
+| Evidence | Context sent to the model |
 |---|---|
-| A string | The supplied text |
-| `codebase.Types` | Type names with file paths, not full declarations or method bodies |
-| `codebase.Lines` | Line text with available file paths and line numbers |
-| `codebase.Files` | File paths, not file contents |
+| Source | Full parsed source lines, with file paths and line numbers |
+| Files | Language, namespace, and imports |
+| Declarations | Types, inheritance, interfaces, methods, and parameter types |
+| Calls | Calling locations and referenced type/member names |
+| Projects | Project paths, references, packages, and target frameworks |
 
-Filter parsed collections before calling the model to limit exposure, request
-size, and irrelevant context. Do not assume a type or file collection includes
-its full source or recursively expands related objects. For implementation-level
-review, supply the relevant source text or a deliberately scoped line collection.
-Using lines as LLM context is different from reconstructing syntax with text
-matching for a deterministic structural rule.
+The model sees implementation code, not just type names or a list of filenames.
+Cop does not reread arbitrary paths from disk or follow cyclic model
+relationships. The context is limited to what the selected parsers return:
+unparsed files, excluded files, and external dependency source are not included.
 
-Here is a self-contained example of reviewing literal source text:
+Scope at the parser level to limit disclosure and request size. The provider
+does not silently truncate source. An empty codebase, or a file without source
+lines, produces an error violation instead of reporting a clean review.
+Paths are those returned by the parsers, typically relative to each parsed root.
+When combining scopes, use distinguishable file paths; conflicting source for
+the same path and line is rejected rather than merged into misleading context.
+
+For example, given `src/billing/Invoice.cs`:
+
+```csharp
+public class Invoice
+{
+    public decimal Total(decimal subtotal) => 0;
+}
+```
+
+Review the billing codebase against its intended behavior:
 
 ```cop norun
 import ai
 import code
+import csharp
+
+let billing = csharp.parse('src/billing')
 
 let violations = ai.judge(
     '''
     Invoice totals must reflect the supplied subtotal.
     Returning a constant zero instead of calculating the total is not allowed.
     ''',
-    'def invoice_total(subtotal): return 0')
+    billing)
 
 command MAIN = CHECK(violations)
 ```
 
 Unlike the opt-in multi-file suite above, this standalone demonstration calls the
-model through `MAIN`. Its `norun` annotation prevents automated documentation
-execution from sending a network request; it is still verified.
+model through `MAIN`. It requires the billing directory shown above. Its `norun`
+annotation prevents automated documentation execution from sending a network
+request; it is still verified.
+
+### Migrating Older Checks
+
+The second argument is now a `Codebase`, not a source string or an individual
+collection. Replace calls using `cb.Types`, `cb.Files`, or `cb.Lines` with `cb`.
+For literal source examples, put the source in a real file and parse its
+directory. Use `parse('path')` rather than filtering a type inventory to scope a
+review. The signature declares `Codebase`, and the provider rejects old argument
+shapes before making a model request. Static verification does not currently
+catch all incompatible intrinsic arguments
+([#61](https://github.com/KrzysztofCwalina/cop/issues/61)).
 
 ## Writing a Useful Requirement
 
@@ -168,9 +211,9 @@ in the requirement. `ai.judge` converts the response into violations; pass those
 directly to `CHECK`, not a `foreach` print loop.
 
 Source text is untrusted input and may contain prompt-injection instructions.
-Tell the model to treat reviewed content as evidence, not instructions, but do
-not treat that prompt as a security boundary. Review findings before acting on
-them; model output is not proof of correctness.
+The provider instructs the model to treat reviewed content as evidence, not
+instructions, but that prompt is not a security boundary. Review findings
+before acting on them; model output is not proof of correctness.
 
 ## Logging and Troubleshooting
 
@@ -200,8 +243,8 @@ repeatable results.
 Run the AI command against a small known violation and a closely related allowed
 example. Inspect both the selected context and the returned paths, line numbers,
 and messages. Repeat the runs to assess variability. A successful `cop verify`
-or an empty result alone is insufficient: an empty input or insufficient context
-can also produce no findings.
+or an empty result alone is insufficient: the wrong scope or an incorrect
+model judgment can also produce no findings.
 
 For ordinary automated tests, keep deterministic assertions on filtering and
 rule composition separate from live model evaluation. Run live evaluations only

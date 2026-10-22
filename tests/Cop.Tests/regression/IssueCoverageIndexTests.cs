@@ -71,17 +71,19 @@ public class IssueRegressionCoverageIndexTests
         new(53, CoverageKind.CoveredBy, "StructuralCheckPolicyTests"),
         new(54, CoverageKind.ImplementedHere, "SelfCheckStructureTests"),
         new(55, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue055_CodePackageSourceVerifiesWithoutSelfImportDuplicates (PendingFix)"),
+        new(60, CoverageKind.ImplementedHere, "PythonCodebaseRegressionTests.Issue060_PythonParseReturnsCodebase (PendingFix)"),
+        new(61, CoverageKind.ImplementedHere, "IntrinsicArgumentRegressionTests.Issue061_VerifyRejectsIncompatibleIntrinsicArguments (PendingFix)"),
     ];
 
     [Test]
-    public void Issues001Through055_AllHaveRegressionCoverageStatus()
+    public void TrackedIssues_AllHaveRegressionCoverageStatus()
     {
         var duplicates = Coverage.GroupBy(c => c.Issue).Where(g => g.Count() > 1).Select(g => g.Key).ToArray();
         Assert.That(duplicates, Is.Empty, "Each issue must appear exactly once in the regression coverage index.");
 
         var coveredIssues = Coverage.Select(c => c.Issue).OrderBy(i => i).ToArray();
-        Assert.That(coveredIssues, Is.EqualTo(Enumerable.Range(1, 55).ToArray()),
-            "Regression coverage index must cover every filed issue from #1 through #55 with no gaps.");
+        Assert.That(coveredIssues, Is.EqualTo(Enumerable.Range(1, 55).Concat([60, 61]).ToArray()),
+            "Regression coverage index must cover issues #1 through #55 and #60-#61 (#56-#59 are pull requests).");
 
         var untracked = Coverage.Where(c => string.IsNullOrWhiteSpace(c.Detail)).Select(c => c.Issue).ToArray();
         Assert.That(untracked, Is.Empty, "Every issue must be ImplementedHere, CoveredBy(suiteName), or OutOfScope(reason).");

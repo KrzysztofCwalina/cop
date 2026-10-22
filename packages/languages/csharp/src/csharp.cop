@@ -3,7 +3,8 @@ import code
 
 ## Parses C# source files in the target directory and returns a Codebase.
 ## Example: let cb = csharp.parse()
-export function parse() : Codebase => provider('csharp')
+export function parse() : Codebase =>
+    provider('csharp').toCodebase(provider('csharp', '.'))
 
 ## Parses C# source files in the specified directory and returns a Codebase.
 ## Example: let cb = csharp.parse('/path/to/project')

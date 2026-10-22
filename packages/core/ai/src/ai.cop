@@ -1,17 +1,18 @@
 # AI Judge Package
-# Reviews code against a natural-language requirement using an LLM.
+# Reviews a parsed codebase against a natural-language requirement using an LLM.
 #
 # Usage:
 #   import ai
 #   import code
-#   let violations = ai.judge('the requirement', codeToReview)
+#   import csharp
+#   let cb = csharp.parse()
+#   let violations = ai.judge('The core must remain general-purpose.', cb)
 #   command MAIN = CHECK(violations)
 #
-#   # code may also be a collection — e.g. judge an abstract rule over the codebase:
-#   import code
-#   let violations = ai.judge('the core must stay general-purpose ...', Types)
-#
-# ai.judge(requirement: string, code: string | collection) returns [Violation].
+# ai.judge(requirement: string, codebase: Codebase) returns [Violation].
+# Use parse('path') to scope the codebase, or codebase(...) to combine languages.
+# The provider supplies numbered source, file metadata, declarations, calls, and
+# project dependencies. Strings and individual collections are not accepted.
 #
 # Configuration: create ~/.cop/ai.json (an OpenAI-compatible chat-completions
 # endpoint). See ai.example.json for the format:
@@ -26,8 +27,10 @@
 #            (e.g. run `gh auth token`, or create a PAT at
 #             https://github.com/settings/tokens with Models access)
 #
-# ai.judge's second argument may be a literal code string OR a collection
-# (e.g. Types / Lines / Files); collections are summarized for the LLM.
+# The complete parsed source is sent to the configured endpoint, not just names.
+# Only use endpoints approved for the code being reviewed. Empty codebases or
+# files without source lines produce an error violation, not a successful review.
+# COP_AI_CONFIG can select another config file, for example for isolated CI tests.
 #
 # Transparency: pass --ai-log <path> to append a full
 # transcript of each agent↔judge interaction (the request the runtime sent and
@@ -37,9 +40,11 @@
 
 import code
 
-## Reviews `code` against a natural-language `requirement` using an LLM and returns a
-## list of Violations (empty if the code satisfies the requirement). `code` may be a
-## literal string or a collection (e.g. Types, Lines, Files), which is summarized for
-## the model. Requires ~/.cop/ai.json (see ai.example.json). Pass --ai-log <path>
-## to record the full agent↔judge interaction.
-export function judge(requirement : string, code : string) : [Violation] => intrinsic
+## Reviews a parsed `codebase` against a natural-language `requirement`.
+## Sends numbered source, file metadata, declarations, calls, and project
+## dependencies to an LLM and returns Violations (empty if the requirement is met).
+## Use language.parse('path') to scope input or codebase(...) to combine languages.
+## Requires ~/.cop/ai.json, or the config file selected by COP_AI_CONFIG.
+## Empty codebases and missing source produce error violations. Pass --ai-log <path>
+## to record the full interaction. Strings and individual collections are unsupported.
+export function judge(requirement : string, codebase : Codebase) : [Violation] => intrinsic

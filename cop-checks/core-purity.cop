@@ -6,21 +6,18 @@
 # rules, analyzers) is the job of cop PACKAGES such as code-analysis, and must
 # never be baked into the C# core.
 #
-# This is an LLM-based rule: it sends the core type inventory to ai.judge, which
-# flags any type whose PURPOSE is analyzing user source code. Unlike a static
-# rule, it can evaluate an abstract architectural requirement.
+# This LLM-based rule reviews the core's parsed source and architecture against
+# its intended responsibilities.
 #
 # Opt-in (makes a network call; needs ~/.cop/ai.json — see packages/core/ai):
 #   cop cop-checks/main.cop -t . -c ai
 
 import code
 import ai
-import code
+import csharp
 
-predicate isCoreType(Type) =>
-    Type.File.Path:contains('cop/shared/') || Type.File.Path:contains('cop/runtime/')
-
-let core-types = codebase.Types:isCoreType
+let core-codebase = code.codebase(
+    csharp.parse('cop/shared'), csharp.parse('cop/runtime'))
 
 export let core-purity-violations = ai.judge(
     '''
@@ -34,4 +31,4 @@ export let core-purity-violations = ai.judge(
     Compiler error severities and package-integrity violations are allowed;
     their purpose is not reviewing user source code.
     ''',
-    core-types)
+    core-codebase)

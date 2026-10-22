@@ -230,7 +230,7 @@ const categories = [
 const packages = {
   "ai": {
     "label": "ai",
-    "overview": "LLM-based code review — ai.judge(requirement, code) returns [Violation]",
+    "overview": "LLM-based codebase review — ai.judge(requirement, codebase) returns [Violation]",
     "samples": [],
     "collections": [],
     "types": {},
@@ -238,9 +238,9 @@ const packages = {
     "functions": [
       {
         "name": "judge",
-        "params": "requirement: string, code: string",
+        "params": "requirement: string, codebase: Codebase",
         "returns": "[Violation]",
-        "desc": "Reviews `code` against a natural-language `requirement` using an LLM and returns a\nlist of Violations (empty if the code satisfies the requirement). `code` may be a\nliteral string or a collection (e.g. Types, Lines, Files), which is summarized for\nthe model. Requires ~/.cop/ai.json (see ai.example.json). Pass --ai-log <path>\nto record the full agent↔judge interaction."
+        "desc": "Reviews a parsed `codebase` against a natural-language `requirement`.\nSends numbered source, file metadata, declarations, calls, and project\ndependencies to an LLM and returns Violations (empty if the requirement is met).\nUse language.parse('path') to scope input or codebase(...) to combine languages.\nRequires ~/.cop/ai.json, or the config file selected by COP_AI_CONFIG.\nEmpty codebases and missing source produce error violations. Pass --ai-log <path>\nto record the full interaction. Strings and individual collections are unsupported."
       }
     ],
     "checks": [],
