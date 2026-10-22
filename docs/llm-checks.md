@@ -5,11 +5,56 @@ Use the `ai` package to review code against a natural-language requirement:
 `Violation` objects that you report with `CHECK`. State the policy you want to
 enforce; Cop supplies source and architectural context from that codebase.
 
+**AI review is diff-first by default.** Cop sends changes in the selected
+codebase to the model, not the entire source tree. The model can look up
+unchanged source when it needs supporting context. You do not need to rewrite
+your checks or manually filter the parsed Codebase to use this behavior.
+
 Prefer deterministic checks over parsed code facts for naming, dependencies,
 nesting, and other structural rules. Use an LLM when a rule needs judgment, such as
 whether a component's purpose fits an architectural boundary. LLM checks require
 an explicitly configured service, can cost money, and are not deterministic.
 They should be an opt-in supplement, not a replacement for static checks.
+
+## Choose What to Review
+
+After configuring the endpoint and creating the `AI` command in the steps below,
+choose a review scope:
+
+```powershell
+# Default: current-branch changes.
+cop cop-checks\main.cop -t . -c ai
+
+# Branch changes with an explicit comparison base.
+cop cop-checks\main.cop -t . -c ai --scope branch --base origin/main
+
+# Exact pull-request changes.
+cop cop-checks\main.cop -t . -c ai --scope pr --pr 123
+
+# Opt into reviewing the entire supplied Codebase.
+cop cop-checks\main.cop -t . -c ai --scope full
+```
+
+The default, `--scope auto`, finds a reliable remote default-branch base and
+compares from the merge base. Branch review includes committed work plus staged,
+unstaged, and non-ignored untracked source. It is not limited to the latest
+commit or to uncommitted edits. If Cop cannot resolve the base locally, use
+`--base <ref>`; Cop errors rather than guessing or falling back to a full review.
+
+PR review requires a clean checkout at the exact PR head and uses the PR merge
+base. It does not include local edits. Full review requires the explicit
+`--scope full` opt-in and can send substantially more source to the model.
+
+The parsed Codebase still defines which source is eligible for review. In change
+mode, Cop reviews its intersection with the Git changes; unchanged source is
+supporting context, not additional review subjects. No applicable changes means
+no model requests and a logged skipped review, not a claim that the codebase is
+clean.
+
+These options do not enable AI checks by themselves: `-c ai` remains opt-in.
+For deterministic checks, full reporting remains the default; use
+[`--report-scope changes`](static-analysis.md#reporting-findings-in-changed-areas)
+to report only changed-area findings while retaining full semantic analysis.
 
 ## 1. Configure a Model Endpoint
 
@@ -105,26 +150,11 @@ cop verify cop-checks\
 cop cop-checks\main.cop -t . -c ai
 ```
 
-AI defaults to `--scope auto`: review current-branch changes using a reliable
-remote default-branch base. This includes committed, staged, unstaged and
-non-ignored untracked source, not just the latest commit. If Cop cannot resolve
-the base locally, pass one explicitly; it will not guess or send the whole
-codebase instead:
-
-```powershell
-cop cop-checks\main.cop -t . -c ai --scope branch --base origin/main
-cop cop-checks\main.cop -t . -c ai --scope pr --pr 123
-cop cop-checks\main.cop -t . -c ai --scope full
-```
-
-PR scope requires a clean checkout at the exact PR head and uses the PR merge
-base. `--scope full` explicitly opts into full review of the supplied parsed
-Codebase. No scope option selects AI commands for you: `-c ai` remains opt-in.
-The legacy `-om` execution gate is independent; if it skips execution, no review
+This runs a diff-first branch review by default. Use the
+[review scope options above](#choose-what-to-review) to select an explicit base,
+an exact PR, or a full-Codebase review.
+The `-om` execution gate is independent; if it skips execution, no review
 runs, regardless of scope. Do not use it as a substitute for comparison scope.
-An empty intersection between changes and the supplied Codebase makes zero
-model requests, even without AI configuration, and logs **no applicable changes**;
-that is a skipped review, not evidence that the codebase is clean.
 
 Verification checks syntax, imports, names, and types; it does **not** call the
 model or prove the rule works. The explicit `-c ai` selects the `AI` command.
@@ -243,22 +273,6 @@ Unlike the opt-in multi-file suite above, this standalone demonstration calls th
 model through `MAIN`. It requires the billing directory shown above. Its `norun`
 annotation prevents automated documentation execution from sending a network
 request; it is still verified.
-
-### Migrating Older Checks
-
-The second argument is now a `Codebase`, not a source string or an individual
-collection. Replace calls using `cb.Types`, `cb.Files`, or `cb.Lines` with `cb`.
-For literal source examples, put the source in a real file and parse its
-directory. Use `parse('path')` rather than filtering a type inventory to scope a
-review. The signature declares `Codebase`, and the provider rejects old argument
-shapes before making a model request. Static verification does not currently
-catch all incompatible intrinsic arguments
-([#61](https://github.com/KrzysztofCwalina/cop/issues/61)).
-This rejection applies to **all scopes**, including `--scope full`; full mode
-does not restore literal-string or individual-collection support. Direct library
-callers using the legacy parameterless provider `GetFunctions()` retain the
-full-Codebase compatibility behavior. Engine/CLI executions always bind the
-per-run scope context.
 
 ## Writing a Useful Requirement
 
