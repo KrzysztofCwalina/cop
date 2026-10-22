@@ -141,12 +141,8 @@ import code
 
 let violations = ai.judge(
     '''
-    Review invoice_service.py.
-    Flag a function that claims to compute an invoice total
-    but always returns zero.
-    Use file invoice_service.py and the actual line number
-    in the supplied source.
-    Return no findings if there is no such function.
+    Invoice totals must reflect the supplied subtotal.
+    Returning a constant zero instead of calculating the total is not allowed.
     ''',
     'def invoice_total(subtotal): return 0')
 
