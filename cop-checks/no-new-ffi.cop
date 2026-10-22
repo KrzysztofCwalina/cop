@@ -12,7 +12,7 @@ let approved-ffi-names = [
     'pathMatches', 'provider', 'distinct', 'take', 'skip', 'first',
     'last', 'text', 'concat', 'push', 'enqueue', 'pop', 'elementAt',
     'empty', 'startsWith', 'endsWith', 'contains', 'equals', 'notEquals',
-    'matches', 'length', 'isSet', 'isClear'
+    'matches', 'length', 'isSet', 'isClear', 'Get', 'containsKey'
 ]
 
 predicate isFfiRegister(Statement) =>
@@ -26,7 +26,16 @@ predicate registersApprovedName(Statement) => Statement.ArgumentExpressions.Coun
     && Statement.ArgumentExpressions[0].Kind == stringLiteral
     && Statement.ArgumentExpressions[0].StringValue:in(approved-ffi-names)
 
-predicate isUnapprovedFfi(Statement) => isFfiRegister && !registersApprovedName
+# Only the FFI invocation test needs to register its own non-built-in callback.
+predicate isFfiInvocationTest(Statement) =>
+    Statement.File.Path == 'tests/lang.tests/lang/EvaluatorTests.cs'
+    && Statement.Method.Name == 'EvalForeignFunction'
+    && Statement.ArgumentExpressions.Count > 0
+    && Statement.ArgumentExpressions[0].Kind == stringLiteral
+    && Statement.ArgumentExpressions[0].StringValue == 'double'
+
+predicate isUnapprovedFfi(Statement) =>
+    isFfiRegister && !registersApprovedName && !isFfiInvocationTest
 
 export let no-new-ffi = codebase.Calls:isUnapprovedFfi
     :toError('New runtime FFI registered without approval. The FFI surface must not grow — implement the capability as a .cop package, or get sign-off and add its name to approved-ffi-names.')

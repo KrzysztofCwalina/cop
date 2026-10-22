@@ -16,12 +16,14 @@ public class EvaluatorTests
         return evaluator.RunCommand("main");
     }
 
-    private CopValue EvalExpr(string exprSource, ForeignFunctionRegistry? ffi = null)
+    private CopValue EvalExpr(string exprSource, ForeignFunctionRegistry? ffi = null,
+        Action<Evaluator>? setup = null)
     {
         // Wrap expression in a command that returns its value
         var source = $"command main = {exprSource}";
         var module = CopParser.Parse(source, "test.cop");
         var evaluator = new Evaluator(ffi, "test.cop");
+        setup?.Invoke(evaluator);
         evaluator.EvalModule(module);
         return evaluator.RunCommand("main");
     }
@@ -268,13 +270,29 @@ public class EvaluatorTests
         Assert.That(((CopString)result).Value, Is.EqualTo("a, b, c"));
     }
 
+    [TestCase("Path")]
+    [TestCase("isError")]
+    [TestCase("greaterThan")]
+    [TestCase("gt")]
+    [TestCase("lessThan")]
+    [TestCase("lt")]
+    [TestCase("greaterOrEqual")]
+    [TestCase("ge")]
+    [TestCase("lessOrEqual")]
+    [TestCase("le")]
+    [TestCase("sameAs")]
+    [TestCase("sm")]
+    public void StandardLibrary_DoesNotRegisterPackageOperations(string name)
+    {
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+
+        Assert.That(ffi.Resolve(name), Is.Null);
+    }
+
     [Test]
     public void EvalFilter_NumericComparisonPredicates_WorkPerItem()
     {
-        // Regression (#33): the named comparison ops (greaterThan/lessThan/greaterOrEqual/
-        // lessOrEqual + short forms) compiled to provider pushdown filters but were not registered
-        // as runtime functions, so a per-item/materialized `value:greaterThan(n)` crashed with
-        // "Undefined variable 'greaterThan'".
         var ffi = new ForeignFunctionRegistry();
         StandardLibrary.Register(ffi);
 
@@ -287,8 +305,11 @@ public class EvaluatorTests
         Assert.That(((CopInt)Count("greaterThan", 15)).Value, Is.EqualTo(2), "greaterThan");
         Assert.That(((CopInt)Count("gt", 15)).Value, Is.EqualTo(2), "gt");
         Assert.That(((CopInt)Count("lessThan", 15)).Value, Is.EqualTo(2), "lessThan");
+        Assert.That(((CopInt)Count("lt", 15)).Value, Is.EqualTo(2), "lt");
         Assert.That(((CopInt)Count("greaterOrEqual", 20)).Value, Is.EqualTo(2), "greaterOrEqual");
+        Assert.That(((CopInt)Count("ge", 20)).Value, Is.EqualTo(2), "ge");
         Assert.That(((CopInt)Count("lessOrEqual", 10)).Value, Is.EqualTo(2), "lessOrEqual");
+        Assert.That(((CopInt)Count("le", 10)).Value, Is.EqualTo(2), "le");
     }
 
     [Test]
@@ -1042,23 +1063,18 @@ let result = x(1)", "test.cop");
     [Test]
     public void ThunkInEnvironmentForcesOnAccess()
     {
-        // Register a thunk as a binding; arithmetic on it should auto-force
-        var ffi = new ForeignFunctionRegistry();
-        ffi.Register("getThunk", (args, env) => new CopThunk(() => new CopInt(10)));
-        var result = EvalExpr("getThunk() + 5", ffi);
+        var result = EvalExpr("value + 5", setup: evaluator =>
+            evaluator.GlobalEnvironment.Define("value", new CopThunk(() => new CopInt(10))));
         Assert.That(result, Is.InstanceOf<CopInt>());
         Assert.That(((CopInt)result).Value, Is.EqualTo(15));
     }
 
     [Test]
-    public void ThunkCollectionCoercesForIteration()
+    public void ThunkCollectionCountAutoForces()
     {
-        // Verify that a thunk wrapping a list can be iterated (Count forces)
-        var ffi = new ForeignFunctionRegistry();
         var items = new CopList([new CopInt(1), new CopInt(2), new CopInt(3)]);
-        ffi.Register("getItems", (args, env) => new CopThunk(() => items));
-
-        var result = EvalExpr("getItems().Count", ffi);
+        var result = EvalExpr("items.Count", setup: evaluator =>
+            evaluator.GlobalEnvironment.Define("items", new CopThunk(() => items)));
         Assert.That(result, Is.InstanceOf<CopInt>());
         Assert.That(((CopInt)result).Value, Is.EqualTo(3));
     }
@@ -1066,13 +1082,12 @@ let result = x(1)", "test.cop");
     [Test]
     public void ThunkMemberAccessAutoForces()
     {
-        var ffi = new ForeignFunctionRegistry();
         var obj = new CopObject(new Dictionary<string, CopValue>
         {
             ["Name"] = new CopString("test")
         });
-        ffi.Register("getObj", (args, env) => new CopThunk(() => obj));
-        var result = EvalExpr("getObj().Name", ffi);
+        var result = EvalExpr("obj.Name", setup: evaluator =>
+            evaluator.GlobalEnvironment.Define("obj", new CopThunk(() => obj)));
         Assert.That(result, Is.InstanceOf<CopString>());
         Assert.That(((CopString)result).Value, Is.EqualTo("test"));
     }
@@ -1080,9 +1095,8 @@ let result = x(1)", "test.cop");
     [Test]
     public void ThunkComparisonAutoForces()
     {
-        var ffi = new ForeignFunctionRegistry();
-        ffi.Register("getVal", (args, env) => new CopThunk(() => new CopInt(5)));
-        var result = EvalExpr("getVal() > 3", ffi);
+        var result = EvalExpr("value > 3", setup: evaluator =>
+            evaluator.GlobalEnvironment.Define("value", new CopThunk(() => new CopInt(5))));
         Assert.That(result, Is.InstanceOf<CopBool>());
         Assert.That(((CopBool)result).Value, Is.True);
     }
@@ -1310,7 +1324,7 @@ command main = x + 1", "test.cop");
     }
 
     // ========================================================================
-    // Convention-insensitive equality: sameAs / sm
+    // Convention-insensitive equality: sameAs
     // ========================================================================
 
     [Test]
@@ -1324,12 +1338,12 @@ command main = x + 1", "test.cop");
     }
 
     [Test]
-    public void SmIsAliasForSameAs()
+    public void SmIsNotDefined()
     {
         var ffi = new ForeignFunctionRegistry();
         StandardLibrary.Register(ffi);
-        Assert.That(EvalExpr("'BlobClient'.sm('blob_client')", ffi), Is.EqualTo(CopBool.True));
-        Assert.That(EvalExpr("'BlobClient'.sm('QueueClient')", ffi), Is.EqualTo(CopBool.False));
+        var evaluator = new Evaluator(ffi);
+        Assert.That(evaluator.GlobalEnvironment.TryLookup("sm", out _), Is.False);
     }
 
     [Test]

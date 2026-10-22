@@ -132,6 +132,34 @@ public class QueryableCollectionTests
             "a user predicate must not be pushed down to the provider as a property filter");
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public void PackagePredicate_OnQueryableProperty_PreservesMatchingObjects(bool negated)
+    {
+        var blob = new CopObject(new Dictionary<string, CopValue> { ["Name"] = new CopString("BlobClient") });
+        var queue = new CopObject(new Dictionary<string, CopValue> { ["Name"] = new CopString("QueueClient") });
+        var svc = new FakeQueryService(new CopList([blob, queue]));
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var evaluator = new Evaluator(ffi);
+        var clients = new CopQueryable("fixture", new ProviderQuery { RootPath = "." }, svc.QueryProvider);
+        evaluator.GlobalEnvironment.Define("names", new CopQueryableProperty(clients, "Name"));
+        var not = negated ? "!" : "";
+        evaluator.EvalModule(CopParser.Parse(
+            $"command MAIN = names:{not}sameAs('blob_client')", "test.cop"));
+
+        var result = evaluator.RunCommand("MAIN");
+
+        var items = result switch
+        {
+            CopList list => list.Items,
+            CopLazyCollection lazy => lazy.Enumerate().ToArray(),
+            _ => throw new AssertionException($"Expected a collection, got {result.GetType().Name}.")
+        };
+        Assert.That(items, Is.EqualTo(new[] { negated ? queue : blob }));
+        Assert.That(svc.LastQuery!.Filter, Is.Null);
+    }
+
     private class FakeQueryService
     {
         private readonly CopValue _result;

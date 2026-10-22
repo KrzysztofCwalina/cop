@@ -193,6 +193,57 @@ public class DocumentedOperationsExecutionTests
     // ---- Numeric / string predicates ------------------------------------------------------------
 
     [Test]
+    public void NumericPredicates_AndAliases_MatchLanguageOperators()
+    {
+        var outputs = Run("""
+            let nums = [5 10 20 30]
+            command main =
+                print(nums.Where(item:greaterThan(15)).Count) &
+                print(nums.Where(item:gt(15)).Count) &
+                print(nums.Where(item:lessThan(15)).Count) &
+                print(nums.Where(item:lt(15)).Count) &
+                print(nums.Where(item:greaterOrEqual(20)).Count) &
+                print(nums.Where(item:ge(20)).Count) &
+                print(nums.Where(item:lessOrEqual(10)).Count) &
+                print(nums.Where(item:le(10)).Count) &
+                print(greaterThan(1.5, 1)) &
+                print(gt(1, 1)) &
+                print(lessThan(-1, 0)) &
+                print(lt(1, 1)) &
+                print(greaterOrEqual(1, 1.0)) &
+                print(ge(0, 1)) &
+                print(lessOrEqual(1.0, 1)) &
+                print(le(2, 1)) &
+                print(greaterThan('20', 3)) &
+                print(gt(true, 0))
+            """);
+
+        Assert.That(outputs, Is.EqualTo(new[]
+        {
+            "2", "2", "2", "2", "2", "2", "2", "2",
+            "true", "false", "true", "false", "true", "false", "true", "false", "false", "false"
+        }));
+    }
+
+    [Test]
+    public void CorePackage_ExplicitImportUsesTheSameImplementations()
+    {
+        var outputs = Run("""
+            import core
+            command main =
+                print(Path('a.cs', '**/*.cs')) &
+                print(gt(2, 1)) &
+                print(isError(error('boom'))) &
+                print(isError({ Type = 'error' })) &
+                print({ Name = 'Ada' }.Get('name', false)) &
+                print({ Value = nic }:containsKey('Value')) &
+                print('BlobClient':sameAs('blob_client'))
+            """);
+
+        Assert.That(outputs, Is.EqualTo(new[] { "true", "true", "true", "true", "Ada", "true", "true" }));
+    }
+
+    [Test]
     public void NumericPredicates_FilterMethodsByParameterCount()
     {
         var outputs = Run("""
@@ -227,6 +278,22 @@ public class DocumentedOperationsExecutionTests
         Assert.That(outputs, Is.EqualTo(new[] { "1", "1" }));
     }
 
+    [Test]
+    public void SameAs_UsesNormalizedForms()
+    {
+        var outputs = Run("""
+            command main =
+                print(sameAs('BlobClient', 'blob_client')) &
+                print('BlobClient':sameAs('blob-client')) &
+                print('BlobClient'.sameAs('Blob Client')) &
+                print('BlobClient'.sameAs('QueueClient')) &
+                print(sameAs('', '_- ')) &
+                print('BlobClient'.sameAs('Blob.Client'))
+            """);
+
+        Assert.That(outputs, Is.EqualTo(new[] { "true", "true", "true", "false", "true", "false" }));
+    }
+
     // ---- Object operations ----------------------------------------------------------------------
 
     [Test]
@@ -246,6 +313,48 @@ public class DocumentedOperationsExecutionTests
         Assert.That(outputs, Is.EqualTo(new[] { "Alice", "true", "false", "2", "2", "2" }));
     }
 
+    [Test]
+    public void ObjectOperations_GetCaseSensitivityAndNullValuedKey()
+    {
+        var outputs = Run("""
+            let p = { Name = 'Alice' Value = nic Enabled = false Count = 0 }
+            let key = 'name'
+            command main =
+                print(p.Get(key)) &
+                print(p.Get(key, false)) &
+                print(p.Get('Name', true)) &
+                print(p.Get(key, true) == nic) &
+                print(p:containsKey('Value')) &
+                print(p:containsKey('value')) &
+                print(p:containsKey('Enabled')) &
+                print(p:containsKey('Count')) &
+                print(p:containsKey('Missing'))
+            """);
+
+        Assert.That(outputs, Is.EqualTo(new[]
+        {
+            "Alice", "Alice", "Alice", "true", "true", "true", "true", "true", "false"
+        }));
+    }
+
+    [Test]
+    public void ProviderObject_GetRespectsCaseSensitivity()
+    {
+        var outputs = Run("""
+            import code
+            import csharp
+            let cb = csharp.parse()
+            let first = cb.Types.OrderBy(item.Name).First
+            command main =
+                print(first.Get('name', false)) &
+                print(first.Get('Name', true)) &
+                print(first.Get('name', true) == nic) &
+                print(first:containsKey('name')) &
+                print(cb.Types.Where(item.Name:sameAs('AL_PHA')).Count)
+            """, withCSharpFixture: true);
+
+        Assert.That(outputs, Is.EqualTo(new[] { "Alpha", "Alpha", "true", "true", "1" }));
+    }
     // ---- Glob / regex built-ins -----------------------------------------------------------------
 
     [Test]
@@ -260,6 +369,21 @@ public class DocumentedOperationsExecutionTests
             """);
 
         Assert.That(outputs, Is.EqualTo(new[] { "true", "true", "true", "false" }));
+    }
+
+    [Test]
+    public void PathWrapper_MatchesExistingGlobFunction()
+    {
+        var outputs = Run("""
+            command main =
+                print(Path('a/b/c.cs', '**/*.cs')) &
+                print('c.cs':Path('?.cs')) &
+                print('a/b.txt':Path('**/*.cs')) &
+                print(Path('a/b/c.cs', '**/*.cs') == pathMatches('a/b/c.cs', '**/*.cs')) &
+                print(Path('A/B.CS', '**/*.cs') == pathMatches('A/B.CS', '**/*.cs'))
+            """);
+
+        Assert.That(outputs, Is.EqualTo(new[] { "true", "true", "false", "true", "true" }));
     }
 
     [Test]
@@ -305,10 +429,14 @@ public class DocumentedOperationsExecutionTests
                 print([error('boom')]:isError.Count) &
                 print(['ok' error('x')]:isError.Count) &
                 print(isError(error('y'))) &
-                print(isError('not an error'))
+                print(isError('not an error')) &
+                print(isError({ Type = 'Error' Message = 'package error' })) &
+                print(isError({ Type = 'Result' Message = 'ok' })) &
+                print(isError(42)) &
+                print(isError(nic))
             """);
 
-        Assert.That(outputs, Is.EqualTo(new[] { "1", "1", "true", "false" }));
+        Assert.That(outputs, Is.EqualTo(new[] { "1", "1", "true", "false", "true", "false", "false", "false" }));
     }
 
     [Test]

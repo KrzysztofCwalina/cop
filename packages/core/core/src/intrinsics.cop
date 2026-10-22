@@ -136,3 +136,48 @@ export type Provider : object = {
 ## Glob-matches a file path against a pattern.
 ## Supports **, *, ? wildcards. Returns true if the path matches.
 export function pathMatches(path : string, pattern : string) : bool => intrinsic
+
+## Glob-matches a file path using pathMatches, including its case-insensitive matching.
+## Example: file.Path:Path('**/*.cs')
+export function Path(path : string, pattern : string) : bool => pathMatches(path, pattern)
+
+# Object Operations
+
+## Looks up a property by name, ignoring case. Returns nic if the key is absent.
+export function Get(value: object, key: string) : object => intrinsic
+
+## Looks up a property by name, using ordinal case-sensitive matching when caseSensitive is true.
+## Example: person.Get('Name', true)
+export function Get(value: object, key: string, caseSensitive: bool) : object => intrinsic
+
+## Tests whether a key exists, ignoring case, even when its value is nic.
+export predicate containsKey(value: object, key: string) => intrinsic
+
+## Compares strings ignoring case, underscores, hyphens, and spaces using their Normalized forms.
+export predicate sameAs(value: string, other: string) => value.Normalized == other.Normalized
+
+# Comparison Predicates
+
+## Compares values using the language greater-than operator.
+export predicate greaterThan(value: object, limit: object) => value > limit
+
+## Short form of greaterThan.
+export predicate gt(value: object, limit: object) => greaterThan(value, limit)
+
+## Compares values using the language less-than operator.
+export predicate lessThan(value: object, limit: object) => value < limit
+
+## Short form of lessThan.
+export predicate lt(value: object, limit: object) => lessThan(value, limit)
+
+## Compares values using the language greater-than-or-equal operator.
+export predicate greaterOrEqual(value: object, limit: object) => value >= limit
+
+## Short form of greaterOrEqual.
+export predicate ge(value: object, limit: object) => greaterOrEqual(value, limit)
+
+## Compares values using the language less-than-or-equal operator.
+export predicate lessOrEqual(value: object, limit: object) => value <= limit
+
+## Short form of lessOrEqual.
+export predicate le(value: object, limit: object) => lessOrEqual(value, limit)

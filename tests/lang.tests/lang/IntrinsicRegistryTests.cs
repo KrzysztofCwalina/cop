@@ -37,7 +37,7 @@ public class IntrinsicRegistryTests
         })
             Assert.That(set, Does.Contain(name), name);
 
-        foreach (var alias in new[] { "sw", "ew", "ct", "ca", "eq", "ne", "rx", "sm", "gt", "lt", "ge", "le" })
+        foreach (var alias in new[] { "sw", "ew", "ct", "ca", "eq", "ne", "rx", "gt", "lt", "ge", "le" })
             Assert.That(set, Does.Contain(alias), alias);
     }
 
@@ -86,11 +86,11 @@ public class IntrinsicRegistryTests
     }
 
     [Test]
-    public void PushableStringPredicates_UseSameAsNotLegacySame()
+    public void PushableStringPredicates_ExcludePackageSameAsAndRemovedSm()
     {
         var pushable = IntrinsicRegistry.NameSet(o => o.Kind == IntrinsicKind.StringPredicate && o.Pushable);
-        Assert.That(pushable, Does.Contain("sameAs"));
-        Assert.That(pushable, Does.Contain("sm"));
+        Assert.That(pushable, Does.Not.Contain("sameAs"));
+        Assert.That(IntrinsicRegistry.NameSet(_ => true), Does.Not.Contain("sm"));
         Assert.That(pushable, Does.Not.Contain("same"), "the legacy 'same' long-form was reconciled to 'sameAs'");
     }
 }

@@ -85,7 +85,7 @@ public static class IntrinsicRegistry
         Pred("contains", IntrinsicKind.StringPredicate, "(value) - substring match", ["ct"], pushable: true),
         Pred("containsAny", IntrinsicKind.StringPredicate, "(list) - any list item is a substring", ["ca"]),
         Pred("matches", IntrinsicKind.StringPredicate, "(pattern) - regex match", ["rx"], pushable: true),
-        Pred("sameAs", IntrinsicKind.StringPredicate, "(value) - convention-insensitive comparison", ["sm"], pushable: true),
+        Pred("sameAs", IntrinsicKind.StringPredicate, "(value) - convention-insensitive comparison"),
         Pred("empty", IntrinsicKind.StringPredicate, "- string is empty"),
 
         // ── numeric / flags predicates ───────────────────────────────────────

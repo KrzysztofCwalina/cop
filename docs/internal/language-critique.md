@@ -119,7 +119,7 @@ Enum members resolve to plain strings at runtime (`TypeDefinition.cs:32-41`). Th
 
 ### 3.2 Short vs Long Predicate Names Add Cognitive Load — MEDIUM
 
-The evaluator accepts both short and long forms: `eq`/`equals`, `sw`/`startsWith`, `ew`/`endsWith`, `ct`/`contains`, `ca`/`containsAny`, `rx`/`matches`, `sm`/`sameAs`, `gt`/`greaterThan`, `lt`/`lessThan`, `ge`/`greaterOrEqual`, `le`/`lessOrEqual`.
+The evaluator accepts both short and long forms: `eq`/`equals`, `sw`/`startsWith`, `ew`/`endsWith`, `ct`/`contains`, `ca`/`containsAny`, `rx`/`matches`, `gt`/`greaterThan`, `lt`/`lessThan`, `ge`/`greaterOrEqual`, `le`/`lessOrEqual`. Convention-insensitive equality is the core-package predicate `sameAs`; its former `sm` alias has been removed.
 
 Source: `PredicateEvaluator.cs:729`
 
@@ -132,7 +132,7 @@ While convenient for experts, this doubles the surface area of the language. New
 ### 3.4 `equals` vs `sameAs` Distinction Is Subtle — MEDIUM
 
 - `equals` — case-insensitive string comparison
-- `sameAs` — convention-insensitive comparison (ignores casing, underscores, hyphens)
+- `sameAs` — convention-insensitive comparison using `.Normalized` (ignores casing, underscores, hyphens, spaces)
 
 Both are string equality checks, and the docs don't clearly explain when to use which (`static-analysis-with-cop.md:195-224`).
 

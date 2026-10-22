@@ -167,7 +167,6 @@ public static class PredicateCompiler
         "contains" or "ct" => StringOp.Contains,
         "equals" or "eq" => StringOp.Equals,
         "matches" or "rx" => StringOp.Matches,
-        "sameas" or "sm" => StringOp.Same,
         _ => null
     };
 

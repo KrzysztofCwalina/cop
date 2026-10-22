@@ -38,6 +38,7 @@
   <ItemGroup>
     <EmbeddedResource Include="..\..\docs\language-reference.md" LogicalName="Cop.Cli.LanguageReference.md" />
     <EmbeddedResource Include="resources\init-instructions.md" LogicalName="Cop.Cli.InitInstructions.md" />
+    <EmbeddedResource Include="..\..\packages\core\core\src\intrinsics.cop" LogicalName="Cop.Lang.Core.cop" />
   </ItemGroup>
 
 </Project>
