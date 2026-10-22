@@ -196,6 +196,8 @@ public static class CodeBindings
             ["File"] = new()
             {
                 ["Path"] = o => ((SourceFile)o).Path,
+                ["FullPath"] = o => ((SourceFile)o).FullPath,
+                ["SourceRoot"] = o => ((SourceFile)o).SourceRoot,
                 ["Language"] = o => ((SourceFile)o).Language,
                 ["Namespace"] = o => ((SourceFile)o).Namespace,
                 ["Usings"] = o => (object)((SourceFile)o).Usings,

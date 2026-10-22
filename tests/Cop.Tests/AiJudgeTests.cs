@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using Cop.Core;
 using Cop.Lang;
 using Cop.Providers;
 using Cop.Providers.Ai;
@@ -216,6 +217,23 @@ public class AiJudgeTests
         await model.Request;
     }
 
+    [TestCase("""[{"file":"Other.cs","line":1,"message":"Not supplied."}]""")]
+    [TestCase("""[{"file":"Example.cs","line":2,"message":"Beyond source."}]""")]
+    [TestCase("""[{"file":"Example.cs","line":0,"message":"No location."}]""")]
+    [TestCase("""[{"file":"Example.cs","line":1,"message":false}]""")]
+    [TestCase("""[{"file":"Example.cs","line":1,"message":"Extra field.","extra":true}]""")]
+    public async Task Judge_FullModeRejectsInvalidFindingLocationsAndShapes(string response)
+    {
+        using var model = ConfigureModel(response);
+        var file = Object("File", ("Path", "Example.cs"));
+        var result = await Judge("Policy",
+            Codebase(file, Object("Line", ("File", file), ("Number", 1), ("Text", "class Example { }"))));
+        Assert.That(result, Has.Count.EqualTo(1));
+        Assert.That(result[0].GetField("IsInfrastructureError"), Is.EqualTo(true));
+        Assert.That(result[0].GetField("File"), Is.EqualTo(""));
+        Assert.That(result[0].GetField("Line"), Is.EqualTo(0));
+    }
+
     [TestCase(false)]
     [TestCase(true)]
     public async Task Engine_ReviewsParsedCodebasesWithFullSourceAndScope(bool combineScopes)
@@ -255,7 +273,8 @@ public class AiJudgeTests
         Directory.CreateDirectory(scripts);
         File.WriteAllText(Path.Combine(scripts, "main.cop"), program);
 
-        var result = Engine.Run(scripts, target, additionalFeedPaths: [Path.Combine(RepoRoot, "packages")]);
+        var result = Engine.Run(scripts, target, additionalFeedPaths: [Path.Combine(RepoRoot, "packages")],
+            reviewOptions: new ReviewOptions { Scope = "full" });
 
         Assert.That(result.ParseErrors, Is.Empty);
         Assert.That(result.Errors, Is.Empty);
@@ -357,6 +376,8 @@ public class AiJudgeTests
         };
         foreach (var arg in args)
             start.ArgumentList.Add(arg);
+        start.ArgumentList.Add("--scope");
+        start.ArgumentList.Add("full");
         using var process = Process.Start(start)!;
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();

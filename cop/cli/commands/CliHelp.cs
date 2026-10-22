@@ -66,6 +66,10 @@ internal static class CliHelp
                 ("-c <commands>", "run only these commands (comma-separated)"),
                 ("-f <format>", "output format: text or json (default: text)"),
                 ("-p <provider>", "load a provider package (repeatable)"),
+                ("--scope <mode>", "AI subject: auto (default), branch, pr, or full"),
+                ("--base <ref>", "branch comparison base (otherwise remote default branch)"),
+                ("--pr <number|url>", "exact PR comparison; requires --scope pr"),
+                ("--report-scope <mode>", "static findings: all (default) or changes; analysis stays complete"),
             },
             new[] { "cop run csharp-checks -t .", "cop run ./cop-checks/main.cop -t src" }),
 

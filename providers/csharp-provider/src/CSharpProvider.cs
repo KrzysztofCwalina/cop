@@ -25,6 +25,13 @@ public class CSharpProvider : DataProvider
         ["toCodebase"] = args => Task.FromResult<object?>(ToCodebase(args.Count > 0 ? args[0] : null))
     };
 
+    public override Dictionary<string, Func<List<object?>, Task<object?>>>? GetFunctions(AnalysisContext context) => new()
+    {
+        ["toCodebase"] = args => Task.FromResult<object?>(ToCodebase(
+            args.Count > 0 ? args[0] : null,
+            args.Count > 1 && args[1] is string path ? Path.GetFullPath(path, context.RootPath) : null))
+    };
+
     public override object? Query(ProviderQuery query)
     {
         if (query.RootPath is null)
@@ -148,7 +155,10 @@ public class CSharpProvider : DataProvider
             if (sourceFile is null) continue;
 
             var relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
-            var normalized = sourceFile with { Path = relativePath };
+            var normalized = sourceFile with
+            {
+                Path = relativePath, FullPath = Path.GetFullPath(filePath), SourceRoot = Path.GetFullPath(rootPath)
+            };
             LinkReferences(normalized);
             sourceFiles.Add(normalized);
 
@@ -175,7 +185,7 @@ public class CSharpProvider : DataProvider
         return collections;
     }
 
-    private static DataObject ToCodebase(object? value)
+    private static DataObject ToCodebase(object? value, string? sourceRoot = null)
     {
         if (value is System.Collections.IList { Count: > 0 } list)
             value = list[0];
@@ -184,6 +194,14 @@ public class CSharpProvider : DataProvider
         foreach (var collection in CodebaseCollectionNames)
             fields[collection] = value is DataObject data ? WrapProviderValue(data.GetField(collection)) ?? new List<object>() : new List<object>();
 
+        fields["SourceScopes"] = sourceRoot is null ? new List<object>() : new List<object>
+        {
+            new DataObject("SourceScope", new Dictionary<string, object?>
+            {
+                ["RootPath"] = sourceRoot,
+                ["Extensions"] = new[] { ".cs" }
+            })
+        };
         return new DataObject("Codebase", fields);
     }
 
@@ -211,7 +229,19 @@ public class CSharpProvider : DataProvider
         }
 
         return new DataObject(typeName).WithFieldResolver(fieldName =>
-            accessors.TryGetValue(fieldName, out var accessor) ? WrapProviderValue(accessor(value)) : null);
+        {
+            if (!accessors.TryGetValue(fieldName, out var accessor))
+            {
+                foreach (var candidate in accessors)
+                {
+                    if (!candidate.Key.Equals(fieldName, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    accessor = candidate.Value;
+                    break;
+                }
+            }
+            return accessor is null ? null : WrapProviderValue(accessor(value));
+        });
     }
 
     private static readonly string[] CodebaseCollectionNames =

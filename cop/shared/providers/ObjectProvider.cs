@@ -60,6 +60,13 @@ public abstract class DataProvider
     public virtual Dictionary<string, Func<List<object?>, Task<object?>>>? GetFunctions() => null;
 
     /// <summary>
+    /// Returns functions bound to this execution's source and comparison context.
+    /// The default preserves existing providers' parameterless function contract.
+    /// </summary>
+    public virtual Dictionary<string, Func<List<object?>, Task<object?>>>? GetFunctions(AnalysisContext context)
+        => GetFunctions();
+
+    /// <summary>
     /// Registers additional capabilities (e.g., document loaders, file parsers) into the TypeRegistry.
     /// Called once by the runtime after schema registration.
     /// Override in providers that need to register custom loaders.

@@ -1,0 +1,8 @@
+{
+  "name": "changes",
+  "version": "1.0.0",
+  "description": "Git comparison files, patches, and source-location membership",
+  "title": "Source Changes",
+  "authors": "cop-team",
+  "tags": ["git", "changes"]
+}

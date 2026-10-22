@@ -126,7 +126,10 @@ public static class CodeCollectionBuilder
                 if (sourceFile == null) return;
 
                 var relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
-                var normalizedFile = sourceFile with { Path = relativePath };
+                var normalizedFile = sourceFile with
+                {
+                    Path = relativePath, FullPath = Path.GetFullPath(filePath), SourceRoot = Path.GetFullPath(rootPath)
+                };
                 LinkReferences(normalizedFile);
                 sourceFiles.Add(normalizedFile);
 
@@ -162,6 +165,10 @@ public static class CodeCollectionBuilder
     /// </summary>
     private static List<SourceFile> RestoreFromCache(List<SourceFile> cachedFiles, string rootPath, List<string> filePaths)
     {
+        cachedFiles = cachedFiles.Select(file => file with
+        {
+            FullPath = Path.GetFullPath(Path.Combine(rootPath, file.Path)), SourceRoot = Path.GetFullPath(rootPath)
+        }).ToList();
         foreach (var file in cachedFiles)
             LinkReferences(file);
         return cachedFiles;

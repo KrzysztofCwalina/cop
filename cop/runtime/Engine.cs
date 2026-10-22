@@ -51,7 +51,7 @@ public static class Engine
     /// <summary>
     /// Discovers .cop scripts and source files, then runs all commands.
     /// </summary>
-    public static EngineResult Run(string scriptsDir, string rootPath, string? commandName = null, string[]? programArgs = null, string[]? commandFilter = null, Action<string>? diagLog = null, bool assertMode = false, string[]? additionalFeedPaths = null, string[]? scriptFiles = null, List<(string Dir, PackageMetadata Meta)>? providerPackages = null)
+    public static EngineResult Run(string scriptsDir, string rootPath, string? commandName = null, string[]? programArgs = null, string[]? commandFilter = null, Action<string>? diagLog = null, bool assertMode = false, string[]? additionalFeedPaths = null, string[]? scriptFiles = null, List<(string Dir, PackageMetadata Meta)>? providerPackages = null, ReviewOptions? reviewOptions = null)
     {
         var totalSw = Stopwatch.StartNew();
 
@@ -85,7 +85,8 @@ public static class Engine
             commandFilter,
             diagLog,
             topLevelProviderPackages: providerPackages,
-            assertMode: assertMode);
+            assertMode: assertMode,
+            reviewOptions: reviewOptions);
 
         diagLog?.Invoke($"[diag] Total: {totalSw.ElapsedMilliseconds}ms");
         return result;
@@ -200,7 +201,8 @@ public static class Engine
         Action<string>? diagLog,
         List<(string Dir, PackageMetadata Meta)>? topLevelProviderPackages,
         bool assertMode = false,
-        Dictionary<string, List<ParsedModule>>? packageModuleMap = null)
+        Dictionary<string, List<ParsedModule>>? packageModuleMap = null,
+        ReviewOptions? reviewOptions = null)
     {
         var outputs = new List<PrintOutput>();
         var warnings = new List<string>();
@@ -215,6 +217,18 @@ public static class Engine
         Cop.Core.ProviderErrors.Clear();
 
         var bridge = CreateBridge(outputs, fileOutputLines, asserts, diagLog);
+        AnalysisContext context;
+        try
+        {
+            context = new AnalysisContext(rootPath, reviewOptions ?? new ReviewOptions(), Console.Error.WriteLine);
+            if (context.Options.Scope is "branch" or "pr" || context.Options.ReportScope == "changes")
+                _ = context.Changes;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException)
+        {
+            return new EngineResult([], parseErrors, [$"Review scope: {ex.Message}"]);
+        }
+        ChangeFunctions.Register(bridge, context);
         // Per-item evaluator trace ([trace] lines) is a deep-debug firehose (millions of lines on
         // large repos). Enabled only at -ddd (CopDiagnostics.Trace); -d/-dd stay focused on [diag].
         bridge.Evaluator.TraceLog =
@@ -372,7 +386,7 @@ public static class Engine
 
             // Register provider functions (e.g., http.Post) as qualified callables: <package>.<fn>.
             // Resolved through CopProviderProxy.GetField (which looks up "<package>.<fn>" in the env).
-            var providerFunctions = loaded.Instance.GetFunctions();
+            var providerFunctions = loaded.Instance.GetFunctions(context);
             if (providerFunctions is not null)
             {
                 foreach (var (fnName, fn) in providerFunctions)
@@ -528,7 +542,7 @@ public static class Engine
                 // If command returns an integer, use it as the exit code
                 if (result is CopInt exitInt)
                 {
-                    exitCode = exitInt.Value;
+                    exitCode = exitInt.Value != 0 ? exitInt.Value : exitCode ?? 0;
                 }
                 else
                 {
@@ -537,7 +551,7 @@ public static class Engine
                     {
                         // A raw [Violation] result was routed through CHECK; use CHECK's count as the
                         // exit code structurally, instead of string-sniffing the formatted output.
-                        exitCode = routedExitCode;
+                        exitCode = routedExitCode != 0 ? routedExitCode : exitCode ?? 0;
                     }
                     else
                     {
@@ -553,6 +567,12 @@ public static class Engine
                 errors.Add($"Command '{command}' failed: {ex.Message}");
                 diagLog?.Invoke($"[diag] Command exception: {ex}");
             }
+        }
+
+        try { context.AssertUnchanged(); }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException)
+        {
+            errors.Add($"Review snapshot: {ex.Message}");
         }
 
         // Check for "Command not found" errors and enhance with exported member listing
@@ -1144,7 +1164,8 @@ public static class Engine
         string[]? programArgs = null,
         Action<string>? diagLog = null,
         string[]? additionalScriptFiles = null,
-        string[]? providers = null)
+        string[]? providers = null,
+        ReviewOptions? reviewOptions = null)
     {
         rootPath = Path.GetFullPath(rootPath);
 
@@ -1230,7 +1251,8 @@ public static class Engine
             rules.Count > 0 ? [.. rules] : null,
             diagLog: diagLog,
             topLevelProviderPackages: providerPackages,
-            packageModuleMap: packageModuleMap.Count > 1 ? packageModuleMap : null);
+            packageModuleMap: packageModuleMap.Count > 1 ? packageModuleMap : null,
+            reviewOptions: reviewOptions);
     }
 
     /// <summary>

@@ -36,6 +36,32 @@ cop run csharp-checks -t src/              # only check files under src/
 cop run python-checks -t backend/          # only check backend/ code
 ```
 
+### Reporting findings in changed areas
+
+Keep full analysis but report only findings in changed areas with:
+
+```powershell
+cop cop-checks\main.cop -t . --scope branch --base origin/main --report-scope changes
+```
+
+The comparison includes committed branch work and local edits. For an exact PR,
+use `--scope pr --pr 123` from a clean checkout of its head. By default, reporting
+remains `--report-scope all`.
+
+This filtering happens in the `code` package's `CHECK` command, before output
+and failure counting. Named rules returning violations use that same path.
+Location-less findings remain visible; file-level findings match changed files,
+and line-level findings match changed lines (or a neighboring deletion anchor).
+Hand-written printing commands are not structured findings and are not filtered.
+
+**This is not incremental analysis or baseline comparison.** Parsers and checks
+retain the full model for cross-file correctness. A change can break an unchanged
+consumer; changed-area reporting may hide that consumer's finding. Prefer all
+findings for comprehensive CI and use scoped reporting for focused feedback.
+To inspect patches explicitly, the `changes` package exposes `files()` and
+`includes(path, line)`; paths supplied to `includes` are target-relative or
+absolute, while returned file paths are repository-relative.
+
 ### Running Multiple Packages
 
 You can run several check packages in one command:

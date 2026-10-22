@@ -16,6 +16,11 @@ They should be an opt-in supplement, not a replacement for static checks.
 Create `~/.cop/ai.json` outside your repository. On Windows, this is
 `$HOME\.cop\ai.json`. The endpoint must implement the OpenAI-compatible
 **chat-completions** API; provide its full URL, not just the service base URL.
+Change-scoped review additionally **requires tool calling**, including
+`tool_choice: "required"` and `tool_calls` responses. Cop verifies support with
+an initial source-tool call; an endpoint returning an immediate text answer is
+an error, even if that answer is `[]`. It never silently falls back to a
+diff-only or full-codebase review.
 
 ```json
 {
@@ -100,6 +105,27 @@ cop verify cop-checks\
 cop cop-checks\main.cop -t . -c ai
 ```
 
+AI defaults to `--scope auto`: review current-branch changes using a reliable
+remote default-branch base. This includes committed, staged, unstaged and
+non-ignored untracked source, not just the latest commit. If Cop cannot resolve
+the base locally, pass one explicitly; it will not guess or send the whole
+codebase instead:
+
+```powershell
+cop cop-checks\main.cop -t . -c ai --scope branch --base origin/main
+cop cop-checks\main.cop -t . -c ai --scope pr --pr 123
+cop cop-checks\main.cop -t . -c ai --scope full
+```
+
+PR scope requires a clean checkout at the exact PR head and uses the PR merge
+base. `--scope full` explicitly opts into full review of the supplied parsed
+Codebase. No scope option selects AI commands for you: `-c ai` remains opt-in.
+The legacy `-om` execution gate is independent; if it skips execution, no review
+runs, regardless of scope. Do not use it as a substitute for comparison scope.
+An empty intersection between changes and the supplied Codebase makes zero
+model requests, even without AI configuration, and logs **no applicable changes**;
+that is a skipped review, not evidence that the codebase is clean.
+
 Verification checks syntax, imports, names, and types; it does **not** call the
 model or prove the rule works. The explicit `-c ai` selects the `AI` command.
 There is no `-p` flag: `csharp.parse()` builds the codebase inside the program.
@@ -129,8 +155,32 @@ The same composition supports different languages when their parsers return a
 ([#60](https://github.com/KrzysztofCwalina/cop/issues/60)); the runnable examples
 here use C#.
 
-The provider builds a single JSON context containing the following evidence,
-when supplied by the language parsers:
+In default change mode, the provider intersects the snapshot with the supplied
+Codebase's source files, using absolute provenance rather than ambiguous
+parser-relative display names. Only the selected diffs, paths, statuses,
+old/new ranges and comparison identities enter the initial prompt. It does not
+send all parsed source or unrelated repository patches. Deleted source under a
+selected parser root remains a review subject even though it no longer appears
+in the current file inventory. Binary or missing patches in the review subject
+fail explicitly instead of producing a false clean result.
+
+The model can call two bounded read-only tools:
+
+- `read_source(path, start_line, line_count, side)` reads numbered source
+  using a repository-relative path and `head` or `base` side.
+- `search_source(query, max_results)` searches literal text across eligible
+  target source and marks incomplete results explicitly.
+
+Supporting context can come from **unchanged files anywhere in `-t`**, not only
+the selected parsed subdirectory. Narrow `-t` to restrict tool access and code
+disclosure. Tools cannot read outside that target, follow links outside it,
+read Git internals, execute commands, write files, or browse the network.
+Source changes during review invalidate the result; rerun against stable input.
+The review focuses on defects introduced by changes, not pre-existing defects
+in supporting source; this is not proof of causality.
+
+With explicit `--scope full`, the provider retains the whole-Codebase payload
+below, when supplied by the language parsers:
 
 | Evidence | Context sent to the model |
 |---|---|
@@ -141,16 +191,25 @@ when supplied by the language parsers:
 | Projects | Project paths, references, packages, and target frameworks |
 
 The model sees implementation code, not just type names or a list of filenames.
-Cop does not reread arbitrary paths from disk or follow cyclic model
-relationships. The context is limited to what the selected parsers return:
+Full mode does not follow cyclic model relationships or invoke source tools.
+Its context is limited to what the selected parsers return:
 unparsed files, excluded files, and external dependency source are not included.
 
 Scope at the parser level to limit disclosure and request size. The provider
 does not silently truncate source. An empty codebase, or a file without source
 lines, produces an error violation instead of reporting a clean review.
 Paths are those returned by the parsers, typically relative to each parsed root.
-When combining scopes, use distinguishable file paths; conflicting source for
-the same path and line is rejected rather than merged into misleading context.
+Absolute `File.FullPath` preserves identity across parsed subroots and cache
+loads; `File.SourceRoot` records the selected parser root. C# parsing also stamps
+`Codebase.SourceScopes` with absolute roots and selected source extensions,
+even when every source file has been deleted. `codebase(...)` preserves all
+these scopes, so deletion-only single-root and combined-root reviews can read
+base-side source without expanding to unrelated roots. Other parser adapters
+must provide this metadata to support deletion-only empty Codebases.
+Full mode still rejects empty Codebases; diff mode rejects an empty Codebase
+without trustworthy parser-scope provenance. Display paths remain
+parser-relative in full mode. Conflicting source for the same absolute file
+and line is rejected rather than merged into misleading context.
 
 For example, given `src/billing/Invoice.cs`:
 
@@ -195,6 +254,11 @@ review. The signature declares `Codebase`, and the provider rejects old argument
 shapes before making a model request. Static verification does not currently
 catch all incompatible intrinsic arguments
 ([#61](https://github.com/KrzysztofCwalina/cop/issues/61)).
+This rejection applies to **all scopes**, including `--scope full`; full mode
+does not restore literal-string or individual-collection support. Direct library
+callers using the legacy parameterless provider `GetFunctions()` retain the
+full-Codebase compatibility behavior. Engine/CLI executions always bind the
+per-run scope context.
 
 ## Writing a Useful Requirement
 
@@ -223,20 +287,32 @@ Append a request/response transcript with:
 cop cop-checks\main.cop -t . -c ai --ai-log ai-review.log
 ```
 
-The log includes the model, endpoint, prompts, submitted code context, and model
-response. Keep it out of version control and handle it as sensitively as the
+The log includes the model, endpoint (without query credentials), prompts,
+submitted diff/context, tool calls/results, limits and model responses.
+Scope/completion/failure diagnostics go to stderr. Keep logs out of version
+control and handle them as sensitively as the
 reviewed code. Logging is best-effort; verify the file was written.
 
 Configuration errors, failed HTTP requests, and malformed model JSON are
 reported as violations with messages such as `ai.judge: config not found`,
 `LLM call failed`, or `could not parse model output`. These are failed reviews,
 not findings about the target code and not a clean bill of health.
+Malformed or out-of-scope findings are errors, not silently discarded findings.
+Final objects must have exactly `file`, `line`, and `message` with valid types.
+Locations must be selected changed new-side hunks; line zero is permitted only
+for file-level deletions or renames. Infrastructure errors remain visible even
+when changed-area finding reporting is enabled.
 
 If a request exceeds the service's context or rate limits, narrow the input or
-use a suitable model. The current provider sends one request per `ai.judge`
-evaluation; it does not automatically batch oversized inputs. It uses a
-120-second HTTP timeout and requests temperature zero, which does not guarantee
-repeatable results.
+use a suitable model. Change mode allows at most 8 model requests, 16 tool calls,
+256 KiB of initial prompt, 256 KiB per response, 2 MiB cumulative exchanged
+request/response bytes, and 90 seconds per review. Each read allows at most 200
+lines / 32 KiB, and each search at most 40 results. Budget exhaustion fails
+explicitly: the provider never silently truncates the review subject or treats
+an incomplete review as success. It does not automatically batch oversized
+inputs. Full mode retains a single request with the existing 120-second HTTP
+timeout and no local source truncation. Both modes request temperature zero,
+which does not guarantee repeatable results.
 
 ## Validate the Check Before Relying on It
 

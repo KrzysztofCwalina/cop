@@ -7,6 +7,10 @@ public record SourceFile(
     List<StatementInfo> Statements,
     string RawText)
 {
+    /// <summary>Absolute source identity, independent of the parser's selected root.</summary>
+    public string FullPath { get; init; } = "";
+    public string SourceRoot { get; init; } = "";
+
     private List<string>? _lines;
 
     public List<string> Lines => _lines ??= RawText.Split('\n').Select(l => l.TrimEnd('\r')).ToList();

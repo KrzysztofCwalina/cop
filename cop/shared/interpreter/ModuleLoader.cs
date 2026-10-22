@@ -125,6 +125,9 @@ public sealed class ModuleLoader
 
         if (modules.Count > 0)
         {
+            if (!evaluator.GlobalEnvironment.TryLookup(packageName, out _))
+                evaluator.GlobalEnvironment.Define(packageName,
+                    new CopProviderProxy(packageName, evaluator.GlobalEnvironment));
             var bucket = _packageModules.TryGetValue(packageName, out var existing)
                 ? existing : (_packageModules[packageName] = []);
             bucket.AddRange(modules.Select(m => m.Module));

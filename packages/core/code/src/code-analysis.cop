@@ -3,6 +3,7 @@
 # Import with: import code
 
 import files
+import changes
 
 export type Violation = {
     Severity : float,
@@ -11,7 +12,8 @@ export type Violation = {
     File : string,
     Line : int,
     Source : string,
-    Check : string
+    Check : string,
+    FullPath : string?
 }
 
 ## Maps numeric severity to a display label (error / warning / info), aligned with the
@@ -23,17 +25,18 @@ export function severityLabel(Violation) : string =>
 ## A type that has a source location (file path and line number).
 export type TextFilePosition = {
   filePath : (item: T) => string,
-  line : (item: T) => int
+  line : (item: T) => int,
+  fullPath : (item: T) => string?
 }
 
 # Trait conformances — map TextFilePosition properties for each type
-export type Statement : TextFilePosition = { filePath => item.File.Path, line => item.Line }
-export type Type : TextFilePosition = { filePath => item.File.Path, line => item.Line }
-export type Method : TextFilePosition = { filePath => item.File.Path, line => item.Line }
-export type Api : TextFilePosition = { filePath => item.File.Path, line => item.Line }
-export type Line : TextFilePosition = { filePath => item.File.Path, line => item.Number }
-export type Region : TextFilePosition = { filePath => item.File.Path, line => item.StartLine }
-export type Folder : TextFilePosition = { filePath => item.Path, line => 0 }
+export type Statement : TextFilePosition = { filePath => item.File.Path, line => item.Line, fullPath => item.File.FullPath }
+export type Type : TextFilePosition = { filePath => item.File.Path, line => item.Line, fullPath => item.File.FullPath }
+export type Method : TextFilePosition = { filePath => item.File.Path, line => item.Line, fullPath => item.File.FullPath }
+export type Api : TextFilePosition = { filePath => item.File.Path, line => item.Line, fullPath => item.File.FullPath }
+export type Line : TextFilePosition = { filePath => item.File.Path, line => item.Number, fullPath => item.File.FullPath }
+export type Region : TextFilePosition = { filePath => item.File.Path, line => item.StartLine, fullPath => item.File.FullPath }
+export type Folder : TextFilePosition = { filePath => item.Path, line => 0, fullPath => item.Path }
 
 # Violation creation functions
 
@@ -43,6 +46,7 @@ export function toError(TextFilePosition, message: string) : Violation => Violat
     Certainty = 1.0,
     Message = message,
     File = item.filePath,
+    FullPath = item.fullPath,
     Line = item.line,
     Source = item.Source,
     Check = ''
@@ -57,6 +61,7 @@ export function toError(TextFilePosition, message: string, check: string) : Viol
     Certainty = 1.0,
     Message = message,
     File = item.filePath,
+    FullPath = item.fullPath,
     Line = item.line,
     Source = item.Source,
     Check = check
@@ -68,6 +73,7 @@ export function toWarning(TextFilePosition, message: string) : Violation => Viol
     Certainty = 1.0,
     Message = message,
     File = item.filePath,
+    FullPath = item.fullPath,
     Line = item.line,
     Source = item.Source,
     Check = ''
@@ -80,6 +86,7 @@ export function toWarning(TextFilePosition, message: string, check: string) : Vi
     Certainty = 1.0,
     Message = message,
     File = item.filePath,
+    FullPath = item.fullPath,
     Line = item.line,
     Source = item.Source,
     Check = check
@@ -91,6 +98,7 @@ export function toInfo(TextFilePosition, message: string) : Violation => Violati
     Certainty = 1.0,
     Message = message,
     File = item.filePath,
+    FullPath = item.fullPath,
     Line = item.line,
     Source = item.Source,
     Check = ''
@@ -103,6 +111,7 @@ export function toInfo(TextFilePosition, message: string, check: string) : Viola
     Certainty = 1.0,
     Message = message,
     File = item.filePath,
+    FullPath = item.fullPath,
     Line = item.line,
     Source = item.Source,
     Check = check
@@ -114,6 +123,7 @@ export function toViolation(TextFilePosition, message: string, severity: float, 
     Certainty = certainty,
     Message = message,
     File = item.filePath,
+    FullPath = item.fullPath,
     Line = item.line,
     Source = item.Source,
     Check = ''
@@ -125,6 +135,7 @@ export function withSeverity(Violation, s: float) : Violation => Violation {
     Certainty = item.Certainty,
     Message = item.Message,
     File = item.File,
+    FullPath = item.FullPath,
     Line = item.Line,
     Source = item.Source,
     Check = item.Check
@@ -132,8 +143,7 @@ export function withSeverity(Violation, s: float) : Violation => Violation {
 
 
 # CHECK prints each violation; the engine exits non-zero when any violations are printed.
-# CHECK does NO filtering — suppression is done by filtering the collection before CHECK
-# (e.g. Statements:isViolating:notIgnored:toError(...)).
+# Scope filtering happens before formatting and counting; full analysis is preserved.
 
 ## The dimmed ` [check]` suffix shown after a violation message when it was tagged with
 ## `named(...)`. Empty when the violation has no check name, so untagged output is unchanged.
@@ -142,7 +152,14 @@ export function ruleTag(Violation) : string => item.Check == '' ? '' : ' [{item.
 export function checkLine(Violation, level: string) : string =>
     '{item.File@dim}({item.Line@dim}): {level}: {item.Message}' + ruleTag(item)
 
-export command CHECK(violations) = foreach violations => checkLine(item, severityLabel(item))
+export predicate isInReportScope(Violation) =>
+    changes.reportIncludes(item.FullPath == nic ? item.File : item.FullPath, item.Line)
+
+export command CHECK(violations) = {
+    let scoped = changes.reportsAll() ? violations : violations:isInReportScope
+    foreach scoped => checkLine(item, severityLabel(item))
+    scoped.Count
+}
 
 
 # Common predicates
