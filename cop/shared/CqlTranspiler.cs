@@ -639,7 +639,6 @@ public class CqlTranspiler
                 "endsWith" or "ew" => $"{accessor}.toLowerCase().matches(\"%{EscapeCqlString(strVal.ToLowerInvariant())}\")",
                 "contains" or "ct" => $"{accessor}.toLowerCase().matches(\"%{EscapeCqlString(strVal.ToLowerInvariant())}%\")",
                 "equals" or "eq" => $"{accessor}.toLowerCase() = \"{EscapeCqlString(strVal.ToLowerInvariant())}\"",
-                "sameAs" or "sm" => $"{accessor} = \"{EscapeCqlString(strVal)}\"", // case-sensitive
                 "matches" or "rx" => $"{accessor}.regexpMatch(\"{EscapeCqlRegex(strVal)}\")",
                 _ => null
             };

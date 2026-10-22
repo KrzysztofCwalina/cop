@@ -211,6 +211,9 @@ public static class VerifyCommand
                 if (declName is not null) programNames.Add(declName);
             }
 
+        // Program declarations shadow default-library functions, just as they do at runtime.
+        externalSymbols.RemoveAll(symbol => programNames.Contains(symbol.Name));
+
         // Names exported by imported packages are also usable as bare values
         // (e.g. METRICS(slop, ...), CHECK(csharp-library-checks)). Add them to the same
         // fallback set so they are not flagged as undefined. They are NOT added to the scope, so

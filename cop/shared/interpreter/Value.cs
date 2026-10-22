@@ -277,6 +277,16 @@ public sealed class CopDynamicObject : CopValue
 
     public object Underlying => _underlying;
     public string? TypeName => _adapter.TypeName ?? (_underlying is DataObject dao ? dao.TypeName : null);
+    public IEnumerable<string> FieldNames
+    {
+        get
+        {
+            foreach (var name in _adapter.GetFieldNames(_underlying))
+                yield return name;
+            if (_adapter.TypeName is not null)
+                yield return "Type";
+        }
+    }
 
     public bool HasField(string name)
     {
@@ -303,6 +313,7 @@ public sealed class CopDynamicObject : CopValue
 /// </summary>
 public abstract class IDynamicObjectAdapter
 {
+    public abstract IEnumerable<string> GetFieldNames(object obj);
     public abstract CopValue GetField(object obj, string name);
     public abstract string Display(object obj);
     public virtual string? TypeName => null;

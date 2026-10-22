@@ -16,6 +16,9 @@ public sealed class DataObjectAdapter : IDynamicObjectAdapter
 
     private DataObjectAdapter() { }
 
+    public override IEnumerable<string> GetFieldNames(object obj) =>
+        obj is DataObject dataObj ? dataObj.Fields.Keys : [];
+
     public override CopValue GetField(object obj, string name)
     {
         if (obj is not DataObject dataObj)
@@ -76,6 +79,7 @@ public sealed class RecordViewAdapter : IDynamicObjectAdapter
     private readonly string? _typeName;
 
     public override string? TypeName => _typeName;
+    public override IEnumerable<string> GetFieldNames(object obj) => _schema.Keys;
 
     public RecordViewAdapter(IReadOnlyList<ProviderPropertySchema> properties, Dictionary<string, DataTable>? childTables = null, string? typeName = null)
     {
@@ -136,6 +140,7 @@ public sealed class ClrObjectAdapter : IDynamicObjectAdapter
     private readonly string? _typeName;
 
     public override string? TypeName => _typeName;
+    public override IEnumerable<string> GetFieldNames(object obj) => _accessors.Keys;
 
     public ClrObjectAdapter(
         Dictionary<string, Func<object, object?>> accessors,

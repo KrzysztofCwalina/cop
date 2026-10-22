@@ -52,7 +52,8 @@ public sealed class Evaluator
         _globalEnv = new Environment();
         _filePath = filePath;
 
-        // Populate global env with FFI functions
+        StandardLibrary.RegisterPackageFunctions(this);
+        // Explicit runtime registrations can override package defaults.
         _ffi.PopulateEnvironment(_globalEnv);
     }
 
@@ -1294,16 +1295,15 @@ public sealed class Evaluator
                 return queryProp.Source.WithFilter(compiled);
             }
 
-            // Cannot compile — materialize the source and apply property access + filter locally
+            // Package predicates run locally but must retain the original records, just like pushdown.
             _traceLog?.Invoke($"[trace] EvalFilter: cannot compile compound, materializing");
-            collection = queryProp.Source.Materialize();
-            collection = ForceValue(collection);
-            // Apply property access as a map, then let normal filter logic handle it
-            var mapped = CoerceToEnumerable(collection)
-                .Select(item => GetFieldOnValue(item, queryProp.PropertyName))
-                .Where(v => v is not CopNull)
-                .ToList();
-            collection = new CopList(mapped);
+            var source = ForceValue(queryProp.Source.Materialize());
+            return new CopLazyCollection(() => CoerceToEnumerable(source).Where(item =>
+            {
+                var field = GetFieldOnValue(item, queryProp.PropertyName);
+                var matches = ForceValue(ApplyFilterPredicateValue(filter.Predicate, field, env)).IsTruthy;
+                return negated ? !matches : matches;
+            }));
         }
 
         // If collection resolved to a predicate/function, resolve as a "named subset":

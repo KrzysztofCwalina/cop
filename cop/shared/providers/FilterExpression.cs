@@ -99,7 +99,6 @@ public record PropertyFilter(string Property, bool Value) : FilterExpression;
 ///   <item><term>ew</term><description><c>Name:ew('Client')</c> — case-insensitive ends-with</description></item>
 ///   <item><term>ct</term><description><c>Name:ct('task')</c> — case-insensitive substring (contains)</description></item>
 ///   <item><term>rx</term><description><c>Name:rx('^Foo$')</c> — case-sensitive regex match</description></item>
-///   <item><term>sm</term><description><c>Name:sm('foo')</c> — case-sensitive exact equality (same)</description></item>
 /// </list>
 /// The <c>==</c> and <c>!=</c> operators also compile to case-insensitive equality.
 /// </summary>
@@ -175,7 +174,7 @@ public enum StringOp
     Equals,
     /// <summary><c>rx</c> — case-sensitive regular expression match.</summary>
     Matches,
-    /// <summary><c>sm</c> — case-sensitive exact equality (same).</summary>
+    /// <summary>Case-sensitive exact equality, distinct from the core-package sameAs predicate.</summary>
     Same
 }
 

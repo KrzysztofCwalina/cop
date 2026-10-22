@@ -1,4 +1,6 @@
 using Cop.Core;
+using Cop.Lang.Ast;
+using Cop.Lang.Parser;
 
 namespace Cop.Lang.Interpreter;
 
@@ -11,6 +13,24 @@ namespace Cop.Lang.Interpreter;
 /// </summary>
 public static class StandardLibrary
 {
+    private static readonly Lazy<ModuleNode> CoreModule = new(() =>
+    {
+        using var stream = typeof(StandardLibrary).Assembly.GetManifestResourceStream("Cop.Lang.Core.cop")
+            ?? throw new InvalidOperationException("Embedded core package declarations are missing.");
+        using var reader = new StreamReader(stream);
+        return CopParser.Parse(reader.ReadToEnd(), "core/intrinsics.cop");
+    });
+
+    internal static void RegisterPackageFunctions(Evaluator evaluator)
+    {
+        foreach (var declaration in CoreModule.Value.Declarations)
+        {
+            if (declaration is FunctionDecl { IsExported: true } function
+                && function.Body is not IntrinsicBody)
+                evaluator.GlobalEnvironment.Define(function.Name, new CopFunction(function, evaluator.GlobalEnvironment));
+        }
+    }
+
     /// <summary>
     /// Register all standard intrinsic functions into the FFI registry.
     /// </summary>
@@ -59,22 +79,6 @@ public static class StandardLibrary
             return new CopObject(fields) { TypeName = "Error" };
         });
 
-        // isError: documented built-in predicate that tests whether a value is an operational Error
-        // (intrinsics.cop carries only the signature; the runtime impl must live here so `items:isError`
-        // and `isError(x)` resolve without an explicit import).
-        ffi.Register("isError", (args, env) =>
-        {
-            if (args.Count == 0) return CopBool.False;
-            var value = args[0] is CopThunk thunk ? thunk.Force() : args[0];
-            var type = value switch
-            {
-                CopObject co => co.TypeName ?? (co.HasField("Type") ? co.GetField("Type").Display() : null),
-                CopDynamicObject dyn => dyn.TypeName,
-                _ => null
-            };
-            return CopBool.Of(string.Equals(type, "Error", StringComparison.Ordinal));
-        });
-
         // I/O functions
         ffi.Register("read", (args, env) =>
         {
@@ -120,14 +124,7 @@ public static class StandardLibrary
             return CopBool.Of(matches);
         });
 
-        // Documented capital built-ins (language-reference "Built-in Functions"). Used via colon
-        // pipe so the subject arrives as args[0]: `item.Path:Path('**/*.cs')` (glob on a file path)
-        // and `item.Name:Matches('rx')` (regex on the current item text).
-        ffi.Register("Path", (args, env) =>
-        {
-            if (args.Count < 2) return CopBool.False;
-            return CopBool.Of(PathMatchesGlob(args[0].Display(), args[1].Display()));
-        });
+        // Capital alias used as `item.Name:Matches('rx')`.
         ffi.Register("Matches", (args, env) =>
         {
             if (args.Count < 2) return CopBool.False;
@@ -385,13 +382,18 @@ public static class StandardLibrary
         // case-insensitive property access on object literals and provider objects.
         ffi.Register("Get", (args, env) =>
         {
-            if (args.Count < 2) return CopNull.Instance;
-            return GetObjectKey(args[0], args[1].Display());
+            if (args.Count is not (2 or 3))
+                throw new CopEvaluationException("Get() requires an object, a key, and an optional caseSensitive boolean");
+            if (args.Count == 3 && args[2] is not CopBool)
+                throw new CopEvaluationException("Get() caseSensitive argument must be a boolean");
+            var caseSensitive = args.Count == 3 && args[2] is CopBool { Value: true };
+            return GetObjectKey(args[0], args[1].Display(), caseSensitive);
         });
         ffi.Register("containsKey", (args, env) =>
         {
-            if (args.Count < 2) return CopBool.False;
-            return CopBool.Of(GetObjectKey(args[0], args[1].Display()) is not CopNull);
+            if (args.Count != 2)
+                throw new CopEvaluationException("containsKey() requires an object and a key");
+            return CopBool.Of(FindObjectKey(args[0], args[1].Display(), caseSensitive: false) is not null);
         });
 
         // single: collection.single(predicate?) — single matching item or null
@@ -593,18 +595,6 @@ public static class StandardLibrary
             return CopBool.Of(!str.Equals(other, StringComparison.OrdinalIgnoreCase));
         });
 
-        // sameAs / sm: convention-insensitive equality (ignores case, underscores, hyphens)
-        ffi.Register("sameAs", (args, env) =>
-        {
-            if (args.Count < 2) return CopBool.False;
-            return CopBool.Of(NormalizeConvention(args[0].Display()) == NormalizeConvention(args[1].Display()));
-        });
-        ffi.Register("sm", (args, env) =>
-        {
-            if (args.Count < 2) return CopBool.False;
-            return CopBool.Of(NormalizeConvention(args[0].Display()) == NormalizeConvention(args[1].Display()));
-        });
-
         ffi.Register("matches", (args, env) =>
         {
             if (args.Count < 2) return CopBool.False;
@@ -625,38 +615,7 @@ public static class StandardLibrary
             if (args.Count == 0) return new CopInt(0);
             return new CopInt(args[0].Display().Length);
         });
-
-        // Numeric comparison predicates. These are compiled to ComparisonFilters for provider
-        // pushdown (PredicateCompiler), but were missing as runtime functions, so a per-item /
-        // materialized use like `Person.age:greaterThan(17)` failed with "Undefined variable
-        // 'greaterThan'" (issue #33). Both long and short forms are registered.
-        void RegisterComparison(string longName, string shortName, Func<double, double, bool> op)
-        {
-            CopValue Impl(IReadOnlyList<CopValue> args, Environment env)
-            {
-                if (args.Count < 2) return CopBool.False;
-                var a = ToDoubleOrNull(args[0]);
-                var b = ToDoubleOrNull(args[1]);
-                if (a is null || b is null) return CopBool.False;
-                return CopBool.Of(op(a.Value, b.Value));
-            }
-            ffi.Register(longName, Impl);
-            ffi.Register(shortName, Impl);
-        }
-        RegisterComparison("greaterThan", "gt", (a, b) => a > b);
-        RegisterComparison("lessThan", "lt", (a, b) => a < b);
-        RegisterComparison("greaterOrEqual", "ge", (a, b) => a >= b);
-        RegisterComparison("lessOrEqual", "le", (a, b) => a <= b);
     }
-
-    private static double? ToDoubleOrNull(CopValue v) => v switch
-    {
-        CopInt i => i.Value,
-        CopNumber n => n.Value,
-        CopBool b => b.Value ? 1 : 0,
-        CopString s when double.TryParse(s.Value, System.Globalization.CultureInfo.InvariantCulture, out var d) => d,
-        _ => null
-    };
 
     private static void RegisterFlagPredicates(ForeignFunctionRegistry ffi)
     {
@@ -686,38 +645,33 @@ public static class StandardLibrary
         _ => 0
     };
 
-    /// <summary>Case-insensitive dynamic property lookup for object literals and provider objects.</summary>
-    private static CopValue GetObjectKey(CopValue obj, string key)
+    private static CopValue GetObjectKey(CopValue obj, string key, bool caseSensitive)
     {
-        switch (obj)
+        if (obj is CopThunk thunk)
+            obj = thunk.Force();
+        var name = FindObjectKey(obj, key, caseSensitive);
+        if (name is null)
+            return CopNull.Instance;
+        return obj switch
         {
-            case CopThunk t: return GetObjectKey(t.Force(), key);
-            case CopObject co:
-                foreach (var kv in co.Fields)
-                    if (string.Equals(kv.Key, key, StringComparison.OrdinalIgnoreCase))
-                        return kv.Value;
-                return CopNull.Instance;
-            case CopDynamicObject dyn:
-                return dyn.HasField(key) ? dyn.GetField(key) : CopNull.Instance;
-            default:
-                return CopNull.Instance;
-        }
+            CopObject co => co.GetField(name),
+            CopDynamicObject dyn => dyn.GetField(name),
+            _ => CopNull.Instance
+        };
     }
 
-    /// <summary>
-    /// Normalize an identifier for convention-insensitive comparison (sameAs / sm).
-    /// Strips underscores and hyphens and lowercases everything — so 'BlobClient',
-    /// 'blob_client', and 'blob-client' all compare equal.
-    /// </summary>
-    private static string NormalizeConvention(string s)
+    private static string? FindObjectKey(CopValue obj, string key, bool caseSensitive)
     {
-        var sb = new System.Text.StringBuilder(s.Length);
-        foreach (var c in s)
+        if (obj is CopThunk thunk)
+            obj = thunk.Force();
+        IEnumerable<string> names = obj switch
         {
-            if (c != '_' && c != '-')
-                sb.Append(char.ToLowerInvariant(c));
-        }
-        return sb.ToString();
+            CopObject co => co.Fields.Keys,
+            CopDynamicObject dyn => dyn.FieldNames,
+            _ => []
+        };
+        var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        return names.FirstOrDefault(name => string.Equals(name, key, comparison));
     }
 
     // ========================================================================

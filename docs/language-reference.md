@@ -102,11 +102,19 @@ These work on all objects — literals, function results, and provider objects (
 
 ```ruby
 obj.Get('Name')          # dynamic property lookup (case-insensitive)
+obj.Get('Name', true)    # case-sensitive dynamic property lookup
+obj.Get('name', false)   # explicitly case-insensitive lookup
 obj:containsKey('Name')  # true if property exists
 obj.Keys                 # list of all property names
 obj.Values               # list of all property values
 obj.Count                # number of properties
 ```
+
+`Get(key)` ignores case for both object literals and provider-backed objects.
+The overload `Get(key, caseSensitive)` uses ordinal case-sensitive matching when
+the boolean is `true`; `false` preserves the default. Missing keys return `nic`.
+`containsKey(key)` also ignores case and tests existence only: an existing key
+whose value is `nic`, `false`, zero, or an empty string still returns `true`.
 
 ## Declarations
 
@@ -769,7 +777,17 @@ Name:in(allowedNames)          # value is a member of the list
 | `in(list)` | Value is a member of the list |
 | `empty` | String is empty (zero length) |
 
+`sameAs` is a core-package predicate implemented as a comparison of the two strings'
+`.Normalized` forms. It ignores case, underscores, hyphens, and spaces, but not other punctuation.
+The former `sm` alias has been removed; use `sameAs`.
+
 #### Numeric Predicates
+
+The core package implements `greaterThan`/`gt`, `lessThan`/`lt`,
+`greaterOrEqual`/`ge`, and `lessOrEqual`/`le` using the language operators
+`>`, `<`, `>=`, and `<=`. They are available without an explicit import.
+Use the operators directly in expressions; the named forms remain available for pipelines.
+Like the operators, these predicates do not coerce strings or booleans to numbers.
 
 ```ruby
 Depth:greaterThan(3)                    # greater than
@@ -1001,6 +1019,9 @@ Types.Select(item.Methods.Count > 0 ? item.Name | 'empty')
 | `nameof(identifier)` | identifier → string | Yields the NAME of an identifier as a string, without evaluating it |
 
 `Text` and `read` can be called via colon pipe: `response.Body:Text` is equivalent to `Text(response.Body)`.
+
+`Path(path, pattern)` is a core-package wrapper over `pathMatches(path, pattern)`.
+Both use the same case-insensitive glob matching; `path:Path(pattern)` is equivalent.
 
 `Path` uses glob patterns: `*` matches within a segment, `**` matches across segments, `?` matches one character.
 
@@ -1340,7 +1361,9 @@ Error values have these fields:
 
 ### Detecting Errors (`isError`)
 
-The built-in predicate `isError` tests whether a value is an error:
+The built-in predicate `isError` tests whether a value is an error. Its implementation
+lives in the core package, using `item.Type:equals('Error')`, and is available without
+an explicit import:
 
 ```ruby
 # As a filter — keep only errors

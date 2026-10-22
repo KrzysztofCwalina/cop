@@ -59,6 +59,16 @@ public class SelfCheckStructureTests
     }
 
     [Test]
+    public void CorePackageSourceVerifiesWithDefaultLibrary()
+    {
+        var source = Path.Combine(_repo, "packages", "core", "core", "src");
+        var diagnostics = VerifyCommand.CollectDiagnostics(
+            Directory.GetFiles(source, "*.cop"), source, File.ReadAllText);
+
+        Assert.That(diagnostics, Is.Empty, string.Join("\n", diagnostics.Select(d => d.Message)));
+    }
+
+    [Test]
     public void Issue054_EnvironmentCheckUsesCallsAndOnlyTheActualVariableName()
     {
         AssertCheck("no-environment.cop", "no-environment", "Input.cs", """
@@ -97,6 +107,25 @@ public class SelfCheckStructureTests
                 }
             }
             """, "csharp", [6, 7],
+            "New runtime FFI registered without approval. The FFI surface must not grow — implement the capability as a .cop package, or get sign-off and add its name to approved-ffi-names.");
+    }
+
+    [TestCase("tests/lang.tests/lang/EvaluatorTests.cs", true)]
+    [TestCase("tests/lang.tests/lang/OtherTests.cs", false)]
+    [TestCase("cop/shared/interpreter/StandardLibrary.cs", false)]
+    public void FfiExceptionOnlyAllowsTheInvocationTest(string file, bool allowsInvocationTest)
+    {
+        AssertCheck("no-new-ffi.cop", "no-new-ffi", file, """
+            class Example {
+                void EvalForeignFunction(Registry ffi) {
+                    ffi.Register("double", () => 0);
+                    ffi.Register("unexpected", () => 0);
+                }
+                void OtherTest(Registry ffi) {
+                    ffi.Register("double", () => 0);
+                }
+            }
+            """, "csharp", allowsInvocationTest ? [4, 7] : [3, 4, 7],
             "New runtime FFI registered without approval. The FFI surface must not grow — implement the capability as a .cop package, or get sign-off and add its name to approved-ffi-names.");
     }
 

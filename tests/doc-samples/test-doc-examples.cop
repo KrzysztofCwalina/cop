@@ -114,7 +114,7 @@ test order-by = assert(orderedAsc.Count > 0)
 let orderedDesc = csharp.Types.OrderByDescending(item.Name)
 test order-by-desc = assert(orderedDesc.Count == orderedAsc.Count)
 
-# --- Language Reference: convention-insensitive equality (sameAs / sm) ---
+# --- Language Reference: convention-insensitive equality via Normalized ---
 
-predicate isBlobSm(Type) => Type.Name:sm('blob_client')
-test sm-alias = assert(csharp.Types:isBlobSm.Count > 0)
+predicate isBlobNormalized(Type) => Type.Name.Normalized == 'blob_client'.Normalized
+test same-as-normalized = assert(csharp.Types:isBlobNormalized.Count == csharp.Types:isBlobClient.Count)

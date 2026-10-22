@@ -359,9 +359,7 @@ command main = text(42)", "test.cop");
     [Test]
     public void IsCompatible_LambdaType()
     {
-        var ffi = new ForeignFunctionRegistry();
-        ffi.Register("dummy", (args, env) => CopNull.Instance);
-        var callable = ffi.Resolve("dummy")!;
+        var callable = new CopExternalFunction("dummy", (args, env) => CopNull.Instance);
         Assert.That(TypeValidator.IsCompatible(callable, new TypeRef("lambda")), Is.True);
         Assert.That(TypeValidator.IsCompatible(callable, new TypeRef("function")), Is.True);
         Assert.That(TypeValidator.IsCompatible(new CopInt(1), new TypeRef("lambda")), Is.False);
