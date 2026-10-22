@@ -60,7 +60,30 @@ public class CSharpProviderFunctionsTests
             "src",
             "csharp.cop"));
 
-        Assert.That(packageSource, Does.Contain("export function parse(path : string) : Codebase => provider('csharp').toCodebase(provider('csharp', path))"));
+        Assert.That(packageSource, Does.Contain("export function parse(path : string) : Codebase => provider('csharp').toCodebase(provider('csharp', path), path)"));
+        Assert.That(packageSource, Does.Contain("provider('csharp').toCodebase(provider('csharp', '.'), '.')"));
+    }
+
+    [TestCase(".")]
+    [TestCase("cs")]
+    public async Task ToCodebase_EmptyInputPreservesExplicitParserScope(string path)
+    {
+        var sourceRoot = Path.GetFullPath(path, _tempDir);
+        Directory.CreateDirectory(sourceRoot);
+        var provider = new CSharpProvider();
+        var context = new AnalysisContext(_tempDir, new ReviewOptions());
+        var toCodebase = provider.GetFunctions(context)!["toCodebase"];
+
+        var codebase = (DataObject)(await toCodebase([new List<object?>(), path]))!;
+
+        Assert.That(codebase.TypeName, Is.EqualTo("Codebase"));
+        Assert.That(codebase.GetField("Files"), Is.Empty);
+        var scopes = (List<object>)codebase.GetField("SourceScopes")!;
+        Assert.That(scopes, Has.Count.EqualTo(1));
+        var scope = (DataObject)scopes[0];
+        Assert.That(scope.TypeName, Is.EqualTo("SourceScope"));
+        Assert.That(scope.GetField("RootPath"), Is.EqualTo(sourceRoot));
+        Assert.That(scope.GetField("Extensions"), Is.EqualTo(new[] { ".cs" }));
     }
 
     private static string FindRepoRoot()
