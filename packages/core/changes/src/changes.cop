@@ -1,0 +1,29 @@
+# Source changes resolved once for the current execution.
+
+export type ChangedFile = {
+    Path : string,
+    OldPath : string,
+    Status : string,
+    Patch : string,
+    IsBinary : bool
+}
+
+function changeFiles() : [ChangedFile] => intrinsic
+function changeMatches(path : string, line : int) : bool => intrinsic
+function changeReportIncludes(path : string, line : int) : bool => intrinsic
+function changeReportsAll() : bool => intrinsic
+
+## Files in the comparison, with repository-relative paths and unified patches.
+## Resolves the branch/PR scope; a full scope has no change comparison.
+export function files() : [ChangedFile] => changeFiles()
+
+## Whether a target-relative or absolute source location intersects a change.
+## A zero line selects the whole file, including renamed or deleted files.
+export function includes(path : string, line : int) : bool => changeMatches(path, line)
+
+## Applies the run's reporting policy to a location without restricting analysis.
+## Global findings remain visible. With default reporting, no Git lookup occurs.
+export function reportIncludes(path : string, line : int) : bool => changeReportIncludes(path, line)
+
+## Whether the current run uses the default, unfiltered reporting policy.
+export function reportsAll() : bool => changeReportsAll()

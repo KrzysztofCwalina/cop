@@ -107,7 +107,7 @@ public static class CodeSchema
                     Prop("PreviousText"), Prop("NextText")),
 
                 TypeDef("File", null,
-                    Prop("Path"), Opt("Language"), Opt("Namespace"),
+                    Prop("Path"), Opt("FullPath"), Opt("SourceRoot"), Opt("Language"), Opt("Namespace"),
                     Coll("Usings"), Coll("Types", "Type"), Coll("Projects")),
 
                 TypeDef("Api", null,

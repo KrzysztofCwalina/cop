@@ -209,6 +209,17 @@ return rootCommand.Parse(args).Invoke();
 /// </summary>
 static int ResolveAndRun(string[] runArgs, bool diag, bool allowPackages)
 {
+    Cop.Core.ReviewOptions reviewOptions;
+    try
+    {
+        (runArgs, reviewOptions) = ReviewArguments.Parse(runArgs);
+    }
+    catch (ArgumentException ex)
+    {
+        WriteError(ex.Message);
+        return 2;
+    }
+
     if (runArgs.Length == 0)
     {
         // `cop run` exists to run a *named* target, so with nothing to resolve it's a usage error.
@@ -220,8 +231,11 @@ static int ResolveAndRun(string[] runArgs, bool diag, bool allowPackages)
 
     var firstArg = runArgs[0];
 
-    // 1. Explicit .cop file → run it directly
-    if (firstArg.EndsWith(".cop", StringComparison.OrdinalIgnoreCase))
+    // Local programs and remote scripts share option parsing.
+    if (firstArg.EndsWith(".cop", StringComparison.OrdinalIgnoreCase) ||
+        firstArg.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+        firstArg.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+        IsLocalCommand(firstArg, Directory.GetFiles(Directory.GetCurrentDirectory(), "*.cop", SearchOption.TopDirectoryOnly)))
     {
         // Extract known flags (-t, -f, -d, -c, -om, -p) from remaining args
         string? copTarget = null;
@@ -246,22 +260,7 @@ static int ResolveAndRun(string[] runArgs, bool diag, bool allowPackages)
             else if (remaining[i] == "--ai-log" && i + 1 < remaining.Length) i++; // value consumed globally
             else programArgs.Add(remaining[i]);
         }
-        return RunCommand.Execute(firstArg, programArgs.Count > 0 ? programArgs.ToArray() : null, copTarget, copFormat, copCommands, copDiag, copOnlyIfModified, copProviders.Count > 0 ? copProviders.ToArray() : null, copProfile);
-    }
-
-    // 2. URL → run remotely
-    if (firstArg.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-        firstArg.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-    {
-        return RunCommand.Execute(firstArg, runArgs.Length > 1 ? runArgs[1..] : null);
-    }
-
-    // 3. Check if local .cop files define a command with this name
-    var cwd = Directory.GetCurrentDirectory();
-    var localCopFiles = Directory.GetFiles(cwd, "*.cop", SearchOption.TopDirectoryOnly);
-    if (localCopFiles.Length > 0 && IsLocalCommand(firstArg, localCopFiles))
-    {
-        return RunCommand.Execute(firstArg, runArgs.Length > 1 ? runArgs[1..] : null);
+        return RunCommand.Execute(firstArg, programArgs.Count > 0 ? programArgs.ToArray() : null, copTarget, copFormat, copCommands, copDiag, copOnlyIfModified, copProviders.Count > 0 ? copProviders.ToArray() : null, copProfile, reviewOptions);
     }
 
     // 4. Otherwise → treat all leading non-switch args as package names
@@ -304,7 +303,7 @@ static int ResolveAndRun(string[] runArgs, bool diag, bool allowPackages)
     if (!string.IsNullOrEmpty(rules))
         rulesFilter = rules.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-    return RunCommand.ExecutePackages(packages, rootPath, rulesFilter, format, isDiag, isOnlyIfModified, pkgProviders.Count > 0 ? pkgProviders.ToArray() : null);
+    return RunCommand.ExecutePackages(packages, rootPath, rulesFilter, format, isDiag, isOnlyIfModified, pkgProviders.Count > 0 ? pkgProviders.ToArray() : null, reviewOptions);
 }
 
 /// <summary>
@@ -440,4 +439,3 @@ static int ExecuteDefault()
     CliHelp.PrintMainHelp();
     return 0;
 }
-

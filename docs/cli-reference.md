@@ -16,6 +16,10 @@ Options:
 | `-f <format>` | Output format: `text` (default) or `json` |
 | `-d` / `-dd` / `-ddd` | Diagnostics to stderr: `-d` summaries, `-dd` + phase/parse timing, `-ddd` + per-item trace |
 | `--ai-log <path>` | Append a transcript of each `ai.judge` interaction to a file |
+| `--scope <mode>` | AI review subject: `auto` (default), `branch`, `pr`, or explicit `full` |
+| `--base <ref>` | Branch comparison base; otherwise resolve the remote default branch |
+| `--pr <number-or-url>` | Exact GitHub PR comparison; requires `--scope pr` |
+| `--report-scope <mode>` | Report `all` static findings (default) or only `changes`; does not reduce analysis input |
 | `--no-color` | Disable ANSI color (also auto-disabled when output is not a terminal) |
 | `--no-user-checks` | Skip personal checks in `~/.cop/checks/` for this run |
 | `-cql` | Transpile to CodeQL instead of running |
@@ -64,6 +68,41 @@ cop <file.cop> [-t <target>] [-c <commands>] [-f text|json] [-d] [-cql]
 4. Otherwise → treat as a package name, auto-restore from feed, and run
 
 A bare `cop <program>` (without `run`) only resolves steps 1–3. If none match, cop prints an `Unknown command` error rather than attempting a package restore — use `cop run <program>` to run a package.
+
+### Change-focused reviews
+
+These options apply to scripts, named local commands, URL scripts, and package
+runs. Scope does **not** select a command or enable AI. Continue selecting an
+opt-in AI command explicitly:
+
+```powershell
+cop cop-checks\main.cop -t . -c ai --scope branch --base origin/main
+cop cop-checks\main.cop -t . -c ai --scope pr --pr 123
+cop cop-checks\main.cop -t . -c ai --scope full
+cop cop-checks\main.cop -t . --scope branch --base origin/main --report-scope changes
+```
+
+Branch scope compares the merge base with the final working tree, including
+staged, unstaged, and non-ignored untracked changes. Automatic AI scope uses
+the branch's remote default branch; missing or ambiguous history requires
+`--base`. It never falls back to a full review. PR scope requires `gh` and an
+exact, clean PR-head checkout, not a synthetic merge commit. It can fetch missing
+comparison objects but never checks out or stashes files.
+
+AI starts from the selected diff and can read/search eligible unchanged source
+within `-t` through bounded read-only tools. It requires a tool-capable model
+endpoint. Empty applicable changes make no model requests and are reported as
+skipped on stderr. See [LLM checks](llm-checks.md) for context and review limits.
+
+Static checks still use the complete target model. Changed-area reporting
+filters structured findings before formatting and exit-code calculation;
+global findings and review failures remain visible. This is not a comparison
+of baseline findings and does not establish that a finding is newly introduced.
+Full scope and changed-area reporting are incompatible.
+
+`-om` remains a separate legacy gate: when the worktree is clean it skips the
+run, even if a branch has committed changes. Omit it for committed branch/PR
+reviews. Default static-only execution needs neither Git nor a comparison.
 
 ### Examples
 

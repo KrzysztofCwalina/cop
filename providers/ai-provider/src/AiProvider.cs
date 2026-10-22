@@ -11,7 +11,7 @@ namespace Cop.Providers.Ai;
 /// source and architectural context to an OpenAI-compatible chat-completions endpoint.
 /// Configuration (endpoint, model, apiKey) is read from ~/.cop/ai.json.
 /// </summary>
-public class AiProvider : DataProvider
+public partial class AiProvider : DataProvider
 {
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(120) };
 
@@ -24,6 +24,12 @@ public class AiProvider : DataProvider
         => new(StringComparer.OrdinalIgnoreCase)
         {
             ["judge"] = JudgeAsync,
+        };
+
+    public override Dictionary<string, Func<List<object?>, Task<object?>>>? GetFunctions(AnalysisContext context)
+        => new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["judge"] = context.Options.Scope == "full" ? JudgeAsync : args => JudgeChangesAsync(args, context),
         };
 
     private static async Task<object?> JudgeAsync(List<object?> args)
@@ -89,7 +95,19 @@ public class AiProvider : DataProvider
                 .GetString() ?? throw new InvalidOperationException("model response contained no review content");
 
             LogInteraction(config, system, user, $"{(int)resp.StatusCode} OK", content);
-            return ParseViolations(StripFences(content));
+            var findings = ParseViolations(StripFences(content));
+            foreach (var finding in findings.Cast<DataObject>())
+            {
+                if (finding.GetField("IsInfrastructureError") is true)
+                    return findings;
+                var path = (string)finding.GetField("File")!;
+                var line = (int)finding.GetField("Line")!;
+                if (!Items(args[1]!, "Files").Any(file => FilePath(file) == path)
+                    || line < 1 || !Items(args[1]!, "Lines").Any(sourceLine =>
+                        FilePath(Member(sourceLine, "File")) == path && LineNumber(sourceLine, "Number") == line))
+                    return One($"ai.judge: model finding outside the supplied Codebase source: '{path}:{line}'");
+            }
+            return findings;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -107,7 +125,7 @@ public class AiProvider : DataProvider
         var sb = new StringBuilder();
         sb.AppendLine("================== ai.judge interaction ==================");
         sb.AppendLine($"model:    {config.Model}");
-        sb.AppendLine($"endpoint: {config.Endpoint}");
+        sb.AppendLine($"endpoint: {SafeEndpoint(config.Endpoint)}");
         sb.AppendLine($"status:   {status}");
         sb.AppendLine();
         sb.AppendLine("------------------ REQUEST  (agent → judge) ------------------");
@@ -124,7 +142,14 @@ public class AiProvider : DataProvider
         try { File.AppendAllText(path, sb.ToString()); } catch { /* logging is best-effort */ }
     }
 
-    private static string SerializeCodebase(object? arg)
+    private static string SafeEndpoint(string endpoint)
+    {
+        if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri)) return "(invalid endpoint)";
+        return new UriBuilder(uri) { UserName = "", Password = "", Query = "", Fragment = "" }
+            .Uri.GetLeftPart(UriPartial.Path);
+    }
+
+    private static string SerializeCodebase(object? arg, bool allowEmpty = false)
     {
         string[] collections = ["Files", "Types", "Methods", "Statements", "Calls", "Lines", "Regions", "Projects"];
         if (arg is not DataObject codebase || collections.Any(name =>
@@ -136,14 +161,14 @@ public class AiProvider : DataProvider
         }
 
         var files = Items(codebase, "Files").OrderBy(FilePath, StringComparer.Ordinal).ToList();
-        if (files.Count == 0)
+        if (files.Count == 0 && !allowEmpty)
             throw new ArgumentException("the Codebase contains no files; check the parser and target path");
 
-        var filePaths = files.Select(FilePath).ToHashSet(StringComparer.Ordinal);
+        var filePaths = files.Select(FileIdentity).ToHashSet(StringComparer.Ordinal);
         var linesByFile = new Dictionary<string, SortedDictionary<int, string>>(StringComparer.Ordinal);
         foreach (var line in Items(codebase, "Lines"))
         {
-            var path = FilePath(Member(line, "File"));
+            var path = FileIdentity(Member(line, "File"));
             if (!filePaths.Contains(path))
                 throw new ArgumentException($"source line refers to a file outside Codebase.Files: {path}");
             var number = LineNumber(line, "Number");
@@ -171,7 +196,7 @@ public class AiProvider : DataProvider
                 language = Member(file, "Language")?.ToString(),
                 @namespace = Member(file, "Namespace")?.ToString(),
                 imports = Items(file, "Usings"),
-                lines = linesByFile[FilePath(file)].Select(line => new { number = line.Key, text = line.Value })
+                lines = linesByFile[FileIdentity(file)].Select(line => new { number = line.Key, text = line.Value })
             }),
             types = Items(codebase, "Types").Select(type => new
             {
@@ -231,6 +256,9 @@ public class AiProvider : DataProvider
             ? path
             : throw new ArgumentException("Codebase files and source locations require a non-empty Path");
 
+    private static string FileIdentity(object? file) =>
+        Member(file, "FullPath") is string fullPath && !string.IsNullOrWhiteSpace(fullPath) ? fullPath : FilePath(file);
+
     private static int LineNumber(object obj, string name) => Member(obj, name) switch
     {
         int number => number,
@@ -248,9 +276,14 @@ public class AiProvider : DataProvider
                 return One($"ai.judge: model did not return a JSON array: {Truncate(content, 200)}");
             foreach (var v in doc.RootElement.EnumerateArray())
             {
-                var file = v.TryGetProperty("file", out var f) && f.ValueKind == JsonValueKind.String ? f.GetString() ?? "" : "";
-                var line = v.TryGetProperty("line", out var l) && l.ValueKind == JsonValueKind.Number ? l.GetInt32() : 0;
-                var message = v.TryGetProperty("message", out var m) && m.ValueKind == JsonValueKind.String ? m.GetString() ?? "" : v.ToString();
+                if (v.ValueKind != JsonValueKind.Object || v.EnumerateObject().Count() != 3
+                    || !v.TryGetProperty("file", out var f) || f.ValueKind != JsonValueKind.String
+                    || !v.TryGetProperty("line", out var l) || !l.TryGetInt32(out var line) || line < 0
+                    || !v.TryGetProperty("message", out var m) || m.ValueKind != JsonValueKind.String
+                    || string.IsNullOrWhiteSpace(m.GetString()))
+                    return One("ai.judge: invalid violation; expected string file, non-negative integer line, and non-empty string message");
+                var file = f.GetString()!;
+                var message = m.GetString()!;
                 result.Add(MakeViolation(message, 0.8, file, line, 0.7));
             }
         }
@@ -261,7 +294,12 @@ public class AiProvider : DataProvider
         return result;
     }
 
-    private static List<object?> One(string message) => new() { MakeViolation(message, 1.0, "", 0, 1.0) };
+    private static List<object?> One(string message)
+    {
+        var violation = MakeViolation(message, 1.0, "", 0, 1.0);
+        violation.Set("IsInfrastructureError", true);
+        return [violation];
+    }
 
     private static DataObject MakeViolation(string message, double certainty, string file, int line, double severity)
     {

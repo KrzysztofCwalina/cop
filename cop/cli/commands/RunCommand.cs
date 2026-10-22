@@ -150,16 +150,18 @@ public static class RunCommand
         return 0;
     }
 
-    public static int Execute(string? command, string[]? programArgs = null, string? target = null, string? format = null, string? commands = null, bool diag = false, bool onlyIfModified = false, string[]? providers = null, bool profileRules = false)
+    public static int Execute(string? command, string[]? programArgs = null, string? target = null, string? format = null, string? commands = null, bool diag = false, bool onlyIfModified = false, string[]? providers = null, bool profileRules = false, ReviewOptions? reviewOptions = null)
     {
         Engine.ProfileRules = profileRules;
-
-        if (command != null && IsUri(command))
-            return ExecuteFromUri(command, programArgs, target, format, commands, diag);
+        try { (reviewOptions ?? new ReviewOptions()).Validate(); }
+        catch (ArgumentException ex) { Console.Error.WriteLine($"Error: {ex.Message}"); return 2; }
 
         // -om: skip analysis if no files modified in git working tree
         if (onlyIfModified && !HasModifiedFiles(target ?? Directory.GetCurrentDirectory()))
             return 0;
+
+        if (command != null && IsUri(command))
+            return ExecuteFromUri(command, programArgs, target, format, commands, diag, reviewOptions);
 
         string? commandName = null;
         string scriptsDir;
@@ -235,7 +237,8 @@ public static class RunCommand
         // Surface imported packages' instructions to coding agents by placing their
         // instructions/*.md into the analysis target's .github/instructions/ (idempotent — a no-op
         // when the content is unchanged, so this does not churn the working tree on repeated runs).
-        PlaceInstructionsForImports(scriptsDir, rootPath, diagLog);
+        if (reviewOptions?.Scope != "pr")
+            PlaceInstructionsForImports(scriptsDir, rootPath, diagLog);
 
         // Discover user-global check files (~/.cop/checks/) to include alongside project checks
         var userCheckFiles = GetUserCheckFiles(diagLog);
@@ -330,8 +333,13 @@ public static class RunCommand
 
         try
         {
-            var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog, additionalFeedPaths: FindFeedPathsFromCwd(), scriptFiles: allScriptFiles, providerPackages: providerPackages);
+            var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog, additionalFeedPaths: FindFeedPathsFromCwd(), scriptFiles: allScriptFiles, providerPackages: providerPackages, reviewOptions: reviewOptions);
             return HandleResult(result, format, rootPath);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or IOException)
+        {
+            Console.Error.WriteLine($"Error: {ex.Message}");
+            return 2;
         }
         finally
         {
@@ -347,9 +355,11 @@ public static class RunCommand
     /// Runs named packages against the target directory (merged from cop check).
     /// Packages are auto-restored from configured GitHub feeds if not found locally.
     /// </summary>
-    public static int ExecutePackages(string[] packages, string? target = null, string[]? rules = null, string? format = null, bool diag = false, bool onlyIfModified = false, string[]? providers = null)
+    public static int ExecutePackages(string[] packages, string? target = null, string[]? rules = null, string? format = null, bool diag = false, bool onlyIfModified = false, string[]? providers = null, ReviewOptions? reviewOptions = null)
     {
         string rootPath = target != null ? Path.GetFullPath(target) : Directory.GetCurrentDirectory();
+        try { (reviewOptions ?? new ReviewOptions()).Validate(); }
+        catch (ArgumentException ex) { Console.Error.WriteLine($"Error: {ex.Message}"); return 2; }
 
         // -om: skip analysis if no files modified in git working tree
         if (onlyIfModified && !HasModifiedFiles(rootPath))
@@ -395,12 +405,19 @@ public static class RunCommand
         // Include user-global check files
         var userCheckFiles = GetUserCheckFiles(diagLog);
 
-        var result = Engine.RunProject(feedPaths, [.. packages], rootPath, rulesList, diagLog: diagLog, additionalScriptFiles: userCheckFiles.Length > 0 ? userCheckFiles : null, providers: providers);
-
-        return HandleResult(result, format, rootPath);
+        try
+        {
+            var result = Engine.RunProject(feedPaths, [.. packages], rootPath, rulesList, diagLog: diagLog, additionalScriptFiles: userCheckFiles.Length > 0 ? userCheckFiles : null, providers: providers, reviewOptions: reviewOptions);
+            return HandleResult(result, format, rootPath);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or IOException)
+        {
+            Console.Error.WriteLine($"Error: {ex.Message}");
+            return 2;
+        }
     }
 
-    private static int ExecuteFromUri(string uri, string[]? programArgs, string? target, string? format, string? commands, bool diag)
+    private static int ExecuteFromUri(string uri, string[]? programArgs, string? target, string? format, string? commands, bool diag, ReviewOptions? reviewOptions)
     {
         if (!uri.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
@@ -453,7 +470,7 @@ public static class RunCommand
             var additionalFeedPaths = FindFeedPathsFromCwd();
 
             Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(ColorDiagLine(msg)) : null;
-            var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog, additionalFeedPaths: additionalFeedPaths);
+            var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog, additionalFeedPaths: additionalFeedPaths, reviewOptions: reviewOptions);
 
             return HandleResult(result, format, rootPath);
         }

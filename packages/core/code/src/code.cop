@@ -250,6 +250,8 @@ export type Region = {
 
 export type File = {
     Path : string,
+    FullPath : string?,
+    SourceRoot : string?,
     Language : Language?,
     Namespace : string?,
     Usings : [string],
@@ -271,9 +273,17 @@ export type Project = {
     Properties : [ProjectProperty]
 }
 
+## Absolute parser scope retained even when every source file has been deleted.
+## Extensions identify which source languages were selected within this root.
+export type SourceScope = {
+    RootPath : string,
+    Extensions : [string]
+}
+
 ## Unified parsed model: Types/Methods for declarations, Calls for invocations, Statements for
 ## control flow and nesting, Files for imports, Projects for dependencies. Prefer these to Lines.
 export type Codebase = {
+    SourceScopes : [SourceScope],
     Files : [File],
     Types : [Type],
     Statements : [Statement],
@@ -287,6 +297,7 @@ export type Codebase = {
 ## Creates a unified Codebase from one or more language providers.
 ## Example: let cb = codebase(Program.Providers)
 export function codebase(providers : [Codebase]) : Codebase => {
+    SourceScopes: reduce(providers, (acc, p) => acc + (p.SourceScopes == nic ? [] : p.SourceScopes), []),
     Types: reduce(providers, (acc, p) => acc + p.Types, []),
     Lines: reduce(providers, (acc, p) => acc + p.Lines, []),
     Statements: reduce(providers, (acc, p) => acc + p.Statements, []),

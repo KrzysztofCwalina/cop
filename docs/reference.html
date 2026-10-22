@@ -149,6 +149,7 @@ const categories = [
     "name": "Core",
     "packages": [
       "ai",
+      "changes",
       "code",
       "core",
       "files",
@@ -240,7 +241,7 @@ const packages = {
         "name": "judge",
         "params": "requirement: string, codebase: Codebase",
         "returns": "[Violation]",
-        "desc": "Reviews a parsed `codebase` against a natural-language `requirement`.\nSends numbered source, file metadata, declarations, calls, and project\ndependencies to an LLM and returns Violations (empty if the requirement is met).\nUse language.parse('path') to scope input or codebase(...) to combine languages.\nRequires ~/.cop/ai.json, or the config file selected by COP_AI_CONFIG.\nEmpty codebases and missing source produce error violations. Pass --ai-log <path>\nto record the full interaction. Strings and individual collections are unsupported."
+        "desc": "Reviews a parsed `codebase` against a natural-language `requirement`.\nDefaults to selected branch diffs, with bounded read/search source tools.\nRequires a tool-capable endpoint; --scope full explicitly reviews full parsed\nsource, declarations and dependencies instead. Neither mode accepts strings\nor individual collections. Empty changes skip the review without model calls.\nUse language.parse('path') to scope input or codebase(...) to combine languages.\nRequires ~/.cop/ai.json, or the config file selected by COP_AI_CONFIG.\nFull mode rejects empty codebases; diff mode can review deletions using parser\nSourceScopes even after the last file was removed. Pass --ai-log <path>\nto record the full interaction. Strings and individual collections are unsupported.\nLimits: 8 requests, 16 tool calls, 256 KiB initial prompt, 2 MiB exchanges, 90s.\nFindings outside selected changed hunks and incomplete reviews are errors."
       }
     ],
     "checks": [],
@@ -483,6 +484,72 @@ const packages = {
     "checks": [],
     "commands": []
   },
+  "changes": {
+    "label": "changes",
+    "overview": "Git comparison files, patches, and source-location membership",
+    "samples": [],
+    "collections": [],
+    "types": {
+      "ChangedFile": {
+        "props": [
+          {
+            "name": "Path",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "OldPath",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Status",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Patch",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "IsBinary",
+            "type": "bool",
+            "desc": ""
+          }
+        ]
+      }
+    },
+    "predicates": [],
+    "functions": [
+      {
+        "name": "files",
+        "params": "",
+        "returns": "[ChangedFile]",
+        "desc": "Files in the comparison, with repository-relative paths and unified patches.\nResolves the branch/PR scope; a full scope has no change comparison."
+      },
+      {
+        "name": "includes",
+        "params": "path: string, line: int",
+        "returns": "bool",
+        "desc": "Whether a target-relative or absolute source location intersects a change.\nA zero line selects the whole file, including renamed or deleted files."
+      },
+      {
+        "name": "reportIncludes",
+        "params": "path: string, line: int",
+        "returns": "bool",
+        "desc": "Applies the run's reporting policy to a location without restricting analysis.\nGlobal findings remain visible. With default reporting, no Git lookup occurs."
+      },
+      {
+        "name": "reportsAll",
+        "params": "",
+        "returns": "bool",
+        "desc": "Whether the current run uses the default, unfiltered reporting policy."
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
   "code": {
     "label": "code",
     "overview": "Core type definitions for source code structural analysis",
@@ -580,6 +647,11 @@ const packages = {
             "name": "Check",
             "type": "string",
             "desc": ""
+          },
+          {
+            "name": "FullPath",
+            "type": "string?",
+            "desc": ""
           }
         ]
       },
@@ -595,6 +667,11 @@ const packages = {
           {
             "name": "line",
             "type": "(item: T) => int",
+            "desc": ""
+          },
+          {
+            "name": "fullPath",
+            "type": "(item: T) => string?",
             "desc": ""
           }
         ]
@@ -1019,6 +1096,11 @@ const packages = {
             "name": "line",
             "type": "computed",
             "desc": ""
+          },
+          {
+            "name": "fullPath",
+            "type": "computed",
+            "desc": ""
           }
         ]
       },
@@ -1318,6 +1400,16 @@ const packages = {
             "desc": ""
           },
           {
+            "name": "FullPath",
+            "type": "string?",
+            "desc": ""
+          },
+          {
+            "name": "SourceRoot",
+            "type": "string?",
+            "desc": ""
+          },
+          {
             "name": "Language",
             "type": "Language?",
             "desc": ""
@@ -1392,9 +1484,29 @@ const packages = {
           }
         ]
       },
+      "SourceScope": {
+        "desc": "Absolute parser scope retained even when every source file has been deleted.\nExtensions identify which source languages were selected within this root.",
+        "props": [
+          {
+            "name": "RootPath",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Extensions",
+            "type": "[string]",
+            "desc": ""
+          }
+        ]
+      },
       "Codebase": {
         "desc": "Unified parsed model: Types/Methods for declarations, Calls for invocations, Statements for\ncontrol flow and nesting, Files for imports, Projects for dependencies. Prefer these to Lines.",
         "props": [
+          {
+            "name": "SourceScopes",
+            "type": "[SourceScope]",
+            "desc": ""
+          },
           {
             "name": "Files",
             "type": "[File]",
@@ -1439,6 +1551,11 @@ const packages = {
       }
     },
     "predicates": [
+      {
+        "name": "isInReportScope",
+        "appliesTo": "Violation",
+        "desc": ""
+      },
       {
         "name": "isSyncWhenAsyncExists",
         "appliesTo": "Statement",
