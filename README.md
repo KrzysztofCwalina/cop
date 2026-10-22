@@ -117,6 +117,7 @@ cop vscode
 - [Language Reference](docs/language-reference.md) — full DSL syntax
 - [CLI Reference](docs/cli-reference.md) — all commands and options
 - [Static Analysis with Cop](docs/static-analysis.md) — writing source code checks
+- [LLM-Based Checks](docs/llm-checks.md) — configuring and writing opt-in AI reviews
 - [Language Walkthroughs](docs/languages/) — per-language guides ([C#](docs/languages/csharp.md), [Python](docs/languages/python.md), [JavaScript](docs/languages/javascript.md), [Rust](docs/languages/rust.md), [Go](docs/languages/go.md), [Java](docs/languages/java.md))
 - [Testing Cop Rules](docs/testing.md) — writing and running tests for your `.cop` programs
 - [Extensibility](docs/extensibility.md) — writing providers and wrapping external tools

@@ -2,6 +2,9 @@
 
 Agent Cop ships with built-in check packages that enforce conventions out of the box. It supports C#, Python, JavaScript/TypeScript, Rust, Go, and Java codebases. You run checks with a single command, inspect what they check, exclude what doesn't apply, and optionally add your own project-specific rules.
 
+For opt-in reviews that need natural-language judgment rather than deterministic
+structural rules, see [How to Write LLM-Based Checks](llm-checks.md).
+
 ---
 
 ## Running Built-In Checks
