@@ -166,6 +166,16 @@
         "Agent instructions now require parsed code facts and user approval before writing any text-based check, with improved model discovery and semantic query examples.",
         "`cop init --checks` now applies strict structural verification automatically."
       ]
+    },
+    {
+      "version": "2026.10.22.1",
+      "approved": true,
+      "features": [
+        "Dynamic object lookup supports `Get(key, caseSensitive)` consistently across literal and provider objects; `containsKey` recognizes existing keys even when their values are null.",
+        "`sameAs` now uses `.Normalized`, ignoring spaces as well as case, underscores, and hyphens. The redundant `sm` alias was removed; use `sameAs` instead.",
+        "Core `Path`, named numeric comparisons, and `sameAs` are implemented in Cop, with shared core definitions available automatically and a unified `isError` predicate.",
+        "Repository self-checks use parsed code facts and no longer flag incidental test FFI registrations; the FFI invocation test has a narrowly scoped exception."
+      ]
     }
   ]
 }
