@@ -186,6 +186,16 @@
         "Static checks can report only changed-area findings with --report-scope changes while retaining full semantic analysis.",
         "Fixed package-qualified parser calls and lazy source locations so scoped analysis resolves the correct source files."
       ]
+    },
+    {
+      "version": "2026.10.23.1",
+      "approved": true,
+      "features": [
+        "Cop source analysis now exposes top-level functions, predicates, and commands with parsed intrinsic, export, and guard metadata, including cached results.",
+        "Repository self-checks are grouped by Cop, C#, and general-purpose rules; intrinsic declaration placement uses Cop-specific function facts.",
+        "Functions and predicates can return the string 'intrinsic' without being mistaken for runtime-backed declarations.",
+        "Publishing now rebuilds compatible C# provider binaries and verifies statement extraction with the actual executable before packaging."
+      ]
     }
   ]
 }
