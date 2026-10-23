@@ -110,7 +110,7 @@ public partial class AiProvider
             if (Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(messages)) > MaxInitialBytes)
                 throw new InvalidOperationException(
                     $"initial diff exceeds {MaxInitialBytes} bytes; narrow the parsed Codebase (no subject was truncated)");
-            var config = LoadConfig(out var error);
+            var config = LoadConfig(context.Options.AiConfigPath, out var error);
             if (config is null)
             {
                 snapshot.Log($"ai.judge: review failed (not a clean result): {error}");

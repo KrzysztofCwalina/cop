@@ -37,7 +37,7 @@
 # Only use endpoints approved for the code being reviewed. Full mode rejects empty
 # codebases. Diff mode accepts deletion-only empty Codebases with parser-stamped
 # SourceScopes (preserved by codebase(...)). Missing provenance/source is an error.
-# COP_AI_CONFIG can select another config file, for example for isolated CI tests.
+# --ai-config <path> selects another config file, for example for isolated CI tests.
 #
 # Transparency: pass --ai-log <path> to append a full
 # transcript of each agent↔judge interaction (the request the runtime sent and
@@ -54,7 +54,7 @@ import markdown
 ## source, declarations and dependencies instead. Neither mode accepts strings
 ## or individual collections. Empty changes skip the review without model calls.
 ## Use language.parse('path') to scope input or codebase(...) to combine languages.
-## Requires ~/.cop/ai.json, or the config file selected by COP_AI_CONFIG.
+## Requires ~/.cop/ai.json, or the config file selected by --ai-config <path>.
 ## Full mode rejects empty codebases; diff mode can review deletions using parser
 ## SourceScopes even after the last file was removed. Pass --ai-log <path>
 ## to record the full interaction. Strings and individual collections are unsupported.

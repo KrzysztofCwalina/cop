@@ -17,7 +17,6 @@ public class AiJudgeTests
 {
     private string _root = "";
     private string _config = "";
-    private string? _previousConfig;
 
     private static string RepoRoot
     {
@@ -36,14 +35,11 @@ public class AiJudgeTests
         _root = Path.Combine(RepoRoot, "tests", "behavior", "ai-judge-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_root);
         _config = Path.Combine(_root, "ai.json");
-        _previousConfig = Environment.GetEnvironmentVariable("COP_AI_CONFIG");
-        Environment.SetEnvironmentVariable("COP_AI_CONFIG", _config);
     }
 
     [TearDown]
     public async Task TearDown()
     {
-        Environment.SetEnvironmentVariable("COP_AI_CONFIG", _previousConfig);
         for (int attempt = 0; ; attempt++)
         {
             try
@@ -138,6 +134,19 @@ public class AiJudgeTests
         Assert.That(violations[0].GetField("Message"), Is.EqualTo(
             "ai.judge: expected a Codebase from a language parse() function or codebase(...); " +
             "strings and individual collections are not supported"));
+    }
+
+    [Test]
+    public async Task Judge_MissingExplicitConfigurationFailsWithoutFallingBack()
+    {
+        var file = Object("File", ("Path", "Example.cs"));
+        var violations = await Judge("Policy",
+            Codebase(file, Object("Line", ("File", file), ("Number", 1), ("Text", "class Example { }"))));
+
+        Assert.That(violations, Has.Count.EqualTo(1));
+        Assert.That(violations[0].GetField("IsInfrastructureError"), Is.EqualTo(true));
+        Assert.That(violations[0].GetField("Message"),
+            Is.EqualTo($"ai.judge: config not found at {_config} (needs endpoint, model, apiKey)"));
     }
 
     [Test]
@@ -274,7 +283,7 @@ public class AiJudgeTests
         File.WriteAllText(Path.Combine(scripts, "main.cop"), program);
 
         var result = Engine.Run(scripts, target, additionalFeedPaths: [Path.Combine(RepoRoot, "packages")],
-            reviewOptions: new ReviewOptions { Scope = "full" });
+            reviewOptions: new ReviewOptions { Scope = "full", AiConfigPath = _config });
 
         Assert.That(result.ParseErrors, Is.Empty);
         Assert.That(result.Errors, Is.Empty);
@@ -362,7 +371,7 @@ public class AiJudgeTests
         Assert.That(files.Any(file => file.GetProperty("path").GetString() == "cli/Program.cs"), Is.False);
     }
 
-    private static async Task<(int ExitCode, string Stdout, string Stderr)> RunCli(params string[] args)
+    private async Task<(int ExitCode, string Stdout, string Stderr)> RunCli(params string[] args)
     {
         var exe = Path.Combine(RepoRoot, "install", "win-x64", "cop.exe");
         if (!File.Exists(exe))
@@ -378,6 +387,8 @@ public class AiJudgeTests
             start.ArgumentList.Add(arg);
         start.ArgumentList.Add("--scope");
         start.ArgumentList.Add("full");
+        start.ArgumentList.Add("--ai-config");
+        start.ArgumentList.Add(_config);
         using var process = Process.Start(start)!;
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
@@ -414,9 +425,10 @@ public class AiJudgeTests
         return JsonDocument.Parse(user[(user.IndexOf(marker, StringComparison.Ordinal) + marker.Length)..]);
     }
 
-    private static async Task<List<DataObject>> Judge(string requirement, object? codebase)
+    private async Task<List<DataObject>> Judge(string requirement, object? codebase)
     {
-        var result = await new AiProvider().GetFunctions()!["judge"]([requirement, codebase]);
+        var context = new AnalysisContext(_root, new ReviewOptions { Scope = "full", AiConfigPath = _config });
+        var result = await new AiProvider().GetFunctions(context)!["judge"]([requirement, codebase]);
         Assert.That(result, Is.InstanceOf<IEnumerable<object?>>());
         return ((IEnumerable<object?>)result!).Cast<DataObject>().ToList();
     }

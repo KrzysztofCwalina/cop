@@ -18,7 +18,7 @@ public class AiChangeReviewTests
 {
     private string _root = "";
     private string _repo = "";
-    private string? _previousConfig;
+    private string _config = "";
     private readonly List<string> _logs = [];
 
     [SetUp]
@@ -35,15 +35,13 @@ public class AiChangeReviewTests
         Git("init", "-q");
         Git("add", ".");
         Git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "base");
-        _previousConfig = Environment.GetEnvironmentVariable("COP_AI_CONFIG");
-        Environment.SetEnvironmentVariable("COP_AI_CONFIG", Path.Combine(_root, "missing-config.json"));
+        _config = Path.Combine(_root, "ai.json");
         _logs.Clear();
     }
 
     [TearDown]
     public void TearDown()
     {
-        Environment.SetEnvironmentVariable("COP_AI_CONFIG", _previousConfig);
         if (Directory.Exists(_root))
         {
             foreach (var file in Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories))
@@ -81,6 +79,20 @@ public class AiChangeReviewTests
         var result = await Judge();
         Assert.That(result, Is.Empty);
         Assert.That(_logs.Last(), Does.Contain("no applicable changes").And.Contain("0 model requests"));
+    }
+
+    [Test]
+    public async Task Diff_MissingExplicitConfigurationFailsWithoutFallingBack()
+    {
+        Change();
+
+        var result = await Judge();
+
+        AssertFailure(result, $"config not found at {_config}");
+        Assert.That(result[0].GetField("Message"),
+            Is.EqualTo($"ai.judge: config not found at {_config} (needs endpoint, model, apiKey)"));
+        Assert.That(_logs.Last(), Is.EqualTo(
+            $"ai.judge: review failed (not a clean result): config not found at {_config} (needs endpoint, model, apiKey)"));
     }
 
     [Test]
@@ -185,7 +197,7 @@ public class AiChangeReviewTests
     [TestCase("full")]
     public async Task AllScopesContinueRejectingStringsAndCollections(string scope)
     {
-        var context = new AnalysisContext(_repo, new ReviewOptions { Scope = scope }, _logs.Add);
+        var context = new AnalysisContext(_repo, new ReviewOptions { Scope = scope, AiConfigPath = _config }, _logs.Add);
         foreach (var input in new object[] { "source", new[] { new DataObject("File") } })
         {
             var result = await new AiProvider().GetFunctions(context)!["judge"](["Policy", input]);
@@ -263,7 +275,7 @@ public class AiChangeReviewTests
         var root = _root;
         while (!File.Exists(Path.Combine(root, "cop.sln"))) root = Path.GetDirectoryName(root)!;
         var result = Engine.Run(scripts, _repo, additionalFeedPaths: [Path.Combine(root, "packages")],
-            reviewOptions: new ReviewOptions { Scope = "branch", Base = "HEAD" });
+            reviewOptions: new ReviewOptions { Scope = "branch", Base = "HEAD", AiConfigPath = _config });
 
         Assert.That(result.ParseErrors, Is.Empty);
         Assert.That(result.Errors, Is.Empty, string.Join("\n", result.Errors));
@@ -281,7 +293,7 @@ public class AiChangeReviewTests
         Assert.That(model.Requests[1], Does.Contain("int Total"));
 
         var full = Engine.Run(scripts, _repo, additionalFeedPaths: [Path.Combine(root, "packages")],
-            reviewOptions: new ReviewOptions { Scope = "full" });
+            reviewOptions: new ReviewOptions { Scope = "full", AiConfigPath = _config });
         Assert.That(full.Errors, Is.Empty);
         Assert.That(full.Outputs.Select(output => output.Message), Is.EqualTo(new[]
         {
@@ -332,7 +344,7 @@ public class AiChangeReviewTests
             UseShellExecute = false
         };
         foreach (var arg in new[] { script, "-t", _repo, "--scope", "branch", "--base", "HEAD",
-            "--report-scope", "changes", "--no-color" }) start.ArgumentList.Add(arg);
+            "--report-scope", "changes", "--no-color", "--ai-config", _config }) start.ArgumentList.Add(arg);
         using var process = Process.Start(start)!;
         var output = process.StandardOutput.ReadToEndAsync();
         var errors = process.StandardError.ReadToEndAsync();
@@ -377,7 +389,7 @@ public class AiChangeReviewTests
             """);
         using var model = Configure((turn, _) => turn == 0 ? ReadExample()
             : Final("""[{"file":"Example.cs","line":2,"message":"Keep the core independent: wrong responsibility."}]"""));
-        var context = new AnalysisContext(_repo, new ReviewOptions { Scope = "branch", Base = "HEAD" });
+        var context = new AnalysisContext(_repo, new ReviewOptions { Scope = "branch", Base = "HEAD", AiConfigPath = _config });
         var output = await new AiProvider().GetFunctions(context)!["judge"]([document, Codebase("Example.cs"), 2]);
         Assert.That(((IEnumerable<object?>)output!).Cast<DataObject>().Single().GetField("Message"),
             Is.EqualTo("Keep the core independent: wrong responsibility."));
@@ -433,7 +445,7 @@ public class AiChangeReviewTests
         var document = await MarkdownInput("# Group\n## One rule\nFirst paragraph.\n\nSecond paragraph.\n");
         using var model = Configure((_, _) =>
             Final("""[{"file":"Example.cs","line":2,"message":"One rule: incorrect total."}]"""));
-        var context = new AnalysisContext(_repo, new ReviewOptions { Scope = "full" });
+        var context = new AnalysisContext(_repo, new ReviewOptions { Scope = "full", AiConfigPath = _config });
         var result = await new AiProvider().GetFunctions(context)!["judge"]([document, Codebase("Example.cs"), 2]);
         Assert.That(((IEnumerable<object?>)result!).Cast<DataObject>().Single().GetField("Message"),
             Is.EqualTo("One rule: incorrect total."));
@@ -485,7 +497,7 @@ public class AiChangeReviewTests
             Assert.That(model.Requests, Is.Empty, "The default command must not execute AI checks.");
             var result = Engine.Run(scripts, _repo, commandName: "AI",
                 additionalFeedPaths: [Path.Combine(root, "packages")],
-                reviewOptions: new ReviewOptions { Scope = "branch", Base = "HEAD" });
+                reviewOptions: new ReviewOptions { Scope = "branch", Base = "HEAD", AiConfigPath = _config });
             Assert.That(result.ParseErrors, Is.Empty);
             Assert.That(result.Errors, Is.Empty, string.Join("\n", result.Errors));
             Assert.That(result.ExitCode, Is.EqualTo(1));
@@ -502,7 +514,7 @@ public class AiChangeReviewTests
                 UseShellExecute = false
             };
             foreach (var arg in new[] { script, "-t", _repo, "-c", "ai", "--scope", "branch", "--base", "HEAD",
-                "--no-user-checks", "--no-color" }) start.ArgumentList.Add(arg);
+                "--no-user-checks", "--no-color", "--ai-config", _config }) start.ArgumentList.Add(arg);
             using var process = Process.Start(start)!;
             var stdout = process.StandardOutput.ReadToEndAsync();
             var stderr = process.StandardError.ReadToEndAsync();
@@ -531,7 +543,7 @@ public class AiChangeReviewTests
 
     private async Task<List<DataObject>> Judge(DataObject codebase)
     {
-        var context = new AnalysisContext(_repo, new ReviewOptions { Scope = "branch", Base = "HEAD" }, _logs.Add);
+        var context = new AnalysisContext(_repo, new ReviewOptions { Scope = "branch", Base = "HEAD", AiConfigPath = _config }, _logs.Add);
         var result = await new AiProvider().GetFunctions(context)!["judge"](["Totals must reflect input.", codebase]);
         return ((IEnumerable<object?>)result!).Cast<DataObject>().ToList();
     }
@@ -585,9 +597,7 @@ public class AiChangeReviewTests
     private Model Configure(Func<int, string, object> respond)
     {
         var model = new Model(respond);
-        var config = Path.Combine(_root, "ai.json");
-        File.WriteAllText(config, JsonSerializer.Serialize(new { endpoint = model.Endpoint, model = "local-test", apiKey = "" }));
-        Environment.SetEnvironmentVariable("COP_AI_CONFIG", config);
+        File.WriteAllText(_config, JsonSerializer.Serialize(new { endpoint = model.Endpoint, model = "local-test", apiKey = "" }));
         return model;
     }
 

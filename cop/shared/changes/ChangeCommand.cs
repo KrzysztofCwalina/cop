@@ -5,18 +5,18 @@ namespace Cop.Core;
 
 internal sealed record ChangeCommandResult(int ExitCode, string Output, string Error);
 
-internal interface IChangeCommand
+internal abstract class ChangeCommandRunner
 {
-    ChangeCommandResult Run(string directory, string executable, params string[] arguments);
+    public abstract ChangeCommandResult Run(string directory, string executable, params string[] arguments);
 }
 
 /// <summary>No shell, no interactive authentication, bounded execution and bounded output.</summary>
-internal sealed class ChangeCommand : IChangeCommand
+internal sealed class ChangeCommand : ChangeCommandRunner
 {
     internal static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
     internal const int MaxOutputCharacters = 16 * 1024 * 1024;
 
-    public ChangeCommandResult Run(string directory, string executable, params string[] arguments)
+    public override ChangeCommandResult Run(string directory, string executable, params string[] arguments)
     {
         using var process = new Process
         {

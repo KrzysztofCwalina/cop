@@ -7,9 +7,12 @@ public sealed record ReviewOptions
     public string? Base { get; init; }
     public string? Pr { get; init; }
     public string ReportScope { get; init; } = "all";
+    public string? AiConfigPath { get; init; }
 
     public void Validate()
     {
+        if (AiConfigPath is not null && string.IsNullOrWhiteSpace(AiConfigPath))
+            throw new ArgumentException("The AI configuration path must not be empty.");
         if (Scope is not ("auto" or "branch" or "pr" or "full"))
             throw new ArgumentException("Review scope must be auto, branch, pr, or full.");
         if (ReportScope is not ("all" or "changes"))

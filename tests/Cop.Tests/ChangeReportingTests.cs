@@ -194,9 +194,30 @@ public class ChangeReportingTests
     [TestCase("--scope=full --report-scope=changes")]
     [TestCase("--scope=branch --pr=1")]
     [TestCase("--scope=branch --scope=full")]
+    [TestCase("--ai-config")]
+    [TestCase("--ai-config=")]
+    [TestCase("--ai-config=first.json --ai-config=second.json")]
     public void InvalidScopeOptions_AreRejected(string options)
     {
         Assert.Throws<ArgumentException>(() => ReviewArguments.Parse(options.Split(' ')));
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public void AiConfigurationOption_PreservesPathsAndOtherRunArguments(bool equalsForm)
+    {
+        var config = Path.Combine(_root, "private config", "ai.json");
+        string[] args = equalsForm
+            ? ["main.cop", "--scope=full", $"--ai-config={config}", "-t", _root]
+            : ["main.cop", "--scope", "full", "--ai-config", config, "-t", _root];
+
+        var parsed = ReviewArguments.Parse(args);
+
+        Assert.That(parsed.Arguments, Is.EqualTo(new[] { "main.cop", "-t", _root }));
+        Assert.That(parsed.Options.AiConfigPath, Is.EqualTo(config));
+        Assert.That(parsed.Options.Scope, Is.EqualTo("full"));
+        Assert.That(ReviewArguments.Parse(["main.cop"]).Options.AiConfigPath, Is.Null);
+        Assert.Throws<ArgumentException>(() => new ReviewOptions { AiConfigPath = " " }.Validate());
     }
 
     private static ReviewOptions Scoped() => new() { Scope = "branch", Base = "main", ReportScope = "changes" };

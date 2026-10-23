@@ -70,6 +70,7 @@ internal static class CliHelp
                 ("--base <ref>", "branch comparison base (otherwise remote default branch)"),
                 ("--pr <number|url>", "exact PR comparison; requires --scope pr"),
                 ("--report-scope <mode>", "static findings: all (default) or changes; analysis stays complete"),
+                ("--ai-config <path>", "AI endpoint configuration (default: ~/.cop/ai.json)"),
             },
             new[] { "cop run csharp-checks -t .", "cop run ./cop-checks/main.cop -t src" }),
 
