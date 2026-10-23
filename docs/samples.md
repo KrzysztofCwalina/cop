@@ -177,6 +177,7 @@ Native C# providers for configuration formats and scripting languages.
 | [http-server](../packages/http/samples/http-server.cop) | Simple HTTP server |
 | [http-client](../packages/http/samples/http-client.cop) | HTTP client with API calls |
 | [list-cop-types](../packages/languages/cop/samples/list-types.cop) | List types in .cop files |
+| [list-cop-functions](../packages/languages/cop/samples/list-functions.cop) | Inspect Cop functions, predicates, and commands with parsed intrinsic metadata |
 | [query-results](../packages/analysis-codeql/samples/query-results.cop) | Query CodeQL SARIF results |
 | [generate-query](../packages/csharp-codeql-export/samples/generate-query.cop) | Generate a CodeQL query |
 | [run-checkov](../packages/analysis-checkov/samples/run-checkov.cop) | Run Checkov security checks |
