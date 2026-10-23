@@ -182,6 +182,30 @@ public class IssueRegressionTests
         Assert.That(Normalize(result.Stderr), Is.EqualTo(string.Empty), Describe(result));
     }
 
+    [Test]
+    public void Issue066_PublishedHostExtractsCSharpStatementsWithMatchingProvider()
+    {
+        File.WriteAllText(Path.Combine(_workDir, "Sample.cs"),
+            "public class Sample { public int M() { return 1; } }\n");
+        var program = Path.Combine(_workDir, "main.cop");
+        File.WriteAllText(program, """
+            import code
+            import csharp
+            let cb = csharp.parse()
+            command MAIN = CHECK(cb.Statements:toError('ISSUE66 {item.Kind} {item.Method.Name}'))
+            """);
+
+        var verify = RunCop($"verify \"{program}\"");
+        Assert.That(verify.ExitCode, Is.EqualTo(0), Describe(verify));
+
+        var result = RunCop($"\"{program}\" -t \"{_workDir}\"");
+
+        Assert.That(result.ExitCode, Is.EqualTo(1), Describe(result));
+        Assert.That(Normalize(result.Stdout),
+            Is.EqualTo("Sample.cs(1): error: ISSUE66 return M"), Describe(result));
+        Assert.That(Normalize(result.Stderr), Is.EqualTo(string.Empty), Describe(result));
+    }
+
     private static string RepoRoot => FindRepoRoot();
 
     private static string CopExe => Path.Combine(RepoRoot, "install", "win-x64", "cop.exe");
