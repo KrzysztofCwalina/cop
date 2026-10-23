@@ -196,6 +196,8 @@ public static class CodeCollectionBuilder
             file.Types[i] = file.Types[i] with { File = file };
 
         LinkMethodFiles(file.Types, file);
+        foreach (var method in file.Methods)
+            method.File = file;
 
         for (int i = 0; i < file.Regions.Count; i++)
         {

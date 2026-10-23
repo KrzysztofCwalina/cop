@@ -7,6 +7,19 @@ namespace Cop.Tests.Lang;
 [TestFixture]
 public class CopParserTests
 {
+    [TestCase("function value() : string => 'intrinsic'", false)]
+    [TestCase("predicate value() => 'intrinsic'", false)]
+    [TestCase("function value() : string => intrinsic", true)]
+    [TestCase("predicate value() => intrinsic", true)]
+    public void Parse_IntrinsicBodyRequiresKeywordToken(string source, bool intrinsic)
+    {
+        var module = CopParser.Parse(source, "test.cop");
+        var function = (FunctionDecl)module.Declarations.Single();
+        Assert.That(function.Body is IntrinsicBody, Is.EqualTo(intrinsic));
+        if (!intrinsic)
+            Assert.That(((LiteralExpr)((ExpressionBody)function.Body).Expr).Value, Is.EqualTo("intrinsic"));
+    }
+
     [Test]
     public void Parse_ImportDeclaration()
     {

@@ -6,7 +6,7 @@
 # codebase(Program.Providers) makes the package silently produce nothing unless the
 # caller remembers to pass `-p <lang>`, which is a footgun.
 #
-# Run against the packages directory: cop cop-checks/packages/main.cop -t packages
+# Run against the packages directory: cop cop-checks/cop/packages/main.cop -t packages
 #
 # Inspect parsed calls and argument member accesses. Whitespace and line breaks do
 # not affect detection, and comments/string literals are not calls.

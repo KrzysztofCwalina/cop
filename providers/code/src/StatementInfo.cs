@@ -27,7 +27,7 @@ public class StatementInfo(
     public string Source => $"{File?.Path}:{MemberName}";
 
     // Tree navigation
-    public MethodDeclaration? Method { get; init; }
+    public MethodDeclaration? Method { get; set; }
     public StatementInfo? Parent { get; set; }
     public IReadOnlyList<StatementInfo> Children => _children;
     public string? Condition { get; init; }

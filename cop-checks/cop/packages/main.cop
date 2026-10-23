@@ -2,7 +2,7 @@
 # These inspect cop PACKAGE source (.cop files), which the root suite excludes
 # (packages/ is an excluded directory), so this sub-suite is run against packages:
 #
-#   cop cop-checks/packages/main.cop -t packages
+#   cop cop-checks/cop/packages/main.cop -t packages
 #
 # It only parses .cop source (cop.parse()); no language provider / -p flag needed.
 

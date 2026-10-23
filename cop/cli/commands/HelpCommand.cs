@@ -518,6 +518,8 @@ public static class HelpCommand
             Console.WriteLine();
             Console.WriteLine("    codebase.Methods:asCSharp:<predicate>     codebase.Statements:asRust:<predicate>");
             Console.WriteLine();
+            Console.WriteLine("  Cop functions, predicates, and commands use codebase.Methods:asCop -> CopFunction.");
+            Console.WriteLine();
             Console.WriteLine("  Run 'cop help <language>' (e.g. cop help csharp) to see each subtype's fields.");
             Console.WriteLine();
         }

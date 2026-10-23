@@ -17,6 +17,9 @@ public record SourceFile(
 
     public List<string> Usings { get; init; } = [];
 
+    /// <summary>Top-level functions, including declarations outside a type.</summary>
+    public List<MethodDeclaration> Methods { get; init; } = [];
+
     public string? Namespace { get; init; }
 
     public List<RegionInfo> Regions { get; init; } = [];

@@ -531,7 +531,7 @@ public class CopParser
         FunctionBody body;
         if (Match(TokenKind.Arrow) || Match(TokenKind.Equals))
         {
-            if (MatchKeyword("intrinsic"))
+            if (Match(TokenKind.IntrinsicKeyword))
             {
                 body = new IntrinsicBody();
             }
@@ -602,7 +602,7 @@ public class CopParser
         FunctionBody body;
         if (Match(TokenKind.Equals) || Match(TokenKind.Arrow))
         {
-            if (MatchKeyword("intrinsic"))
+            if (Match(TokenKind.IntrinsicKeyword))
             {
                 body = new IntrinsicBody();
             }

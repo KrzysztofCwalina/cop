@@ -255,7 +255,8 @@ export type File = {
     Language : Language?,
     Namespace : string?,
     Usings : [string],
-    Types : [Type]
+    Types : [Type],
+    Methods : [Method]
 }
 
 export type ProjectProperty = {

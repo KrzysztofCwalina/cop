@@ -1434,6 +1434,11 @@ const packages = {
             "name": "Types",
             "type": "[Type]",
             "desc": ""
+          },
+          {
+            "name": "Methods",
+            "type": "[Method]",
+            "desc": ""
           }
         ]
       },
@@ -2163,19 +2168,67 @@ const packages = {
     "overview": "Structural analysis of .cop source files — types, predicates, functions, imports",
     "samples": [
       {
+        "title": "List functions",
+        "code": "import cop\n\n# Inspect Cop function declarations using parsed language-specific facts.\nlet cb = cop.parse()\ncommand MAIN = foreach cb.Methods:asCop =>\n    '{item.Name}: intrinsic={item.IsIntrinsic}, predicate={item.IsPredicate}, command={item.IsCommand}'"
+      },
+      {
         "title": "List types",
         "code": "import cop\n\n# List all types defined in .cop files\nlet cb = cop.parse()\ncommand MAIN = foreach cb.Types => '{item.Name} ({item.File.Path})'"
       }
     ],
     "collections": [],
-    "types": {},
-    "predicates": [],
+    "types": {
+      "CopFunction": {
+        "desc": "A parsed Cop function, predicate, or command. Common signature and location\nfields are inherited from Method; Cop-only facts come directly from the AST.\nObtain one with codebase.Methods:asCop.",
+        "baseType": "Method",
+        "props": [
+          {
+            "name": "IsIntrinsic",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsPredicate",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsCommand",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsExported",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "HasGuard",
+            "type": "bool",
+            "desc": ""
+          }
+        ]
+      }
+    },
+    "predicates": [
+      {
+        "name": "asCop",
+        "appliesTo": "Method",
+        "narrows": "CopFunction",
+        "desc": "Narrows a Method to a CopFunction, excluding functions from other languages.\nExample: codebase.Methods:asCop:isIntrinsic"
+      },
+      {
+        "name": "isIntrinsic",
+        "appliesTo": "CopFunction",
+        "desc": "True when the function's implementation is supplied by the runtime."
+      }
+    ],
     "functions": [
       {
         "name": "parse",
         "params": "",
         "returns": "Codebase",
-        "desc": "Parses .cop source files in the target directory and returns a Codebase.\nExample: let cb = cop.parse()"
+        "desc": "Parses .cop source files in the target directory and returns a Codebase.\nMethods contains top-level functions, predicates, and commands; narrow with :asCop.\nExample: let cb = cop.parse()"
       },
       {
         "name": "parse",

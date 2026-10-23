@@ -108,7 +108,7 @@ public static class CodeSchema
 
                 TypeDef("File", null,
                     Prop("Path"), Opt("FullPath"), Opt("SourceRoot"), Opt("Language"), Opt("Namespace"),
-                    Coll("Usings"), Coll("Types", "Type"), Coll("Projects")),
+                    Coll("Usings"), Coll("Types", "Type"), Coll("Methods", "Method"), Coll("Projects")),
 
                 TypeDef("Api", null,
                     Prop("Kind"), Prop("TypeName"), Prop("MemberName"),

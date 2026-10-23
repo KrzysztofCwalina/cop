@@ -9,6 +9,8 @@ namespace Cop.Providers.SourceParsers;
 /// </summary>
 public class CopSourceParser : ISourceParser
 {
+    static CopSourceParser() => CopFunctionDeclaration.RegisterCacheFactory();
+
     public override IReadOnlyList<string> Extensions => [".cop"];
     public override string Language => "cop";
 
@@ -27,6 +29,7 @@ public class CopSourceParser : ISourceParser
 
         var types = new List<TypeDeclaration>();
         var statements = new List<StatementInfo>();
+        var functions = new Dictionary<FunctionDecl, CopFunctionDeclaration>();
         var usings = module.Declarations.OfType<ImportDecl>().Select(i => i.ModuleName).ToList();
 
         // Map type definitions → TypeDeclaration
@@ -63,6 +66,19 @@ public class CopSourceParser : ISourceParser
 
         foreach (var fn in module.Declarations.OfType<FunctionDecl>())
         {
+            var method = new MethodDeclaration(fn.Name, fn.IsExported ? Modifier.Public : Modifier.None,
+                [], fn.ReturnType is { } returnType ? MakeTypeRef(returnType.Name, returnType.IsCollection)
+                    : fn.IsPredicate ? MakeTypeRef("bool") : null,
+                fn.Params.Select(p => new ParameterDeclaration(p.Name,
+                    p.Type is { } type ? MakeTypeRef(type.Name, type.IsCollection) : null,
+                    false, false, false, p.Line)).ToList(), fn.Line)
+            {
+                HasDocComment = fn.DocComment is not null,
+                DocComment = fn.DocComment
+            };
+            functions.Add(fn, new CopFunctionDeclaration(method,
+                fn.Body is IntrinsicBody, fn.IsPredicate, fn.IsCommand, fn.Guard is not null));
+
             var keywords = new List<string> { fn.IsPredicate ? "predicate" : "function" };
             if (fn.Body is IntrinsicBody) keywords.Add("intrinsic");
             statements.Add(new StatementInfo(fn.IsCommand ? "command" : "declaration", keywords,
@@ -92,33 +108,44 @@ public class CopSourceParser : ISourceParser
                 null, cmd.Name, [], cmd.Line, false));
         }
 
-        new ExpressionCollector(statements).Visit(module);
+        new ExpressionCollector(statements, functions).Visit(module);
 
         return new SourceFile(filePath, "cop", types, statements, sourceText)
         {
-            Usings = usings
+            Usings = usings,
+            Methods = functions.Values.Cast<MethodDeclaration>().ToList()
         };
     }
 
-    private sealed class ExpressionCollector(List<StatementInfo> statements) : AstWalker
+    private sealed class ExpressionCollector(List<StatementInfo> statements,
+        IReadOnlyDictionary<FunctionDecl, CopFunctionDeclaration> functions) : AstWalker
     {
+        private CopFunctionDeclaration? _function;
+
         public override object? VisitCallExpr(Cop.Lang.Ast.CallExpr node)
         {
             var target = ConvertExpression(node.Callee);
-            statements.Add(new StatementInfo("call", [],
-                target.Target?.Name, target.Name, [], node.Line, false)
+            var statement = new StatementInfo("call", [],
+                target.Target?.Name, target.Name, [], node.Line, _function is not null)
             {
                 CallTarget = target,
-                ArgumentExpressions = node.Args.Select(ConvertExpression).ToList()
-            });
+                ArgumentExpressions = node.Args.Select(ConvertExpression).ToList(),
+                Method = _function
+            };
+            statements.Add(statement);
+            _function?.Statements.Add(statement);
             return base.VisitCallExpr(node);
         }
 
         public override object? VisitFunctionDecl(FunctionDecl node)
         {
+            var previous = _function;
+            _function = functions[node];
             if (node.Body is BlockBody block)
                 foreach (var statement in block.Statements) Visit(statement);
-            return base.VisitFunctionDecl(node);
+            base.VisitFunctionDecl(node);
+            _function = previous;
+            return null;
         }
 
         protected override object? DefaultVisit(AstNode node)

@@ -25,4 +25,3 @@ predicate piReferencesProviderProject(Project) => Project.References:any(piIsPro
 
 export let derived-provider-isolation = codebase.Projects:piIsProviderProject:piReferencesProviderProject
     :toError('Provider project {item.Name} must not reference another provider project')
-
