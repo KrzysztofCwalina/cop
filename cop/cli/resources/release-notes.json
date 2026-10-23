@@ -176,6 +176,16 @@
         "Core `Path`, named numeric comparisons, and `sameAs` are implemented in Cop, with shared core definitions available automatically and a unified `isError` predicate.",
         "Repository self-checks use parsed code facts and no longer flag incidental test FFI registrations; the FFI invocation test has a narrowly scoped exception."
       ]
+    },
+    {
+      "version": "2026.10.22.2",
+      "approved": true,
+      "features": [
+        "AI reviews are diff-first by default, with branch and exact-PR scopes, bounded source lookups for context, and an explicit full-codebase opt-in.",
+        "Write architectural AI rules in ordinary Markdown: markdown.parse preserves ordered document trees, and ai.judge(document, codebase, level) reviews complete sections with inherited context.",
+        "Static checks can report only changed-area findings with --report-scope changes while retaining full semantic analysis.",
+        "Fixed package-qualified parser calls and lazy source locations so scoped analysis resolves the correct source files."
+      ]
     }
   ]
 }
