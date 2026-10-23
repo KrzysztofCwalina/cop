@@ -36,9 +36,47 @@ public class SelfCheckStructureTests
     }
 
     [Test]
+    public void SelfChecksAreGroupedBySourceLanguage()
+    {
+        var checks = Path.Combine(_repo, "cop-checks");
+        Assert.That(Directory.GetFiles(checks, "*.cop").Select(Path.GetFileName),
+            Is.EqualTo(new[] { "main.cop" }));
+        Assert.That(Directory.GetFiles(Path.Combine(checks, "cop"), "*.cop", SearchOption.AllDirectories),
+            Has.Length.EqualTo(6));
+        Assert.That(Directory.GetFiles(Path.Combine(checks, "csharp"), "*.cop", SearchOption.AllDirectories),
+            Has.Length.EqualTo(32));
+        Assert.That(Directory.GetFiles(Path.Combine(checks, "general"), "*.cop", SearchOption.AllDirectories),
+            Has.Length.EqualTo(2));
+    }
+
+    [Test]
+    public void GroupedSelfChecks_RunCopAndCSharpRulesThroughRootMain()
+    {
+        var target = Path.Combine(_root, "target");
+        Directory.CreateDirectory(target);
+        File.WriteAllText(Path.Combine(target, "Wrong.cop"),
+            "export function misplaced(value : string) : string => intrinsic");
+        File.WriteAllText(Path.Combine(target, "Sample.cs"),
+            "namespace Fixture; public interface IUnexpected { }");
+        var checks = Path.Combine(_repo, "cop-checks");
+        var main = Path.Combine(checks, "main.cop");
+        var files = Directory.GetFiles(checks, "*.cop", SearchOption.AllDirectories)
+            .Where(f => f != main).Order(StringComparer.Ordinal).Append(main).ToArray();
+        var result = Engine.Run(checks, target, scriptFiles: files,
+            additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+
+        Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
+        Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]
+        {
+            "Wrong.cop(1): error: Intrinsic declaration must be in intrinsics.cop, not Wrong.cop",
+            "Sample.cs(1): error: Do not add new interfaces — use abstract classes instead: IUnexpected in Sample.cs"
+        }));
+    }
+
+    [Test]
     public void RepositoryHasNoUnapprovedRegexImports()
     {
-        File.Copy(Path.Combine(_repo, "cop-checks", "no-regex.cop"), Path.Combine(_root, "rule.cop"));
+        File.Copy(Path.Combine(_repo, "cop-checks", "csharp", "no-regex.cop"), Path.Combine(_root, "rule.cop"));
         File.WriteAllText(Path.Combine(_root, "main.cop"), "command MAIN = CHECK(no-regex)");
         var result = Engine.Run(_root, _repo, additionalFeedPaths: [Path.Combine(_repo, "packages")]);
 
@@ -71,7 +109,7 @@ public class SelfCheckStructureTests
     [Test]
     public void Issue054_EnvironmentCheckUsesCallsAndOnlyTheActualVariableName()
     {
-        AssertCheck("no-environment.cop", "no-environment", "Input.cs", """
+        AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", "Input.cs", """
             using System;
             namespace Fixture;
             class Example {
@@ -93,7 +131,7 @@ public class SelfCheckStructureTests
     [Test]
     public void Issue054_FfiApprovalUsesTheDecodedFirstArgumentOnly()
     {
-        AssertCheck("no-new-ffi.cop", "no-new-ffi", "Input.cs", """
+        AssertCheck(Path.Combine("csharp", "no-new-ffi.cop"), "no-new-ffi", "Input.cs", """
             class Example {
                 void RegisterAll(Registry ffi) {
                     ffi.Register("print", () => "");
@@ -115,7 +153,7 @@ public class SelfCheckStructureTests
     [TestCase("cop/shared/interpreter/StandardLibrary.cs", false)]
     public void FfiExceptionOnlyAllowsTheInvocationTest(string file, bool allowsInvocationTest)
     {
-        AssertCheck("no-new-ffi.cop", "no-new-ffi", file, """
+        AssertCheck(Path.Combine("csharp", "no-new-ffi.cop"), "no-new-ffi", file, """
             class Example {
                 void EvalForeignFunction(Registry ffi) {
                     ffi.Register("double", () => 0);
@@ -132,7 +170,7 @@ public class SelfCheckStructureTests
     [Test]
     public void Issue054_NullableCheckUsesActiveParsedDirectives()
     {
-        AssertCheck(Path.Combine("derived", "no-nullable-disable.cop"), "derived-no-nullable-disable", "Input.cs", """
+        AssertCheck(Path.Combine("csharp", "derived", "no-nullable-disable.cop"), "derived-no-nullable-disable", "Input.cs", """
             #nullable enable
             // #nullable disable
             class Example { string Decoy = "#nullable disable"; }
@@ -157,7 +195,7 @@ public class SelfCheckStructureTests
     [TestCase("checks/rust-checks")]
     public void Issue054_PackageCheckUsesCopCallAndMemberNodesIncludingCachedRuns(string package)
     {
-        AssertCheck(Path.Combine("packages", "lang-provider-hardcoded.cop"),
+        AssertCheck(Path.Combine("cop", "packages", "lang-provider-hardcoded.cop"),
             "lang-provider-hardcoded-violations", Path.Combine(package, "Input.cop"), """
             # codebase(Program.Providers)
             let decoy = 'codebase(Program.Providers)'

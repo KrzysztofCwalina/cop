@@ -7,7 +7,7 @@ namespace Cop.Providers;
 internal static class SourceCacheSerializer
 {
     private static readonly byte[] Magic = [(byte)'C', (byte)'O', (byte)'P', (byte)'C'];
-    private const int FormatVersion = 4;
+    private const int FormatVersion = 5;
 
     public static void Save(string cachePath, byte[] fingerprint, List<SourceFile> sourceFiles)
     {
@@ -76,6 +76,9 @@ internal static class SourceCacheSerializer
         WriteNullableString(writer, sourceFile.Namespace);
         WriteList(writer, sourceFile.Regions, WriteRegionInfo);
         WriteHashSet(writer, sourceFile.CommentLines);
+        WriteList(writer, sourceFile.Methods, WriteMethodDeclaration);
+        foreach (var statement in sourceFile.Statements)
+            writer.Write(statement.Method is null ? -1 : sourceFile.Methods.IndexOf(statement.Method));
     }
 
     private static SourceFile ReadSourceFile(BinaryReader reader)
@@ -89,13 +92,28 @@ internal static class SourceCacheSerializer
         var @namespace = ReadNullableString(reader);
         var regions = ReadList(reader, ReadRegionInfo, "SourceFile.Regions");
         var commentLines = ReadHashSet(reader, "SourceFile.CommentLines");
+        var methods = ReadList(reader, ReadMethodDeclaration, "SourceFile.Methods");
+        foreach (var method in methods)
+            method.Statements = [];
+        for (int i = 0; i < statements.Count; i++)
+        {
+            var methodIndex = reader.ReadInt32();
+            if (methodIndex < -1 || methodIndex >= methods.Count)
+                throw new InvalidDataException("Invalid top-level method reference.");
+            if (methodIndex >= 0)
+            {
+                statements[i].Method = methods[methodIndex];
+                methods[methodIndex].Statements.Add(statements[i]);
+            }
+        }
 
         return new SourceFile(path, language, types, statements, rawText)
         {
             Usings = usings,
             Namespace = @namespace,
             Regions = regions,
-            CommentLines = commentLines
+            CommentLines = commentLines,
+            Methods = methods
         };
     }
 

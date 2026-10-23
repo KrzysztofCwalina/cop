@@ -454,12 +454,27 @@ This keeps the common model language-agnostic — multi-language checks still ru
 and reads the extra fields. The narrowed values still satisfy their base type, so base
 predicates (`isPublic`, `isCSharp`, …) and `toError`/`toWarning` continue to work after narrowing.
 
+The `cop` package exposes top-level functions, predicates, and commands through
+`Codebase.Methods` (and `File.Methods`). Narrow with `:asCop` to get a `CopFunction`:
+
+```cop
+import cop
+
+let cb = cop.parse()
+command MAIN = foreach cb.Methods:asCop:isIntrinsic => '{item.Name} ({item.File.Path})'
+```
+
+`CopFunction` inherits the common method signature, documentation, and source location,
+and adds `IsIntrinsic`, `IsPredicate`, `IsCommand`, `IsExported`, and `HasGuard`.
+These facts come from the parsed Cop AST. In particular, `IsIntrinsic` identifies
+an `intrinsic` body marker, not a string or comment containing that word.
+
 > **Write language-specific checks only when the language-agnostic model can't express the
 > rule.** Most rules should use `codebase.Types`, `Type.Name`, `Type.Kind`, `Type.Modifiers`,
 > `Type.BaseTypes`, `Type.Decorators`, etc. — they work across every language. Reach for a
-> language narrowing (`:asCSharp`, `:asRust`, `:asJava`, `:asPython`, `:asGo`, `:asJavaScript`)
+> language narrowing (`:asCSharp`, `:asRust`, `:asJava`, `:asPython`, `:asGo`, `:asJavaScript`, `:asCop`)
 > **only** for a fact the common model genuinely lacks (e.g. C# `record`/`partial`, Rust
-> `unsafe`/traits, Java `record`). Run `cop help <language>` to see each language's extra fields.
+> `unsafe`/traits, Java `record`, Cop `intrinsic`). Run `cop help <language>` to see each language's extra fields.
 
 #### Constrained Predicates
 

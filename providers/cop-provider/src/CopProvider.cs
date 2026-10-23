@@ -6,14 +6,14 @@ namespace Cop.Providers;
 /// <summary>
 /// Cop language source code provider. Scans and parses .cop files,
 /// exposing their structure (types, predicates, functions, imports) through
-/// the shared code analysis collections (Types, Statements, Lines, Files).
+/// the shared code analysis collections, with CopFunction declarations in Methods.
 /// </summary>
 public class CopProvider : DataProvider
 {
 
-    public override ReadOnlyMemory<byte> GetSchema() => CodeSchema.GetJson();
+    public override ReadOnlyMemory<byte> GetSchema() => CopSchema.GetJson();
 
-    public override RuntimeBindings GetRuntimeBindings() => CodeBindings.Build();
+    public override RuntimeBindings GetRuntimeBindings() => CopBindings.Build();
 
     public override object? Query(ProviderQuery query)
     {

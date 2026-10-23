@@ -1,16 +1,35 @@
 # Cop Language Analysis Package v1.0
 # Provides structural analysis of .cop source files through
-# the standard code analysis collections (Types, Statements, Lines, Files).
+# the standard code analysis collections (Types, Methods, Statements, Lines, Files).
 #
 # Usage: import cop
-# Then use cop.parse() to get the Codebase, or ambient collections with -p cop.
+# Use cop.parse() to get the Codebase and Methods:asCop for Cop function facts.
 
 import code
 
 ## Parses .cop source files in the target directory and returns a Codebase.
+## Methods contains top-level functions, predicates, and commands; narrow with :asCop.
 ## Example: let cb = cop.parse()
 export function parse() : Codebase => provider('cop')
 
 ## Parses .cop source files in the specified directory and returns a Codebase.
 ## Example: let cb = cop.parse('/path/to/project')
 export function parse(path : string) : Codebase => provider('cop', path)
+
+## A parsed Cop function, predicate, or command. Common signature and location
+## fields are inherited from Method; Cop-only facts come directly from the AST.
+## Obtain one with codebase.Methods:asCop.
+export type CopFunction = Method & {
+    IsIntrinsic : bool
+    IsPredicate : bool
+    IsCommand : bool
+    IsExported : bool
+    HasGuard : bool
+}
+
+## Narrows a Method to a CopFunction, excluding functions from other languages.
+## Example: codebase.Methods:asCop:isIntrinsic
+export predicate asCop(Method) : CopFunction => Method.File.Language == cop
+
+## True when the function's implementation is supplied by the runtime.
+export predicate isIntrinsic(CopFunction) => CopFunction.IsIntrinsic

@@ -177,12 +177,16 @@ and PR. Do not `dotnet test cop.sln` (MSB5004 — two projects named `cop`); tes
 
 All cop check files live in `cop-checks/` at the repository root. Structure:
 
+- **`cop/`** — rules inspecting Cop source, including check-authoring conventions
+- **`csharp/`** — rules inspecting C# source and .NET projects; opt-in AI rules live in `csharp/ai/`
+- **`general/`** — language-independent project dependency and layering rules
+- **`<group>/derived/`** — derived rules, still selected with `-c DERIVED`
 - **One check per file** — each `.cop` file defines a single focused check
 - **Each file declares a `let` with its violations** — e.g., `let naming-violations = ...`
 - **`main.cop` composes all checks** — concatenates violation lists from each file with `+` and runs `CHECK(all-violations)`
 - **Run all checks with** `cop cop-checks/main.cop -t .` from the repo root
 
-When adding a new self-check, create a new `.cop` file in `cop-checks/`, declare a violation let, and add it to the `+` expression in `main.cop`.
+When adding a new self-check, create a new `.cop` file under the appropriate group in `cop-checks/`, declare a violation let, and add it to the appropriate `+` expression in the root `main.cop`. Group folders share the root's `codebase`; they are not standalone programs. The separate package-source suite is `cop-checks/cop/packages/main.cop`, run with `cop cop-checks/cop/packages/main.cop -t packages`.
 
 ## Language vs. Package Boundary
 
@@ -248,9 +252,16 @@ Narrow a collection to one language with `isCSharp` / `isPython` / `isJavaScript
 ```
 cop-checks/
   main.cop              # Builds the codebase, composes all checks → CHECK(all-violations)
-  namespaces.cop        # One focused check per file
-  layering.cop          # Another check
-  ...
+  cop/                  # Cop source rules
+    derived/
+    packages/           # Separate main.cop, run against packages/
+  csharp/               # C# source and .NET project rules
+    namespaces.cop
+    derived/
+    ai/                 # Opt-in AI rules
+  general/              # Language-independent project rules
+    layering.cop
+    derived/
 ```
 
 Rules:
@@ -293,7 +304,7 @@ command MAIN = CHECK(all-violations)
 
 ## Complete Real-World Example
 
-**`cop-checks/namespaces.cop`** — ensures all types are in namespaces:
+**`cop-checks/csharp/namespaces.cop`** — ensures all types are in namespaces:
 
 ```cop
 # All C# types must be in namespaces
@@ -306,7 +317,7 @@ let types-without-namespace = codebase.Types:isMissingNamespace
     :toError('{item.Name} in {item.File.Path} must be in a namespace')
 ```
 
-**`cop-checks/layering.cop`** — enforces dependency rules:
+**`cop-checks/general/layering.cop`** — enforces dependency rules:
 
 ```cop
 # Runtime must not reference providers

@@ -16,6 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\cop\cli\cop.csproj" />
     <ProjectReference Include="..\..\providers\csharp-provider\csharp-provider.csproj" />
+    <ProjectReference Include="..\..\providers\cop-provider\cop-provider.csproj" />
     <ProjectReference Include="..\..\providers\python-provider\python-provider.csproj" />
     <ProjectReference Include="..\..\providers\javascript-provider\javascript-provider.csproj" />
     <ProjectReference Include="..\..\providers\rust-provider\rust-provider.csproj" />

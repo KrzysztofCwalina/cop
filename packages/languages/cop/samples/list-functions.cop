@@ -1,0 +1,6 @@
+import cop
+
+# Inspect Cop function declarations using parsed language-specific facts.
+let cb = cop.parse()
+command MAIN = foreach cb.Methods:asCop =>
+    '{item.Name}: intrinsic={item.IsIntrinsic}, predicate={item.IsPredicate}, command={item.IsCommand}'

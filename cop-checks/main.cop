@@ -1,12 +1,15 @@
 # Cop Self-Checks
 # Run all checks: cop cop-checks/main.cop -t .
 # Run AI checks:  cop cop-checks/main.cop -t . -c ai
+# Rules are grouped by the source they inspect: cop/, csharp/, and general/.
+# Each group's derived/ rules still run via DERIVED; csharp/ai/ remains opt-in.
 
 import code
 import code
 import csharp
 import cop
 
+# Shared by the root-suite rules in all three groups.
 let codebase = codebase(csharp.parse(), cop.parse())
 
 export let all-violations = 
@@ -28,7 +31,7 @@ export let all-ai-violations =
 command AI = CHECK(all-ai-violations)
 
 # Derived checks — architectural & design rules specific to the cop codebase
-# (cop-checks/derived/). Each codifies a decision a newcomer wouldn't know from
+# (cop-checks/<group>/derived/). Each codifies a decision a newcomer wouldn't know from
 # standard .NET tooling. Run with: cop cop-checks/main.cop -t . -c DERIVED
 export let all-derived-violations =
     # Layering & the general-purpose-core boundary

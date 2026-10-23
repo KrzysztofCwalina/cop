@@ -1,4 +1,20 @@
-# Derived Cop self-checks
+# Cop self-checks
+
+Rules are grouped by the source they inspect:
+
+- `cop/`: Cop declarations and check-authoring rules.
+- `csharp/`: C# source and .NET project rules; `csharp/ai/` contains opt-in AI checks.
+- `general/`: language-independent project dependency and layering rules.
+
+The root `main.cop` defines the shared `codebase` and composes the default rules.
+Run it with `cop cop-checks/main.cop -t .`; opt into AI checks with `-c AI`.
+Group folders are not standalone programs. The separate package-source suite is
+`cop cop-checks/cop/packages/main.cop -t packages`.
+
+## Derived rule catalog
+
+Derived rules live in each group's `derived/` subfolder. Unless stated otherwise
+below, the catalog's filenames refer to `csharp/derived/`.
 
 Run: `cop cop-checks/main.cop -t . -c DERIVED`
 
@@ -28,9 +44,12 @@ first string argument, never by a comment or unrelated text on the same line.
 | `provider-naming.cop` | A C# class that extends `DataProvider` must be named `*Provider`. This is load-bearing, not style: the base class computes a provider's registered name by stripping the `Provider` suffix, so a misnamed class registers under the wrong name. |
 | `provider-namespace.cop` | Provider classes (the `DataProvider` subclasses) must live in the `Cop.Providers` namespace (or a sub-namespace) so every plugin shares one root. (The two TypeSpec providers are a known, allowlisted exception.) |
 | `provider-sources-under-src.cop` | A provider's C# source files must live under `providers/<name>/src/` — the standard provider package layout that the build and packaging rely on. |
-| `provider-isolation.cop` | A provider project must not reference *another* provider project — only the core `cop` project. Providers are independent plugins; referencing each other couples them and causes load-order and duplicate-assembly problems. |
+| `general/derived/provider-isolation.cop` | A provider project must not reference *another* provider project — only the core `cop` project. Providers are independent plugins; referencing each other couples them and causes load-order and duplicate-assembly problems. |
 
 ## cop-checks authoring
+
+These rules live under `cop/derived/`.
+
 | Rule | Description |
 |------|-------------|
 | `single-command-in-checks.cop` | Within `cop-checks/`, only `main.cop` may define a `command`. The suite is one program with a single entry point (`main.cop` defines `MAIN`/`AI`/`DERIVED`); every other file just exports its list of violations. |

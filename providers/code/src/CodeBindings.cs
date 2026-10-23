@@ -202,6 +202,7 @@ public static class CodeBindings
                 ["Namespace"] = o => ((SourceFile)o).Namespace,
                 ["Usings"] = o => (object)((SourceFile)o).Usings,
                 ["Types"] = o => (object)((SourceFile)o).Types,
+                ["Methods"] = o => (object)((SourceFile)o).Methods,
                 ["Projects"] = o => (object)((SourceFile)o).Projects,
             },
             ["Member"] = new()
@@ -258,8 +259,9 @@ public static class CodeBindings
             ["Statements"] = doc => ((SourceFile)doc).Statements.Cast<object>().ToList(),
             ["Methods"] = doc =>
             {
-                var result = new List<object>();
-                CollectMethods(((SourceFile)doc).Types, result);
+                var file = (SourceFile)doc;
+                var result = file.Methods.Cast<object>().ToList();
+                CollectMethods(file.Types, result);
                 return result;
             },
             ["Calls"] = doc => ((SourceFile)doc).Statements.Where(s => s.Kind == "call").Cast<object>().ToList(),
