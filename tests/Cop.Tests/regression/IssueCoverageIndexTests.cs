@@ -76,6 +76,7 @@ public class IssueRegressionCoverageIndexTests
         new(62, CoverageKind.ImplementedHere, "PackageNamespaceRegressionTests.Issue062_QualifiedPurePackageFunctionExecutes"),
         new(63, CoverageKind.ImplementedHere, "LazySourceLocationRegressionTests.Issue063_ToErrorResolvesLazySourceLocationWithoutPriorFieldReads"),
         new(65, CoverageKind.ImplementedHere, "IntrinsicLiteralRegressionTests.Issue065_FunctionCanReturnIntrinsicStringLiteral"),
+        new(66, CoverageKind.ImplementedHere, "IssueRegressionTests.Issue066_PublishedHostExtractsCSharpStatementsWithMatchingProvider"),
     ];
 
     [Test]
@@ -85,8 +86,8 @@ public class IssueRegressionCoverageIndexTests
         Assert.That(duplicates, Is.Empty, "Each issue must appear exactly once in the regression coverage index.");
 
         var coveredIssues = Coverage.Select(c => c.Issue).OrderBy(i => i).ToArray();
-        Assert.That(coveredIssues, Is.EqualTo(Enumerable.Range(1, 55).Concat([60, 61, 62, 63, 65]).ToArray()),
-            "Regression coverage index must cover issues #1 through #55, #60-#63 and #65.");
+        Assert.That(coveredIssues, Is.EqualTo(Enumerable.Range(1, 55).Concat([60, 61, 62, 63, 65, 66]).ToArray()),
+            "Regression coverage index must cover issues #1 through #55, #60-#63, #65, and #66.");
 
         var untracked = Coverage.Where(c => string.IsNullOrWhiteSpace(c.Detail)).Select(c => c.Issue).ToArray();
         Assert.That(untracked, Is.Empty, "Every issue must be ImplementedHere, CoveredBy(suiteName), or OutOfScope(reason).");

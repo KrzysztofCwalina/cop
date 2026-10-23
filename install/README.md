@@ -29,6 +29,13 @@ To build for just your platform:
 install/publish.ps1 -Runtimes win-x64
 ```
 
+For the host's runtime identifier, publishing verifies and executes a small C# parser
+program using the actual published executable and the freshly built provider DLL.
+It asserts the exact parsed statement and its containing method before creating the
+archive or updating the PATH-installed executable. A failed build or smoke test stops
+publishing; cross-platform binaries still need functional testing on their target OS.
+`-SkipBuild` also runs this smoke test for the host runtime.
+
 ## Usage
 
 Add the platform subfolder to your PATH, or invoke directly:
