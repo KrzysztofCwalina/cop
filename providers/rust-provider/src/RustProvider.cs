@@ -14,6 +14,10 @@ public class RustProvider : DataProvider
 
     public override RuntimeBindings GetRuntimeBindings() => RustBindings.Build();
 
+    public override IReadOnlyDictionary<string, object?> GetQueryMetadata(ProviderQuery query) =>
+        CodeBindings.SourceMetadata(query, ".rs");
+    public override string QueryResultType => "Codebase";
+
     public override object? Query(ProviderQuery query)
     {
         // Ensure cached Rust types reconstruct as RustTypeDeclaration (not the plain base)
@@ -24,7 +28,7 @@ public class RustProvider : DataProvider
 
         var parsers = new SourceParserRegistry();
         parsers.Register(new RustSourceParser());
-        var collections = CodeCollectionBuilder.CollectAndParse(parsers, query);
+        var collections = CodeCollectionBuilder.CollectAndParse(parsers, query, this);
 
         // Discover projects from Cargo.toml
         if (query.RootPath is not null)
@@ -34,6 +38,6 @@ public class RustProvider : DataProvider
                 collections["Projects"] = projects.Cast<object>().ToList();
         }
 
-        return collections;
+        return ApplyQueryFilters(query, collections);
     }
 }

@@ -11,6 +11,7 @@ namespace Cop.Providers.Sql;
 public sealed class SqlProvider : DataProvider
 {
     public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
+    public override string QueryResultType => "SqlContent";
 
     private static readonly ProviderSchema _schema = BuildSchema();
 
@@ -97,7 +98,7 @@ public sealed class SqlProvider : DataProvider
         var collections = new Dictionary<string, List<object>>(StringComparer.Ordinal);
         var requested = query.Collection;
         if (requested is null || requested == "Statements") collections["Statements"] = statements;
-        return collections;
+        return ApplyQueryFilters(query, collections);
     }
 
     private static void CollectSqlFiles(string dir, IReadOnlySet<string>? excluded, List<string> result)

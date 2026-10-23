@@ -19,6 +19,58 @@ Both approaches produce packages that can be published, shared, and composed wit
 
 ---
 
+## Deferred queries and provider optimization
+
+Provider collection access builds a deferred query; it does not fetch all collections.
+This includes scoped `provider(name, path)` access and language `parse()` results.
+Unifying language results with `codebase(...)` preserves their deferred collections.
+Filters over a union are sent to each provider separately.
+
+Cop translates boolean fields, scalar string/numeric comparisons, and supported string
+operations into `FilterExpression` trees. Simple named predicates and per-item `Where`
+expressions can also translate, including conjunction, disjunction, and negation.
+Translation is conservative: overloaded or guarded predicates, nested relationships,
+collection-valued expressions, and arbitrary functions remain local when their semantics
+cannot be represented safely. Local filtering and projection remain deferred.
+
+Iteration, `foreach`, `first`, indexing, `any`, and count terminals trigger execution.
+Counts (`count(items)`, `items.count()`, and `items.Count`) return the actual matching count.
+Repeated enumeration reuses results during that engine execution. Different paths,
+filters, exclusions, and options have separate query-cache entries; creating a filtered
+branch does not modify its source or another branch. Language providers reuse parsed
+source snapshots within an execution, not across separate engine runs.
+
+For CLR providers, `ProviderQuery.Collection` selects the requested collection;
+`Filter` and `CollectionFilters` carry optimization hints. The Node/Python process
+protocol sends the same information as `collection`, `filter`, and `collectionFilters`
+in the query's `params`. Filter objects use a `kind` discriminator and camelCase fields.
+Operations are numeric: string operations are starts-with=0, ends-with=1, contains=2,
+case-insensitive equals=3, regex=4, legacy same=5, ordinal equals=6; comparison operations
+are greater-than=0, less-than=1, equals=2, greater-or-equal=3, less-or-equal=4.
+Language `==` uses ordinal equality; `:equals()` is case-insensitive.
+
+Providers may ignore unsupported hints and return extra records: the host reapplies
+the filter to preserve correctness. They must never discard possible matches.
+In particular, do not push only part of a `NOT` or `OR` expression. The shared
+`FilterCompiler` declines unsupported trees conservatively.
+
+**Current limits:** pushdown selects collections and filters records. It does not push
+projection, joins, ordering, limits, or aggregate execution into providers. `take`/`first`
+can stop local enumeration early, but a provider can still return a complete matching
+collection. Language parsers may need to parse the whole source tree (especially Roslyn
+semantic analysis) before filtering extracted records. Format providers can parse a
+whole document before selecting/filtering its records. This is not a database optimizer,
+and returning fewer records does not imply reading fewer files.
+
+Passing a provider object to a CLR provider function materializes its collections.
+Its structural wrapper is preserved; CLR providers can declare `QueryResultType` for
+consumers that require a named wrapper such as `Codebase` or `MarkdownContent`.
+
+Diagnostic logging distinguishes `[query]` (the requested plan) from `[query-result]`
+(the number of records returned before host residual filtering).
+
+---
+
 ## Python Provider
 
 Create a package directory with `cop.json` and a Python entry script:

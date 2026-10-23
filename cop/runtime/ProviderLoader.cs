@@ -181,22 +181,23 @@ public static class ProviderLoader
         return schema;
     }
 
-    internal static Dictionary<string, List<object>> QueryCollections(DataProvider instance, ProviderSchema schema, ProviderQuery query, TypeRegistry? registry = null)
+    internal static Dictionary<string, List<object>> QueryCollections(DataProvider instance, ProviderSchema schema, ProviderQuery query, TypeRegistry? registry = null, Action<DataStore>? onStore = null)
     {
         var result = instance.Query(query);
         return result switch
         {
             null => new Dictionary<string, List<object>>(StringComparer.Ordinal),
             Dictionary<string, List<object>> collections => collections,
-            DataStore store => ConvertDataStoreToCollections(schema, store, registry),
+            DataStore store => ConvertDataStoreToCollections(schema, store, registry, onStore),
             byte[] json => ConvertJsonToCollections(schema, json, registry),
             ReadOnlyMemory<byte> json => ConvertJsonToCollections(schema, json.ToArray(), registry),
             _ => throw new InvalidOperationException($"Provider '{instance}' returned unsupported query result type '{result.GetType().FullName}'.")
         };
     }
 
-    private static Dictionary<string, List<object>> ConvertDataStoreToCollections(ProviderSchema schema, DataStore store, TypeRegistry? registry)
+    private static Dictionary<string, List<object>> ConvertDataStoreToCollections(ProviderSchema schema, DataStore store, TypeRegistry? registry, Action<DataStore>? onStore)
     {
+        onStore?.Invoke(store);
         registry?.RegisterDataTableAccessors(schema);
         registry?.WireDataStoreAccessors(schema, store);
 

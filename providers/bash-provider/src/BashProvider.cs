@@ -105,7 +105,7 @@ public sealed class BashProvider : DataProvider
         var requested = query.Collection;
         if (requested is null || requested == "Commands") collections["Commands"] = commands;
         if (requested is null || requested == "Scripts") collections["Scripts"] = scripts;
-        return collections;
+        return ApplyQueryFilters(query, collections);
     }
 
     private static void CollectBashFiles(string dir, IReadOnlySet<string>? excluded, List<string> result)
@@ -159,4 +159,3 @@ public sealed class BashProvider : DataProvider
         };
     }
 }
-

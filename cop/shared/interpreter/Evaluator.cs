@@ -574,42 +574,46 @@ public sealed class Evaluator
     private bool TryEvalPerItemTransform(CopValue collection, string member,
         IReadOnlyList<Expression> argExprs, Environment env, out CopValue result)
     {
+        CopValue Transform(Func<IEnumerable<CopValue>> factory) => collection is CopList
+            ? new CopList(factory().ToList()) : new CopLazyCollection(factory);
         result = CopNull.Instance;
         switch (member)
         {
             case "Select" or "select":
             {
                 if (argExprs.Count != 1) return false;
-                var projected = new List<CopValue>();
-                foreach (var item in CoerceToEnumerable(collection))
-                    projected.Add(ForceValue(EvalElementExpr(argExprs[0], item, env)));
-                result = new CopList(projected);
+                result = Transform(() => CoerceToEnumerable(collection)
+                    .Select(item => ForceValue(EvalElementExpr(argExprs[0], item, env))));
                 return true;
             }
             case "Where" or "where":
             {
                 if (argExprs.Count != 1) return false;
-                var kept = new List<CopValue>();
-                foreach (var item in CoerceToEnumerable(collection))
+                if (collection is CopQueryable query
+                    && PredicateCompiler.TryCompileElement(argExprs[0], env, query.ItemType) is { } compiled
+                    && query.CanPushFilter(compiled))
                 {
-                    var v = ForceValue(EvalElementExpr(argExprs[0], item, env));
-                    if (v is ICopCallable callable)
-                        v = callable.Invoke([item], this, env);
-                    if (v.IsTruthy)
-                        kept.Add(item);
+                    result = query.WithFilter(compiled);
+                    return true;
                 }
-                result = new CopList(kept);
+                result = Transform(() => CoerceToEnumerable(collection).Where(item =>
+                {
+                    var value = ForceValue(EvalElementExpr(argExprs[0], item, env));
+                    return value is ICopCallable callable ? callable.Invoke([item], this, env).IsTruthy : value.IsTruthy;
+                }));
                 return true;
             }
             case "OrderBy" or "orderBy" or "OrderByDescending" or "orderByDescending":
             {
                 if (argExprs.Count != 1) return false;
                 bool descending = member.Contains("Descending", StringComparison.OrdinalIgnoreCase);
-                var keyed = new List<(CopValue Item, CopValue Key)>();
-                foreach (var item in CoerceToEnumerable(collection))
-                    keyed.Add((item, ForceValue(EvalElementExpr(argExprs[0], item, env))));
-                keyed.Sort((a, b) => CompareValues(a.Key, b.Key) * (descending ? -1 : 1));
-                result = new CopList(keyed.Select(k => k.Item).ToList());
+                result = Transform(() =>
+                {
+                    var keyed = CoerceToEnumerable(collection).Select(item =>
+                        (Item: item, Key: ForceValue(EvalElementExpr(argExprs[0], item, env)))).ToList();
+                    keyed.Sort((a, b) => CompareValues(a.Key, b.Key) * (descending ? -1 : 1));
+                    return keyed.Select(k => k.Item);
+                });
                 return true;
             }
             case "any" or "all" or "none" or "count":
@@ -888,6 +892,7 @@ public sealed class Evaluator
             CopProviderProxy proxy => proxy.GetField(mem.Member),
             CopList list => EvalListMember(list, mem.Member, mem.Line),
             CopLazyCollection lazy => EvalLazyMember(lazy, mem.Member, mem.Line),
+            CopQueryable query => EvalLazyMember(new CopLazyCollection(query.Enumerate), mem.Member, mem.Line),
             CopString str => EvalStringMember(str, mem.Member, mem.Line),
             // Null propagation: accessing a member of a null/absent value yields null rather than
             // crashing, so checks over real-world data with missing fields (e.g. a C# type in the
@@ -1140,6 +1145,8 @@ public sealed class Evaluator
             (CopList list, CopInt i) => i.Value >= 0 && i.Value < list.Items.Count
                 ? list.Items[i.Value]
                 : CopNull.Instance,
+            (CopLazyCollection lazy, CopInt i) => i.Value < 0 ? CopNull.Instance : lazy.Enumerate().ElementAtOrDefault(i.Value) ?? CopNull.Instance,
+            (CopQueryable query, CopInt i) => i.Value < 0 ? CopNull.Instance : query.Enumerate().ElementAtOrDefault(i.Value) ?? CopNull.Instance,
             (CopString str, CopInt i) => i.Value >= 0 && i.Value < str.Value.Length
                 ? new CopString(str.Value[i.Value].ToString())
                 : CopNull.Instance,
@@ -1224,7 +1231,21 @@ public sealed class Evaluator
 
     private CopValue EvalFilter(FilterExpr filter, Environment env)
     {
-        var collection = ForceValue(Eval(filter.Collection, env));
+        CopValue? collection = null;
+        if (filter.Collection is FilterExpr { Predicate: IdentifierExpr property, Negated: false } propertyAccess
+            && !ResolvesToUserPredicate(property, env)
+            && PredicateCompiler.TryCompile(filter.Predicate, filter.Negated, property.Name) is { } compound)
+        {
+            var source = ForceValue(Eval(propertyAccess.Collection, env));
+            if (source is CopQueryable compoundSource)
+                return compoundSource.WithFilter(compound);
+            // Reuse the evaluated source: expressions may have observable side effects.
+            var sourceEnvironment = env.Extend();
+            sourceEnvironment.Define("$query-source", source);
+            collection = ForceValue(Eval(propertyAccess with { Collection = new IdentifierExpr("$query-source") }, sourceEnvironment));
+        }
+
+        collection ??= ForceValue(Eval(filter.Collection, env));
         bool negated = filter.Negated;
 
         _traceLog?.Invoke($"[trace] EvalFilter: {ExpressionRenderer.Render(filter)}  (collection={DescribeValue(collection)})");
@@ -1247,16 +1268,14 @@ public sealed class Evaluator
         // Queryable collection: try to compile predicate and accumulate filter (lazy pushdown)
         if (collection is CopQueryable queryable)
         {
-            // A user-defined (non-intrinsic) predicate is NOT a provider property and must not be
-            // pushed down — the provider would treat it as a missing field and yield null. Compiling
-            // `people:canVote` to a PropertyFilter('canVote') crashed the json provider with
-            // "PropertyFilter expects bool for 'canVote', got null" (issue #33). Materialize and
-            // evaluate per item so the predicate body actually runs. Real fields (e.g. `people:active`)
-            // don't resolve to a user function and still push down.
+            var translated = PredicateCompiler.TryCompileBound(filter.Predicate, env, queryable.ItemType);
+            if (translated is not null && queryable.CanPushFilter(translated))
+                return queryable.WithFilter(negated ? new Cop.Core.NotFilter(translated) : translated);
+            // An untranslated predicate name is not a provider field (issue #33).
             if (ResolvesToUserPredicate(filter.Predicate, env))
             {
-                _traceLog?.Invoke($"[trace] EvalFilter: '{ExpressionRenderer.Render(filter.Predicate)}' is a user predicate, materializing queryable for per-item evaluation");
-                collection = ForceValue(queryable.Materialize());
+                _traceLog?.Invoke($"[trace] EvalFilter: deferring local predicate '{ExpressionRenderer.Render(filter.Predicate)}'");
+                collection = new CopLazyCollection(queryable.Enumerate);
             }
             else
             {
@@ -1277,10 +1296,9 @@ public sealed class Evaluator
                     return new CopQueryableProperty(queryable, propName);
                 }
 
-                // Cannot compile — materialize and fall through to normal path
-                _traceLog?.Invoke($"[trace] EvalFilter: cannot compile predicate '{ExpressionRenderer.Render(filter.Predicate)}', materializing queryable");
-                collection = queryable.Materialize();
-                collection = ForceValue(collection);
+                // Keep unsupported expressions deferred and evaluate them locally.
+                _traceLog?.Invoke($"[trace] EvalFilter: deferring local predicate '{ExpressionRenderer.Render(filter.Predicate)}'");
+                collection = new CopLazyCollection(queryable.Enumerate);
             }
         }
 
@@ -1297,8 +1315,7 @@ public sealed class Evaluator
 
             // Package predicates run locally but must retain the original records, just like pushdown.
             _traceLog?.Invoke($"[trace] EvalFilter: cannot compile compound, materializing");
-            var source = ForceValue(queryProp.Source.Materialize());
-            return new CopLazyCollection(() => CoerceToEnumerable(source).Where(item =>
+            return new CopLazyCollection(() => queryProp.Source.Enumerate().Where(item =>
             {
                 var field = GetFieldOnValue(item, queryProp.PropertyName);
                 var matches = ForceValue(ApplyFilterPredicateValue(filter.Predicate, field, env)).IsTruthy;
@@ -1740,6 +1757,7 @@ public sealed class Evaluator
         CopThunk thunk => IsEmpty(thunk.Force()),
         CopList list => list.Items.Count == 0,
         CopLazyCollection lazy => !lazy.Enumerate().Any(),
+        CopQueryable query => !query.Enumerate().Any(),
         CopString str => str.Value.Length == 0,
         CopNull => true,
         _ => false
@@ -1875,6 +1893,7 @@ public sealed class Evaluator
     /// <summary>Type name of the first item in a collection, or null if empty/unknown.</summary>
     private string? FirstItemTypeName(CopValue collection)
     {
+        if (collection is CopQueryable { ItemType: not null } query) return query.ItemType;
         var first = CoerceToEnumerable(collection).FirstOrDefault();
         if (first is CopThunk t) first = t.Force();
         return first switch
@@ -1952,7 +1971,7 @@ public sealed class Evaluator
         {
             var lastArg = args[^1];
             if (lastArg is CopThunk t) lastArg = t.Force();
-            if (lastArg is CopList or CopLazyCollection)
+            if (lastArg is CopList or CopLazyCollection or CopQueryable)
                 hasParamArray = false;
         }
 
@@ -2188,6 +2207,9 @@ public sealed class Evaluator
         // Force thunks before collection concat
         if (l is CopThunk lt) l = lt.Force();
         if (r is CopThunk rt) r = rt.Force();
+
+        if ((l is CopQueryable || r is CopQueryable) && IsCollectionValue(l) && IsCollectionValue(r))
+            return CopQueryable.Concat(l, r);
 
         var left = AsEnumerable(l);
         var right = AsEnumerable(r);

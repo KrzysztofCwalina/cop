@@ -1,4 +1,5 @@
 using Cop.Core;
+using Cop.Lang;
 
 namespace TypeSpecProvider;
 
@@ -327,11 +328,8 @@ public class TypeSpecRawProvider : DataProvider
         string? prop2 = null, string? val2 = null)
     {
         if (filter is null) return true;
-        return FilterEvaluator.Matches(filter, prop => prop switch
-        {
-            _ when prop == prop1 => (object?)val1,
-            _ when prop == prop2 => (object?)val2,
-            _ => null
-        });
+        var accessors = new Dictionary<string, Func<object, object?>> { [prop1] = _ => val1 };
+        if (prop2 is not null) accessors[prop2] = _ => val2;
+        return FilterCompiler.Compile(filter, accessors)(filter);
     }
 }

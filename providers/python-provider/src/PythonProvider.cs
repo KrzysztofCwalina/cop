@@ -14,6 +14,10 @@ public class PythonProvider : DataProvider
 
     public override RuntimeBindings GetRuntimeBindings() => PythonBindings.Build();
 
+    public override IReadOnlyDictionary<string, object?> GetQueryMetadata(ProviderQuery query) =>
+        CodeBindings.SourceMetadata(query, ".py");
+    public override string QueryResultType => "Codebase";
+
     public override object? Query(ProviderQuery query)
     {
         PythonTypeDeclaration.RegisterCacheFactory();
@@ -21,7 +25,7 @@ public class PythonProvider : DataProvider
         PythonStatementInfo.RegisterCacheFactory();
         var parsers = new SourceParserRegistry();
         parsers.Register(new PythonSourceParser());
-        var collections = CodeCollectionBuilder.CollectAndParse(parsers, query);
+        var collections = CodeCollectionBuilder.CollectAndParse(parsers, query, this);
 
         // Discover projects from pyproject.toml/setup.py
         if (query.RootPath is not null)
@@ -31,6 +35,6 @@ public class PythonProvider : DataProvider
                 collections["Projects"] = projects.Cast<object>().ToList();
         }
 
-        return collections;
+        return ApplyQueryFilters(query, collections);
     }
 }

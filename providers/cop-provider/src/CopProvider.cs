@@ -15,11 +15,15 @@ public class CopProvider : DataProvider
 
     public override RuntimeBindings GetRuntimeBindings() => CopBindings.Build();
 
+    public override IReadOnlyDictionary<string, object?> GetQueryMetadata(ProviderQuery query) =>
+        CodeBindings.SourceMetadata(query, ".cop");
+    public override string QueryResultType => "Codebase";
+
     public override object? Query(ProviderQuery query)
     {
         var parsers = new SourceParserRegistry();
         parsers.Register(new CopSourceParser());
         parsers.Register(new TextFileParser());
-        return CodeCollectionBuilder.CollectAndParse(parsers, query);
+        return ApplyQueryFilters(query, CodeCollectionBuilder.CollectAndParse(parsers, query, this));
     }
 }

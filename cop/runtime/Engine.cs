@@ -381,8 +381,7 @@ public static class Engine
             // trait/subtype resolution works for provider-declared types — e.g. so a
             // language-specific subtype like CSharpType is known to be a subtype of Type.
             ProviderLoader.RegisterSchema(loaded.Instance, typeRegistry);
-            var runtimeBindings = loaded.Instance.GetRuntimeBindings();
-            RegisterLazyProviderCollections(bridge.Evaluator.GlobalEnvironment, loaded.PackageName, loaded.Instance, loaded.Schema, query, errors, warnings, runtimeBindings, diagLog);
+            RegisterQueryableProviderCollections(bridge.Evaluator.GlobalEnvironment, loaded.PackageName, loaded.Schema, query, queryService);
 
             // Register provider functions (e.g., http.Post) as qualified callables: <package>.<fn>.
             // Resolved through CopProviderProxy.GetField (which looks up "<package>.<fn>" in the env).
@@ -395,8 +394,7 @@ public static class Engine
             // Lazy: a built-in provider (e.g. filesystem / markdown parsing) is only
             // queried when one of its collections is actually accessed. Programs that
             // never use a provider pay nothing for it.
-            var runtimeBindings = builtinProvider.Instance.GetRuntimeBindings();
-            RegisterLazyProviderCollections(bridge.Evaluator.GlobalEnvironment, builtinProvider.Name, builtinProvider.Instance, builtinProvider.Schema, query, errors, warnings, runtimeBindings, diagLog);
+            RegisterQueryableProviderCollections(bridge.Evaluator.GlobalEnvironment, builtinProvider.Name, builtinProvider.Schema, query, queryService);
             RegisterProviderFunctions(bridge, builtinProvider.Name, builtinProvider.Instance, context);
         }
 
@@ -418,10 +416,10 @@ public static class Engine
                 };
                 // Return a queryable collection that defers provider execution until materialization.
                 // Filters from predicate chains will be accumulated and pushed to the provider.
-                return new CopQueryable(providerName, providerQuery, queryService.QueryProvider);
+                return queryService.CreateValue(providerName, providerQuery);
             }
 
-            return new CopProviderProxy(providerName, env);
+            return env.Lookup(providerName) is CopProviderProxy proxy ? proxy : new CopProviderProxy(providerName, env);
         });
 
         // Register Program with Providers list — only explicit -p providers, not import-detected ones.
@@ -813,6 +811,7 @@ public static class Engine
             CopList l => l.Items.Select(CopToClr).ToList(),
             CopLazyCollection lazy => lazy.Enumerate().Select(CopToClr).ToList(),
             CopQueryable q => q.Enumerate().Select(CopToClr).ToList(),
+            CopProviderProxy { Data: { } data } => CopObjectToDataObject(data),
             CopDynamicObject d => d.Underlying,
             CopObject o => CopObjectToDataObject(o),
             _ => value.Display()
@@ -843,148 +842,22 @@ public static class Engine
         bridge.RegisterFunction("program", (_, _) => programObj, 0);
     }
 
-    private static void WarnIfProviderEmpty(string providerName, Dictionary<string, List<object>> collections, ProviderSchema schema, List<string> warnings)
-    {
-        // Skip providers that don't declare any collections (e.g., pure schema providers)
-        if (schema.Collections.Count == 0)
-            return;
-
-        // Skip when dict is empty — means provider returned null (schema-only, data comes from external providers)
-        if (collections.Count == 0)
-            return;
-
-        // Skip for analysis/tool providers — 0 violations means clean code, not a failure
-        if (schema.Collections.All(c => c.Name == "Violations" || c.ItemType == "Violation"))
-            return;
-
-        // Check if ALL collections returned 0 items
-        int totalItems = 0;
-        foreach (var (_, items) in collections)
-            totalItems += items.Count;
-
-        if (totalItems == 0)
-        {
-            // A provider that returns 0 items means checks cannot produce reliable results.
-            warnings.Add($"Error: Provider '{providerName}' returned 0 items across all collections. " +
-                $"This likely indicates a transient filesystem issue (antivirus, file locks). " +
-                $"Check results are unreliable — treat this run as failed.");
-        }
-    }
-
-    private static Dictionary<string, List<object>> QueryProviderCollections(
-        DataProvider provider,
-        ProviderSchema schema,
-        ProviderQuery query,
-        List<string> errors)
-    {
-        try
-        {
-            return ProviderLoader.QueryCollections(provider, schema, query);
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            errors.Add($"Provider '{provider}' query failed: {ex.Message}");
-            return new Dictionary<string, List<object>>(StringComparer.Ordinal);
-        }
-    }
-
     /// <summary>
     /// Registers lazy collections for a provider. Data is not loaded until a collection
     /// is first accessed, avoiding expensive provider queries (e.g., Roslyn parsing)
     /// for unused providers.
     /// </summary>
-    private static void RegisterLazyProviderCollections(
+    private static void RegisterQueryableProviderCollections(
         Cop.Lang.Interpreter.Environment env, string providerName,
-        DataProvider provider, ProviderSchema schema, ProviderQuery query,
-        List<string> errors, List<string> warnings,
-        RuntimeBindings? bindings, Action<string>? diagLog)
+        ProviderSchema schema, ProviderQuery query, ProviderQueryService service)
     {
-        // Shared lazy: all collections for this provider are loaded together on first access
-        var lazyData = new Lazy<Dictionary<string, List<object>>>(() =>
-        {
-            var collections = QueryProviderCollections(provider, schema, query, errors);
-            diagLog?.Invoke($"[diag] Provider '{providerName}' returned {collections.Count} collections: {string.Join(", ", collections.Select(c => $"{c.Key}({c.Value.Count})"))}");
-            WarnIfProviderEmpty(providerName, collections, schema, warnings);
-            return collections;
-        }, LazyThreadSafetyMode.ExecutionAndPublication);
-
-        var typeSchemas = schema.Types.ToDictionary(t => t.Name, StringComparer.Ordinal);
-        var collectionItemTypes = schema.Collections.ToDictionary(c => c.Name, c => c.ItemType, StringComparer.Ordinal);
-
-        foreach (var collection in schema.Collections)
-        {
-            var collName = collection.Name;
-            var lazy = new CopLazyCollection(() =>
-            {
-                var allCollections = lazyData.Value;
-                if (!allCollections.TryGetValue(collName, out var items) || items.Count == 0)
-                    return [];
-
-                if (collectionItemTypes.TryGetValue(collName, out var itemType))
-                {
-                    if (items[0] is RecordView && typeSchemas.TryGetValue(itemType, out var typeSchema))
-                    {
-                        var rvAdapter = new RecordViewAdapter(typeSchema.Properties, typeName: itemType);
-                        return items.Select(item => (CopValue)new CopDynamicObject(item, rvAdapter));
-                    }
-
-                    if (items[0] is not DataObject && bindings?.Accessors is not null)
-                    {
-                        // Per-item adapter selection. A collection declared as [Type] may contain
-                        // language-specific subtypes (e.g. CSharpType items in a Types collection)
-                        // whose CLR type maps to a different cop type than the collection's declared
-                        // itemType. Resolving each item's adapter by its CLR type mapping lets
-                        // subtype-only fields (e.g. CSharpType.IsRecord) resolve to real provider
-                        // data instead of null, while plain items keep the collection's default.
-                        var runtimeBindings = bindings;
-                        var defaultAdapter = runtimeBindings.Accessors.TryGetValue(itemType, out var accessors)
-                            ? new ClrObjectAdapter(accessors, typeName: itemType,
-                                allAccessors: runtimeBindings.Accessors, clrTypeMappings: runtimeBindings.ClrTypeMappings)
-                            : null;
-                        var adapterCache = new Dictionary<string, ClrObjectAdapter>(StringComparer.Ordinal);
-                        return items.Select(item =>
-                        {
-                            var itemAdapter = ResolveClrItemAdapter(item, itemType, defaultAdapter, adapterCache, runtimeBindings);
-                            return (CopValue)new CopDynamicObject(item, itemAdapter ?? (IDynamicObjectAdapter)DataObjectAdapter.Instance);
-                        });
-                    }
-                }
-
-                return items.Select(item => (CopValue)new CopDynamicObject(item, DataObjectAdapter.Instance));
-            });
-
-            env.Define($"{providerName}.{collName}", lazy);
-        }
-
-        env.Define(providerName, new CopProviderProxy(providerName, env));
-    }
-
-    /// <summary>
-    /// Resolves the adapter for a single provider collection item. When the item's CLR type
-    /// maps (via the provider's <see cref="RuntimeBindings.ClrTypeMappings"/>) to a different
-    /// cop type than the collection's declared <paramref name="itemType"/> — e.g. a
-    /// language-specific subtype like CSharpType inside a [Type] collection — the item gets
-    /// that subtype's accessor set so its extra fields resolve to real data. Otherwise it
-    /// uses the collection's <paramref name="defaultAdapter"/>. Adapters are cached per
-    /// resolved type name to avoid re-allocating one per item.
-    /// </summary>
-    private static ClrObjectAdapter? ResolveClrItemAdapter(
-        object item, string itemType, ClrObjectAdapter? defaultAdapter,
-        Dictionary<string, ClrObjectAdapter> cache, RuntimeBindings bindings)
-    {
-        if (bindings.ClrTypeMappings.TryGetValue(item.GetType(), out var mapped)
-            && !string.Equals(mapped, itemType, StringComparison.Ordinal)
-            && bindings.Accessors.TryGetValue(mapped, out var accessors))
-        {
-            if (!cache.TryGetValue(mapped, out var adapter))
-            {
-                adapter = new ClrObjectAdapter(accessors, typeName: mapped,
-                    allAccessors: bindings.Accessors, clrTypeMappings: bindings.ClrTypeMappings);
-                cache[mapped] = adapter;
-            }
-            return adapter;
-        }
-        return defaultAdapter;
+        var value = service.CreateValue(providerName, query);
+        if (value is CopQueryable collection && schema.Collections.Count == 1)
+            env.Define($"{providerName}.{schema.Collections[0].Name}", collection);
+        if (value is CopObject obj)
+            foreach (var (name, field) in obj.Fields)
+                env.Define($"{providerName}.{name}", field);
+        env.Define(providerName, new CopProviderProxy(providerName, env, value as CopObject));
     }
 
     /// <summary>

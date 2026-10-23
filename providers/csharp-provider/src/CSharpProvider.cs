@@ -20,6 +20,12 @@ public class CSharpProvider : DataProvider
 
     public override RuntimeBindings GetRuntimeBindings() => CSharpBindings.Build();
 
+    public override IReadOnlyDictionary<string, object?> GetQueryMetadata(ProviderQuery query) =>
+        CodeBindings.SourceMetadata(query, ".cs");
+    public override string QueryResultType => "Codebase";
+
+    private readonly Dictionary<string, (List<SourceFile> Files, List<ProjectInfo> Projects)> _snapshots = new(StringComparer.Ordinal);
+
     public override Dictionary<string, Func<List<object?>, Task<object?>>>? GetFunctions() => new()
     {
         ["toCodebase"] = args => Task.FromResult<object?>(ToCodebase(args.Count > 0 ? args[0] : null))
@@ -37,7 +43,26 @@ public class CSharpProvider : DataProvider
         if (query.RootPath is null)
             return new Dictionary<string, List<object>>();
 
-        var rootPath = query.RootPath;
+        var key = Path.GetFullPath(query.RootPath) + "\n" +
+            string.Join("\n", (query.ExcludedDirectories ?? new HashSet<string>()).Order(StringComparer.Ordinal));
+        if (!_snapshots.TryGetValue(key, out var snapshot))
+        {
+            var files = LoadSourceFiles(query);
+            var projects = CSharpProjectDiscovery.Discover(query.RootPath, query.ExcludedDirectories);
+            LinkFilesToProjects(new Dictionary<string, List<object>> { ["Files"] = files.Cast<object>().ToList() },
+                projects, query.RootPath);
+            snapshot = (files, projects);
+            _snapshots.Add(key, snapshot);
+        }
+        var collections = CodeCollectionBuilder.ExtractCollections(snapshot.Files, query.Collection, query.CollectionFilters, query.Filter);
+        if (query.Collection is null or "Projects")
+            collections["Projects"] = snapshot.Projects.Cast<object>().ToList();
+        return ApplyQueryFilters(query, collections);
+    }
+
+    private static List<SourceFile> LoadSourceFiles(ProviderQuery query)
+    {
+        var rootPath = query.RootPath!;
         var excluded = query.ExcludedDirectories;
 
         // Optional phase timing for diagnosing slow/large analyses: enabled at -dd (CopDiagnostics.Timing).
@@ -171,18 +196,7 @@ public class CSharpProvider : DataProvider
         sourceFiles.Sort((a, b) => string.Compare(a.Path, b.Path, StringComparison.Ordinal));
         Log($"semantic extraction complete ({sourceFiles.Count} files)");
 
-        // 5. Build collections
-        var collections = CodeCollectionBuilder.ExtractCollections(sourceFiles, query.Collection, query.CollectionFilters);
-        Log("built collections");
-
-        // 6. Discover projects and link files
-        var projects = CSharpProjectDiscovery.Discover(rootPath, excluded);
-        LinkFilesToProjects(collections, projects, rootPath);
-        if (query.Collection == null || query.Collection == "Projects")
-            collections["Projects"] = projects.Cast<object>().ToList();
-        Log($"discovered {projects.Count} projects");
-
-        return collections;
+        return sourceFiles;
     }
 
     private static DataObject ToCodebase(object? value, string? sourceRoot = null)

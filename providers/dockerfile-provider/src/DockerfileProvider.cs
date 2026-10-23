@@ -104,7 +104,7 @@ public sealed class DockerfileProvider : DataProvider
         var requested = query.Collection;
         if (requested is null || requested == "Instructions") collections["Instructions"] = instructions;
         if (requested is null || requested == "Stages") collections["Stages"] = stages;
-        return collections;
+        return ApplyQueryFilters(query, collections);
     }
 
     private static void CollectDockerfiles(string dir, IReadOnlySet<string>? excluded, List<string> result)
