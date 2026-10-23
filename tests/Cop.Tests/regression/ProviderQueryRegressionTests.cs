@@ -41,6 +41,34 @@ public class ProviderQueryRegressionTests
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "2" }));
     }
 
+    [TestCase("cb.Types:hasAlphaPrefix:isClient")]
+    [TestCase("cb.Types:selected")]
+    public void Issue075_CrossFilePredicatesUseLocalProviderAndPushBothFilters(string expression)
+    {
+        File.WriteAllText(Path.Combine(_root, "input.cs"),
+            "class AlphaClient {} class BetaClient {} class AlphaService {}");
+        File.WriteAllText(Path.Combine(_root, "prefix.cop"),
+            "predicate hasAlphaPrefix(Type) => Type.Name:startsWith('Alpha')");
+        File.WriteAllText(Path.Combine(_root, "suffix.cop"),
+            "predicate isClient(Type) => Type.Name:endsWith('Client')");
+        File.WriteAllText(Path.Combine(_root, "main.cop"), $$"""
+            import code
+            import csharp
+            let cb = csharp.parse()
+            predicate selected(Type) => hasAlphaPrefix && isClient
+            command MAIN = foreach {{expression}} => '{item.Name}'
+            """);
+        var diagnostics = new List<string>();
+        var result = Engine.Run(_root, _root,
+            additionalFeedPaths: [Path.Combine(RepoRoot, "packages")], diagLog: diagnostics.Add);
+        Assert.That(result.Errors.Concat(result.ParseErrors), Is.Empty);
+        Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "AlphaClient" }));
+        Assert.That(diagnostics, Has.Some.Contains(Path.Combine(RepoRoot, "packages", "languages", "csharp")));
+        Assert.That(diagnostics, Has.Some.Contains("Name:startsWith('Alpha'), Name:endsWith('Client')"));
+        Assert.That(diagnostics, Has.Some.Contains("[query-result] csharp.Types returned=1"));
+        Assert.That(diagnostics.Count(d => d.Contains("[query]")), Is.EqualTo(1));
+    }
+
     [Test]
     public void Issue071_ProcessProviderReceivesFilterAndIssue072IgnoredFilterRemainsCorrect()
     {

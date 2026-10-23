@@ -187,7 +187,10 @@ public static class Engine
             }
         }
 
-        return feedPaths;
+        // Explicit and caller-supplied feeds must also precede the restored-package fallback.
+        var globalCache = Cop.Cli.Commands.PackageResolver.GlobalCachePath;
+        return feedPaths.OrderBy(path =>
+            string.Equals(path, globalCache, StringComparison.OrdinalIgnoreCase)).ToList();
     }
 
     private static EngineResult ExecuteModules(

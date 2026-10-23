@@ -33,6 +33,11 @@ Translation is conservative: overloaded or guarded predicates, nested relationsh
 collection-valued expressions, and arbitrary functions remain local when their semantics
 cannot be represented safely. Local filtering and projection remain deferred.
 
+Predicates in different files loaded into the same program can be chained or referenced
+from a composite predicate. File boundaries do not prevent filter translation; imported
+packages still require the normal exports. Explicit and caller-supplied local package
+feeds take precedence over restored copies in the global cache.
+
 Iteration, `foreach`, `first`, indexing, `any`, and count terminals trigger execution.
 Counts (`count(items)`, `items.count()`, and `items.Count`) return the actual matching count.
 Repeated enumeration reuses results during that engine execution. Different paths,

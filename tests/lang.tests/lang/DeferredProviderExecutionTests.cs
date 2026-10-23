@@ -5,6 +5,8 @@ using Cop.Lang;
 using Cop.Lang.Interpreter;
 using Cop.Lang.Parser;
 using Cop.Providers;
+using Cop.Providers.SourceModel;
+using Cop.Providers.SourceParsers;
 using NUnit.Framework;
 
 namespace Cop.Tests.Lang;
@@ -140,6 +142,42 @@ public class DeferredProviderExecutionTests
     [TestCase(true)]
     public void EngineCollectionAccess_PushesNamedFilterAndPrunesOtherCollections(bool scoped)
     {
+        var access = scoped ? "provider('recording', '.').Items" : "provider('recording').Items";
+        var program = $"let items = {access}\npredicate selected(p) => p.Name == 'Alpha'\ncommand MAIN = foreach items:selected => '{{item.Name}}'";
+        var script = Path.Combine(_root, "main.cop");
+        File.WriteAllText(script, program);
+        var result = Engine.Run(_root, _root, scriptFiles: [script], providerPackages: [CreateRecordingPackage()]);
+        Assert.That(result.Errors.Concat(result.ParseErrors), Is.Empty);
+        Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "Alpha" }));
+        using var query = JsonDocument.Parse(File.ReadAllLines(Path.Combine(_root, "queries.jsonl")).Single());
+        Assert.That(query.RootElement.GetProperty("Collection").GetString(), Is.EqualTo("Items"));
+        Assert.That(query.RootElement.GetProperty("Filter").GetString(), Is.EqualTo("Name:equalsExact('Alpha')"));
+    }
+
+    [TestCase("items:hasPrefix:hasSuffix")]
+    [TestCase("items:selected")]
+    public void PredicatesInSeparateFiles_ComposeIntoOneProviderQuery(string expression)
+    {
+        File.WriteAllText(Path.Combine(_root, "prefix.cop"),
+            "predicate hasPrefix(p) => p.Name:startsWith('A')");
+        File.WriteAllText(Path.Combine(_root, "suffix.cop"),
+            "predicate hasSuffix(p) => p.Name:endsWith('a')");
+        File.WriteAllText(Path.Combine(_root, "main.cop"), $$"""
+            let items = provider('recording').Items
+            predicate selected(p) => hasPrefix && hasSuffix
+            command MAIN = foreach {{expression}} => '{item.Name}'
+            """);
+        var result = Engine.Run(_root, _root, providerPackages: [CreateRecordingPackage()]);
+        Assert.That(result.Errors.Concat(result.ParseErrors), Is.Empty);
+        Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "Alpha" }));
+        using var query = JsonDocument.Parse(File.ReadAllLines(Path.Combine(_root, "queries.jsonl")).Single());
+        Assert.That(query.RootElement.GetProperty("Collection").GetString(), Is.EqualTo("Items"));
+        Assert.That(query.RootElement.GetProperty("Filter").GetString(),
+            Is.EqualTo("Name:startsWith('A'), Name:endsWith('a')"));
+    }
+
+    private static (string Dir, PackageMetadata Meta) CreateRecordingPackage()
+    {
         // Loaded provider DLLs stay mapped on Windows until the test host exits.
         var package = Path.Combine(TestContext.CurrentContext.TestDirectory, "query-provider-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(package, "lib"));
@@ -150,16 +188,7 @@ public class DeferredProviderExecutionTests
             Authors = "Cop", Provider = "clr", ProviderEntry = typeof(RecordingQueryProvider).FullName!,
             ProviderAssembly = "Lang.Tests.dll"
         };
-        var access = scoped ? "provider('recording', '.').Items" : "provider('recording').Items";
-        var program = $"let items = {access}\npredicate selected(p) => p.Name == 'Alpha'\ncommand MAIN = foreach items:selected => '{{item.Name}}'";
-        var script = Path.Combine(_root, "main.cop");
-        File.WriteAllText(script, program);
-        var result = Engine.Run(_root, _root, scriptFiles: [script], providerPackages: [(package, metadata)]);
-        Assert.That(result.Errors.Concat(result.ParseErrors), Is.Empty);
-        Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "Alpha" }));
-        using var query = JsonDocument.Parse(File.ReadAllLines(Path.Combine(_root, "queries.jsonl")).Single());
-        Assert.That(query.RootElement.GetProperty("Collection").GetString(), Is.EqualTo("Items"));
-        Assert.That(query.RootElement.GetProperty("Filter").GetString(), Is.EqualTo("Name:equalsExact('Alpha')"));
+        return (package, metadata);
     }
 
     [TestCase("csharp", "input.cs", "public class Alpha {} internal class Beta {}")]
@@ -220,6 +249,28 @@ public class DeferredProviderExecutionTests
         var service = new ProviderQueryService(_root);
         service.RegisterProvider("recording", provider, ProviderSchema.FromJson(provider.GetSchema()));
         return service;
+    }
+
+    [Test]
+    public void ExistingProviderBinaries_CanCallOriginalCollectAndParseSignature()
+    {
+        var method = typeof(CodeCollectionBuilder).GetMethod(nameof(CodeCollectionBuilder.CollectAndParse),
+            [typeof(SourceParserRegistry), typeof(ProviderQuery)]);
+        Assert.That(method, Is.Not.Null, "Optional parameters must not replace existing binary signatures.");
+        var result = (Dictionary<string, List<object>>)method!.Invoke(null, [new SourceParserRegistry(), new ProviderQuery()])!;
+        Assert.That(result, Is.Empty);
+    }
+
+    [Test]
+    public void ExistingProviderBinaries_CanCallOriginalExtractCollectionsSignature()
+    {
+        var method = typeof(CodeCollectionBuilder).GetMethod(nameof(CodeCollectionBuilder.ExtractCollections),
+            [typeof(List<SourceFile>), typeof(string), typeof(IReadOnlyDictionary<string, FilterExpression>)]);
+        Assert.That(method, Is.Not.Null, "Previously published providers call this exact three-parameter signature.");
+        var result = (Dictionary<string, List<object>>)method!.Invoke(null,
+            [new List<SourceFile>(), "Types", null])!;
+        Assert.That(result.Keys, Is.EqualTo(new[] { "Types" }));
+        Assert.That(result["Types"], Is.Empty);
     }
 
     [TestCase("markdown", "input.md", "# Alpha\n# Beta\n", "Headings", "Heading", "Text", "Alpha")]

@@ -18,7 +18,10 @@ public static class CodeCollectionBuilder
     /// <summary>
     /// Scans source files under rootPath, parses them, and returns flat collections.
     /// </summary>
-    public static Dictionary<string, List<object>> CollectAndParse(SourceParserRegistry parsers, ProviderQuery query, DataProvider? owner = null)
+    public static Dictionary<string, List<object>> CollectAndParse(SourceParserRegistry parsers, ProviderQuery query)
+        => CollectAndParse(parsers, query, null);
+
+    public static Dictionary<string, List<object>> CollectAndParse(SourceParserRegistry parsers, ProviderQuery query, DataProvider? owner)
     {
         if (query.RootPath is null)
             return new();
@@ -277,8 +280,13 @@ public static class CodeCollectionBuilder
     /// </summary>
     public static Dictionary<string, List<object>> ExtractCollections(
         List<SourceFile> sourceFiles, string? collection,
-        IReadOnlyDictionary<string, FilterExpression>? collectionFilters = null,
-        FilterExpression? filter = null)
+        IReadOnlyDictionary<string, FilterExpression>? collectionFilters = null)
+        => ExtractCollections(sourceFiles, collection, collectionFilters, null);
+
+    public static Dictionary<string, List<object>> ExtractCollections(
+        List<SourceFile> sourceFiles, string? collection,
+        IReadOnlyDictionary<string, FilterExpression>? collectionFilters,
+        FilterExpression? filter)
     {
         var extractors = CodeBindings.BuildExtractors();
         var accessors = collectionFilters is not null || filter is not null ? CodeBindings.BuildAccessors() : null;
