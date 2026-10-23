@@ -20,6 +20,7 @@ Options:
 | `--base <ref>` | Branch comparison base; otherwise resolve the remote default branch |
 | `--pr <number-or-url>` | Exact GitHub PR comparison; requires `--scope pr` |
 | `--report-scope <mode>` | Report `all` static findings (default) or only `changes`; does not reduce analysis input |
+| `--ai-config <path>` | AI endpoint configuration file (default: `~/.cop/ai.json`); replaces `COP_AI_CONFIG` |
 | `--no-color` | Disable ANSI color (also auto-disabled when output is not a terminal) |
 | `--no-user-checks` | Skip personal checks in `~/.cop/checks/` for this run |
 | `-cql` | Transpile to CodeQL instead of running |

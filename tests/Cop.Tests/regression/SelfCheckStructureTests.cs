@@ -74,6 +74,21 @@ public class SelfCheckStructureTests
     }
 
     [Test]
+    public void RepositoryPassesDefaultSelfChecks()
+    {
+        var checks = Path.Combine(_repo, "cop-checks");
+        var main = Path.Combine(checks, "main.cop");
+        var files = Directory.GetFiles(checks, "*.cop", SearchOption.AllDirectories)
+            .Where(f => f != main).Order(StringComparer.Ordinal).Append(main).ToArray();
+        var result = Engine.Run(checks, _repo, scriptFiles: files,
+            additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+
+        Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
+        Assert.That(result.Outputs.Select(o => o.Message), Is.Empty);
+        Assert.That(result.ExitCode, Is.EqualTo(0));
+    }
+
+    [Test]
     public void RepositoryHasNoUnapprovedRegexImports()
     {
         File.Copy(Path.Combine(_repo, "cop-checks", "csharp", "no-regex.cop"), Path.Combine(_root, "rule.cop"));

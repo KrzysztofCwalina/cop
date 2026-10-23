@@ -19,7 +19,7 @@ public sealed partial class ChangeSnapshot
     private static readonly StringComparer PathComparer = OperatingSystem.IsWindows()
         ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
-    private readonly IChangeCommand command;
+    private readonly ChangeCommandRunner command;
     private readonly Action<string> logger;
     private readonly ReviewOptions options;
     private readonly Dictionary<string, string> fingerprints = new(PathComparer);
@@ -30,7 +30,7 @@ public sealed partial class ChangeSnapshot
     internal ChangeSnapshot(string rootPath, ReviewOptions options, Action<string>? log = null)
         : this(rootPath, options, new ChangeCommand(), log) { }
 
-    internal ChangeSnapshot(string rootPath, ReviewOptions options, IChangeCommand command, Action<string>? log = null)
+    internal ChangeSnapshot(string rootPath, ReviewOptions options, ChangeCommandRunner command, Action<string>? log = null)
     {
         options.Validate();
         if (options.Scope == "full")

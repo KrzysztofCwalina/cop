@@ -8,7 +8,7 @@ internal static class ReviewArguments
     {
         var remaining = new List<string>();
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
-        string[] names = ["--scope", "--base", "--pr", "--report-scope"];
+        string[] names = ["--scope", "--base", "--pr", "--report-scope", "--ai-config"];
         for (int i = 0; i < args.Length; i++)
         {
             var separator = args[i].IndexOf('=');
@@ -33,7 +33,8 @@ internal static class ReviewArguments
             Scope = values.GetValueOrDefault("--scope", "auto"),
             Base = values.GetValueOrDefault("--base"),
             Pr = values.GetValueOrDefault("--pr"),
-            ReportScope = values.GetValueOrDefault("--report-scope", "all")
+            ReportScope = values.GetValueOrDefault("--report-scope", "all"),
+            AiConfigPath = values.GetValueOrDefault("--ai-config")
         };
         options.Validate();
         return ([.. remaining], options);

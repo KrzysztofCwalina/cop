@@ -9,7 +9,7 @@ namespace Cop.Providers.Ai;
 /// <summary>
 /// LLM-based code-review provider. Exposes ai.judge(requirement, codebase), sending parsed
 /// source and architectural context to an OpenAI-compatible chat-completions endpoint.
-/// Configuration (endpoint, model, apiKey) is read from ~/.cop/ai.json.
+/// Configuration (endpoint, model, apiKey) is read from ~/.cop/ai.json or --ai-config.
 /// </summary>
 public partial class AiProvider : DataProvider
 {
@@ -46,10 +46,10 @@ public partial class AiProvider : DataProvider
             }
         }
         return context is not null && context.Options.Scope != "full"
-            ? JudgeChangesAsync(args, context) : JudgeAsync(args);
+            ? JudgeChangesAsync(args, context) : JudgeAsync(args, context?.Options.AiConfigPath);
     }
 
-    private static async Task<object?> JudgeAsync(List<object?> args)
+    private static async Task<object?> JudgeAsync(List<object?> args, string? configPath)
     {
         if (args.Count != 2 || args[0] is not string prompt || string.IsNullOrWhiteSpace(prompt))
             return One("ai.judge requires a non-empty requirement and a Codebase argument");
@@ -64,7 +64,7 @@ public partial class AiProvider : DataProvider
             return One($"ai.judge: {ex.Message}");
         }
 
-        var config = LoadConfig(out var configError);
+        var config = LoadConfig(configPath, out var configError);
         if (config is null)
             return One($"ai.judge: {configError}");
 
@@ -331,12 +331,10 @@ public partial class AiProvider : DataProvider
         return v;
     }
 
-    private static AiConfig? LoadConfig(out string error)
+    private static AiConfig? LoadConfig(string? path, out string error)
     {
         error = "";
-        var path = Environment.GetEnvironmentVariable("COP_AI_CONFIG");
-        if (string.IsNullOrWhiteSpace(path))
-            path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cop", "ai.json");
+        path ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cop", "ai.json");
         if (!File.Exists(path))
         {
             error = $"config not found at {path} (needs endpoint, model, apiKey)";

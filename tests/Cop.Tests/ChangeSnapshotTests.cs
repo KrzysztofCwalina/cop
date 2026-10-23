@@ -576,14 +576,14 @@ public sealed class ChangeSnapshotTests
         url = "https://github.com/example/repository/pull/12"
     });
 
-    private sealed class PullRequestCommands(IChangeCommand git, string metadata) : IChangeCommand
+    private sealed class PullRequestCommands(ChangeCommandRunner git, string metadata) : ChangeCommandRunner
     {
         public string Metadata { get; set; } = metadata;
         public int GhCalls { get; private set; }
         public int FetchCalls { get; private set; }
         public string[]? LastFetchArguments { get; private set; }
 
-        public ChangeCommandResult Run(string directory, string executable, params string[] arguments)
+        public override ChangeCommandResult Run(string directory, string executable, params string[] arguments)
         {
             if (executable == "gh")
             {

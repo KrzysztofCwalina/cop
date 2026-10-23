@@ -87,8 +87,9 @@ quotas, context limits, and pricing depend on the service.
 
 Never commit the real configuration or credentials. Only send code to an
 endpoint approved for that code's sensitivity and your organization's policies.
-To select a different configuration file, set `COP_AI_CONFIG` to its path. This
+To select a different configuration file, pass `--ai-config <path>`. This
 is useful for CI and isolated tests without changing your personal configuration.
+The former `COP_AI_CONFIG` environment variable is no longer read.
 
 ## 2. Write Rules in Markdown
 
