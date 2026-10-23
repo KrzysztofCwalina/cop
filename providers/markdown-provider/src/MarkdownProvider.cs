@@ -10,7 +10,7 @@ namespace Cop.Providers.Markdown;
 /// </summary>
 public class MarkdownProvider : DataProvider
 {
-
+    public override string QueryResultType => "MarkdownContent";
     public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
 
     private static readonly ProviderSchema _schema = BuildSchema();
@@ -164,7 +164,7 @@ public class MarkdownProvider : DataProvider
         if (requested is null || requested == "FenceBlocks") collections["FenceBlocks"] = fenceBlocks;
         if (requested is null || requested == "Documents") collections["Documents"] = documents;
 
-        return collections;
+        return ApplyQueryFilters(query, collections);
     }
 
     private static void CollectMarkdownFiles(string dir, IReadOnlySet<string>? excluded, List<string> result)

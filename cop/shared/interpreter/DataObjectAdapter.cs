@@ -74,20 +74,22 @@ public sealed class DataObjectAdapter : IDynamicObjectAdapter
 /// </summary>
 public sealed class RecordViewAdapter : IDynamicObjectAdapter
 {
-    private readonly Dictionary<string, (int Slot, string Type)> _schema;
+    private readonly Dictionary<string, (int Slot, string Type, bool Collection)> _schema;
+    private readonly ProviderSchema? _providerSchema;
     private readonly Dictionary<string, DataTable>? _childTables;
     private readonly string? _typeName;
 
     public override string? TypeName => _typeName;
     public override IEnumerable<string> GetFieldNames(object obj) => _schema.Keys;
 
-    public RecordViewAdapter(IReadOnlyList<ProviderPropertySchema> properties, Dictionary<string, DataTable>? childTables = null, string? typeName = null)
+    public RecordViewAdapter(IReadOnlyList<ProviderPropertySchema> properties, Dictionary<string, DataTable>? childTables = null, string? typeName = null, ProviderSchema? providerSchema = null)
     {
-        _schema = new Dictionary<string, (int, string)>(properties.Count, StringComparer.Ordinal);
+        _schema = new Dictionary<string, (int, string, bool)>(properties.Count, StringComparer.Ordinal);
         for (int i = 0; i < properties.Count; i++)
-            _schema[properties[i].Name] = (i, properties[i].Type);
+            _schema[properties[i].Name] = (i, properties[i].Type, properties[i].Collection);
         _childTables = childTables;
         _typeName = typeName;
+        _providerSchema = providerSchema;
     }
 
     public override CopValue GetField(object obj, string name)
@@ -98,7 +100,32 @@ public sealed class RecordViewAdapter : IDynamicObjectAdapter
         if (!_schema.TryGetValue(name, out var info))
             return CopNull.Instance;
 
-        var (slot, type) = info;
+        var (slot, type, collection) = info;
+        if (collection && _childTables is not null)
+        {
+            var child = _childTables.GetValueOrDefault($"{_typeName}.{name}")
+                ?? _childTables.Values.FirstOrDefault(t => t.TypeName == type);
+            if (child is null) throw new CopEvaluationException($"Missing table for {_typeName}.{name}.");
+            var (start, count) = rv.Table.GetRange(rv.Index, slot);
+            var properties = _providerSchema?.Types.FirstOrDefault(t => t.Name == type)?.Properties;
+            var adapter = properties is null ? null : new RecordViewAdapter(properties, _childTables, type, _providerSchema);
+            return new CopLazyCollection(() => Enumerable.Range(start, count).Select(i => adapter is not null
+                ? (CopValue)new CopDynamicObject(new RecordView(child, i), adapter)
+                : type switch
+                {
+                    "string" => new CopString(child.GetString(i, 0)),
+                    "int" => new CopInt(child.GetInt32(i, 0)),
+                    "bool" => CopBool.Of(child.GetBool(i, 0)),
+                    _ => throw new CopEvaluationException($"Unsupported child table type '{type}'.")
+                }));
+        }
+        if (!collection && _childTables?.Values.FirstOrDefault(t => t.TypeName == type) is { } referenced
+            && _providerSchema?.Types.FirstOrDefault(t => t.Name == type) is { } referencedSchema)
+        {
+            var index = rv.Table.GetRef(rv.Index, slot);
+            return index < 0 ? CopNull.Instance : new CopDynamicObject(new RecordView(referenced, index),
+                new RecordViewAdapter(referencedSchema.Properties, _childTables, type, _providerSchema));
+        }
         return type switch
         {
             "bool" => CopBool.Of(rv.Table.GetBool(rv.Index, slot)),

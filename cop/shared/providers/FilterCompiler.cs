@@ -28,6 +28,7 @@ public static class FilterCompiler
         FilterExpression filter,
         Dictionary<string, Func<object, object?>> accessors)
     {
+        if (!CanCompile(filter, accessors)) return _ => true;
         return filter switch
         {
             PropertyFilter pf => CompilePropertyFilter(pf, accessors),
@@ -45,6 +46,22 @@ public static class FilterCompiler
             _ => _ => true // Unknown filter type — pass everything through
         };
     }
+
+    private static bool CanCompile(FilterExpression filter, Dictionary<string, Func<object, object?>> accessors) => filter switch
+    {
+        PropertyFilter f => accessors.ContainsKey(f.Property),
+        StringOpFilter f => accessors.ContainsKey(f.Property),
+        ComparisonFilter f => accessors.ContainsKey(f.Property),
+        ContainsAnyFilter f => accessors.ContainsKey(f.Property),
+        InFilter f => accessors.ContainsKey(f.Property),
+        CollectionContainsFilter f => accessors.ContainsKey(f.Property),
+        CollectionCountFilter f => accessors.ContainsKey(f.Property),
+        FlagsFilter f => accessors.ContainsKey(f.Property),
+        AndFilter f => f.Conditions.All(c => CanCompile(c, accessors)),
+        OrFilter f => f.Conditions.All(c => CanCompile(c, accessors)),
+        NotFilter f => CanCompile(f.Inner, accessors),
+        _ => false
+    };
 
     private static Func<object, bool> CompilePropertyFilter(
         PropertyFilter pf, Dictionary<string, Func<object, object?>> accessors)
@@ -77,6 +94,7 @@ public static class FilterCompiler
                 StringOp.EndsWith => value.EndsWith(sf.Value, StringComparison.OrdinalIgnoreCase),
                 StringOp.Contains => value.Contains(sf.Value, StringComparison.OrdinalIgnoreCase),
                 StringOp.Equals => value.Equals(sf.Value, StringComparison.OrdinalIgnoreCase),
+                StringOp.ExactEquals => value.Equals(sf.Value, StringComparison.Ordinal),
                 StringOp.Same => NormalizeIdentifier(value) == NormalizeIdentifier(sf.Value),
                 StringOp.Matches => RegexCache.IsMatch(
                     value, sf.Value, System.Text.RegularExpressions.RegexOptions.None),
@@ -109,7 +127,7 @@ public static class FilterCompiler
             {
                 CompareOp.GreaterThan => numVal > cf.Value,
                 CompareOp.LessThan => numVal < cf.Value,
-                CompareOp.Equals => Math.Abs(numVal - cf.Value) < 0.001,
+                CompareOp.Equals => numVal == cf.Value,
                 CompareOp.GreaterOrEqual => numVal >= cf.Value,
                 CompareOp.LessOrEqual => numVal <= cf.Value,
                 _ => true

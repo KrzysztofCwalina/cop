@@ -39,6 +39,12 @@ public abstract class DataProvider
     /// </summary>
     public virtual RuntimeBindings? GetRuntimeBindings() => null;
 
+    /// <summary>Optional structural type name for the object containing deferred collections.</summary>
+    public virtual string? QueryResultType => null;
+
+    /// <summary>Cheap metadata fields to expose beside deferred collections. Must not query data.</summary>
+    public virtual IReadOnlyDictionary<string, object?>? GetQueryMetadata(ProviderQuery query) => null;
+
     /// <summary>
     /// Queries for provider data. Single entry point for all data retrieval.
     /// Returns one of:
@@ -50,6 +56,24 @@ public abstract class DataProvider
     /// providers may skip computing other collections).
     /// </summary>
     public virtual object? Query(ProviderQuery query) => null;
+
+    /// <summary>Filters extracted CLR collections before returning them to the host.</summary>
+    protected Dictionary<string, List<object>> ApplyQueryFilters(
+        ProviderQuery query, Dictionary<string, List<object>> collections)
+    {
+        if (query.Filter is null && query.CollectionFilters is null) return collections;
+        var schema = ProviderSchema.FromJson(GetSchema());
+        var bindings = GetRuntimeBindings();
+        foreach (var name in collections.Keys.ToArray())
+        {
+            var filter = query.CollectionFilters?.GetValueOrDefault(name) ?? query.Filter;
+            var type = schema.Collections.FirstOrDefault(c => c.Name == name)?.ItemType;
+            if (filter is not null && type is not null
+                && bindings?.Accessors.TryGetValue(type, out var accessors) == true)
+                collections[name] = collections[name].Where(FilterCompiler.Compile(filter, accessors)).ToList();
+        }
+        return collections;
+    }
 
     /// <summary>
     /// Returns namespace-scoped functions that this provider exposes (e.g., http.Get, json.Load).
@@ -112,6 +136,15 @@ public class RuntimeBindings
 /// </summary>
 public class ProviderQuery
 {
+    public ProviderQuery ForCollection(string collection, FilterExpression? filter = null) => new()
+    {
+        RootPath = RootPath,
+        Collection = collection,
+        Filter = filter ?? Filter,
+        CollectionFilters = CollectionFilters,
+        ExcludedDirectories = ExcludedDirectories,
+        Options = Options
+    };
     /// <summary>
     /// Root path of the project, or null for non-file-backed providers.
     /// </summary>

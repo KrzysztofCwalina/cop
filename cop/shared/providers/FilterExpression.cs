@@ -1,9 +1,24 @@
+using System.Text.Json.Serialization;
+
 namespace Cop.Core;
 
 /// <summary>
 /// Represents a filter condition that can be pushed down to a data provider.
 /// Analogous to a LINQ expression tree node — providers can inspect and optimize.
 /// </summary>
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
+[JsonDerivedType(typeof(PropertyFilter), "property")]
+[JsonDerivedType(typeof(StringOpFilter), "string")]
+[JsonDerivedType(typeof(ComparisonFilter), "comparison")]
+[JsonDerivedType(typeof(AndFilter), "and")]
+[JsonDerivedType(typeof(OrFilter), "or")]
+[JsonDerivedType(typeof(NotFilter), "not")]
+[JsonDerivedType(typeof(ContainsAnyFilter), "containsAny")]
+[JsonDerivedType(typeof(InFilter), "in")]
+[JsonDerivedType(typeof(CollectionContainsFilter), "collectionContains")]
+[JsonDerivedType(typeof(CollectionAnyFilter), "collectionAny")]
+[JsonDerivedType(typeof(CollectionCountFilter), "collectionCount")]
+[JsonDerivedType(typeof(FlagsFilter), "flags")]
 public abstract record FilterExpression
 {
     /// <summary>Combines two expressions with AND.</summary>
@@ -54,6 +69,7 @@ public abstract record FilterExpression
             StringOp.Equals => "equals",
             StringOp.Matches => "matches",
             StringOp.Same => "sameAs",
+            StringOp.ExactEquals => "equalsExact",
             _ => sf.Op.ToString()
         }}('{sf.Value}')",
         ComparisonFilter cf => $"{cf.Property}{cf.Op switch
@@ -170,12 +186,14 @@ public enum StringOp
     EndsWith,
     /// <summary><c>ct</c> — case-insensitive substring (contains).</summary>
     Contains,
-    /// <summary><c>eq</c> — case-insensitive equality (also used for <c>==</c> and <c>!=</c>).</summary>
+    /// <summary><c>eq</c> — case-insensitive equality.</summary>
     Equals,
     /// <summary><c>rx</c> — case-sensitive regular expression match.</summary>
     Matches,
     /// <summary>Case-sensitive exact equality, distinct from the core-package sameAs predicate.</summary>
-    Same
+    Same,
+    /// <summary>Ordinal equality used by the language's == and != operators.</summary>
+    ExactEquals
 }
 
 /// <summary>

@@ -201,6 +201,18 @@ public sealed class ProcessObjectProvider : DataProvider, IDisposable
         if (query.Collection is not null)
             writer.WriteString("collection", query.Collection);
 
+        var filterOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+        if (query.Filter is not null)
+        {
+            writer.WritePropertyName("filter");
+            JsonSerializer.Serialize(writer, query.Filter, filterOptions);
+        }
+        if (query.CollectionFilters is not null)
+        {
+            writer.WritePropertyName("collectionFilters");
+            JsonSerializer.Serialize(writer, query.CollectionFilters, filterOptions);
+        }
+
         if (query.ExcludedDirectories is not null)
         {
             writer.WriteStartArray("excludedDirectories");

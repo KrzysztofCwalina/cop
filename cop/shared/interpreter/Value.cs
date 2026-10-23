@@ -91,16 +91,55 @@ public sealed class CopList : CopValue
 public sealed class CopLazyCollection : CopValue
 {
     private Func<IEnumerable<CopValue>>? _factory;
-    private List<CopValue>? _cached;
+    private readonly List<CopValue> _cached = [];
+    private IEnumerator<CopValue>? _iterator;
+    private System.Runtime.ExceptionServices.ExceptionDispatchInfo? _failure;
+    private bool _complete;
 
     public CopLazyCollection(Func<IEnumerable<CopValue>> factory) => _factory = factory;
 
     public IEnumerable<CopValue> Enumerate()
     {
-        if (_cached is not null) return _cached;
-        _cached = _factory!().ToList();
-        _factory = null; // release closure for GC
-        return _cached;
+        for (int index = 0; ; index++)
+        {
+            CopValue value;
+            lock (_cached)
+            {
+                if (index < _cached.Count)
+                    value = _cached[index];
+                else
+                {
+                    _failure?.Throw();
+                    if (_complete) yield break;
+                    try
+                    {
+                        if (_iterator is null)
+                        {
+                            _iterator = _factory!().GetEnumerator();
+                            _factory = null;
+                        }
+                        if (!_iterator.MoveNext())
+                        {
+                            _iterator.Dispose();
+                            _iterator = null;
+                            _complete = true;
+                            yield break;
+                        }
+                        value = _iterator.Current;
+                        _cached.Add(value);
+                    }
+                    catch (Exception ex)
+                    {
+                        _failure = System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex);
+                        _iterator?.Dispose();
+                        _iterator = null;
+                        _factory = null;
+                        throw;
+                    }
+                }
+            }
+            yield return value;
+        }
     }
 
     public override string Display() => "[...]";
@@ -117,16 +156,31 @@ public sealed class CopQueryable : CopValue
     public string ProviderName { get; }
     public Cop.Core.ProviderQuery Query { get; }
     private readonly Func<string, Cop.Core.ProviderQuery, CopValue> _queryProvider;
+    private CopValue? _materialized;
     public Cop.Core.FilterExpression? AccumulatedFilter { get; }
+    public string? ItemType { get; }
+    private readonly IReadOnlyDictionary<string, string>? _scalarProperties;
 
-    public CopQueryable(string providerName, Cop.Core.ProviderQuery query, Func<string, Cop.Core.ProviderQuery, CopValue> queryProvider, Cop.Core.FilterExpression? filter = null)
+    public CopQueryable(string providerName, Cop.Core.ProviderQuery query, Func<string, Cop.Core.ProviderQuery, CopValue> queryProvider, Cop.Core.FilterExpression? filter = null, string? itemType = null, IReadOnlyDictionary<string, string>? scalarProperties = null)
     {
         ProviderName = providerName;
         Query = query;
         _queryProvider = queryProvider;
-        AccumulatedFilter = filter;
+        AccumulatedFilter = filter ?? query.Filter;
+        ItemType = itemType;
+        _scalarProperties = scalarProperties;
     }
 
+    public bool CanPushFilter(Cop.Core.FilterExpression filter) => _scalarProperties is null || filter switch
+    {
+        Cop.Core.PropertyFilter f => _scalarProperties.GetValueOrDefault(f.Property) == "bool",
+        Cop.Core.StringOpFilter f => _scalarProperties.GetValueOrDefault(f.Property) == "string",
+        Cop.Core.ComparisonFilter f => _scalarProperties.GetValueOrDefault(f.Property) is "int" or "float",
+        Cop.Core.AndFilter f => f.Conditions.All(CanPushFilter),
+        Cop.Core.OrFilter f => f.Conditions.All(CanPushFilter),
+        Cop.Core.NotFilter f => CanPushFilter(f.Inner),
+        _ => false
+    };
     /// <summary>
     /// Returns a new queryable with an additional filter accumulated (immutable).
     /// Multiple filters are combined with AND.
@@ -136,7 +190,7 @@ public sealed class CopQueryable : CopValue
         var combined = AccumulatedFilter is null
             ? filter
             : Cop.Core.FilterExpression.And(AccumulatedFilter, filter);
-        return new CopQueryable(ProviderName, Query, _queryProvider, combined);
+        return new CopQueryable(ProviderName, Query, _queryProvider, combined, ItemType, _scalarProperties);
     }
 
     /// <summary>
@@ -145,6 +199,7 @@ public sealed class CopQueryable : CopValue
     /// </summary>
     public CopValue Materialize()
     {
+        if (_materialized is not null) return _materialized;
         var queryWithFilter = new Cop.Core.ProviderQuery
         {
             RootPath = Query.RootPath,
@@ -154,7 +209,11 @@ public sealed class CopQueryable : CopValue
             ExcludedDirectories = Query.ExcludedDirectories,
             Options = Query.Options
         };
-        return _queryProvider(ProviderName, queryWithFilter);
+        var result = _queryProvider(ProviderName, queryWithFilter);
+        _materialized = AccumulatedFilter is null ? result
+            : new CopLazyCollection(() => CollectionValues.Enumerate(result)
+                .Where(item => CopFilter.Matches(AccumulatedFilter, item)));
+        return _materialized;
     }
 
     /// <summary>
@@ -173,6 +232,19 @@ public sealed class CopQueryable : CopValue
 
     public override string Display() => $"<queryable {ProviderName}>";
     public override string ToString() => Display();
+
+    public static CopQueryable Concat(CopValue left, CopValue right)
+    {
+        var itemType = (left as CopQueryable)?.ItemType ?? (right as CopQueryable)?.ItemType;
+        return new CopQueryable("concat", new(), (_, query) => new CopLazyCollection(() =>
+            Filter(left, query.Filter).Concat(Filter(right, query.Filter))), itemType: itemType,
+            scalarProperties: (left as CopQueryable)?._scalarProperties ?? (right as CopQueryable)?._scalarProperties);
+
+        static IEnumerable<CopValue> Filter(CopValue source, Cop.Core.FilterExpression? filter) =>
+            source is CopQueryable q
+                ? (filter is null ? q : q.WithFilter(filter)).Enumerate()
+                : CollectionValues.Enumerate(source).Where(item => filter is null || CopFilter.Matches(filter, item));
+    }
 }
 
 /// <summary>
@@ -640,12 +712,14 @@ public sealed class CopExternalFunction : CopValue, ICopCallable
 public sealed class CopProviderProxy : CopValue
 {
     public string ProviderName { get; }
+    public CopObject? Data { get; }
     private readonly Environment _env;
 
-    public CopProviderProxy(string providerName, Environment env)
+    public CopProviderProxy(string providerName, Environment env, CopObject? data = null)
     {
         ProviderName = providerName;
         _env = env;
+        Data = data;
     }
 
     public bool HasField(string name)

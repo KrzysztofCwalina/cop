@@ -14,6 +14,10 @@ public class GoProvider : DataProvider
 
     public override RuntimeBindings GetRuntimeBindings() => GoBindings.Build();
 
+    public override IReadOnlyDictionary<string, object?> GetQueryMetadata(ProviderQuery query) =>
+        CodeBindings.SourceMetadata(query, ".go");
+    public override string QueryResultType => "Codebase";
+
     public override object? Query(ProviderQuery query)
     {
         GoTypeDeclaration.RegisterCacheFactory();
@@ -21,7 +25,7 @@ public class GoProvider : DataProvider
         GoStatementInfo.RegisterCacheFactory();
         var parsers = new SourceParserRegistry();
         parsers.Register(new GoSourceParser());
-        var collections = CodeCollectionBuilder.CollectAndParse(parsers, query);
+        var collections = CodeCollectionBuilder.CollectAndParse(parsers, query, this);
 
         // Discover projects from go.mod
         if (query.RootPath is not null)
@@ -31,6 +35,6 @@ public class GoProvider : DataProvider
                 collections["Projects"] = projects.Cast<object>().ToList();
         }
 
-        return collections;
+        return ApplyQueryFilters(query, collections);
     }
 }

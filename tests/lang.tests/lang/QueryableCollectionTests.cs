@@ -103,13 +103,9 @@ public class QueryableCollectionTests
     }
 
     [Test]
-    public void EvalFilter_UserPredicateOverQueryable_MaterializesInsteadOfPushingDown()
+    public void EvalFilter_UserPredicateOverQueryable_PushesItsBodyNotItsName()
     {
-        // Regression (#33): a user-defined predicate applied to a provider queryable (e.g.
-        // json.Parse()) must be evaluated PER ITEM, not compiled to a PropertyFilter and pushed
-        // down. Pushing down made the provider read a non-existent 'canVote' field and crash with
-        // "PropertyFilter expects bool for 'canVote', got null". Real fields (e.g. people:active)
-        // still push down.
+        // Regression (#33): translate the body, not a nonexistent 'canVote' provider field.
         CopValue Person(string name, int age) => new CopObject(
             new Dictionary<string, CopValue> { ["name"] = new CopString(name), ["age"] = new CopInt(age) });
         var svc = new FakeQueryService(new CopList([Person("Ada", 36), Person("Bo", 12)]));
@@ -128,8 +124,8 @@ public class QueryableCollectionTests
 
         Assert.That(result, Is.InstanceOf<CopInt>());
         Assert.That(((CopInt)result).Value, Is.EqualTo(1), "only Ada (age 36) should pass canVote");
-        Assert.That(svc.LastQuery?.Filter, Is.Null,
-            "a user predicate must not be pushed down to the provider as a property filter");
+        Assert.That(svc.LastQuery?.Filter, Is.EqualTo(new ComparisonFilter("age", CompareOp.GreaterThan, 17)),
+            "Translate the predicate body, never a fictitious 'canVote' field.");
     }
 
     [TestCase(false)]
