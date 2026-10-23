@@ -46,6 +46,7 @@
 # ~/.cop/ai.json lives outside any repo and must never be committed.
 
 import code
+import markdown
 
 ## Reviews a parsed `codebase` against a natural-language `requirement`.
 ## Defaults to selected branch diffs, with bounded read/search source tools.
@@ -60,3 +61,10 @@ import code
 ## Limits: 8 requests, 16 tool calls, 256 KiB initial prompt, 2 MiB exchanges, 90s.
 ## Findings outside selected changed hunks and incomplete reviews are errors.
 export function judge(requirement : string, codebase : Codebase) : [Violation] => intrinsic
+
+## Reviews each section at ruleLevel (1-6) as one complete rule, including all
+## paragraphs and nested content. Parent headings and prose supply context.
+## Selected rules share one review and the existing source tools and budgets.
+## An invalid level, missing rule sections, or a rule without a body is an error.
+## Example: CHECK(ai.judge(markdown.parse('architecture.md'), csharp.parse(), 2))
+export function judge(document : MarkdownContent, codebase : Codebase, ruleLevel : int) : [Violation] => intrinsic

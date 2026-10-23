@@ -89,7 +89,10 @@ public static class MarkdownParser
         // Build sections from headings
         var sections = BuildSections(headings, lines);
 
-        return new MarkdownDocument(headings, links, fenceBlocks, sections);
+        return new MarkdownDocument(headings, links, fenceBlocks, sections)
+        {
+            Root = new MarkdownTreeParser(sourceText).Parse()
+        };
     }
 
     private static void ExtractLinks(string line, int lineNumber, List<LinkInfo> links)
@@ -168,4 +171,7 @@ public record MarkdownDocument(
     List<HeadingInfo> Headings,
     List<LinkInfo> Links,
     List<FenceBlockInfo> FenceBlocks,
-    List<SectionInfo> Sections);
+    List<SectionInfo> Sections)
+{
+    public MarkdownNodeInfo Root { get; init; } = new("document", "", 0, 1);
+}

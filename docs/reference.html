@@ -242,6 +242,12 @@ const packages = {
         "params": "requirement: string, codebase: Codebase",
         "returns": "[Violation]",
         "desc": "Reviews a parsed `codebase` against a natural-language `requirement`.\nDefaults to selected branch diffs, with bounded read/search source tools.\nRequires a tool-capable endpoint; --scope full explicitly reviews full parsed\nsource, declarations and dependencies instead. Neither mode accepts strings\nor individual collections. Empty changes skip the review without model calls.\nUse language.parse('path') to scope input or codebase(...) to combine languages.\nRequires ~/.cop/ai.json, or the config file selected by COP_AI_CONFIG.\nFull mode rejects empty codebases; diff mode can review deletions using parser\nSourceScopes even after the last file was removed. Pass --ai-log <path>\nto record the full interaction. Strings and individual collections are unsupported.\nLimits: 8 requests, 16 tool calls, 256 KiB initial prompt, 2 MiB exchanges, 90s.\nFindings outside selected changed hunks and incomplete reviews are errors."
+      },
+      {
+        "name": "judge",
+        "params": "document: MarkdownContent, codebase: Codebase, ruleLevel: int",
+        "returns": "[Violation]",
+        "desc": "Reviews each section at ruleLevel (1-6) as one complete rule, including all\nparagraphs and nested content. Parent headings and prose supply context.\nSelected rules share one review and the existing source tools and budgets.\nAn invalid level, missing rule sections, or a rule without a body is an error.\nExample: CHECK(ai.judge(markdown.parse('architecture.md'), csharp.parse(), 2))"
       }
     ],
     "checks": [],
@@ -5696,6 +5702,61 @@ const packages = {
             "name": "FenceBlocks",
             "type": "[FenceBlock]",
             "desc": ""
+          },
+          {
+            "name": "Documents",
+            "type": "[MarkdownNode]",
+            "desc": ""
+          }
+        ]
+      },
+      "MarkdownNode": {
+        "desc": "An ordered Markdown tree node. Heading Content includes the complete section,\nthrough the next heading of the same or shallower level. Other block Content\npreserves its Markdown source; Text is the node's own string payload.",
+        "props": [
+          {
+            "name": "Kind",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Text",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Content",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Level",
+            "type": "int",
+            "desc": ""
+          },
+          {
+            "name": "StartLine",
+            "type": "int",
+            "desc": ""
+          },
+          {
+            "name": "EndLine",
+            "type": "int",
+            "desc": ""
+          },
+          {
+            "name": "Children",
+            "type": "[MarkdownNode]",
+            "desc": ""
+          },
+          {
+            "name": "File",
+            "type": "File?",
+            "desc": ""
+          },
+          {
+            "name": "Source",
+            "type": "string",
+            "desc": ""
           }
         ]
       }
@@ -5712,7 +5773,7 @@ const packages = {
         "name": "parse",
         "params": "path: string",
         "returns": "MarkdownContent",
-        "desc": "Parses markdown files in the specified directory and returns their structured content.\nExample: let md = markdown.parse('docs/')"
+        "desc": "Parses one Markdown file or files in a directory, retaining ordered document trees\nand the headings, links, sections, and fence-block collections.\nRelative paths resolve against the target directory (-t).\nExample: let md = markdown.parse('docs/')"
       }
     ],
     "checks": [],

@@ -23,14 +23,31 @@ public partial class AiProvider : DataProvider
     public override Dictionary<string, Func<List<object?>, Task<object?>>>? GetFunctions()
         => new(StringComparer.OrdinalIgnoreCase)
         {
-            ["judge"] = JudgeAsync,
+            ["judge"] = args => JudgeArgumentsAsync(args, null),
         };
 
     public override Dictionary<string, Func<List<object?>, Task<object?>>>? GetFunctions(AnalysisContext context)
         => new(StringComparer.OrdinalIgnoreCase)
         {
-            ["judge"] = context.Options.Scope == "full" ? JudgeAsync : args => JudgeChangesAsync(args, context),
+            ["judge"] = args => JudgeArgumentsAsync(args, context),
         };
+
+    private static Task<object?> JudgeArgumentsAsync(List<object?> args, AnalysisContext? context)
+    {
+        if (args.Count == 3)
+        {
+            try
+            {
+                args = [MarkdownRequirements(args[0], args[2]), args[1]];
+            }
+            catch (ArgumentException ex)
+            {
+                return Task.FromResult<object?>(One($"ai.judge: {ex.Message}"));
+            }
+        }
+        return context is not null && context.Options.Scope != "full"
+            ? JudgeChangesAsync(args, context) : JudgeAsync(args);
+    }
 
     private static async Task<object?> JudgeAsync(List<object?> args)
     {

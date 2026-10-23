@@ -7,6 +7,7 @@ using Cop.Core;
 using Cop.Lang;
 using Cop.Providers;
 using Cop.Providers.Ai;
+using Cop.Providers.Markdown;
 using NUnit.Framework;
 
 namespace Cop.Tests;
@@ -350,6 +351,181 @@ public class AiChangeReviewTests
 
     private void Change() =>
         File.WriteAllText(Path.Combine(_repo, "Example.cs"), "class Example {\nint Total => 0;\n}\n");
+
+    [Test]
+    public async Task Markdown_JudgeBatchesWholeSectionsAndInheritsContext()
+    {
+        Change();
+        var document = await MarkdownInput("""
+            # Layering
+            Production code only.
+
+            ## Keep the core independent
+            The first paragraph defines the boundary.
+
+            The second paragraph explains exceptions.
+
+            ### Example
+            This nested section is part of the same rule.
+
+            ## Keep storage separate
+            Storage is application-owned.
+
+            # Performance
+            ## Avoid blocking
+            Background workers are exempt.
+            """);
+        using var model = Configure((turn, _) => turn == 0 ? ReadExample()
+            : Final("""[{"file":"Example.cs","line":2,"message":"Keep the core independent: wrong responsibility."}]"""));
+        var context = new AnalysisContext(_repo, new ReviewOptions { Scope = "branch", Base = "HEAD" });
+        var output = await new AiProvider().GetFunctions(context)!["judge"]([document, Codebase("Example.cs"), 2]);
+        Assert.That(((IEnumerable<object?>)output!).Cast<DataObject>().Single().GetField("Message"),
+            Is.EqualTo("Keep the core independent: wrong responsibility."));
+        Assert.That(model.Requests, Has.Count.EqualTo(2), "Rules must share the diff and source-tool conversation.");
+        using var request = JsonDocument.Parse(model.Requests[0]);
+        var user = request.RootElement.GetProperty("messages")[1].GetProperty("content").GetString()!;
+        var start = user.IndexOf("{\"ruleLevel\":", StringComparison.Ordinal);
+        using var requirements = JsonDocument.Parse(user[start..].Split('\n')[0]);
+        var rules = requirements.RootElement.GetProperty("rules");
+        Assert.That(rules.GetArrayLength(), Is.EqualTo(3));
+        Assert.That(rules[0].GetProperty("title").GetString(), Is.EqualTo("Keep the core independent"));
+        Assert.That(rules[0].GetProperty("requirement").GetString(),
+            Does.Contain("The first paragraph").And.Contain("The second paragraph").And.Contain("### Example")
+                .And.Not.Contain("Storage is application-owned"));
+        Assert.That(rules[0].GetProperty("context")[1].GetProperty("title").GetString(), Is.EqualTo("Layering"));
+        Assert.That(rules[0].GetProperty("context")[1].GetProperty("content")[0].GetString(),
+            Is.EqualTo("Production code only."));
+        Assert.That(rules[2].GetProperty("context")[1].GetProperty("title").GetString(), Is.EqualTo("Performance"));
+    }
+
+    [TestCase(0)]
+    [TestCase(7)]
+    [TestCase(3)]
+    public async Task Markdown_InvalidLevelOrNoRulesFailsBeforeModelConfiguration(int level)
+    {
+        var document = await MarkdownInput("# Group\n## Rule\nRequired behavior.\n");
+        var result = await new AiProvider().GetFunctions()!["judge"]([document, Codebase("Example.cs"), level]);
+        AssertFailure(((IEnumerable<object?>)result!).Cast<DataObject>().ToList(),
+            level == 3 ? "no Markdown rule sections" : "integer from 1 to 6");
+    }
+
+    [Test]
+    public async Task Markdown_EmptyRuleIsAnErrorEvenWhenTheCodeHasNoChanges()
+    {
+        var document = await MarkdownInput("# Group\n## Empty rule\n");
+        var context = new AnalysisContext(_repo, new ReviewOptions { Scope = "branch", Base = "HEAD" });
+        var result = await new AiProvider().GetFunctions(context)!["judge"]([document, Codebase("Example.cs"), 2]);
+        AssertFailure(((IEnumerable<object?>)result!).Cast<DataObject>().ToList(), "has no section body");
+    }
+
+    [Test]
+    public async Task Markdown_ExampleHeadingsDoNotBecomeRules()
+    {
+        var document = await MarkdownInput(
+            "# Group\n```md\n## Example\nNot a rule.\n```\n\n> ## Quote\n> Context.\n\n\t## Tabbed example\n\tNot a rule.\n\n    - Example list\n    ## Indented example\n");
+        var result = await new AiProvider().GetFunctions()!["judge"]([document, Codebase("Example.cs"), 2]);
+        AssertFailure(((IEnumerable<object?>)result!).Cast<DataObject>().ToList(), "no Markdown rule sections");
+    }
+
+    [Test]
+    public async Task Markdown_FullScopeRetainsOneRequestAndExistingFindingProtocol()
+    {
+        var document = await MarkdownInput("# Group\n## One rule\nFirst paragraph.\n\nSecond paragraph.\n");
+        using var model = Configure((_, _) =>
+            Final("""[{"file":"Example.cs","line":2,"message":"One rule: incorrect total."}]"""));
+        var context = new AnalysisContext(_repo, new ReviewOptions { Scope = "full" });
+        var result = await new AiProvider().GetFunctions(context)!["judge"]([document, Codebase("Example.cs"), 2]);
+        Assert.That(((IEnumerable<object?>)result!).Cast<DataObject>().Single().GetField("Message"),
+            Is.EqualTo("One rule: incorrect total."));
+        Assert.That(model.Requests, Has.Count.EqualTo(1));
+        using var request = JsonDocument.Parse(model.Requests[0]);
+        Assert.That(request.RootElement.TryGetProperty("tools", out _), Is.False);
+        Assert.That(model.Requests[0], Does.Contain("First paragraph.").And.Contain("Second paragraph."));
+    }
+
+    [Test]
+    public async Task Markdown_UnchangedCodeSkipsTheModelWithoutConfiguration()
+    {
+        var document = await MarkdownInput("# Group\n## One rule\nRequired behavior.\n");
+        var context = new AnalysisContext(_repo, new ReviewOptions { Scope = "branch", Base = "HEAD" }, _logs.Add);
+        var result = await new AiProvider().GetFunctions(context)!["judge"]([document, Codebase("Example.cs"), 2]);
+        Assert.That((IEnumerable<object?>)result!, Is.Empty);
+        Assert.That(_logs.Last(), Does.Contain("0 model requests"));
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task Markdown_MinimalRunnerExecutesWithTransitiveCheckImport(bool publishedCli)
+    {
+        Change();
+        await MarkdownInput("# Layering\n## Keep totals correct\nFirst paragraph.\n\nSecond paragraph.\n");
+        using var model = Configure((turn, _) => turn == 0 ? ReadExample()
+            : Final("""[{"file":"Example.cs","line":2,"message":"Keep totals correct: wrong value."}]"""));
+        var scripts = Path.Combine(_root, "checks");
+        Directory.CreateDirectory(scripts);
+        var script = Path.Combine(scripts, "main.cop");
+        File.WriteAllText(script, """
+            import markdown
+            import ai
+            import csharp
+            let codebase = csharp.parse()
+            let architecture = markdown.parse('architecture.md')
+            command MAIN = CHECK([])
+            command AI = CHECK(ai.judge(architecture, codebase, 2))
+            """);
+        var root = _root;
+        while (!File.Exists(Path.Combine(root, "cop.sln"))) root = Path.GetDirectoryName(root)!;
+        if (!publishedCli)
+        {
+            var normal = Engine.Run(scripts, _repo, commandName: "MAIN",
+                additionalFeedPaths: [Path.Combine(root, "packages")]);
+            Assert.That(normal.Errors, Is.Empty, string.Join("\n", normal.Errors));
+            Assert.That(normal.Outputs, Is.Empty);
+            Assert.That(normal.ExitCode, Is.EqualTo(0));
+            Assert.That(model.Requests, Is.Empty, "The default command must not execute AI checks.");
+            var result = Engine.Run(scripts, _repo, commandName: "AI",
+                additionalFeedPaths: [Path.Combine(root, "packages")],
+                reviewOptions: new ReviewOptions { Scope = "branch", Base = "HEAD" });
+            Assert.That(result.ParseErrors, Is.Empty);
+            Assert.That(result.Errors, Is.Empty, string.Join("\n", result.Errors));
+            Assert.That(result.ExitCode, Is.EqualTo(1));
+            Assert.That(result.Outputs.Select(output => output.Message),
+                Is.EqualTo(new[] { "Example.cs(2): error: Keep totals correct: wrong value." }));
+        }
+        else
+        {
+            var exe = Path.Combine(root, "install", "win-x64", "cop.exe");
+            Assert.That(File.Exists(exe), Is.True, "Publish win-x64 before running this functional test.");
+            var start = new ProcessStartInfo(exe)
+            {
+                WorkingDirectory = root, RedirectStandardOutput = true, RedirectStandardError = true,
+                UseShellExecute = false
+            };
+            foreach (var arg in new[] { script, "-t", _repo, "-c", "ai", "--scope", "branch", "--base", "HEAD",
+                "--no-user-checks", "--no-color" }) start.ArgumentList.Add(arg);
+            using var process = Process.Start(start)!;
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            var stderr = process.StandardError.ReadToEndAsync();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            try { await process.WaitForExitAsync(timeout.Token); }
+            catch (OperationCanceledException) { process.Kill(true); throw; }
+            Assert.That(process.ExitCode, Is.EqualTo(1), await stderr + await stdout);
+            Assert.That(TestTextParsing.StripAnsi(await stdout).Trim(),
+                Is.EqualTo("Example.cs(2): error: Keep totals correct: wrong value."));
+        }
+        Assert.That(model.Requests, Has.Count.EqualTo(2));
+        Assert.That(model.Requests[0], Does.Contain("First paragraph.").And.Contain("Second paragraph."));
+    }
+
+    private async Task<DataObject> MarkdownInput(string text)
+    {
+        var path = Path.Combine(_repo, "architecture.md");
+        File.WriteAllText(path, text);
+        var provider = new MarkdownProvider();
+        var collections = (Dictionary<string, List<object>>)provider.Query(new ProviderQuery { RootPath = path })!;
+        var raw = new DataObject("Object", collections.ToDictionary(pair => pair.Key, pair => (object?)pair.Value));
+        return (DataObject)(await provider.GetFunctions()!["toContent"]([new List<object?> { raw }]))!;
+    }
 
     private Task<List<DataObject>> Judge() => Judge(Codebase("Example.cs"));
 

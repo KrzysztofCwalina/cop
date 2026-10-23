@@ -386,17 +386,7 @@ public static class Engine
 
             // Register provider functions (e.g., http.Post) as qualified callables: <package>.<fn>.
             // Resolved through CopProviderProxy.GetField (which looks up "<package>.<fn>" in the env).
-            var providerFunctions = loaded.Instance.GetFunctions(context);
-            if (providerFunctions is not null)
-            {
-                foreach (var (fnName, fn) in providerFunctions)
-                {
-                    var capturedFn = fn;
-                    var qualifiedName = $"{loaded.PackageName}.{fnName}";
-                    bridge.Evaluator.GlobalEnvironment.Define(qualifiedName,
-                        new CopExternalFunction(qualifiedName, (callArgs, _) => InvokeProviderFunction(capturedFn, callArgs)));
-                }
-            }
+            RegisterProviderFunctions(bridge, loaded.PackageName, loaded.Instance, context);
         }
 
         foreach (var builtinProvider in _builtinProviders)
@@ -407,6 +397,7 @@ public static class Engine
             // never use a provider pay nothing for it.
             var runtimeBindings = builtinProvider.Instance.GetRuntimeBindings();
             RegisterLazyProviderCollections(bridge.Evaluator.GlobalEnvironment, builtinProvider.Name, builtinProvider.Instance, builtinProvider.Schema, query, errors, warnings, runtimeBindings, diagLog);
+            RegisterProviderFunctions(bridge, builtinProvider.Name, builtinProvider.Instance, context);
         }
 
         // Re-register provider intrinsic with query service access (same pattern as print/save/assert)
@@ -789,6 +780,18 @@ public static class Engine
 
     // Invokes a provider function (from ObjectProvider.GetFunctions): marshals cop args → CLR,
     // synchronously awaits the Task, and marshals the CLR result → CopValue.
+    private static void RegisterProviderFunctions(LanguageBridge bridge, string name, DataProvider provider, AnalysisContext context)
+    {
+        var functions = provider.GetFunctions(context);
+        if (functions is null) return;
+        foreach (var (functionName, function) in functions)
+        {
+            var qualifiedName = $"{name}.{functionName}";
+            bridge.Evaluator.GlobalEnvironment.Define(qualifiedName,
+                new CopExternalFunction(qualifiedName, (args, _) => InvokeProviderFunction(function, args)));
+        }
+    }
+
     private static CopValue InvokeProviderFunction(Func<List<object?>, Task<object?>> fn, IReadOnlyList<CopValue> args)
     {
         var clrArgs = args.Select(CopToClr).ToList();

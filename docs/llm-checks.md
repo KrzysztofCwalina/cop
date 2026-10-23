@@ -5,6 +5,10 @@ Use the `ai` package to review code against a natural-language requirement:
 `Violation` objects that you report with `CHECK`. State the policy you want to
 enforce; Cop supplies source and architectural context from that codebase.
 
+For multiple architectural rules, write an ordinary Markdown document and use
+`ai.judge(markdown.parse('architecture.md'), codebase, 2)`. Each level-two
+section is one rule, including its complete body, not one rule per paragraph.
+
 **AI review is diff-first by default.** Cop sends changes in the selected
 codebase to the model, not the entire source tree. The model can look up
 unchanged source when it needs supporting context. You do not need to rewrite
@@ -86,60 +90,83 @@ endpoint approved for that code's sensitivity and your organization's policies.
 To select a different configuration file, set `COP_AI_CONFIG` to its path. This
 is useful for CI and isolated tests without changing your personal configuration.
 
-## 2. Create an Opt-In Check
+## 2. Write Rules in Markdown
 
-Keep one focused rule per file under `cop-checks/`. Only `main.cop` declares
-commands; individual check files expose violation lists.
+Create `architecture.md` in the repository being analyzed. Use headings to group
+and name rules, with as many paragraphs, examples, or lists as each rule needs:
 
-For example, create `cop-checks/architecture.cop`:
+```markdown
+# Layering
 
-```cop skip
-import ai
-import code
+These rules apply to production code.
 
-let architecture-violations = ai.judge(
-    '''
-    The core library must remain general-purpose.
-    Application-specific business logic, such as order fulfillment or
-    invoice processing, belongs outside the core.
-    Parsing, collections, diagnostics, and runtime infrastructure belong here.
-    ''',
-    codebase)
+## Keep the core independent of application workflows
+
+The core library should provide reusable mechanisms rather than encode the
+workflows of a particular application. Parsing, dependency resolution, and
+diagnostics belong here. Order fulfillment and customer onboarding belong in
+application packages that depend on the core, not the other way around.
+
+Consider responsibilities and dependency direction, not merely names.
+Accepting an application-supplied callback is acceptable when the core remains
+unaware of the business operation being performed.
+
+### Examples
+
+A reusable queue is appropriate; an order-fulfillment coordinator is not.
+
+# Performance
+
+## Keep request processing free of blocking operations
+
+Code on request-processing threads should not synchronously wait for network or
+filesystem operations. Follow calls into helpers; an asynchronous method name
+does not make a blocking implementation acceptable. Startup initialization and
+explicitly isolated background workers are outside this restriction.
 ```
 
-This is a partial snippet: it uses the shared `codebase` defined in `main.cop`.
-The main program below scopes the codebase to `src/core/`; adapt that path and
-the requirement to your repository. You do not need to decide whether the rule
-should operate on types, files, or lines: the judge receives the parsed codebase.
-The prompt uses a triple-single-quoted multiline string (`'''...'''`).
-Cop removes the opening newline and the indentation set by the closing delimiter,
-so the prompt stays readable without string concatenation.
+Write the runner once in `cop-checks/main.cop`:
 
-For a new check suite, create `cop-checks/main.cop`:
-
-```cop skip
+```cop
+import markdown
 import ai
-import code
 import csharp
 
-let codebase = csharp.parse('src/core')
+let codebase = csharp.parse()
+let architecture = markdown.parse('architecture.md')
 
 command MAIN = CHECK([])
-command AI = CHECK(architecture-violations)
+command AI = CHECK(ai.judge(architecture, codebase, 2))
 ```
 
-The `main.cop` snippet belongs alongside `architecture.cop`, not in isolation.
-In an existing suite, keep `MAIN = CHECK(all-violations)` and add your new list
-to a separate AI-only aggregate:
+The third argument selects the rule heading level, from 1 to 6. Here each `##`
+section is one logical rule. **Both paragraphs and the Examples subsection
+belong to the first rule.** The next heading of the same or shallower level ends
+that rule. Parent headings and their prose provide inherited context.
+Headings inside code blocks, lists, or quotations do not become independent rules.
+
+All selected rules share one review and its diff/source-tool budgets, rather
+than sending the same source separately for every rule. Findings identify the
+rule title in their messages. No matching sections or a selected heading without
+a body is an error, not a clean result.
+
+`markdown.parse` accepts a file or directory. Its `Documents` collection preserves
+one ordered tree per file, including paragraphs, lists, code blocks, and other
+content. The existing flat collections remain available. Relative paths resolve
+against `-t`; use an absolute path when the rules live elsewhere.
+
+The default `MAIN` above does not execute AI. In an existing check suite, keep
+`MAIN = CHECK(all-violations)` for deterministic checks and add the separate `AI`
+command. `csharp` imports `code`, making `CHECK` available without another import.
+
+For a single requirement, the string overload also works:
 
 ```cop skip
-let all-ai-violations = architecture-violations + another-ai-violations
-command AI = CHECK(all-ai-violations)
+command AI = CHECK(ai.judge('The core must remain general-purpose.', codebase))
 ```
 
-Do not include AI violation lists in the default static-check aggregate.
-The repository's [own main program](../cop-checks/main.cop) and
-[core-purity check](../cop-checks/core-purity.cop) demonstrate this separation.
+No Cop syntax or imports are needed inside `architecture.md`. Adding another
+architectural rule means adding another Markdown section, not another Cop file.
 
 ## 3. Verify, Then Run Explicitly
 
