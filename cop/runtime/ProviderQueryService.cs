@@ -161,8 +161,10 @@ public class ProviderQueryService
             var properties = schema.Types.FirstOrDefault(t => t.Name == collection.ItemType)?.Properties
                 .Where(p => !p.Collection && p.Type is "string" or "bool" or "int" or "float")
                 .ToDictionary(p => p.Name, p => p.Type, StringComparer.Ordinal);
-            return new CopQueryable(providerName, query.ForCollection(collection.Name), QueryProvider,
+            var value = new CopQueryable(providerName, query.ForCollection(collection.Name), QueryProvider,
                 itemType: collection.ItemType, scalarProperties: properties);
+            value.SetQueryLog(_diagLog);
+            return value;
         }
         if (schema.Collections.Count == 1 && provider.Instance.QueryResultType is null)
         {

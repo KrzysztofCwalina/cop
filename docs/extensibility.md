@@ -71,8 +71,12 @@ Passing a provider object to a CLR provider function materializes its collection
 Its structural wrapper is preserved; CLR providers can declare `QueryResultType` for
 consumers that require a named wrapper such as `Codebase` or `MarkdownContent`.
 
-Diagnostic logging distinguishes `[query]` (the requested plan) from `[query-result]`
-(the number of records returned before host residual filtering).
+Diagnostic logging (`-d`) includes `[query-cop]` (source-shaped Cop for the provider
+portion), `[query-local]` (host-only operations), `[query]` (the structured filter),
+and `[query-result]` (records returned before host residual filtering).
+
+See [Provider query representation](query-language.md) for the query fields, readable
+filter notation, and JSON transport format.
 
 ---
 

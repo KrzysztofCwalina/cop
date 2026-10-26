@@ -42,24 +42,10 @@ public static class PredicateCompiler
 
         FilterExpression? Expand(AstExpr expression, Environment scope, string? parameter)
         {
-            if (expression is Ast.IdentifierExpr id && scope.TryLookup(id.Name, out var binding))
+            if (expression is Ast.IdentifierExpr id && scope.TryLookup(id.Name, out _))
             {
-                var functions = binding switch
-                {
-                    CopFunction f => new[] { f },
-                    CopFunctionGroup group => group.Functions.ToArray(),
-                    _ => []
-                };
-                var candidates = functions.Where(f => f.Declaration.IsPredicate && f.Arity == 1
-                    && f.Declaration.Guard is null && f.Declaration.Params[0].Type?.Constraint is null
-                    && f.Declaration.Body is ExpressionBody).ToArray();
-                var exact = candidates.Where(f => f.Declaration.Params[0].Type?.Name == itemType).ToArray();
-                if (exact.Length == 1) candidates = exact;
-                if (candidates.Length != 1 || functions.Length > 1 && exact.Length != 1 || !expanding.Add(id.Name))
-                    return null;
-                var function = candidates[0];
-                if (itemType is not null && function.Declaration.Params[0].Type is { } parameterType
-                    && !string.Equals(parameterType.Name, itemType, StringComparison.Ordinal))
+                var function = FindPredicate(id.Name, scope, itemType);
+                if (function is null || !expanding.Add(id.Name))
                     return null;
                 var result = Expand(((ExpressionBody)function.Declaration.Body).Expr,
                     function.Closure, function.Declaration.Params[0].Name);
@@ -120,6 +106,26 @@ public static class PredicateCompiler
             expression is MemberExpr { Object: Ast.IdentifierExpr root } member
                 && (root.Name == parameter || string.Equals(root.Name, parameter, StringComparison.OrdinalIgnoreCase))
                 ? member.Member : null;
+    }
+
+    internal static CopFunction? FindPredicate(string name, Environment scope, string? itemType)
+    {
+        if (!scope.TryLookup(name, out var binding)) return null;
+        var functions = binding switch
+        {
+            CopFunction function => new[] { function },
+            CopFunctionGroup group => group.Functions.ToArray(),
+            _ => []
+        };
+        var candidates = functions.Where(f => f.Declaration.IsPredicate && f.Arity == 1
+            && f.Declaration.Guard is null && f.Declaration.Params[0].Type?.Constraint is null
+            && f.Declaration.Body is ExpressionBody).ToArray();
+        var exact = candidates.Where(f => f.Declaration.Params[0].Type?.Name == itemType).ToArray();
+        if (exact.Length == 1) candidates = exact;
+        if (candidates.Length != 1 || functions.Length > 1 && exact.Length != 1) return null;
+        var selected = candidates[0];
+        return itemType is not null && selected.Declaration.Params[0].Type is { } type && type.Name != itemType
+            ? null : selected;
     }
 
     public static FilterExpression? TryCompileElement(AstExpr expression, Environment environment, string? itemType)

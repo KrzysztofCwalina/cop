@@ -70,6 +70,19 @@ public class ProviderQueryRegressionTests
     }
 
     [Test]
+    public void Issue076_OrderedLazyCollectionLastReturnsLastRecord()
+    {
+        var result = Run("""
+            let items = json.Parse('input.json')
+            command MAIN =
+                print(items.OrderBy(item.Name).Last.Name) &
+                print(items.OrderByDescending(item.Name).last.Name) &
+                print(items.Where(item.Name == 'Alpha').Last.Name)
+            """);
+        Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "Beta", "Alpha", "Alpha" }));
+    }
+
+    [Test]
     public void Issue071_ProcessProviderReceivesFilterAndIssue072IgnoredFilterRemainsCorrect()
     {
         var sdk = JsonSerializer.Serialize(Path.Combine(RepoRoot, "sdk", "python"));

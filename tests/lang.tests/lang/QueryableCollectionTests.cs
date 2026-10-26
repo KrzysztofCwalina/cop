@@ -156,6 +156,37 @@ public class QueryableCollectionTests
         Assert.That(svc.LastQuery!.Filter, Is.Null);
     }
 
+    [TestCase("items", "Last.Name", "Beta")]
+    [TestCase("items", "last.Name", "Beta")]
+    [TestCase("items.OrderBy(item.Name)", "Last.Name", "Beta")]
+    [TestCase("items.OrderByDescending(item.Name)", "Last.Name", "Alpha")]
+    [TestCase("items.Where(item.Name == 'Alpha')", "Last.Name", "Alpha")]
+    [TestCase("items.Where(item.Name == 'Missing')", "Last", null)]
+    [TestCase("items.Where(item.Name == 'Missing')", "last", null)]
+    public void Last_OnDeferredCollections_ReturnsExactElementOrNull(string source, string terminal, string? expected)
+    {
+        CopValue Named(string name) => new CopObject(
+            new Dictionary<string, CopValue> { ["Name"] = new CopString(name) });
+        var svc = new FakeQueryService(new CopList([Named("Alpha"), Named("Beta")]));
+        var ffi = new ForeignFunctionRegistry();
+        StandardLibrary.Register(ffi);
+        var evaluator = new Evaluator(ffi);
+        evaluator.GlobalEnvironment.Define("items",
+            new CopQueryable("fixture", new ProviderQuery { RootPath = "." }, svc.QueryProvider));
+        evaluator.EvalModule(CopParser.Parse($"let selected = {source}\ncommand MAIN = selected.{terminal}", "last.cop"));
+        Assert.That(svc.QueryCount, Is.EqualTo(0));
+
+        var result = evaluator.RunCommand("MAIN");
+
+        if (expected is null)
+            Assert.That(result, Is.SameAs(CopNull.Instance));
+        else
+            Assert.That(result, Is.InstanceOf<CopString>().And.Property(nameof(CopString.Value)).EqualTo(expected));
+        Assert.That(svc.QueryCount, Is.EqualTo(1));
+        Assert.That(evaluator.RunCommand("MAIN"), Is.EqualTo(result));
+        Assert.That(svc.QueryCount, Is.EqualTo(1));
+    }
+
     private class FakeQueryService
     {
         private readonly CopValue _result;
