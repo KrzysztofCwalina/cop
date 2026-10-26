@@ -116,7 +116,7 @@ public sealed class XmlProvider : DataProvider
         var requested = query.Collection;
         if (requested is null || requested == "Elements") collections["Elements"] = elements;
         if (requested is null || requested == "Attributes") collections["Attributes"] = attributes;
-        return collections;
+        return ApplyQueryFilters(query, collections);
     }
 
     private static (List<XmlElementInfo> Elements, List<XmlAttributeInfo> Attributes) ParseDocument(string text)

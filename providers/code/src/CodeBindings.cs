@@ -1,4 +1,5 @@
 using Cop.Core;
+using Cop.Lang;
 using Cop.Providers.SourceModel;
 
 namespace Cop.Providers;
@@ -9,6 +10,19 @@ namespace Cop.Providers;
 /// </summary>
 public static class CodeBindings
 {
+    public static IReadOnlyDictionary<string, object?> SourceMetadata(ProviderQuery query, params string[] extensions) =>
+        new Dictionary<string, object?>
+        {
+            ["SourceScopes"] = query.RootPath is null ? new List<object>() : new List<object>
+            {
+                new DataObject("SourceScope", new Dictionary<string, object?>
+                {
+                    ["RootPath"] = Path.GetFullPath(query.RootPath),
+                    ["Extensions"] = extensions
+                })
+            }
+        };
+
     public static RuntimeBindings Build()
     {
         return new RuntimeBindings

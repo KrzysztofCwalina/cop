@@ -50,7 +50,7 @@ public class CSharpProviderFunctionsTests
     }
 
     [Test]
-    public void CSharpPackage_ParsePath_UsesProviderCodebaseMaterializer()
+    public void CSharpPackage_ParsePath_PreservesDeferredProviderValues()
     {
         var packageSource = File.ReadAllText(Path.Combine(
             FindRepoRoot(),
@@ -60,8 +60,8 @@ public class CSharpProviderFunctionsTests
             "src",
             "csharp.cop"));
 
-        Assert.That(packageSource, Does.Contain("export function parse(path : string) : Codebase => provider('csharp').toCodebase(provider('csharp', path), path)"));
-        Assert.That(packageSource, Does.Contain("provider('csharp').toCodebase(provider('csharp', '.'), '.')"));
+        Assert.That(packageSource, Does.Contain("export function parse(path : string) : Codebase => provider('csharp', path)"));
+        Assert.That(packageSource, Does.Contain("export function parse() : Codebase => provider('csharp')"));
     }
 
     [TestCase(".")]

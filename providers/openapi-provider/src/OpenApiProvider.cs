@@ -112,7 +112,7 @@ public sealed class OpenApiProvider : DataProvider
         var requested = query.Collection;
         if (requested is null || requested == "Operations") collections["Operations"] = operations;
         if (requested is null || requested == "Paths") collections["Paths"] = paths;
-        return collections;
+        return ApplyQueryFilters(query, collections);
     }
 
     private static void CollectOpenApiCandidateFiles(string dir, IReadOnlySet<string>? excluded, List<string> result)
@@ -169,4 +169,3 @@ public sealed class OpenApiProvider : DataProvider
         };
     }
 }
-

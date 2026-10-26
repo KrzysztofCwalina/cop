@@ -42,6 +42,7 @@ public static class FilterEvaluator
 
     private static bool EvalBool(PropertyFilter pf, object? raw)
     {
+        if (raw is null) return false;
         if (raw is not bool b)
             throw new ArgumentException($"PropertyFilter expects bool for '{pf.Property}', got {raw?.GetType().Name ?? "null"}");
         return b == pf.Value;
@@ -49,15 +50,17 @@ public static class FilterEvaluator
 
     private static bool EvalString(StringOpFilter sf, object? raw)
     {
+        if (raw is null) return false;
         if (raw is not string s)
             throw new ArgumentException($"StringOpFilter expects string for '{sf.Property}', got {raw?.GetType().Name ?? "null"}");
         return sf.Op switch
         {
+            StringOp.ExactEquals => s.Equals(sf.Value, StringComparison.Ordinal),
             StringOp.Equals => s.Equals(sf.Value, StringComparison.OrdinalIgnoreCase),
             StringOp.StartsWith => s.StartsWith(sf.Value, StringComparison.OrdinalIgnoreCase),
             StringOp.EndsWith => s.EndsWith(sf.Value, StringComparison.OrdinalIgnoreCase),
             StringOp.Contains => s.Contains(sf.Value, StringComparison.OrdinalIgnoreCase),
-            StringOp.Matches => RegexCache.IsMatch(s, sf.Value, RegexOptions.IgnoreCase),
+            StringOp.Matches => RegexCache.IsMatch(s, sf.Value, RegexOptions.None),
             StringOp.Same => NormalizeIdentifier(s) == NormalizeIdentifier(sf.Value),
             _ => throw new ArgumentException($"Unknown string operation: {sf.Op}")
         };
@@ -88,6 +91,7 @@ public static class FilterEvaluator
 
     private static bool EvalNumeric(ComparisonFilter cf, object? raw)
     {
+        if (raw is null) return false;
         if (raw is not (int or long or double or float))
             throw new ArgumentException($"ComparisonFilter expects numeric for '{cf.Property}', got {raw?.GetType().Name ?? "null"}");
         var num = AsDouble(raw);

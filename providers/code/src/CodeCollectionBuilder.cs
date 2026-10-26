@@ -12,16 +12,27 @@ namespace Cop.Providers;
 /// </summary>
 public static class CodeCollectionBuilder
 {
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<DataProvider,
+        Dictionary<string, List<SourceFile>>> Snapshots = new();
+
     /// <summary>
     /// Scans source files under rootPath, parses them, and returns flat collections.
     /// </summary>
     public static Dictionary<string, List<object>> CollectAndParse(SourceParserRegistry parsers, ProviderQuery query)
+        => CollectAndParse(parsers, query, null);
+
+    public static Dictionary<string, List<object>> CollectAndParse(SourceParserRegistry parsers, ProviderQuery query, DataProvider? owner)
     {
         if (query.RootPath is null)
             return new();
 
         var rootPath = query.RootPath;
         var excluded = query.ExcludedDirectories;
+        var snapshotKey = Path.GetFullPath(rootPath) + "\n" +
+            string.Join("\n", (excluded ?? new HashSet<string>()).Order(StringComparer.Ordinal));
+        var snapshots = owner is null ? null : Snapshots.GetOrCreateValue(owner);
+        if (snapshots?.TryGetValue(snapshotKey, out var snapshot) == true)
+            return ExtractCollections(snapshot, query.Collection, query.CollectionFilters, query.Filter);
 
         var filePaths = new List<string>();
         CollectSourceFiles(rootPath, parsers, excluded, filePaths);
@@ -79,7 +90,8 @@ public static class CodeCollectionBuilder
             }
         }
 
-        return ExtractCollections(sorted, query.Collection, query.CollectionFilters);
+        snapshots?.Add(snapshotKey, sorted);
+        return ExtractCollections(sorted, query.Collection, query.CollectionFilters, query.Filter);
     }
 
     /// <summary>
@@ -269,9 +281,15 @@ public static class CodeCollectionBuilder
     public static Dictionary<string, List<object>> ExtractCollections(
         List<SourceFile> sourceFiles, string? collection,
         IReadOnlyDictionary<string, FilterExpression>? collectionFilters = null)
+        => ExtractCollections(sourceFiles, collection, collectionFilters, null);
+
+    public static Dictionary<string, List<object>> ExtractCollections(
+        List<SourceFile> sourceFiles, string? collection,
+        IReadOnlyDictionary<string, FilterExpression>? collectionFilters,
+        FilterExpression? filter)
     {
         var extractors = CodeBindings.BuildExtractors();
-        var accessors = collectionFilters is not null ? CodeBindings.BuildAccessors() : null;
+        var accessors = collectionFilters is not null || filter is not null ? CodeBindings.BuildAccessors() : null;
         var collectionItemTypes = GetCollectionItemTypes();
         var collections = new Dictionary<string, List<object>>();
 
@@ -282,12 +300,12 @@ public static class CodeCollectionBuilder
 
             // Compile a filter predicate for this collection if available
             Func<object, bool>? predicate = null;
-            if (collectionFilters is not null &&
-                collectionFilters.TryGetValue(name, out var filter) &&
+            var effectiveFilter = collectionFilters?.GetValueOrDefault(name) ?? filter;
+            if (effectiveFilter is not null &&
                 collectionItemTypes.TryGetValue(name, out var itemType) &&
                 accessors!.TryGetValue(itemType, out var typeAccessors))
             {
-                predicate = FilterCompiler.Compile(filter, typeAccessors);
+                predicate = FilterCompiler.Compile(effectiveFilter, typeAccessors);
             }
 
             var items = new List<object>();

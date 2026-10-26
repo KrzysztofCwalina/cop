@@ -107,7 +107,7 @@ public sealed class YamlProvider : DataProvider
         var requested = query.Collection;
         if (requested is null || requested == "Entries") collections["Entries"] = entries;
         if (requested is null || requested == "Documents") collections["Documents"] = documents;
-        return collections;
+        return ApplyQueryFilters(query, collections);
     }
 
     private static void CollectYamlFiles(string dir, IReadOnlySet<string>? excluded, List<string> result)

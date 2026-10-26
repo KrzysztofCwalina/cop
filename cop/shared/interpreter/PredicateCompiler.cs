@@ -34,6 +34,114 @@ public static class PredicateCompiler
         return negated ? new NotFilter(result) : result;
     }
 
+    /// <summary>Expands unambiguous, pure predicate bodies; unsupported expressions stay local.</summary>
+    public static FilterExpression? TryCompileBound(AstExpr predicate, Environment environment, string? itemType = null)
+    {
+        var expanding = new HashSet<string>(StringComparer.Ordinal);
+        return Expand(predicate, environment, null);
+
+        FilterExpression? Expand(AstExpr expression, Environment scope, string? parameter)
+        {
+            if (expression is Ast.IdentifierExpr id && scope.TryLookup(id.Name, out _))
+            {
+                var function = FindPredicate(id.Name, scope, itemType);
+                if (function is null || !expanding.Add(id.Name))
+                    return null;
+                var result = Expand(((ExpressionBody)function.Declaration.Body).Expr,
+                    function.Closure, function.Declaration.Params[0].Name);
+                expanding.Remove(id.Name);
+                return result;
+            }
+
+            if (parameter is null) return null;
+            if (expression is Ast.BinaryExpr { Op: BinaryOp.And or BinaryOp.Or } logical)
+            {
+                var left = Expand(logical.Left, scope, parameter);
+                var right = Expand(logical.Right, scope, parameter);
+                if (left is null || right is null) return null;
+                return logical.Op == BinaryOp.And ? FilterExpression.And(left, right) : FilterExpression.Or(left, right);
+            }
+            if (expression is Ast.UnaryExpr { Op: UnaryOp.Not } not)
+                return Expand(not.Operand, scope, parameter) is { } inner ? new NotFilter(inner) : null;
+            if (expression is MemberExpr member && Property(member, parameter) is { } boolProperty)
+                return new PropertyFilter(boolProperty, true);
+            if (expression is FilterExpr filter && Property(filter.Collection, parameter) is { } property)
+            {
+                var compiled = TryCompile(filter.Predicate, filter.Negated, property);
+                return compiled;
+            }
+            if (expression is Ast.BinaryExpr comparison && Property(comparison.Left, parameter) is { } name
+                && comparison.Right is Ast.LiteralExpr literal)
+            {
+                if (literal.Value is bool boolean && comparison.Op is BinaryOp.Equal or BinaryOp.NotEqual)
+                {
+                    var equal = new PropertyFilter(name, boolean);
+                    return comparison.Op == BinaryOp.Equal ? equal : new NotFilter(equal);
+                }
+                if (literal.Value is string text && comparison.Op is BinaryOp.Equal or BinaryOp.NotEqual)
+                {
+                    var equal = new StringOpFilter(name, StringOp.ExactEquals, text);
+                    return comparison.Op == BinaryOp.Equal ? equal : new NotFilter(equal);
+                }
+                double? number = literal.Value switch { int i => i, long l => l, double d => d, _ => null };
+                CompareOp? op = comparison.Op switch
+                {
+                    BinaryOp.Equal or BinaryOp.NotEqual => CompareOp.Equals,
+                    BinaryOp.GreaterThan => CompareOp.GreaterThan,
+                    BinaryOp.GreaterOrEqual => CompareOp.GreaterOrEqual,
+                    BinaryOp.LessThan => CompareOp.LessThan,
+                    BinaryOp.LessOrEqual => CompareOp.LessOrEqual,
+                    _ => null
+                };
+                if (number is not null && op is not null)
+                {
+                    var numeric = new ComparisonFilter(name, op.Value, number.Value);
+                    return comparison.Op == BinaryOp.NotEqual ? new NotFilter(numeric) : numeric;
+                }
+            }
+            return null;
+        }
+
+        static string? Property(AstExpr expression, string parameter) =>
+            expression is MemberExpr { Object: Ast.IdentifierExpr root } member
+                && (root.Name == parameter || string.Equals(root.Name, parameter, StringComparison.OrdinalIgnoreCase))
+                ? member.Member : null;
+    }
+
+    internal static CopFunction? FindPredicate(string name, Environment scope, string? itemType)
+    {
+        if (!scope.TryLookup(name, out var binding)) return null;
+        var functions = binding switch
+        {
+            CopFunction function => new[] { function },
+            CopFunctionGroup group => group.Functions.ToArray(),
+            _ => []
+        };
+        var candidates = functions.Where(f => f.Declaration.IsPredicate && f.Arity == 1
+            && f.Declaration.Guard is null && f.Declaration.Params[0].Type?.Constraint is null
+            && f.Declaration.Body is ExpressionBody).ToArray();
+        var exact = candidates.Where(f => f.Declaration.Params[0].Type?.Name == itemType).ToArray();
+        if (exact.Length == 1) candidates = exact;
+        if (candidates.Length != 1 || functions.Length > 1 && exact.Length != 1) return null;
+        var selected = candidates[0];
+        return itemType is not null && selected.Declaration.Params[0].Type is { } type && type.Name != itemType
+            ? null : selected;
+    }
+
+    public static FilterExpression? TryCompileElement(AstExpr expression, Environment environment, string? itemType)
+    {
+        var parameter = new Parameter("item", null);
+        if (expression is LambdaExpr { Params.Count: 1 } lambda)
+        {
+            parameter = lambda.Params[0];
+            expression = lambda.Body;
+        }
+        var scope = environment.Extend();
+        scope.Define("$query", new CopFunction(new FunctionDecl("$query", [parameter], null,
+            new ExpressionBody(expression), IsPredicate: true), environment));
+        return TryCompileBound(new Ast.IdentifierExpr("$query"), scope, itemType);
+    }
+
     /// <summary>
     /// Attempts to extract a property name from a predicate expression.
     /// Used to detect compound patterns: queryable:PropertyName:StringOp(value).

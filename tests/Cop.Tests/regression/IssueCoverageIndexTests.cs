@@ -77,6 +77,12 @@ public class IssueRegressionCoverageIndexTests
         new(63, CoverageKind.ImplementedHere, "LazySourceLocationRegressionTests.Issue063_ToErrorResolvesLazySourceLocationWithoutPriorFieldReads"),
         new(65, CoverageKind.ImplementedHere, "IntrinsicLiteralRegressionTests.Issue065_FunctionCanReturnIntrinsicStringLiteral"),
         new(66, CoverageKind.ImplementedHere, "IssueRegressionTests.Issue066_PublishedHostExtractsCSharpStatementsWithMatchingProvider"),
+        new(70, CoverageKind.ImplementedHere, "ProviderQueryRegressionTests.Issue070_CompoundJsonPropertyFilterPreservesRecords"),
+        new(71, CoverageKind.ImplementedHere, "ProviderQueryRegressionTests.Issue071_ProcessProviderReceivesFilterAndIssue072IgnoredFilterRemainsCorrect"),
+        new(72, CoverageKind.ImplementedHere, "ProviderQueryRegressionTests.Issue071_ProcessProviderReceivesFilterAndIssue072IgnoredFilterRemainsCorrect"),
+        new(73, CoverageKind.ImplementedHere, "ProviderQueryRegressionTests.Issue073_JsonQueryableCountIsExact"),
+        new(75, CoverageKind.ImplementedHere, "ProviderQueryRegressionTests.Issue075_CrossFilePredicatesUseLocalProviderAndPushBothFilters; DeferredProviderExecutionTests.ExistingProviderBinaries"),
+        new(76, CoverageKind.ImplementedHere, "ProviderQueryRegressionTests.Issue076_OrderedLazyCollectionLastReturnsLastRecord"),
     ];
 
     [Test]
@@ -86,8 +92,8 @@ public class IssueRegressionCoverageIndexTests
         Assert.That(duplicates, Is.Empty, "Each issue must appear exactly once in the regression coverage index.");
 
         var coveredIssues = Coverage.Select(c => c.Issue).OrderBy(i => i).ToArray();
-        Assert.That(coveredIssues, Is.EqualTo(Enumerable.Range(1, 55).Concat([60, 61, 62, 63, 65, 66]).ToArray()),
-            "Regression coverage index must cover issues #1 through #55, #60-#63, #65, and #66.");
+        Assert.That(coveredIssues, Is.EqualTo(Enumerable.Range(1, 55).Concat([60, 61, 62, 63, 65, 66, 70, 71, 72, 73, 75, 76]).ToArray()),
+            "Regression coverage index must cover issues #1 through #55, #60-#63, #65-#66, #70-#73, and #75-#76.");
 
         var untracked = Coverage.Where(c => string.IsNullOrWhiteSpace(c.Detail)).Select(c => c.Issue).ToArray();
         Assert.That(untracked, Is.Empty, "Every issue must be ImplementedHere, CoveredBy(suiteName), or OutOfScope(reason).");

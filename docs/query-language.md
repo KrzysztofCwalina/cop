@@ -1,7 +1,8 @@
 # Provider query representation
 
-Cop has a structured provider-query representation and a readable diagnostic format.
-It does **not** currently have a standalone textual query language that providers parse.
+Cop keeps a structured provider-query representation and a source-shaped **Cop**
+representation of supported queries. Providers still receive typed objects or JSON,
+**not Cop text**; no new query language or transport has been introduced.
 This document describes implemented query support, including the changes in
 [PR #74](https://github.com/KrzysztofCwalina/cop/pull/74), not a proposed language.
 If those changes have not landed in your build, its execution and optimization
@@ -25,6 +26,73 @@ Name:startsWith('Alpha'), Name:endsWith('Client')
 The predicates can be defined in separate files loaded into the same program.
 A composite predicate referencing both names can produce the same filter tree.
 The provider receives the conditions, not the original predicate names or filenames.
+
+## Source-shaped Cop queries
+
+Run a program with `-d` to see `[query-cop]` immediately before a provider query is
+materialized. This is generated from retained Cop syntax and resolved dependencies,
+not reconstructed from the flattened JSON filter tree.
+
+For example, this program can load its two predicates from separate files:
+
+```cop skip
+let prefix = 'Alpha'
+predicate hasAlphaPrefix(Type) => Type.Name:startsWith(prefix)
+predicate isClient(Type) => Type.Name:endsWith('Client')
+command MAIN = cb.Types:hasAlphaPrefix:isClient
+```
+
+Its provider-side Cop representation is:
+
+```cop skip
+predicate hasAlphaPrefix(Type) => Type.Name:startsWith('Alpha')
+predicate isClient(Type) => Type.Name:endsWith('Client')
+command MAIN = Types:hasAlphaPrefix:isClient
+```
+
+`Types` means the requested schema collection in the provider/root context printed
+on the diagnostic header. Replaying this program requires that collection binding
+and its schema types; it is not an independently configured CLI program. Root paths,
+provider identity, exclusions, and options remain request metadata, not invented Cop
+syntax.
+
+The representation retains colon chains, `.Where` calls, lambda parameter names,
+logical grouping, negation, and required named predicate definitions. It resolves
+collection aliases, literal bindings and their aliases, and already evaluated
+scalar values. Only needed predicate definitions are included, in dependency order.
+Captured values are snapshotted; conflicting definition names are renamed only when
+necessary to preserve meaning.
+
+Formatting is normalized, not byte-for-byte source preservation: comments, whitespace,
+redundant parentheses, literal quoting, and equivalent parameter annotations may
+change. String literals are escaped without accidental interpolation. Numbers use
+invariant, parseable Cop notation, including values .NET normally prints in exponent
+notation. Output is not truncated.
+
+Planning and rendering do not enumerate collections or execute arbitrary thunks.
+Computed or effectful bindings that have not already been evaluated are not executed
+to make a query look more resolved; an unsupported predicate remains local.
+
+`[query-local]` identifies host-only predicates, projections, sorting, indexing,
+terminals such as `.Count`, and concatenation. A local predicate still refers to
+bindings in the original program; it is not advertised as a closed provider query.
+Local expressions outside the source writer's supported subset are explicitly
+identified as nonportable, rather than printed as misleading runnable Cop.
+Filters after a local stage stay local. For concatenation, filters are distributed
+to the provider-backed inputs and each actual provider query gets its own Cop
+representation; concatenation itself remains local.
+
+In .NET, `CopQueryable.CopQuery` exposes a single provider collection's generated
+program without executing it. A concatenation is not one provider query: use `-d`
+to inspect its individual provider programs instead.
+Source provenance is not stored on `ProviderQuery`, so it neither changes JSON packets
+nor affects query-cache identity. Queries constructed directly from a filter tree
+without Cop provenance use a normalized `.Where` representation when supported;
+an unnamed collection or an unsupported programmatic filter reports source as
+unavailable instead of fabricating an equivalent.
+
+See [ten captured examples](query-examples.md) for actual generated Cop, independently
+replayed queries, and their received JSON packets.
 
 ## Query fields
 
@@ -146,7 +214,7 @@ will be translated or that every provider can optimize it.
 
 Translation supports direct scalar fields, literal comparisons, supported string
 predicates, and unambiguous compatible named predicates, including AND, OR, and NOT.
-Nested relationships, arbitrary functions, captured values, and unsupported predicate
+Nested relationships, arbitrary functions, unevaluated computed captures, and unsupported predicate
 overloads or guards can require local evaluation. A local-only stage can prevent
 subsequent filters from reaching the provider.
 
@@ -166,5 +234,7 @@ details.
 - [ProviderQuery](../cop/shared/providers/ObjectProvider.cs)
 - [FilterExpression nodes and diagnostic formatter](../cop/shared/providers/FilterExpression.cs)
 - [Predicate translation](../cop/shared/interpreter/PredicateCompiler.cs)
+- [Retained query syntax and dependency resolution](../cop/shared/interpreter/QuerySource.cs)
+- [Portable Cop query source writer](../cop/shared/ast/QuerySourceWriter.cs)
 - [Query execution and host residual filtering](../cop/runtime/ProviderQueryService.cs)
 - [Process-provider serialization](../cop/runtime/ProcessObjectProvider.cs)

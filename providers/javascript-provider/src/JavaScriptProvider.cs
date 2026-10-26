@@ -14,6 +14,10 @@ public class JavaScriptProvider : DataProvider
 
     public override RuntimeBindings GetRuntimeBindings() => JavaScriptBindings.Build();
 
+    public override IReadOnlyDictionary<string, object?> GetQueryMetadata(ProviderQuery query) =>
+        CodeBindings.SourceMetadata(query, ".js", ".jsx", ".ts", ".tsx");
+    public override string QueryResultType => "Codebase";
+
     public override object? Query(ProviderQuery query)
     {
         JavaScriptTypeDeclaration.RegisterCacheFactory();
@@ -21,7 +25,7 @@ public class JavaScriptProvider : DataProvider
         JavaScriptStatementInfo.RegisterCacheFactory();
         var parsers = new SourceParserRegistry();
         parsers.Register(new JavaScriptSourceParser());
-        var collections = CodeCollectionBuilder.CollectAndParse(parsers, query);
+        var collections = CodeCollectionBuilder.CollectAndParse(parsers, query, this);
 
         // Discover projects from package.json
         if (query.RootPath is not null)
@@ -31,6 +35,6 @@ public class JavaScriptProvider : DataProvider
                 collections["Projects"] = projects.Cast<object>().ToList();
         }
 
-        return collections;
+        return ApplyQueryFilters(query, collections);
     }
 }

@@ -14,6 +14,10 @@ public class JavaProvider : DataProvider
 
     public override RuntimeBindings GetRuntimeBindings() => JavaBindings.Build();
 
+    public override IReadOnlyDictionary<string, object?> GetQueryMetadata(ProviderQuery query) =>
+        CodeBindings.SourceMetadata(query, ".java");
+    public override string QueryResultType => "Codebase";
+
     public override object? Query(ProviderQuery query)
     {
         // Ensure cached Java language-specific subtypes reconstruct before the cache is read.
@@ -23,7 +27,7 @@ public class JavaProvider : DataProvider
 
         var parsers = new SourceParserRegistry();
         parsers.Register(new JavaSourceParser());
-        var collections = CodeCollectionBuilder.CollectAndParse(parsers, query);
+        var collections = CodeCollectionBuilder.CollectAndParse(parsers, query, this);
 
         // Discover projects from pom.xml / build.gradle
         if (query.RootPath is not null)
@@ -33,6 +37,6 @@ public class JavaProvider : DataProvider
                 collections["Projects"] = projects.Cast<object>().ToList();
         }
 
-        return collections;
+        return ApplyQueryFilters(query, collections);
     }
 }
