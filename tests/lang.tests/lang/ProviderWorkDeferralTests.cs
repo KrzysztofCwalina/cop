@@ -1,0 +1,252 @@
+using Cop.Core;
+using Cop.Lang;
+using Cop.Lang.Interpreter;
+using Cop.Providers;
+using Cop.Providers.SourceModel;
+using Cop.Providers.SourceParsers;
+using NUnit.Framework;
+
+namespace Cop.Tests.Lang;
+
+[TestFixture]
+public class ProviderWorkDeferralTests
+{
+    private string _root = null!;
+
+    [SetUp]
+    public void SetUp()
+    {
+        _root = Path.Combine(Path.GetTempPath(), "cop-provider-work-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_root);
+        ProviderErrors.Clear();
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        ProviderErrors.Clear();
+        Directory.Delete(_root, true);
+    }
+
+    [TestCase("csharp", ".cs", "public class Alpha {}", "public class Beta {}")]
+    [TestCase("python", ".py", "class Alpha:\n    pass\n", "class Beta:\n    pass\n")]
+    [TestCase("javascript", ".js", "class Alpha {}", "class Beta {}")]
+    [TestCase("go", ".go", "package example\ntype Alpha struct {}", "package example\ntype Beta struct {}")]
+    [TestCase("java", ".java", "class Alpha {}", "class Beta {}")]
+    [TestCase("rust", ".rs", "pub struct Alpha {}", "pub struct Beta {}")]
+    [TestCase("cop", ".cop", "type Alpha = { Name : string }", "type Beta = { Name : string }")]
+    public void First_DoesNotReadLaterFiles_AndFullEnumerationCanResume(
+        string language, string extension, string firstSource, string secondSource)
+    {
+        File.WriteAllText(Path.Combine(_root, "a" + extension), firstSource);
+        var later = Path.Combine(_root, "b" + extension);
+        File.WriteAllText(later, secondSource);
+        var service = Service(language);
+        CopValue result;
+        using (var locked = new FileStream(later, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            result = service.QueryProvider(language, new ProviderQuery { RootPath = _root, Collection = "Types" });
+            Assert.That(Name(Items(result).First()), Is.EqualTo("Alpha"));
+            Assert.That(ProviderErrors.Drain(), Is.Empty, "A later file must not even be opened by First.");
+        }
+
+        Assert.That(Items(result).Select(Name), Is.EqualTo(new[] { "Alpha", "Beta" }));
+        File.Delete(later);
+        Assert.That(Items(result).Select(Name), Is.EqualTo(new[] { "Alpha", "Beta" }),
+            "Repeated enumeration must use the execution snapshot.");
+    }
+
+    [Test]
+    public void CSharp_SyntaxOnlyFilter_DoesNotConstructWholeCompilation()
+    {
+        File.WriteAllText(Path.Combine(_root, "a.cs"), "public class AlphaClient {}");
+        var later = Path.Combine(_root, "b.cs");
+        File.WriteAllText(later, "public interface IMarker {}");
+        var service = Service("csharp");
+        using var locked = new FileStream(later, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        var result = service.QueryProvider("csharp", new ProviderQuery
+        {
+            RootPath = _root, Collection = "Types",
+            Filter = new AndFilter([
+                new PropertyFilter("IsPublic", true),
+                new StringOpFilter("Name", StringOp.EndsWith, "Client")])
+        });
+
+        Assert.That(Name(Items(result).First()), Is.EqualTo("AlphaClient"));
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
+    }
+
+    [Test]
+    public void CSharp_SemanticField_StillResolvesInterfacesAcrossFiles()
+    {
+        File.WriteAllText(Path.Combine(_root, "a.cs"), "public class Alpha : Base {}");
+        File.WriteAllText(Path.Combine(_root, "b.cs"), "public class Base : IMarker {}\npublic interface IMarker {}");
+        var service = Service("csharp");
+        var result = service.QueryProvider("csharp", new ProviderQuery
+        {
+            RootPath = _root, Collection = "Types",
+            Filter = new StringOpFilter("Name", StringOp.ExactEquals, "Alpha")
+        });
+        var type = (CopDynamicObject)Items(result).First();
+        Assert.That(Name(type), Is.EqualTo("Alpha"));
+        Assert.That(Items(type.GetField("Interfaces")).Select(v => v.Display()),
+            Is.EqualTo(new[] { "IMarker" }));
+    }
+
+    [Test]
+    public void SharedSnapshot_ParsesOnlyDemandedFiles_AndReusesThemAcrossQueries()
+    {
+        for (int i = 0; i < 100; i++)
+            File.WriteAllText(Path.Combine(_root, $"{i:D3}.fake"), $"Type{i:D3}");
+        var parser = new CountingParser();
+        var parsers = new SourceParserRegistry();
+        parsers.Register(parser);
+        var snapshot = new DeferredSourceSnapshot(parsers, new ProviderQuery { RootPath = _root });
+        var types = snapshot.Query(new ProviderQuery { Collection = "Types" }).Collections["Types"];
+        Assert.That(parser.Reads, Is.Empty);
+        Assert.That(types.Take(2).Cast<TypeDeclaration>().Select(t => t.Name),
+            Is.EqualTo(new[] { "Type000", "Type001" }));
+        Assert.That(parser.Reads, Is.EqualTo(new[] { "000.fake", "001.fake" }));
+        var files = snapshot.Query(new ProviderQuery { Collection = "Files" }).Collections["Files"];
+        Assert.That(files.Take(2).Cast<SourceFile>().Select(f => f.Path),
+            Is.EqualTo(new[] { "000.fake", "001.fake" }));
+        Assert.That(parser.Reads, Has.Count.EqualTo(2));
+        Assert.That(types.Cast<TypeDeclaration>().Last().Name, Is.EqualTo("Type099"));
+        Assert.That(parser.Reads, Has.Count.EqualTo(100));
+        Assert.That(types.Count(), Is.EqualTo(100));
+        Assert.That(parser.Reads, Has.Count.EqualTo(100));
+    }
+
+    [Test]
+    public void SharedSnapshot_DiskCacheReadsOnlyChangedFilesOnNextExecution()
+    {
+        File.WriteAllText(Path.Combine(_root, "a.fake"), "Alpha");
+        var later = Path.Combine(_root, "b.fake");
+        File.WriteAllText(later, "Beta");
+        var parser = new CountingParser();
+        var parsers = new SourceParserRegistry();
+        parsers.Register(parser);
+        var query = new ProviderQuery { RootPath = _root, Collection = "Types" };
+        Assert.That(new DeferredSourceSnapshot(parsers, query).Query(query).Collections["Types"]
+            .Cast<TypeDeclaration>().Select(t => t.Name), Is.EqualTo(new[] { "Alpha", "Beta" }));
+        Assert.That(parser.Reads, Is.EqualTo(new[] { "a.fake", "b.fake" }));
+        parser.Reads.Clear();
+        File.WriteAllText(later, "BetaChanged");
+
+        Assert.That(new DeferredSourceSnapshot(parsers, query).Query(query).Collections["Types"]
+            .Cast<TypeDeclaration>().Select(t => t.Name), Is.EqualTo(new[] { "Alpha", "BetaChanged" }));
+        Assert.That(parser.Reads, Is.EqualTo(new[] { "b.fake" }));
+    }
+
+    [TestCase("csharp", ".cs", "public class Alpha {}")]
+    [TestCase("python", ".py", "class Alpha:\n    pass\n")]
+    [TestCase("javascript", ".js", "class Alpha {}")]
+    [TestCase("go", ".go", "package example\ntype Alpha struct {}")]
+    [TestCase("java", ".java", "class Alpha {}")]
+    [TestCase("rust", ".rs", "pub struct Alpha {}")]
+    public void Projects_DoesNotOpenSourceFiles(string language, string extension, string source)
+    {
+        var path = Path.Combine(_root, "a" + extension);
+        File.WriteAllText(path, source);
+        using var locked = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        var service = Service(language);
+        var projects = service.QueryProvider(language, new ProviderQuery { RootPath = _root, Collection = "Projects" });
+        Assert.That(Items(projects).Count(), Is.EqualTo(0));
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
+    }
+
+    [Test]
+    public void DeferredFailure_IsReportedWhenDemanded_AndNotConvertedToEmptySuccess()
+    {
+        File.WriteAllText(Path.Combine(_root, "a.cs"), "public class Alpha {}");
+        var later = Path.Combine(_root, "b.cs");
+        File.WriteAllText(later, "public class Beta {}");
+        var service = Service("csharp");
+        var result = service.QueryProvider("csharp", new ProviderQuery { RootPath = _root, Collection = "Types" });
+        using (var locked = new FileStream(later, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            Assert.That(Name(Items(result).First()), Is.EqualTo("Alpha"));
+            Assert.Throws<IOException>(() => Items(result).ToArray());
+        }
+        Assert.Throws<IOException>(() => Items(result).ToArray(),
+            "An errored iterator must preserve the failure, not silently terminate on retry.");
+    }
+
+    [Test]
+    public void CSharp_DeferredSemantics_PreservesInferredAndInvocationTypes()
+    {
+        File.WriteAllText(Path.Combine(_root, "a.cs"),
+            "public class Alpha { public void Run() { var x = new Beta(); x.Ping(); } }");
+        File.WriteAllText(Path.Combine(_root, "b.cs"), "public class Beta { public void Ping() {} }");
+        var service = Service("csharp");
+        var result = service.QueryProvider("csharp", new ProviderQuery { RootPath = _root, Collection = "Statements" });
+        var statements = Items(result).Cast<CopDynamicObject>().ToArray();
+        var declaration = statements.Single(s => s.GetField("Kind").Display() == "declaration");
+        var call = statements.Single(s => s.GetField("MemberName").Display() == "Ping");
+        Assert.That(declaration.GetField("TypeName").Display(), Is.EqualTo("Beta"));
+        Assert.That(call.GetField("TypeName").Display(), Is.EqualTo("Beta"));
+    }
+
+    [Test]
+    public void DiskCache_ReconstructsUsingTheRequestingParserLoadContext()
+    {
+        var context = new System.Runtime.Loader.AssemblyLoadContext("provider-cache-test", isCollectible: true);
+        try
+        {
+            var assembly = context.LoadFromAssemblyPath(typeof(CopSourceParser).Assembly.Location);
+            var foreignParser = (ISourceParser)Activator.CreateInstance(
+                assembly.GetType(typeof(CopSourceParser).FullName!)!)!;
+            var localFile = new CopSourceParser().Parse("sample.cop", "function chosen() => 1")!;
+            foreignParser.Parse("sample.cop", "function chosen() => 1");
+            var path = Path.Combine(_root, "cache.bin");
+            SourceCacheSerializer.Save(path, [1], [localFile]);
+            Assert.That(SourceCacheSerializer.TryLoad(path, [1])![0].Methods.Single().GetType(),
+                Is.EqualTo(typeof(CopFunctionDeclaration)));
+            CopFunctionDeclaration.RegisterCacheFactory();
+            Assert.That(SourceCacheSerializer.TryLoad(path, [1], assembly)![0].Methods.Single().GetType().Assembly,
+                Is.SameAs(assembly));
+        }
+        finally { context.Unload(); }
+    }
+
+    private sealed class CountingParser : ISourceParser
+    {
+        public List<string> Reads { get; } = [];
+        public override IReadOnlyList<string> Extensions => [".fake"];
+        public override string Language => "fixture";
+        public override SourceFile Parse(string filePath, string sourceText)
+        {
+            Reads.Add(Path.GetFileName(filePath));
+            return new SourceFile(filePath, Language,
+                [new TypeDeclaration(sourceText, TypeKind.Class, Modifier.Public, [], [], [], [], [], [], 1)],
+                [], sourceText);
+        }
+    }
+
+    private ProviderQueryService Service(string language)
+    {
+        DataProvider provider = language switch
+        {
+            "csharp" => new CSharpProvider(),
+            "python" => new PythonProvider(),
+            "javascript" => new JavaScriptProvider(),
+            "go" => new GoProvider(),
+            "java" => new JavaProvider(),
+            "rust" => new RustProvider(),
+            "cop" => new CopProvider(),
+            _ => throw new ArgumentOutOfRangeException(nameof(language))
+        };
+        var service = new ProviderQueryService(_root);
+        service.RegisterProvider(language, provider, ProviderSchema.FromJson(provider.GetSchema()));
+        return service;
+    }
+
+    private static string Name(CopValue value) => ((CopDynamicObject)value).GetField("Name").Display();
+    private static IEnumerable<CopValue> Items(CopValue value) => value switch
+    {
+        CopList list => list.Items,
+        CopLazyCollection lazy => lazy.Enumerate(),
+        CopQueryable query => query.Enumerate(),
+        _ => throw new AssertionException($"Expected collection, got {value.GetType().Name}")
+    };
+}

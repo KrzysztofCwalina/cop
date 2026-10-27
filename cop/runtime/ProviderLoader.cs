@@ -184,9 +184,26 @@ public static class ProviderLoader
     internal static Dictionary<string, List<object>> QueryCollections(DataProvider instance, ProviderSchema schema, ProviderQuery query, TypeRegistry? registry = null, Action<DataStore>? onStore = null)
     {
         var result = instance.Query(query);
+        return MaterializeCollections(result, instance, schema, registry, onStore);
+    }
+
+    internal static IReadOnlyDictionary<string, IEnumerable<object>> QueryDeferredCollections(
+        DataProvider instance, ProviderSchema schema, ProviderQuery query, Action<DataStore>? onStore = null)
+    {
+        var result = instance.QueryDeferred(query);
+        return result is DeferredProviderResult deferred
+            ? deferred.Collections
+            : MaterializeCollections(result, instance, schema, null, onStore)
+                .ToDictionary(c => c.Key, c => (IEnumerable<object>)c.Value, StringComparer.Ordinal);
+    }
+
+    private static Dictionary<string, List<object>> MaterializeCollections(object? result,
+        DataProvider instance, ProviderSchema schema, TypeRegistry? registry, Action<DataStore>? onStore)
+    {
         return result switch
         {
             null => new Dictionary<string, List<object>>(StringComparer.Ordinal),
+            DeferredProviderResult deferred => deferred.Collections.ToDictionary(c => c.Key, c => c.Value.ToList()),
             Dictionary<string, List<object>> collections => collections,
             DataStore store => ConvertDataStoreToCollections(schema, store, registry, onStore),
             byte[] json => ConvertJsonToCollections(schema, json, registry),

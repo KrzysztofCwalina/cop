@@ -92,6 +92,7 @@ public sealed class CopList : CopValue
 public sealed class CopLazyCollection : CopValue
 {
     internal QuerySource? Source { get; set; }
+    internal Cop.Core.FilterExpression? AppliedFilter { get; init; }
     private Func<IEnumerable<CopValue>>? _factory;
     private readonly List<CopValue> _cached = [];
     private IEnumerator<CopValue>? _iterator;
@@ -164,6 +165,8 @@ public sealed class CopQueryable : CopValue
     public Cop.Core.FilterExpression? AccumulatedFilter { get; }
     public string? ItemType { get; }
     private readonly IReadOnlyDictionary<string, string>? _scalarProperties;
+    private QueryReuseScope _reuse;
+    private QueryReuseStage? _stage;
     internal QuerySource? Source { get; private set; }
 
     /// <summary>Source-shaped Cop for this provider query, without enumerating it.</summary>
@@ -178,10 +181,12 @@ public sealed class CopQueryable : CopValue
         AccumulatedFilter = filter ?? query.Filter;
         ItemType = itemType;
         _scalarProperties = scalarProperties;
+        _reuse = new();
         Source = query.Collection is { } collection
             ? new QuerySource(collection, $"{providerName}.{collection} root={query.RootPath}") : null;
         if (AccumulatedFilter is { } initial)
             Source = QuerySource.FromFilter(initial) is { } step ? Source?.Append(step) : null;
+        RegisterStage();
     }
 
     private CopQueryable(CopQueryable original, Cop.Core.FilterExpression filter, QuerySource? source)
@@ -195,7 +200,25 @@ public sealed class CopQueryable : CopValue
             : Cop.Core.FilterExpression.And(original.AccumulatedFilter, filter);
         ItemType = original.ItemType;
         _scalarProperties = original._scalarProperties;
+        _reuse = original._reuse;
         Source = source;
+        if (original._concatInputs is { } inputs)
+            _concatInputs = (Distribute(inputs.Left), Distribute(inputs.Right));
+        RegisterStage();
+
+        CopValue Distribute(CopValue input)
+        {
+            if (input is CopQueryable query)
+                return new CopQueryable(query, filter, source is null ? null
+                    : query.Source?.Append(source.Steps.Skip(original.Source?.Steps.Count ?? 0)));
+            return new CopLazyCollection(() =>
+            {
+                if (QuerySource.FromFilter(filter) is { } step)
+                    QuerySource.Of(input)?.Local(expression => step.Apply(expression, step.Predicate),
+                        "filter after a local concatenation input");
+                return CollectionValues.Enumerate(input).Where(item => CopFilter.Matches(filter, item));
+            });
+        }
     }
 
     private CopQueryable(CopValue left, CopValue right)
@@ -205,6 +228,7 @@ public sealed class CopQueryable : CopValue
         _concatInputs = (left, right);
         ItemType = (left as CopQueryable)?.ItemType ?? (right as CopQueryable)?.ItemType;
         _scalarProperties = (left as CopQueryable)?._scalarProperties ?? (right as CopQueryable)?._scalarProperties;
+        _reuse = new();
         Source = QuerySource.Concat(left, right);
     }
 
@@ -212,6 +236,21 @@ public sealed class CopQueryable : CopValue
     {
         _queryLog = log;
         Source = Source?.WithLog(log);
+        if (_stage is not null) _stage.Source = Source;
+    }
+
+    internal void SetReuseScope(QueryReuseScope scope)
+    {
+        _reuse = scope;
+        RegisterStage();
+    }
+
+    private void RegisterStage()
+    {
+        if (_concatInputs is null && Query.Collection is not null && _scalarProperties is not null
+            && Query.CollectionFilters is not { Count: > 0 } && AccumulatedFilter is { } filter
+            && CanPushFilter(filter) && QueryReuseScope.IsReusable(filter))
+            _stage = _reuse.Register(ProviderName, Query, filter, Source);
     }
 
     public bool CanPushFilter(Cop.Core.FilterExpression filter) => _scalarProperties is null || filter switch
@@ -248,37 +287,39 @@ public sealed class CopQueryable : CopValue
         if (_concatInputs is { } inputs)
         {
             Source?.Local(expression => expression, "concatenation executes locally; filters are distributed to provider inputs");
-            _materialized = new CopLazyCollection(() => Filter(inputs.Left).Concat(Filter(inputs.Right)));
+            _materialized = new CopLazyCollection(EnumerateInputs);
             return _materialized;
+
+            IEnumerable<CopValue> EnumerateInputs()
+            {
+                foreach (var item in CollectionValues.Enumerate(inputs.Left)) yield return item;
+                foreach (var item in CollectionValues.Enumerate(inputs.Right)) yield return item;
+            }
         }
-        if (Source is { } source) source.ReportProvider();
-        else _queryLog?.Invoke($"[query-cop-unavailable] {ProviderName}.{Query.Collection}: unnamed collection or filter without portable source");
+        if (Source is null)
+            _queryLog?.Invoke($"[query-cop-unavailable] {ProviderName}.{Query.Collection}: unnamed collection or filter without portable source");
+        if (_stage is not null)
+            return _materialized = _stage.Materialize(ExecuteProvider, Source);
+        Source?.ReportProvider();
+        return _materialized = ExecuteProvider(AccumulatedFilter);
+    }
+
+    private CopValue ExecuteProvider(Cop.Core.FilterExpression? filter)
+    {
         var queryWithFilter = new Cop.Core.ProviderQuery
         {
             RootPath = Query.RootPath,
             Collection = Query.Collection,
-            Filter = AccumulatedFilter,
+            Filter = filter,
             CollectionFilters = Query.CollectionFilters,
             ExcludedDirectories = Query.ExcludedDirectories,
             Options = Query.Options
         };
         var result = _queryProvider!(ProviderName, queryWithFilter);
-        _materialized = AccumulatedFilter is null ? result
-            : new CopLazyCollection(() => CollectionValues.Enumerate(result)
-                .Where(item => CopFilter.Matches(AccumulatedFilter, item)));
-        return _materialized;
-
-        IEnumerable<CopValue> Filter(CopValue input)
-        {
-            if (input is CopQueryable query)
-                return (AccumulatedFilter is null ? query : new CopQueryable(query, AccumulatedFilter,
-                    Source is null ? null : query.Source?.Append(Source.Steps))).Enumerate();
-            if (AccumulatedFilter is not null && QuerySource.FromFilter(AccumulatedFilter) is { } step)
-                QuerySource.Of(input)?.Local(expression => step.Apply(expression, step.Predicate),
-                    "filter after a local concatenation input");
-            return CollectionValues.Enumerate(input)
-                .Where(item => AccumulatedFilter is null || CopFilter.Matches(AccumulatedFilter, item));
-        }
+        if (filter is null || result is CopLazyCollection lazy && QueryReuseScope.SameFilter(lazy.AppliedFilter, filter))
+            return result;
+        return new CopLazyCollection(() => CollectionValues.Enumerate(result)
+            .Where(item => CopFilter.Matches(filter, item))) { AppliedFilter = filter };
     }
 
     /// <summary>

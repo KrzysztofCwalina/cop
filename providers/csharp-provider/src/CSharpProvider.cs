@@ -25,6 +25,56 @@ public class CSharpProvider : DataProvider
     public override string QueryResultType => "Codebase";
 
     private readonly Dictionary<string, (List<SourceFile> Files, List<ProjectInfo> Projects)> _snapshots = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, DeferredSourceSnapshot> _deferredSnapshots = new(StringComparer.Ordinal);
+
+    public override object QueryDeferred(ProviderQuery query)
+    {
+        if (query.RootPath is null) return new DeferredProviderResult(new Dictionary<string, IEnumerable<object>>());
+        var root = Path.GetFullPath(query.RootPath);
+        var key = root + "\n" +
+            string.Join("\n", (query.ExcludedDirectories ?? new HashSet<string>()).Order(StringComparer.Ordinal));
+        if (!_deferredSnapshots.TryGetValue(key, out var snapshot))
+        {
+            var parser = new CSharpSourceParser();
+            var parsers = new SourceParserRegistry();
+            parsers.Register(parser);
+            var trees = new Dictionary<string, (SyntaxTree Tree, string Text)>(StringComparer.Ordinal);
+            (SyntaxTree Tree, string Text) Syntax(string path)
+            {
+                if (trees.TryGetValue(path, out var cached)) return cached;
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var reader = new StreamReader(stream);
+                var text = reader.ReadToEnd();
+                var parsed = (CSharpSyntaxTree.ParseText(text, path: path), text);
+                trees.Add(path, parsed);
+                if (CopDiagnostics.Timing)
+                    Console.Error.WriteLine($"[provider-parse] csharp {Path.GetRelativePath(root, path)}");
+                return parsed;
+            }
+            DeferredSourceSnapshot sources = null!;
+            var compilation = new Lazy<CSharpCompilation>(() =>
+            {
+                var allTrees = sources.Paths.Select(path => Syntax(path).Tree).ToArray();
+                var result = CSharpCompilation.Create("CopAnalysis", allTrees, GetReferences(root),
+                    new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
+                        .WithNullableContextOptions(NullableContextOptions.Enable));
+                if (CopDiagnostics.Timing)
+                    Console.Error.WriteLine($"[provider-semantics] csharp compilation files={allTrees.Length}");
+                return result;
+            });
+            sources = new(parsers, query, path =>
+            {
+                var (tree, text) = Syntax(path);
+                var file = parser.ParseWithSemantics(path, text, tree, model: null);
+                file?.DeferSemanticAnalysis(() => CSharpSourceParser.EnrichWithSemantics(tree,
+                    compilation.Value.GetSemanticModel(tree), file.Types, file.Statements));
+                return file;
+            }, () => CSharpProjectDiscovery.Discover(root, query.ExcludedDirectories));
+            snapshot = sources;
+            _deferredSnapshots.Add(key, snapshot);
+        }
+        return snapshot.Query(query, GetRuntimeBindings());
+    }
 
     public override Dictionary<string, Func<List<object?>, Task<object?>>>? GetFunctions() => new()
     {

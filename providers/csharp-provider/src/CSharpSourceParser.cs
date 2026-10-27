@@ -135,7 +135,7 @@ public class CSharpSourceParser : ISourceParser
     /// Enriches already-extracted types and statements with semantic information from the model.
     /// Called after syntax extraction to add interface lists and accurate type resolution.
     /// </summary>
-    private static void EnrichWithSemantics(SyntaxTree tree, SemanticModel model, List<TypeDeclaration> types, List<StatementInfo> allStatements)
+    public static void EnrichWithSemantics(SyntaxTree tree, SemanticModel model, List<TypeDeclaration> types, List<StatementInfo> allStatements)
     {
         var root = tree.GetCompilationUnitRoot();
 

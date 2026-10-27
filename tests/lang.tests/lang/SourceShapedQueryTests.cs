@@ -284,7 +284,9 @@ public class SourceShapedQueryTests
         Assert.That(Names(first), Is.EqualTo(new[] { "Alpha" }));
         Assert.That(Names(second), Is.EqualTo(new[] { "Alpha" }));
         Assert.That(provider.Queries, Has.Count.EqualTo(1));
-        Assert.That(logs.Count(line => line.StartsWith("[query-cop]")), Is.EqualTo(2));
+        Assert.That(logs.Count(line => line.StartsWith("[query-cop]")), Is.EqualTo(1));
+        Assert.That(logs.Where(line => line.StartsWith("[query-local]")),
+            Has.Some.Contains("shared query result reused").And.Some.Contains("Items.Where"));
         var build = typeof(ProcessObjectProvider).GetMethod("BuildQueryRequest", BindingFlags.NonPublic | BindingFlags.Static)!;
         using var wire = JsonDocument.Parse((string)build.Invoke(null, [provider.Queries.Single()])!);
         Assert.That(wire.RootElement.GetProperty("params").EnumerateObject().Select(property => property.Name),

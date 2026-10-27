@@ -16,6 +16,7 @@ public class ProviderQueryService
 
     private readonly Dictionary<CacheKey, List<object>> _cache = new();
     private readonly Dictionary<string, CopValue> _queryCache = new(StringComparer.Ordinal);
+    private readonly QueryReuseScope _queryReuse = new();
     private readonly Dictionary<string, RuntimeBindings?> _bindings = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<(string Provider, Type Type), ClrObjectAdapter> _clrAdapters = new();
     private readonly Dictionary<DataTable, RecordViewAdapter> _tableAdapters = new();
@@ -126,17 +127,25 @@ public class ProviderQueryService
         var (instance, schema) = provider;
         _diagLog?.Invoke($"[query] Query {providerName}.{query.Collection ?? "*"} root={query.RootPath} filter={(query.Filter is null ? "<none>" : FilterExpression.Format(query.Filter))}");
         DataStore? store = null;
-        var collections = ProviderLoader.QueryCollections(instance, schema, query, onStore: value => store = value);
+        var collections = ProviderLoader.QueryDeferredCollections(instance, schema, query, onStore: value => store = value);
 
-        _diagLog?.Invoke($"[query-result] {providerName}.{query.Collection ?? "*"} returned={collections
-            .Where(c => query.Collection is null || c.Key == query.Collection).Sum(c => c.Value.Count)}");
-        CopValue ToCollection(string name, List<object> items)
+        IEnumerable<object> ReportResults(string name, IEnumerable<object> items)
         {
-            var values = items.Select(item => Adapt(providerName, schema, name, item, store));
+            int count = 0;
+            foreach (var item in items)
+            {
+                count++;
+                yield return item;
+            }
+            _diagLog?.Invoke($"[query-result] {providerName}.{name} returned={count}");
+        }
+        CopValue ToCollection(string name, IEnumerable<object> items)
+        {
+            var values = ReportResults(name, items).Select(item => Adapt(providerName, schema, name, item, store));
             var filter = query.CollectionFilters?.GetValueOrDefault(name) ?? query.Filter;
             if (filter is not null)
                 values = values.Where(item => CopFilter.Matches(filter, item));
-            return new CopLazyCollection(() => values);
+            return new CopLazyCollection(() => values) { AppliedFilter = filter };
         }
 
         CopValue result;
@@ -164,6 +173,7 @@ public class ProviderQueryService
             var value = new CopQueryable(providerName, query.ForCollection(collection.Name), QueryProvider,
                 itemType: collection.ItemType, scalarProperties: properties);
             value.SetQueryLog(_diagLog);
+            value.SetReuseScope(_queryReuse);
             return value;
         }
         if (schema.Collections.Count == 1 && provider.Instance.QueryResultType is null)

@@ -9,13 +9,14 @@ namespace Cop.Providers.SourceModel;
 /// </summary>
 public static class MethodTypeRegistry
 {
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Func<MethodDeclaration, IReadOnlyDictionary<string, bool>, MethodDeclaration>> _factories = new(StringComparer.Ordinal);
-
     public static void Register(string tag, Func<MethodDeclaration, IReadOnlyDictionary<string, bool>, MethodDeclaration> factory)
-        => _factories[tag] = factory;
+        => LanguageCacheFactories<MethodDeclaration>.Register(tag, factory);
 
     public static MethodDeclaration Reconstruct(string tag, MethodDeclaration baseDecl, IReadOnlyDictionary<string, bool> flags)
-        => _factories.TryGetValue(tag, out var factory) ? factory(baseDecl, flags) : baseDecl;
+        => Reconstruct(tag, baseDecl, flags, System.Runtime.Loader.AssemblyLoadContext.Default);
+
+    internal static MethodDeclaration Reconstruct(string tag, MethodDeclaration baseDecl, IReadOnlyDictionary<string, bool> flags,
+        System.Runtime.Loader.AssemblyLoadContext context) => LanguageCacheFactories<MethodDeclaration>.Reconstruct(tag, baseDecl, flags, context);
 }
 
 /// <summary>
@@ -24,11 +25,12 @@ public static class MethodTypeRegistry
 /// </summary>
 public static class StatementTypeRegistry
 {
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Func<StatementInfo, IReadOnlyDictionary<string, bool>, StatementInfo>> _factories = new(StringComparer.Ordinal);
-
     public static void Register(string tag, Func<StatementInfo, IReadOnlyDictionary<string, bool>, StatementInfo> factory)
-        => _factories[tag] = factory;
+        => LanguageCacheFactories<StatementInfo>.Register(tag, factory);
 
     public static StatementInfo Reconstruct(string tag, StatementInfo baseDecl, IReadOnlyDictionary<string, bool> flags)
-        => _factories.TryGetValue(tag, out var factory) ? factory(baseDecl, flags) : baseDecl;
+        => Reconstruct(tag, baseDecl, flags, System.Runtime.Loader.AssemblyLoadContext.Default);
+
+    internal static StatementInfo Reconstruct(string tag, StatementInfo baseDecl, IReadOnlyDictionary<string, bool> flags,
+        System.Runtime.Loader.AssemblyLoadContext context) => LanguageCacheFactories<StatementInfo>.Reconstruct(tag, baseDecl, flags, context);
 }

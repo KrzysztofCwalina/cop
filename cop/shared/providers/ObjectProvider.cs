@@ -57,6 +57,12 @@ public abstract class DataProvider
     /// </summary>
     public virtual object? Query(ProviderQuery query) => null;
 
+    /// <summary>
+    /// Optional pull-based query path. Providers may return DeferredProviderResult to defer
+    /// file reads and parsing until enumeration. Existing providers keep their Query behavior.
+    /// </summary>
+    public virtual object? QueryDeferred(ProviderQuery query) => Query(query);
+
     /// <summary>Filters extracted CLR collections before returning them to the host.</summary>
     protected Dictionary<string, List<object>> ApplyQueryFilters(
         ProviderQuery query, Dictionary<string, List<object>> collections)
@@ -96,6 +102,12 @@ public abstract class DataProvider
     /// Override in providers that need to register custom loaders.
     /// </summary>
     public virtual void RegisterCapabilities(TypeRegistry registry, string rootPath) { }
+}
+
+/// <summary>Finite named collections whose items are produced only as the host requests them.</summary>
+public sealed class DeferredProviderResult(IReadOnlyDictionary<string, IEnumerable<object>> collections)
+{
+    public IReadOnlyDictionary<string, IEnumerable<object>> Collections { get; } = collections;
 }
 
 /// <summary>

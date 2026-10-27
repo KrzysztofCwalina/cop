@@ -18,6 +18,17 @@ public class GoProvider : DataProvider
         CodeBindings.SourceMetadata(query, ".go");
     public override string QueryResultType => "Codebase";
 
+    public override object QueryDeferred(ProviderQuery query)
+    {
+        GoTypeDeclaration.RegisterCacheFactory();
+        GoMethodDeclaration.RegisterCacheFactory();
+        GoStatementInfo.RegisterCacheFactory();
+        var parsers = new SourceParserRegistry();
+        parsers.Register(new GoSourceParser());
+        return CodeCollectionBuilder.CollectDeferred(parsers, query, this,
+            () => GoProjectDiscovery.Discover(query.RootPath!, query.ExcludedDirectories));
+    }
+
     public override object? Query(ProviderQuery query)
     {
         GoTypeDeclaration.RegisterCacheFactory();

@@ -11,7 +11,13 @@ public class StatementInfo(
 {
     public string Kind { get; } = kind;
     public List<string> Keywords { get; } = keywords;
-    public string? TypeName { get; set; } = typeName;
+    internal Lazy<bool>? DeferredSemantics { get; set; }
+    private string? _typeName = typeName;
+    public string? TypeName
+    {
+        get { _ = DeferredSemantics?.Value; return _typeName; }
+        set => _typeName = value;
+    }
     public string? MemberName { get; } = memberName;
     public List<string> Arguments { get; } = arguments;
     public ExpressionInfo? CallTarget { get; init; }
@@ -38,7 +44,12 @@ public class StatementInfo(
     /// this contains all interfaces the constructed type implements (resolved via semantic analysis).
     /// Empty for non-creation statements or when semantic analysis is unavailable.
     /// </summary>
-    public List<string> ConstructedTypeInterfaces { get; set; } = [];
+    private List<string> _constructedTypeInterfaces = [];
+    public List<string> ConstructedTypeInterfaces
+    {
+        get { _ = DeferredSemantics?.Value; return _constructedTypeInterfaces; }
+        set => _constructedTypeInterfaces = value;
+    }
 
     public List<StatementInfo> _children = [];
 

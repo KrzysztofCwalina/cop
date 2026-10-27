@@ -1,5 +1,7 @@
 using System.IO.Compression;
 using System.Text;
+using System.Reflection;
+using System.Runtime.Loader;
 using Cop.Providers.SourceModel;
 
 namespace Cop.Providers;
@@ -27,6 +29,9 @@ internal static class SourceCacheSerializer
     }
 
     public static List<SourceFile>? TryLoad(string cachePath, byte[] fingerprint)
+        => TryLoad(cachePath, fingerprint, typeof(SourceCacheSerializer).Assembly);
+
+    public static List<SourceFile>? TryLoad(string cachePath, byte[] fingerprint, Assembly parserAssembly)
     {
         if (!File.Exists(cachePath))
             return null;
@@ -35,7 +40,8 @@ internal static class SourceCacheSerializer
         {
             using var fileStream = new FileStream(cachePath, FileMode.Open, FileAccess.Read, FileShare.Read);
             using var gzip = new GZipStream(fileStream, CompressionMode.Decompress);
-            using var reader = new BinaryReader(gzip, Encoding.UTF8, leaveOpen: false);
+            using var reader = new CacheReader(gzip,
+                AssemblyLoadContext.GetLoadContext(parserAssembly) ?? AssemblyLoadContext.Default);
 
             var magic = reader.ReadBytes(Magic.Length);
             if (magic.Length != Magic.Length || !magic.SequenceEqual(Magic))
@@ -63,6 +69,12 @@ internal static class SourceCacheSerializer
         {
             return null;
         }
+    }
+
+    private sealed class CacheReader(Stream input, AssemblyLoadContext context)
+        : BinaryReader(input, Encoding.UTF8, leaveOpen: false)
+    {
+        public AssemblyLoadContext Context { get; } = context;
     }
 
     private static void WriteSourceFile(BinaryWriter writer, SourceFile sourceFile)
@@ -182,7 +194,7 @@ internal static class SourceCacheSerializer
                 var key = reader.ReadString();
                 flags[key] = reader.ReadBoolean();
             }
-            return LanguageTypeRegistry.Reconstruct(languageTag, type, flags);
+            return LanguageTypeRegistry.Reconstruct(languageTag, type, flags, ((CacheReader)reader).Context);
         }
 
         return type;
@@ -217,7 +229,7 @@ internal static class SourceCacheSerializer
             DocComment = ReadNullableString(reader)
         };
         var (tag, flags) = ReadLanguageSubtype(reader, "MethodDeclaration");
-        return tag is not null ? MethodTypeRegistry.Reconstruct(tag, method, flags) : method;
+        return tag is not null ? MethodTypeRegistry.Reconstruct(tag, method, flags, ((CacheReader)reader).Context) : method;
     }
 
     private static void WriteStatementInfo(BinaryWriter writer, StatementInfo statement)
@@ -266,7 +278,7 @@ internal static class SourceCacheSerializer
             _children = ReadList(reader, ReadStatementInfo, "StatementInfo.Children")
         };
         var (tag, flags) = ReadLanguageSubtype(reader, "StatementInfo");
-        return tag is not null ? StatementTypeRegistry.Reconstruct(tag, statement, flags) : statement;
+        return tag is not null ? StatementTypeRegistry.Reconstruct(tag, statement, flags, ((CacheReader)reader).Context) : statement;
     }
 
     private static void WriteExpression(BinaryWriter writer, ExpressionInfo? expression)
