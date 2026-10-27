@@ -12,6 +12,7 @@ public sealed class DeferredSourceSnapshot
     private readonly Dictionary<string, Lazy<SourceFile?>> _files = new(StringComparer.Ordinal);
     private readonly Func<string, SourceFile?> _parse;
     private readonly Lazy<List<ProjectInfo>>? _projects;
+    private readonly Lazy<List<(string Name, string Directory)>>? _projectDirectories;
 
     public IReadOnlyList<string> Paths => _paths.Value;
 
@@ -28,6 +29,13 @@ public sealed class DeferredSourceSnapshot
         });
         _parse = parse ?? (path => ParseFile(parsers, path));
         _projects = discoverProjects is null ? null : new(discoverProjects);
+        if (_projects is not null)
+            _projectDirectories = new(() => _projects.Value.Select(project =>
+            {
+                var directory = Path.GetDirectoryName(Path.GetFullPath(project.Path, _root))!;
+                return (project.Name, Path.EndsInDirectorySeparator(directory)
+                    ? directory : directory + Path.DirectorySeparatorChar);
+            }).ToList());
     }
 
     private SourceFile? ParseFile(SourceParserRegistry parsers, string path)
@@ -76,17 +84,11 @@ public sealed class DeferredSourceSnapshot
                     SourceRoot = _root
                 };
                 CodeCollectionBuilder.LinkReferences(normalized);
-                if (_projects is not null)
-                {
-                    foreach (var project in _projects.Value)
-                    {
-                        var directory = Path.GetDirectoryName(Path.GetFullPath(project.Path, _root))!;
-                        var relative = Path.GetRelativePath(directory, path);
-                        if (!Path.IsPathRooted(relative) && relative != ".."
-                            && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-                            normalized.Projects.Add(project.Name);
-                    }
-                }
+                if (_projectDirectories is not null)
+                    normalized.DeferProjects(() => _projectDirectories.Value
+                        .Where(project => normalized.FullPath.StartsWith(project.Directory,
+                            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                        .Select(project => project.Name).ToList());
                 foreach (var error in normalized.ParseErrors)
                     ProviderErrors.Report(error);
                 if (CopDiagnostics.Timing)

@@ -12,10 +12,11 @@ public class StatementInfo(
     public string Kind { get; } = kind;
     public List<string> Keywords { get; } = keywords;
     internal Lazy<bool>? DeferredSemantics { get; set; }
+    internal Lazy<bool>? DeferredTypeNames { get; set; }
     private string? _typeName = typeName;
     public string? TypeName
     {
-        get { _ = DeferredSemantics?.Value; return _typeName; }
+        get { _ = (DeferredTypeNames ?? DeferredSemantics)?.Value; return _typeName; }
         set => _typeName = value;
     }
     public string? MemberName { get; } = memberName;

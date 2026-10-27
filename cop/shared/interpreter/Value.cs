@@ -95,18 +95,27 @@ public sealed class CopLazyCollection : CopValue
     internal Cop.Core.FilterExpression? AppliedFilter { get; init; }
     private Func<IEnumerable<CopValue>>? _factory;
     private readonly List<CopValue> _cached = [];
+    private readonly System.Threading.Lock _gate = new();
     private IEnumerator<CopValue>? _iterator;
     private System.Runtime.ExceptionServices.ExceptionDispatchInfo? _failure;
     private bool _complete;
 
     public CopLazyCollection(Func<IEnumerable<CopValue>> factory) => _factory = factory;
 
-    public IEnumerable<CopValue> Enumerate()
+    public IEnumerable<CopValue> Enumerate() =>
+        System.Threading.Volatile.Read(ref _complete) ? EnumerateCached() : EnumerateAndCache();
+
+    private IEnumerable<CopValue> EnumerateCached()
+    {
+        foreach (var value in _cached) yield return value;
+    }
+
+    private IEnumerable<CopValue> EnumerateAndCache()
     {
         for (int index = 0; ; index++)
         {
             CopValue value;
-            lock (_cached)
+            lock (_gate)
             {
                 if (index < _cached.Count)
                     value = _cached[index];
@@ -125,7 +134,7 @@ public sealed class CopLazyCollection : CopValue
                         {
                             _iterator.Dispose();
                             _iterator = null;
-                            _complete = true;
+                            System.Threading.Volatile.Write(ref _complete, true);
                             yield break;
                         }
                         value = _iterator.Current;

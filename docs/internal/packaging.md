@@ -422,3 +422,34 @@ When cop needs to find a package named `xxx`, it searches these locations in ord
 4. `packages/` directories found by walking up from the **current working directory**
 
 This means a package in your project's `packages/` directory always takes priority over a cached version in `~/.cop/packages/`.
+
+## Source-provider execution costs
+
+Source snapshots discover paths first and construct each file's model only when enumerated.
+File-to-project membership is also lazy: reading lines, types, or statements does not discover
+projects. Reading `File.Projects` resolves membership once, using project directories normalized
+once per execution. Nested projects retain all containing-project memberships.
+
+The C# provider resolves statement type names separately from interface enrichment. Reading a
+call's `TypeName` still uses Roslyn's semantic model, but does not force interface computation
+for every type or constructed object. Comments, regions, and active nullable directives share
+one Roslyn trivia traversal.
+
+The C# provider keeps an execution-scoped syntax-tree cache and a persistent, compressed
+source-text snapshot in `~/.cop/cache/`. On Windows, each source is validated by length,
+last-write time, and native change time before using cached text. Attribute-only handles
+avoid opening unchanged source data. Change time catches same-length edits even when a tool
+restores the last-write timestamp. Other platforms reread source data rather than trust
+incomplete metadata. A changed file is reread; new executions always rebuild
+syntax and semantic models. The snapshot is atomically saved only after all discovered
+sources have been demanded, so a first-item query does not prefetch later files.
+
+Memoized collections synchronize production with a dedicated lock. Once complete, replay reads
+the immutable cache without acquiring a lock for every row. Failed enumerations retain their
+cached prefix and original exception rather than becoming an empty successful result.
+
+For performance comparisons, measure normal execution as well as `-rp`. The rule profiler
+forces lazy bindings in alphabetical order, so the first rule includes shared source loading;
+its timing is not that rule's exclusive cost. It also forces imported bindings that the normal
+command might not use. Keep the executable, provider DLLs, target, check definitions, and
+package-restore state explicit when comparing runs.

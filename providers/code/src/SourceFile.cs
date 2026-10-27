@@ -27,7 +27,19 @@ public record SourceFile(
     /// <summary>
     /// Project names that contain this file. Set by the provider after project discovery.
     /// </summary>
-    public List<string> Projects { get; set; } = [];
+    private List<string>? _projects;
+    private Lazy<List<string>>? _deferredProjects;
+    public List<string> Projects
+    {
+        get => _projects ??= _deferredProjects?.Value ?? [];
+        set => _projects = value;
+    }
+
+    internal void DeferProjects(Func<List<string>> discover)
+    {
+        _projects = null;
+        _deferredProjects = new(discover);
+    }
 
     /// <summary>
     /// Line numbers (1-based) that are comment lines, populated by source parsers.
@@ -53,5 +65,11 @@ public record SourceFile(
         }
         foreach (var type in Types) Attach(type);
         foreach (var statement in Statements) statement.DeferredSemantics = semantics;
+    }
+
+    public void DeferTypeNameAnalysis(Action analyze)
+    {
+        var typeNames = new Lazy<bool>(() => { analyze(); return true; });
+        foreach (var statement in Statements) statement.DeferredTypeNames = typeNames;
     }
 }
