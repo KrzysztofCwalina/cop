@@ -85,6 +85,33 @@ public class ProviderWorkDeferralIntegrationTests
             Is.EqualTo(2), result.Stderr);
     }
 
+    [Test]
+    public void PublishedCli_CSharpTextCache_PreservesSemanticResultsAndDetectsEdits()
+    {
+        var caller = Path.Combine(SourceRoot, "a.cs");
+        var callee = Path.Combine(SourceRoot, "b.cs");
+        File.WriteAllText(caller, "class Alpha { void Run() { var x = new Beta(); x.Ping(); } }");
+        File.WriteAllText(callee, "class Beta { public void Ping() {} }");
+        WriteScript("""
+            import code
+            import csharp
+            let cb = csharp.parse('src')
+            command MAIN = print(cb.Types.Count) &
+                print(cb.Statements.Where(item.MemberName == 'Ping').First.TypeName)
+            """);
+        for (int i = 0; i < 2; i++)
+        {
+            var result = Run("MAIN");
+            Assert.That(result.ExitCode, Is.EqualTo(0), result.Stderr);
+            Assert.That(result.Stdout.Trim().Replace("\r", ""), Is.EqualTo("2\nBeta"));
+        }
+        File.WriteAllText(caller, "class Alpha { void Run() { var x = new BetaChanged(); x.Ping(); } }");
+        File.WriteAllText(callee, "class BetaChanged { public void Ping() {} }");
+        var changed = Run("MAIN");
+        Assert.That(changed.ExitCode, Is.EqualTo(0), changed.Stderr);
+        Assert.That(changed.Stdout.Trim().Replace("\r", ""), Is.EqualTo("2\nBetaChanged"));
+    }
+
     [TestCase("csharp", ".cs")]
     [TestCase("python", ".py")]
     [TestCase("javascript", ".js")]

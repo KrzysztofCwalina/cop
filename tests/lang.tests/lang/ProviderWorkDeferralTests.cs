@@ -138,6 +138,89 @@ public class ProviderWorkDeferralTests
         Assert.That(parser.Reads, Is.EqualTo(new[] { "b.fake" }));
     }
 
+    [Test]
+    public void Files_DeferProjectDiscovery_AndPreserveNestedMembership()
+    {
+        var source = Path.Combine(_root, "src");
+        Directory.CreateDirectory(source);
+        File.WriteAllText(Path.Combine(source, "a.fake"), "Alpha");
+        var parsers = new SourceParserRegistry();
+        parsers.Register(new CountingParser());
+        int discoveries = 0;
+        var snapshot = new DeferredSourceSnapshot(parsers, new ProviderQuery { RootPath = _root },
+            discoverProjects: () =>
+            {
+                discoveries++;
+                return [
+                    new("Root", "root.csproj", "fixture", []),
+                    new("Nested", Path.Combine("src", "nested.csproj"), "fixture", []),
+                    new("Neighbor", Path.Combine("src2", "neighbor.csproj"), "fixture", [])
+                ];
+            });
+        var file = snapshot.Query(new ProviderQuery { Collection = "Files" })
+            .Collections["Files"].Cast<SourceFile>().Single();
+
+        Assert.That(file.Path, Is.EqualTo("src/a.fake"));
+        Assert.That(discoveries, Is.EqualTo(0), "Unrelated queries must not discover projects.");
+        Assert.That(file.Projects, Is.EqualTo(new[] { "Root", "Nested" }));
+        Assert.That(file.Projects, Is.EqualTo(new[] { "Root", "Nested" }));
+        var projects = snapshot.Query(new ProviderQuery { Collection = "Projects" })
+            .Collections["Projects"].Cast<ProjectInfo>().Select(p => p.Name).ToArray();
+        Assert.That(projects, Is.EqualTo(new[] { "Root", "Nested", "Neighbor" }));
+        Assert.That(discoveries, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void CSharp_TypeNameDemand_DoesNotForceInterfaceEnrichment()
+    {
+        File.WriteAllText(Path.Combine(_root, "a.cs"),
+            "class Alpha : IMarker { void Run() { var x = new Beta(); x.Ping(); } }");
+        File.WriteAllText(Path.Combine(_root, "b.cs"),
+            "interface IMarker {} class Beta { public void Ping() {} }");
+        var provider = new CSharpProvider();
+        var files = (DeferredProviderResult)provider.QueryDeferred(
+            new ProviderQuery { RootPath = _root, Collection = "Files" });
+        var file = files.Collections["Files"].Cast<SourceFile>().First();
+        var type = file.Types.Single();
+        var call = file.Statements.Single(s => s.MemberName == "Ping");
+        var declaration = file.Statements.Single(s => s.Kind == "declaration");
+
+        Assert.That(call.TypeName, Is.EqualTo("Beta"));
+        Assert.That(declaration.TypeName, Is.EqualTo("Beta"));
+        Assert.That(type.DeferredSemantics!.IsValueCreated, Is.False,
+            "Resolving call types must not also resolve every type's interfaces.");
+        Assert.That(type.Interfaces, Is.EqualTo(new[] { "IMarker" }));
+        Assert.That(call.TypeName, Is.EqualTo("Beta"));
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
+    }
+
+    [Test]
+    public void CSharp_TextCache_ReusesUnchangedSourcesAndInvalidatesEdits()
+    {
+        var path = Path.Combine(_root, "a.cs");
+        File.WriteAllText(path, "public class Alpha {}");
+        SourceFile Read()
+        {
+            var provider = new CSharpProvider();
+            var result = (DeferredProviderResult)provider.QueryDeferred(
+                new ProviderQuery { RootPath = _root, Collection = "Files" });
+            return result.Collections["Files"].Cast<SourceFile>().Single();
+        }
+
+        Assert.That(Read().Types.Single().Name, Is.EqualTo("Alpha"));
+        Assert.That(Read().Types.Single().Name, Is.EqualTo("Alpha"));
+        File.WriteAllText(path, "public class BetaChanged {}");
+        Assert.That(Read().Types.Single().Name, Is.EqualTo("BetaChanged"));
+        File.WriteAllText(path, "public class SameLengthX {}");
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddSeconds(5));
+        Assert.That(Read().Types.Single().Name, Is.EqualTo("SameLengthX"));
+        var timestamp = File.GetLastWriteTimeUtc(path);
+        File.WriteAllText(path, "public class SameLengthY {}");
+        File.SetLastWriteTimeUtc(path, timestamp);
+        Assert.That(Read().Types.Single().Name, Is.EqualTo("SameLengthY"));
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
+    }
+
     [TestCase("csharp", ".cs", "public class Alpha {}")]
     [TestCase("python", ".py", "class Alpha:\n    pass\n")]
     [TestCase("javascript", ".js", "class Alpha {}")]
@@ -172,13 +255,20 @@ public class ProviderWorkDeferralTests
             "An errored iterator must preserve the failure, not silently terminate on retry.");
     }
 
-    [Test]
-    public void CSharp_DeferredSemantics_PreservesInferredAndInvocationTypes()
+    [TestCase(false)]
+    [TestCase(true)]
+    public void CSharp_DeferredSemantics_PreservesInferredAndInvocationTypes(bool warmCache)
     {
         File.WriteAllText(Path.Combine(_root, "a.cs"),
             "public class Alpha { public void Run() { var x = new Beta(); x.Ping(); } }");
         File.WriteAllText(Path.Combine(_root, "b.cs"), "public class Beta { public void Ping() {} }");
         var service = Service("csharp");
+        if (warmCache)
+        {
+            Assert.That(Items(service.QueryProvider("csharp",
+                new ProviderQuery { RootPath = _root, Collection = "Files" })).Count(), Is.EqualTo(2));
+            service = Service("csharp");
+        }
         var result = service.QueryProvider("csharp", new ProviderQuery { RootPath = _root, Collection = "Statements" });
         var statements = Items(result).Cast<CopDynamicObject>().ToArray();
         var declaration = statements.Single(s => s.GetField("Kind").Display() == "declaration");

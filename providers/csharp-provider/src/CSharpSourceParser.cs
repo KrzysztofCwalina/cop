@@ -83,17 +83,7 @@ public class CSharpSourceParser : ISourceParser
         }
 
         AddNestedCalls(root, types, allStatements);
-        foreach (var trivia in root.DescendantTrivia(descendIntoTrivia: true))
-        {
-            if (trivia.GetStructure() is NullableDirectiveTriviaSyntax { IsActive: true } directive)
-            {
-                var keywords = new List<string> { "nullable", directive.SettingToken.ValueText };
-                if (!directive.TargetToken.IsKind(SyntaxKind.None))
-                    keywords.Add(directive.TargetToken.ValueText);
-                allStatements.Add(new CSharpStatementInfo("directive", keywords, null, null, [],
-                    LineOf(directive), false));
-            }
-        }
+        var (regions, commentLines) = ExtractTrivia(root, sourceText, allStatements);
         allStatements = allStatements.OrderBy(s => s.Line)
             .ThenBy(s => (s as CSharpStatementInfo)?.SyntaxStart ?? -1).ToList();
 
@@ -108,8 +98,8 @@ public class CSharpSourceParser : ISourceParser
         {
             Usings = usings,
             Namespace = ns,
-            Regions = ExtractRegions(root, sourceText),
-            CommentLines = ExtractCommentLines(root, sourceText),
+            Regions = regions,
+            CommentLines = commentLines,
             ParseErrors = CollectSyntaxErrors(filePath, tree)
         };
     }
@@ -136,6 +126,13 @@ public class CSharpSourceParser : ISourceParser
     /// Called after syntax extraction to add interface lists and accurate type resolution.
     /// </summary>
     public static void EnrichWithSemantics(SyntaxTree tree, SemanticModel model, List<TypeDeclaration> types, List<StatementInfo> allStatements)
+        => EnrichWithSemantics(tree, model, types, allStatements, typeNamesOnly: false);
+
+    public static void EnrichTypeNames(SyntaxTree tree, SemanticModel model, List<StatementInfo> statements)
+        => EnrichWithSemantics(tree, model, [], statements, typeNamesOnly: true);
+
+    private static void EnrichWithSemantics(SyntaxTree tree, SemanticModel model,
+        List<TypeDeclaration> types, List<StatementInfo> allStatements, bool typeNamesOnly)
     {
         var root = tree.GetCompilationUnitRoot();
 
@@ -145,7 +142,8 @@ public class CSharpSourceParser : ISourceParser
             typesByLine[t.Line] = t;
 
         // Enrich type declarations with interface information
-        foreach (var node in root.DescendantNodes().OfType<TypeDeclarationSyntax>())
+        foreach (var node in typeNamesOnly ? Enumerable.Empty<TypeDeclarationSyntax>()
+                     : root.DescendantNodes().OfType<TypeDeclarationSyntax>())
         {
             var line = node.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
             if (typesByLine.TryGetValue(line, out var typeDecl))
@@ -180,6 +178,7 @@ public class CSharpSourceParser : ISourceParser
         {
             if (node is ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax)
             {
+                if (typeNamesOnly) continue;
                 var line = node.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
                 if (stmtsByLine.TryGetValue(line, out var stmts))
                 {
@@ -937,14 +936,30 @@ public class CSharpSourceParser : ISourceParser
     private static string ExtractBaseTypeName(TypeSyntax type) =>
         type is GenericNameSyntax generic ? generic.Identifier.Text : type.ToString();
 
-    private static List<RegionInfo> ExtractRegions(CompilationUnitSyntax root, string sourceText)
+    private static (List<RegionInfo> Regions, HashSet<int> CommentLines) ExtractTrivia(
+        CompilationUnitSyntax root, string sourceText, List<StatementInfo> statements)
     {
         var regions = new List<RegionInfo>();
+        var commentLines = new HashSet<int>();
         var stack = new Stack<(string Name, int Line)>();
-        var lines = sourceText.Split('\n');
+        string[]? lines = null;
 
         foreach (var trivia in root.DescendantTrivia())
         {
+            switch (trivia.Kind())
+            {
+                case SyntaxKind.SingleLineCommentTrivia:
+                case SyntaxKind.SingleLineDocumentationCommentTrivia:
+                    commentLines.Add(trivia.GetLocation().GetLineSpan().StartLinePosition.Line + 1);
+                    break;
+                case SyntaxKind.MultiLineCommentTrivia:
+                case SyntaxKind.MultiLineDocumentationCommentTrivia:
+                    var span = trivia.GetLocation().GetLineSpan();
+                    for (int line = span.StartLinePosition.Line; line <= span.EndLinePosition.Line; line++)
+                        commentLines.Add(line + 1);
+                    break;
+            }
+
             if (trivia.IsKind(SyntaxKind.RegionDirectiveTrivia))
             {
                 var directive = (RegionDirectiveTriviaSyntax)trivia.GetStructure()!;
@@ -959,6 +974,7 @@ public class CSharpSourceParser : ISourceParser
                 var (name, startLine) = stack.Pop();
 
                 // Extract content between region and endregion (exclusive of markers)
+                lines ??= sourceText.Split('\n');
                 var contentLines = new List<string>();
                 for (int i = startLine; i < endLine - 1 && i < lines.Length; i++)
                     contentLines.Add(lines[i].TrimEnd('\r'));
@@ -966,38 +982,17 @@ public class CSharpSourceParser : ISourceParser
 
                 regions.Add(new RegionInfo(name, startLine, endLine, content));
             }
-        }
-
-        return regions;
-    }
-
-    /// <summary>
-    /// Extracts 1-based line numbers that are comment lines using Roslyn trivia.
-    /// A line is a comment if it contains single-line (//) or doc-comment (///)
-    /// trivia, or falls within a multi-line comment (/* */).
-    /// </summary>
-    private static HashSet<int> ExtractCommentLines(CompilationUnitSyntax root, string sourceText)
-    {
-        var commentLines = new HashSet<int>();
-
-        foreach (var trivia in root.DescendantTrivia())
-        {
-            switch (trivia.Kind())
+            else if (trivia.IsKind(SyntaxKind.NullableDirectiveTrivia)
+                && trivia.GetStructure() is NullableDirectiveTriviaSyntax { IsActive: true } nullable)
             {
-                case SyntaxKind.SingleLineCommentTrivia:
-                case SyntaxKind.SingleLineDocumentationCommentTrivia:
-                    commentLines.Add(trivia.GetLocation().GetLineSpan().StartLinePosition.Line + 1);
-                    break;
-
-                case SyntaxKind.MultiLineCommentTrivia:
-                case SyntaxKind.MultiLineDocumentationCommentTrivia:
-                    var span = trivia.GetLocation().GetLineSpan();
-                    for (int line = span.StartLinePosition.Line; line <= span.EndLinePosition.Line; line++)
-                        commentLines.Add(line + 1);
-                    break;
+                var keywords = new List<string> { "nullable", nullable.SettingToken.ValueText };
+                if (!nullable.TargetToken.IsKind(SyntaxKind.None))
+                    keywords.Add(nullable.TargetToken.ValueText);
+                statements.Add(new CSharpStatementInfo("directive", keywords, null, null, [],
+                    LineOf(nullable), false));
             }
         }
 
-        return commentLines;
+        return (regions, commentLines);
     }
 }

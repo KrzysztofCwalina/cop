@@ -122,6 +122,51 @@ public class DeferredProviderExecutionTests
     }
 
     [Test]
+    public void LazyEnumeration_ConcurrentConsumersProduceEachItemExactlyOnce()
+    {
+        int factories = 0;
+        int produced = 0;
+        var source = new CopLazyCollection(() =>
+        {
+            Interlocked.Increment(ref factories);
+            return Enumerable.Range(0, 1000).Select(i =>
+            {
+                Interlocked.Increment(ref produced);
+                return (CopValue)new CopInt(i);
+            });
+        });
+        var results = new int[4][];
+        Parallel.For(0, results.Length, i =>
+            results[i] = source.Enumerate().Cast<CopInt>().Select(v => v.Value).ToArray());
+        foreach (var result in results)
+            Assert.That(result, Is.EqualTo(Enumerable.Range(0, 1000)));
+        Assert.That(source.Enumerate().Cast<CopInt>().Select(v => v.Value),
+            Is.EqualTo(Enumerable.Range(0, 1000)));
+        Assert.That(factories, Is.EqualTo(1));
+        Assert.That(produced, Is.EqualTo(1000));
+    }
+
+    [Test]
+    public void LazyEnumeration_PreservesCachedPrefixAndOriginalFailure()
+    {
+        int factories = 0;
+        var error = new IOException("Unable to read second row.");
+        IEnumerable<CopValue> Rows()
+        {
+            factories++;
+            yield return new CopInt(7);
+            throw error;
+        }
+        var source = new CopLazyCollection(Rows);
+        for (int i = 0; i < 2; i++)
+        {
+            Assert.That(source.Enumerate().First().Display(), Is.EqualTo("7"));
+            Assert.That(Assert.Throws<IOException>(() => source.Enumerate().ToArray()), Is.SameAs(error));
+        }
+        Assert.That(factories, Is.EqualTo(1));
+    }
+
+    [Test]
     public void ProcessQuery_SerializesBothFilterChannels()
     {
         var build = typeof(ProcessObjectProvider).GetMethod("BuildQueryRequest", BindingFlags.NonPublic | BindingFlags.Static)!;

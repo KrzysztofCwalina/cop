@@ -9,6 +9,35 @@ public class CSharpSourceParserTests
     private readonly CSharpSourceParser _parser = new();
 
     [Test]
+    public void Parse_CombinedTriviaPass_PreservesCommentsRegionsAndActiveDirectives()
+    {
+        var file = _parser.Parse("Input.cs", """
+            #nullable enable
+            #region Outer
+            /// <summary>Sample</summary>
+            class Sample {
+            #region Inner
+                /* first
+                   second */
+                void Run() {}
+            #endregion
+            }
+            #endregion
+            #if NEVER
+            #nullable disable
+            #endif
+            """)!;
+        Assert.That(file.ParseErrors, Is.Empty);
+        Assert.That(file.CommentLines.Order(), Is.EqualTo(new[] { 3, 6, 7 }));
+        Assert.That(file.Regions.Select(r => (r.Name, r.StartLine, r.EndLine)),
+            Is.EqualTo(new[] { ("Inner", 5, 9), ("Outer", 2, 11) }));
+        Assert.That(file.Regions[0].Content, Is.EqualTo("    /* first\n       second */\n    void Run() {}"));
+        var directive = file.Statements.Single(s => s.Kind == "directive");
+        Assert.That(directive.Line, Is.EqualTo(1));
+        Assert.That(directive.Keywords, Is.EqualTo(new[] { "nullable", "enable" }));
+    }
+
+    [Test]
     public void Parse_ArgumentFactsAndNestedCalls_AreDecodedAndNotDuplicated()
     {
         var file = _parser.Parse("Input.cs", """

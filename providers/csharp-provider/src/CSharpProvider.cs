@@ -39,19 +39,20 @@ public class CSharpProvider : DataProvider
             var parsers = new SourceParserRegistry();
             parsers.Register(parser);
             var trees = new Dictionary<string, (SyntaxTree Tree, string Text)>(StringComparer.Ordinal);
+            var texts = new CSharpSourceTextCache(key);
+            DeferredSourceSnapshot sources = null!;
             (SyntaxTree Tree, string Text) Syntax(string path)
             {
                 if (trees.TryGetValue(path, out var cached)) return cached;
-                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                using var reader = new StreamReader(stream);
-                var text = reader.ReadToEnd();
+                var text = texts.Read(path);
                 var parsed = (CSharpSyntaxTree.ParseText(text, path: path), text);
                 trees.Add(path, parsed);
+                if (trees.Count == sources.Paths.Count)
+                    texts.Save(sources.Paths);
                 if (CopDiagnostics.Timing)
                     Console.Error.WriteLine($"[provider-parse] csharp {Path.GetRelativePath(root, path)}");
                 return parsed;
             }
-            DeferredSourceSnapshot sources = null!;
             var compilation = new Lazy<CSharpCompilation>(() =>
             {
                 var allTrees = sources.Paths.Select(path => Syntax(path).Tree).ToArray();
@@ -68,6 +69,8 @@ public class CSharpProvider : DataProvider
                 var file = parser.ParseWithSemantics(path, text, tree, model: null);
                 file?.DeferSemanticAnalysis(() => CSharpSourceParser.EnrichWithSemantics(tree,
                     compilation.Value.GetSemanticModel(tree), file.Types, file.Statements));
+                file?.DeferTypeNameAnalysis(() => CSharpSourceParser.EnrichTypeNames(tree,
+                    compilation.Value.GetSemanticModel(tree), file.Statements));
                 return file;
             }, () => CSharpProjectDiscovery.Discover(root, query.ExcludedDirectories));
             snapshot = sources;
