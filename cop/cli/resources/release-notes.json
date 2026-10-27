@@ -196,6 +196,16 @@
         "Functions and predicates can return the string 'intrinsic' without being mistaken for runtime-backed declarations.",
         "Publishing now rebuilds compatible C# provider binaries and verifies statement extraction with the actual executable before packaging."
       ]
+    },
+    {
+      "version": "2026.10.27.1",
+      "approved": true,
+      "features": [
+        "Source analysis parses files on demand across C#, Python, JavaScript/TypeScript, Go, Java, Rust, and Cop; early First/take queries avoid reading later files.",
+        "C# semantic compilation now runs only when a query needs semantic facts.",
+        "Checks reuse identical ordered scalar filter prefixes within one execution, reducing repeated work across large check suites.",
+        "Query diagnostics now show source-shaped provider filters and distinguish locally evaluated stages."
+      ]
     }
   ]
 }
