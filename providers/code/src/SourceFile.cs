@@ -41,4 +41,17 @@ public record SourceFile(
     /// skipped or partially/incorrectly modelled.
     /// </summary>
     public List<string> ParseErrors { get; init; } = [];
+
+    /// <summary>Shares one memoized semantic analysis across this file's syntax-derived objects.</summary>
+    public void DeferSemanticAnalysis(Action analyze)
+    {
+        var semantics = new Lazy<bool>(() => { analyze(); return true; });
+        void Attach(TypeDeclaration type)
+        {
+            type.DeferredSemantics = semantics;
+            foreach (var nested in type.NestedTypes) Attach(nested);
+        }
+        foreach (var type in Types) Attach(type);
+        foreach (var statement in Statements) statement.DeferredSemantics = semantics;
+    }
 }

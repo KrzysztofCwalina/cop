@@ -28,7 +28,13 @@ public record TypeDeclaration(
     /// All interfaces this type implements (including inherited), resolved via semantic analysis.
     /// Empty if semantic analysis is unavailable.
     /// </summary>
-    public List<string> Interfaces { get; set; } = [];
+    internal Lazy<bool>? DeferredSemantics { get; set; }
+    private List<string> _interfaces = [];
+    public List<string> Interfaces
+    {
+        get { _ = DeferredSemantics?.Value; return _interfaces; }
+        set => _interfaces = value;
+    }
 
     public string Source => Name;
 

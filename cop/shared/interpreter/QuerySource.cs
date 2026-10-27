@@ -46,6 +46,8 @@ internal sealed class QuerySource
     public QuerySource Append(IEnumerable<QueryStep> steps) =>
         new(_root, _rootDefinitions, Steps.Concat(steps).ToArray(), _context, _log, _roots);
     public QuerySource WithLog(Action<string>? log) => new(_root, _rootDefinitions, Steps, _context, log, _roots);
+    public QuerySource? ForFilter(FilterExpression filter) => FromFilter(filter) is { } step
+        ? new(_root, _rootDefinitions, [step], _context, _log, _roots) : null;
 
     public static QueryStep? FromFilter(FilterExpression filter)
     {

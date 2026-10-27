@@ -18,6 +18,17 @@ public class PythonProvider : DataProvider
         CodeBindings.SourceMetadata(query, ".py");
     public override string QueryResultType => "Codebase";
 
+    public override object QueryDeferred(ProviderQuery query)
+    {
+        PythonTypeDeclaration.RegisterCacheFactory();
+        PythonMethodDeclaration.RegisterCacheFactory();
+        PythonStatementInfo.RegisterCacheFactory();
+        var parsers = new SourceParserRegistry();
+        parsers.Register(new PythonSourceParser());
+        return CodeCollectionBuilder.CollectDeferred(parsers, query, this,
+            () => PythonProjectDiscovery.Discover(query.RootPath!, query.ExcludedDirectories));
+    }
+
     public override object? Query(ProviderQuery query)
     {
         PythonTypeDeclaration.RegisterCacheFactory();

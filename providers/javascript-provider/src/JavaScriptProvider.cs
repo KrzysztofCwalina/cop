@@ -18,6 +18,17 @@ public class JavaScriptProvider : DataProvider
         CodeBindings.SourceMetadata(query, ".js", ".jsx", ".ts", ".tsx");
     public override string QueryResultType => "Codebase";
 
+    public override object QueryDeferred(ProviderQuery query)
+    {
+        JavaScriptTypeDeclaration.RegisterCacheFactory();
+        JavaScriptMethodDeclaration.RegisterCacheFactory();
+        JavaScriptStatementInfo.RegisterCacheFactory();
+        var parsers = new SourceParserRegistry();
+        parsers.Register(new JavaScriptSourceParser());
+        return CodeCollectionBuilder.CollectDeferred(parsers, query, this,
+            () => JavaScriptProjectDiscovery.Discover(query.RootPath!, query.ExcludedDirectories));
+    }
+
     public override object? Query(ProviderQuery query)
     {
         JavaScriptTypeDeclaration.RegisterCacheFactory();

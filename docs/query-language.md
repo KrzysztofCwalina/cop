@@ -226,6 +226,95 @@ The provider query has no projection, ordering, join, limit, or aggregate nodes.
 Those operations remain local. A union distributes filters into its provider-backed
 inputs rather than becoming a provider-side union query.
 
+## Reusing common filter stages
+
+Exact provider requests reuse their results within an execution. Queries also share
+identical **ordered prefixes** of schema-known scalar filters. For example:
+
+```cop
+import code
+import csharp
+
+let cb = csharp.parse()
+predicate isPublicApi(Type) => Type.IsPublic && !Type.IsAbstract
+let publicTypes = cb.Types:isPublicApi
+let clients = publicTypes.Where(item.Name:endsWith('Client'))
+let services = publicTypes.Where(item.Name:endsWith('Service'))
+command MAIN = print([clients.Count, services.Count])
+```
+
+The public, non-abstract prefix is evaluated once as its rows are demanded;
+the client and service suffixes filter those shared results locally. This also
+works for independently composed equivalent prefixes and the provider inputs of
+`codebase(...)`. Reuse is identified by provider, collection, source request scope
+(including root, exclusions, and options), and resolved typed filter values, not
+by the name of a `let` or predicate.
+
+A second distinct downstream branch establishes sharing. If that branch is built
+only after the first has executed, the first request can push its complete filter,
+then one additional request builds the shared prefix. Later branches reuse it.
+If the prefix itself has already been consumed, even partially, a child can resume
+it immediately. Composition does not enumerate rows, and `.First`/`.take(n)` do not
+force the shared cache to fill.
+
+Single-consumer queries still push the complete filter. Sharing never reorders
+conditions or infers arbitrary Boolean equivalence. Regular expressions, relationship
+filters, arbitrary local/effectful calls, queryables without scalar schemas, and
+requests with pre-existing per-collection filters do not participate in automatic
+prefix sharing. Captures must resolve to supported literal values. Providers may
+still apply a filter themselves; host residual validation is retained, but is no
+longer repeated by the queryable after the runtime has validated that same filter.
+Demand and initialization failures are preserved rather than becoming empty results.
+
+The automatic stage lookup is execution-scoped, weak, and capped at 256 entries.
+Evicting lookup metadata does not invalidate stages held by live queries, but may
+miss later sharing opportunities. This is **not a hard memory limit**: live stages,
+memoized rows, provider snapshots, and the existing exact-request cache can retain
+data for the rest of the execution. Result caches are not shared across CLI runs.
+Each distinct rule still evaluates its own suffix over the shared matching rows;
+this is not an index or a general cost-based optimizer.
+
+At `-d`, `[query-cop]` shows the prefix actually sent to the provider.
+`[query-local]` identifies shared-result reuse and suffixes evaluated locally;
+it does not claim that those suffixes were pushed.
+
+## Provider-side demand and parsing
+
+The C#, Python, JavaScript/TypeScript, Go, Java, Rust, and Cop language providers
+support pull-based results. The runtime requests rows incrementally instead of
+asking these providers for a fully materialized list.
+
+Discovery records the source paths in deterministic order without reading their
+contents. Each file is read and parsed only when enumeration reaches it; filtering
+runs before its matching rows are yielded. `.First`, `.first()`, `.take(n)`, and
+short-circuit predicates can therefore stop before later files are opened.
+Subsequent enumeration can resume, and queries for other collections reuse files
+already parsed during that execution. `Projects` queries do not parse source files.
+The shared non-C# path also caches individual parsed files on disk, checking file
+size, modification time, and parser build identity before reusing them in a new run.
+
+C# initially extracts syntax-derived facts from demanded files. Reading semantic
+facts (`Type.Interfaces`, `Statement.TypeName`, or `Statement.ConstructedTypeInterfaces`)
+builds the whole-target Roslyn compilation on demand, retaining cross-file type
+resolution. That fallback may read and syntax-parse all files in the target, but
+does not extract all of their Cop source models. Analysis of each demanded file
+and its semantic facts is memoized. Direct legacy `DataProvider.Query` calls retain
+their eager contract; the runtime uses the optional `QueryDeferred` path.
+
+This is not an index. A cold query enumerating **all** matching types still has to
+inspect every eligible file; a name predicate alone cannot safely tell the provider
+which unopened files contain matching declarations. `.Count`, `.Last`, and sorting
+also require complete enumeration. Target scoping and directory exclusions still
+avoid unrelated files altogether. A file that has not been visited has not been
+syntax-validated; parse diagnostics cover demanded files, not a whole-target audit.
+Read failures during demand are surfaced, not silently treated as empty results.
+
+Use `-dd` to distinguish `[provider-parse]` (actual parsing), `[provider-cache]`
+(per-file disk-cache reuse), `[provider-model]` (source-model extraction), and
+`[provider-semantics]` (C# compilation construction). `[query-result]` reports a
+collection's provider-returned count only when that collection is fully enumerated.
+Its absence after `.First` is not a zero-result indication.
+
 See [Provider extensibility](extensibility.md) for provider architecture and transport
 details.
 
@@ -235,6 +324,7 @@ details.
 - [FilterExpression nodes and diagnostic formatter](../cop/shared/providers/FilterExpression.cs)
 - [Predicate translation](../cop/shared/interpreter/PredicateCompiler.cs)
 - [Retained query syntax and dependency resolution](../cop/shared/interpreter/QuerySource.cs)
+- [Shared ordered query stages](../cop/shared/interpreter/QueryReuseScope.cs)
 - [Portable Cop query source writer](../cop/shared/ast/QuerySourceWriter.cs)
 - [Query execution and host residual filtering](../cop/runtime/ProviderQueryService.cs)
 - [Process-provider serialization](../cop/runtime/ProcessObjectProvider.cs)

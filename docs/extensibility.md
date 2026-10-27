@@ -43,7 +43,23 @@ Counts (`count(items)`, `items.count()`, and `items.Count`) return the actual ma
 Repeated enumeration reuses results during that engine execution. Different paths,
 filters, exclusions, and options have separate query-cache entries; creating a filtered
 branch does not modify its source or another branch. Language providers reuse parsed
-source snapshots within an execution, not across separate engine runs.
+source snapshots within an execution. The shared non-C# path also maintains a
+per-file disk cache across runs, invalidated by file stats and parser build identity.
+
+Distinct branches with identical ordered scalar-filter prefixes can reuse a lazy
+intermediate result. Once a second branch is composed, the shared prefix is pushed
+and each suffix runs locally; a unique branch still pushes its complete filter.
+Already-consumed prefixes resume without replaying predicate work. If sharing is
+discovered after a complete branch has executed, one extra prefix request may be
+needed. Provider, collection, target, exclusions, options, and resolved filter values
+remain isolated. No special treatment is required for public types or any particular
+language provider.
+
+Automatic sharing is conservative: schema-known scalar predicates only, without
+reordering, regular expressions, arbitrary local calls, or pre-existing
+`CollectionFilters`. The execution-scoped weak stage lookup has at most 256 entries;
+live query stages and the existing result/snapshot caches are not hard memory-bounded.
+See [common filter stages](query-language.md#reusing-common-filter-stages) for details.
 
 For CLR providers, `ProviderQuery.Collection` selects the requested collection;
 `Filter` and `CollectionFilters` carry optimization hints. The Node/Python process
@@ -73,7 +89,25 @@ consumers that require a named wrapper such as `Codebase` or `MarkdownContent`.
 
 Diagnostic logging (`-d`) includes `[query-cop]` (source-shaped Cop for the provider
 portion), `[query-local]` (host-only operations), `[query]` (the structured filter),
-and `[query-result]` (records returned before host residual filtering).
+and `[query-result]` (records returned before host residual filtering, emitted at
+the end of collection enumeration, not for a partially consumed collection).
+For shared stages the provider diagnostics show only the pushed prefix; suffixes
+and reuse appear as local operations.
+
+CLR providers can override `QueryDeferred(ProviderQuery)` to return a
+`DeferredProviderResult` containing named `IEnumerable<object>` collections.
+Constructing the result must not enumerate those collections. Rows are pulled only
+as needed, so providers should defer file reads and parsing inside their iterators
+and close file handles before yielding. The runtime memoizes consumed rows, retains
+iteration failures, and reapplies residual filters. Existing providers remain
+compatible: the default `QueryDeferred` delegates to their original `Query`.
+The process-provider JSON protocol remains materialized and unchanged.
+
+The main language providers implement this pull-based path with per-file source
+snapshots. C# defers whole-target semantic compilation until semantic fields are
+read. Cold full-result queries still inspect the target; this is demand-driven
+parsing, not an indexed lookup. At `-dd`, `[provider-parse]`, `[provider-cache]`,
+`[provider-model]`, and `[provider-semantics]` expose the actual work performed.
 
 See [Provider query representation](query-language.md) for the query fields, readable
 filter notation, and JSON transport format.

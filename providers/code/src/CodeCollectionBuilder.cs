@@ -14,6 +14,23 @@ public static class CodeCollectionBuilder
 {
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<DataProvider,
         Dictionary<string, List<SourceFile>>> Snapshots = new();
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<DataProvider,
+        Dictionary<string, DeferredSourceSnapshot>> DeferredSnapshots = new();
+
+    public static DeferredProviderResult CollectDeferred(SourceParserRegistry parsers, ProviderQuery query,
+        DataProvider owner, Func<List<ProjectInfo>>? discoverProjects = null)
+    {
+        if (query.RootPath is null) return new(new Dictionary<string, IEnumerable<object>>());
+        var key = Path.GetFullPath(query.RootPath) + "\n" +
+            string.Join("\n", (query.ExcludedDirectories ?? new HashSet<string>()).Order(StringComparer.Ordinal));
+        var snapshots = DeferredSnapshots.GetOrCreateValue(owner);
+        if (!snapshots.TryGetValue(key, out var snapshot))
+        {
+            snapshot = new(parsers, query, discoverProjects: discoverProjects);
+            snapshots.Add(key, snapshot);
+        }
+        return snapshot.Query(query, owner.GetRuntimeBindings());
+    }
 
     /// <summary>
     /// Scans source files under rootPath, parses them, and returns flat collections.
@@ -66,7 +83,7 @@ public static class CodeCollectionBuilder
         // Compute cache fingerprint from file stats (fast: just stat calls, no file reading)
         var fingerprint = ComputeFingerprint(rootPath, filePaths);
         var cachePath = GetCachePath(rootPath);
-        var cachedFiles = SourceCacheSerializer.TryLoad(cachePath, fingerprint);
+        var cachedFiles = SourceCacheSerializer.TryLoad(cachePath, fingerprint, owner?.GetType().Assembly ?? parsers.CacheAssembly);
 
         List<SourceFile> sorted;
         if (cachedFiles != null)
@@ -189,7 +206,7 @@ public static class CodeCollectionBuilder
     /// <summary>
     /// Links File/CopIgnore references on types and statements after construction/cache load.
     /// </summary>
-    private static void LinkReferences(SourceFile file)
+    internal static void LinkReferences(SourceFile file)
     {
         for (int i = 0; i < file.Statements.Count; i++)
         {
@@ -264,7 +281,7 @@ public static class CodeCollectionBuilder
     /// <summary>
     /// Gets the cache file path for a given root directory.
     /// </summary>
-    private static string GetCachePath(string rootPath)
+    internal static string GetCachePath(string rootPath)
     {
         var hash = Convert.ToHexStringLower(
             SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(rootPath)));
@@ -333,7 +350,7 @@ public static class CodeCollectionBuilder
     /// <summary>
     /// Maps collection names to their item type names (matching schema/accessors keys).
     /// </summary>
-    private static Dictionary<string, string> GetCollectionItemTypes() => new(StringComparer.OrdinalIgnoreCase)
+    internal static Dictionary<string, string> GetCollectionItemTypes() => new(StringComparer.OrdinalIgnoreCase)
     {
         ["Types"] = "Type",
         ["Statements"] = "Statement",

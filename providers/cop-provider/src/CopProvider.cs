@@ -19,6 +19,14 @@ public class CopProvider : DataProvider
         CodeBindings.SourceMetadata(query, ".cop");
     public override string QueryResultType => "Codebase";
 
+    public override object QueryDeferred(ProviderQuery query)
+    {
+        var parsers = new SourceParserRegistry();
+        parsers.Register(new CopSourceParser());
+        parsers.Register(new TextFileParser());
+        return CodeCollectionBuilder.CollectDeferred(parsers, query, this);
+    }
+
     public override object? Query(ProviderQuery query)
     {
         var parsers = new SourceParserRegistry();

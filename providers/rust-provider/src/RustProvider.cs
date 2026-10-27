@@ -18,6 +18,17 @@ public class RustProvider : DataProvider
         CodeBindings.SourceMetadata(query, ".rs");
     public override string QueryResultType => "Codebase";
 
+    public override object QueryDeferred(ProviderQuery query)
+    {
+        RustTypeDeclaration.RegisterCacheFactory();
+        RustMethodDeclaration.RegisterCacheFactory();
+        RustStatementInfo.RegisterCacheFactory();
+        var parsers = new SourceParserRegistry();
+        parsers.Register(new RustSourceParser());
+        return CodeCollectionBuilder.CollectDeferred(parsers, query, this,
+            () => RustProjectDiscovery.Discover(query.RootPath!, query.ExcludedDirectories));
+    }
+
     public override object? Query(ProviderQuery query)
     {
         // Ensure cached Rust types reconstruct as RustTypeDeclaration (not the plain base)

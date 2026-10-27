@@ -18,6 +18,17 @@ public class JavaProvider : DataProvider
         CodeBindings.SourceMetadata(query, ".java");
     public override string QueryResultType => "Codebase";
 
+    public override object QueryDeferred(ProviderQuery query)
+    {
+        JavaTypeDeclaration.RegisterCacheFactory();
+        JavaMethodDeclaration.RegisterCacheFactory();
+        JavaStatementInfo.RegisterCacheFactory();
+        var parsers = new SourceParserRegistry();
+        parsers.Register(new JavaSourceParser());
+        return CodeCollectionBuilder.CollectDeferred(parsers, query, this,
+            () => JavaProjectDiscovery.Discover(query.RootPath!, query.ExcludedDirectories));
+    }
+
     public override object? Query(ProviderQuery query)
     {
         // Ensure cached Java language-specific subtypes reconstruct before the cache is read.
