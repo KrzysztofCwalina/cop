@@ -82,6 +82,69 @@ public class CliCommandTests
         Assert.That(stdout, Does.Contain("cop verify"));
     }
 
+    [TestCase("help")]
+    [TestCase("--help")]
+    [TestCase("-help")]
+    [TestCase("-?")]
+    [TestCase("/?")]
+    [TestCase("-h --no-color")]
+    [TestCase("--help --no-color")]
+    [TestCase("--no-color -h")]
+    [TestCase("--no-color --help")]
+    [TestCase("--help update")]
+    public void MainHelp_AllEntryPointsShowTheSameCommandsIncludingUpdate(string arguments)
+    {
+        var (expectedExit, expected, _) = RunCop("-h");
+        var (exit, stdout, stderr) = RunCop(arguments);
+        Assert.That(expectedExit, Is.EqualTo(0));
+        Assert.That(exit, Is.EqualTo(0), stderr);
+        Assert.That(stderr, Is.Empty);
+        Assert.That(stdout, Is.EqualTo(expected));
+        Assert.That(stdout.Split('\n').Count(line =>
+            line.TrimStart().StartsWith("cop update [--force]", StringComparison.Ordinal)), Is.EqualTo(1));
+        Assert.That(stdout, Does.Contain("cop init").And.Contain("cop vscode").And.Contain("cop run"));
+    }
+
+    [TestCase("package list -h")]
+    [TestCase("package list --help")]
+    public void NestedCommandHelp_RemainsSpecificToTheSelectedCommand(string arguments)
+    {
+        var (exit, stdout, stderr) = RunCop(arguments);
+        Assert.That(exit, Is.EqualTo(0), stderr);
+        Assert.That(stderr, Is.Empty);
+        Assert.That(stdout, Does.Contain("--feed"));
+        Assert.That(stdout, Does.Not.Contain("cop update").And.Not.Contain("cop vscode"));
+    }
+
+    [Test]
+    public void InitHelp_AfterOptions_DoesNotGenerateFiles()
+    {
+        var (expectedExit, expected, _) = RunCop("init -h");
+        var dir = Path.Combine(Path.GetTempPath(), "cop-cli-help-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var (exit, stdout, stderr) = RunCop("init --claude --help", dir);
+            Assert.That(expectedExit, Is.EqualTo(0));
+            Assert.That(exit, Is.EqualTo(0), stderr);
+            Assert.That(stderr, Is.Empty);
+            Assert.That(stdout, Is.EqualTo(expected));
+            Assert.That(Directory.GetFileSystemEntries(dir), Is.Empty);
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
+    [Test]
+    public void MainHelp_ParserErrorsShowTheCompleteCommandList()
+    {
+        var (expectedExit, expected, _) = RunCop("-h");
+        var (exit, stdout, stderr) = RunCop("--not-a-real-option");
+        Assert.That(expectedExit, Is.EqualTo(0));
+        Assert.That(exit, Is.EqualTo(1));
+        Assert.That(stderr, Does.Contain("Unrecognized command or argument '--not-a-real-option'."));
+        Assert.That(stdout, Is.EqualTo(expected));
+    }
+
     // Regression: a bare `cop` (no command) must NOT fall through to the getting-started screen
     // or run local files.
     [Test]

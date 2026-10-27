@@ -24,10 +24,12 @@ Options:
 | `--no-color` | Disable ANSI color (also auto-disabled when output is not a terminal) |
 | `--no-user-checks` | Skip personal checks in `~/.cop/checks/` for this run |
 | `-cql` | Transpile to CodeQL instead of running |
-| `-h` | Show help |
-| `-v` | Show version |
+| `-h`, `--help` | Show help |
+| `-v`, `--version` | Show version |
 
-> **Note:** Agent Cop uses short flags only — there are no long-form `--help` or `--version` equivalents.
+Help also accepts `-help`, `-?`, and `/?`. Root help always shows the complete
+command list, including `cop update [--force]`, even when combined with
+`--no-color`. Use `cop <command> --help` for command-specific options.
 
 ## Exit Codes
 
@@ -287,6 +289,8 @@ Show help for the Cop language or a package.
 
 ```bash
 cop help                  # General usage help
+cop --help --no-color      # Same complete command list without color
+cop update --help          # Self-update options, including --force
 cop help language         # Full language reference
 cop help <package>        # Package documentation (types, functions, samples)
 ```
