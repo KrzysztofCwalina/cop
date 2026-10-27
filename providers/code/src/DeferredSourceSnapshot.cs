@@ -13,6 +13,7 @@ public sealed class DeferredSourceSnapshot
     private readonly Func<string, SourceFile?> _parse;
     private readonly Lazy<List<ProjectInfo>>? _projects;
     private readonly Lazy<List<(string Name, string Directory)>>? _projectDirectories;
+    private readonly DeferredSourceCache? _cache;
 
     public IReadOnlyList<string> Paths => _paths.Value;
 
@@ -28,6 +29,9 @@ public sealed class DeferredSourceSnapshot
             return paths;
         });
         _parse = parse ?? (path => ParseFile(parsers, path));
+        if (parse is null && OperatingSystem.IsWindows())
+            _cache = new(_root + "\n" + parsers.CacheAssembly.ManifestModule.ModuleVersionId + "\n" +
+                string.Join("\n", (query.ExcludedDirectories ?? new HashSet<string>()).Order(StringComparer.Ordinal)));
         _projects = discoverProjects is null ? null : new(discoverProjects);
         if (_projects is not null)
             _projectDirectories = new(() => _projects.Value.Select(project =>
@@ -41,6 +45,13 @@ public sealed class DeferredSourceSnapshot
     private SourceFile? ParseFile(SourceParserRegistry parsers, string path)
     {
         var parser = parsers.GetParser(Path.GetExtension(path))!;
+        if (_cache is not null)
+        {
+            var source = _cache.Read(path, parser);
+            if (_files.Count == Paths.Count)
+                _cache.Save(Paths);
+            return source;
+        }
         var info = new FileInfo(path);
         var fingerprint = System.Text.Encoding.UTF8.GetBytes($"{info.Length}:{info.LastWriteTimeUtc.Ticks}");
         var cachePath = CodeCollectionBuilder.GetCachePath(_root + "\nfile\n" + path + "\n"

@@ -139,6 +139,120 @@ public class ProviderWorkDeferralTests
     }
 
     [Test]
+    public void SharedSnapshot_BundledCache_KeepsUndemandedModelsLazy()
+    {
+        if (!OperatingSystem.IsWindows()) Assert.Ignore("The bundled cache uses Windows change-time validation.");
+        File.WriteAllText(Path.Combine(_root, "a.fake"), "Alpha");
+        var later = Path.Combine(_root, "b.fake");
+        File.WriteAllText(later, "Beta");
+        var parser = new CountingParser();
+        var parsers = new SourceParserRegistry();
+        parsers.Register(parser);
+        var query = new ProviderQuery { RootPath = _root, Collection = "Types" };
+        Assert.That(new DeferredSourceSnapshot(parsers, query).Query(query).Collections["Types"]
+            .Cast<TypeDeclaration>().Select(t => t.Name), Is.EqualTo(new[] { "Alpha", "Beta" }));
+        parser.Reads.Clear();
+        using var locked = new FileStream(later, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        var fresh = new DeferredSourceSnapshot(parsers, query);
+        Assert.That(fresh.Query(query).Collections["Types"].Cast<TypeDeclaration>().First().Name,
+            Is.EqualTo("Alpha"));
+        Assert.That(parser.Reads, Is.Empty);
+    }
+
+    [TestCase("python", ".py", "class Alpha:\n    pass\n", "class Bravo:\n    pass\n")]
+    [TestCase("javascript", ".js", "class Alpha {}", "class Bravo {}")]
+    [TestCase("go", ".go", "package example\ntype Alpha struct {}", "package example\ntype Bravo struct {}")]
+    [TestCase("java", ".java", "class Alpha {}", "class Bravo {}")]
+    [TestCase("rust", ".rs", "pub struct Alpha {}", "pub struct Bravo {}")]
+    [TestCase("cop", ".cop", "type Alpha = { Name : string }", "type Bravo = { Name : string }")]
+    public void SourceCache_PreservesResultsAndDetectsSameSizeSameTimestampEdits(
+        string language, string extension, string original, string edited)
+    {
+        if (!OperatingSystem.IsWindows()) Assert.Ignore("The bundled cache uses Windows change-time validation.");
+        var path = Path.Combine(_root, "a" + extension);
+        File.WriteAllText(path, original);
+        string[] ReadNames() => Items(Service(language).QueryProvider(language,
+            new ProviderQuery { RootPath = _root, Collection = "Types" })).Select(Name).ToArray();
+        Assert.That(ReadNames(), Is.EqualTo(new[] { "Alpha" }));
+        Assert.That(ReadNames(), Is.EqualTo(new[] { "Alpha" }));
+        var timestamp = File.GetLastWriteTimeUtc(path);
+        File.WriteAllText(path, edited);
+        File.SetLastWriteTimeUtc(path, timestamp);
+        Assert.That(ReadNames(), Is.EqualTo(new[] { "Bravo" }));
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
+    }
+
+    [Test]
+    public void SharedSnapshot_BundledCache_IsolatesScopesAndTracksAddedAndDeletedFiles()
+    {
+        if (!OperatingSystem.IsWindows()) Assert.Ignore("The bundled cache uses Windows change-time validation.");
+        File.WriteAllText(Path.Combine(_root, "a.fake"), "Alpha");
+        var nested = Path.Combine(_root, "nested");
+        Directory.CreateDirectory(nested);
+        var later = Path.Combine(nested, "b.fake");
+        File.WriteAllText(later, "Beta");
+        var parser = new CountingParser();
+        var parsers = new SourceParserRegistry();
+        parsers.Register(parser);
+        string[] ReadNames(params string[] excluded)
+        {
+            var query = new ProviderQuery
+            {
+                RootPath = _root, Collection = "Types", ExcludedDirectories = new HashSet<string>(excluded)
+            };
+            return new DeferredSourceSnapshot(parsers, query).Query(query).Collections["Types"]
+                .Cast<TypeDeclaration>().Select(t => t.Name).ToArray();
+        }
+        Assert.That(ReadNames(), Is.EqualTo(new[] { "Alpha", "Beta" }));
+        Assert.That(ReadNames("nested"), Is.EqualTo(new[] { "Alpha" }));
+        parser.Reads.Clear();
+        Assert.That(ReadNames(), Is.EqualTo(new[] { "Alpha", "Beta" }));
+        Assert.That(parser.Reads, Is.Empty);
+        File.Delete(later);
+        File.WriteAllText(Path.Combine(_root, "c.fake"), "Gamma");
+        Assert.That(ReadNames(), Is.EqualTo(new[] { "Alpha", "Gamma" }));
+        Assert.That(parser.Reads, Is.EqualTo(new[] { "c.fake" }));
+        parser.Reads.Clear();
+        Assert.That(ReadNames(), Is.EqualTo(new[] { "Alpha", "Gamma" }));
+        Assert.That(parser.Reads, Is.Empty);
+    }
+
+    [Test]
+    public void SharedSnapshot_BundledCache_ReportsTruncationAndRebuildsFromSource()
+    {
+        if (!OperatingSystem.IsWindows()) Assert.Ignore("The bundled cache uses Windows change-time validation.");
+        var path = Path.Combine(_root, "a.fake");
+        File.WriteAllText(path, "Alpha");
+        var scope = _root + "\nrecovery";
+        var cachePath = CodeCollectionBuilder.GetCachePath(scope + "\ndeferred-bundle");
+        var parser = new CountingParser();
+        try
+        {
+            var original = new DeferredSourceCache(scope);
+            Assert.That(original.Read(path, parser)!.Types.Single().Name, Is.EqualTo("Alpha"));
+            original.Save([path]);
+            File.WriteAllBytes(cachePath, [1, 0, 0, 0, 1, 0, 0, 0]);
+            parser.Reads.Clear();
+            var error = Console.Error;
+            using var diagnostics = new StringWriter();
+            var rebuilt = new DeferredSourceCache(scope);
+            try
+            {
+                Console.SetError(diagnostics);
+                Assert.That(rebuilt.Read(path, parser)!.Types.Single().Name, Is.EqualTo("Alpha"));
+            }
+            finally { Console.SetError(error); }
+            Assert.That(diagnostics.ToString(), Does.Contain("Could not read deferred source cache"));
+            Assert.That(parser.Reads, Is.EqualTo(new[] { "a.fake" }));
+            rebuilt.Save([path]);
+            parser.Reads.Clear();
+            Assert.That(new DeferredSourceCache(scope).Read(path, parser)!.Types.Single().Name, Is.EqualTo("Alpha"));
+            Assert.That(parser.Reads, Is.Empty);
+        }
+        finally { File.Delete(cachePath); }
+    }
+
+    [Test]
     public void Files_DeferProjectDiscovery_AndPreserveNestedMembership()
     {
         var source = Path.Combine(_root, "src");
@@ -191,6 +305,64 @@ public class ProviderWorkDeferralTests
             "Resolving call types must not also resolve every type's interfaces.");
         Assert.That(type.Interfaces, Is.EqualTo(new[] { "IMarker" }));
         Assert.That(call.TypeName, Is.EqualTo("Beta"));
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public void CSharp_TypeNameDemand_PreservesNullableInferenceAndOverloadResolution(bool interfacesFirst)
+    {
+        File.WriteAllText(Path.Combine(_root, "a.cs"), """
+            #nullable enable
+            class Client {
+                public Client? Next() => null;
+                public void Ping() {}
+            }
+            class Factory {
+                public static T Identity<T>(T value) => value;
+                public static Client? Choose(Client? value) => value;
+                public static int Choose(int value) => value;
+            }
+            class Example {
+                void Run(bool flag) {
+                    Client? maybe = flag ? new Client() : null;
+                    var inferred = maybe;
+                    var present = maybe ?? new Client();
+                    var chained = maybe?.Next();
+                    var identified = Factory.Identity(maybe);
+                    var chosen = Factory.Choose(maybe);
+                    var number = Factory.Choose(1);
+                    var nullableItems = new[] { maybe };
+                    if (maybe != null) {
+                        var narrowed = Factory.Identity(maybe);
+                        var narrowedItems = new[] { maybe };
+                        narrowed.Ping();
+                    }
+                    maybe?.Ping();
+                }
+            }
+            """);
+        var provider = new CSharpProvider();
+        var result = (DeferredProviderResult)provider.QueryDeferred(
+            new ProviderQuery { RootPath = _root, Collection = "Files" });
+        var file = result.Collections["Files"].Cast<SourceFile>().Single();
+        if (interfacesFirst)
+            Assert.That(file.Types[0].Interfaces, Is.Empty);
+        Assert.That(file.Statements.Where(s => s.Kind == "declaration")
+                .Select(s => (s.MemberName, s.TypeName)),
+            Is.EqualTo(new[] {
+                ("maybe", "Client?"), ("inferred", "Client"), ("present", "Client"),
+                ("chained", "Client"), ("identified", "Client"), ("chosen", "Client"),
+                ("number", "int"), ("nullableItems", "Client?[]"),
+                ("narrowed", "Client"), ("narrowedItems", "Client[]")
+            }));
+        Assert.That(file.Statements.Where(s => s.Kind == "call")
+                .Select(s => (s.MemberName, s.TypeName)),
+            Is.EqualTo(new (string?, string)[] {
+                (null, "Client"), ("Identity", "Factory"), ("Choose", "Factory"),
+                ("Choose", "Factory"), ("Identity", "Factory"), ("Ping", "Client"),
+                (null, "Client")
+            }));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
     }
 

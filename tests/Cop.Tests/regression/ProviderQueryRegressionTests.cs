@@ -41,6 +41,25 @@ public class ProviderQueryRegressionTests
     }
 
     [Test]
+    [Explicit("Issue #80: quoted Python return annotations are rejected - remove when fixed")]
+    [Category("PendingFix")]
+    public void Issue080_PythonQuotedReturnAnnotationsAreAccepted()
+    {
+        File.WriteAllText(Path.Combine(_root, "client.py"), """
+            class GoodClient:
+                @classmethod
+                def from_connection_string(cls, conn_str: str, **kwargs) -> "GoodClient":
+                    return cls(conn_str, None, **kwargs)
+            """);
+        var result = Run("""
+            import python
+            let cb = python.parse()
+            command MAIN = print(cb.Types.Count)
+            """);
+        Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "1" }));
+    }
+
+    [Test]
     public void Issue070_CompoundJsonPropertyFilterPreservesRecords()
     {
         var result = Run("""
