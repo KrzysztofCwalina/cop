@@ -58,7 +58,8 @@ if (args.Length == 1 && IsHelpFlag(args[0]))
     CliHelp.PrintMainHelp();
     return 0;
 }
-if (args.Length >= 2 && IsHelpFlag(args[1]) && knownVerbs.Contains(args[0]))
+if (args.Length >= 2 && knownVerbs.Contains(args[0]) &&
+    (IsHelpFlag(args[1]) || RequestsManualHelp(args)))
 {
     CliHelp.PrintCommandHelp(args[0]);
     return 0;
@@ -147,29 +148,19 @@ if (!knownVerbs.Contains(args[0]) && !args[0].StartsWith('-') && !args[0].Starts
 
 var rootCommand = new RootCommand
 {
-    Description = $"""
-        {HelpCommand.Banner}
-
-        quick reference
-          cop run <package>     run a package from a feed (auto-restores)
-          cop <file.cop>        run a local .cop file
-          cop package list      browse available packages
-          cop help <package>    package documentation
-          cop test [<file>]     run tests
-          cop repl              interactive repl
-          cop <command> -h      details for a command
-        """
+    Description = HelpCommand.Banner
 };
 
-// Replace built-in --help/-?/-h with just -h
+// Keep parser help aliases consistent with the manually dispatched commands.
 var defaultHelp = rootCommand.Options.FirstOrDefault(o => o is HelpOption);
 if (defaultHelp != null) rootCommand.Options.Remove(defaultHelp);
-rootCommand.Options.Add(new HelpOption("-h"));
+rootCommand.Options.Add(new HelpOption("-h", "--help", "-help", "-?", "/?"));
 
 // Replace built-in --version with -v/--version
 var defaultVersion = rootCommand.Options.FirstOrDefault(o => o is VersionOption);
 if (defaultVersion != null) rootCommand.Options.Remove(defaultVersion);
-rootCommand.Options.Add(new VersionOption("-v", "--version"));
+var versionOption = new VersionOption("-v", "--version");
+rootCommand.Options.Add(versionOption);
 
 rootCommand.Add(TestCommand.Create());
 rootCommand.Add(SyntaxCommand.Create());
@@ -199,7 +190,19 @@ packageCommand.Add(SearchCommand.Create());
 packageCommand.Add(FeedCommand.Create());
 rootCommand.Add(packageCommand);
 
-return rootCommand.Parse(args).Invoke();
+var parseResult = rootCommand.Parse(args);
+// The parser's command tree excludes manually dispatched verbs, so its root help is incomplete.
+if (parseResult.CommandResult.Command == rootCommand && parseResult.Action != versionOption.Action &&
+    (args.Any(IsHelpFlag) || parseResult.Errors.Count > 0))
+{
+    bool helpRequested = args.Any(IsHelpFlag);
+    if (!helpRequested)
+        foreach (var error in parseResult.Errors)
+            WriteError(error.Message);
+    CliHelp.PrintMainHelp();
+    return helpRequested ? 0 : 1;
+}
+return parseResult.Invoke();
 
 /// <summary>
 /// Resolves and runs a target: a local .cop file, an HTTPS URL, a local UPPERCASE command,
@@ -306,12 +309,26 @@ static int ResolveAndRun(string[] runArgs, bool diag, bool allowPackages)
     return RunCommand.ExecutePackages(packages, rootPath, rulesFilter, format, isDiag, isOnlyIfModified, pkgProviders.Count > 0 ? pkgProviders.ToArray() : null, reviewOptions);
 }
 
+static bool IsHelpFlag(string arg) => arg is "-h" or "--help" or "-help" or "-?" or "/?";
+
+static bool RequestsManualHelp(string[] commandArgs)
+{
+    if (commandArgs[0] is not ("init" or "update" or "vscode"))
+        return false;
+    for (int i = 1; i < commandArgs.Length; i++)
+    {
+        if (commandArgs[0] == "init" && commandArgs[i].Equals("--cop-cmd", StringComparison.OrdinalIgnoreCase))
+            i++;
+        else if (IsHelpFlag(commandArgs[i]))
+            return true;
+    }
+    return false;
+}
+
 /// <summary>
 /// Prints an "Unknown command" error for a bare invocation, suggesting a close known verb
 /// (if any) and the explicit `cop run` form for actually running a package.
 /// </summary>
-static bool IsHelpFlag(string arg) => arg is "-h" or "--help" or "-help";
-
 static int UnknownCommandError(string[] tokens)
 {
     var name = tokens.Length > 0 ? tokens[0] : "";
