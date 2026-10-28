@@ -21,7 +21,8 @@ cop --version
 
 ### Python toolchain and fallback
 
-Cop automatically discovers and probes an installed Python 3 interpreter. The richer
+Cop automatically discovers and probes an installed Python 3.8 or newer interpreter
+through `python`, `python3`, or the Windows `py -3` launcher. The richer
 analysis uses Python's standard-library `ast` module to read `.py` and `.pyi` files;
 no pip packages, project environment activation, or Cop-specific setup are required.
 The installed interpreter determines which Python syntax the native parser accepts.
@@ -37,6 +38,8 @@ its built-in, simpler syntax parser. Its coverage is more limited, so a clean fa
 run is not evidence that every native-parser fact was available. Warnings are plain text
 when redirected or when `--no-color` is used, and are repeated on a later execution even
 when fallback results come from cache. Cop never downloads Python or installs dependencies.
+Reading project metadata with the standard-library `tomllib` module requires Python 3.11
+or newer; older interpreters use an explicitly warned, simpler metadata reader.
 
 Malformed source or a failure after native analysis has started is reported as an error,
 not silently retried as successful fallback analysis. To use the richer path, make a

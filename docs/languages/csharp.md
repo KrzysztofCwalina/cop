@@ -28,9 +28,10 @@ download a compiler. There is no missing-external-compiler fallback for C#.
 Semantic analysis uses discovered project boundaries, project references, and available
 restored dependency metadata. It is not a full MSBuild evaluation: Cop does not build the
 target project or run its build targets. Conditional/imported compile settings, custom
-build logic, multiple target frameworks, or missing restored references can leave symbol
-resolution incomplete; Cop reports capability warnings rather than treating those facts
-as fully resolved. Syntax-level facts remain available.
+build logic, or multiple target frameworks produce capability warnings because the full
+build configuration is not evaluated. Missing restored references can also leave symbols
+unresolved; an installed SDK alone does not supply every project dependency. Syntax-level
+facts remain available.
 
 If your checks need dependency-aware symbols, provide the project's existing restored
 references using your normal development workflow before running Cop. Cop does not
