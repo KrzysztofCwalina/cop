@@ -16,6 +16,7 @@ public record SourceFile(
     public List<string> Lines => _lines ??= RawText.Split('\n').Select(l => l.TrimEnd('\r')).ToList();
 
     public List<string> Usings { get; init; } = [];
+    public List<ImportInfo> Imports { get; init; } = [];
 
     /// <summary>Top-level functions, including declarations outside a type.</summary>
     public List<MethodDeclaration> Methods { get; init; } = [];
