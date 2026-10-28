@@ -404,9 +404,10 @@ public class ProviderWorkDeferralTests
         Assert.That(file.Statements.Where(s => s.Kind == "call")
                 .Select(s => (s.MemberName, s.TypeName)),
             Is.EqualTo(new (string?, string)[] {
-                (null, "Client"), ("Identity", "Factory"), ("Choose", "Factory"),
+                (null, "Client"), (null, "Client"), ("Next", "Client"),
+                ("Identity", "Factory"), ("Choose", "Factory"),
                 ("Choose", "Factory"), ("Identity", "Factory"), ("Ping", "Client"),
-                (null, "Client")
+                ("Ping", "Client")
             }));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
     }

@@ -1000,8 +1000,7 @@ public class CSharpSourceParser : ISourceParser
         MemberBindingExpressionSyntax member => new("memberAccess")
         {
             Name = member.Name.Identifier.ValueText,
-            Target = member.Ancestors().OfType<ConditionalAccessExpressionSyntax>().FirstOrDefault() is { } conditional
-                ? ExtractExpression(conditional.Expression) : null
+            Target = ExtractConditionalReceiver(member)
         },
         InvocationExpressionSyntax call => new("invocation")
         {
@@ -1010,6 +1009,17 @@ public class CSharpSourceParser : ISourceParser
         },
         _ => new("other")
     };
+
+    private static ExpressionInfo? ExtractConditionalReceiver(MemberBindingExpressionSyntax member)
+    {
+        for (SyntaxNode? child = member; child?.Parent is { } parent; child = parent)
+        {
+            if (parent is ConditionalAccessExpressionSyntax conditional
+                && ReferenceEquals(child, conditional.WhenNotNull))
+                return ExtractExpression(conditional.Expression);
+        }
+        return null;
+    }
 
     private static void AddNestedCalls(CompilationUnitSyntax root, List<TypeDeclaration> types, List<StatementInfo> statements)
     {

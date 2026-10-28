@@ -10,6 +10,31 @@ public class CSharpSourceParserTests
 {
     private readonly CSharpSourceParser _parser = new();
 
+    [TestCase("value?.Next()?.Ping()", 2)]
+    [TestCase("value?.Next()?.Next()?.Ping()", 3)]
+    public void Parse_ChainedConditionalCalls_PreserveTheOuterReceiver(string expression, int count)
+    {
+        var source = "class Node { Node Next() => this; void Ping() {} " +
+            "void Run(Node value) { " + expression + "; } }";
+        var file = _parser.Parse("Input.cs", source)!;
+        Assert.That(file.ParseErrors, Is.Empty);
+        var calls = file.Statements.Where(s => s.Kind == "call").ToArray();
+        Assert.That(calls.Select(c => c.MemberName),
+            Is.EqualTo(Enumerable.Repeat("Next", count - 1).Append("Ping")));
+        var target = calls[^1].CallTarget!;
+        Assert.That(target.Kind, Is.EqualTo("memberAccess"));
+        Assert.That(target.Name, Is.EqualTo("Ping"));
+        for (int i = 0; i < count - 1; i++)
+        {
+            Assert.That(target.Target?.Kind, Is.EqualTo("invocation"));
+            target = target.Target!.Target!;
+            Assert.That(target.Kind, Is.EqualTo("memberAccess"));
+            Assert.That(target.Name, Is.EqualTo("Next"));
+        }
+        Assert.That(target.Target?.Kind, Is.EqualTo("identifier"));
+        Assert.That(target.Target?.Name, Is.EqualTo("value"));
+    }
+
     [Test]
     public void DeferredTypeNames_SeparateInvocationAndInferenceDemand_AndReuseEachPhase()
     {
