@@ -19,6 +19,15 @@ Invocation expressions expose their arguments through `Children`; unsupported fo
 `Kind == other`. `CallTarget` preserves the syntactic receiver even when semantic analysis
 resolves `TypeName` to its declaring type.
 
+Demanding `ReceiverType`, `ValueType`, or `ReferencedCallable` binds the demanded source
+file with Roslyn. Factory-inferred receivers, selected overloads, parameter/result types,
+and source declaration identity are available through the common model. Static type
+qualifications are not instance receivers; a derived receiver and a base declaration remain
+distinct. `ReferencedCallable` describes the compiler-selected declaration, not runtime
+virtual dispatch. Missing semantic context is reported on demand and unresolved facts stay
+absent. Syntax-only queries do not require a complete compilation. Only syntax is cached;
+semantic facts are rebound against current dependencies on each execution.
+
 Conditional access (`client?.Ping()`), direct generic calls, and nested object creation
 have independent call facts. Methods and nested types are matched by syntax position,
 not line number. Accessor/operator/local-function bodies, finally blocks, do loops,

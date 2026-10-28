@@ -93,6 +93,7 @@ public class CSharpSourceParser : ISourceParser
         {
             try { EnrichWithSemantics(tree, model, types, allStatements); }
             catch { /* graceful degradation — syntax data still valid */ }
+            DeferBoundFacts(tree, allStatements, () => model);
         }
 
         return new SourceFile(filePath, "csharp", types, allStatements, sourceText)
@@ -145,6 +146,7 @@ public class CSharpSourceParser : ISourceParser
     public static void DeferTypeNames(SyntaxTree tree, List<StatementInfo> statements,
         Func<SemanticModel> invocationModel, Func<SemanticModel> inferenceModel)
     {
+        DeferBoundFacts(tree, statements, inferenceModel);
         var invocations = new Lazy<bool>(() =>
         {
             EnrichWithSemantics(tree, invocationModel(), [], statements, typeNamesOnly: true,
@@ -163,6 +165,121 @@ public class CSharpSourceParser : ISourceParser
                 ? statement.Kind == "declaration" ? inferences : invocations
                 : null);
         }
+    }
+
+    private static void DeferBoundFacts(SyntaxTree tree, List<StatementInfo> statements,
+        Func<SemanticModel> getModel)
+    {
+        var binding = new Lazy<bool>(() =>
+        {
+            EnrichBoundFacts(tree, getModel(), statements);
+            return true;
+        });
+        foreach (var statement in statements)
+            statement.DeferSemanticAnalysis(binding);
+    }
+
+    private static void EnrichBoundFacts(SyntaxTree tree, SemanticModel model, List<StatementInfo> statements)
+    {
+        foreach (var diagnostic in model.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error))
+        {
+            var position = diagnostic.Location.GetLineSpan().StartLinePosition;
+            Cop.Core.ProviderErrors.Report(
+                $"{tree.FilePath}({position.Line + 1},{position.Character + 1}): " +
+                $"C# semantic context: {diagnostic.GetMessage()} ({diagnostic.Id})");
+        }
+
+        var byStart = statements.OfType<CSharpStatementInfo>().GroupBy(s => s.SyntaxStart)
+            .ToDictionary(g => g.Key, g => g.ToArray());
+        foreach (var node in tree.GetRoot().DescendantNodes())
+        {
+            if (!byStart.TryGetValue(node.SpanStart, out var matches)) continue;
+            var expression = node switch
+            {
+                VariableDeclaratorSyntax variable => variable.Initializer?.Value,
+                ReturnStatementSyntax returned => returned.Expression,
+                ExpressionSyntax value => value,
+                _ => null
+            };
+            if (expression is null) continue;
+
+            var resultType = BoundType(model.GetTypeInfo(expression).Type);
+            var callable = expression is InvocationExpressionSyntax or BaseObjectCreationExpressionSyntax
+                ? model.GetSymbolInfo(expression).Symbol as IMethodSymbol : null;
+            var receiver = expression switch
+            {
+                InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax member }
+                    when model.GetSymbolInfo(member.Expression).Symbol is not INamedTypeSymbol
+                    => model.GetTypeInfo(member.Expression).Type,
+                InvocationExpressionSyntax { Expression: MemberBindingExpressionSyntax }
+                    => model.GetTypeInfo(expression.Ancestors().OfType<ConditionalAccessExpressionSyntax>().First().Expression).Type,
+                InvocationExpressionSyntax invocation when callable?.MethodKind == MethodKind.DelegateInvoke
+                    => model.GetTypeInfo(invocation.Expression).Type,
+                InvocationExpressionSyntax when callable is { IsStatic: false, MethodKind: MethodKind.Ordinary }
+                    => model.GetEnclosingSymbol(expression.SpanStart)?.ContainingType,
+                _ => null
+            };
+            var selected = callable is null || callable.ContainingType?.TypeKind == Microsoft.CodeAnalysis.TypeKind.Error
+                ? null : BoundCallable(callable);
+            var end = node.GetLocation().GetLineSpan().EndLinePosition;
+            foreach (var statement in matches)
+            {
+                if (statement.EndLine != end.Line + 1 || statement.EndColumn != end.Character + 1) continue;
+                statement.ValueType = resultType;
+                if (node is InvocationExpressionSyntax or BaseObjectCreationExpressionSyntax)
+                {
+                    statement.ReceiverType = BoundType(receiver);
+                    statement.ReferencedCallable = selected;
+                }
+            }
+        }
+    }
+
+    private static TypeReference? BoundType(ITypeSymbol? symbol)
+    {
+        if (symbol is null || symbol.TypeKind is Microsoft.CodeAnalysis.TypeKind.Error or Microsoft.CodeAnalysis.TypeKind.Dynamic)
+            return null;
+        if (symbol is IArrayTypeSymbol array)
+            return BoundType(array.ElementType) is { } element
+                ? element with { OriginalText = symbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat) } : null;
+        if (symbol is IPointerTypeSymbol pointer)
+            return BoundType(pointer.PointedAtType) is { } element
+                ? element with { OriginalText = symbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat) } : null;
+        var ns = symbol.ContainingNamespace is { IsGlobalNamespace: false } containingNamespace
+            ? containingNamespace.ToDisplayString() : null;
+        var arguments = new List<TypeReference>();
+        if (symbol is INamedTypeSymbol named)
+            foreach (var argument in named.TypeArguments)
+            {
+                if (BoundType(argument) is not { } bound) return null;
+                arguments.Add(bound);
+            }
+        return new TypeReference(symbol.Name, ns, arguments,
+            symbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat));
+    }
+
+    private static CallableReference? BoundCallable(IMethodSymbol symbol)
+    {
+        var parameters = new List<TypeReference>();
+        foreach (var parameter in symbol.Parameters)
+        {
+            if (BoundType(parameter.Type) is not { } bound) return null;
+            parameters.Add(bound);
+        }
+        var location = symbol.Locations.FirstOrDefault(l => l.IsInSource);
+        var span = location?.GetLineSpan();
+        return new CallableReference(symbol.Name, symbol.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat))
+        {
+            DeclaringType = symbol.ContainingType?.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat),
+            Namespace = symbol.ContainingNamespace is { IsGlobalNamespace: false } ns ? ns.ToDisplayString() : null,
+            ReturnType = BoundType(symbol.ReturnType),
+            Parameters = parameters,
+            SourceFile = span?.Path,
+            Line = span?.StartLinePosition.Line + 1,
+            Column = span?.StartLinePosition.Character + 1,
+            EndLine = span?.EndLinePosition.Line + 1,
+            EndColumn = span?.EndLinePosition.Character + 1
+        };
     }
 
     private static void EnrichWithSemantics(SyntaxTree tree, SemanticModel model,
