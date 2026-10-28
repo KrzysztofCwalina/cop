@@ -717,10 +717,10 @@ command main = print('done')
         var dir = TestContext.CurrentContext.TestDirectory;
         while (dir is not null)
         {
-            if (Directory.Exists(Path.Combine(dir, ".git")))
+            if (File.Exists(Path.Combine(dir, "cop.sln")))
                 return dir;
             dir = Path.GetDirectoryName(dir);
         }
-        return TestContext.CurrentContext.TestDirectory;
+        throw new DirectoryNotFoundException("Could not locate cop.sln above the test output directory.");
     }
 }
