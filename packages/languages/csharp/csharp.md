@@ -28,6 +28,12 @@ virtual dispatch. Missing semantic context is reported on demand and unresolved 
 absent. Syntax-only queries do not require a complete compilation. Only syntax is cached;
 semantic facts are rebound against current dependencies on each execution.
 
+The provider bundles the .NET 10 reference metadata selected by the SDK when Cop is built.
+Roslyn source binding and read-only assembly API inspection use the same bundled contracts,
+including in a self-contained, single-file deployment. No installed .NET SDK/runtime,
+adjacent framework DLLs, runtime downloads, or execution of the analyzed code is required.
+Assembly inspection still resolves non-framework dependencies beside the inspected library.
+
 Conditional access (`client?.Ping()`), direct generic calls, and nested object creation
 have independent call facts. Methods and nested types are matched by syntax position,
 not line number. Accessor/operator/local-function bodies, finally blocks, do loops,

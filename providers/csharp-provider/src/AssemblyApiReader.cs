@@ -21,8 +21,8 @@ public static class AssemblyApiReader
         if (!File.Exists(dllPath))
             throw new FileNotFoundException($"Assembly not found: {dllPath}");
 
-        var resolver = CreateResolver(dllPath);
-        using var mlc = new MetadataLoadContext(resolver);
+        var resolver = FrameworkMetadata.CreateAssemblyResolver(dllPath);
+        using var mlc = new MetadataLoadContext(resolver, coreAssemblyName: "System.Runtime");
         var assembly = mlc.LoadFromAssemblyPath(dllPath);
 
         var types = new List<TypeDeclaration>();
@@ -43,20 +43,6 @@ public static class AssemblyApiReader
             Statements: [],
             RawText: "")
         { Namespace = fileNamespace };
-    }
-
-    private static PathAssemblyResolver CreateResolver(string dllPath)
-    {
-        var directory = Path.GetDirectoryName(dllPath)!;
-        var runtimeDir = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
-
-        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var f in Directory.GetFiles(directory, "*.dll"))
-            paths.Add(f);
-        foreach (var f in Directory.GetFiles(runtimeDir, "*.dll"))
-            paths.Add(f);
-
-        return new PathAssemblyResolver(paths);
     }
 
     private static TypeDeclaration ConvertType(Type type, MetadataLoadContext mlc)

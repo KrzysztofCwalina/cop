@@ -336,25 +336,9 @@ public class CSharpProvider : DataProvider
 
     private static List<MetadataReference> GetReferences(string rootPath)
     {
-        var references = new List<MetadataReference>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        // Framework references — load all DLLs from the runtime directory
-        var runtimeDir = System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory();
-        if (Directory.Exists(runtimeDir))
-        {
-            foreach (var dll in Directory.EnumerateFiles(runtimeDir, "*.dll"))
-            {
-                if (seen.Add(Path.GetFileName(dll)))
-                {
-                    try { references.Add(MetadataReference.CreateFromFile(dll)); }
-                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or BadImageFormatException)
-                    {
-                        ProviderWarnings.ReportOnce("csharp", dll, $"Cannot load metadata reference '{dll}': {ex.Message}");
-                    }
-                }
-            }
-        }
+        var references = FrameworkMetadata.CompilationReferences.Cast<MetadataReference>().ToList();
+        var seen = references.Select(reference => Path.GetFileName(reference.Display!))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         // Project dependency references — resolve from project.assets.json
         try
