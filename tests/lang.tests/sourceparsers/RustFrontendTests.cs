@@ -57,6 +57,44 @@ public class RustFrontendTests
         file.Statements.Single(s => s.MemberName == name).ReferencedCallable!;
 
     [Test]
+    public void MaintainedAst_DeclarationSpansExcludeDocumentationAndRetainAttributes()
+    {
+        string path = Write("src/lib.rs", """
+            /// Type docs.
+            pub struct Alpha;
+            impl Alpha {
+                /// Call docs.
+                #[inline]
+                pub fn get(&self, value: u32) -> u32 { value }
+            }
+            /// Run docs.
+            pub fn run() { Alpha.get(1); }
+            """);
+        using var scope = new ToolchainExecutionScope();
+        var file = Parse(path);
+        Assert.That(file.ParseErrors, Is.Empty);
+        var type = file.Types.Single(t => t.Name == "Alpha");
+        var method = type.Methods.Single(m => m.Name == "get");
+        var run = file.Types.SelectMany(t => t.Methods).Single(m => m.Name == "run");
+        Assert.Multiple(() =>
+        {
+            Assert.That((type.Line, type.Column), Is.EqualTo((2, 1)));
+            Assert.That(type.HasDocComment, Is.True);
+            Assert.That(type.DocComment, Does.Contain("Type docs."));
+            Assert.That((method.Line, method.Column, method.EndLine), Is.EqualTo((5, 5, 6)));
+            Assert.That(method.Decorators, Is.EqualTo(new[] { "#[inline]" }));
+            Assert.That(method.HasDocComment, Is.True);
+            Assert.That(method.DocComment, Does.Contain("Call docs."));
+            Assert.That((run.Line, run.Column), Is.EqualTo((9, 1)));
+            Assert.That(run.HasDocComment, Is.True);
+        });
+        var callable = Bound(file, "get");
+        Assert.That(callable, Is.Not.Null);
+        Assert.That((callable.Line, callable.Column, callable.EndLine), Is.EqualTo((5, 5, 6)));
+        Assert.That(callable.Signature, Is.EqualTo("pub fn get(&self, value: u32) -> u32"));
+    }
+
+    [Test]
     public void MaintainedAstAndHir_BindAliasesFactoriesTraitMethodsAndGenericSignaturesAcrossFiles()
     {
         Write("Cargo.toml", "[package]\nname='app'\nversion='1.0.0'\nedition='2024'");

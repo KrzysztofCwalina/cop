@@ -225,13 +225,13 @@ impl Workspace {
                     if let Some(file_id) = source.file_id.file_id() {
                         if let Some(file) = self.files.get(file_id.file_id(&self.db).index() as usize) {
                             source_path = Some(file.path.clone());
-                            let (line, column) = position(&file.text, source.value.syntax().text_range().start().into());
+                            let (line, column) = position(&file.text, source_start(source.value.syntax()) as usize);
                             let (end_line, end_column) = position(&file.text, source.value.syntax().text_range().end().into());
                             declaration_span = Some(json!({"line":line,"column":column,"end_line":end_line,"end_column":end_column}));
                         }
                     }
                     let syntax = source.value.syntax();
-                    start = Some(u32::from(syntax.text_range().start()));
+                    start = Some(source_start(syntax));
                     end = Some(u32::from(syntax.text_range().end()));
                     let header_end = source.value.body().map(|b| b.syntax().text_range().start())
                         .unwrap_or(syntax.text_range().end());
@@ -282,6 +282,13 @@ fn position(text: &str, offset: usize) -> (usize, usize) {
     (line, column)
 }
 
+fn source_start(node: &SyntaxNode) -> u32 {
+    node.children_with_tokens()
+        .find(|part| !part.kind().is_trivia() && part.kind() != SyntaxKind::DOC_COMMENT)
+        .map(|part| u32::from(part.text_range().start()))
+        .unwrap_or_else(|| u32::from(node.text_range().start()))
+}
+
 fn syntax(text: &str) -> Value {
     let parsed = ast::SourceFile::parse(text, Edition::CURRENT);
     let root = parsed.tree().syntax().clone();
@@ -298,7 +305,7 @@ fn syntax(text: &str) -> Value {
             .map(|token| token.text().to_owned())
             .collect::<Vec<_>>();
         nodes.push(
-            json!({"kind":format!("{:?}",node.kind()),"start":u32::from(node.text_range().start()),
+            json!({"kind":format!("{:?}",node.kind()),"start":source_start(&node),
             "end":u32::from(node.text_range().end()),"parent":parent,"tokens":tokens}),
         );
     }

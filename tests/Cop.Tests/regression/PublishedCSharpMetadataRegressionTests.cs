@@ -63,7 +63,8 @@ public class PublishedCSharpMetadataRegressionTests
             {
                 var start = new ProcessStartInfo(executable)
                 {
-                    WorkingDirectory = root,
+                    // Discover the checkout's packages without depending on a warm global cache or issue #85.
+                    WorkingDirectory = repository,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,

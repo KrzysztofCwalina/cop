@@ -24,6 +24,19 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install pinned TypeScript compiler
+        shell: pwsh
+        run: |
+          npm install --global typescript@6.0.3
+          if ($LASTEXITCODE -ne 0) { throw 'TypeScript compiler installation failed.' }
+          tsc --version
+          if ($LASTEXITCODE -ne 0) { throw 'TypeScript compiler is not available on PATH.' }
+
       - name: Setup pinned Rust build toolchain
         shell: pwsh
         run: |
@@ -77,6 +90,19 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install pinned TypeScript compiler
+        shell: pwsh
+        run: |
+          npm install --global typescript@6.0.3
+          if ($LASTEXITCODE -ne 0) { throw 'TypeScript compiler installation failed.' }
+          tsc --version
+          if ($LASTEXITCODE -ne 0) { throw 'TypeScript compiler is not available on PATH.' }
 
       - name: Setup pinned Rust build toolchain
         shell: pwsh

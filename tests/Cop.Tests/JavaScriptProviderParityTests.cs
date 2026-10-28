@@ -133,7 +133,7 @@ public class JavaScriptProviderParityTests
                     $"{type}|string|{type}|(value: number): string|number",
                     "Other|boolean|Other|(value: string): boolean|string",
                     "true", "true"
-                }));
+                }), string.Join("; ", result.Warnings ?? []));
             }
         }
     }

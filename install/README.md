@@ -63,6 +63,10 @@ Rust, plus a scalar-receiver call in Cop source, on repeated executions. The pub
 gate runs every provider from a copy of the executable alone, proving that framework
 metadata and the embedded native payload do not depend on build-output sidecars.
 
+CI provisions Node.js and a pinned TypeScript compiler before publishing and testing,
+so JavaScript semantic regressions exercise the compiler rather than the structural
+fallback. The compiler remains optional for end-user structural analysis.
+
 A failed build or smoke test stops publishing before archive creation or PATH updates.
 `-SkipBuild` also runs this gate for the host runtime. Cross-platform archives still
 need functional testing on their target OS; generating or checking archive metadata
