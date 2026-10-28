@@ -65,6 +65,29 @@ public class ProviderWorkDeferralIntegrationTests
     }
 
     [Test]
+    public void PublishedCli_CSharpSyntaxTypeNames_DoNotReadSemanticDependencies()
+    {
+        File.WriteAllText(Path.Combine(SourceRoot, "a.cs"),
+            "class Alpha { void Run() { int count = 1; var client = new Beta(); } }");
+        var later = Path.Combine(SourceRoot, "b.cs");
+        File.WriteAllText(later, "class Beta {}");
+        WriteScript("""
+            import code
+            import csharp
+            let cb = csharp.parse('src')
+            command MAIN = print(cb.Statements.Where(item.MemberName == 'count').First.TypeName) &
+                print(cb.Calls.First.TypeName)
+            """);
+        using var locked = new FileStream(later, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        var result = Run("MAIN");
+        Assert.That(result.ExitCode, Is.EqualTo(0), result.Stderr);
+        Assert.That(result.Stdout.Trim().Replace("\r", ""), Is.EqualTo("int\nBeta"));
+        Assert.That(ModelCount(result.Stderr), Is.EqualTo(1));
+        Assert.That(result.Stderr, Does.Not.Contain("[provider-semantics]"));
+        Assert.That(result.Stderr, Does.Not.Contain("b.cs"));
+    }
+
+    [Test]
     public void PublishedCli_CSharpSemanticDemand_ParsesDependenciesWithoutExtractingTheirModels()
     {
         File.WriteAllText(Path.Combine(SourceRoot, "a.cs"), "public class Alpha : Base {}");

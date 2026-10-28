@@ -1,4 +1,6 @@
 using Cop.Providers.SourceParsers;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using NUnit.Framework;
 
 namespace Cop.Tests.Lang.SourceParsers;
@@ -7,6 +9,74 @@ namespace Cop.Tests.Lang.SourceParsers;
 public class CSharpSourceParserTests
 {
     private readonly CSharpSourceParser _parser = new();
+
+    [Test]
+    public void DeferredTypeNames_SeparateInvocationAndInferenceDemand_AndReuseEachPhase()
+    {
+        const string source = """
+            class Client {
+                public Client Next() => this;
+                public System.Threading.Tasks.Task Ping() => System.Threading.Tasks.Task.CompletedTask;
+            }
+            class Example {
+                async System.Threading.Tasks.Task Run() {
+                    var first = new Client();
+                    var second = new Client();
+                    first.Next();
+                    second.Next();
+                    await first.Ping();
+                }
+            }
+            """;
+        var tree = CSharpSyntaxTree.ParseText(source);
+        var compilation = CSharpCompilation.Create("Demand", [tree],
+            [MetadataReference.CreateFromFile(typeof(object).Assembly.Location)],
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        var model = compilation.GetSemanticModel(tree);
+        var file = _parser.ParseWithSemantics("Input.cs", source, tree, null)!;
+        int invocations = 0, inferences = 0;
+        CSharpSourceParser.DeferTypeNames(tree, file.Statements,
+            () => { invocations++; return model; }, () => { inferences++; return model; });
+        Assert.That((invocations, inferences), Is.EqualTo((0, 0)));
+        var next = file.Statements.Where(s => s.MemberName == "Next").ToArray();
+        Assert.That(next.Select(s => s.Line), Is.EqualTo(new[] { 9, 10 }));
+        Assert.That(next[0].TypeName, Is.EqualTo("Client"));
+        Assert.That(next[0].TypeName, Is.EqualTo("Client"));
+        Assert.That((invocations, inferences), Is.EqualTo((1, 0)));
+        Assert.That(file.Statements.Single(s => s.MemberName == "second").TypeName, Is.EqualTo("Client"));
+        Assert.That((invocations, inferences), Is.EqualTo((1, 1)));
+        var awaited = file.Statements.Where(s => s.MemberName == "Ping").ToArray();
+        Assert.That(awaited.Select(s => s.Kind), Is.EquivalentTo(new[] { "await", "call" }));
+        Assert.That(awaited.Select(s => s.TypeName), Is.EqualTo(new[] { "Client", "Client" }));
+        Assert.That((invocations, inferences), Is.EqualTo((1, 1)));
+        Assert.That(next[1].TypeName, Is.EqualTo("Client"));
+        Assert.That((invocations, inferences), Is.EqualTo((1, 1)));
+    }
+
+    [Test]
+    public void Parse_PrunedDeclarationWalk_PreservesNestedTypesAndPhysicalLineNumbers()
+    {
+        var file = _parser.Parse("Input.cs", """
+            namespace Outer {
+            #line 100 "Mapped.cs"
+                class Alpha {
+                    class Nested { void Run() { Ping(); } }
+                    enum State { Ready, Done }
+                    void Ping() {}
+                }
+            }
+            namespace Another {
+                struct Beta {}
+            }
+            """)!;
+        Assert.That(file.ParseErrors, Is.Empty);
+        Assert.That(file.Namespace, Is.EqualTo("Outer"));
+        Assert.That(file.Types.Select(t => (t.Name, t.Line)), Is.EqualTo(new[] { ("Alpha", 3), ("Beta", 10) }));
+        Assert.That(file.Types[0].NestedTypes.Select(t => (t.Name, t.Line)),
+            Is.EqualTo(new[] { ("Nested", 4), ("State", 5) }));
+        Assert.That(file.Types[0].NestedTypes[0].Methods.Single().Line, Is.EqualTo(4));
+        Assert.That(file.Statements.Single(s => s.Kind == "call").Line, Is.EqualTo(4));
+    }
 
     [Test]
     public void Parse_CombinedTriviaPass_PreservesCommentsRegionsAndActiveDirectives()

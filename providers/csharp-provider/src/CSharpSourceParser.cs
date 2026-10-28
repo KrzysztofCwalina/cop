@@ -36,7 +36,8 @@ public class CSharpSourceParser : ISourceParser
 
         // Single-pass: extract namespace and top-level types in one traversal
         string? ns = null;
-        foreach (var node in root.DescendantNodes())
+        foreach (var node in root.DescendantNodes(node =>
+                     node is not BaseTypeDeclarationSyntax && node is not GlobalStatementSyntax))
         {
             switch (node)
             {
@@ -135,9 +136,32 @@ public class CSharpSourceParser : ISourceParser
         SemanticModel inferenceModel, List<StatementInfo> statements)
         => EnrichWithSemantics(tree, invocationModel, [], statements, typeNamesOnly: true, inferenceModel);
 
+    public static void DeferTypeNames(SyntaxTree tree, List<StatementInfo> statements,
+        Func<SemanticModel> invocationModel, Func<SemanticModel> inferenceModel)
+    {
+        var invocations = new Lazy<bool>(() =>
+        {
+            EnrichWithSemantics(tree, invocationModel(), [], statements, typeNamesOnly: true,
+                resolveInferences: false);
+            return true;
+        });
+        var inferences = new Lazy<bool>(() =>
+        {
+            EnrichWithSemantics(tree, inferenceModel(), [], statements, typeNamesOnly: true,
+                resolveInvocations: false);
+            return true;
+        });
+        foreach (var statement in statements)
+        {
+            statement.DeferTypeNameAnalysis(statement is CSharpStatementInfo { RequiresTypeNameAnalysis: true }
+                ? statement.Kind == "declaration" ? inferences : invocations
+                : null);
+        }
+    }
+
     private static void EnrichWithSemantics(SyntaxTree tree, SemanticModel model,
         List<TypeDeclaration> types, List<StatementInfo> allStatements, bool typeNamesOnly,
-        SemanticModel? inferenceModel = null)
+        SemanticModel? inferenceModel = null, bool resolveInvocations = true, bool resolveInferences = true)
     {
         var root = tree.GetCompilationUnitRoot();
 
@@ -150,7 +174,7 @@ public class CSharpSourceParser : ISourceParser
         foreach (var node in typeNamesOnly ? Enumerable.Empty<TypeDeclarationSyntax>()
                      : root.DescendantNodes().OfType<TypeDeclarationSyntax>())
         {
-            var line = node.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+            var line = LineOf(node);
             if (typesByLine.TryGetValue(line, out var typeDecl))
             {
                 try
@@ -184,7 +208,7 @@ public class CSharpSourceParser : ISourceParser
             if (node is ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax)
             {
                 if (typeNamesOnly) continue;
-                var line = node.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+                var line = LineOf(node);
                 if (stmtsByLine.TryGetValue(line, out var stmts))
                 {
                     try
@@ -211,9 +235,9 @@ public class CSharpSourceParser : ISourceParser
                 }
             }
             // Resolve method call type names from semantic model
-            else if (node is InvocationExpressionSyntax invocation)
+            else if (resolveInvocations && node is InvocationExpressionSyntax invocation)
             {
-                var line = node.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+                var line = LineOf(node);
                 if (stmtsByLine.TryGetValue(line, out var stmts))
                 {
                     try
@@ -241,9 +265,9 @@ public class CSharpSourceParser : ISourceParser
             }
             // Resolve the inferred type for `var` declarations, so `var` is never a TypeName.
             // The `var` keyword stays in Keywords; TypeName becomes the actual inferred type.
-            else if (node is LocalDeclarationStatementSyntax varDecl && varDecl.Declaration.Type.IsVar)
+            else if (resolveInferences && node is LocalDeclarationStatementSyntax varDecl && varDecl.Declaration.Type.IsVar)
             {
-                var line = node.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+                var line = LineOf(node);
                 if (stmtsByLine.TryGetValue(line, out var stmts))
                 {
                     try
@@ -565,6 +589,7 @@ public class CSharpSourceParser : ISourceParser
                     var declStmt = new CSharpStatementInfo("declaration", keywords, typeName, v.Identifier.Text, [], line, isInMethod)
                     {
                         Method = method, Parent = parent,
+                        RequiresTypeNameAnalysis = isVar,
                         Expression = v.Initializer?.Value.ToString()
                     };
                     results.Add(declStmt);
@@ -790,6 +815,7 @@ public class CSharpSourceParser : ISourceParser
                 {
                     Method = method, Parent = parent,
                     SyntaxStart = invocation.SpanStart,
+                    RequiresTypeNameAnalysis = true,
                     CallTarget = ExtractExpression(invocation.Expression),
                     ArgumentExpressions = invocation.ArgumentList.Arguments.Select(a => ExtractExpression(a.Expression)).ToList(),
                     Expression = invocation.ToString()
@@ -804,6 +830,7 @@ public class CSharpSourceParser : ISourceParser
                 {
                     Method = method, Parent = parent,
                     SyntaxStart = awaitExpr.Expression.SpanStart,
+                    RequiresTypeNameAnalysis = awaitExpr.Expression is InvocationExpressionSyntax,
                     Expression = awaitExpr.Expression.ToString()
                 };
                 results.Add(awaitInfo);
@@ -881,6 +908,7 @@ public class CSharpSourceParser : ISourceParser
                 invocation.ArgumentList.Arguments.Select(a => a.ToString()).ToList(), LineOf(invocation), method is not null)
             {
                 SyntaxStart = invocation.SpanStart,
+                RequiresTypeNameAnalysis = true,
                 CallTarget = target,
                 ArgumentExpressions = invocation.ArgumentList.Arguments.Select(a => ExtractExpression(a.Expression)).ToList(),
                 Method = method, Parent = parent, Expression = invocation.ToString()
@@ -915,10 +943,10 @@ public class CSharpSourceParser : ISourceParser
     }
 
     private static int LineOf(SyntaxNode node) =>
-        node.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+        node.SyntaxTree.GetText().Lines.GetLinePosition(node.SpanStart).Line + 1;
 
     private static int LineOf(SyntaxNodeOrToken node) =>
-        node.GetLocation()!.GetLineSpan().StartLinePosition.Line + 1;
+        node.SyntaxTree!.GetText().Lines.GetLinePosition(node.SpanStart).Line + 1;
 
     private static bool HasDocComment(SyntaxNode node) =>
         node.GetLeadingTrivia().Any(t => t.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia)

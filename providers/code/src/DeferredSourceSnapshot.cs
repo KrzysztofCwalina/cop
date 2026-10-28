@@ -14,6 +14,7 @@ public sealed class DeferredSourceSnapshot
     private readonly Lazy<List<ProjectInfo>>? _projects;
     private readonly Lazy<List<(string Name, string Directory)>>? _projectDirectories;
     private readonly DeferredSourceCache? _cache;
+    private readonly Dictionary<(string Path, string Collection), List<object>> _collections = new();
 
     public IReadOnlyList<string> Paths => _paths.Value;
 
@@ -125,7 +126,7 @@ public sealed class DeferredSourceSnapshot
             if (filter is not null && itemTypes.TryGetValue(name, out var type)
                 && accessors.TryGetValue(type, out var fields))
                 predicate = Cop.Lang.FilterCompiler.Compile(filter, fields);
-            collections[name] = Enumerate(extractor, predicate);
+            collections[name] = Enumerate(name, extractor, predicate);
         }
         if (_projects is not null && (query.Collection is null or "Projects"))
         {
@@ -136,13 +137,30 @@ public sealed class DeferredSourceSnapshot
         return new(collections);
     }
 
-    private IEnumerable<object> Enumerate(Func<object, List<object>> extract, Func<object, bool>? predicate)
+    private IEnumerable<object> Enumerate(string collection, Func<object, List<object>> extract, Func<object, bool>? predicate)
     {
         foreach (var path in Paths)
         {
             var file = ReadFile(path);
             if (file is null) continue;
-            foreach (var item in extract(file))
+            IEnumerable<object> items;
+            if (collection == "Types")
+                items = file.Types;
+            else if (collection == "Statements")
+                items = file.Statements;
+            else if (collection == "Calls")
+                items = file.Statements.Where(static statement => statement.Kind == "call");
+            else
+            {
+                var key = (path, collection);
+                if (!_collections.TryGetValue(key, out var projected))
+                {
+                    projected = extract(file);
+                    _collections.Add(key, projected);
+                }
+                items = projected;
+            }
+            foreach (var item in items)
                 if (predicate is null || predicate(item))
                     yield return item;
         }
