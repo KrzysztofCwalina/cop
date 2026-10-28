@@ -19,26 +19,84 @@ cop --version
 
 ---
 
-### Rust analysis and the installed toolchain
+### Rust syntax and semantic analysis
 
-Rust currently uses Cop's **built-in syntax analyzer**, whether or not `rustc`, Cargo,
-or rust-analyzer is installed. There is no external Rust helper to configure. Installing
-a compiler does not silently enable a different analysis backend: stable `rustc` has no
-supported portable parse-only AST/semantic export used by this provider, and Cop does
-not currently integrate rust-analyzer.
+Cop supports a **pinned rust-analyzer frontend** (`ra_ap_*` 0.0.358), bundled with
+standard-library sources in the self-contained Cop executable. It does not depend on
+the optional `rust-analyzer` rustup component. On first Rust source demand, Cop extracts
+the helper/sources/notices to a content-addressed user cache, validates their integrity,
+and reuses them. It does not write into the analyzed project. Adjacent helper/bundle
+discovery also supports development builds; a source checkout does not build it automatically.
 
-Cop emits an explicit **yellow syntax-only capability warning** when Rust analysis is
-used. This is not a claim that Rust is missing from your machine. The analyzer provides
-structural declarations, signatures, imports, spans, and nested call/control relationships,
-but does not perform macro expansion, name/type resolution, trait solving, or `cfg`
-evaluation. Cross-file implementation ownership that cannot be established reliably
-is left unresolved, not guessed.
+The maintained AST supplies declarations, signatures, imports, generic parameters,
+source spans, decoded literal arguments, and nested call/control relationships.
+Requesting `Statement.ReceiverType`, `Statement.ValueType`, or
+`Statement.ReferencedCallable` additionally runs rust-analyzer's name resolution and
+type inference. This resolves module/import aliases, inferred factory/variable receivers,
+and static trait/impl method selections across local files. `ReferencedCallable` identifies
+the selected declaration, **not a promise about runtime dynamic dispatch**. Its signature
+preserves declaration generics; inferred result and receiver types are separate facts.
+Unknown required parameter types leave the whole callable reference null, rather than
+silently dropping parameters.
 
-Cop does not run Cargo, build scripts, procedural macros, or the analyzed application,
-and does not download components or require nightly Rust. The warning remains visible
-on later executions, including cached analysis, and becomes plain text when redirected
-or with `--no-color`. Source parse failures are reported as errors rather than an empty,
-successful model.
+The frontend reads Cargo manifests and lockfiles directly. It supports path dependencies,
+renamed dependencies, workspace inheritance, default features, target dependencies using
+`rustc --print cfg`, and pinned registry/Git dependency sources already in Cargo's local
+cache. Ambiguous source identities are errors, not guessed resolutions. Each semantic demand
+snapshots source files and crate/features context; edits rebuild the execution-scoped
+database. Structural FIRST/TAKE queries do not load a semantic project. Rich-mode syntax
+disk caching is currently disabled so dependency-bound callbacks cannot be lost or stale.
+
+**Source compatibility is explicit.** Matching rust-src under the installed compiler's
+sysroot is preferred; otherwise the shipped sources require an exact compiler release
+and commit match. The current source pin is Rust 1.99.1, commit
+`58cf8f9c35b355199727627d07ae34a4e2846d67`. A mismatch warns and leaves unavailable
+standard-library bindings unknown rather than substituting another version.
+The source-only sysroot graph supplies core/alloc/std/prelude inference, including
+generic standard-library receivers. External sysroot implementation dependencies and
+platform/generated internals can still be unresolved without their build context.
+
+**Partial context is explicit.**
+Custom Cargo target/rustflags configurations are not assumed to be host defaults; semantic
+binding is withheld with a warning. Build-script cfg/environment, generated source, and
+procedural macros are unavailable. This is not full `cargo check` equivalence.
+
+If the helper is not deployed, Cop prints a **yellow fallback warning** and uses its
+built-in structural analyzer; this is not a claim that `rustc` is absent. A configured
+helper that fails, incompatible protocols, and source parse failures are errors rather
+than silent fallback. Warnings are plain text when redirected or with `--no-color`.
+Neither backend runs Cargo, analyzed applications, build scripts, procedural macros,
+compiler plugins, or generators; runtime analysis never downloads dependencies/components.
+
+### Building the frontend for distribution
+
+Release builders need a Rust compiler/Cargo and the target platform's linker/toolchain.
+The lockfile pins every dependency. From the repository root, for example:
+
+```powershell
+providers\rust-provider\native\build.ps1 -Runtime win-x64 -OutputDirectory artifacts\rust-win-x64
+```
+
+Prepare the pinned official source archive separately in the same payload directory:
+
+```powershell
+providers\rust-provider\native\prepare-stdlib.ps1 -ArchivePath rust-src-1.99.1.tar.xz -OutputDirectory artifacts\rust-win-x64
+```
+
+`native/stdlib.json` records its immutable URL, SHA256, release, and compiler commit;
+preparation verifies both archive hash and component identity. Downloading this build
+input happens in release CI, never during analysis. `-Offline` requires build dependencies
+already restored. Supported release IDs are `win-x64`,
+`win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64`, and `osx-arm64`; cross targets must be
+provisioned in release CI, not installed on users' machines. Windows builds statically
+link the C runtime. Linux GNU builds must use the release's minimum-supported glibc
+baseline. Package the helper, **`rust-frontend-licenses/`, and `rust-stdlib/`** together;
+the build script collects every locked dependency's license metadata and license/notice texts,
+including pinned upstream notices omitted from published crates. Missing attribution fails
+the build. The payload ZIP is embedded as `Cop.RustFrontend.Bundle.zip` by release publishing.
+rust-analyzer is MIT OR Apache-2.0; transitive dependencies require their own notices.
+The official source component's licenses, copyright inventory, and nested notices are
+preserved alongside its source.
 
 ---
 

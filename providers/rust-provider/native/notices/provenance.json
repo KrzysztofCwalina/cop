@@ -1,0 +1,8 @@
+[
+  { "directory": "rust-analyzer", "repository": "https://github.com/rust-lang/rust-analyzer", "revision": "2ad81e72b7e978cb800dffe1bcce5c9f98032acf" },
+  { "directory": "line-index", "repository": "https://github.com/rust-lang/rust-analyzer", "revision": "3bda0cc2c07f6330b543be2c12c5e156847ba94e" },
+  { "directory": "rust", "repository": "https://github.com/rust-lang/rust", "revision": "58cf8f9c35b355199727627d07ae34a4e2846d67" },
+  { "directory": "perf-event", "repository": "https://github.com/jimblandy/perf-event", "revision": "fdfcd6eab9de3e40b2ecbcc01a1be3b1bd15405b" },
+  { "directory": "perf-event-open-sys", "repository": "https://github.com/jimblandy/perf-event", "revision": "3aecf09156daa67b5579cc7742168cc95dcbe063" },
+  { "directory": "valuable", "repository": "https://github.com/tokio-rs/valuable", "revision": "9efc29b6e58cef28f6566a47aa7e142a55fead77" }
+]

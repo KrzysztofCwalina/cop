@@ -25,7 +25,7 @@ public class RustProvider : DataProvider
         RustMethodDeclaration.RegisterCacheFactory();
         RustStatementInfo.RegisterCacheFactory();
         var parsers = new SourceParserRegistry();
-        parsers.Register(new RustSourceParser());
+        parsers.Register(new RustSourceParser(projectRoot: query.RootPath));
         return CodeCollectionBuilder.CollectDeferred(parsers, query, this,
             () => RustProjectDiscovery.Discover(query.RootPath!, query.ExcludedDirectories));
     }
@@ -40,7 +40,7 @@ public class RustProvider : DataProvider
         RustStatementInfo.RegisterCacheFactory();
 
         var parsers = new SourceParserRegistry();
-        parsers.Register(new RustSourceParser());
+        parsers.Register(new RustSourceParser(projectRoot: query.RootPath));
         var collections = CodeCollectionBuilder.CollectAndParse(parsers, query, this);
 
         // Discover projects from Cargo.toml
@@ -54,9 +54,12 @@ public class RustProvider : DataProvider
         return ApplyQueryFilters(query, collections);
     }
 
-    private static void ReportAnalysisLimits(ProviderQuery query) =>
+    private static void ReportAnalysisLimits(ProviderQuery query)
+    {
+        if (RustFrontendBundle.IsAvailable) return;
         ProviderWarnings.ReportOnce("rust", query.RootPath ?? "",
             "Rust analysis is syntax-only: stable Rust tooling has no supported portable parse-only AST/semantic export. " +
             "Using the built-in structural parser; macro expansion, name/type resolution, and cfg evaluation are unavailable. " +
-            "No Cargo build, downloads, or target code execution are performed.");
+            "Cop's maintained Rust frontend is unavailable. No Cargo build, downloads, or target code execution are performed.");
+    }
 }

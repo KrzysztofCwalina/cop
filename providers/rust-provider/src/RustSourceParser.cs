@@ -4,11 +4,33 @@ namespace Cop.Providers.SourceParsers;
 
 public class RustSourceParser : ISourceParser
 {
+    private readonly Lazy<RustFrontend?> _frontend;
+    public RustSourceParser(string? frontendPath = null, string? projectRoot = null, string? standardLibraryDirectory = null,
+        Func<Stream?>? bundleFactory = null, string? cacheDirectory = null)
+    {
+        _frontend = new(() =>
+        {
+            string? executable = frontendPath ?? RustFrontendBundle.Find(bundleFactory, cacheDirectory);
+            return executable is not null ? new(executable, projectRoot ?? Directory.GetCurrentDirectory(), standardLibraryDirectory) : null;
+        });
+    }
+
     public override IReadOnlyList<string> Extensions => [".rs"];
     public override string Language => "rust";
+    public override bool CanCache(string filePath) => _frontend.Value is null;
+    public override string GetCacheIdentity(string filePath) =>
+        base.GetCacheIdentity(filePath) + ":" + (_frontend.Value?.Executable ?? "structural-fallback");
 
     public override SourceFile? Parse(string filePath, string sourceText)
     {
+        try
+        {
+            if (_frontend.Value is { } frontend) return frontend.Parse(filePath, sourceText);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            return new(filePath, "rust", [], [], sourceText) { ParseErrors = [$"{filePath}: error: {ex.Message}"] };
+        }
         var lexer = new RustLexer(sourceText);
         var tokens = lexer.Tokenize();
         var parser = new RustParser(tokens, sourceText, lexer.Errors);

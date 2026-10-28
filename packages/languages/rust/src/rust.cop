@@ -2,8 +2,9 @@
 import code
 
 ## Parses Rust source files in the target directory and returns a Codebase.
-## Structural syntax analysis only; reports a warning because portable stable Rust tooling
-## does not expose a supported parse-only AST/semantic export. Never builds or executes code.
+## Uses the pinned maintained Rust frontend when deployed beside Cop; otherwise warns
+## and falls back to structural syntax analysis. Semantic Statement fields are demand-driven.
+## Resolves local modules and dependencies already on disk; never builds or executes code.
 ## Example: let cb = rust.parse()
 export function parse() : Codebase => provider('rust')
 
