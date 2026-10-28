@@ -2,8 +2,11 @@
 # Builds for all supported platforms into install/<rid>/ subfolders
 # Creates zip archives with Unix executable permissions for Linux/macOS
 param(
+    [ValidateSet('win-x64', 'win-arm64', 'linux-x64', 'linux-arm64', 'osx-x64', 'osx-arm64')]
     [string[]]$Runtimes = @("win-x64", "win-arm64", "linux-x64", "linux-arm64", "osx-x64", "osx-arm64"),
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [string]$RustSourceArchive,
+    [switch]$RustOffline
 )
 
 Add-Type -AssemblyName System.IO.Compression
@@ -230,11 +233,15 @@ if (-not $SkipBuild) {
 foreach ($rid in $Runtimes) {
     $outDir = Join-Path $OutputBase $rid
     if (-not $SkipBuild) {
+        $rustBundle = & (Join-Path $PSScriptRoot 'prepare-rust-bundle.ps1') -Runtime $rid -RustSourceArchive $RustSourceArchive -Offline:$RustOffline
+        if (-not $rustBundle -or -not (Test-Path -LiteralPath $rustBundle -PathType Leaf)) {
+            throw "Rust frontend bundle preparation failed for $rid"
+        }
         if (Test-Path $outDir) { Remove-Item -Recurse -Force $outDir }
         New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 
         Write-Host "Publishing cop for $rid..."
-        dotnet publish "$RepoRoot\cop\cli\cop.csproj" -c Release -r $rid --self-contained -p:PublishReadyToRun=false -o $outDir
+        dotnet publish "$RepoRoot\cop\cli\cop.csproj" -c Release -r $rid --self-contained -p:PublishReadyToRun=false "-p:RustFrontendBundlePath=$rustBundle" -o $outDir
         if ($LASTEXITCODE -ne 0) { throw "cop publish failed for $rid" }
         
         # Clean up build artifacts
@@ -248,7 +255,7 @@ foreach ($rid in $Runtimes) {
     # Exercise the actual binary and provider contract before packaging or updating PATH.
     if ($rid -eq [System.Runtime.InteropServices.RuntimeInformation]::RuntimeIdentifier) {
         $exeName = if ($rid -like 'win-*') { 'cop.exe' } else { 'cop' }
-        & (Join-Path $PSScriptRoot 'provider-smoke.ps1') -Executable (Join-Path $outDir $exeName)
+        & (Join-Path $PSScriptRoot 'provider-smoke.ps1') -Executable (Join-Path $outDir $exeName) -RequireRustBundle
     }
 
     # Create zip archive

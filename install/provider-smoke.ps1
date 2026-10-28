@@ -1,7 +1,8 @@
 # Exercise the host executable and each shipped source provider before packaging.
 param(
     [Parameter(Mandatory = $true)]
-    [string]$Executable
+    [string]$Executable,
+    [switch]$RequireRustBundle
 )
 
 $ErrorActionPreference = 'Stop'
@@ -46,6 +47,52 @@ function Invoke-SmokeProcess([string[]]$Arguments) {
     finally { $process.Dispose() }
 }
 
+function Test-SemanticSmoke([string]$Language, [string]$Source, [string]$Extension, [string]$Member, [string]$ResultType) {
+    $target = Join-Path $smokeDir ("semantic-" + $Language)
+    New-Item -ItemType Directory -Path $target | Out-Null
+    Set-Content -LiteralPath (Join-Path $target ("sample" + $Extension)) -Encoding utf8 -Value $Source
+    if ($Language -eq 'rust') {
+        Set-Content -LiteralPath (Join-Path $target 'Cargo.toml') -Encoding utf8 -Value @'
+[package]
+name = "cop-publish-smoke"
+version = "0.1.0"
+edition = "2024"
+[lib]
+path = "sample.rs"
+'@
+    }
+    $programDir = Join-Path $smokeDir ("semantic-checks-" + $Language)
+    New-Item -ItemType Directory -Path $programDir | Out-Null
+    $program = Join-Path $programDir 'main.cop'
+    $feed = (Join-Path $RepoRoot 'packages').Replace('\', '/').Replace("'", "\'")
+    Set-Content -LiteralPath $program -Encoding utf8 -Value @"
+feed '$feed'
+import code
+import $Language
+let cb = $Language.parse()
+let calls = cb.Calls.Where(item.MemberName == '$Member')
+let resolved = calls.Where(
+    item.ReceiverType != nic && item.ValueType != nic && item.ReferencedCallable != nic
+    && item.ReceiverType.Name == 'Alpha' && item.ValueType.Name == '$ResultType'
+    && item.ReferencedCallable.Name == '$Member'
+    && item.ReferencedCallable.ReturnType.Name == '$ResultType'
+    && item.ReferencedCallable.SourceFile != nic)
+command MAIN = print('PUBLISH-SEMANTIC $Language {calls.Count} {resolved.Count}')
+"@
+    $verification = Invoke-SmokeProcess @('verify', $program)
+    if ($verification.ExitCode -ne 0) {
+        throw "$Language semantic smoke failed verification:`n$($verification.Stdout)`n$($verification.Stderr)"
+    }
+    foreach ($run in 1..2) {
+        $result = Invoke-SmokeProcess @($program, '-t', $target, '--no-color')
+        if ($result.ExitCode -ne 0 -or $result.Stdout.Trim() -ne "PUBLISH-SEMANTIC $Language 1 1") {
+            throw "$Language semantic smoke run $run failed (exit $($result.ExitCode)):`n$($result.Stdout)`n$($result.Stderr)"
+        }
+        if ($result.Stderr) { Write-Host $result.Stderr.TrimEnd() -ForegroundColor Yellow }
+    }
+    Write-Host "  Verified $Language receiver, result, selected declaration, and cold/warm semantic facts."
+}
+
 try {
     foreach ($fixture in $fixtures) {
         $language = $fixture.Language
@@ -84,6 +131,15 @@ command MAIN = print('PUBLISH-SMOKE $language {alpha.Count} {runs.Count} {calls.
             throw "$language malformed-source smoke was silent/successful (exit $($result.ExitCode)):`n$($result.Stdout)`n$($result.Stderr)"
         }
         Write-Host "  Verified $language declarations, methods, calls, cold/warm results, and visible malformed input."
+    }
+    Test-SemanticSmoke 'csharp' 'class Alpha { public int Get(int value) => value; } class Caller { void Run() { var a = new Alpha(); a.Get(1); } }' '.cs' 'Get' 'Int32'
+    if ($RequireRustBundle) {
+        $portableDir = Join-Path $smokeDir 'portable'
+        New-Item -ItemType Directory -Path $portableDir | Out-Null
+        $portableExe = Join-Path $portableDir ([System.IO.Path]::GetFileName($Executable))
+        Copy-Item -LiteralPath $Executable -Destination $portableExe
+        $Executable = $portableExe
+        Test-SemanticSmoke 'rust' 'pub struct Alpha; impl Alpha { pub fn get(&self, value: u32) -> u32 { value } } pub fn run() { let a = Alpha; a.get(1); }' '.rs' 'get' 'u32'
     }
 }
 finally {

@@ -39,6 +39,13 @@
     <EmbeddedResource Include="..\..\docs\language-reference.md" LogicalName="Cop.Cli.LanguageReference.md" />
     <EmbeddedResource Include="resources\init-instructions.md" LogicalName="Cop.Cli.InitInstructions.md" />
     <EmbeddedResource Include="..\..\packages\core\core\src\intrinsics.cop" LogicalName="Cop.Lang.Core.cop" />
+    <EmbeddedResource Include="$(RustFrontendBundlePath)" LogicalName="Cop.RustFrontend.Bundle.zip"
+                      Condition="'$(RustFrontendBundlePath)' != ''" />
   </ItemGroup>
+
+  <Target Name="RequireRustFrontendBundle" BeforeTargets="PrepareForPublish">
+    <Error Condition="'$(RustFrontendBundlePath)' == '' Or !Exists('$(RustFrontendBundlePath)')"
+           Text="Publishing requires a target-specific Rust frontend bundle. Use install\publish.ps1, or supply RustFrontendBundlePath from install\prepare-rust-bundle.ps1." />
+  </Target>
 
 </Project>

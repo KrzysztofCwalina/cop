@@ -29,12 +29,38 @@ To build for just your platform:
 install/publish.ps1 -Runtimes win-x64
 ```
 
+Publishing also builds the pinned Rust analysis helper and embeds it, its third-party
+licenses, and the checksum-verified Rust 1.99.1 standard-library sources inside `cop`.
+Building requires Cargo/Rust and the native linker and Rust target for each requested
+RID; cross-publishing .NET alone is not sufficient. Build each platform on a suitable
+host or provision its cross-toolchain first. The pinned source archive is downloaded
+at build time and cached under `install/native-bundles/inputs/`.
+
+To supply the official source archive locally and forbid Cargo network access:
+
+```powershell
+install/publish.ps1 -Runtimes win-x64 -RustSourceArchive C:\inputs\rust-src-1.99.1.tar.xz -RustOffline
+```
+
+Cargo dependencies must already be cached for `-RustOffline`; this option does not
+disable .NET restore. `install/prepare-rust-bundle.ps1 -Runtime win-x64` can prepare
+just the embedded payload. Direct `dotnet publish` of the CLI requires its returned
+ZIP path through `-p:RustFrontendBundlePath=...`; ordinary development builds do not.
+The installed executable lazily extracts its own versioned payload into Cop's user
+cache, without downloads, writes to the analyzed project, or a separate rust-analyzer
+installation. Matching installed Rust sources take precedence; bundled standard-library
+sources require an exactly compatible compiler release and commit. Incompatible
+context produces explicit diagnostics rather than guessed bindings.
+
 For the host's runtime identifier, publishing verifies and executes small C#, Python,
 JavaScript, Go, Java, Rust, and Cop analysis programs using the actual executable and
 freshly built provider DLLs. Each must retain exactly one known declaration, method,
 and call on both cold and warm runs. Malformed input must produce a visible diagnostic
 and a nonzero exit code. Missing optional toolchains may emit fallback warnings; they
 must not hide these baseline facts or turn malformed input into success.
+The gate also checks exact receiver, result, and selected-callable facts for C# and
+Rust on repeated executions. Rust runs from a copy of the executable alone, proving
+that a portable installation can obtain the embedded native payload without sidecars.
 
 A failed build or smoke test stops publishing before archive creation or PATH updates.
 `-SkipBuild` also runs this gate for the host runtime. Cross-platform archives still
