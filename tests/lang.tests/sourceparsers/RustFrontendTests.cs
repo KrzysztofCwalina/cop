@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using Cop.Core;
 using Cop.Providers;
 using Cop.Providers.SourceModel;
@@ -403,6 +404,62 @@ public class RustFrontendTests
             Assert.That(count.ReferencedCallable?.Signature, Is.EqualTo("pub const fn len(&self) -> usize"));
             Assert.That(count.ReferencedCallable?.SourceFile, Does.EndWith(Path.Combine("alloc", "src", "vec", "mod.rs")));
             Assert.That(file.Statements.Single(s => s.MemberName == "push").ReferencedCallable?.Name, Is.EqualTo("push"));
+        }
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
+    }
+
+    [Test]
+    public void Issue091_ArchiveSourcesRemainDeferredUntilRealSemanticDemand()
+    {
+        string sources = Path.Combine(Path.GetDirectoryName(_frontend)!, "rust-stdlib");
+        if (!File.Exists(Path.Combine(sources, "manifest.json")))
+            Assert.Ignore("Prepare the checksum-pinned standard library beside the test frontend with native/prepare-stdlib.ps1.");
+        using var buffer = new MemoryStream();
+        using (var zip = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            zip.CreateEntryFromFile(_frontend, Path.GetFileName(_frontend), CompressionLevel.Fastest);
+            foreach (string source in Directory.GetFiles(sources, "*", SearchOption.AllDirectories))
+                zip.CreateEntryFromFile(source, "rust-stdlib/" + Path.GetRelativePath(sources, source).Replace('\\', '/'),
+                    CompressionLevel.Fastest);
+            using var notice = new StreamWriter(zip.CreateEntry("rust-frontend-licenses/manifest.json").Open());
+            notice.Write("{}");
+        }
+        byte[] bytes = buffer.ToArray();
+        string cache = Path.Combine(_root, ".cop", "frontend-cache");
+        Write("Cargo.toml", "[package]\nname='app'\nversion='1.0.0'\nedition='2024'");
+        string path = Write("src/lib.rs", "fn run(){ let mut values=Vec::<u32>::new(); values.push(7); values.len(); }");
+        using var scope = new ToolchainExecutionScope();
+        for (int pass = 0; pass < 2; pass++)
+        {
+            int opened = 0;
+            var parser = new RustSourceParser(projectRoot: _root,
+                bundleFactory: () => { opened++; return new MemoryStream(bytes); }, cacheDirectory: cache);
+            var file = parser.Parse(path, File.ReadAllText(path))!;
+            Assert.That(file.ParseErrors, Is.Empty);
+            Assert.That(file.Statements.Where(s => s.Kind == "call").Select(s => s.MemberName),
+                Is.EqualTo(new[] { "new", "push", "len" }));
+            if (pass == 0)
+                Assert.That(Directory.GetFiles(cache, "lib.rs", SearchOption.AllDirectories), Is.Empty,
+                    "structural demand must not deploy the bundled source tree");
+            var count = file.Statements.Single(s => s.MemberName == "len");
+            Assert.That(count.ReceiverType?.OriginalText, Is.EqualTo("Vec<u32, Global>"));
+            Assert.That(count.ValueType?.Name, Is.EqualTo("usize"));
+            Assert.That(count.ReferencedCallable?.Signature, Is.EqualTo("pub const fn len(&self) -> usize"));
+            string declaration = count.ReferencedCallable!.SourceFile!;
+            if (declaration.StartsWith(cache, StringComparison.Ordinal))
+            {
+                Assert.That(File.ReadAllText(declaration),
+                    Is.EqualTo(File.ReadAllText(Path.Combine(sources, "library", "alloc", "src", "vec", "mod.rs"))));
+                string manifest = Directory.GetFiles(cache, "manifest.json", SearchOption.AllDirectories)
+                    .Single(filePath => Path.GetFileName(Path.GetDirectoryName(filePath)) == "rust-stdlib");
+                Assert.That(File.ReadAllText(manifest), Is.EqualTo(File.ReadAllText(Path.Combine(sources, "manifest.json"))));
+            }
+            else
+            {
+                Assert.That(File.Exists(declaration), Is.True, "matching installed rust-src takes precedence");
+                Assert.That(Directory.GetFiles(cache, "lib.rs", SearchOption.AllDirectories), Is.Empty);
+            }
+            Assert.That(opened, Is.EqualTo(1), "semantic deployment must reuse the trusted original archive bytes");
         }
         Assert.That(ProviderErrors.Drain(), Is.Empty);
     }

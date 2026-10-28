@@ -4,6 +4,8 @@ using System.Security.Cryptography;
 
 namespace Cop.Providers.SourceParsers;
 
+internal sealed record RustFrontendDeployment(string Executable, Func<string>? PrepareStandardLibrary = null);
+
 internal static class RustFrontendBundle
 {
     internal const string ResourceName = "Cop.RustFrontend.Bundle.zip";
@@ -16,28 +18,28 @@ internal static class RustFrontendBundle
     internal static bool IsAvailable => Assembly.GetEntryAssembly()?.GetManifestResourceInfo(ResourceName) is not null ||
         Directories.Any(d => File.Exists(Path.Combine(d, ExecutableName)) || File.Exists(Path.Combine(d, ResourceName)));
 
-    internal static string? Find(Func<Stream?>? bundleFactory = null, string? cacheDirectory = null)
+    internal static RustFrontendDeployment? Find(Func<Stream?>? bundleFactory = null, string? cacheDirectory = null)
     {
         if (bundleFactory is not null)
         {
             using var supplied = bundleFactory();
-            return supplied is null ? null : Extract(supplied, cacheDirectory);
+            return supplied is null ? null : Deploy(supplied, cacheDirectory);
         }
         using var embedded = Assembly.GetEntryAssembly()?.GetManifestResourceStream(ResourceName);
-        if (embedded is not null) return Extract(embedded, cacheDirectory);
+        if (embedded is not null) return Deploy(embedded, cacheDirectory);
         foreach (string directory in Directories)
         {
             string executable = Path.Combine(directory, ExecutableName);
-            if (File.Exists(executable)) return executable;
+            if (File.Exists(executable)) return new(executable);
             string archive = Path.Combine(directory, ResourceName);
             if (!File.Exists(archive)) continue;
             using var stream = File.OpenRead(archive);
-            return Extract(stream, cacheDirectory);
+            return Deploy(stream, cacheDirectory);
         }
         return null;
     }
 
-    private static string Extract(Stream source, string? cacheDirectory)
+    private static RustFrontendDeployment Deploy(Stream source, string? cacheDirectory)
     {
         using var bytes = new MemoryStream();
         byte[] buffer = new byte[81920];
@@ -48,8 +50,17 @@ internal static class RustFrontendBundle
                 throw new InvalidDataException("Rust frontend bundle exceeds 128 MiB.");
             bytes.Write(buffer.AsSpan(0, count));
         }
-        string identity = Convert.ToHexString(SHA256.HashData(bytes.GetBuffer().AsSpan(0, (int)bytes.Length)));
-        bytes.Position = 0;
+        byte[] content = bytes.ToArray();
+        string identity = Convert.ToHexString(SHA256.HashData(content));
+        string executable = Extract(content, identity, cacheDirectory, includeStandardLibrary: false);
+        var standardLibrary = new Lazy<string>(() => Path.Combine(
+            Path.GetDirectoryName(Extract(content, identity, cacheDirectory, includeStandardLibrary: true))!, "rust-stdlib"));
+        return new(executable, () => standardLibrary.Value);
+    }
+
+    private static string Extract(byte[] content, string identity, string? cacheDirectory, bool includeStandardLibrary)
+    {
+        using var bytes = new MemoryStream(content, writable: false);
         using var archive = new ZipArchive(bytes, ZipArchiveMode.Read);
         if (archive.Entries.Count > 15000) throw new InvalidDataException("Rust frontend bundle exceeds 15000 entries.");
         long length = 0;
@@ -72,16 +83,20 @@ internal static class RustFrontendBundle
             !files.ContainsKey("rust-stdlib/library/core/src/lib.rs") ||
             !files.ContainsKey("rust-frontend-licenses/manifest.json"))
             throw new InvalidDataException("Rust frontend bundle is missing its helper, sources, or attribution.");
+        if (!includeStandardLibrary)
+            files = files.Where(file => !file.Key.StartsWith("rust-stdlib/", StringComparison.Ordinal))
+                .ToDictionary(file => file.Key, file => file.Value, files.Comparer);
         string cache = Path.GetFullPath(cacheDirectory ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Cop", "rust-frontends"));
         Directory.CreateDirectory(cache);
-        string destination = Path.Combine(cache, identity);
+        string destination = Path.Combine(cache, identity + (includeStandardLibrary ? "" : "-syntax"));
         string staging = Path.Combine(cache, ".extracting-" + Guid.NewGuid().ToString("N"));
         if (!Directory.Exists(destination))
         {
             Directory.CreateDirectory(staging);
             try
             {
+                byte[] buffer = new byte[81920];
                 foreach (var (name, entry) in files)
                 {
                     string path = Path.Combine(staging, name.Replace('/', Path.DirectorySeparatorChar));
@@ -89,6 +104,7 @@ internal static class RustFrontendBundle
                     using var input = entry.Open();
                     using var output = new FileStream(path, FileMode.CreateNew);
                     long written = 0;
+                    int count;
                     while ((count = input.Read(buffer)) != 0)
                     {
                         if ((written += count) > entry.Length)

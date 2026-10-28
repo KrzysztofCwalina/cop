@@ -69,6 +69,44 @@ public class RustFrontendBundleTests
             Assert.That(File.GetUnixFileMode(helper).HasFlag(UnixFileMode.UserExecute), Is.True);
     }
 
+    [Test]
+    public void Issue091_StructuralDiscoveryMaterializesOnlyHelperAndNotices()
+    {
+        byte[] bytes = Bundle("rust-frontend-licenses/fixture/LICENSE");
+        Parser(bytes).GetCacheIdentity("lib.rs");
+        string destination = Directory.GetDirectories(_root).Single();
+        Assert.That(Directory.GetFiles(destination, "*", SearchOption.AllDirectories)
+                .Select(path => Path.GetRelativePath(destination, path).Replace('\\', '/')).Order(),
+            Is.EqualTo(new[] { Helper, "rust-frontend-licenses/fixture/LICENSE", "rust-frontend-licenses/manifest.json" }.Order()));
+        Assert.That(Directory.Exists(Path.Combine(destination, "rust-stdlib")), Is.False);
+        Assert.That(File.ReadAllText(Path.Combine(destination, "rust-frontend-licenses", "fixture", "LICENSE")),
+            Is.EqualTo("not a permitted target"));
+    }
+
+    [Test]
+    public void SourcePreparationUsesOriginalArchiveAndConcurrentAtomicPublicationWithIntegrityChecks()
+    {
+        byte[] bytes = Bundle();
+        var deployment = RustFrontendBundle.Find(() => new MemoryStream(bytes), _root)!;
+        Assert.That(Directory.GetDirectories(_root), Has.Length.EqualTo(1));
+        Assert.That(Directory.GetFiles(_root, "lib.rs", SearchOption.AllDirectories), Is.Empty);
+        var preparations = Enumerable.Range(0, 8).Select(_ =>
+            RustFrontendBundle.Find(() => new MemoryStream(bytes), _root)!).ToArray();
+        var sources = Task.WhenAll(preparations.Select(prepared =>
+            Task.Run(() => prepared.PrepareStandardLibrary!()))).GetAwaiter().GetResult();
+        Assert.That(sources.Distinct().Count(), Is.EqualTo(1));
+        Assert.That(deployment.PrepareStandardLibrary!(), Is.EqualTo(sources[0]));
+        Assert.That(Directory.GetDirectories(_root), Has.Length.EqualTo(2),
+            "syntax and complete payloads publish atomically without abandoned staging directories");
+        Assert.That(File.ReadAllText(Path.Combine(sources[0], "library", "core", "src", "lib.rs")), Is.EqualTo("{}"));
+        Assert.That(File.ReadAllText(Path.Combine(sources[0], "manifest.json")), Is.EqualTo("{}"));
+        File.WriteAllText(Path.Combine(sources[0], "library", "core", "src", "lib.rs"), "[]");
+        var next = RustFrontendBundle.Find(() => new MemoryStream(bytes), _root)!;
+        Assert.That(File.Exists(next.Executable), Is.True, "source tampering does not trigger unrelated structural I/O");
+        Assert.Throws<InvalidDataException>(() => next.PrepareStandardLibrary!(),
+            "demanded source integrity must be checked, including equal-length tampering");
+    }
+
     [TestCase("../escaped")]
     [TestCase("/absolute")]
     [TestCase("C:/absolute")]

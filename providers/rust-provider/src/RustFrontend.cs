@@ -6,7 +6,8 @@ using Cop.Providers.SourceModel;
 namespace Cop.Providers.SourceParsers;
 
 /// <summary>Protocol client for Cop's pinned, source-only rust-analyzer frontend.</summary>
-internal sealed class RustFrontend(string executable, string root, string? standardLibraryDirectory = null)
+internal sealed class RustFrontend(string executable, string root, string? standardLibraryDirectory = null,
+    Func<string>? prepareStandardLibrary = null)
 {
     public const string ProtocolIdentity = "rust-analyzer:0.0.358:protocol1";
     public string Executable { get; } = Path.GetFullPath(executable);
@@ -140,7 +141,8 @@ internal sealed class RustFrontend(string executable, string root, string? stand
             if (File.Exists(Path.Combine(installed, "core", "src", "lib.rs")))
                 return installed;
         }
-        string bundled = standardLibraryDirectory ?? Path.Combine(Path.GetDirectoryName(Executable)!, "rust-stdlib");
+        string bundled = standardLibraryDirectory ?? prepareStandardLibrary?.Invoke()
+            ?? Path.Combine(Path.GetDirectoryName(Executable)!, "rust-stdlib");
         string manifest = Path.Combine(bundled, "manifest.json");
         if (File.Exists(manifest))
         {

@@ -10,8 +10,10 @@ public class RustSourceParser : ISourceParser
     {
         _frontend = new(() =>
         {
-            string? executable = frontendPath ?? RustFrontendBundle.Find(bundleFactory, cacheDirectory);
-            return executable is not null ? new(executable, projectRoot ?? Directory.GetCurrentDirectory(), standardLibraryDirectory) : null;
+            var deployment = frontendPath is not null ? new RustFrontendDeployment(frontendPath)
+                : RustFrontendBundle.Find(bundleFactory, cacheDirectory);
+            return deployment is not null ? new(deployment.Executable, projectRoot ?? Directory.GetCurrentDirectory(),
+                standardLibraryDirectory, deployment.PrepareStandardLibrary) : null;
         });
     }
 

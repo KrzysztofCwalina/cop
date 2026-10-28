@@ -24,8 +24,10 @@ cop --version
 Cop supports a **pinned rust-analyzer frontend** (`ra_ap_*` 0.0.358), bundled with
 standard-library sources in the self-contained Cop executable. It does not depend on
 the optional `rust-analyzer` rustup component. On first Rust source demand, Cop extracts
-the helper/sources/notices to a content-addressed user cache, validates their integrity,
-and reuses them. It does not write into the analyzed project. Adjacent helper/bundle
+only the helper and its notices to a content-addressed user cache and validates their
+integrity. Bundled standard-library sources are extracted and validated separately only
+when semantic analysis needs them; structural queries do not materialize those sources.
+Both payloads are reused without writing into the analyzed project. Adjacent helper/bundle
 discovery also supports development builds; a source checkout does not build it automatically.
 
 The maintained AST supplies declarations, signatures, imports, generic parameters,
