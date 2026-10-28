@@ -8,5 +8,9 @@ public record ParameterDeclaration(
     bool HasDefaultValue,
     int Line)
 {
+    public bool IsOptional { get; init; }
+    public int? Column { get; init; }
+    public int? EndLine { get; init; }
+    public int? EndColumn { get; init; }
     public string? DefaultValueText { get; init; }
 }

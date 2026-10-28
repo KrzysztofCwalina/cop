@@ -9,6 +9,9 @@ public class StatementInfo(
     int line,
     bool isInMethod)
 {
+    public int? Column { get; init; }
+    public int? EndLine { get; init; }
+    public int? EndColumn { get; init; }
     public string Kind { get; } = kind;
     public List<string> Keywords { get; } = keywords;
     internal Lazy<bool>? DeferredSemantics { get; set; }

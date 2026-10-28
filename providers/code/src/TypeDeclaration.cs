@@ -12,6 +12,11 @@ public record TypeDeclaration(
     List<string> EnumValues,
     int Line)
 {
+    public TypeReference? AliasTarget { get; init; }
+    public List<string> TypeParameters { get; init; } = [];
+    public int? Column { get; init; }
+    public int? EndLine { get; init; }
+    public int? EndColumn { get; init; }
     public bool IsPublic => Modifiers.HasFlag(Modifier.Public);
     public bool IsSealed => Modifiers.HasFlag(Modifier.Sealed);
     public bool IsAbstract => Modifiers.HasFlag(Modifier.Abstract);
