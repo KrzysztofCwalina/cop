@@ -29,12 +29,24 @@ To build for just your platform:
 install/publish.ps1 -Runtimes win-x64
 ```
 
-For the host's runtime identifier, publishing verifies and executes a small C# parser
-program using the actual published executable and the freshly built provider DLL.
-It asserts the exact parsed statement and its containing method before creating the
-archive or updating the PATH-installed executable. A failed build or smoke test stops
-publishing; cross-platform binaries still need functional testing on their target OS.
-`-SkipBuild` also runs this smoke test for the host runtime.
+For the host's runtime identifier, publishing verifies and executes small C#, Python,
+JavaScript, Go, Java, Rust, and Cop analysis programs using the actual executable and
+freshly built provider DLLs. Each must retain exactly one known declaration, method,
+and call on both cold and warm runs. Malformed input must produce a visible diagnostic
+and a nonzero exit code. Missing optional toolchains may emit fallback warnings; they
+must not hide these baseline facts or turn malformed input into success.
+
+A failed build or smoke test stops publishing before archive creation or PATH updates.
+`-SkipBuild` also runs this gate for the host runtime. Cross-platform archives still
+need functional testing on their target OS; generating or checking archive metadata
+on Windows does not verify Linux/macOS execution.
+
+To run only the provider smoke against an existing local build without publishing or
+modifying PATH:
+
+```powershell
+install/provider-smoke.ps1 -Executable cop/cli/bin/Debug/net10.0/cop.exe
+```
 
 ## Usage
 

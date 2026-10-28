@@ -33,33 +33,6 @@ function Test-ReleaseNotesApproved {
 }
 Test-ReleaseNotesApproved
 
-function Test-PublishedCSharpProvider([string]$Executable) {
-    $smokeDir = Join-Path ([System.IO.Path]::GetTempPath()) ("cop-publish-" + [guid]::NewGuid().ToString('N'))
-    New-Item -ItemType Directory -Path $smokeDir | Out-Null
-    try {
-        Set-Content -LiteralPath (Join-Path $smokeDir 'Sample.cs') -Encoding utf8 -Value 'public class Sample { public int M() { return 1; } }'
-        $program = Join-Path $smokeDir 'main.cop'
-        $feed = [System.IO.Path]::GetFullPath((Join-Path $RepoRoot 'packages')).Replace('\', '/')
-        Set-Content -LiteralPath $program -Encoding utf8 -Value @"
-feed '$feed'
-import code
-import csharp
-let cb = csharp.parse()
-command MAIN = foreach cb.Statements => 'PUBLISH-SMOKE {item.Kind} {item.Method.Name}'
-"@
-        $verification = & $Executable verify $program 2>&1
-        if ($LASTEXITCODE -ne 0) { throw "Published CSharp smoke program failed verification:`n$($verification -join "`n")" }
-        $output = & $Executable $program -t $smokeDir 2>&1
-        if ($LASTEXITCODE -ne 0 -or ($output -join "`n").Trim() -ne 'PUBLISH-SMOKE return M') {
-            throw "Published executable and CSharp provider failed functional smoke test (exit $LASTEXITCODE):`n$($output -join "`n")"
-        }
-        Write-Host "  Verified published executable + CSharp provider statement extraction."
-    }
-    finally {
-        Remove-Item -LiteralPath $smokeDir -Recurse -Force
-    }
-}
-
 # Patches the ZIP central directory "version made by" host OS byte to Unix (3)
 # for all entries in the archive. .NET's ZipArchive always writes host OS = 0 (MS-DOS),
 # which causes unzip/mise to ignore ExternalAttributes Unix permission bits.
@@ -275,7 +248,7 @@ foreach ($rid in $Runtimes) {
     # Exercise the actual binary and provider contract before packaging or updating PATH.
     if ($rid -eq [System.Runtime.InteropServices.RuntimeInformation]::RuntimeIdentifier) {
         $exeName = if ($rid -like 'win-*') { 'cop.exe' } else { 'cop' }
-        Test-PublishedCSharpProvider (Join-Path $outDir $exeName)
+        & (Join-Path $PSScriptRoot 'provider-smoke.ps1') -Executable (Join-Path $outDir $exeName)
     }
 
     # Create zip archive
