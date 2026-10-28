@@ -30,6 +30,12 @@ public class CopSourceParser : ISourceParser
             };
         }
 
+        return ParseModule(filePath, sourceText, module);
+    }
+
+    internal SourceFile ParseModule(string filePath, string sourceText, ModuleNode module,
+        Dictionary<StatementInfo, Cop.Lang.Ast.Expression>? expressions = null)
+    {
         var types = new List<TypeDeclaration>();
         var statements = new List<StatementInfo>();
         var functions = new Dictionary<FunctionDecl, CopFunctionDeclaration>();
@@ -102,8 +108,10 @@ public class CopSourceParser : ISourceParser
         {
             var keywords = new List<string> { "let" };
             if (let.IsExported) keywords.Add("export");
-            statements.Add(new StatementInfo("declaration", keywords,
-                null, let.Name, [], let.Line, false) { ValueExpression = ConvertExpression(let.Value) });
+            var statement = new StatementInfo("declaration", keywords,
+                null, let.Name, [], let.Line, false) { ValueExpression = ConvertExpression(let.Value) };
+            statements.Add(statement);
+            expressions?.Add(statement, let.Value);
         }
 
         // Map commands → statements
@@ -113,7 +121,7 @@ public class CopSourceParser : ISourceParser
                 null, cmd.Name, [], cmd.Line, false));
         }
 
-        new ExpressionCollector(statements, functions).Visit(module);
+        new ExpressionCollector(statements, functions, expressions).Visit(module);
 
         return new SourceFile(filePath, "cop", types, statements, sourceText)
         {
@@ -125,7 +133,8 @@ public class CopSourceParser : ISourceParser
     }
 
     private sealed class ExpressionCollector(List<StatementInfo> statements,
-        IReadOnlyDictionary<FunctionDecl, CopFunctionDeclaration> functions) : AstWalker
+        IReadOnlyDictionary<FunctionDecl, CopFunctionDeclaration> functions,
+        Dictionary<StatementInfo, Cop.Lang.Ast.Expression>? expressions) : AstWalker
     {
         private CopFunctionDeclaration? _function;
         private StatementInfo? _parent;
@@ -158,13 +167,17 @@ public class CopSourceParser : ISourceParser
                 ArgumentExpressions = node.Args.Select(ConvertExpression).ToList(),
                 Method = _function
             };
+            expressions?.Add(statement, node);
             return Within(statement, () => base.VisitCallExpr(node));
         }
 
-        public override object? VisitLetStatement(LetStatement node) =>
-            Within(new StatementInfo("declaration", ["let"], node.TypeAnnotation?.Name, node.Name, [],
-                node.Line, _function is not null) { ValueExpression = ConvertExpression(node.Value) },
-                () => base.VisitLetStatement(node));
+        public override object? VisitLetStatement(LetStatement node)
+        {
+            var statement = new StatementInfo("declaration", ["let"], node.TypeAnnotation?.Name, node.Name, [],
+                node.Line, _function is not null) { ValueExpression = ConvertExpression(node.Value) };
+            expressions?.Add(statement, node.Value);
+            return Within(statement, () => base.VisitLetStatement(node));
+        }
 
         public override object? VisitForEachStatement(ForEachStatement node) =>
             Within(new StatementInfo("foreach", node.IsAsync ? ["async"] : [], null, node.Variable, [],

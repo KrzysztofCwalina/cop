@@ -47,6 +47,30 @@ foreach loops, pipelines, and nested calls expose `Parent`/`Children` relationsh
 function ownership. Cop AST locations currently provide line numbers only; unavailable
 column/end positions are left unknown rather than approximated.
 
+## Deferred source semantics
+
+`Statement.ValueType`, `ReceiverType`, and `ReferencedCallable` use the Cop compiler's
+declaration-only static analysis. Direct source calls select unambiguous typed/arity
+overloads, instantiate generic scalar or collection-element signatures from known argument
+types, and infer simple expression-body results. An unknown required parameter type makes
+the entire callable reference unknown without discarding an independently known result type.
+Package-qualified calls have no value receiver; supported scalar colon applications expose
+the subject separately from the result.
+
+Binding begins only when a semantic field is read. Structural queries and `FIRST`/`TAKE`
+do not load semantic dependencies. The context includes sibling `.cop` files in the same
+directory and imported packages available in local source feeds or an ancestor `packages`
+directory. Imports are parsed for exported declarations only: no target commands, package
+initializers, providers, guards, or function bodies are executed. Missing or malformed source
+dependencies are visible errors on semantic demand. Semantic results are execution-scoped
+and never written into file-only syntax caches, so dependency-only edits are reanalyzed.
+
+Runtime-dependent guards, ambiguous/dynamic overloads, partial/variadic application, and
+collection-filter dispatch remain unknown with a capability warning. Unsupported expression
+inference also remains unknown. Imported functions expose declared results; results requiring inference
+inside a package's private scope remain unknown. No remote feed is downloaded during
+analysis.
+
 ## Usage
 
 ```cop
