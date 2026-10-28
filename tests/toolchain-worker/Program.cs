@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
+using Cop.Providers;
 
 switch (args[0])
 {
@@ -31,6 +32,29 @@ switch (args[0])
         break;
     case "environment":
         Console.Write(Environment.GetEnvironmentVariable(args[1]));
+        break;
+    case "engine-probe":
+        var engineResult = Engine.Run(args[1], args[2]);
+        var pids = File.ReadAllLines(Path.Combine(args[2], "pids.txt")).Select(int.Parse).Distinct().ToArray();
+        bool stopped = true;
+        foreach (var pid in pids)
+        {
+            try
+            {
+                using var worker = Process.GetProcessById(pid);
+                if (!worker.HasExited)
+                {
+                    stopped = false;
+                    worker.Kill(entireProcessTree: true);
+                    worker.WaitForExit(2000);
+                }
+            }
+            catch (ArgumentException) { }
+        }
+        Console.Write(JsonSerializer.Serialize(new
+        {
+            engineResult.HasFatalErrors, engineResult.Errors, engineResult.Warnings, Stopped = stopped, Pids = pids
+        }));
         break;
     case "flood":
         while (true)
