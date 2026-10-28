@@ -117,4 +117,92 @@ public class JavaScriptProjectDiscoveryTests
 
         Assert.That(projects, Is.Empty);
     }
+
+    [Test]
+    public void Discover_AllDependencyKinds_DeduplicatesWithExplicitScope()
+    {
+        File.WriteAllText(Path.Combine(_tempDir, "package.json"), """
+            {
+                "name": "app",
+                "dependencies": { "shared": "^1" },
+                "devDependencies": { "shared": "^1", "test": "^2" },
+                "peerDependencies": { "peer": "*" },
+                "optionalDependencies": { "optional": "*" }
+            }
+            """);
+        var project = JavaScriptProjectDiscovery.Discover(_tempDir, null).Single();
+        Assert.That(project.References, Is.EqualTo(new[] { "optional", "peer", "shared", "test" }));
+        Assert.That(project.Packages, Is.EqualTo(project.References));
+        Assert.That(project.Properties["DiscoveryScope"], Does.Contain("no lockfile resolution"));
+        Assert.That(project.Properties.Keys, Does.Contain("peerDependencies").And.Contain("optionalDependencies"));
+    }
+
+    [Test]
+    public void Discover_WorkspaceObjectAndExclusion_DoesNotAssumeEveryNestedPackageIsAMember()
+    {
+        File.WriteAllText(Path.Combine(_tempDir, "package.json"), """
+            { "name": "root", "workspaces": { "packages": ["packages/*", "!packages/excluded"] } }
+            """);
+        foreach (var name in new[] { "member", "excluded" })
+        {
+            var directory = Path.Combine(_tempDir, "packages", name);
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(Path.Combine(directory, "package.json"), """{"name":""" + "\"" + name + "\"}");
+        }
+        var projects = JavaScriptProjectDiscovery.Discover(_tempDir, null);
+        Assert.That(projects, Has.Count.EqualTo(3));
+        Assert.That(projects.Single(p => p.Name == "member").Properties["WorkspaceRoot"], Is.EqualTo("root"));
+        Assert.That(projects.Single(p => p.Name == "excluded").Properties.ContainsKey("WorkspaceRoot"), Is.False);
+    }
+
+    [Test]
+    public void Discover_TypeScriptConfig_UsesCompilerMembershipExtendsAliasesAndReferences()
+    {
+        if (Cop.Providers.SourceParsers.JavaScriptToolchain.Discover(Path.Combine(_tempDir, "source.ts")) is null)
+            Assert.Ignore("Native configuration tests require an installed TypeScript compiler.");
+        Directory.CreateDirectory(Path.Combine(_tempDir, "src"));
+        Directory.CreateDirectory(Path.Combine(_tempDir, "referenced"));
+        File.WriteAllText(Path.Combine(_tempDir, "base.json"), """
+            { "compilerOptions": { "baseUrl": ".", "paths": { "@app/*": ["src/*"] } } }
+            """);
+        File.WriteAllText(Path.Combine(_tempDir, "tsconfig.json"), """
+            {
+                // Compiler JSONC and inherited path aliases are intentional.
+                "extends": "./base.json",
+                "include": ["src/**/*.ts"],
+                "exclude": ["src/ignored.ts"],
+                "references": [{ "path": "./referenced" }],
+            }
+            """);
+        File.WriteAllText(Path.Combine(_tempDir, "referenced", "tsconfig.json"), """{ "files": ["library.ts"] }""");
+        File.WriteAllText(Path.Combine(_tempDir, "referenced", "library.ts"), "export class Library {}");
+        File.WriteAllText(Path.Combine(_tempDir, "src", "included.ts"), "export class Included {}");
+        File.WriteAllText(Path.Combine(_tempDir, "src", "ignored.ts"), "export class Ignored {}");
+        using var scope = new Cop.Core.ToolchainExecutionScope();
+        var projects = JavaScriptProjectDiscovery.Discover(_tempDir, null);
+        Assert.That(projects, Has.Count.EqualTo(2));
+        var project = projects.Single(p => p.Path == "tsconfig.json");
+        Assert.That(project.SourceFiles, Is.EqualTo(new[] { Path.Combine(_tempDir, "src", "included.ts") }));
+        Assert.That(project.References, Is.EqualTo(new[] { "referenced:tsconfig" }));
+        Assert.That(project.Properties["PathAliases"], Is.EqualTo("""{"@app/*":["src/*"]}"""));
+        Assert.That(project.Properties["BaseUrl"], Is.EqualTo(_tempDir.Replace('\\', '/')).Or.EqualTo(_tempDir));
+    }
+
+    [Test]
+    public void Discover_MalformedManifest_ReportsErrorInsteadOfSilentlyDroppingIt()
+    {
+        Cop.Core.ProviderErrors.Clear();
+        File.WriteAllText(Path.Combine(_tempDir, "package.json"), """{ "name": "bad", "dependencies": [] }""");
+        Assert.That(JavaScriptProjectDiscovery.Discover(_tempDir, null), Is.Empty);
+        Assert.That(Cop.Core.ProviderErrors.Drain().Single(), Does.Contain("'dependencies' must be an object"));
+    }
+
+    [Test]
+    public void Discover_MissingCompiler_ReportsUnknownConfigMembership()
+    {
+        Cop.Core.ProviderWarnings.Clear();
+        File.WriteAllText(Path.Combine(_tempDir, "tsconfig.json"), """{ "files": [] }""");
+        Assert.That(JavaScriptProjectDiscovery.Discover(_tempDir, null, toolchainSearchPath: ""), Is.Empty);
+        Assert.That(Cop.Core.ProviderWarnings.Drain().Single(), Does.Contain("membership").And.Contain("unknown"));
+    }
 }

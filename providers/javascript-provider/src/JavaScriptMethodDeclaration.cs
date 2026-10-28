@@ -23,7 +23,7 @@ public sealed record JavaScriptMethodDeclaration : MethodDeclaration
     /// <summary>True for <c>function*</c> or <c>*name()</c> generator methods.</summary>
     public bool IsGenerator { get; init; }
 
-    /// <summary>True for class-field arrow function methods.</summary>
+    /// <summary>True for arrow functions, including module functions and class-field methods.</summary>
     public bool IsArrow { get; init; }
 
     /// <summary>True for <c>get name()</c> accessors.</summary>

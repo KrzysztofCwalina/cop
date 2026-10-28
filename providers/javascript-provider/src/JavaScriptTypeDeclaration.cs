@@ -28,7 +28,7 @@ public sealed record JavaScriptTypeDeclaration : TypeDeclaration
     public bool HasBaseClass { get; init; }
 
     /// <summary>True when the class is declared <c>abstract</c>.</summary>
-    public bool IsAbstract { get; init; }
+    public new bool IsAbstract { get; init; }
 
     /// <summary>True when the class declares type parameters.</summary>
     public bool IsGeneric { get; init; }

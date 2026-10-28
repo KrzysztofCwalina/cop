@@ -15,7 +15,7 @@ public class JavaScriptProvider : DataProvider
     public override RuntimeBindings GetRuntimeBindings() => JavaScriptBindings.Build();
 
     public override IReadOnlyDictionary<string, object?> GetQueryMetadata(ProviderQuery query) =>
-        CodeBindings.SourceMetadata(query, ".js", ".jsx", ".ts", ".tsx");
+        CodeBindings.SourceMetadata(query, ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts");
     public override string QueryResultType => "Codebase";
 
     public override object QueryDeferred(ProviderQuery query)

@@ -1,7 +1,8 @@
 # JavaScript/TypeScript source language provider
 import code
 
-## Parses JavaScript/TypeScript source files in the target directory and returns a Codebase.
+## Parses JS/TS/JSX/TSX and module variants in the target directory and returns a Codebase.
+## Uses an installed Node.js/TypeScript compiler when available; otherwise warns and uses simpler syntax analysis.
 ## Example: let cb = javascript.parse()
 export function parse() : Codebase => provider('javascript')
 
@@ -71,7 +72,7 @@ export predicate hasImplements(JavaScriptType) => JavaScriptType.HasImplements
 ## True for `function*` or `*name()` generator methods.
 export predicate isGeneratorMethod(JavaScriptMethod) => JavaScriptMethod.IsGenerator
 
-## True for class-field arrow function methods.
+## True for arrow functions, including module functions and class-field methods.
 export predicate isArrowMethod(JavaScriptMethod) => JavaScriptMethod.IsArrow
 
 ## True for `get name()` accessors.
