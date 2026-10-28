@@ -75,6 +75,14 @@ modifying PATH:
 install/provider-smoke.ps1 -Executable cop/cli/bin/Debug/net10.0/cop.exe
 ```
 
+For a focused Rust structural and semantic check of the portable executable:
+
+```powershell
+install/provider-smoke.ps1 -Executable install/win-x64/cop.exe -Languages rust -RequireRustBundle
+```
+
+Language selection limits manual smoke runs only; publishing still checks every provider.
+
 ## Usage
 
 Add the platform subfolder to your PATH, or invoke directly:

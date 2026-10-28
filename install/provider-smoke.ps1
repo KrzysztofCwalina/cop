@@ -2,6 +2,9 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$Executable,
+    [ValidateSet('csharp', 'python', 'javascript', 'go', 'java', 'rust', 'cop')]
+    [ValidateCount(1, 7)]
+    [string[]]$Languages = @('csharp', 'python', 'javascript', 'go', 'java', 'rust', 'cop'),
     [switch]$RequireRustBundle
 )
 
@@ -106,6 +109,7 @@ try {
     }
     foreach ($fixture in $fixtures) {
         $language = $fixture.Language
+        if ($Languages -notcontains $language) { continue }
         $target = Join-Path $smokeDir $language
         New-Item -ItemType Directory -Path $target | Out-Null
         $source = Join-Path $target ("sample" + $fixture.Extension)
@@ -142,9 +146,13 @@ command MAIN = print('PUBLISH-SMOKE $language {alpha.Count} {runs.Count} {calls.
         }
         Write-Host "  Verified $language declarations, methods, calls, cold/warm results, and visible malformed input."
     }
-    Test-SemanticSmoke 'csharp' 'class Alpha { public int Get(int value) => value; } class Caller { void Run() { var a = new Alpha(); a.Get(1); } }' '.cs' 'Get' 'Int32'
-    Test-SemanticSmoke 'cop' "function get(value : string) : int => value.Length`nlet result = 'hello':get()" '.cop' 'get' 'int' 'string'
-    if ($RequireRustBundle) {
+    if ($Languages -contains 'csharp') {
+        Test-SemanticSmoke 'csharp' 'class Alpha { public int Get(int value) => value; } class Caller { void Run() { var a = new Alpha(); a.Get(1); } }' '.cs' 'Get' 'Int32'
+    }
+    if ($Languages -contains 'cop') {
+        Test-SemanticSmoke 'cop' "function get(value : string) : int => value.Length`nlet result = 'hello':get()" '.cop' 'get' 'int' 'string'
+    }
+    if ($RequireRustBundle -and $Languages -contains 'rust') {
         Test-SemanticSmoke 'rust' 'pub struct Alpha; impl Alpha { pub fn get(&self, value: u32) -> u32 { value } } pub fn run() { let a = Alpha; a.get(1); }' '.rs' 'get' 'u32'
     }
 }
