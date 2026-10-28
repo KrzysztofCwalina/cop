@@ -417,6 +417,10 @@ public class RustFrontendTests
         var file = new RustSourceParser(_frontend, _root, Path.GetDirectoryName(manifest)).Parse(path, File.ReadAllText(path))!;
         Assert.That(file.Statements.Single().ReferencedCallable, Is.Null);
         Assert.That(ProviderWarnings.Drain(), Has.Some.Contains("do not match installed compiler"));
+        File.WriteAllText(manifest, "{}");
+        var corrupt = new RustSourceParser(_frontend, _root, Path.GetDirectoryName(manifest)).Parse(path, File.ReadAllText(path))!;
+        Assert.That(corrupt.Statements.Single().ReferencedCallable, Is.Null);
+        Assert.That(ProviderErrors.Drain(), Has.Some.Contains("standard-library manifest is malformed"));
         File.WriteAllText(path, "fn known()->u32 { 1 } fn run(){ known(); }");
         var changed = Parse(path);
         File.WriteAllText(path, "fn known()->bool { true } fn run(){ known(); }");
