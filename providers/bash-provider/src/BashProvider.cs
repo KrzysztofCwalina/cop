@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Cop.Core;
 using Cop.Providers.SourceModel;
 
@@ -66,46 +65,38 @@ public sealed class BashProvider : DataProvider
 
     public override object? Query(ProviderQuery query)
     {
-        if (query.RootPath is null)
-            return new Dictionary<string, List<object>>();
+        var result = (DeferredProviderResult)QueryDeferred(query);
+        return result.Collections.ToDictionary(c => c.Key, c => c.Value.ToList(), StringComparer.Ordinal);
+    }
 
-        var rootPath = query.RootPath;
-        var excluded = query.ExcludedDirectories;
+    private readonly Dictionary<string, DeferredFormatSnapshot> _snapshots = new(StringComparer.Ordinal);
 
-        var filePaths = new List<string>();
-        CollectBashFiles(rootPath, excluded, filePaths);
-
-        var parsed = new ConcurrentBag<(SourceFile File, BashParser.BashParseResult Script)>();
-        Parallel.ForEach(filePaths,
-            new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
-            filePath =>
-            {
-                try
-                {
-                    var text = File.ReadAllText(filePath);
-                    var relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
-                    var sourceFile = new SourceFile(relativePath, "bash", [], [], text);
-                    var script = BashParser.Parse(text);
-                    parsed.Add((sourceFile, script));
-                }
-                catch { }
-            });
-
-        var sorted = parsed.OrderBy(p => p.File.Path, StringComparer.Ordinal).ToList();
-
-        var commands = new List<object>();
-        var scripts = new List<object>();
-        foreach (var (file, script) in sorted)
+    public override object QueryDeferred(ProviderQuery query)
+    {
+        if (query.RootPath is null) return new DeferredProviderResult(new Dictionary<string, IEnumerable<object>>());
+        var key = DeferredFormatSnapshot.Key(query);
+        var root = Path.GetFullPath(query.RootPath);
+        if (!_snapshots.TryGetValue(key, out var snapshot))
         {
-            commands.AddRange(script.Commands.Select(c => (object)(c with { File = file })));
-            scripts.Add(script.Script with { File = file });
+            snapshot = new(() =>
+            {
+                var paths = new List<string>();
+                CollectBashFiles(root, query.ExcludedDirectories, paths);
+                return paths;
+            }, path =>
+            {
+                var text = File.ReadAllText(path);
+                var file = new SourceFile(Path.GetRelativePath(root, path).Replace('\\', '/'), "bash", [], [], text);
+                var script = BashParser.Parse(text);
+                return new()
+                {
+                    ["Commands"] = script.Commands.Select(c => (object)(c with { File = file })).ToList(),
+                    ["Scripts"] = [script.Script with { File = file }]
+                };
+            });
+            _snapshots.Add(key, snapshot);
         }
-
-        var collections = new Dictionary<string, List<object>>(StringComparer.Ordinal);
-        var requested = query.Collection;
-        if (requested is null || requested == "Commands") collections["Commands"] = commands;
-        if (requested is null || requested == "Scripts") collections["Scripts"] = scripts;
-        return ApplyQueryFilters(query, collections);
+        return snapshot.Query(query, _schema, GetRuntimeBindings());
     }
 
     private static void CollectBashFiles(string dir, IReadOnlySet<string>? excluded, List<string> result)
@@ -119,13 +110,16 @@ public sealed class BashProvider : DataProvider
             }
             foreach (var subDir in Directory.GetDirectories(dir))
             {
+                if ((File.GetAttributes(subDir) & FileAttributes.ReparsePoint) != 0) continue;
                 var dirName = Path.GetFileName(subDir);
                 if (excluded is not null && excluded.Contains(dirName)) continue;
                 CollectBashFiles(subDir, excluded, result);
             }
         }
-        catch (UnauthorizedAccessException) { }
-        catch (IOException) { }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            ProviderErrors.Report($"Failed to scan '{dir}': {ex.Message}");
+        }
     }
 
     private static Dictionary<string, Dictionary<string, Func<object, object?>>> BuildAccessors()

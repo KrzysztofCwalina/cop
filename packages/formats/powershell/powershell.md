@@ -1,13 +1,24 @@
 # powershell
 
-Analyze PowerShell scripts (`.ps1`, `.psm1`, `.psd1`) by extracting simple commands,
-their logical command text, line numbers, file positions, and per-script strict-mode
-metadata. The parser is hand-rolled C# with no third-party PowerShell parser dependency.
+Analyze PowerShell scripts (`.ps1`, `.psm1`, `.psd1`) with the installed PowerShell
+parser (`pwsh`, or Windows `powershell`). No SDK package, module installation, or additional
+setup is needed. The parser reads ASTs only: analyzed scripts are never executed.
+A no-profile JSON-lines helper is reused during one Cop execution, with bounded time/output,
+and disposed afterward. Syntax errors are reported rather than silently skipped.
+
+When PowerShell is absent or unusable, Cop prints a yellow warning and uses simpler analysis.
+The fallback recognizes assignment RHS and parenthesized invocations and skips literal
+here-string bodies, but does not fully analyze interpolation, nested syntax, or dynamic
+command names. Native AST analysis includes calls inside expandable strings; dynamic
+invocation names that cannot be determined statically are not invented.
+
+Collections are read lazily per file and share one execution snapshot. Directory symlinks
+and reparse points are not followed; file or directory access failures are reported.
 
 ## Types
 
 - **PowerShellCommand** — a command occurrence. Fields: `Name`, `Text`, `Line`, `File`, `Source`.
-  `Text` is the full logical command line, so pipeline checks can inspect the complete command.
+  `Text` includes the containing pipeline, so pipeline checks can inspect its commands.
 - **PowerShellScript** — one item per script. Fields: `UsesStrictMode`, `Line`, `File`, `Source`.
 
 ## Usage

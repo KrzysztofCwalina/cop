@@ -10,6 +10,10 @@ export type DockerInstruction = {
     Argument : string,
     Line : int,
     Stage : int,
+    IsJsonForm : bool,
+    Arguments : [string],
+    From : string?,
+    ReferencedStage : int,
     File : File?,
     Source : string
 }

@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Cop.Core;
 using Cop.Providers.SourceModel;
 
@@ -62,43 +61,34 @@ public sealed class SqlProvider : DataProvider
 
     public override object? Query(ProviderQuery query)
     {
-        if (query.RootPath is null)
-            return new Dictionary<string, List<object>>();
+        var result = (DeferredProviderResult)QueryDeferred(query);
+        return result.Collections.ToDictionary(c => c.Key, c => c.Value.ToList(), StringComparer.Ordinal);
+    }
 
-        var rootPath = query.RootPath;
-        var excluded = query.ExcludedDirectories;
+    private readonly Dictionary<string, DeferredFormatSnapshot> _snapshots = new(StringComparer.Ordinal);
 
-        var filePaths = new List<string>();
-        CollectSqlFiles(rootPath, excluded, filePaths);
-
-        var parsed = new ConcurrentBag<(SourceFile File, SqlParser.SqlParseResult Doc)>();
-        Parallel.ForEach(filePaths,
-            new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
-            filePath =>
-            {
-                try
-                {
-                    var text = File.ReadAllText(filePath);
-                    var relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
-                    var sourceFile = new SourceFile(relativePath, "sql", [], [], text);
-                    var doc = SqlParser.Parse(text);
-                    parsed.Add((sourceFile, doc));
-                }
-                catch { }
-            });
-
-        var sorted = parsed.OrderBy(p => p.File.Path, StringComparer.Ordinal).ToList();
-
-        var statements = new List<object>();
-        foreach (var (file, doc) in sorted)
+    public override object QueryDeferred(ProviderQuery query)
+    {
+        if (query.RootPath is null) return new DeferredProviderResult(new Dictionary<string, IEnumerable<object>>());
+        var key = DeferredFormatSnapshot.Key(query);
+        var root = Path.GetFullPath(query.RootPath);
+        if (!_snapshots.TryGetValue(key, out var snapshot))
         {
-            statements.AddRange(doc.Statements.Select(s => (object)(s with { File = file })));
+            snapshot = new(() =>
+            {
+                var paths = new List<string>();
+                CollectSqlFiles(root, query.ExcludedDirectories, paths);
+                return paths;
+            }, path =>
+            {
+                var text = File.ReadAllText(path);
+                var file = new SourceFile(Path.GetRelativePath(root, path).Replace('\\', '/'), "sql", [], [], text);
+                var doc = SqlParser.Parse(text);
+                return new() { ["Statements"] = doc.Statements.Select(s => (object)(s with { File = file })).ToList() };
+            });
+            _snapshots.Add(key, snapshot);
         }
-
-        var collections = new Dictionary<string, List<object>>(StringComparer.Ordinal);
-        var requested = query.Collection;
-        if (requested is null || requested == "Statements") collections["Statements"] = statements;
-        return ApplyQueryFilters(query, collections);
+        return snapshot.Query(query, _schema, GetRuntimeBindings());
     }
 
     private static void CollectSqlFiles(string dir, IReadOnlySet<string>? excluded, List<string> result)
@@ -112,13 +102,16 @@ public sealed class SqlProvider : DataProvider
             }
             foreach (var subDir in Directory.GetDirectories(dir))
             {
+                if ((File.GetAttributes(subDir) & FileAttributes.ReparsePoint) != 0) continue;
                 var dirName = Path.GetFileName(subDir);
                 if (excluded is not null && excluded.Contains(dirName)) continue;
                 CollectSqlFiles(subDir, excluded, result);
             }
         }
-        catch (UnauthorizedAccessException) { }
-        catch (IOException) { }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            ProviderErrors.Report($"Failed to scan '{dir}': {ex.Message}");
+        }
     }
 
     private static Dictionary<string, Dictionary<string, Func<object, object?>>> BuildAccessors()

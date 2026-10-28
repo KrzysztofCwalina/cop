@@ -22,6 +22,10 @@
     <ProjectReference Include="..\..\providers\rust-provider\rust-provider.csproj" />
     <ProjectReference Include="..\..\providers\java-provider\java-provider.csproj" />
     <ProjectReference Include="..\..\providers\go-provider\go-provider.csproj" />
+    <ProjectReference Include="..\..\providers\bash-provider\bash-provider.csproj" />
+    <ProjectReference Include="..\..\providers\powershell-provider\powershell-provider.csproj" />
+    <ProjectReference Include="..\..\providers\sql-provider\sql-provider.csproj" />
+    <ProjectReference Include="..\..\providers\dockerfile-provider\dockerfile-provider.csproj" />
   </ItemGroup>
 
   <ItemGroup>

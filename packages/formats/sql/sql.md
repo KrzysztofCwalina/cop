@@ -2,7 +2,16 @@
 
 Analyze SQL files by splitting `.sql` files into statements and exposing basic statement
 metadata for static checks. The parser is hand-rolled (no third-party SQL parser) and handles
-semicolons inside strings, `--` comments, and `/* ... */` comments.
+semicolons inside strings, quoted identifiers (double quotes, brackets, and backticks),
+PostgreSQL dollar-quoted bodies, `--` comments, and nested `/* ... */` comments.
+Standalone `GO` lines separate batches. `WITH` statements use the main operation's kind;
+`SelectsStar` recognizes bare and qualified wildcards in mixed projection lists, but not
+`COUNT(*)` or multiplication. Line tracking is linear rather than rescanning the file.
+
+This is not a complete dialect grammar or schema resolver. MySQL `DELIMITER`, Oracle
+slash terminators, SQLCMD directives, and procedural dialect control flow are not modeled.
+Collections are read lazily per file and share one execution snapshot. Directory symlinks
+and reparse points are not followed; file or directory access failures are reported.
 
 ## Types
 

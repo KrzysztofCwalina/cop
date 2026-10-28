@@ -7,5 +7,9 @@ namespace Cop.Providers.Dockerfile;
 public record DockerInstructionInfo(string Instruction, string Argument, int Line, int Stage)
 {
     public SourceModel.SourceFile? File { get; init; }
+    public bool IsJsonForm { get; init; }
+    public List<string> Arguments { get; init; } = [];
+    public string? From { get; init; }
+    public int ReferencedStage { get; init; } = -1;
     public string Source => $"{File?.Path}:{Line}";
 }
