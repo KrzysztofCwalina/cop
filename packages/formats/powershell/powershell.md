@@ -6,7 +6,10 @@ setup is needed. The parser reads ASTs only: analyzed scripts are never executed
 A no-profile JSON-lines helper is reused during one Cop execution, with bounded time/output,
 and disposed afterward. Syntax errors are reported rather than silently skipped.
 
-When PowerShell is absent or unusable, Cop prints a yellow warning and uses simpler analysis.
+Cop probes each installed candidate before submitting source, trying Windows `powershell`
+if `pwsh` is unusable. Only absent or unusable preflight results permit a yellow-warning
+fallback. Once a helper is established, timeouts, request failures, and invalid AST responses
+are analysis errors, not fallback triggers.
 The fallback recognizes assignment RHS and parenthesized invocations and skips literal
 here-string bodies, but does not fully analyze interpolation, nested syntax, or dynamic
 command names. Native AST analysis includes calls inside expandable strings; dynamic

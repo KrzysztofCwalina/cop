@@ -39,6 +39,11 @@ public sealed class DeferredFormatSnapshot(
                 if (!_files.TryGetValue(path, out parsed!))
                 {
                     try { parsed = parse(path); }
+                    catch (InvalidDataException ex)
+                    {
+                        ProviderErrors.Report($"Failed to analyze '{path}': {ex.Message}");
+                        parsed = new(StringComparer.Ordinal);
+                    }
                     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                     {
                         ProviderErrors.Report($"Failed to read '{path}': {ex.Message}");

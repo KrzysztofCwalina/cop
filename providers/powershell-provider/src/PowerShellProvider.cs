@@ -70,6 +70,7 @@ public sealed class PowerShellProvider : DataProvider
     }
 
     private readonly Dictionary<string, DeferredFormatSnapshot> _snapshots = new(StringComparer.Ordinal);
+    private readonly PowerShellAstParser _parser = new();
 
     public override object QueryDeferred(ProviderQuery query)
     {
@@ -87,7 +88,7 @@ public sealed class PowerShellProvider : DataProvider
             {
                 var text = File.ReadAllText(path);
                 var file = new SourceFile(Path.GetRelativePath(root, path).Replace('\\', '/'), "powershell", [], [], text);
-                var script = PowerShellAstParser.Parse(text, path);
+                var script = _parser.Parse(text, path);
                 return new()
                 {
                     ["Commands"] = script.Commands.Select(c => (object)(c with { File = file })).ToList(),
