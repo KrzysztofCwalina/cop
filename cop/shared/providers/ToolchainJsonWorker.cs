@@ -27,22 +27,24 @@ public sealed class ToolchainExecutionScope : IDisposable
     public static async Task<ToolchainResult> RequestAsync(
         string executable, IReadOnlyList<string> arguments, string workingDirectory, string request,
         TimeSpan? timeout = null, int maxOutputCharacters = 4_194_304,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyDictionary<string, string?>? environment = null)
     {
         var scope = Ambient.Value;
         if (scope is null)
         {
-            using var worker = new ToolchainJsonWorker(executable, arguments, workingDirectory);
+            using var worker = new ToolchainJsonWorker(executable, arguments, workingDirectory, environment);
             return await worker.RequestAsync(request, timeout, maxOutputCharacters, cancellationToken).ConfigureAwait(false);
         }
         ToolchainJsonWorker shared;
         // JSON preserves argument boundaries, including quotes and separators in paths/scripts.
-        var key = JsonSerializer.Serialize(new { executable, arguments, workingDirectory });
+        var key = JsonSerializer.Serialize(new { executable, arguments, workingDirectory,
+            environment = environment?.OrderBy(pair => pair.Key, StringComparer.Ordinal).ToArray() });
         lock (scope._workers)
         {
             ObjectDisposedException.ThrowIf(scope._disposed, scope);
             if (!scope._workers.TryGetValue(key, out shared!))
-                scope._workers.Add(key, shared = new(executable, arguments, workingDirectory));
+                scope._workers.Add(key, shared = new(executable, arguments, workingDirectory, environment));
         }
         return await shared.RequestAsync(request, timeout, maxOutputCharacters, cancellationToken).ConfigureAwait(false);
     }
@@ -66,23 +68,27 @@ public sealed class ToolchainJsonWorker : IDisposable
     private readonly string _executable;
     private readonly string[] _arguments;
     private readonly string _workingDirectory;
+    private readonly Dictionary<string, string?>? _environment;
     private readonly SemaphoreSlim _requests = new(1, 1);
     private readonly CancellationTokenSource _lifetime = new();
     private readonly StringBuilder _stderr = new();
     private Process? _process;
+    private ToolchainProcessContainment? _containment;
     private Task? _stderrTask;
     private ToolchainResult? _failure;
     private bool _disposed;
     private volatile bool _stderrOverflow;
     private string? _path;
 
-    public ToolchainJsonWorker(string executable, IReadOnlyList<string> arguments, string workingDirectory)
+    public ToolchainJsonWorker(string executable, IReadOnlyList<string> arguments, string workingDirectory,
+        IReadOnlyDictionary<string, string?>? environment = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(executable);
         ArgumentNullException.ThrowIfNull(arguments);
         _executable = executable;
         _arguments = arguments.ToArray();
         _workingDirectory = Path.GetFullPath(workingDirectory);
+        _environment = environment?.ToDictionary(pair => pair.Key, pair => pair.Value);
     }
 
     public async Task<ToolchainResult> RequestAsync(string request, TimeSpan? timeout = null,
@@ -166,9 +172,13 @@ public sealed class ToolchainJsonWorker : IDisposable
             }
         };
         foreach (var argument in _arguments) _process.StartInfo.ArgumentList.Add(argument);
+        if (_environment is not null)
+            foreach (var (name, value) in _environment) _process.StartInfo.Environment[name] = value;
         try
         {
+            _containment = new();
             if (!_process.Start()) return Result(ToolchainStatus.Failed, $"Could not start worker '{_path}'.");
+            _containment.Attach(_process);
         }
         catch (Win32Exception ex)
         {
@@ -196,6 +206,7 @@ public sealed class ToolchainJsonWorker : IDisposable
                 }
                 if (_stderrOverflow)
                 {
+                    _containment?.Terminate();
                     if (!_process.HasExited) _process.Kill(entireProcessTree: true);
                     return;
                 }
@@ -255,6 +266,7 @@ public sealed class ToolchainJsonWorker : IDisposable
         {
             try
             {
+                _containment?.Terminate();
                 if (!HasExited(_process)) _process.Kill(entireProcessTree: true);
                 if (!_process.WaitForExit(2000))
                     throw new TimeoutException("Worker process did not exit after termination.");
@@ -271,6 +283,7 @@ public sealed class ToolchainJsonWorker : IDisposable
         if (_disposed) return;
         _disposed = true;
         Stop();
+        _containment?.Dispose();
         _process?.Dispose();
         try { _stderrTask?.GetAwaiter().GetResult(); }
         catch (ObjectDisposedException) { }

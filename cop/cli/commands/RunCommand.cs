@@ -496,7 +496,7 @@ public static class RunCommand
     private static string[] FindFeedPathsFromCwd() =>
         PackageResolver.GetFeedPaths().ToArray();
 
-    private static int HandleResult(EngineResult result, string? format, string rootPath)
+    internal static int HandleResult(EngineResult result, string? format, string rootPath)
     {
         // Use structured diagnostics for rich error output when available
         if (result.Diagnostics is { Count: > 0 })

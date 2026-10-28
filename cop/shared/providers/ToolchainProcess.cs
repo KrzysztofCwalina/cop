@@ -77,7 +77,8 @@ public static class ToolchainProcess
         string? standardInput = null,
         TimeSpan? timeout = null,
         int maxOutputCharacters = 4_194_304,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyDictionary<string, string?>? environment = null)
     {
         ArgumentNullException.ThrowIfNull(arguments);
         ArgumentException.ThrowIfNullOrWhiteSpace(workingDirectory);
@@ -111,13 +112,19 @@ public static class ToolchainProcess
             }
         };
         foreach (var argument in arguments) process.StartInfo.ArgumentList.Add(argument);
+        if (environment is not null)
+            foreach (var (name, value) in environment) process.StartInfo.Environment[name] = value;
+        using var containment = new ToolchainProcessContainment();
         try
         {
             if (!process.Start())
                 return new(ToolchainStatus.Failed, path, null, "", "", $"Could not start toolchain '{path}'.");
+            containment.Attach(process);
         }
         catch (Win32Exception ex)
         {
+            try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
+            catch (InvalidOperationException) { }
             return new(ex.NativeErrorCode is 2 or 3 ? ToolchainStatus.Unavailable : ToolchainStatus.Failed,
                 path, null, "", "", $"Cannot start toolchain '{path}': {ex.Message}");
         }
@@ -172,6 +179,7 @@ public static class ToolchainProcess
             deadline.Cancel();
             try
             {
+                containment.Terminate();
                 if (!process.HasExited) process.Kill(entireProcessTree: true);
                 await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
             }
@@ -182,7 +190,7 @@ public static class ToolchainProcess
             // Closing the pipes also releases reads when an exited tool's child inherited them.
             process.StandardOutput.Close();
             process.StandardError.Close();
-            process.StandardInput.Close();
+            process.StandardInput.BaseStream.Close();
             try { await work.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false); }
             catch (Exception pending) when (pending is OperationCanceledException or IOException
                 or ObjectDisposedException or OutputLimitException or TimeoutException) { }
