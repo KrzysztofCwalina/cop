@@ -11,12 +11,19 @@ predicate notIgnored(Statement) => Statement.CopIgnore == ''
 ## Java Correctness
 
 ## Avoid System.out / System.err console output in production code
-predicate isConsolePrint(Statement) => (Statement.TypeName == 'out' || Statement.TypeName == 'err')
+predicate isConsolePrint(Statement) => Statement.CallTarget != nic
+    && Statement.CallTarget.Kind == memberAccess
+    && Statement.CallTarget.Target != nic
+    && Statement.CallTarget.Target.Kind == memberAccess
+    && (Statement.CallTarget.Target.Name == 'out' || Statement.CallTarget.Target.Name == 'err')
+    && Statement.CallTarget.Target.Target != nic
+    && Statement.CallTarget.Target.Target.Kind == identifier
+    && Statement.CallTarget.Target.Target.Name == 'System'
     && (Statement.MemberName == 'println'
         || Statement.MemberName == 'print'
         || Statement.MemberName == 'printf')
 export let console-output = cb.Calls:isConsolePrint:notIgnored
-    :toWarning('Avoid System.{item.TypeName}.{item.MemberName}() — use a logging framework instead', nameof(console-output))
+    :toWarning('Avoid System.{item.CallTarget.Target.Name}.{item.MemberName}() — use a logging framework instead', nameof(console-output))
 
 ## Do not call printStackTrace() — log exceptions through a logger
 predicate isPrintStackTrace(Statement) => Statement.MemberName == 'printStackTrace'
@@ -24,7 +31,11 @@ export let print-stack-trace = cb.Calls:isPrintStackTrace:notIgnored
     :toWarning('Do not call printStackTrace() — log the exception via a logger', nameof(print-stack-trace))
 
 ## Avoid System.exit() in library and application code
-predicate isSystemExit(Statement) => Statement.TypeName == 'System'
+predicate isSystemExit(Statement) => Statement.CallTarget != nic
+    && Statement.CallTarget.Kind == memberAccess
+    && Statement.CallTarget.Target != nic
+    && Statement.CallTarget.Target.Kind == identifier
+    && Statement.CallTarget.Target.Name == 'System'
     && Statement.MemberName == 'exit'
 export let system-exit = cb.Calls:isSystemExit:notIgnored
     :toError('Avoid System.exit() — throw an exception or return an error instead', nameof(system-exit))
