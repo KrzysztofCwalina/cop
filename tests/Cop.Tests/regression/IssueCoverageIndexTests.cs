@@ -86,6 +86,8 @@ public class IssueRegressionCoverageIndexTests
         new(78, CoverageKind.ImplementedHere, "ProviderQueryRegressionTests.Issue078_CSharpFileBasedAppDirectivesAreAccepted (PendingFix)"),
         new(80, CoverageKind.ImplementedHere, "ProviderQueryRegressionTests.Issue080_PythonQuotedReturnAnnotationsAreAccepted (PendingFix)"),
         new(84, CoverageKind.ImplementedHere, "ForeachPipelineRegressionTests.Issue084_PipeSeparatedForeachCommandsProduceBothOutputs (PendingFix)"),
+        new(85, CoverageKind.ImplementedHere, "ToolchainCliIntegrationTests.ExplicitLocalFeed_DoesNotAttemptRemoteRestore (PendingFix)"),
+        new(86, CoverageKind.CoveredBy, "ForeachPipelineRegressionTests.Issue084_PipeSeparatedForeachCommandsProduceBothOutputs (PendingFix; foreach composition family)"),
     ];
 
     [Test]
@@ -95,8 +97,8 @@ public class IssueRegressionCoverageIndexTests
         Assert.That(duplicates, Is.Empty, "Each issue must appear exactly once in the regression coverage index.");
 
         var coveredIssues = Coverage.Select(c => c.Issue).OrderBy(i => i).ToArray();
-        Assert.That(coveredIssues, Is.EqualTo(Enumerable.Range(1, 55).Concat([60, 61, 62, 63, 65, 66, 70, 71, 72, 73, 75, 76, 78, 80, 84]).ToArray()),
-            "Regression coverage index must cover issues #1 through #55, #60-#63, #65-#66, #70-#73, #75-#76, #78, #80, and #84.");
+        Assert.That(coveredIssues, Is.EqualTo(Enumerable.Range(1, 55).Concat([60, 61, 62, 63, 65, 66, 70, 71, 72, 73, 75, 76, 78, 80, 84, 85, 86]).ToArray()),
+            "Regression coverage index must cover issues #1 through #55, #60-#63, #65-#66, #70-#73, #75-#76, #78, #80, and #84-#86.");
 
         var untracked = Coverage.Where(c => string.IsNullOrWhiteSpace(c.Detail)).Select(c => c.Issue).ToArray();
         Assert.That(untracked, Is.Empty, "Every issue must be ImplementedHere, CoveredBy(suiteName), or OutOfScope(reason).");
