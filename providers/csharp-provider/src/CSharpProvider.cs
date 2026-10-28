@@ -53,12 +53,10 @@ public class CSharpProvider : DataProvider
                     Console.Error.WriteLine($"[provider-parse] csharp {Path.GetRelativePath(root, path)}");
                 return parsed;
             }
-            var compilation = new Lazy<CSharpCompilation>(() =>
+            var compilations = new Lazy<Dictionary<SyntaxTree, CSharpCompilation>>(() =>
             {
                 var allTrees = sources.Paths.Select(path => Syntax(path).Tree).ToArray();
-                var result = CSharpCompilation.Create("CopAnalysis", allTrees, GetReferences(root),
-                    new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
-                        .WithNullableContextOptions(NullableContextOptions.Enable));
+                var result = CSharpProjectCompilations.Create(root, allTrees, query.ExcludedDirectories, GetReferences);
                 if (CopDiagnostics.Timing)
                     Console.Error.WriteLine($"[provider-semantics] csharp compilation files={allTrees.Length}");
                 return result;
@@ -68,13 +66,13 @@ public class CSharpProvider : DataProvider
                 var (tree, text) = Syntax(path);
                 var file = parser.ParseWithSemantics(path, text, tree, model: null);
                 file?.DeferSemanticAnalysis(() => CSharpSourceParser.EnrichWithSemantics(tree,
-                    compilation.Value.GetSemanticModel(tree), file.Types, file.Statements));
+                    compilations.Value[tree].GetSemanticModel(tree), file.Types, file.Statements));
 #pragma warning disable RSEXPERIMENTAL001 // Nullable-analysis control is experimental in the pinned Roslyn version.
                 if (file is not null)
                 {
                     CSharpSourceParser.DeferTypeNames(tree, file.Statements,
-                        () => compilation.Value.GetSemanticModel(tree, SemanticModelOptions.DisableNullableAnalysis),
-                        () => compilation.Value.GetSemanticModel(tree));
+                        () => compilations.Value[tree].GetSemanticModel(tree, SemanticModelOptions.DisableNullableAnalysis),
+                        () => compilations.Value[tree].GetSemanticModel(tree));
                 }
 #pragma warning restore RSEXPERIMENTAL001
                 return file;
@@ -204,14 +202,8 @@ public class CSharpProvider : DataProvider
         Log($"parsed {syntaxTrees.Count} syntax trees");
 
         // 3. Create Roslyn compilation with framework + project references
-        var references = GetReferences(rootPath);
-        Log($"loaded {references.Count} metadata references");
-        var compilation = CSharpCompilation.Create(
-            "CopAnalysis",
-            syntaxTrees.Select(t => t.Tree),
-            references,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
-                .WithNullableContextOptions(NullableContextOptions.Enable));
+        var compilations = CSharpProjectCompilations.Create(rootPath,
+            syntaxTrees.Select(t => t.Tree), excluded, GetReferences);
         Log("created compilation");
 
         // 4. Parse each file using its semantic model.
@@ -228,7 +220,7 @@ public class CSharpProvider : DataProvider
         foreach (var (tree, filePath, text) in syntaxTrees)
         {
             SemanticModel? model = null;
-            try { model = compilation.GetSemanticModel(tree); }
+            try { model = compilations[tree].GetSemanticModel(tree); }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 Console.Error.WriteLine($"Warning: Semantic analysis failed for '{filePath}': {ex.Message}");
@@ -337,7 +329,7 @@ public class CSharpProvider : DataProvider
         {
             var sourceFile = AssemblyApiReader.ReadAssembly(path);
             for (int i = 0; i < sourceFile.Types.Count; i++)
-                sourceFile.Types[i] = sourceFile.Types[i] with { File = sourceFile };
+                sourceFile.Types[i].File = sourceFile;
             return [new Document(path, sourceFile.Language, sourceFile)];
         });
     }
@@ -356,7 +348,10 @@ public class CSharpProvider : DataProvider
                 if (seen.Add(Path.GetFileName(dll)))
                 {
                     try { references.Add(MetadataReference.CreateFromFile(dll)); }
-                    catch { }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or BadImageFormatException)
+                    {
+                        ProviderWarnings.ReportOnce("csharp", dll, $"Cannot load metadata reference '{dll}': {ex.Message}");
+                    }
                 }
             }
         }
@@ -368,7 +363,10 @@ public class CSharpProvider : DataProvider
             if (assetsPath != null)
                 LoadPackageReferences(assetsPath, references, seen);
         }
-        catch { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            ProviderWarnings.ReportOnce("csharp", rootPath, $"Cannot read restored C# references under '{rootPath}': {ex.Message}; semantic resolution may be incomplete.");
+        }
 
         return references;
     }
@@ -430,7 +428,7 @@ public class CSharpProvider : DataProvider
     private static void LoadPackageReferences(string assetsPath, List<MetadataReference> references, HashSet<string> seen)
     {
         var json = File.ReadAllText(assetsPath);
-        var doc = System.Text.Json.JsonDocument.Parse(json);
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
 
         // Get package folder paths
         var packageFolders = new List<string>();
@@ -455,6 +453,7 @@ public class CSharpProvider : DataProvider
         // Get compile assets from the first target framework
         if (!doc.RootElement.TryGetProperty("targets", out var targets)) return;
         var firstTarget = targets.EnumerateObject().FirstOrDefault();
+        if (firstTarget.Value.ValueKind != System.Text.Json.JsonValueKind.Object) return;
 
         foreach (var package in firstTarget.Value.EnumerateObject())
         {
@@ -474,7 +473,10 @@ public class CSharpProvider : DataProvider
                     if (File.Exists(fullPath) && seen.Add(Path.GetFileName(fullPath)))
                     {
                         try { references.Add(MetadataReference.CreateFromFile(fullPath)); }
-                        catch { }
+                        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or BadImageFormatException)
+                        {
+                            ProviderWarnings.ReportOnce("csharp", fullPath, $"Cannot load metadata reference '{fullPath}': {ex.Message}");
+                        }
                         break;
                     }
                 }
@@ -498,7 +500,7 @@ public class CSharpProvider : DataProvider
         }
 
         for (int i = 0; i < file.Types.Count; i++)
-            file.Types[i] = file.Types[i] with { File = file };
+            file.Types[i].File = file;
 
         LinkMethodFiles(file.Types, file);
 
@@ -513,6 +515,7 @@ public class CSharpProvider : DataProvider
     {
         foreach (var type in types)
         {
+            type.File = file;
             foreach (var method in type.Methods) method.File = file;
             foreach (var ctor in type.Constructors) ctor.File = file;
             LinkMethodFiles(type.NestedTypes, file);
@@ -527,12 +530,13 @@ public class CSharpProvider : DataProvider
         var projectDirs = new List<(string Dir, string Name)>();
         foreach (var proj in projects)
         {
-           var projFilePath = Path.Combine(rootPath, proj.Path.Replace('/', '\\'));
+           var projFilePath = Path.Combine(rootPath, proj.Path.Replace('/', Path.DirectorySeparatorChar));
            var projDir = Path.GetDirectoryName(projFilePath);
            if (projDir is not null)
            {
                var relDir = Path.GetRelativePath(rootPath, projDir).Replace('\\', '/');
-               if (!relDir.EndsWith('/')) relDir += '/';
+               if (relDir == ".") relDir = "";
+               else if (!relDir.EndsWith('/')) relDir += '/';
                projectDirs.Add((relDir, proj.Name));
            }
         }

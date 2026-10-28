@@ -11,6 +11,7 @@ namespace Cop.Providers.SourceModel;
 /// </summary>
 public sealed record CSharpMethodDeclaration : MethodDeclaration
 {
+    internal int SyntaxStart { get; set; } = -1;
     public CSharpMethodDeclaration(
         MethodDeclaration source,
         bool isExtension = false,

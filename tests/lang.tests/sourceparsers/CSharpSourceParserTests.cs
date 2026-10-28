@@ -165,7 +165,7 @@ public class CSharpSourceParserTests
         Assert.That(calls[8].Parent, Is.SameAs(calls[7]));
         var condition = file.Statements.Single(s => s.Kind == "if");
         Assert.That(calls[7].Parent, Is.SameAs(condition));
-        Assert.That(calls[9].Parent, Is.Null);
+        Assert.That(calls[9].Parent, Is.SameAs(condition));
         Assert.That(file.ParseErrors, Is.Empty);
     }
 

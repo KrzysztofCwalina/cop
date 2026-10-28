@@ -30,6 +30,12 @@ member on `Program`), and `StringValue` for decoded string literals. Invocation 
 their arguments through `Children`; unsupported expression forms have `Kind == other`.
 Comments and plain string literals do not produce calls.
 
+Malformed source retains a file and reports `ParseErrors` rather than becoming an empty
+successful model. Comment positions exclude hashes inside strings. Local let bindings,
+foreach loops, pipelines, and nested calls expose `Parent`/`Children` relationships and
+function ownership. Cop AST locations currently provide line numbers only; unavailable
+column/end positions are left unknown rather than approximated.
+
 ## Usage
 
 ```cop

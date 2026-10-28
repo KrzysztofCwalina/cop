@@ -81,29 +81,31 @@ public static class AssemblyApiReader
         }
         else
         {
-            foreach (var ctor in type.GetConstructors(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+            const BindingFlags apiFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
+            foreach (var ctor in type.GetConstructors(apiFlags))
             {
                 if (!IsVisibleApi(ctor)) continue;
                 constructors.Add(ConvertConstructor(ctor));
             }
 
-            foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly))
+            foreach (var method in type.GetMethods(apiFlags))
             {
-                if (!IsVisibleApi(method) || method.IsSpecialName) continue;
+                if (!IsVisibleApi(method) || (method.IsSpecialName && !method.Name.StartsWith("op_", StringComparison.Ordinal))) continue;
                 methods.Add(ConvertMethod(method));
             }
 
-            foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly))
-                properties.Add(ConvertProperty(prop));
+            foreach (var prop in type.GetProperties(apiFlags))
+                if (prop.GetAccessors(true).Any(IsVisibleApi)) properties.Add(ConvertProperty(prop));
 
-            foreach (var evt in type.GetEvents(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly))
-                events.Add(ConvertEvent(evt));
+            foreach (var evt in type.GetEvents(apiFlags))
+                if (evt.GetAddMethod(true) is { } add && IsVisibleApi(add)) events.Add(ConvertEvent(evt));
 
-            foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly))
-                fields.Add(ConvertField(field));
+            foreach (var field in type.GetFields(apiFlags))
+                if (field.IsPublic || field.IsFamily || field.IsFamilyOrAssembly) fields.Add(ConvertField(field));
 
-            foreach (var nested in type.GetNestedTypes(BindingFlags.Public | BindingFlags.DeclaredOnly))
-                nestedTypes.Add(ConvertType(nested, mlc));
+            foreach (var nested in type.GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic))
+                if (nested.IsNestedPublic || nested.IsNestedFamily || nested.IsNestedFamORAssem)
+                    nestedTypes.Add(ConvertType(nested, mlc));
         }
 
         return new TypeDeclaration(
@@ -120,7 +122,9 @@ public static class AssemblyApiReader
         {
             Properties = properties,
             Events = events,
-            Fields = fields
+            Fields = fields,
+            Namespace = type.Namespace,
+            TypeParameters = type.IsGenericTypeDefinition ? type.GetGenericArguments().Select(p => p.Name).ToList() : []
         };
     }
 
@@ -161,6 +165,7 @@ public static class AssemblyApiReader
     {
         var mods = Modifier.None;
         if (type.IsPublic || type.IsNestedPublic) mods |= Modifier.Public;
+        if (type.IsNestedFamily || type.IsNestedFamORAssem) mods |= Modifier.Protected;
         if (type.IsSealed && !type.IsValueType && !type.IsEnum) mods |= Modifier.Sealed;
         if (type.IsAbstract && !type.IsInterface && !type.IsSealed) mods |= Modifier.Abstract;
         // Static classes are abstract + sealed in metadata
@@ -208,7 +213,10 @@ public static class AssemblyApiReader
             Decorators: [],
             ReturnType: new TypeReference(method.ReturnType.Name, method.ReturnType.Namespace, [], returnType),
             Parameters: method.GetParameters().Select(ConvertParameter).ToList(),
-            Line: 0);
+            Line: 0)
+        {
+            TypeParameters = method.IsGenericMethodDefinition ? method.GetGenericArguments().Select(p => p.Name).ToList() : []
+        };
     }
 
     private static string FormatMethodName(MethodInfo method)
@@ -238,8 +246,10 @@ public static class AssemblyApiReader
 
     private static PropertyDeclaration ConvertProperty(PropertyInfo prop)
     {
-        var getter = prop.GetGetMethod();
-        var setter = prop.GetSetMethod();
+        var getter = prop.GetGetMethod(true);
+        var setter = prop.GetSetMethod(true);
+        if (getter is not null && !IsVisibleApi(getter)) getter = null;
+        if (setter is not null && !IsVisibleApi(setter)) setter = null;
         var mods = Modifier.None;
 
         var accessorMethod = getter ?? setter;
@@ -258,7 +268,7 @@ public static class AssemblyApiReader
     private static EventDeclaration ConvertEvent(EventInfo evt)
     {
         var mods = Modifier.None;
-        var addMethod = evt.GetAddMethod();
+        var addMethod = evt.GetAddMethod(true);
         if (addMethod != null)
             mods = GetMethodModifiers(addMethod);
 
@@ -277,6 +287,7 @@ public static class AssemblyApiReader
     {
         var mods = Modifier.None;
         if (field.IsPublic) mods |= Modifier.Public;
+        else if (field.IsFamily || field.IsFamilyOrAssembly) mods |= Modifier.Protected;
         if (field.IsStatic) mods |= Modifier.Static;
         if (field.IsInitOnly) mods |= Modifier.Readonly;
         if (field.IsLiteral) mods |= Modifier.Const;
@@ -301,7 +312,7 @@ public static class AssemblyApiReader
             IsKwargs: false,
             HasDefaultValue: param.HasDefaultValue,
             Line: 0)
-        { DefaultValueText = param.HasDefaultValue ? FormatDefaultValue(param) : null };
+        { DefaultValueText = param.HasDefaultValue ? FormatDefaultValue(param) : null, IsOptional = param.IsOptional };
     }
 
     private static string FormatDefaultValue(ParameterInfo param)

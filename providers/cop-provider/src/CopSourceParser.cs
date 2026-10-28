@@ -21,10 +21,13 @@ public class CopSourceParser : ISourceParser
         {
             module = Cop.Lang.Parser.CopParser.Parse(sourceText, filePath);
         }
-        catch (ParseException)
+        catch (ParseException ex)
         {
-            // Return a minimal source file so Lines/Files still work
-            return new SourceFile(filePath, "cop", [], [], sourceText);
+            return new SourceFile(filePath, "cop", [], [], sourceText)
+            {
+                ParseErrors = [$"{filePath}({ex.Line}): error: {ex.Message}"],
+                CommentLines = ExpressionCollector.CollectCommentLines(sourceText)
+            };
         }
 
         var types = new List<TypeDeclaration>();
@@ -44,7 +47,9 @@ public class CopSourceParser : ISourceParser
             types.Add(new TypeDeclaration(td.Name, TypeKind.Class, modifiers,
                 baseTypes, [], [], [], [], [], td.Line)
             {
-                Fields = fields
+                Fields = fields,
+                HasDocComment = td.DocComment is not null,
+                DocComment = td.DocComment
             });
         }
 
@@ -98,7 +103,7 @@ public class CopSourceParser : ISourceParser
             var keywords = new List<string> { "let" };
             if (let.IsExported) keywords.Add("export");
             statements.Add(new StatementInfo("declaration", keywords,
-                null, let.Name, [], let.Line, false));
+                null, let.Name, [], let.Line, false) { ValueExpression = ConvertExpression(let.Value) });
         }
 
         // Map commands → statements
@@ -113,7 +118,9 @@ public class CopSourceParser : ISourceParser
         return new SourceFile(filePath, "cop", types, statements, sourceText)
         {
             Usings = usings,
-            Methods = functions.Values.Cast<MethodDeclaration>().ToList()
+            Imports = module.Declarations.OfType<ImportDecl>().Select(i => new ImportInfo(i.ModuleName, i.Line)).ToList(),
+            Methods = functions.Values.Cast<MethodDeclaration>().ToList(),
+            CommentLines = ExpressionCollector.CollectCommentLines(sourceText)
         };
     }
 
@@ -121,6 +128,25 @@ public class CopSourceParser : ISourceParser
         IReadOnlyDictionary<FunctionDecl, CopFunctionDeclaration> functions) : AstWalker
     {
         private CopFunctionDeclaration? _function;
+        private StatementInfo? _parent;
+
+        private void Add(StatementInfo statement)
+        {
+            statement.Method = _function;
+            statement.Parent = _parent;
+            statements.Add(statement);
+            if (_parent is not null) _parent._children.Add(statement);
+            else _function?.Statements.Add(statement);
+        }
+
+        private object? Within(StatementInfo statement, Func<object?> visit)
+        {
+            Add(statement);
+            var previous = _parent;
+            _parent = statement;
+            try { return visit(); }
+            finally { _parent = previous; }
+        }
 
         public override object? VisitCallExpr(Cop.Lang.Ast.CallExpr node)
         {
@@ -132,9 +158,73 @@ public class CopSourceParser : ISourceParser
                 ArgumentExpressions = node.Args.Select(ConvertExpression).ToList(),
                 Method = _function
             };
-            statements.Add(statement);
-            _function?.Statements.Add(statement);
-            return base.VisitCallExpr(node);
+            return Within(statement, () => base.VisitCallExpr(node));
+        }
+
+        public override object? VisitLetStatement(LetStatement node) =>
+            Within(new StatementInfo("declaration", ["let"], node.TypeAnnotation?.Name, node.Name, [],
+                node.Line, _function is not null) { ValueExpression = ConvertExpression(node.Value) },
+                () => base.VisitLetStatement(node));
+
+        public override object? VisitForEachStatement(ForEachStatement node) =>
+            Within(new StatementInfo("foreach", node.IsAsync ? ["async"] : [], null, node.Variable, [],
+                node.Line, _function is not null), () => base.VisitForEachStatement(node));
+
+        public override object? VisitPipelineStatement(PipelineStatement node) =>
+            Within(new StatementInfo("pipeline", [], null, null, [], node.Line, _function is not null),
+                () => base.VisitPipelineStatement(node));
+
+        public override object? VisitLetDecl(LetDecl node)
+        {
+            var declaration = statements.Single(s => s.Kind == "declaration" && s.MemberName == node.Name && s.Line == node.Line);
+            var previous = _parent;
+            _parent = declaration;
+            base.VisitLetDecl(node);
+            _parent = previous;
+            return null;
+        }
+
+        public static HashSet<int> CollectCommentLines(string text)
+        {
+            var result = new HashSet<int>();
+            int line = 1;
+            bool quoted = false, verbatim = false, triple = false;
+            for (int i = 0; i < text.Length; i++)
+            {
+                char c = text[i];
+                if (c == '\n') line++;
+                if (quoted)
+                {
+                    if (!verbatim && !triple && c == '\\' && i + 1 < text.Length)
+                    {
+                        if (text[++i] == '\n') line++;
+                    }
+                    else if (c == '\'')
+                    {
+                        if (triple)
+                        {
+                            if (i + 2 < text.Length && text[i + 1] == '\'' && text[i + 2] == '\'')
+                            { quoted = false; i += 2; }
+                        }
+                        else if (verbatim && i + 1 < text.Length && text[i + 1] == '\'') i++;
+                        else quoted = false;
+                    }
+                    continue;
+                }
+                if (c == '#')
+                {
+                    result.Add(line);
+                    while (i + 1 < text.Length && text[i + 1] != '\n') i++;
+                }
+                else if (c == '\'')
+                {
+                    quoted = true;
+                    verbatim = i > 0 && text[i - 1] == '@';
+                    triple = !verbatim && i + 2 < text.Length && text[i + 1] == '\'' && text[i + 2] == '\'';
+                    if (triple) i += 2;
+                }
+            }
+            return result;
         }
 
         public override object? VisitFunctionDecl(FunctionDecl node)
@@ -167,6 +257,23 @@ public class CopSourceParser : ISourceParser
         {
             Target = ConvertExpression(call.Callee), Children = call.Args.Select(ConvertExpression).ToList()
         },
+        Cop.Lang.Ast.IndexExpr index => new("index")
+        {
+            Target = ConvertExpression(index.Object), Children = [ConvertExpression(index.Index)]
+        },
+        Cop.Lang.Ast.BinaryExpr binary => new("binary")
+        {
+            Name = binary.Op.ToString(), Children = [ConvertExpression(binary.Left), ConvertExpression(binary.Right)]
+        },
+        Cop.Lang.Ast.UnaryExpr unary => new("unary")
+        {
+            Name = unary.Op.ToString(), Children = [ConvertExpression(unary.Operand)]
+        },
+        Cop.Lang.Ast.ConditionalExpr conditional => new("conditional")
+        {
+            Children = [ConvertExpression(conditional.Condition), ConvertExpression(conditional.Then), ConvertExpression(conditional.Else)]
+        },
+        Cop.Lang.Ast.ListExpr list => new("list") { Children = list.Elements.Select(ConvertExpression).ToList() },
         _ => new("other")
     };
 
