@@ -188,6 +188,31 @@ public class JavaScriptProjectDiscoveryTests
         Assert.That(project.Properties["BaseUrl"], Is.EqualTo(_tempDir.Replace('\\', '/')).Or.EqualTo(_tempDir));
     }
 
+    [TestCase("packages/*", "packages/member", true)]
+    [TestCase("packages/*", "packages/nested/member", false)]
+    [TestCase("packages/?", "packages/a", true)]
+    [TestCase("packages/?", "packages/ab", false)]
+    [TestCase("**/member", "member", true)]
+    [TestCase("**/member", "packages/nested/member", true)]
+    [TestCase("**/member", "notmember", false)]
+    [TestCase("packages/**/member", "packages/member", true)]
+    [TestCase("packages/**/member", "packages/nested/member", true)]
+    [TestCase("packages/**/member", "packages/notmember", false)]
+    [TestCase("packages/**", "packages/nested/member", true)]
+    [TestCase("packages/[literal]", "packages/[literal]", true)]
+    [TestCase("packages/[literal]", "packages/l", false)]
+    public void Discover_WorkspaceGlob_HonorsSegmentsRecursiveDirectoriesAndLiteralCharacters(
+        string pattern, string member, bool expected)
+    {
+        File.WriteAllText(Path.Combine(_tempDir, "package.json"),
+            System.Text.Json.JsonSerializer.Serialize(new { name = "root", workspaces = new[] { pattern } }));
+        var directory = Path.Combine(_tempDir, member.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "package.json"), """{ "name": "member" }""");
+        var project = JavaScriptProjectDiscovery.Discover(_tempDir, null).Single(p => p.Name == "member");
+        Assert.That(project.Properties.ContainsKey("WorkspaceRoot"), Is.EqualTo(expected));
+    }
+
     [Test]
     public void Discover_MalformedManifest_ReportsErrorInsteadOfSilentlyDroppingIt()
     {

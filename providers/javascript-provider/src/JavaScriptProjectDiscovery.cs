@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Cop.Core;
 using Cop.Providers.SourceModel;
 using Cop.Providers.SourceParsers;
@@ -115,12 +114,40 @@ public static class JavaScriptProjectDiscovery
         {
             bool exclude = pattern.StartsWith('!');
             var glob = (exclude ? pattern[1..] : pattern).TrimEnd('/').Replace('\\', '/');
-            var regex = "^" + Regex.Escape(glob).Replace(@"\*\*/", "(?:.*/)?")
-                .Replace(@"\*\*", ".*").Replace(@"\*", "[^/]*").Replace(@"\?", "[^/]") + "$";
-            if (Regex.IsMatch(relative, regex, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1)))
+            if (MatchesGlob(relative, glob))
                 matches = !exclude;
         }
         return matches;
+    }
+
+    private static bool MatchesGlob(string path, string pattern)
+    {
+        // Dynamic programming bounds work by path length times pattern length, without backtracking.
+        var next = new bool[path.Length + 1];
+        next[path.Length] = true;
+        for (int i = pattern.Length - 1; i >= 0; i--)
+        {
+            bool recursiveDirectory = pattern[i] == '/' && i >= 2 && pattern[i - 1] == '*' && pattern[i - 2] == '*';
+            bool recursive = !recursiveDirectory && pattern[i] == '*' && i > 0 && pattern[i - 1] == '*';
+            var current = new bool[path.Length + 1];
+            bool directorySuffix = false;
+            for (int j = path.Length; j >= 0; j--)
+            {
+                if (recursiveDirectory)
+                {
+                    if (j < path.Length && path[j] == '/' && next[j + 1]) directorySuffix = true;
+                    current[j] = next[j] || directorySuffix;
+                }
+                else if (pattern[i] == '*')
+                    current[j] = next[j] || j < path.Length && (recursive || path[j] != '/') && current[j + 1];
+                else if (j < path.Length)
+                    current[j] = (pattern[i] == '?' ? path[j] != '/' : pattern[i] == path[j]) && next[j + 1];
+            }
+            if (recursiveDirectory) i -= 2;
+            else if (recursive) i--;
+            next = current;
+        }
+        return next[0];
     }
 
     private static void CollectManifests(string directory, IReadOnlySet<string>? excluded, List<string> result)

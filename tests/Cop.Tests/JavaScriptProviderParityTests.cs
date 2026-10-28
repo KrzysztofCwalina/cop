@@ -80,6 +80,32 @@ public class JavaScriptProviderParityTests
         }
     }
 
+    [Test]
+    public void AzureConsoleLogging_UsesParsedReceiver_AndExcludesOtherReceivers()
+    {
+        File.WriteAllText(Path.Combine(_root, "sample.ts"), """
+            export class StorageClient {
+                send(logger: { log(value: string): void }) {
+                    console.log('output');
+                    logger.log('clean');
+                    const text = 'console.log("not a call")';
+                }
+            }
+            """);
+        var script = Path.Combine(_root, "check.cop");
+        File.WriteAllText(script, """
+            import javascript-library-azure-checks
+            command TEST = CHECK(no-console-logging)
+            """);
+        var result = Engine.RunProject([Path.Combine(RepoRoot, "packages")],
+            ["javascript-library-azure-checks"], _root, ["TEST"], additionalScriptFiles: [script]);
+        Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
+        Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]
+        {
+            "sample.ts(3): error: Do not use console for logging — use @azure/logger instead"
+        }));
+    }
+
     [TestCase("FIRST")]
     [TestCase("TAKE")]
     public void DeferredSelection_DoesNotOpenAnUnrelatedLockedLaterFile(string command)

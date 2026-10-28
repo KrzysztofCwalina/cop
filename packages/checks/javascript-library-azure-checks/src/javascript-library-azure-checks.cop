@@ -51,7 +51,9 @@ export let error-handling = javascript.statements():isThrowingCustomError
 
 ## Azure clients should not use console for logging — use @azure/logger
 predicate isUsingConsoleLog(Statement) => Statement.Kind == 'call'
-    && Statement.TypeName == 'console'
+    && Statement.CallTarget != nic && Statement.CallTarget.Kind == memberAccess
+    && Statement.CallTarget.Target != nic && Statement.CallTarget.Target.Kind == identifier
+    && Statement.CallTarget.Target.Name == 'console'
 export let no-console-logging = Clients.Methods.Statements:isUsingConsoleLog
     :toError('Do not use console for logging — use @azure/logger instead')
 

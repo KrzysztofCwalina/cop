@@ -84,7 +84,9 @@ test swallows = assert(python.Statements:swallowsException.Count > 0)
 
 predicate consoleOutput(Statement) => Statement.Kind == call
     && (Statement.TypeName == 'Console'
-        || Statement.TypeName == 'console'
+        || (Statement.CallTarget != nic && Statement.CallTarget.Kind == memberAccess
+            && Statement.CallTarget.Target != nic && Statement.CallTarget.Target.Kind == identifier
+            && Statement.CallTarget.Target.Name == 'console')
         || Statement.MemberName == 'print')
 test console = assert(python.Statements:consoleOutput.Count > 0)
 

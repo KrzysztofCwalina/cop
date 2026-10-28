@@ -8,7 +8,10 @@ import files
 
 # ── Statement call predicates ──
 predicate printCall(Statement) => Statement.Kind == 'call' && Statement.MemberName == 'print'
-predicate consoleCall(Statement) => Statement.Kind == 'call' && Statement.TypeName == 'console'
+predicate consoleCall(Statement) => Statement.Kind == 'call'
+    && Statement.CallTarget != nic && Statement.CallTarget.Kind == memberAccess
+    && Statement.CallTarget.Target != nic && Statement.CallTarget.Target.Kind == identifier
+    && Statement.CallTarget.Target.Name == 'console'
 predicate evalCall(Statement) => Statement.Kind == 'call' && Statement.MemberName == 'eval'
 predicate alertCall(Statement) => Statement.Kind == 'call' && Statement.MemberName == 'alert'
 
