@@ -14,7 +14,11 @@ import (
 	"strings"
 )
 
-type request struct{ Path, Source string }
+type request struct {
+	Path, Source string
+	Semantic     bool
+	Packages     []packageContext
+}
 type expression struct {
 	Kind        string        `json:"kind"`
 	Name        string        `json:"name,omitempty"`
@@ -471,7 +475,13 @@ func main() {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(2)
 		}
-		if err := json.NewEncoder(writer).Encode(analyze(req)); err != nil {
+		var result any
+		if req.Semantic {
+			result = semantic(req)
+		} else {
+			result = analyze(req)
+		}
+		if err := json.NewEncoder(writer).Encode(result); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(2)
 		}

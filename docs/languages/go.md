@@ -26,8 +26,11 @@ uses Go's standard-library parser and AST through a Cop-owned helper; no third-p
 Go modules or additional Cop setup are required.
 
 The helper reads source declarations, signatures, imports, spans, and statement/call
-structure. This is **AST analysis, not a full `go/types` check**: native parsing does not
-guarantee that imports, receiver types, or all call targets have been semantically resolved.
+structure without type-checking the project. Requesting a call's `ReceiverType`,
+`ValueType`, or `ReferencedCallable` then runs **package-aware `go/types` checking**.
+The installed Go toolchain's offline, read-only `go list` supplies module/workspace,
+local replacements, vendored dependencies, imports and build-selected source files. A source importer checks
+those packages, including the installed standard library; no dependency binary is built.
 Cop does not build or run the analyzed application, invoke its generators, or download
 modules or toolchains. Helper compilation is separate from the target project's build:
 ambient workspace settings, automatic toolchain downloads, CGO, and build flags are
@@ -50,11 +53,21 @@ have kind `other`; unknown spans remain absent rather than being invented.
 Native generic argument trees come directly from parsed type syntax; fallback
 signatures retain their text but do not claim resolved generic argument trees.
 
-Neither backend performs project-wide type checking, resolves dynamic calls, or
-computes implemented interfaces from a build. A call's receiver spelling is not a
-resolved receiver type. Module discovery includes nested modules. `Project.Properties`
+Compiler-bound facts include an inferred receiver/result type and the selected callable's
+package, signature, parameter/return types, and source location where available.
+`TypeName` remains syntax-compatible; use `ReceiverType` for inferred receiver types.
+Interface calls name the compiler-selected declaration, not a guaranteed runtime target.
+Missing packages or incomplete context produce errors on semantic demand, not invented
+bindings. Fallback semantic fields remain unknown. CGO and generators never run; packages
+requiring generated or C declarations need those declarations locally or produce diagnostics.
+Semantic facts are memoized per demanded file. Go per-file disk caching is disabled until
+it can safely track dependency context; new executions re-check dependencies even when
+the caller has not changed. Syntax-only
+queries and `First`/`Take` do not force package checking or later source reads.
+
+Module discovery includes nested modules. `Project.Properties`
 preserves declared `replace`, `exclude`, and enclosing `go.work` context; these are
-static manifest summaries, not the result of `go list` or module graph resolution.
+static manifest summaries; semantic checking separately uses the installed Go package loader.
 
 Source syntax errors, malformed protocol responses, timeouts, output limits, and other
 failures during an established native request are reported as

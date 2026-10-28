@@ -96,13 +96,14 @@ public static class JavaProjectDiscovery
         }
     }
 
-    private static IEnumerable<string> ReadGradleDependencies(string content)
+    internal static IEnumerable<string> ReadGradleDependencies(string content, IReadOnlySet<string>? selectedConfigurations = null)
     {
         var tokens = new JavaLexer(content).Tokenize(singleQuotedStrings: true);
         string[] configurations = ["implementation", "api", "compile", "compileOnly", "runtimeOnly", "testImplementation", "testRuntimeOnly", "annotationProcessor"];
         for (int i = 0; i + 1 < tokens.Count; i++)
         {
-            if (tokens[i].Kind != JavaTokenKind.Identifier || !configurations.Contains(tokens[i].Value)) continue;
+            if (tokens[i].Kind != JavaTokenKind.Identifier
+                || !(selectedConfigurations?.Contains(tokens[i].Value) ?? configurations.Contains(tokens[i].Value))) continue;
             int valueIndex = i + 1;
             if (tokens[valueIndex].Value == "(") valueIndex++;
             if (valueIndex >= tokens.Count || tokens[valueIndex].Kind != JavaTokenKind.StringLiteral) continue;

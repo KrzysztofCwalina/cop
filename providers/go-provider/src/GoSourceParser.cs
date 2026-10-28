@@ -7,6 +7,7 @@ public class GoSourceParser(string? toolchainSearchPath = null, Func<string, Cop
     public GoSourceParser() : this(null, null) { }
     public override IReadOnlyList<string> Extensions => [".go"];
     public override string Language => "go";
+    public override bool CanCache(string filePath) => false;
     public override bool SupportsCrossFileMembers => true;
     public override string GetCacheIdentity(string filePath) =>
         base.GetCacheIdentity(filePath) + ":" + GoNativeAnalysis.Identity(toolchainSearchPath, nativeRequest is not null);

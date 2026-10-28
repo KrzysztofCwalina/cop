@@ -2,6 +2,8 @@ import com.sun.source.tree.*;
 import com.sun.source.util.*;
 import javax.tools.*;
 import javax.lang.model.element.Modifier;
+import javax.lang.model.element.*;
+import javax.lang.model.type.*;
 import java.io.*;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -156,6 +158,7 @@ public class CopJavaAnalysis {
                     importFacts.add("{\"module\":" + quote(module) + ",\"isStatic\":" + imported.isStatic()
                         + ",\"isWildcard\":" + module.endsWith(".*") + "," + model.span(imported) + "}");
                 }
+
                 for (Tree declaration : unit.getTypeDecls())
                     if (declaration instanceof ClassTree) declarations.add(model.type((ClassTree)declaration));
                 new TreeScanner<Void, Void>() {
@@ -283,13 +286,140 @@ public class CopJavaAnalysis {
             + ",\"statements\":" + array(statements) + ",\"importFacts\":" + array(importFacts) + "}";
     }
 
+    static String mirror(TypeMirror type) {
+        if (type == null || type.getKind() == TypeKind.ERROR || type.getKind() == TypeKind.NONE) return "null";
+        List<String> arguments = new ArrayList<>();
+        String namespace = "";
+        TypeMirror base = type;
+        while (base instanceof ArrayType) base = ((ArrayType)base).getComponentType();
+        if (base instanceof DeclaredType) {
+            Element owner = ((DeclaredType)base).asElement();
+            while (owner != null && !(owner instanceof PackageElement)) owner = owner.getEnclosingElement();
+            if (owner instanceof PackageElement) namespace = ((PackageElement)owner).getQualifiedName().toString();
+            for (TypeMirror argument : ((DeclaredType)base).getTypeArguments()) {
+                String fact = mirror(argument);
+                if (fact.equals("null")) return "null";
+                arguments.add(fact);
+            }
+        }
+        return "{\"name\":" + quote(type.toString()) + ",\"originalText\":" + quote(type.toString())
+            + ",\"namespace\":" + quote(namespace) + ",\"genericArguments\":" + array(arguments) + "}";
+    }
+
+    static String semantic(JavaCompiler compiler, String path, String source, String sources,
+                           String classpath, String sourcepath) throws IOException {
+        DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+        List<String> facts = new ArrayList<>(), errors = new ArrayList<>();
+        try (StandardJavaFileManager manager = compiler.getStandardFileManager(diagnostics, null, StandardCharsets.UTF_8)) {
+            JavaFileObject original = manager.getJavaFileObjects(new File(path)).iterator().next();
+            JavaFileObject target = new ForwardingJavaFileObject<JavaFileObject>(original) {
+                public CharSequence getCharContent(boolean ignoreEncodingErrors) { return source; }
+            };
+            // Module attribution needs the manager's real path object, not the source overlay.
+            JavaFileManager overlay = (JavaFileManager)java.lang.reflect.Proxy.newProxyInstance(
+                JavaFileManager.class.getClassLoader(), new Class<?>[] { JavaFileManager.class }, (proxy, method, arguments) -> {
+                    if (arguments != null)
+                        for (int i = 0; i < arguments.length; i++) if (arguments[i] == target) arguments[i] = original;
+                    try { return method.invoke(manager, arguments); }
+                    catch (java.lang.reflect.InvocationTargetException failure) { throw failure.getCause(); }
+                });
+            List<JavaFileObject> inputs = new ArrayList<>();
+            inputs.add(target);
+            if (!sources.isEmpty())
+                for (JavaFileObject input : manager.getJavaFileObjectsFromStrings(Arrays.asList(sources.split("\n")))) inputs.add(input);
+            List<File> classFiles = new ArrayList<>();
+            if (!classpath.isEmpty())
+                for (String entry : classpath.split(java.util.regex.Pattern.quote(File.pathSeparator))) classFiles.add(new File(entry));
+            manager.setLocation(StandardLocation.CLASS_PATH, classFiles);
+            List<String> options = new ArrayList<>(Arrays.asList("-proc:none", "-implicit:none", "-encoding", "UTF-8",
+                "-sourcepath", sourcepath));
+            if (!classpath.isEmpty() && !System.getProperty("java.specification.version", "1.8").startsWith("1.")) {
+                options.add("--module-path"); options.add(classpath);
+            }
+            JavacTask task = (JavacTask)compiler.getTask(null, overlay, diagnostics, options, null, inputs);
+            List<CompilationUnitTree> units = new ArrayList<>();
+            for (CompilationUnitTree unit : task.parse()) units.add(unit);
+            task.analyze();
+            Trees trees = Trees.instance(task);
+            for (CompilationUnitTree unit : units) {
+                if (!unit.getSourceFile().toUri().equals(target.toUri())) continue;
+                Declarations model = new Declarations(unit, trees);
+                new TreePathScanner<Void, Void>() {
+                    void bind(Tree node, ExpressionTree select, ExpressionTree receiver) {
+                        if (trees.getSourcePositions().getStartPosition(unit, node) < 0
+                            || trees.getSourcePositions().getEndPosition(unit, node) < 0) return;
+                        TreePath current = getCurrentPath();
+                        Element element = trees.getElement(current);
+                        TypeMirror value = trees.getTypeMirror(current);
+                        String callable = "null";
+                        if (element instanceof ExecutableElement) {
+                            ExecutableElement method = (ExecutableElement)element;
+                            Element owner = method.getEnclosingElement();
+                            TypeMirror selected = select == null ? method.asType()
+                                : trees.getTypeMirror(new TreePath(current, select));
+                            ExecutableType signature = selected instanceof ExecutableType ? (ExecutableType)selected : (ExecutableType)method.asType();
+                            List<String> parameters = new ArrayList<>();
+                            boolean complete = signature.getReturnType().getKind() != TypeKind.ERROR;
+                            for (TypeMirror parameter : signature.getParameterTypes()) {
+                                String fact = mirror(parameter);
+                                complete &= !fact.equals("null");
+                                parameters.add(fact);
+                            }
+                            String namespace = task.getElements().getPackageOf(method).getQualifiedName().toString();
+                            TreePath declaration = trees.getPath(method);
+                            String location = "";
+                            if (declaration != null) {
+                                CompilationUnitTree declaredUnit = declaration.getCompilationUnit();
+                                long start = trees.getSourcePositions().getStartPosition(declaredUnit, declaration.getLeaf());
+                                long end = trees.getSourcePositions().getEndPosition(declaredUnit, declaration.getLeaf());
+                                location = ",\"sourceFile\":" + quote(new File(declaredUnit.getSourceFile().toUri()).getAbsolutePath())
+                                    + ",\"line\":" + declaredUnit.getLineMap().getLineNumber(start)
+                                    + ",\"column\":" + declaredUnit.getLineMap().getColumnNumber(start);
+                                if (end >= 0) location += ",\"endLine\":" + declaredUnit.getLineMap().getLineNumber(end)
+                                    + ",\"endColumn\":" + declaredUnit.getLineMap().getColumnNumber(end);
+                            }
+                            callable = "{\"name\":" + quote(method.getSimpleName().toString())
+                                + ",\"signature\":" + quote(owner.toString() + "." + method.getSimpleName() + signature.toString())
+                                + ",\"declaringType\":" + quote(owner.toString()) + ",\"namespace\":" + quote(namespace)
+                                + ",\"returnType\":" + mirror(signature.getReturnType()) + ",\"parameters\":" + array(parameters)
+                                + location + "}";
+                            if (!complete) callable = "null";
+                        }
+                        TypeMirror receiverType = receiver == null ? null
+                            : trees.getTypeMirror(TreePath.getPath(unit, receiver));
+                        facts.add("{" + model.span(node) + ",\"receiverType\":" + mirror(receiverType)
+                            + ",\"valueType\":" + mirror(value) + ",\"callable\":" + callable + "}");
+                    }
+                    public Void visitMethodInvocation(MethodInvocationTree node, Void unused) {
+                        ExpressionTree select = node.getMethodSelect();
+                        bind(node, select, select instanceof MemberSelectTree ? ((MemberSelectTree)select).getExpression() : null);
+                        return super.visitMethodInvocation(node, unused);
+                    }
+                    public Void visitNewClass(NewClassTree node, Void unused) {
+                        bind(node, null, null);
+                        return super.visitNewClass(node, unused);
+                    }
+                }.scan(unit, null);
+            }
+        }
+        for (Diagnostic<? extends JavaFileObject> diagnostic : diagnostics.getDiagnostics())
+            if (diagnostic.getKind() == Diagnostic.Kind.ERROR)
+                errors.add(quote("Java semantic context: " + (diagnostic.getSource() == null ? path : diagnostic.getSource().getName())
+                    + "(" + diagnostic.getLineNumber() + "): " + diagnostic.getMessage(Locale.ROOT)));
+        return "{\"facts\":" + array(facts) + ",\"errors\":" + array(errors) + "}";
+    }
+
     public static void main(String[] args) throws Exception {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         if (compiler == null) throw new IllegalStateException("JDK compiler-tree API unavailable");
         BufferedReader input = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
         PrintWriter output = new PrintWriter(new OutputStreamWriter(System.out, StandardCharsets.UTF_8), true);
         String line;
-        while ((line = input.readLine()) != null)
-            output.println(analyze(compiler, field(line, "Path"), field(line, "Source")));
+        while ((line = input.readLine()) != null) {
+            boolean semantic = line.contains("\"Semantic\":");
+            output.println(semantic ? semantic(compiler, field(line, "Path"), field(line, "Source"),
+                field(line, "Sources"), field(line, "Classpath"), field(line, "Sourcepath"))
+                : analyze(compiler, field(line, "Path"), field(line, "Source")));
+        }
     }
 }

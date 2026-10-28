@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <EmbeddedResource Include="src\native\analysis.go" LogicalName="Cop.Go.Native" />
+    <EmbeddedResource Include="src\native\semantics.go" LogicalName="Cop.Go.Semantics" />
   </ItemGroup>
 
   <PropertyGroup>

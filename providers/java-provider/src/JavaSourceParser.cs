@@ -7,6 +7,7 @@ public class JavaSourceParser(string? toolchainSearchPath = null, Func<string, C
     public JavaSourceParser() : this(null, null) { }
     public override IReadOnlyList<string> Extensions => [".java"];
     public override string Language => "java";
+    public override bool CanCache(string filePath) => false;
     public override string GetCacheIdentity(string filePath) =>
         base.GetCacheIdentity(filePath) + ":" + JavaNativeAnalysis.Identity(toolchainSearchPath, nativeRequest is not null);
 

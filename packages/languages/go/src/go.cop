@@ -2,7 +2,8 @@
 import code
 
 ## Parses Go with the installed standard-library AST toolchain, or warns and uses simpler syntax analysis.
-## No target code is built or executed. Neither mode performs project-wide type resolution.
+## Native semantic fields demand package-aware go/types checking with offline local dependencies.
+## No target code is built or executed; missing semantic context is diagnosed.
 ## Example: let cb = go.parse()
 export function parse() : Codebase => provider('go')
 

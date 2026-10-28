@@ -62,8 +62,56 @@ internal static class JavaNativeAnalysis
         ApplyCalls(file, response);
         if (response.Errors.Count == 0) file.ParseErrors.Clear();
         file.ParseErrors.AddRange(response.Errors);
+        if (request is null) AttachSemantics(file, searchPath);
         return file;
     }
+
+    private static void AttachSemantics(SourceFile file, string? searchPath)
+    {
+        var analysis = new Lazy<bool>(() =>
+        {
+            string javac = ToolchainProcess.FindExecutable("javac", searchPath)
+                ?? throw new InvalidOperationException("Java semantic compiler disappeared after native parsing.");
+            string java = JavaExecutable(javac)
+                ?? throw new InvalidOperationException("Java semantic launcher is unavailable.");
+            string helper = Helper(javac) ?? throw new InvalidOperationException("Java semantic helper is unavailable.");
+            var context = JavaSemanticContext.Discover(file);
+            string request = JsonSerializer.Serialize(new
+            {
+                Path = Convert.ToBase64String(Encoding.UTF8.GetBytes(context.Path)),
+                Source = Convert.ToBase64String(Encoding.UTF8.GetBytes(file.RawText)),
+                Semantic = Convert.ToBase64String(Encoding.UTF8.GetBytes("true")),
+                Sources = Convert.ToBase64String(Encoding.UTF8.GetBytes(string.Join("\n", context.Sources))),
+                Classpath = Convert.ToBase64String(Encoding.UTF8.GetBytes(string.Join(Path.PathSeparator, context.Classpath))),
+                Sourcepath = Convert.ToBase64String(Encoding.UTF8.GetBytes(string.Join(Path.PathSeparator, context.Roots)))
+            }, RequestJson);
+            var result = ToolchainExecutionScope.RequestAsync(java, ["-cp", helper, "CopJavaAnalysis"], helper, request,
+                timeout: TimeSpan.FromMinutes(2), environment: EnvironmentOverrides).GetAwaiter().GetResult();
+            if (result.Status != ToolchainStatus.Success)
+                throw new InvalidOperationException($"Java semantic analysis {result.Status}: {result.Diagnostic ?? result.StandardError}");
+            var response = JsonSerializer.Deserialize<SemanticResponse>(result.StandardOutput, Json)
+                ?? throw new InvalidOperationException("Java semantic analysis returned null.");
+            if (response.Facts is null || response.Errors is null)
+                throw new InvalidOperationException("Java semantic analysis omitted bindings or diagnostics.");
+            foreach (string error in context.Errors.Concat(response.Errors)) ProviderErrors.Report(error);
+            foreach (var fact in response.Facts)
+            {
+                var call = file.Statements.FirstOrDefault(s => s.Kind == "call" && s.Line == fact.Line && s.Column == fact.Column
+                    && s.EndLine == fact.EndLine && s.EndColumn == fact.EndColumn);
+                if (call is null) throw new InvalidOperationException("Java semantic binding has no matching source call.");
+                call.ReceiverType = fact.ReceiverType;
+                call.ValueType = fact.ValueType;
+                call.ReferencedCallable = fact.Callable;
+            }
+            return true;
+        });
+        foreach (var statement in file.Statements)
+            statement.DeferSemanticAnalysis(analysis);
+    }
+
+    private sealed record SemanticResponse(List<SemanticFact>? Facts, List<string>? Errors);
+    private sealed record SemanticFact(int Line, int Column, int EndLine, int EndColumn, TypeReference? ReceiverType,
+        TypeReference? ValueType, CallableReference? Callable);
 
     private static void Warn(string reason) =>
         ProviderWarnings.ReportOnce("java", "fallback", $"{reason}; using simpler Java syntax analysis (no type resolution).");
@@ -107,7 +155,7 @@ internal static class JavaNativeAnalysis
                 timeout: TimeSpan.FromSeconds(60), environment: EnvironmentOverrides).GetAwaiter().GetResult();
             if (result.Status != ToolchainStatus.Success)
             {
-                ProviderWarnings.ReportOnce("java", "preflight", $"JDK native helper unavailable: {result.Diagnostic ?? result.StandardError}");
+                ProviderWarnings.ReportOnce("java", "preflight", $"JDK native helper unavailable: {result.Diagnostic}\n{result.StandardError}");
                 return null;
             }
             foreach (string output in Directory.GetFiles(scratch, "*.class").OrderBy(p => Path.GetFileName(p) == "CopJavaAnalysis.class"))

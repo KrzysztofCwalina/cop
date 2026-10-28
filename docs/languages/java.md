@@ -27,8 +27,10 @@ The richer path uses the JDK compiler's tree API through a Cop-owned helper.
 No Maven/Gradle integration, third-party parser, or additional Cop setup is required.
 
 The helper parses declarations, signatures, imports, spans, and statement/call structure.
-This is **compiler AST parsing, not full Java type attribution**: classpath-dependent
-symbols and call targets are not guaranteed to be resolved. Cop does not build or run
+Structural queries stop after parsing. Requesting `ReceiverType`, `ValueType`, or
+`ReferencedCallable` runs **javac attribution** over locally available source and
+dependency context, including compiler overload selection and inferred expression types.
+Cop does not build or run
 the application, execute annotation processors, run Maven/Gradle scripts, or download
 dependencies. Annotation processing is disabled; ambient JVM agent and classpath options
 are removed from helper processes. The installed JDK limits which source syntax can be
@@ -49,8 +51,23 @@ unknown spans remain absent. `permits` entries are not superclasses or interface
 Native generic argument trees come directly from parsed type syntax; fallback
 signatures retain their text but do not claim resolved generic argument trees.
 
-Neither backend performs whole-project symbol or type resolution. Receiver spellings
-and preserved generic signatures are syntax facts, not resolved call targets.
+The compiler-selected callable records its declaring type/package, instantiated signature,
+parameter/return types, and source location where available. `TypeName` remains syntax
+compatible; use `ReceiverType` for inferred receiver types. A selected declaration is not
+a promise about runtime virtual dispatch. Missing dependencies and attribution errors are
+visible when semantic fields are requested; fallback fields stay unknown.
+
+Local source roots, conventional Maven/Gradle class output, `lib`/`libs` jars, exact declared
+Maven dependencies already in the local repository, and literal Gradle dependencies already
+in the local cache are used without executing build scripts. Named modules use locally
+available module-path jars. Dynamic build configuration and dependency downloads are not
+evaluated. Unavailable context produces diagnostics rather than invented types.
+Production source queries do not attribute conventional test sources or require test-only
+dependencies. Semantic work is shared per demanded file. Java per-file disk caching is
+disabled until dependency context can be tracked safely, so dependency edits are rechecked
+on a new execution even if the caller is unchanged.
+Syntax-only queries and `First`/`Take` remain independent of attribution.
+
 Maven summaries use the project's own artifact ID and declared dependencies,
 excluding dependency-management-only entries. Nested Maven/Gradle projects and
 literal Kotlin DSL dependency declarations are discovered without evaluating build

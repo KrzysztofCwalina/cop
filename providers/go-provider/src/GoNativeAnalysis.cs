@@ -68,6 +68,11 @@ internal static class GoNativeAnalysis
         Apply(file, response);
         if (response.Errors.Count == 0) file.ParseErrors.Clear();
         file.ParseErrors.AddRange(response.Errors);
+        if (request is null)
+        {
+            string go = ToolchainProcess.FindExecutable("go", searchPath)!;
+            GoSemanticAnalysis.Attach(file, go, Helper(go)!);
+        }
         return file;
     }
 
@@ -93,8 +98,12 @@ internal static class GoNativeAnalysis
             ?? throw new InvalidOperationException("Bundled Go helper resource is missing.");
         using var reader = new StreamReader(resource);
         string source = reader.ReadToEnd();
+        using var semantics = typeof(GoSourceParser).Assembly.GetManifestResourceStream("Cop.Go.Semantics")
+            ?? throw new InvalidOperationException("Bundled Go semantics resource is missing.");
+        using var semanticReader = new StreamReader(semantics);
+        string semanticSource = semanticReader.ReadToEnd();
         var executable = new FileInfo(go);
-        string identity = source + go + executable.Length + executable.LastWriteTimeUtc.Ticks
+        string identity = source + semanticSource + go + executable.Length + executable.LastWriteTimeUtc.Ticks
             + System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture
             + string.Join(";", EnvironmentOverrides.Select(p => $"{p.Key}={p.Value}"));
         string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));
@@ -109,11 +118,13 @@ internal static class GoNativeAnalysis
             string input = Path.Combine(scratch, "analysis.go");
             string output = Path.Combine(scratch, Path.GetFileName(binary));
             File.WriteAllText(input, source, new UTF8Encoding(false));
-            var result = ToolchainProcess.RunAsync(go, ["build", "-o", output, input], scratch,
+            string semanticInput = Path.Combine(scratch, "semantics.go");
+            File.WriteAllText(semanticInput, semanticSource, new UTF8Encoding(false));
+            var result = ToolchainProcess.RunAsync(go, ["build", "-o", output, input, semanticInput], scratch,
                 timeout: TimeSpan.FromMinutes(3), environment: EnvironmentOverrides).GetAwaiter().GetResult();
             if (result.Status != ToolchainStatus.Success)
             {
-                ProviderWarnings.ReportOnce("go", "preflight", $"Go native helper unavailable: {result.Diagnostic ?? result.StandardError}");
+                ProviderWarnings.ReportOnce("go", "preflight", $"Go native helper unavailable: {result.Diagnostic}\n{result.StandardError}");
                 return null;
             }
             try { File.Move(output, binary); }
