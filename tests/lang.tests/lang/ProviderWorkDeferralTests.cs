@@ -57,6 +57,51 @@ public class ProviderWorkDeferralTests
     }
 
     [Test]
+    public void CSharp_SyntaxTypeNames_DoNotDemandCompilationOrOtherFiles()
+    {
+        File.WriteAllText(Path.Combine(_root, "a.cs"),
+            "class Alpha { void Run() { int count = 1; var client = new Beta(); } }");
+        var later = Path.Combine(_root, "b.cs");
+        File.WriteAllText(later, "class Beta {}");
+        using var locked = new FileStream(later, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        var provider = new CSharpProvider();
+        var result = (DeferredProviderResult)provider.QueryDeferred(
+            new ProviderQuery { RootPath = _root, Collection = "Files" });
+        var file = result.Collections["Files"].Cast<SourceFile>().First();
+        Assert.That(file.Statements.Single(s => s.MemberName == "count").TypeName, Is.EqualTo("int"));
+        Assert.That(file.Statements.Single(s => s.Kind == "call").TypeName, Is.EqualTo("Beta"));
+        Assert.That(file.Types[0].DeferredSemantics!.IsValueCreated, Is.False);
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
+    }
+
+    [Test]
+    public void SharedSnapshot_ReusesUnfilteredLineProjectionAcrossDifferentQueries()
+    {
+        File.WriteAllText(Path.Combine(_root, "a.fake"), "Alpha\n\nBeta");
+        var later = Path.Combine(_root, "b.fake");
+        File.WriteAllText(later, "Gamma");
+        var parsers = new SourceParserRegistry();
+        var parser = new CountingParser();
+        parsers.Register(parser);
+        var snapshot = new DeferredSourceSnapshot(parsers, new ProviderQuery { RootPath = _root });
+        using var locked = new FileStream(later, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        var lines = snapshot.Query(new ProviderQuery { Collection = "Lines" }).Collections["Lines"]
+            .Cast<LineInfo>().Take(3).ToArray();
+        Assert.That(lines.Select(l => (l.Text, l.Number, l.Kind)),
+            Is.EqualTo(new[] { ("Alpha", 1, "code"), ("", 2, "blank"), ("Beta", 3, "code") }));
+        var filtered = snapshot.Query(new ProviderQuery
+        {
+            Collection = "Lines", Filter = new StringOpFilter("Kind", StringOp.ExactEquals, "blank")
+        }).Collections["Lines"].Cast<LineInfo>().First();
+        Assert.That(filtered, Is.SameAs(lines[1]));
+        var repeated = snapshot.Query(new ProviderQuery { Collection = "Lines" }).Collections["Lines"]
+            .Cast<LineInfo>().Take(3).ToArray();
+        for (int i = 0; i < lines.Length; i++)
+            Assert.That(repeated[i], Is.SameAs(lines[i]));
+        Assert.That(parser.Reads, Is.EqualTo(new[] { "a.fake" }));
+    }
+
+    [Test]
     public void CSharp_SyntaxOnlyFilter_DoesNotConstructWholeCompilation()
     {
         File.WriteAllText(Path.Combine(_root, "a.cs"), "public class AlphaClient {}");

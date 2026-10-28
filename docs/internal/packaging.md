@@ -441,6 +441,19 @@ semantic model, since nullable flow can change nested annotations such as `Clien
 The nullable-analysis option is experimental in the pinned Roslyn version, so its diagnostic
 suppression is limited to this call site. Full interface enrichment remains unchanged.
 
+Invocation resolution and inferred declaration types have separate, memoized demand phases.
+Reading a call's `TypeName` does not infer every `var` declaration; reading a syntactically
+known type (including object creation) does not construct a compilation. Each phase is
+shared across the relevant statements in a file rather than allocating semantic work per
+statement. The declaration-discovery traversal stops at type and global-statement bodies,
+which their dedicated extractors already visit, and line lookup uses Roslyn's source-text
+line index without creating a location object for each declaration or call.
+
+Deferred source snapshots enumerate existing type and statement lists directly and stream
+call selection. Constructed projections such as source lines and API entries are cached
+before filtering and reused across queries in the same execution. This preserves independent
+filters and first/take short-circuiting without reopening or projecting later files.
+
 On Windows, deferred non-C# providers bundle their compressed per-file parsed models into
 one persistent snapshot per source root, exclusion scope, and parser assembly version.
 This replaces a cache-file open for every source with one snapshot read, while models

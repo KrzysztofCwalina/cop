@@ -13,6 +13,7 @@ namespace Cop.Providers.SourceModel;
 public sealed class CSharpStatementInfo : StatementInfo
 {
     internal int SyntaxStart { get; set; } = -1;
+    internal bool RequiresTypeNameAnalysis { get; init; }
 
     public CSharpStatementInfo(
         string kind, List<string> keywords, string? typeName, string? memberName,

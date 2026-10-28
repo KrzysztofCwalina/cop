@@ -19,6 +19,12 @@ public class StatementInfo(
         get { _ = (DeferredTypeNames ?? DeferredSemantics)?.Value; return _typeName; }
         set => _typeName = value;
     }
+
+    private static readonly Lazy<bool> SyntaxTypeName = new(() => true);
+
+    /// <summary>A null analysis marks an already-known syntax type without forcing other semantic fields.</summary>
+    public void DeferTypeNameAnalysis(Lazy<bool>? analysis) =>
+        DeferredTypeNames = analysis ?? SyntaxTypeName;
     public string? MemberName { get; } = memberName;
     public List<string> Arguments { get; } = arguments;
     public ExpressionInfo? CallTarget { get; init; }
