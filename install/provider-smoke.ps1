@@ -94,6 +94,13 @@ command MAIN = print('PUBLISH-SEMANTIC $Language {calls.Count} {resolved.Count}'
 }
 
 try {
+    if ($RequireRustBundle) {
+        $portableDir = Join-Path $smokeDir 'portable'
+        New-Item -ItemType Directory -Path $portableDir | Out-Null
+        $portableExe = Join-Path $portableDir ([System.IO.Path]::GetFileName($Executable))
+        Copy-Item -LiteralPath $Executable -Destination $portableExe
+        $Executable = $portableExe
+    }
     foreach ($fixture in $fixtures) {
         $language = $fixture.Language
         $target = Join-Path $smokeDir $language
@@ -135,11 +142,6 @@ command MAIN = print('PUBLISH-SMOKE $language {alpha.Count} {runs.Count} {calls.
     Test-SemanticSmoke 'csharp' 'class Alpha { public int Get(int value) => value; } class Caller { void Run() { var a = new Alpha(); a.Get(1); } }' '.cs' 'Get' 'Int32'
     Test-SemanticSmoke 'cop' "function get(value : string) : int => value.Length`nlet result = 'hello':get()" '.cop' 'get' 'int' 'string'
     if ($RequireRustBundle) {
-        $portableDir = Join-Path $smokeDir 'portable'
-        New-Item -ItemType Directory -Path $portableDir | Out-Null
-        $portableExe = Join-Path $portableDir ([System.IO.Path]::GetFileName($Executable))
-        Copy-Item -LiteralPath $Executable -Destination $portableExe
-        $Executable = $portableExe
         Test-SemanticSmoke 'rust' 'pub struct Alpha; impl Alpha { pub fn get(&self, value: u32) -> u32 { value } } pub fn run() { let a = Alpha; a.get(1); }' '.rs' 'get' 'u32'
     }
 }
