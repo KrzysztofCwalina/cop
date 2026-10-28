@@ -15,7 +15,8 @@ public sealed record PythonTypeDeclaration : TypeDeclaration
     {
         IsDataclass = isDataclass;
         IsEnum = isEnum;
-        IsAbstract = isAbstract;
+        if (isAbstract)
+            Modifiers |= Modifier.Abstract;
         IsNamedTuple = isNamedTuple;
         IsProtocol = isProtocol;
         IsException = isException;
@@ -27,9 +28,6 @@ public sealed record PythonTypeDeclaration : TypeDeclaration
 
     /// <summary>True for classes deriving from <c>Enum</c> (IntEnum, StrEnum, Flag, …).</summary>
     public bool IsEnum { get; init; }
-
-    /// <summary>True for classes deriving from <c>ABC</c> or using <c>ABCMeta</c>.</summary>
-    public bool IsAbstract { get; init; }
 
     /// <summary>True for classes deriving from <c>NamedTuple</c>.</summary>
     public bool IsNamedTuple { get; init; }

@@ -18,6 +18,48 @@ public class PythonAstParityTests
         return parser.Parse(path, source)!;
     }
 
+    [TestCase(true)]
+    [TestCase(false)]
+    public void AbstractClasses_CommonAndPythonFactsAgreeBeforeAndAfterCache(bool useToolchain)
+    {
+        const string text = """
+            from abc import ABC
+            import abc
+            class AbstractBase(ABC):
+                pass
+            class QualifiedAbstractBase(abc.ABC):
+                pass
+            class Plain:
+                pass
+            """;
+        var source = useToolchain
+            ? ParseNative(text)
+            : new PythonSourceParser(useToolchain: false).Parse("abstract.py", text)!;
+        var existingAbstract = (source.Types.Last() with { Modifiers = Modifier.Abstract | Modifier.Public }).AsPython();
+        Assert.That(existingAbstract.IsAbstract, Is.True);
+        Assert.That(existingAbstract.Modifiers, Is.EqualTo(Modifier.Abstract | Modifier.Public));
+        PythonTypeDeclaration.RegisterCacheFactory();
+        var path = Path.Combine(Path.GetTempPath(), "cop-python-abstract-" + Guid.NewGuid().ToString("N") + ".bin");
+        try
+        {
+            SourceCacheSerializer.Save(path, [4, 5, 6], [source]);
+            var warm = SourceCacheSerializer.TryLoad(path, [4, 5, 6], typeof(PythonSourceParser).Assembly)!.Single();
+            foreach (var file in new[] { source, warm })
+            {
+                Assert.That(file.Types.Select(t => t.Name), Is.EqualTo(new[] { "AbstractBase", "QualifiedAbstractBase", "Plain" }));
+                Assert.That(file.Types.Select(t => t.IsAbstract), Is.EqualTo(new[] { true, true, false }));
+                Assert.That(file.Types.Select(t => t.Modifiers.HasFlag(Modifier.Abstract)), Is.EqualTo(new[] { true, true, false }));
+                Assert.That(file.Types.Cast<PythonTypeDeclaration>().Select(t => t.IsAbstract), Is.EqualTo(new[] { true, true, false }));
+                Assert.That(file.Types.Select(t => t.LanguageFlags!.Single(f => f.Key == "IsAbstract").Value),
+                    Is.EqualTo(new[] { true, true, false }));
+            }
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Test]
     public void Calls_IncludeAllExpressionContextsWithOwnershipAndNesting()
     {
