@@ -23,14 +23,36 @@ public sealed class StaticSourceProgram
         var feeds = feedPaths.ToList();
         foreach (var file in local)
         {
-            feeds.AddRange(ModuleLoader.ExtractFeedPaths(file.Source, System.IO.Path.GetDirectoryName(file.Path)!));
+            foreach (var feed in file.Module.FeedPaths)
+            {
+                if (Uri.TryCreate(feed, UriKind.Absolute, out var uri) && (!uri.IsFile || uri.IsUnc)) continue;
+                try
+                {
+                    var path = uri is { IsFile: true } ? uri.LocalPath
+                        : System.IO.Path.GetFullPath(feed, System.IO.Path.GetDirectoryName(file.Path)!);
+                    if (Directory.Exists(path)) feeds.Add(path);
+                }
+                catch (ArgumentException ex)
+                {
+                    diagnostics.Add($"Feed in '{file.Path}' cannot be used for local source analysis: {ex.Message}");
+                }
+            }
             foreach (var function in file.Module.Declarations.OfType<FunctionDecl>())
                 _locations[function] = new(file.Path, null, function.Line);
         }
+        var directImports = local.SelectMany(file => file.Module.Declarations.OfType<ImportDecl>())
+            .Select(import => import.ModuleName).ToHashSet(StringComparer.Ordinal);
         var imported = new HashSet<string>(StringComparer.Ordinal);
-        void Import(string name)
+        int sourceFiles = 0;
+        long sourceBytes = 0;
+        void Import(string name, int depth = 0)
         {
             if (!imported.Add(name)) return;
+            if (depth >= 64 || imported.Count > 256)
+            {
+                diagnostics.Add($"Import '{name}' exceeds the declaration-only analysis limit (64 levels / 256 packages).");
+                return;
+            }
             string? directory = null;
             try
             {
@@ -48,11 +70,32 @@ public sealed class StaticSourceProgram
                     return;
                 }
                 var exports = new List<Declaration>();
-                foreach (var path in Directory.GetFiles(sourceDirectory, "*.cop").Order(StringComparer.Ordinal))
+                var paths = Directory.EnumerateFiles(sourceDirectory, "*.cop").Take(4097 - Math.Min(sourceFiles, 4096))
+                    .Order(StringComparer.Ordinal).ToList();
+                if (paths.Count == 0)
+                    diagnostics.Add($"Import '{name}' has no .cop source declarations.");
+                foreach (var path in paths)
                 {
+                    if (++sourceFiles > 4096)
+                    {
+                        diagnostics.Add("Imported declaration analysis exceeded its 4096-file limit.");
+                        return;
+                    }
+                    var info = new FileInfo(path);
+                    if (info.Length > 32 * 1024 * 1024 - sourceBytes)
+                    {
+                        diagnostics.Add($"Import '{name}' exceeds the 32 MiB source-text analysis limit.");
+                        return;
+                    }
                     var text = File.ReadAllText(path);
+                    sourceBytes += System.Text.Encoding.UTF8.GetByteCount(text);
+                    if (sourceBytes > 32 * 1024 * 1024)
+                    {
+                        diagnostics.Add($"Import '{name}' exceeds the 32 MiB source-text analysis limit.");
+                        return;
+                    }
                     var module = CopParser.Parse(text, path);
-                    foreach (var dependency in module.Declarations.OfType<ImportDecl>()) Import(dependency.ModuleName);
+                    foreach (var dependency in module.Declarations.OfType<ImportDecl>()) Import(dependency.ModuleName, depth + 1);
                     foreach (var declaration in module.Declarations)
                     {
                         switch (declaration)
@@ -79,15 +122,14 @@ public sealed class StaticSourceProgram
                         }
                     }
                 }
-                modules.Add(new(exports));
+                if (directImports.Contains(name)) modules.Add(new(exports));
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ParseException)
             {
                 diagnostics.Add($"Import '{name}' source analysis failed: {ex.Message}");
             }
         }
-        foreach (var import in local.SelectMany(f => f.Module.Declarations.OfType<ImportDecl>()))
-            Import(import.ModuleName);
+        foreach (var import in directImports) Import(import);
         Model = new(modules);
         Diagnostics = diagnostics;
     }

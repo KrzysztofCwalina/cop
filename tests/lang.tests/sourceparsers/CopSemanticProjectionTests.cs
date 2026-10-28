@@ -202,4 +202,31 @@ public class CopSemanticProjectionTests
             Is.EqualTo(new[] { "int", "string" }));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
     }
+
+    [Test]
+    public void SourceTopLevelLetsCommandsAndImportedInitializersNeverExecute()
+    {
+        var sentinel = Path.Combine(_root, "executed.txt");
+        var literal = sentinel.Replace("\\", "\\\\", StringComparison.Ordinal);
+        var source = Path.Combine(_root, "packages", "library", "src");
+        Directory.CreateDirectory(source);
+        File.WriteAllText(Path.Combine(_root, "packages", "library", "cop.json"), """{"name":"library"}""");
+        File.WriteAllText(Path.Combine(source, "library.cop"), $"""
+            export let sideEffect = save('{literal}', 'import executed')
+            export function known(value : string) : string => value
+            """);
+        File.WriteAllText(Path.Combine(Target, "main.cop"), $"""
+            import library
+            let sideEffect = save('{literal}', 'source executed')
+            let provider = object('unregistered-static-sentinel')
+            command MAIN = save('{literal}', 'command executed')
+            let result = library.known('hello')
+            """);
+        Assert.That(File.Exists(sentinel), Is.False);
+        var call = Calls(new CopProvider(), Target).Single(call => call.MemberName == "known");
+        Assert.That(call.ValueType?.OriginalText, Is.EqualTo("string"));
+        Assert.That(call.ReferencedCallable?.Name, Is.EqualTo("known"));
+        Assert.That(File.Exists(sentinel), Is.False, "Semantic demand must not force target lets, commands, or package initializers.");
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
+    }
 }

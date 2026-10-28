@@ -71,6 +71,13 @@ inference also remains unknown. Imported functions expose declared results; resu
 inside a package's private scope remain unknown. No remote feed is downloaded during
 analysis.
 
+Import graphs are cycle-safe and bounded to 64 levels, 256 packages, 4096 source files, and
+32 MiB of UTF-8 source text per context; exceeding a limit is an explicit analysis error.
+Only directly imported packages expose exports to the analyzed program; private transitive
+imports are checked without leaking their declarations into the caller's scope.
+Local feed discovery skips directory reparse points and has a 64-level / 4096-directory
+budget. Feed paths come from decoded parser metadata, never from matching target source text.
+
 ## Usage
 
 ```cop

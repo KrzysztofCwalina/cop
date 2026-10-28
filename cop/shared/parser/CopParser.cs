@@ -13,6 +13,7 @@ public class CopParser
     private readonly string _filePath;
     private readonly string? _source;
     private int _pos;
+    private readonly List<string> _feedPaths = [];
     private bool _suppressFilterColon; // true inside ternary then-branch to prevent `:` being consumed as filter
 
     public CopParser(List<Token> tokens, string filePath = "<unknown>", string? source = null)
@@ -165,7 +166,7 @@ public class CopParser
             if (decl is not null)
                 declarations.Add(decl);
         }
-        return new ModuleNode(declarations, 1);
+        return new ModuleNode(declarations, 1) { FeedPaths = [.. _feedPaths] };
     }
 
     /// <summary>
@@ -196,7 +197,7 @@ public class CopParser
             if (_pos == before && !IsAtEnd())
                 Advance();
         }
-        return new ModuleNode(declarations, 1);
+        return new ModuleNode(declarations, 1) { FeedPaths = [.. _feedPaths] };
     }
 
     /// <summary>Skips past the offending token to the next declaration boundary (or EOF).</summary>
@@ -277,10 +278,13 @@ public class CopParser
         if (IsKeyword(token, "test"))
             return ParseTestAsCommand(docComment, line);
 
-        // feed declaration → skip (runtime concern)
+        // Feed metadata is retained without resolving or loading the feed.
         if (IsKeyword(token, "feed"))
         {
-            SkipToEndOfLine();
+            Advance();
+            if (Peek().Line == line && Peek().Kind is TokenKind.StringLiteral or TokenKind.VerbatimStringLiteral)
+                _feedPaths.Add(Advance().Value);
+            while (!IsAtEnd() && Peek().Line == line) Advance();
             return null;
         }
 
