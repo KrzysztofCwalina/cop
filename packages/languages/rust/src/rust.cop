@@ -2,6 +2,8 @@
 import code
 
 ## Parses Rust source files in the target directory and returns a Codebase.
+## Structural syntax analysis only; reports a warning because portable stable Rust tooling
+## does not expose a supported parse-only AST/semantic export. Never builds or executes code.
 ## Example: let cb = rust.parse()
 export function parse() : Codebase => provider('rust')
 
@@ -29,7 +31,8 @@ export predicate asRust(Type) : RustType => Type.File.Language == rust
 ## True for Rust `trait` declarations.
 export predicate isTrait(RustType) => RustType.IsTrait
 
-## True for synthetic types that represent an `impl` block.
+## True for synthetic types that represent an `impl` block. Methods belong to the declared
+## type when its same-file module-qualified owner is unambiguous; otherwise remain on the impl.
 export predicate isImpl(RustType) => RustType.IsImpl
 
 ## True for `unsafe` traits and impls.

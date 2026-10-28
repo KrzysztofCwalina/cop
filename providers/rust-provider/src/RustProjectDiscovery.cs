@@ -1,326 +1,309 @@
+using System.Text;
+using System.Globalization;
+using Cop.Core;
 using Cop.Providers.SourceModel;
 
 namespace Cop.Providers;
 
-/// <summary>
-/// Discovers Rust projects by scanning for Cargo.toml files,
-/// extracting project name and dependencies.
-/// </summary>
+/// <summary>Reads Cargo manifests without running Cargo, build scripts, or fetching dependencies.</summary>
 public static class RustProjectDiscovery
 {
-    /// <summary>
-    /// Discovers Rust projects under rootPath by finding Cargo.toml files.
-    /// </summary>
-    public static List<ProjectInfo> Discover(string rootPath, IReadOnlySet<string>? excludedDirs)
+    private sealed class Dependency
     {
-        var manifestPaths = new List<string>();
-        CollectManifests(rootPath, excludedDirs, manifestPaths);
-
-        var result = new List<ProjectInfo>();
-        foreach (var manifestPath in manifestPaths)
-        {
-            var info = ParseCargoToml(manifestPath, rootPath);
-            if (info is not null)
-                result.Add(info);
-        }
-        return result;
+        public string Alias = "";
+        public string? Package;
+        public bool Workspace;
+        public bool Production;
     }
 
-    private static ProjectInfo? ParseCargoToml(string filePath, string rootPath)
+    private sealed class Manifest(string path)
+    {
+        public string Path { get; } = path;
+        public string? Name;
+        public string? WorkspacePath;
+        public bool IsWorkspace;
+        public Dictionary<string, Dependency> Dependencies { get; } = new(StringComparer.Ordinal);
+        public Dictionary<string, Dependency> WorkspaceDependencies { get; } = new(StringComparer.Ordinal);
+    }
+
+    public static List<ProjectInfo> Discover(string rootPath, IReadOnlySet<string>? excludedDirs)
+    {
+        var paths = new List<string>();
+        CollectManifests(rootPath, excludedDirs, paths);
+        var manifests = paths.Order(StringComparer.Ordinal).Select(Read).Where(m => m is not null).Cast<Manifest>().ToList();
+        var results = new List<ProjectInfo>();
+        foreach (var manifest in manifests)
+        {
+            if (manifest.Name is null) continue;
+            Manifest? workspace;
+            if (manifest.WorkspacePath is { } relativeWorkspace)
+            {
+                string path = System.IO.Path.GetFullPath(System.IO.Path.Combine(
+                    System.IO.Path.GetDirectoryName(manifest.Path)!, relativeWorkspace, "Cargo.toml"));
+                workspace = manifests.FirstOrDefault(m => m.Path == path && m.IsWorkspace);
+            }
+            else
+            {
+                workspace = manifests.Where(m => m.IsWorkspace && IsInside(manifest.Path, m.Path))
+                    .OrderByDescending(m => m.Path.Length).FirstOrDefault();
+            }
+            var references = new SortedSet<string>(StringComparer.Ordinal);
+            var packages = new SortedSet<string>(StringComparer.Ordinal);
+            foreach (var dependency in manifest.Dependencies.Values)
+            {
+                string alias = dependency.Alias;
+                string name = dependency.Package ?? alias;
+                if (dependency.Workspace)
+                {
+                    if (workspace?.WorkspaceDependencies.TryGetValue(alias, out var inherited) == true)
+                        name = dependency.Package ?? inherited.Package ?? alias;
+                    else
+                        ProviderErrors.Report($"{manifest.Path}: warning: workspace dependency '{alias}' could not be resolved; retaining its alias.");
+                }
+                packages.Add(name);
+                if (dependency.Production) references.Add(name);
+            }
+            results.Add(new ProjectInfo(manifest.Name,
+                System.IO.Path.GetRelativePath(rootPath, manifest.Path).Replace('\\', '/'), "rust",
+                references.ToList(), packages.ToList(), []));
+        }
+        return results;
+    }
+
+    private static bool IsInside(string path, string manifestPath)
+    {
+        string directory = System.IO.Path.GetDirectoryName(manifestPath)!;
+        string relative = System.IO.Path.GetRelativePath(directory, path);
+        return !System.IO.Path.IsPathRooted(relative) && relative != ".."
+            && !relative.StartsWith(".." + System.IO.Path.DirectorySeparatorChar, StringComparison.Ordinal);
+    }
+
+    private static Manifest? Read(string path)
     {
         try
         {
-            var lines = File.ReadAllLines(filePath);
-            var relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
-            string? name = null;
-            var prodDeps = new List<string>();   // [dependencies] (+ target normal) — used for layering
-            var allDeps = new List<string>();    // prod + dev + build
-            bool inPackage = false;
-            bool inDeps = false;       // any dependency table
-            bool inProdDeps = false;   // a normal (non dev/build) dependency table
-
-            // Multi-line inline-table state: a `key = { ... }` that spans lines. We suppress
-            // its continuation lines (so version/features aren't read as deps) and look for a
-            // `package = "real"` rename to record the real crate name.
-            int inlineDepth = 0;
-            string? pendingKey = null;
-            string? pendingPackage = null;
-            bool pendingProd = false;
-
-            void Flush()
+            var manifest = new Manifest(path);
+            List<string> table = [];
+            foreach (var (text, line) in Entries(File.ReadAllText(path)))
             {
-                if (pendingKey != null)
+                if (text.StartsWith('['))
                 {
-                    var crate = pendingPackage ?? pendingKey;
-                    allDeps.Add(crate);
-                    if (pendingProd) prodDeps.Add(crate);
-                }
-                pendingKey = null;
-                pendingPackage = null;
-                pendingProd = false;
-            }
-
-            foreach (var rawLine in lines)
-            {
-                var line = StripComment(rawLine).Trim();
-                if (line.Length == 0) continue;
-
-                // Inside a multi-line inline table: suppress dep parsing, but capture a rename.
-                if (inlineDepth > 0)
-                {
-                    if (TryReadPackageRename(line, out var pkgCont)) pendingPackage = pkgCont;
-                    inlineDepth += BraceDelta(line);
-                    if (inlineDepth <= 0) { inlineDepth = 0; Flush(); }
+                    if (!text.EndsWith(']')) throw new FormatException($"line {line}: unterminated table header");
+                    bool array = text.StartsWith("[[", StringComparison.Ordinal);
+                    table = KeyPath(text[(array ? 2 : 1)..^(array ? 2 : 1)]);
+                    if (table.Count == 1 && table[0] == "workspace") manifest.IsWorkspace = true;
                     continue;
                 }
-
-                if (line.StartsWith("["))
+                int equals = OutsideIndex(text, '=');
+                if (equals < 0) throw new FormatException($"line {line}: expected key = value");
+                var key = KeyPath(text[..equals]);
+                string value = text[(equals + 1)..].Trim();
+                if (key.Count == 0 || value.Length == 0) throw new FormatException($"line {line}: missing key or value");
+                List<string> full = [..table, ..key];
+                if (full.SequenceEqual(["package", "name"]))
+                    manifest.Name = String(value) ?? throw new FormatException($"line {line}: package name must be a quoted string");
+                if (full.SequenceEqual(["package", "workspace"])) manifest.WorkspacePath = String(value);
+                int depIndex = full.FindIndex(k => k is "dependencies" or "dev-dependencies" or "build-dependencies");
+                if (depIndex < 0 || full.Count <= depIndex + 1) continue;
+                bool workspace = full[0] == "workspace";
+                if (workspace) manifest.IsWorkspace = true;
+                var dependencies = workspace ? manifest.WorkspaceDependencies : manifest.Dependencies;
+                string alias = full[depIndex + 1];
+                string identity = workspace ? alias : string.Join(".", full.Take(depIndex + 2).Select(k => k.Length + ":" + k));
+                if (!dependencies.TryGetValue(identity, out var dependency))
+                    dependencies.Add(identity, dependency = new Dependency { Alias = alias });
+                dependency.Production |= full[depIndex] == "dependencies";
+                if (full.Count > depIndex + 2)
+                    Set(dependency, full[^1], value);
+                else if (value.StartsWith('{'))
                 {
-                    Flush();
-                    int close = line.IndexOf(']');
-                    var header = (close >= 0 ? line[1..close] : line.TrimStart('[')).Trim();
-
-                    inPackage = header == "package";
-                    inDeps = false;
-                    inProdDeps = false;
-
-                    bool isWorkspace = header.StartsWith("workspace");
-                    if (!isWorkspace && TryReadSubTableDependency(header, out var subDep, out var subProd))
+                    foreach (string field in Split(value[1..^1], ','))
                     {
-                        allDeps.Add(subDep);
-                        if (subProd) prodDeps.Add(subDep);
-                    }
-                    else if (!isWorkspace && IsDependencyTable(header, out bool prod))
-                    {
-                        inDeps = true;
-                        inProdDeps = prod;
-                    }
-                    continue;
-                }
-
-                if (inPackage)
-                {
-                    if (TryReadQuotedName(line, out var packageName)) name = packageName;
-                }
-                else if (inDeps)
-                {
-                    if (TryReadDependencyKey(line, out var depKey))
-                    {
-                        int braces = BraceDelta(line);
-                        if (braces > 0)
-                        {
-                            // Opens an inline table that doesn't close on this line.
-                            pendingKey = depKey;
-                            pendingProd = inProdDeps;
-                            if (TryReadPackageRename(line, out var pkg)) pendingPackage = pkg;
-                            inlineDepth = braces;
-                        }
-                        else
-                        {
-                            var crate = depKey;
-                            if (line.Contains('{') && TryReadPackageRename(line, out var pkg)) crate = pkg;
-                            allDeps.Add(crate);
-                            if (inProdDeps) prodDeps.Add(crate);
-                        }
+                        int separator = OutsideIndex(field, '=');
+                        if (separator < 0) continue;
+                        var fieldKey = KeyPath(field[..separator]);
+                        if (fieldKey.Count == 1) Set(dependency, fieldKey[0], field[(separator + 1)..].Trim());
                     }
                 }
             }
-            Flush();
-
-            if (name is null)
-                return null;
-
-            return new ProjectInfo(name, relativePath, "rust", prodDeps, allDeps, []);
+            return manifest;
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FormatException)
         {
+            ProviderErrors.Report($"{path}: warning: failed to read Cargo manifest: {ex.Message}");
             return null;
         }
     }
 
-    // Removes a TOML line comment (`#...`) that is outside any quoted string.
-    private static string StripComment(string line)
+    private static void Set(Dependency dependency, string key, string value)
     {
-        bool inString = false;
-        char quote = '"';
-        for (int i = 0; i < line.Length; i++)
+        if (key == "package")
+            dependency.Package = String(value) ?? throw new FormatException("dependency package must be a quoted string");
+        if (key == "workspace")
         {
-            char c = line[i];
-            if (inString) { if (c == quote) inString = false; }
-            else if (c is '"' or '\'') { inString = true; quote = c; }
-            else if (c == '#') return line[..i];
+            if (value is not "true" and not "false") throw new FormatException("dependency workspace must be a boolean");
+            dependency.Workspace = value == "true";
         }
-        return line;
     }
 
-    // Net `{` minus `}` outside strings (comments already stripped).
-    private static int BraceDelta(string line)
+    private static string? String(string value)
     {
-        int depth = 0;
-        bool inString = false;
-        char quote = '"';
-        foreach (char c in line)
+        if (value.Length < 2) return null;
+        if (value[0] == '\'' && value[^1] == '\'') return value[1..^1];
+        if (value[0] != '"' || value[^1] != '"') return null;
+        var decoded = new StringBuilder();
+        for (int i = 1; i < value.Length - 1; i++)
         {
-            if (inString) { if (c == quote) inString = false; }
-            else if (c is '"' or '\'') { inString = true; quote = c; }
-            else if (c == '{') depth++;
-            else if (c == '}') depth--;
+            char c = value[i];
+            if (c != '\\') { decoded.Append(c); continue; }
+            if (++i >= value.Length - 1) throw new FormatException("incomplete TOML string escape");
+            c = value[i];
+            switch (c)
+            {
+                case 'b': decoded.Append('\b'); break;
+                case 't': decoded.Append('\t'); break;
+                case 'n': decoded.Append('\n'); break;
+                case 'f': decoded.Append('\f'); break;
+                case 'r': decoded.Append('\r'); break;
+                case '"': case '\\': decoded.Append(c); break;
+                case 'u': case 'U':
+                    int digits = c == 'u' ? 4 : 8;
+                    if (i + digits >= value.Length - 1 || !int.TryParse(value.AsSpan(i + 1, digits),
+                        NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int scalar) || !Rune.IsValid(scalar))
+                        throw new FormatException("invalid TOML Unicode escape");
+                    decoded.Append(char.ConvertFromUtf32(scalar));
+                    i += digits;
+                    break;
+                default: throw new FormatException($"invalid TOML escape '\\{c}'");
+            }
         }
-        return depth;
+        return decoded.ToString();
     }
 
-    // Finds a `package = "real_crate"` rename inside an inline dependency table.
-    private static bool TryReadPackageRename(string text, out string pkg)
+    private static List<string> KeyPath(string text) => Split(text.Trim(), '.')
+        .Select(p => String(p.Trim()) ?? p.Trim()).ToList();
+
+    private static int OutsideIndex(string text, char character)
     {
-        pkg = "";
-        int i = text.IndexOf("package", StringComparison.Ordinal);
-        if (i < 0) return false;
-        int j = i + "package".Length;
-        while (j < text.Length && char.IsWhiteSpace(text[j])) j++;
-        if (j >= text.Length || text[j] != '=') return false;
-        j++;
-        while (j < text.Length && char.IsWhiteSpace(text[j])) j++;
-        if (j >= text.Length || text[j] != '"') return false;
-        j++;
-        int start = j;
-        while (j < text.Length && text[j] != '"') j++;
-        if (j <= start || j >= text.Length) return false;
-        pkg = text[start..j];
-        return true;
-    }
-
-    // Classifies a table header (brackets stripped) as a dependency table.
-    // prod = true for a normal [dependencies] (or target normal) table; false for dev/build.
-    private static bool IsDependencyTable(string header, out bool prod)
-    {
-        prod = false;
-        if (header == "dependencies" || header.EndsWith(".dependencies")) { prod = true; return true; }
-        if (header == "dev-dependencies" || header.EndsWith(".dev-dependencies")) return true;
-        if (header == "build-dependencies" || header.EndsWith(".build-dependencies")) return true;
-        return false;
-    }
-
-    private static bool TryReadQuotedName(string text, out string name)
-    {
-        name = "";
-        const string keyword = "name";
-        if (!text.StartsWith(keyword, StringComparison.Ordinal))
-            return false;
-
-        var index = keyword.Length;
-        while (index < text.Length && char.IsWhiteSpace(text[index]))
-            index++;
-
-        if (index >= text.Length || text[index] != '=')
-            return false;
-
-        index++;
-        while (index < text.Length && char.IsWhiteSpace(text[index]))
-            index++;
-
-        if (index >= text.Length || text[index] != '"')
-            return false;
-
-        index++;
-        var nameStart = index;
-        while (index < text.Length && text[index] != '"')
-            index++;
-
-        if (index == nameStart || index >= text.Length)
-            return false;
-
-        name = text[nameStart..index];
-        return true;
-    }
-
-    private static bool TryReadDependencyKey(string text, out string key)
-    {
-        key = "";
-        var index = 0;
-        while (index < text.Length && IsDependencyKeyCharacter(text[index]))
-            index++;
-
-        if (index == 0)
-            return false;
-
-        var keyEnd = index;
-
-        // Dotted single-line form: `dep.workspace = true`, `dep.path = "..."`,
-        // `dep.version = "1.0"`. The dependency is on `dep`.
-        if (index < text.Length && text[index] == '.')
+        char quote = '\0';
+        for (int i = 0; i < text.Length; i++)
         {
-            key = text[..keyEnd];
-            return true;
+            char c = text[i];
+            if (quote != '\0')
+            {
+                if (quote == '"' && c == '\\') i++;
+                else if (c == quote) quote = '\0';
+            }
+            else if (c is '"' or '\'') quote = c;
+            else if (c == character) return i;
         }
-
-        while (index < text.Length && char.IsWhiteSpace(text[index]))
-            index++;
-
-        if (index >= text.Length || text[index] != '=')
-            return false;
-
-        key = text[..keyEnd];
-        return true;
+        return -1;
     }
 
-    /// <summary>
-    /// Recognizes a dependency sub-table header body (brackets already stripped), e.g.
-    /// "dependencies.serde", "dev-dependencies.tokio", or
-    /// "target.'cfg(unix)'.dependencies.nix", and extracts the trailing crate name.
-    /// </summary>
-    private static bool TryReadSubTableDependency(string header, out string name, out bool prod)
+    private static IEnumerable<string> Split(string text, char separator)
     {
-        name = "";
-        prod = true;
-        const string marker = "dependencies.";
-        int idx = header.LastIndexOf(marker, StringComparison.Ordinal);
-        if (idx < 0)
-            return false;
-
-        var remainder = header[(idx + marker.Length)..].Trim();
-        if (remainder.Length == 0)
-            return false;
-
-        foreach (var ch in remainder)
+        char quote = '\0';
+        int depth = 0, start = 0;
+        for (int i = 0; i < text.Length; i++)
         {
-            if (!IsDependencyKeyCharacter(ch))
-                return false;
+            char c = text[i];
+            if (quote != '\0')
+            {
+                if (quote == '"' && c == '\\') i++;
+                else if (c == quote) quote = '\0';
+                continue;
+            }
+            if (c is '"' or '\'') quote = c;
+            else if (c is '{' or '[' or '(') depth++;
+            else if (c is '}' or ']' or ')') depth--;
+            else if (c == separator && depth == 0)
+            {
+                if (i > start) yield return text[start..i];
+                start = i + 1;
+            }
         }
-
-        name = remainder;
-        // [dev-dependencies.X] / [build-dependencies.X] are not production dependencies.
-        string before = header[..idx];
-        prod = !(before.EndsWith("dev-") || before.EndsWith("build-"));
-        return true;
+        if (quote != '\0' || depth != 0) throw new FormatException("unbalanced quoted key or value");
+        if (start < text.Length) yield return text[start..];
     }
 
-    private static bool IsDependencyKeyCharacter(char ch) =>
-        (ch >= 'a' && ch <= 'z') ||
-        (ch >= 'A' && ch <= 'Z') ||
-        (ch >= '0' && ch <= '9') ||
-        ch is '_' or '-';
+    // Joins multiline arrays/inline tables, respecting both TOML quoting styles and comments.
+    private static IEnumerable<(string text, int line)> Entries(string source)
+    {
+        var entry = new StringBuilder();
+        char quote = '\0';
+        bool triple = false;
+        int depth = 0, line = 1, start = 1;
+        for (int i = 0; i < source.Length; i++)
+        {
+            char c = source[i];
+            if (quote != '\0')
+            {
+                entry.Append(c);
+                if (c == '\\' && quote == '"' && i + 1 < source.Length)
+                {
+                    entry.Append(source[++i]);
+                    if (source[i] == '\n') line++;
+                    continue;
+                }
+                if (c == quote)
+                {
+                    if (!triple) quote = '\0';
+                    else if (i + 2 < source.Length && source[i + 1] == quote && source[i + 2] == quote)
+                    { entry.Append(source[++i]); entry.Append(source[++i]); quote = '\0'; triple = false; }
+                }
+                if (c == '\n') line++;
+                continue;
+            }
+            if (c == '#')
+            {
+                while (i < source.Length && source[i] != '\n') i++;
+                c = '\n';
+            }
+            if (c is '"' or '\'')
+            {
+                quote = c;
+                triple = i + 2 < source.Length && source[i + 1] == c && source[i + 2] == c;
+                entry.Append(c);
+                if (triple) { entry.Append(source[++i]); entry.Append(source[++i]); }
+                continue;
+            }
+            if (c is '[' or '{') depth++;
+            if (c is ']' or '}') depth--;
+            if (depth < 0) throw new FormatException($"line {line}: unexpected '{c}'");
+            if (c == '\n')
+            {
+                if (depth == 0)
+                {
+                    if (entry.ToString().Trim() is { Length: > 0 } text) yield return (text, start);
+                    entry.Clear();
+                    start = line + 1;
+                }
+                else entry.Append(' ');
+                line++;
+            }
+            else entry.Append(c);
+        }
+        if (quote != '\0' || depth != 0) throw new FormatException($"line {start}: unterminated quoted value or table");
+        if (entry.ToString().Trim() is { Length: > 0 } last) yield return (last, start);
+    }
 
-    private static void CollectManifests(string dir, IReadOnlySet<string>? excluded, List<string> result)
+    private static void CollectManifests(string directory, IReadOnlySet<string>? excluded, List<string> result)
     {
         try
         {
-            var cargoToml = Path.Combine(dir, "Cargo.toml");
-            if (File.Exists(cargoToml))
+            string path = System.IO.Path.Combine(directory, "Cargo.toml");
+            if (File.Exists(path)) result.Add(System.IO.Path.GetFullPath(path));
+            foreach (string child in Directory.EnumerateDirectories(directory).Order(StringComparer.Ordinal))
             {
-                result.Add(cargoToml);
-                // Don't return — Rust workspaces have nested Cargo.toml files
-            }
-
-            foreach (var subDir in Directory.GetDirectories(dir))
-            {
-                var dirName = Path.GetFileName(subDir);
-                if (excluded is not null && excluded.Contains(dirName)) continue;
-                // Skip target directory (Rust build output)
-                if (dirName == "target") continue;
-                CollectManifests(subDir, excluded, result);
+                string name = System.IO.Path.GetFileName(child);
+                if (name is "target" or ".git" || excluded?.Contains(name) == true
+                    || File.GetAttributes(child).HasFlag(FileAttributes.ReparsePoint)) continue;
+                CollectManifests(child, excluded, result);
             }
         }
-        catch (UnauthorizedAccessException) { }
-        catch (IOException) { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ProviderErrors.Report($"{directory}: warning: failed to discover Cargo manifests: {ex.Message}");
+        }
     }
 }

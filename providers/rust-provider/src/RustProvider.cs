@@ -20,6 +20,7 @@ public class RustProvider : DataProvider
 
     public override object QueryDeferred(ProviderQuery query)
     {
+        ReportAnalysisLimits(query);
         RustTypeDeclaration.RegisterCacheFactory();
         RustMethodDeclaration.RegisterCacheFactory();
         RustStatementInfo.RegisterCacheFactory();
@@ -31,6 +32,7 @@ public class RustProvider : DataProvider
 
     public override object? Query(ProviderQuery query)
     {
+        ReportAnalysisLimits(query);
         // Ensure cached Rust types reconstruct as RustTypeDeclaration (not the plain base)
         // before the source cache is read in CollectAndParse.
         RustTypeDeclaration.RegisterCacheFactory();
@@ -51,4 +53,10 @@ public class RustProvider : DataProvider
 
         return ApplyQueryFilters(query, collections);
     }
+
+    private static void ReportAnalysisLimits(ProviderQuery query) =>
+        ProviderWarnings.ReportOnce("rust", query.RootPath ?? "",
+            "Rust analysis is syntax-only: stable Rust tooling has no supported portable parse-only AST/semantic export. " +
+            "Using the built-in structural parser; macro expansion, name/type resolution, and cfg evaluation are unavailable. " +
+            "No Cargo build, downloads, or target code execution are performed.");
 }

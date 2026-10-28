@@ -279,13 +279,11 @@ public class RustSourceParserTests
                 }
             }
             """);
-        // Should produce the struct + impl type
-        Assert.That(result.Types.Count, Is.GreaterThanOrEqualTo(2));
-        var impl = result.Types.First(t => t.Name.Contains("impl"));
-        Assert.That(impl.Constructors, Has.Count.EqualTo(1));
-        Assert.That(impl.Constructors[0].Name, Is.EqualTo("new"));
-        Assert.That(impl.Methods, Has.Count.EqualTo(1));
-        Assert.That(impl.Methods[0].Name, Is.EqualTo("bar"));
+        Assert.That(result.Types.Count, Is.EqualTo(2));
+        var owner = result.Types.Single(t => t.Name == "Foo");
+        Assert.That(owner.Constructors, Is.Empty, "new is an ordinary associated function, not a Rust constructor");
+        Assert.That(owner.Methods.Select(m => m.Name), Is.EqualTo(new[] { "new", "bar" }));
+        Assert.That(result.Types.Single(t => t is RustTypeDeclaration { IsImpl: true }).Methods, Is.Empty);
     }
 
     [Test]
@@ -337,8 +335,7 @@ public class RustSourceParserTests
                 }
             }
             """);
-        var impl = result.Types.First(t => t.Name.Contains("impl"));
-        var m = impl.Methods.First(m => m.Name == "process");
+        var m = result.Types.Single(t => t.Name == "S").Methods.Single(m => m.Name == "process");
         // &self is skipped, so we expect name and count
         Assert.That(m.Parameters, Has.Count.EqualTo(2));
         Assert.That(m.Parameters[0].Name, Is.EqualTo("name"));
@@ -358,8 +355,7 @@ public class RustSourceParserTests
                 }
             }
             """);
-        var impl = result.Types.First(t => t.Name.Contains("impl"));
-        var m = impl.Methods.First(m => m.Name == "compute");
+        var m = result.Types.Single(t => t.Name == "S").Methods.Single(m => m.Name == "compute");
         Assert.That(m.ReturnType, Is.Not.Null);
         Assert.That(m.ReturnType!.Name, Does.Contain("Vec"));
     }
@@ -375,8 +371,7 @@ public class RustSourceParserTests
                 }
             }
             """);
-        var impl = result.Types.First(t => t.Name.Contains("impl"));
-        var m = impl.Methods.First(m => m.Name == "fetch");
+        var m = result.Types.Single(t => t.Name == "Client").Methods.Single(m => m.Name == "fetch");
         Assert.That(m.IsAsync, Is.True);
     }
 
@@ -472,7 +467,8 @@ public class RustSourceParserTests
             """);
         var throws = result.Statements.Where(s => s.Kind == "throw").ToList();
         Assert.That(throws, Has.Count.EqualTo(1));
-        Assert.That(throws[0].MemberName, Is.EqualTo("panic"));
+        Assert.That(throws[0].MemberName, Is.EqualTo("panic!"));
+        Assert.That(((RustStatementInfo)throws[0]).IsMacroCall, Is.True);
     }
 
     [Test]
@@ -491,8 +487,7 @@ public class RustSourceParserTests
             """);
         var throws = result.Statements.Where(s => s.Kind == "throw").ToList();
         Assert.That(throws, Has.Count.EqualTo(2));
-        Assert.That(throws.Select(s => s.MemberName), Does.Contain("todo"));
-        Assert.That(throws.Select(s => s.MemberName), Does.Contain("unimplemented"));
+        Assert.That(throws.Select(s => s.MemberName), Is.EqualTo(new[] { "todo!", "unimplemented!" }));
     }
 
     // ================================================================
@@ -744,10 +739,9 @@ public class RustSourceParserTests
         Assert.That(item.Fields, Has.Count.EqualTo(2));
 
         // Check impl
-        var impl = result.Types.First(t => t.Name.Contains("FooClient") && t.Name.Contains("impl"));
-        Assert.That(impl.Constructors, Has.Count.EqualTo(1));
-        Assert.That(impl.Constructors[0].Name, Is.EqualTo("new"));
-        Assert.That(impl.Constructors[0].HasDocComment, Is.True);
+        var impl = fooClient;
+        Assert.That(impl.Constructors, Is.Empty);
+        Assert.That(impl.Methods.Single(m => m.Name == "new").HasDocComment, Is.True);
 
         // Async methods
         var asyncMethods = impl.Methods.Where(m => m.IsAsync).ToList();
@@ -798,8 +792,7 @@ public class RustSourceParserTests
                 }
             }
             """, 5000);
-        var impl = result.Types.First(t => t.Name.Contains("impl"));
-        var m = impl.Methods.First(x => x.Name == "apply");
+        var m = result.Types.Single(t => t.Name == "S").Methods.Single(x => x.Name == "apply");
         // 'f' (closure) and 'x' should both be recognized as parameters.
         Assert.That(m.Parameters.Select(p => p.Name), Does.Contain("x"));
     }
@@ -815,8 +808,7 @@ public class RustSourceParserTests
                 }
             }
             """, 5000);
-        var impl = result.Types.First(t => t.Name.Contains("impl"));
-        var m = impl.Methods.First(x => x.Name == "handle");
+        var m = result.Types.Single(t => t.Name == "S").Methods.Single(x => x.Name == "handle");
         var pair = m.Parameters.First(p => p.Name == "pair");
         Assert.That(pair.Type?.Name, Does.Contain("i32"));
         Assert.That(m.Parameters.Select(p => p.Name), Does.Contain("flag"));
@@ -833,8 +825,7 @@ public class RustSourceParserTests
                 }
             }
             """, 5000);
-        var impl = result.Types.First(t => t.Name.Contains("impl"));
-        var m = impl.Methods.First(x => x.Name == "weird");
+        var m = result.Types.Single(t => t.Name == "S").Methods.Single(x => x.Name == "weird");
         Assert.That(m.Parameters.Select(p => p.Name), Does.Contain("a"));
     }
 
@@ -1046,7 +1037,7 @@ public class RustSourceParserTests
                 }
             }
             """);
-        Assert.That(result.Statements.Any(s => s.Kind == "throw" && s.MemberName == "panic"), Is.True);
+        Assert.That(result.Statements.Count(s => s.Kind == "throw" && s.MemberName == "panic!"), Is.EqualTo(1));
     }
 
     [Test]
@@ -1072,7 +1063,7 @@ public class RustSourceParserTests
             }
             """);
         var impl = result.Types.First(t => t.Name.Contains("(impl"));
-        Assert.That(impl.BaseTypes, Does.Contain("Debug"));
+        Assert.That(impl.BaseTypes, Is.EqualTo(new[] { "std::fmt::Debug" }));
         Assert.That(impl.BaseTypes, Does.Not.Contain("std"));
         Assert.That(impl.Name, Does.StartWith("Foo"));
     }
@@ -1086,8 +1077,7 @@ public class RustSourceParserTests
                 pub const fn make() -> i32 { 1 }
             }
             """);
-        var impl = result.Types.First(t => t.Name.Contains("(impl"));
-        var make = impl.Methods.Concat(impl.Constructors).First(m => m.Name == "make");
+        var make = result.Types.Single(t => t.Name == "S").Methods.Single(m => m.Name == "make");
         Assert.That(make.IsPublic, Is.True);
     }
 

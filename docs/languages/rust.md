@@ -85,7 +85,7 @@ predicate isDeclaredType(Type) => Type.Kind == Struct || Type.Kind == Enum || Ty
 predicate isUndocumented(Type) => isDeclaredType && isPublic && !Type.Documented
 
 # Flag uses of panic! (prefer Result returns in library code)
-predicate isPanicCall(Statement) => Statement.Kind == throw && Statement.MemberName == 'panic'
+predicate isPanicCall(Statement) => Statement.Kind == throw && Statement.MemberName == 'panic!'
 
 let undocumented = cb.Types:isUndocumented
     :toWarning('Public type {item.Name} is missing documentation')
@@ -147,7 +147,7 @@ Example output:
 src/main.rs(33): warning: Avoid panic! in library code — return a Result instead [panic-macros]
 src/main.rs(40): warning: Avoid println! — use a logging framework (log/tracing) [console-output]
 src/main.rs(25): warning: Public type Status is missing a doc comment [undocumented-types]
-src/main.rs(11): warning: User (impl) has public methods without doc comments [undocumented-methods]
+src/main.rs(11): warning: User has public methods without doc comments [undocumented-methods]
 ```
 
 Each line ends with the **name of the check** in brackets (e.g. `[panic-macros]`). That bracketed
@@ -272,7 +272,7 @@ import rust
 
 let cb = rust.parse()
 
-# Each type lists its method names (impl blocks hold a type's methods)
+# Declared types own same-file impl methods; unresolved external impls retain their methods.
 command MAIN = foreach cb.Types => '{item.Name}: {item.MethodNames}'
 ```
 
@@ -302,9 +302,9 @@ The `rust.parse()` function returns a `Codebase` with these collections:
 
 | Collection | Description |
 |------------|-------------|
-| `cb.Types` | All structs, enums, traits, and impl blocks |
-| `cb.Statements` | Function calls, macro invocations, panic!/todo! |
-| `cb.Calls` | Just the call statements (method/function/macro calls) |
+| `cb.Types` | Structs, enums, traits, aliases, impl views, and synthetic free-function containers |
+| `cb.Statements` | Nested calls, macro invocations, declarations, returns, if/else, loops, match, await |
+| `cb.Calls` | Call statements (method/function/ordinary macro calls); panic-like macros use `throw` in `cb.Statements` |
 | `cb.Methods` | All functions and methods (free functions and `impl` methods) |
 | `cb.Files` | Source files with metadata |
 | `cb.Lines` | Every line of code (with kind: code/comment/blank) |
@@ -318,14 +318,55 @@ The `rust.parse()` function returns a `Codebase` with these collections:
 | `enum` | Enum |
 | `trait` | Interface |
 | `impl` block | Class |
+| `type` alias | Alias |
+
+Impl targets and trait paths preserve their full spelling, including generic arguments.
+When an impl's module-qualified target identifies exactly one declared struct/enum in the
+same file, its methods are attached to that declaration. The impl view remains available
+for trait/unsafe/negative-impl facts, without duplicating those methods in `cb.Methods`.
+Unresolved or external impls retain their methods on the impl view; cross-file ownership is
+not guessed. An associated function named `new` is an ordinary method, not a constructor.
+
+Tuple struct fields use numeric names (`0`, `1`, ...). Enum payloads are exposed as nested
+struct-shaped types named after their variants. Parameters preserve destructuring patterns
+and their real source lines. Type references preserve source spelling and expose parsed
+path namespaces and generic arguments; declarations expose type/lifetime/const parameters.
+Nested calls have `CallTarget` and `ArgumentExpressions`, with decoded Rust string literals
+(`StringValue`). Byte strings, C strings, and character literals are not misreported as
+Rust strings. Calls, control statements, and their containing methods have linked
+`Parent`/`Children`/`Method` relationships and source locations. Macro names always retain
+`!`, including `panic!`, `todo!`, `unimplemented!`, and `unreachable!`.
+
+### Analysis capabilities and safety
+
+The provider uses a built-in token-based structural parser. **It is not a full Rust compiler
+front end or semantic analyzer.** Stable `rustc` does not expose a supported portable
+parse-only AST/semantic export; nightly flags and rustup component installation are not
+used. A `rust-analyzer` rustup launcher on PATH does not prove that the component is usable.
+Cop reports a yellow syntax-only/degraded-analysis warning rather than silently claiming
+toolchain-backed parity, whether or not a Rust toolchain is installed.
+
+No Cargo command, build script, procedural macro, or analyzed target code is executed.
+There are no downloads or setup steps. Macro token trees are unexpanded: visible nested
+call syntax can be inspected, but macro expansion, name/type resolution, trait solving,
+and conditional-compilation evaluation are not known. Unsupported expressions have
+`CodeExpression.Kind == 'other'`, not fabricated semantic facts. Deep inputs are bounded
+and diagnosed instead of hanging or overflowing the stack.
+
+Cargo summaries are read directly from manifests. Both quoting styles, quoted keys,
+dependency subtables, target/dev/build dependencies, renamed crates, and nearest-workspace
+dependency inheritance are supported. `References` contains production dependencies;
+`Packages` includes dev/build dependencies as well. Manifest read/format errors and unresolved
+workspace inheritance are diagnosed rather than silently discarded.
 
 ### Syntax-error reporting
 
 `rust.parse()` uses a real lexer + recursive-descent parser (not a line scanner). When a `.rs`
-file contains a syntax error — an unterminated string/raw-string, an unterminated (possibly
+file contains a recognized syntax error — an unterminated string/raw-string, an unterminated (possibly
 nested) block comment, a malformed `fn`/`struct` header, or unbalanced `()`/`[]`/`{}` — cop
 surfaces it as a **warning** of the form `path(line,col): error: message` and still analyzes the
-rest of that file and every other file. Malformed sources are reported, never silently skipped.
+rest of that file and every other file. Mismatched balanced delimiters are also diagnosed.
+These are structural diagnostics, not complete Rust grammar or compiler validation.
 
 ---
 

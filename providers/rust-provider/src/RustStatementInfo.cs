@@ -27,6 +27,12 @@ public sealed class RustStatementInfo : StatementInfo
         Method = source.Method;
         Condition = source.Condition;
         Expression = source.Expression;
+        CallTarget = source.CallTarget;
+        ValueExpression = source.ValueExpression;
+        ArgumentExpressions = source.ArgumentExpressions;
+        Column = source.Column;
+        EndLine = source.EndLine;
+        EndColumn = source.EndColumn;
         File = source.File;
         Parent = source.Parent;
         CopIgnore = source.CopIgnore;
