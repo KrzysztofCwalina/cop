@@ -56,6 +56,7 @@ public class StatementInfo(
     /// Empty for non-creation statements or when semantic analysis is unavailable.
     /// </summary>
     private List<string> _constructedTypeInterfaces = [];
+    internal List<string> CachedConstructedTypeInterfaces => _constructedTypeInterfaces;
     public List<string> ConstructedTypeInterfaces
     {
         get { _ = DeferredSemantics?.Value; return _constructedTypeInterfaces; }

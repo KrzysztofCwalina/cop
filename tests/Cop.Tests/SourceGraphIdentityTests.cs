@@ -8,8 +8,10 @@ namespace Cop.Tests;
 [TestFixture]
 public class SourceGraphIdentityTests
 {
-    [Test]
-    public void CacheRoundTrip_PreservesSameLineCallsAndSharedOwnership()
+    [TestCase(0)]
+    [TestCase(1)]
+    [TestCase(2)]
+    public void CacheRoundTrip_PreservesSameLineCallsAndSharedOwnership(int rounds)
     {
         var first = new StatementInfo("call", [], null, "Run", [], 1, true);
         var second = new StatementInfo("call", [], null, "Run", [], 1, true);
@@ -27,36 +29,36 @@ public class SourceGraphIdentityTests
             [], [method], [], [], 1);
         var type = new TypeDeclaration("Outer", TypeKind.Class, Modifier.Public, [], [],
             [], [], [nested], [], 1);
-        var original = new SourceFile("same.test", "test", [type], [parent, first, second], "if (x) { Run(); Run(); }")
+        var original = new SourceFile("same.test", "test", [type, nested], [parent, first, second], "if (x) { Run(); Run(); }")
         {
             Methods = [method]
         };
-        foreach (var file in new[] { original, RoundTrip(original), RoundTrip(RoundTrip(original)) })
+        var file = original;
+        for (int i = 0; i < rounds; i++) file = RoundTrip(file);
+        Link(file);
+        var actualMethod = file.Types[0].NestedTypes[0].Methods.Single();
+        var statements = file.Statements;
+        Assert.Multiple(() =>
         {
-            Link(file);
-            var actualMethod = file.Types[0].NestedTypes[0].Methods.Single();
-            var statements = file.Statements;
-            Assert.Multiple(() =>
-            {
-                Assert.That(statements, Has.Count.EqualTo(3));
-                Assert.That(statements[1], Is.Not.SameAs(statements[2]));
-                Assert.That(statements[0].Children, Has.Count.EqualTo(2));
-                Assert.That(statements[0].Children[0], Is.SameAs(statements[1]));
-                Assert.That(statements[0].Children[1], Is.SameAs(statements[2]));
-                Assert.That(statements[1].Parent, Is.SameAs(statements[0]));
-                Assert.That(statements[2].Parent, Is.SameAs(statements[0]));
-                Assert.That(statements[2].GetAncestors().Single(), Is.SameAs(statements[0]));
-                Assert.That(file.Methods.Single(), Is.SameAs(actualMethod));
-                Assert.That(actualMethod.Statements[1], Is.SameAs(statements[1]));
-                Assert.That(actualMethod.Statements[2], Is.SameAs(statements[2]));
-                Assert.That(statements.Select(s => s.Method), Is.All.SameAs(actualMethod));
-                Assert.That(statements.Select(s => s.File), Is.All.SameAs(file));
-                Assert.That(actualMethod.File, Is.SameAs(file));
-                Assert.That(file.Types[0].File, Is.SameAs(file));
-                Assert.That(file.Types[0].NestedTypes[0].File, Is.SameAs(file));
-                Assert.That(CodeBindings.BuildExtractors()["Methods"](file), Has.Count.EqualTo(1));
-            });
-        }
+            Assert.That(statements, Has.Count.EqualTo(3));
+            Assert.That(statements[1], Is.Not.SameAs(statements[2]));
+            Assert.That(statements[0].Children, Has.Count.EqualTo(2));
+            Assert.That(statements[0].Children[0], Is.SameAs(statements[1]));
+            Assert.That(statements[0].Children[1], Is.SameAs(statements[2]));
+            Assert.That(statements[1].Parent, Is.SameAs(statements[0]));
+            Assert.That(statements[2].Parent, Is.SameAs(statements[0]));
+            Assert.That(statements[2].GetAncestors().Single(), Is.SameAs(statements[0]));
+            Assert.That(file.Methods.Single(), Is.SameAs(actualMethod));
+            Assert.That(actualMethod.Statements[1], Is.SameAs(statements[1]));
+            Assert.That(actualMethod.Statements[2], Is.SameAs(statements[2]));
+            Assert.That(statements.Select(s => s.Method), Is.All.SameAs(actualMethod));
+            Assert.That(statements.Select(s => s.File), Is.All.SameAs(file));
+            Assert.That(actualMethod.File, Is.SameAs(file));
+            Assert.That(file.Types[0].File, Is.SameAs(file));
+            Assert.That(file.Types[0].NestedTypes[0].File, Is.SameAs(file));
+            Assert.That(file.Types[1], Is.SameAs(file.Types[0].NestedTypes[0]));
+            Assert.That(CodeBindings.BuildExtractors()["Methods"](file), Has.Count.EqualTo(1));
+        });
     }
 
     [Test]

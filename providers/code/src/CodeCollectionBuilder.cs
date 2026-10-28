@@ -281,7 +281,8 @@ public static class CodeCollectionBuilder
             }
         }
         var owners = files.SelectMany(file => AllTypes(file.Types)
-            .Where(candidate => candidate.Name == type.Name && (candidate.Namespace ?? file.Namespace) == scope)).ToList();
+            .Where(candidate => candidate.Name == type.Name && (candidate.Namespace ?? file.Namespace) == scope))
+            .Distinct<TypeDeclaration>(ReferenceEqualityComparer.Instance).ToList();
         if (owners.Count != 1 || !ReferenceEquals(owners[0], type))
             return type.DeclaredMethods;
         return type.DeclaredMethods.Concat(files.Where(file => file.Namespace == scope)

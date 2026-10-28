@@ -45,6 +45,7 @@ public record TypeDeclaration(
     /// </summary>
     internal Lazy<bool>? DeferredSemantics { get; set; }
     private List<string> _interfaces = [];
+    internal List<string> CachedInterfaces => _interfaces;
     public List<string> Interfaces
     {
         get { _ = DeferredSemantics?.Value; return _interfaces; }

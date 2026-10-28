@@ -9,7 +9,7 @@ namespace Cop.Providers;
 internal static class SourceCacheSerializer
 {
     private static readonly byte[] Magic = [(byte)'C', (byte)'O', (byte)'P', (byte)'C'];
-    private const int FormatVersion = 6;
+    private const int FormatVersion = 7;
 
     public static void Save(string cachePath, byte[] fingerprint, List<SourceFile> sourceFiles)
     {
@@ -171,12 +171,13 @@ internal static class SourceCacheSerializer
         var count = ReadCount(reader, "SourceFile.Graph");
         if (count != graph.Statements.Count)
             throw new InvalidDataException("Invalid statement graph size.");
+        var linked = new HashSet<int>();
         for (int i = 0; i < count; i++)
         {
             var statementId = reader.ReadInt32();
             var parentId = reader.ReadInt32();
             var methodIndex = reader.ReadInt32();
-            if (!graph.Statements.TryGetValue(statementId, out var statement)
+            if (!linked.Add(statementId) || !graph.Statements.TryGetValue(statementId, out var statement)
                 || parentId < -1 || (parentId >= 0 && !graph.Statements.ContainsKey(parentId))
                 || methodIndex < -1 || (methodIndex >= 0 && !graph.Methods.ContainsKey(methodIndex)))
                 throw new InvalidDataException("Invalid statement graph reference.");
@@ -227,6 +228,7 @@ internal static class SourceCacheSerializer
         WriteList(writer, type.TypeParameters, static (w, value) => w.Write(value));
         WriteSpan(writer, type.Column, type.EndLine, type.EndColumn);
         WriteNullableString(writer, type.Namespace);
+        WriteList(writer, type.CachedInterfaces, static (w, value) => w.Write(value));
 
         // Language-specific subtype tag + flags (e.g. RustType). Null for base types.
         var languageTag = type.LanguageTag;
@@ -272,7 +274,8 @@ internal static class SourceCacheSerializer
             Column = ReadNullableInt(reader),
             EndLine = ReadNullableInt(reader),
             EndColumn = ReadNullableInt(reader),
-            Namespace = ReadNullableString(reader)
+            Namespace = ReadNullableString(reader),
+            Interfaces = ReadList(reader, static r => r.ReadString(), "TypeDeclaration.Interfaces")
         };
 
         // Language-specific subtype tag + flags — reconstruct the subtype if registered.
@@ -293,7 +296,8 @@ internal static class SourceCacheSerializer
                 Namespace = type.Namespace, Methods = type.DeclaredMethods,
                 Constructors = type.Constructors, NestedTypes = type.NestedTypes,
                 Fields = type.Fields, Properties = type.Properties, Events = type.Events,
-                HasDocComment = type.HasDocComment, DocComment = type.DocComment
+                HasDocComment = type.HasDocComment, DocComment = type.DocComment,
+                Interfaces = type.CachedInterfaces
             };
         }
 
@@ -397,6 +401,7 @@ internal static class SourceCacheSerializer
         WriteExpression(writer, statement.ValueExpression);
         WriteList(writer, statement.ArgumentExpressions, WriteExpression);
         WriteSpan(writer, statement.Column, statement.EndLine, statement.EndColumn);
+        WriteList(writer, statement.CachedConstructedTypeInterfaces, static (w, value) => w.Write(value));
         WriteList(writer, statement._children, WriteStatementInfo);
         WriteLanguageSubtype(writer, statement.LanguageTag, statement.LanguageFlags);
     }
@@ -431,6 +436,7 @@ internal static class SourceCacheSerializer
             Column = ReadNullableInt(reader),
             EndLine = ReadNullableInt(reader),
             EndColumn = ReadNullableInt(reader),
+            ConstructedTypeInterfaces = ReadList(reader, static r => r.ReadString(), "StatementInfo.ConstructedTypeInterfaces"),
             _children = ReadList(reader, ReadStatementInfo, "StatementInfo.Children")
         };
         var (tag, flags) = ReadLanguageSubtype(reader, "StatementInfo");
@@ -444,6 +450,7 @@ internal static class SourceCacheSerializer
         result.Condition = statement.Condition;
         result.Expression = statement.Expression;
         result.CopIgnore = statement.CopIgnore;
+        result.ConstructedTypeInterfaces = statement.CachedConstructedTypeInterfaces;
         result._children = statement._children;
         if (!graph.Statements.TryAdd(id, result))
             throw new InvalidDataException("Duplicate statement identity.");
