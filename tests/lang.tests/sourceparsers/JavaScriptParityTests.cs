@@ -33,6 +33,7 @@ public class JavaScriptParityTests
                 export function run(): number { return outer(inner('decoded')); }
                 export const arrow = () => log('arrow');
                 topLevel();
+                run();
                 """);
             var repository = TestContext.CurrentContext.TestDirectory;
             while (!File.Exists(Path.Combine(repository, "cop.sln")))
@@ -45,7 +46,9 @@ public class JavaScriptParityTests
                 import code
                 let cb = javascript.parse()
                 command MAIN = print(cb.Projects.Count) & print(cb.Methods.Count) & print(cb.Calls.Count) &
-                    print(cb.Calls.Where(item.MemberName == 'inner').First.ArgumentExpressions.First.StringValue)
+                    print(cb.Calls.Where(item.MemberName == 'inner').First.ArgumentExpressions.First.StringValue) &
+                    print(cb.Calls.Where(item.MemberName == 'run').First.ValueType.Name) &
+                    print(cb.Calls.Where(item.MemberName == 'run').First.ReferencedCallable.Signature)
                 """);
             var executable = Path.Combine(TestContext.CurrentContext.TestDirectory,
                 OperatingSystem.IsWindows() ? "cop.exe" : "cop");
@@ -71,12 +74,52 @@ public class JavaScriptParityTests
             var output = await stdout;
             var errors = await stderr;
             Assert.That(process.ExitCode, Is.EqualTo(0), errors);
-            Assert.That(output.Replace("\r\n", "\n").Trim(), Is.EqualTo("1\n2\n4\ndecoded"));
+            Assert.That(output.Replace("\r\n", "\n").Trim(), Is.EqualTo("1\n2\n5\ndecoded\nnumber\n(): number"));
             Assert.That(errors, Does.Not.Contain("simpler syntax analysis"));
             Assert.That(errors, Does.Not.Contain("Auto-restoring"));
             Assert.That(File.Exists(marker), Is.False, "Inherited Node options must not execute a runtime preload.");
         }
         finally { Directory.Delete(root, true); }
+    }
+
+    [Test]
+    public void Parse_CheckerBinding_DistinguishesReceiverValueAndSelectedOverload()
+    {
+        var file = new JavaScriptSourceParser().Parse("binding.ts", """
+            class First {
+                convert(value: string): number;
+                convert(value: number): string;
+                convert(value: string | number): string | number { return value; }
+            }
+            class Second { convert(value: string): boolean { return true; } }
+            function factory(): First { return new First(); }
+            const first = factory();
+            first.convert('value');
+            first.convert(42);
+            new Second().convert('value');
+            declare const dynamic: any;
+            dynamic.convert('unknown');
+            missing('unknown');
+            """)!;
+        var calls = file.Statements.Where(s => s.Kind == "call").ToList();
+        var factory = calls.Single(s => s.MemberName == "factory");
+        Assert.That(factory.ReceiverType, Is.Null);
+        Assert.That(factory.ValueType!.Name, Is.EqualTo("First"));
+        Assert.That(factory.ReferencedCallable!.Name, Is.EqualTo("factory"));
+        Assert.That(factory.ReferencedCallable.ReturnType!.Name, Is.EqualTo("First"));
+        var converts = calls.Where(s => s.MemberName == "convert").ToList();
+        Assert.That(converts.Select(s => s.ReceiverType?.Name), Is.EqualTo(new string?[] { "First", "First", "Second", null }));
+        Assert.That(converts.Select(s => s.ValueType?.Name), Is.EqualTo(new string?[] { "number", "string", "boolean", null }));
+        Assert.That(converts.Take(3).Select(s => s.ReferencedCallable!.DeclaringType),
+            Is.EqualTo(new[] { "First", "First", "Second" }));
+        Assert.That(converts.Take(3).Select(s => s.ReferencedCallable!.Signature),
+            Is.EqualTo(new[] { "(value: string): number", "(value: number): string", "(value: string): boolean" }));
+        Assert.That(converts.Take(3).Select(s => s.ReferencedCallable!.Parameters.Single().Name),
+            Is.EqualTo(new[] { "string", "number", "string" }));
+        Assert.That(converts.Take(3).Select(s => s.ReferencedCallable!.Line), Is.EqualTo(new int?[] { 2, 3, 6 }));
+        Assert.That(converts.Last().ReferencedCallable, Is.Null);
+        Assert.That(calls.Single(s => s.MemberName == "missing").ReferencedCallable, Is.Null);
+        Assert.That(converts.Take(3).All(s => s.ReferencedCallable!.SourceFile!.EndsWith("binding.ts")), Is.True);
     }
 
     [Test]
@@ -252,17 +295,28 @@ public class JavaScriptParityTests
                 { "compilerOptions": { "baseUrl": ".", "paths": { "@client": ["client.ts"] } } }
                 """);
             var imported = Path.Combine(root, "client.ts");
-            File.WriteAllText(imported, "class First { send() {} } export const client = new First();");
+            File.WriteAllText(imported, "class First { send(value: string): number { return 1; } } export const client = new First();");
             var main = Path.Combine(root, "main" + extension);
-            const string source = "import { client } from '@client'; client.send();";
+            const string source = "import { client } from '@client'; client.send('value');";
             var parser = new JavaScriptSourceParser();
             using var scope = new Cop.Core.ToolchainExecutionScope();
             var first = parser.Parse(main, source)!;
             Assert.That(first.Statements.Single(s => s.Kind == "call").TypeName, Is.EqualTo("First"));
-            File.WriteAllText(imported, "class Second { send() {} } export const client = new Second();");
+            var firstCall = first.Statements.Single(s => s.Kind == "call");
+            Assert.That(firstCall.ReceiverType!.Name, Is.EqualTo("First"));
+            Assert.That(firstCall.ValueType!.Name, Is.EqualTo("number"));
+            Assert.That(firstCall.ReferencedCallable!.Signature, Is.EqualTo("(value: string): number"));
+            Assert.That(firstCall.ReferencedCallable.DeclaringType, Is.EqualTo("First"));
+            Assert.That(Path.GetFullPath(firstCall.ReferencedCallable.SourceFile!), Is.EqualTo(imported));
+            File.WriteAllText(imported, "class Second { send(value: string): boolean { return true; } } export const client = new Second();");
             File.SetLastWriteTimeUtc(imported, DateTime.UtcNow.AddSeconds(2));
             var second = parser.Parse(main, source)!;
             Assert.That(second.Statements.Single(s => s.Kind == "call").TypeName, Is.EqualTo("Second"));
+            var secondCall = second.Statements.Single(s => s.Kind == "call");
+            Assert.That(secondCall.ReceiverType!.Name, Is.EqualTo("Second"));
+            Assert.That(secondCall.ValueType!.Name, Is.EqualTo("boolean"));
+            Assert.That(secondCall.ReferencedCallable!.Signature, Is.EqualTo("(value: string): boolean"));
+            Assert.That(secondCall.ReferencedCallable.DeclaringType, Is.EqualTo("Second"));
             Assert.That(parser.CanCache(main), Is.False, "Semantic dependencies are not source-only persistent cache keys.");
         }
         finally { Directory.Delete(root, true); }
@@ -355,6 +409,9 @@ public class JavaScriptFallbackParityTests
         Assert.That(calls[1].ArgumentExpressions.Single().StringValue, Is.EqualTo("ab"));
         Assert.That(calls[2].Method, Is.SameAs(file.Methods[1]));
         Assert.That(calls[4].IsInMethod, Is.False);
+        Assert.That(calls.Select(s => s.ReceiverType), Is.All.Null);
+        Assert.That(calls.Select(s => s.ValueType), Is.All.Null);
+        Assert.That(calls.Select(s => s.ReferencedCallable), Is.All.Null);
         Assert.That(Cop.Core.ProviderWarnings.Drain().Single(), Does.Contain("using simpler syntax analysis"));
     }
 

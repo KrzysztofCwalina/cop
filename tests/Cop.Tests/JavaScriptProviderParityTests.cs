@@ -81,6 +81,64 @@ public class JavaScriptProviderParityTests
     }
 
     [Test]
+    public void PublicBindingQueries_SelectOverloadsAndRefreshImportedDeclarations()
+    {
+        var library = Path.Combine(_root, "library.ts");
+        File.WriteAllText(Path.Combine(_root, "main.ts"), """
+            import { factory, Other } from './library';
+            const value = factory();
+            value.convert('text');
+            value.convert(1);
+            new Other().convert('text');
+            declare const dynamic: any;
+            dynamic.convert('unknown');
+            missing();
+            """);
+        var script = Path.Combine(_root, "check.cop");
+        File.WriteAllText(script, """
+            import javascript
+            let cb = javascript.parse()
+            let calls = cb.Calls.Where(item.File.Path == 'main.ts')
+            let first = calls.Where(item.Line == 3).First
+            let second = calls.Where(item.Line == 4).First
+            let third = calls.Where(item.Line == 5 && item.MemberName == 'convert').First
+            command TEST = print(calls.Where(item.MemberName == 'factory').First.ValueType.Name) &
+                print('{first.ReceiverType.Name}|{first.ValueType.Name}|{first.ReferencedCallable.DeclaringType}|{first.ReferencedCallable.Signature}|{first.ReferencedCallable.Parameters.First.Name}') &
+                print('{second.ReceiverType.Name}|{second.ValueType.Name}|{second.ReferencedCallable.DeclaringType}|{second.ReferencedCallable.Signature}|{second.ReferencedCallable.Parameters.First.Name}') &
+                print('{third.ReceiverType.Name}|{third.ValueType.Name}|{third.ReferencedCallable.DeclaringType}|{third.ReferencedCallable.Signature}|{third.ReferencedCallable.Parameters.First.Name}') &
+                print(calls.Where(item.Line == 7).First.ReferencedCallable == nic) &
+                print(calls.Where(item.MemberName == 'missing').First.ValueType == nic)
+            """);
+        foreach (var (type, returnType, resultValue) in new[]
+            { ("First", "number", "1"), ("Changed", "boolean", "true") })
+        {
+            File.WriteAllText(library, $$"""
+                export class {{type}} {
+                    convert(value: string): {{returnType}};
+                    convert(value: number): string;
+                    convert(value: string | number): {{returnType}} | string { return {{resultValue}}; }
+                }
+                export class Other { convert(value: string): boolean { return true; } }
+                export function factory(): {{type}} { return new {{type}}(); }
+                """);
+            for (int repeat = 0; repeat < 2; repeat++)
+            {
+                var result = Engine.RunProject([Path.Combine(RepoRoot, "packages")],
+                    ["javascript"], _root, ["TEST"], additionalScriptFiles: [script]);
+                Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
+                Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]
+                {
+                    type,
+                    $"{type}|{returnType}|{type}|(value: string): {returnType}|string",
+                    $"{type}|string|{type}|(value: number): string|number",
+                    "Other|boolean|Other|(value: string): boolean|string",
+                    "true", "true"
+                }));
+            }
+        }
+    }
+
+    [Test]
     public void AzureConsoleLogging_UsesParsedReceiver_AndExcludesOtherReceivers()
     {
         File.WriteAllText(Path.Combine(_root, "sample.ts"), """

@@ -258,6 +258,9 @@ internal sealed class TypeScriptProjection(string? searchPath)
         public string Kind { get; set; } = "";
         public List<string> Keywords { get; set; } = [];
         public string? TypeName { get; set; }
+        public TypeReference? ReceiverType { get; set; }
+        public TypeReference? ValueType { get; set; }
+        public CallableReference? ReferencedCallable { get; set; }
         public string? MemberName { get; set; }
         public List<string> Arguments { get; set; } = [];
         public ExpressionInfo? CallTarget { get; set; }
@@ -284,7 +287,8 @@ internal sealed class TypeScriptProjection(string? searchPath)
                 IsErrorHandler = IsErrorHandler, IsGenericErrorHandler = IsGenericErrorHandler,
                 IsBraced = IsBraced, Condition = Condition, Expression = Expression, ValueExpression = ValueExpression,
                 Column = Column, EndLine = EndLine, EndColumn = EndColumn,
-                ConstructedTypeInterfaces = ConstructedTypeInterfaces
+                ConstructedTypeInterfaces = ConstructedTypeInterfaces,
+                ReceiverType = ReceiverType, ValueType = ValueType, ReferencedCallable = ReferencedCallable
             };
     }
 }

@@ -366,6 +366,14 @@ unknown. Match the parsed `CallTarget` to identify a receiver such as `console`.
 Dynamic dispatch, unresolved modules, `any`, and `unknown` are not fabricated as resolved
 types. Cop does not claim whole-program runtime behavior or TypeScript type-checker diagnostics.
 
+`Statement.ReceiverType` describes the compiler-known receiver, and `ValueType` describes
+the expression result (for example, the object returned by a factory). `ReferencedCallable`
+identifies the compiler-selected declaration and overload, including its signature, parameter
+and return types, declaring type, and source span. It is not a prediction of runtime virtual
+dispatch. Unresolved or dynamic calls leave unavailable facts null; match `CallTarget` for
+syntax regardless of whether binding succeeds. These facts reuse the existing checker and
+worker, not a second compiler process.
+
 Compiler-backed models are reused within an execution but deliberately not persisted across
 runs: imported declarations, compiler libraries, and configuration can change independently
 of a source file. Simpler syntax models retain persistent caching. This avoids stale semantic

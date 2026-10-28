@@ -88,7 +88,7 @@ function project(request) {
         const end = source.getLineAndCharacterOfPosition(node.end);
         return { Line: start.line + 1, Column: start.character + 1, EndLine: end.line + 1, EndColumn: end.character + 1 };
     }
-    const name = node => node.name ? (ts.isStringLiteralLike(node.name) ? node.name.text : text(node.name)) : null;
+    const name = node => node.name ? (ts.isStringLiteralLike(node.name) ? node.name.text : node.name.getText()) : null;
     function namespace(node) {
         const parts = [];
         for (let parent = node.parent; parent; parent = parent.parent)
@@ -134,8 +134,8 @@ function project(request) {
         }
         return { Name: typeName, Namespace: namespace, GenericArguments: args, OriginalText: original };
     }
-    function inferredType(type) {
-        if (!type || (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown))) return null;
+    function inferredType(type, dynamic = false) {
+        if (!type || !dynamic && (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown))) return null;
         const original = checker.typeToString(type, undefined, ts.TypeFormatFlags.NoTruncation);
         // Avoid source-less synthetic type nodes: preserve a structured annotation using a tiny parsed type.
         const temp = ts.createSourceFile('type.ts', 'type T = ' + original, ts.ScriptTarget.Latest, true);
@@ -202,6 +202,36 @@ function project(request) {
         // A syntactic receiver is not a resolved type. CallTarget retains its exact identity.
         return null;
     }
+    function binding(node) {
+        const call = ts.isCallExpression(node) || ts.isNewExpression(node);
+        const value = call || ts.isAwaitExpression(node) ? node : node.initializer || node.expression;
+        const target = call && (ts.isPropertyAccessExpression(node.expression) ||
+            ts.isElementAccessExpression(node.expression)) ? node.expression.expression : null;
+        const signature = call ? checker.getResolvedSignature(node) : null;
+        const declaration = signature?.declaration;
+        let callable = null;
+        if (declaration && !source.parseDiagnostics.length) {
+            const symbol = declaration.symbol;
+            const parent = declaration.parent;
+            const file = declaration.getSourceFile();
+            const start = file.getLineAndCharacterOfPosition(declaration.getStart());
+            const end = file.getLineAndCharacterOfPosition(declaration.end);
+            callable = {
+                Name: name(declaration) || (ts.isVariableDeclaration(parent) ? name(parent) : null) ||
+                    symbol?.name || (ts.isConstructorDeclaration(declaration) ? 'constructor' : null),
+                Signature: checker.signatureToString(signature, node, ts.TypeFormatFlags.NoTruncation),
+                DeclaringType: parent && (ts.isClassLike(parent) || ts.isInterfaceDeclaration(parent)) ? name(parent) : null,
+                Namespace: namespace(declaration),
+                ReturnType: inferredType(checker.getReturnTypeOfSignature(signature)),
+                Parameters: signature.getParameters().map(p => inferredType(checker.getTypeOfSymbolAtLocation(p, node), true)),
+                SourceFile: file.fileName, Line: start.line + 1, Column: start.character + 1,
+                EndLine: end.line + 1, EndColumn: end.character + 1
+            };
+            if (!callable.Name || callable.Parameters.some(p => !p)) callable = null;
+        }
+        return { ReceiverType: target ? inferredType(checker.getTypeAtLocation(target)) : null,
+            ValueType: value ? inferredType(checker.getTypeAtLocation(value)) : null, ReferencedCallable: callable };
+    }
     function implementedInterfaces(node, seen = new Set()) {
         const names = new Set();
         if (!node || seen.has(node)) return [];
@@ -242,7 +272,7 @@ function project(request) {
         const value = {
             Id: result.Statements.length, Kind: kind, Keywords: [], Arguments: [], ArgumentExpressions: [],
             ...span(node), MethodId: owner ? owner.Id : null, ParentId: parent ? parent.Id : null,
-            IsBraced: !!node.statement && ts.isBlock(node.statement), ...extra
+            IsBraced: !!node.statement && ts.isBlock(node.statement), ...binding(node), ...extra
         };
         result.Statements.push(value);
         return value;
