@@ -91,7 +91,7 @@ public class SourceCacheSerializerTests
             Assert.That(ifStatement.Kind, Is.EqualTo("if"));
             Assert.That(ifStatement.IsBraced, Is.True);
             Assert.That(ifStatement.Condition, Is.EqualTo("items.Count > 0"));
-            Assert.That(ifStatement.Method, Is.Null);
+            Assert.That(ifStatement.Method, Is.SameAs(method));
             Assert.That(ifStatement.Parent, Is.Null);
             Assert.That(ifStatement.File, Is.Null);
             Assert.That(ifStatement.CopIgnore, Is.EqualTo("ignore-rule"));
@@ -112,13 +112,15 @@ public class SourceCacheSerializerTests
             Assert.That(childCall.ArgumentExpressions[0].Children, Has.Count.EqualTo(1));
             Assert.That(childCall.ArgumentExpressions[0].Children[0].StringValue, Is.EqualTo("decoded\nvalue"));
             Assert.That(childCall.Expression, Is.EqualTo("logger.Log(items)"));
-            Assert.That(childCall.Method, Is.Null);
-            Assert.That(childCall.Parent, Is.Null);
+            Assert.That(childCall.Method, Is.SameAs(method));
+            Assert.That(childCall.Parent, Is.SameAs(ifStatement));
             Assert.That(childCall.File, Is.Null);
 
             Assert.That(file.Statements, Has.Count.EqualTo(3));
             Assert.That(file.Statements[0].Kind, Is.EqualTo("if"));
             Assert.That(file.Statements[1].Kind, Is.EqualTo("call"));
+            Assert.That(file.Statements[0], Is.SameAs(ifStatement));
+            Assert.That(file.Statements[1], Is.SameAs(childCall));
             Assert.That(file.Statements[2].Kind, Is.EqualTo("throw"));
             Assert.That(file.Statements[2].HasRethrow, Is.True);
             Assert.That(file.Statements[2].IsErrorHandler, Is.True);

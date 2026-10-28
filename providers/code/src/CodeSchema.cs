@@ -36,6 +36,8 @@ public static class CodeSchema
             [
                 TypeDef("Type", null,
                     Prop("Name"), Prop("Kind"),
+                    Opt("Namespace"), Opt("AliasTarget", "TypeReference"), Coll("TypeParameters"),
+                    Opt("Column", "int"), Opt("EndLine", "int"), Opt("EndColumn", "int"),
                     Prop("Modifiers", "int"),
                     Bool("IsSealed"), Bool("IsAbstract"), Bool("IsStatic"), Bool("IsPublic"),
                     Coll("BaseTypes"), Coll("Interfaces"), Coll("Constructors", "Method"), Coll("Methods", "Method"),
@@ -47,6 +49,8 @@ public static class CodeSchema
 
                 TypeDef("Method", null,
                     Prop("Name"),
+                    Opt("ReceiverType"), Coll("TypeParameters"),
+                    Opt("Column", "int"), Opt("EndLine", "int"), Opt("EndColumn", "int"),
                     Prop("Modifiers", "int"),
                     Bool("IsStatic"), Bool("IsAbstract"), Bool("IsPublic"),
                     Opt("ReturnType", "TypeReference"),
@@ -59,6 +63,7 @@ public static class CodeSchema
                 TypeDef("Parameter", null,
                     Prop("Name"), Opt("Type", "TypeReference"),
                     Bool("Variadic"), Bool("Kwargs"), Bool("Defaulted"),
+                    Bool("Optional"), Opt("Column", "int"), Opt("EndLine", "int"), Opt("EndColumn", "int"),
                     Opt("DefaultValue"), Prop("Line", "int")),
 
                 TypeDef("Field", null,
@@ -89,7 +94,9 @@ public static class CodeSchema
                     Prop("Kind"), Coll("Keywords"),
                     Opt("TypeName"), Opt("MemberName"),
                     Coll("Arguments"), Prop("Line", "int"),
+                    Opt("Column", "int"), Opt("EndLine", "int"), Opt("EndColumn", "int"),
                     Opt("CallTarget", "CodeExpression"), Coll("ArgumentExpressions", "CodeExpression"),
+                    Opt("ValueExpression", "CodeExpression"),
                     Bool("InMethod"), Bool("Rethrows"), Bool("Generic"), Bool("ErrorHandler"),
                     Bool("Braced"),
                     Opt("File", "File"), Prop("Source"),
@@ -108,7 +115,12 @@ public static class CodeSchema
 
                 TypeDef("File", null,
                     Prop("Path"), Opt("FullPath"), Opt("SourceRoot"), Opt("Language"), Opt("Namespace"),
-                    Coll("Usings"), Coll("Types", "Type"), Coll("Methods", "Method"), Coll("Projects")),
+                    Coll("Usings"), Coll("Imports", "Import"), Coll("Types", "Type"), Coll("Methods", "Method"), Coll("Projects")),
+
+                TypeDef("Import", null,
+                    Prop("Module"), Opt("Name"), Opt("Alias"), Bool("IsWildcard"), Bool("IsStatic"),
+                    Prop("RelativeLevel", "int"), Prop("Line", "int"),
+                    Opt("Column", "int"), Opt("EndLine", "int"), Opt("EndColumn", "int")),
 
                 TypeDef("Api", null,
                     Prop("Kind"), Prop("TypeName"), Prop("MemberName"),
@@ -126,6 +138,7 @@ public static class CodeSchema
                 TypeDef("Project", null,
                     Prop("Name"), Prop("Path"), Opt("Language"),
                     Coll("References"), Coll("Packages"), Coll("Frameworks"),
+                    new ProviderPropertySchema { Name = "SourceFiles", Type = "string", Collection = true, Optional = true },
                     Coll("Properties", "ProjectProperty")),
 
                 TypeDef("ProjectProperty", null,

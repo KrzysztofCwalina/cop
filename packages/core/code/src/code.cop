@@ -7,9 +7,9 @@
 export flags Modifier = Public | Private | Protected | Internal | Static | Sealed | Abstract | Virtual | Async | Override | Readonly | Const
 
 # Extensible enums — known values for Kind properties. Providers may return additional values.
-export enum TypeKind = Class | Struct | Interface | Enum
+export enum TypeKind = Class | Struct | Interface | Enum | Alias
 export enum StatementKind = call | declaration | import | command | attribute | throw | return | using | foreach | try | catch | if | else | while | for | switch | await | directive
-export enum ExpressionKind = identifier | stringLiteral | memberAccess | invocation | other
+export enum ExpressionKind = identifier | stringLiteral | numericLiteral | booleanLiteral | nullLiteral | arrayLiteral | objectLiteral | memberAccess | invocation | other
 export enum ApiKind = class | struct | interface | enum | enumvalue | ctor | method | property | event | field
 export enum LineKind = code | comment | blank
 export enum Language = csharp | python | javascript | rust | go | java | cop | text
@@ -19,6 +19,12 @@ export enum Language = csharp | python | javascript | rust | go | java | cop | t
 export type Type = {
     Name : string,
     Kind : TypeKind,
+    Namespace : string?,
+    AliasTarget : TypeReference?,
+    TypeParameters : [string],
+    Column : int?,
+    EndLine : int?,
+    EndColumn : int?,
     Modifiers : int,
     BaseTypes : [string],
     Interfaces : [string],
@@ -42,6 +48,11 @@ export type Type = {
 ## Use Statements and their Parent/Children relationships instead of searching Source.
 export type Method = {
     Name : string,
+    ReceiverType : string?,
+    TypeParameters : [string],
+    Column : int?,
+    EndLine : int?,
+    EndColumn : int?,
     Modifiers : int,
     ReturnType : TypeReference?,
     Parameters : [Parameter],
@@ -104,6 +115,10 @@ export type Parameter = {
     Variadic : bool,
     Kwargs : bool,
     Defaulted : bool,
+    Optional : bool,
+    Column : int?,
+    EndLine : int?,
+    EndColumn : int?,
     DefaultValue : string?,
     Line : int
 }
@@ -128,7 +143,11 @@ export type Statement = {
     MemberName : string?,
     Arguments : [string],
     CallTarget : CodeExpression?,
+    ValueExpression : CodeExpression?,
     ArgumentExpressions : [CodeExpression],
+    Column : int?,
+    EndLine : int?,
+    EndColumn : int?,
     Line : int,
     InMethod : bool,
     Rethrows : bool,
@@ -255,6 +274,7 @@ export type File = {
     Language : Language?,
     Namespace : string?,
     Usings : [string],
+    Imports : [Import],
     Types : [Type],
     Methods : [Method]
 }
@@ -264,6 +284,20 @@ export type ProjectProperty = {
     Value : string
 }
 
+## Parsed import facts; these describe syntax, not resolved symbol bindings.
+export type Import = {
+    Module : string,
+    Name : string?,
+    Alias : string?,
+    IsWildcard : bool,
+    IsStatic : bool,
+    RelativeLevel : int,
+    Line : int,
+    Column : int?,
+    EndLine : int?,
+    EndColumn : int?
+}
+
 export type Project = {
     Name : string,
     Path : string,
@@ -271,6 +305,7 @@ export type Project = {
     References : [string],
     Packages : [string],
     Frameworks : [string],
+    SourceFiles : [string]?,
     Properties : [ProjectProperty]
 }
 

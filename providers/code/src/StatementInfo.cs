@@ -9,9 +9,9 @@ public class StatementInfo(
     int line,
     bool isInMethod)
 {
-    public int? Column { get; init; }
-    public int? EndLine { get; init; }
-    public int? EndColumn { get; init; }
+    public int? Column { get; set; }
+    public int? EndLine { get; set; }
+    public int? EndColumn { get; set; }
     public string Kind { get; } = kind;
     public List<string> Keywords { get; } = keywords;
     internal Lazy<bool>? DeferredSemantics { get; set; }
@@ -30,8 +30,9 @@ public class StatementInfo(
         DeferredTypeNames = analysis ?? SyntaxTypeName;
     public string? MemberName { get; } = memberName;
     public List<string> Arguments { get; } = arguments;
-    public ExpressionInfo? CallTarget { get; init; }
-    public List<ExpressionInfo> ArgumentExpressions { get; init; } = [];
+    public ExpressionInfo? CallTarget { get; set; }
+    public ExpressionInfo? ValueExpression { get; set; }
+    public List<ExpressionInfo> ArgumentExpressions { get; set; } = [];
     public int Line { get; } = line;
     public bool IsInMethod { get; } = isInMethod;
     public SourceFile? File { get; set; }
@@ -46,8 +47,8 @@ public class StatementInfo(
     public MethodDeclaration? Method { get; set; }
     public StatementInfo? Parent { get; set; }
     public IReadOnlyList<StatementInfo> Children => _children;
-    public string? Condition { get; init; }
-    public string? Expression { get; init; }
+    public string? Condition { get; set; }
+    public string? Expression { get; set; }
 
     /// <summary>
     /// For 'call' statements representing object creation (new X()),

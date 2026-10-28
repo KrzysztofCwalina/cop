@@ -45,6 +45,7 @@ public static class CodeBindings
                 [typeof(RegionInfo)] = "Region",
                 [typeof(ProjectInfo)] = "Project",
                 [typeof(ProjectProperty)] = "ProjectProperty",
+                [typeof(ImportInfo)] = "Import",
             },
             Accessors = BuildAccessors(),
             CollectionExtractors = BuildExtractors(),
@@ -72,6 +73,12 @@ public static class CodeBindings
             ["Type"] = new()
             {
                 ["Name"] = o => ((TypeDeclaration)o).Name,
+                ["Namespace"] = o => ((TypeDeclaration)o).Namespace,
+                ["AliasTarget"] = o => ((TypeDeclaration)o).AliasTarget,
+                ["TypeParameters"] = o => ((TypeDeclaration)o).TypeParameters,
+                ["Column"] = o => ((TypeDeclaration)o).Column,
+                ["EndLine"] = o => ((TypeDeclaration)o).EndLine,
+                ["EndColumn"] = o => ((TypeDeclaration)o).EndColumn,
                 ["Kind"] = o => ((TypeDeclaration)o).Kind.ToString(),
                 ["Modifiers"] = o => (object)(int)((TypeDeclaration)o).Modifiers,
                 ["IsSealed"] = o => (object)((TypeDeclaration)o).IsSealed,
@@ -98,6 +105,11 @@ public static class CodeBindings
             ["Method"] = new()
             {
                 ["Name"] = o => ((MethodDeclaration)o).Name,
+                ["ReceiverType"] = o => ((MethodDeclaration)o).ReceiverType,
+                ["TypeParameters"] = o => ((MethodDeclaration)o).TypeParameters,
+                ["Column"] = o => ((MethodDeclaration)o).Column,
+                ["EndLine"] = o => ((MethodDeclaration)o).EndLine,
+                ["EndColumn"] = o => ((MethodDeclaration)o).EndColumn,
                 ["Modifiers"] = o => (object)(int)((MethodDeclaration)o).Modifiers,
                 ["IsStatic"] = o => (object)((MethodDeclaration)o).IsStatic,
                 ["IsAbstract"] = o => (object)((MethodDeclaration)o).IsAbstract,
@@ -115,6 +127,10 @@ public static class CodeBindings
             ["Parameter"] = new()
             {
                 ["Name"] = o => ((ParameterDeclaration)o).Name,
+                ["Optional"] = o => ((ParameterDeclaration)o).IsOptional,
+                ["Column"] = o => ((ParameterDeclaration)o).Column,
+                ["EndLine"] = o => ((ParameterDeclaration)o).EndLine,
+                ["EndColumn"] = o => ((ParameterDeclaration)o).EndColumn,
                 ["Type"] = o => (object?)((ParameterDeclaration)o).Type,
                 ["Variadic"] = o => (object)((ParameterDeclaration)o).IsVariadic,
                 ["Kwargs"] = o => (object)((ParameterDeclaration)o).IsKwargs,
@@ -165,11 +181,15 @@ public static class CodeBindings
             ["Statement"] = new()
             {
                 ["Kind"] = o => ((StatementInfo)o).Kind,
+                ["Column"] = o => ((StatementInfo)o).Column,
+                ["EndLine"] = o => ((StatementInfo)o).EndLine,
+                ["EndColumn"] = o => ((StatementInfo)o).EndColumn,
                 ["Keywords"] = o => (object)((StatementInfo)o).Keywords,
                 ["TypeName"] = o => ((StatementInfo)o).TypeName,
                 ["MemberName"] = o => ((StatementInfo)o).MemberName,
                 ["Arguments"] = o => (object)((StatementInfo)o).Arguments,
                 ["CallTarget"] = o => ((StatementInfo)o).CallTarget,
+                ["ValueExpression"] = o => ((StatementInfo)o).ValueExpression,
                 ["ArgumentExpressions"] = o => ((StatementInfo)o).ArgumentExpressions,
                 ["Line"] = o => (object)((StatementInfo)o).Line,
                 ["InMethod"] = o => (object)((StatementInfo)o).IsInMethod,
@@ -215,6 +235,7 @@ public static class CodeBindings
                 ["Language"] = o => ((SourceFile)o).Language,
                 ["Namespace"] = o => ((SourceFile)o).Namespace,
                 ["Usings"] = o => (object)((SourceFile)o).Usings,
+                ["Imports"] = o => ((SourceFile)o).Imports,
                 ["Types"] = o => (object)((SourceFile)o).Types,
                 ["Methods"] = o => (object)((SourceFile)o).Methods,
                 ["Projects"] = o => (object)((SourceFile)o).Projects,
@@ -254,6 +275,7 @@ public static class CodeBindings
                 ["References"] = o => (object)((ProjectInfo)o).References,
                 ["Packages"] = o => (object)((ProjectInfo)o).Packages,
                 ["Frameworks"] = o => (object)((ProjectInfo)o).Frameworks,
+                ["SourceFiles"] = o => ((ProjectInfo)o).SourceFiles,
                 ["Properties"] = o => (object)((ProjectInfo)o).Properties
                     .Select(kv => new ProjectProperty(kv.Key, kv.Value)).ToList(),
             },
@@ -261,6 +283,19 @@ public static class CodeBindings
             {
                 ["Name"] = o => ((ProjectProperty)o).Name,
                 ["Value"] = o => ((ProjectProperty)o).Value,
+            },
+            ["Import"] = new()
+            {
+                ["Module"] = o => ((ImportInfo)o).Module,
+                ["Name"] = o => ((ImportInfo)o).Name,
+                ["Alias"] = o => ((ImportInfo)o).Alias,
+                ["IsWildcard"] = o => ((ImportInfo)o).IsWildcard,
+                ["IsStatic"] = o => ((ImportInfo)o).IsStatic,
+                ["RelativeLevel"] = o => ((ImportInfo)o).RelativeLevel,
+                ["Line"] = o => ((ImportInfo)o).Line,
+                ["Column"] = o => ((ImportInfo)o).Column,
+                ["EndLine"] = o => ((ImportInfo)o).EndLine,
+                ["EndColumn"] = o => ((ImportInfo)o).EndColumn,
             },
         };
     }
@@ -276,7 +311,7 @@ public static class CodeBindings
                 var file = (SourceFile)doc;
                 var result = file.Methods.Cast<object>().ToList();
                 CollectMethods(file.Types, result);
-                return result;
+                return result.Distinct(ReferenceEqualityComparer.Instance).ToList();
             },
             ["Calls"] = doc => ((SourceFile)doc).Statements.Where(s => s.Kind == "call").Cast<object>().ToList(),
             ["Lines"] = doc =>
@@ -369,7 +404,7 @@ public static class CodeBindings
     {
         foreach (var type in types)
         {
-            result.AddRange(type.Methods);
+            result.AddRange(type.DeclaredMethods);
             CollectMethods(type.NestedTypes, result);
         }
     }

@@ -18,9 +18,10 @@ internal sealed class DeferredSourceCache(string scope)
         var info = new FileInfo(path);
         var fingerprint = Encoding.UTF8.GetBytes(
             $"{info.Length}:{info.LastWriteTimeUtc.Ticks}:{SourceFileMetadata.ReadChangeTime(path)}");
-        var parserId = parser.GetType().FullName + ":" + parser.GetType().Assembly.ManifestModule.ModuleVersionId;
-        var entries = _entries ??= Load();
-        if (entries.TryGetValue(path, out var entry) && entry.Parser == parserId
+        var parserId = parser.GetCacheIdentity(path);
+        var canCache = parser.CanCache(path);
+        var entries = canCache ? _entries ??= Load() : null;
+        if (entries is not null && entries.TryGetValue(path, out var entry) && entry.Parser == parserId
             && entry.Fingerprint.AsSpan().SequenceEqual(fingerprint))
         {
             using var buffer = new MemoryStream(entry.Model, writable: false);
@@ -39,9 +40,12 @@ internal sealed class DeferredSourceCache(string scope)
         var parsed = parser.Parse(path, reader.ReadToEnd());
         if (CopDiagnostics.Timing)
             Console.Error.WriteLine($"[provider-parse] {parser.Language} {path}");
-        entries.Remove(path);
-        _changed = true;
-        if (parsed is not null && parsed.ParseErrors.Count == 0)
+        if (entries is not null)
+        {
+            entries.Remove(path);
+            _changed = true;
+        }
+        if (entries is not null && parsed is not null && parsed.ParseErrors.Count == 0)
         {
             using var buffer = new MemoryStream();
             SourceCacheSerializer.Save(buffer, fingerprint, [parsed]);
