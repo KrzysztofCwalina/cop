@@ -7,6 +7,29 @@ namespace Cop.Tests;
 public class ForeachPipelineRegressionTests
 {
     [Test]
+    [Explicit("Issue #88: verified multiline command silently emits no output - remove when fixed")]
+    [Category("PendingFix")]
+    public void Issue088_MultilineCommandDoesNotSilentlyDropLiteralAndForeachOutput()
+    {
+        string directory = Path.Combine(TestContext.CurrentContext.WorkDirectory, "cop-issue088-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            File.WriteAllText(Path.Combine(directory, "main.cop"), """
+                let values = [1, 2]
+                command MAIN =
+                    'count:{values.Count}'
+                    foreach values => 'value:{item}'
+                """);
+            var result = Engine.Run(directory, directory);
+            Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
+            Assert.That(result.Outputs.Select(output => output.Message),
+                Is.EqualTo(new[] { "count:2", "value:1", "value:2" }));
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Test]
     [Explicit("Issue #84: verified pipe-separated foreach silently emits no output - remove when fixed")]
     [Category("PendingFix")]
     public void Issue084_PipeSeparatedForeachCommandsProduceBothOutputs()
