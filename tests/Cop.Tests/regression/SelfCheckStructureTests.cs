@@ -160,6 +160,32 @@ public class SelfCheckStructureTests
             "Environment variable used to control behavior — use a CLI flag or config instead (Input.cs:{0})");
     }
 
+    [TestCase("providers/java-provider/src/JavaSemanticContext.cs", "Discover", "CLASSPATH", false, true)]
+    [TestCase("providers/rust-provider/src/RustFrontend.cs", "Bind", "CARGO_HOME", true, true)]
+    [TestCase("providers/rust-provider/src/Other.cs", "Bind", "CARGO_HOME", false, false)]
+    public void EnvironmentCheckLimitsReviewedFrontendContextToItsOwner(
+        string file, string method, string variable, bool allowsComputed, bool allowsLiteral)
+    {
+        int[] violations = allowsLiteral
+            ? allowsComputed ? [6, 8, 11] : [6, 7, 8, 11]
+            : [5, 6, 7, 8, 11];
+        AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", file, $$"""
+            using System;
+            namespace Fixture;
+            class Example {
+                string? {{method}}(string name) {
+                    var context = Environment.GetEnvironmentVariable("{{variable}}");
+                    var toggle = Environment.GetEnvironmentVariable("COP_FEATURE");
+                    var computed = Environment.GetEnvironmentVariable(name);
+                    Environment.SetEnvironmentVariable("{{variable}}", "value");
+                    return context;
+                }
+                string? Other() => Environment.GetEnvironmentVariable("{{variable}}");
+            }
+            """, "csharp", violations,
+            $"Environment variable used to control behavior — use a CLI flag or config instead ({file}:{{0}})");
+    }
+
     [Test]
     public void Issue054_FfiApprovalUsesTheDecodedFirstArgumentOnly()
     {

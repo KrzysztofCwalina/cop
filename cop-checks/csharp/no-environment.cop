@@ -1,6 +1,7 @@
 # Environment variables must not control cop's behavior — use CLI flags or config instead.
 # Secrets (e.g. GITHUB_TOKEN) must not be passed on a command line.
 # Reading PATH for installed-tool discovery is allowed; writing PATH is not.
+# Frontends may inspect reviewed toolchain context, not introduce Cop feature flags.
 #
 # Inspect parsed calls, including nested expressions. Only the decoded first argument can
 # exempt a secret name (TOKEN/SECRET/PASSWORD); comments and other arguments cannot.
@@ -17,8 +18,21 @@ predicate envIsSearchPathRead(Statement) => Statement.MemberName == 'GetEnvironm
     && Statement.ArgumentExpressions.Count == 1
     && Statement.ArgumentExpressions[0].Kind == stringLiteral
     && Statement.ArgumentExpressions[0].StringValue == 'PATH'
+# Java diagnoses an ignored CLASSPATH; Rust resolves Cargo sources and rejects unsupported flags.
+predicate envIsFrontendContextRead(Statement) => Statement.MemberName == 'GetEnvironmentVariable'
+    && Statement.ArgumentExpressions.Count == 1
+    && ((Statement.File.Path == 'providers/java-provider/src/JavaSemanticContext.cs'
+        && Statement.Method.Name == 'Discover'
+        && Statement.ArgumentExpressions[0].Kind == stringLiteral
+        && Statement.ArgumentExpressions[0].StringValue == 'CLASSPATH')
+    || (Statement.File.Path == 'providers/rust-provider/src/RustFrontend.cs'
+        && Statement.Method.Name == 'Bind'
+        && ((Statement.ArgumentExpressions[0].Kind == stringLiteral
+            && Statement.ArgumentExpressions[0].StringValue == 'CARGO_HOME')
+        || (Statement.ArgumentExpressions[0].Kind == identifier
+            && Statement.ArgumentExpressions[0].Name == 'name'))))
 predicate envControlsBehavior(Statement) => (Statement.ArgumentExpressions.Count == 0
-    || !envIsSecretName(Statement.ArgumentExpressions[0])) && !envIsSearchPathRead
+    || !envIsSecretName(Statement.ArgumentExpressions[0])) && !envIsSearchPathRead && !envIsFrontendContextRead
 
 export let no-environment = codebase.Calls:readsEnvVar:envIsCSharp:envNotTest:envControlsBehavior
     :toError('Environment variable used to control behavior — use a CLI flag or config instead ({item.File.Path}:{item.Line})')
