@@ -396,6 +396,8 @@ public class RustAnalysisCapabilityTests
             var notices = ProviderWarnings.Drain();
             Assert.That(notices, Has.Count.EqualTo(1));
             Assert.That(notices[0], Does.Contain("syntax-only"));
+            Assert.That(notices[0], Does.Contain("maintained Rust frontend is unavailable"));
+            Assert.That(notices[0], Does.Not.Contain("stable Rust tooling"));
             Assert.That(notices[0], Does.Contain("macro expansion, name/type resolution"));
             Assert.That(ProviderErrors.Drain(), Is.Empty);
         }

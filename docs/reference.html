@@ -701,6 +701,21 @@ const packages = {
             "desc": ""
           },
           {
+            "name": "ReceiverType",
+            "type": "TypeReference?",
+            "desc": ""
+          },
+          {
+            "name": "ValueType",
+            "type": "TypeReference?",
+            "desc": ""
+          },
+          {
+            "name": "ReferencedCallable",
+            "type": "CallableReference?",
+            "desc": ""
+          },
+          {
             "name": "MemberName",
             "type": "string?",
             "desc": ""
@@ -1467,6 +1482,66 @@ const packages = {
           {
             "name": "Children",
             "type": "[CodeExpression]",
+            "desc": ""
+          }
+        ]
+      },
+      "CallableReference": {
+        "desc": "A compiler-selected callable declaration; virtual/interface dispatch may call an override at runtime.\nSourceFile and its one-based, exclusive-end declaration span are absent for metadata-only symbols.",
+        "props": [
+          {
+            "name": "Name",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Signature",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "DeclaringType",
+            "type": "string?",
+            "desc": ""
+          },
+          {
+            "name": "Namespace",
+            "type": "string?",
+            "desc": ""
+          },
+          {
+            "name": "ReturnType",
+            "type": "TypeReference?",
+            "desc": ""
+          },
+          {
+            "name": "Parameters",
+            "type": "[TypeReference]",
+            "desc": ""
+          },
+          {
+            "name": "SourceFile",
+            "type": "string?",
+            "desc": ""
+          },
+          {
+            "name": "Line",
+            "type": "int?",
+            "desc": ""
+          },
+          {
+            "name": "Column",
+            "type": "int?",
+            "desc": ""
+          },
+          {
+            "name": "EndLine",
+            "type": "int?",
+            "desc": ""
+          },
+          {
+            "name": "EndColumn",
+            "type": "int?",
             "desc": ""
           }
         ]
@@ -4731,7 +4806,7 @@ const packages = {
         "name": "parse",
         "params": "",
         "returns": "Codebase",
-        "desc": "Parses Go with the installed standard-library AST toolchain, or warns and uses simpler syntax analysis.\nNo target code is built or executed. Neither mode performs project-wide type resolution.\nExample: let cb = go.parse()"
+        "desc": "Parses Go with the installed standard-library AST toolchain, or warns and uses simpler syntax analysis.\nNative semantic fields demand package-aware go/types checking with offline local dependencies.\nNo target code is built or executed; missing semantic context is diagnosed.\nExample: let cb = go.parse()"
       },
       {
         "name": "parse",
@@ -5203,7 +5278,7 @@ const packages = {
         "name": "parse",
         "params": "",
         "returns": "Codebase",
-        "desc": "Parses Java with the installed JDK compiler-tree API, or warns and uses simpler syntax analysis.\nNo target code or annotation processor runs. Neither mode performs project-wide type resolution.\nExample: let cb = java.parse()"
+        "desc": "Parses Java with the installed JDK compiler-tree API, or warns and uses simpler syntax analysis.\nNative semantic fields demand javac attribution over locally available source and dependencies.\nNo target code or annotation processor runs; missing semantic context is diagnosed.\nExample: let cb = java.parse()"
       },
       {
         "name": "parse",
@@ -7092,7 +7167,7 @@ const packages = {
         "name": "parse",
         "params": "",
         "returns": "Codebase",
-        "desc": "Parses Rust source files in the target directory and returns a Codebase.\nStructural syntax analysis only; reports a warning because portable stable Rust tooling\ndoes not expose a supported parse-only AST/semantic export. Never builds or executes code.\nExample: let cb = rust.parse()"
+        "desc": "Parses Rust source files in the target directory and returns a Codebase.\nUses the pinned maintained Rust frontend when deployed beside Cop; otherwise warns\nand falls back to structural syntax analysis. Semantic Statement fields are demand-driven.\nResolves local modules and dependencies already on disk; never builds or executes code.\nExample: let cb = rust.parse()"
       },
       {
         "name": "parse",
