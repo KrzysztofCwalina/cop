@@ -112,7 +112,11 @@ internal sealed class TypeScriptProjection(string? searchPath)
     private static T Request<T>(JavaScriptToolchain toolchain, string request)
     {
         var output = ToolchainExecutionScope.RequestAsync(toolchain.NodePath, ["-e", Script.Value, toolchain.CompilerPath],
-            Environment.CurrentDirectory, request)
+            Environment.CurrentDirectory, request, environment: new Dictionary<string, string?>
+            {
+                ["NODE_OPTIONS"] = null,
+                ["NODE_PATH"] = null
+            })
             .GetAwaiter().GetResult();
         if (output.Status == ToolchainStatus.Unavailable)
             throw new CompilerUnavailableException(output.Diagnostic ?? "Node.js is unavailable.");

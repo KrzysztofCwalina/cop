@@ -14,6 +14,71 @@ public class JavaScriptParityTests
             Assert.Ignore("Native compiler projection requires an already-installed Node.js and TypeScript.");
     }
 
+    [TestCase("--require")]
+    [TestCase("--import")]
+    public async Task Cli_InheritedNodePreload_DoesNotExecuteDuringNativeAnalysis(string option)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "cop-js-preload-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var target = Path.Combine(root, "target");
+            Directory.CreateDirectory(target);
+            var marker = Path.Combine(root, "executed.txt");
+            var preload = Path.Combine(root, "preload.cjs");
+            File.WriteAllText(preload, "require('fs').writeFileSync(" +
+                System.Text.Json.JsonSerializer.Serialize(marker) + ", 'executed');");
+            File.WriteAllText(Path.Combine(target, "tsconfig.json"), """{ "include": ["*.ts"] }""");
+            File.WriteAllText(Path.Combine(target, "sample.ts"), """
+                export function run(): number { return outer(inner('decoded')); }
+                export const arrow = () => log('arrow');
+                topLevel();
+                """);
+            var repository = TestContext.CurrentContext.TestDirectory;
+            while (!File.Exists(Path.Combine(repository, "cop.sln")))
+                repository = Path.GetDirectoryName(repository)
+                    ?? throw new InvalidOperationException("Repository root not found.");
+            var script = Path.Combine(root, "check.cop");
+            File.WriteAllText(script, $"""
+                feed '{Path.Combine(repository, "packages").Replace("\\", "\\\\").Replace("'", "\\'")}'
+                import javascript
+                import code
+                let cb = javascript.parse()
+                command MAIN = print(cb.Projects.Count) & print(cb.Methods.Count) & print(cb.Calls.Count) &
+                    print(cb.Calls.Where(item.MemberName == 'inner').First.ArgumentExpressions.First.StringValue)
+                """);
+            var executable = Path.Combine(TestContext.CurrentContext.TestDirectory,
+                OperatingSystem.IsWindows() ? "cop.exe" : "cop");
+            var start = new System.Diagnostics.ProcessStartInfo(executable)
+            {
+                WorkingDirectory = root, UseShellExecute = false,
+                RedirectStandardOutput = true, RedirectStandardError = true
+            };
+            foreach (var argument in new[] { script, "-t", target }) start.ArgumentList.Add(argument);
+            var preloadArgument = option == "--import" ? new Uri(preload).AbsoluteUri : preload;
+            start.Environment["NODE_OPTIONS"] = option + " " + System.Text.Json.JsonSerializer.Serialize(preloadArgument);
+            start.Environment["NODE_PATH"] = root;
+            using var process = System.Diagnostics.Process.Start(start)!;
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            var stderr = process.StandardError.ReadToEndAsync();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            try { await process.WaitForExitAsync(timeout.Token); }
+            catch (OperationCanceledException)
+            {
+                process.Kill(entireProcessTree: true);
+                throw;
+            }
+            var output = await stdout;
+            var errors = await stderr;
+            Assert.That(process.ExitCode, Is.EqualTo(0), errors);
+            Assert.That(output.Replace("\r\n", "\n").Trim(), Is.EqualTo("1\n2\n4\ndecoded"));
+            Assert.That(errors, Does.Not.Contain("simpler syntax analysis"));
+            Assert.That(errors, Does.Not.Contain("Auto-restoring"));
+            Assert.That(File.Exists(marker), Is.False, "Inherited Node options must not execute a runtime preload.");
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     [Test]
     public void Parse_ModuleFunctionsArrowsAndSemicolonFreeDeclarations_RetainsExactFacts()
     {
