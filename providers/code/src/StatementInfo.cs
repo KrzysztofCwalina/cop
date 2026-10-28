@@ -16,6 +16,28 @@ public class StatementInfo(
     public List<string> Keywords { get; } = keywords;
     internal Lazy<bool>? DeferredSemantics { get; set; }
     internal Lazy<bool>? DeferredTypeNames { get; set; }
+    private Lazy<bool>? _deferredBinding;
+    private TypeReference? _receiverType;
+    private TypeReference? _valueType;
+    private CallableReference? _referencedCallable;
+    public TypeReference? ReceiverType
+    {
+        get { _ = _deferredBinding?.Value; return _receiverType; }
+        set => _receiverType = value;
+    }
+    public TypeReference? ValueType
+    {
+        get { _ = _deferredBinding?.Value; return _valueType; }
+        set => _valueType = value;
+    }
+    public CallableReference? ReferencedCallable
+    {
+        get { _ = _deferredBinding?.Value; return _referencedCallable; }
+        set => _referencedCallable = value;
+    }
+
+    /// <summary>Shares provider-scoped binding work; structural fields never demand it.</summary>
+    public void DeferSemanticAnalysis(Lazy<bool> analysis) => _deferredBinding = analysis;
     private string? _typeName = typeName;
     public string? TypeName
     {
