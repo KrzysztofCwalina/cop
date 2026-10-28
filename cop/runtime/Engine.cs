@@ -616,6 +616,8 @@ public static class Engine
         {
             warnings.Add($"Error: {providerErrors.Count} source analysis error(s) — the analysis model may be incomplete:");
             warnings.AddRange(providerErrors);
+            if (exitCode.GetValueOrDefault() == 0)
+                exitCode = 1;
         }
 
         return new EngineResult(outputs, parseErrors, errors, resultCommandName, fileOutputs, warnings, asserts, diagnostics, exitCode);

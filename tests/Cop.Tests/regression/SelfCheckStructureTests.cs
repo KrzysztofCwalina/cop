@@ -144,6 +144,23 @@ public class SelfCheckStructureTests
     }
 
     [Test]
+    public void EnvironmentCheckAllowsOnlyLiteralSearchPathReads()
+    {
+        AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", "Input.cs", """
+            using System;
+            namespace Fixture;
+            class Example {
+                string? Discover() => Environment.GetEnvironmentVariable("PATH");
+                string? Encoded() => Environment.GetEnvironmentVariable("\u0050ATH");
+                string? Toggle() => Environment.GetEnvironmentVariable("COP_FEATURE");
+                void Mutate() => Environment.SetEnvironmentVariable("PATH", "bin");
+                string? Unknown(string name) => Environment.GetEnvironmentVariable(name);
+            }
+            """, "csharp", [6, 7, 8],
+            "Environment variable used to control behavior — use a CLI flag or config instead (Input.cs:{0})");
+    }
+
+    [Test]
     public void Issue054_FfiApprovalUsesTheDecodedFirstArgumentOnly()
     {
         AssertCheck(Path.Combine("csharp", "no-new-ffi.cop"), "no-new-ffi", "Input.cs", """
