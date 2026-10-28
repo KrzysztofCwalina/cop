@@ -218,6 +218,8 @@ public static class Engine
         // file that failed to parse here; it is drained below and surfaced — providers must not hide
         // errors behind an incomplete or partial model.
         Cop.Core.ProviderErrors.Clear();
+        Cop.Core.ProviderWarnings.Clear();
+        using var toolchainScope = new Cop.Core.ToolchainExecutionScope();
 
         var bridge = CreateBridge(outputs, fileOutputLines, asserts, diagLog);
         AnalysisContext context;
@@ -607,15 +609,12 @@ public static class Engine
         // failure reads as nicely as a syntax error.
         EnrichRuntimeErrorsWithSource(errors, modules);
 
-        // Surface errors a provider reported while producing data (e.g. a source file that failed to
-        // parse). These were previously swallowed entirely, so a run produced an incomplete/partial
-        // model with no indication. They are reported as prominent WARNINGS rather than fatal errors:
-        // a repo legitimately contains .cs files that aren't complete compilable units (snippet/region
-        // fixtures), so blocking the whole analysis on them would be wrong — but they must be visible.
+        // Drain only after commands and collection output have forced deferred provider work.
+        warnings.AddRange(Cop.Core.ProviderWarnings.Drain());
         var providerErrors = Cop.Core.ProviderErrors.Drain();
         if (providerErrors.Count > 0)
         {
-            warnings.Add($"Warning: {providerErrors.Count} source file parse error(s) — the analysis model may be incomplete:");
+            warnings.Add($"Error: {providerErrors.Count} source analysis error(s) — the analysis model may be incomplete:");
             warnings.AddRange(providerErrors);
         }
 

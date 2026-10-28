@@ -514,7 +514,8 @@ public static class RunCommand
         if (result.Warnings is { Count: > 0 })
         {
             foreach (var warning in result.Warnings)
-                Console.Error.WriteLine(warning);
+                Console.Error.WriteLine(FormatProviderWarning(warning,
+                    !Console.IsErrorRedirected && !ConsoleMarkdown.NoColor));
         }
 
         if (result.HasParseErrors)
@@ -577,13 +578,17 @@ public static class RunCommand
         }
 
         // Use explicit exit code from command if available (e.g., CHECK returns violation count)
+        if (result.Warnings?.Any(w => w.StartsWith("Error:", StringComparison.Ordinal)) == true)
+            return 1;
         if (result.ExitCode is not null)
             return result.ExitCode.Value != 0 ? 1 : 0;
 
         // Fallback: report output is success; CHECK-style violation output is failure.
-        bool hasUnreliableWarnings = result.Warnings is { Count: > 0 } && result.Warnings.Any(w => w.StartsWith("Error:"));
-        return hasUnreliableWarnings || result.Outputs.Any(IsViolationOutput) ? 1 : 0;
+        return result.Outputs.Any(IsViolationOutput) ? 1 : 0;
     }
+
+    internal static string FormatProviderWarning(string warning, bool useColor) =>
+        useColor ? ConsoleMarkdown.Yellow + warning + ConsoleMarkdown.Reset : warning;
 
     private static bool IsViolationOutput(PrintOutput output)
     {
