@@ -19,6 +19,31 @@ cop --version
 
 ---
 
+### Python toolchain and fallback
+
+Cop automatically discovers and probes an installed Python 3 interpreter. The richer
+analysis uses Python's standard-library `ast` module to read `.py` and `.pyi` files;
+no pip packages, project environment activation, or Cop-specific setup are required.
+The installed interpreter determines which Python syntax the native parser accepts.
+
+The helper runs in isolation without importing or executing the analyzed project. It
+provides parsed declarations, signatures, defaults, imports, source spans, and nested
+calls, not runtime evaluation or a Python type checker's whole-program type inference.
+A bounded helper process is reused as files are requested during one Cop execution,
+then stopped; Cop does not start a fresh interpreter for every file.
+
+If no usable interpreter is available, Cop emits a **yellow warning** and continues with
+its built-in, simpler syntax parser. Its coverage is more limited, so a clean fallback
+run is not evidence that every native-parser fact was available. Warnings are plain text
+when redirected or when `--no-color` is used, and are repeated on a later execution even
+when fallback results come from cache. Cop never downloads Python or installs dependencies.
+
+Malformed source or a failure after native analysis has started is reported as an error,
+not silently retried as successful fallback analysis. To use the richer path, make a
+working Python 3 interpreter available to the process running Cop and rerun the check.
+
+---
+
 ## 2. Set Up Agent Context
 
 Run `cop init` once, in your **repository root** (not in `src/` or any other subfolder):

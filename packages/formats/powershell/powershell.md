@@ -12,6 +12,21 @@ here-string bodies, but does not fully analyze interpolation, nested syntax, or 
 command names. Native AST analysis includes calls inside expandable strings; dynamic
 invocation names that cannot be determined statically are not invented.
 
+## Toolchain discovery and diagnostics
+
+Cop probes `pwsh` and, on Windows, `powershell` on the process `PATH`; an unusable
+launcher is not treated as an available parser. The helper starts without profiles
+and uses the installed engine's standard AST API, so no PowerShell SDK or extra module
+is needed. The installed engine determines which PowerShell syntax is supported.
+Cop never installs PowerShell or executes the analyzed scripts.
+
+An unavailable engine permits the warned fallback described above. Source syntax
+errors and failures after a native request has started remain analysis errors, rather
+than silently turning into successful fallback results. Warnings are emitted once
+per relevant scope in an execution, and remain plain text when stderr is redirected
+or `--no-color` is used. To enable native analysis, make a working PowerShell executable
+available to Cop and rerun the check.
+
 Collections are read lazily per file and share one execution snapshot. Directory symlinks
 and reparse points are not followed; file or directory access failures are reported.
 

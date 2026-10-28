@@ -19,6 +19,31 @@ cop --version
 
 ---
 
+### Go toolchain and fallback
+
+Cop automatically discovers and probes an installed **Go toolchain**. The richer path
+uses Go's standard-library parser and AST through a Cop-owned helper; no third-party
+Go modules or additional Cop setup are required.
+
+The helper reads source declarations, signatures, imports, spans, and statement/call
+structure. This is **AST analysis, not a full `go/types` check**: native parsing does not
+guarantee that imports, receiver types, or all call targets have been semantically resolved.
+Cop does not build or run the analyzed application, invoke its generators, or download
+modules or toolchains. Helper compilation is separate from the target project's build.
+
+The helper is bounded and reused for requested files within one Cop execution rather
+than compiled/launched separately for every source file. If the installed toolchain is
+absent or fails its availability probe, Cop emits a **yellow warning** and continues with
+its simpler built-in syntax parser. Fallback has more limited syntax coverage and does
+not add compiler type resolution. Redirected output and `--no-color` retain the warning
+as plain text.
+
+Source syntax errors and failures during an established native request are reported as
+errors, not silently converted into clean fallback results. To enable native parsing,
+make a working Go toolchain available on Cop's `PATH` and rerun; Cop never installs one.
+
+---
+
 ## 2. Set Up Agent Context
 
 Run `cop init` once, in your **repository root** (not in `src/` or any other subfolder):

@@ -19,6 +19,30 @@ cop --version
 
 ---
 
+### Java toolchain and fallback
+
+Cop automatically discovers and probes an installed **JDK**, not just a runtime-only
+JRE. The richer path uses the JDK compiler's tree API through a Cop-owned helper.
+No Maven/Gradle integration, third-party parser, or additional Cop setup is required.
+
+The helper parses declarations, signatures, imports, spans, and statement/call structure.
+This is **compiler AST parsing, not full Java type attribution**: classpath-dependent
+symbols and call targets are not guaranteed to be resolved. Cop does not build or run
+the application, execute annotation processors, run Maven/Gradle scripts, or download
+dependencies. The installed JDK also limits which source syntax can be parsed.
+
+A bounded helper is reused as files are requested within one Cop execution, avoiding a
+fresh JVM for every file. If a usable JDK/compiler API is unavailable, Cop emits a
+**yellow warning** and uses its simpler built-in syntax parser. Fallback supports fewer
+syntax forms and does not provide compiler type resolution. With redirected output or
+`--no-color`, the same warning is printed as plain text.
+
+Malformed source and failures during an established native request remain errors, rather
+than silently producing a clean fallback result. To use the richer path, make a working
+JDK available on Cop's `PATH` and rerun the check; Cop never downloads or installs a JDK.
+
+---
+
 ## 2. Set Up Agent Context
 
 Run `cop init` once, in your **repository root** (not in `src/` or any other subfolder):

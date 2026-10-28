@@ -19,6 +19,25 @@ cop --version
 
 ---
 
+### C# analysis and the .NET toolchain
+
+C# parsing uses **Roslyn bundled with Cop**. The self-contained Cop executable does not
+need an installed .NET SDK, runtime, or `csc` command to read source files, and does not
+download a compiler. There is no missing-external-compiler fallback for C#.
+
+Semantic analysis uses discovered project boundaries, project references, and available
+restored dependency metadata. It is not a full MSBuild evaluation: Cop does not build the
+target project or run its build targets. Conditional/imported compile settings, custom
+build logic, multiple target frameworks, or missing restored references can leave symbol
+resolution incomplete; Cop reports capability warnings rather than treating those facts
+as fully resolved. Syntax-level facts remain available.
+
+If your checks need dependency-aware symbols, provide the project's existing restored
+references using your normal development workflow before running Cop. Cop does not
+automatically install the SDK or restore the target project's NuGet dependencies for you.
+
+---
+
 ## 2. Set Up Agent Context
 
 Run `cop init` once, in your **repository root** (not in `src/` or any other subfolder):

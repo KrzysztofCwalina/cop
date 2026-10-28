@@ -19,6 +19,29 @@ cop --version
 
 ---
 
+### Rust analysis and the installed toolchain
+
+Rust currently uses Cop's **built-in syntax analyzer**, whether or not `rustc`, Cargo,
+or rust-analyzer is installed. There is no external Rust helper to configure. Installing
+a compiler does not silently enable a different analysis backend: stable `rustc` has no
+supported portable parse-only AST/semantic export used by this provider, and Cop does
+not currently integrate rust-analyzer.
+
+Cop emits an explicit **yellow syntax-only capability warning** when Rust analysis is
+used. This is not a claim that Rust is missing from your machine. The analyzer provides
+structural declarations, signatures, imports, spans, and nested call/control relationships,
+but does not perform macro expansion, name/type resolution, trait solving, or `cfg`
+evaluation. Cross-file implementation ownership that cannot be established reliably
+is left unresolved, not guessed.
+
+Cop does not run Cargo, build scripts, procedural macros, or the analyzed application,
+and does not download components or require nightly Rust. The warning remains visible
+on later executions, including cached analysis, and becomes plain text when redirected
+or with `--no-color`. Source parse failures are reported as errors rather than an empty,
+successful model.
+
+---
+
 ## 2. Set Up Agent Context
 
 Run `cop init` once, in your **repository root** (not in `src/` or any other subfolder):

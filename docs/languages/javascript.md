@@ -19,6 +19,37 @@ cop --version
 
 ---
 
+### JavaScript / TypeScript toolchain and fallback
+
+The richer parser requires **Node.js and an installed TypeScript compiler**, including
+when analyzing JavaScript. Cop discovers Node automatically and looks for TypeScript
+in the project's ancestor `node_modules` directories or through an installed `tsc`
+launcher. Node alone is not sufficient. An existing project-local TypeScript installation
+works without a global installation or Cop-specific configuration.
+
+Cop uses the TypeScript compiler API for `.js`, `.jsx`, `.ts`, and `.tsx` syntax and
+available symbol/type facts. It reads TypeScript configuration and installed declarations;
+it does not run the application, npm scripts, compiler plugins, or dependency installation.
+Dynamic or unresolved symbols remain unknown rather than being presented as resolved types.
+
+A bounded Node helper and compiler state are reused within one Cop execution as files are
+requested. Native semantic models are deliberately not cached across executions: changes
+to imported declarations, libraries, or configuration must not leave stale type facts.
+This means a later native run still has compiler startup work.
+
+When Node or a usable TypeScript compiler cannot be found, Cop emits a **yellow warning**
+and uses its simpler built-in syntax parser. This does not provide equivalent compiler
+semantics or complete coverage of advanced TypeScript/JSX syntax. Warnings remain visible
+on cached fallback runs, and are plain text when redirected or with `--no-color`.
+Actual source errors, timeouts, and helper failures are errors, not a reason to silently
+switch to a successful fallback. Cop never runs npm or downloads Node or TypeScript.
+
+For richer analysis, make Node available to Cop and use an already installed local or
+global TypeScript compiler, then rerun the check. If fallback is reported unexpectedly,
+check both installations rather than only `node --version`.
+
+---
+
 ## 2. Set Up Agent Context
 
 Run `cop init` once, in your **repository root** (not in `src/` or any other subfolder):

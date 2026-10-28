@@ -14,6 +14,17 @@ providerEntry: Cop.Providers.CopProvider
 
 Provides structural analysis of `.cop` source files through the standard code analysis collections.
 
+## Parser and toolchain requirements
+
+The Cop language parser is bundled with Cop. An installed SDK, external compiler, or
+language server is not required, and no parser tools are downloaded or installed.
+Structural analysis reads source without executing the analyzed Cop program; it is not
+a replacement for `cop verify` or running that program's tests.
+
+There is no optional external-parser fallback for Cop. Malformed input is reported as a
+source-analysis error rather than silently returning an empty successful result. Unknown
+source positions or unsupported facts remain unknown instead of being inferred from text.
+
 ## Collections
 
 All standard code collections are available, filtered to `.cop` files:
