@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
 namespace Cop.Providers.Dockerfile;
 
@@ -28,8 +27,8 @@ public static class DockerfileParser
             var raw = lines[i].TrimEnd('\r');
             if (raw.TrimStart().StartsWith('#'))
             {
-                if (!seenInstruction && Regex.Match(raw, @"^\s*#\s*escape\s*=\s*([\\`])\s*$", RegexOptions.IgnoreCase) is { Success: true } directive)
-                    escape = directive.Groups[1].Value[0];
+                if (!seenInstruction && TryGetEscapeDirective(raw, out var directive))
+                    escape = directive;
                 continue;
             }
             var withoutComment = raw.TrimEnd();
@@ -56,10 +55,8 @@ public static class DockerfileParser
                     || header.StartsWith("COPY ", StringComparison.OrdinalIgnoreCase)
                     || header.StartsWith("ADD ", StringComparison.OrdinalIgnoreCase))
                 {
-                    foreach (Match heredoc in Regex.Matches(header, """<<(-?)(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2"""))
+                    foreach (var (delimiter, stripTabs) in HeredocDelimiters(header))
                     {
-                        var delimiter = heredoc.Groups[3].Value;
-                        bool stripTabs = heredoc.Groups[1].Length > 0;
                         bool closed = false;
                         while (++i < lines.Length)
                         {
@@ -118,7 +115,7 @@ public static class DockerfileParser
                 && s.Name.Equals(stages[stage].Image, StringComparison.OrdinalIgnoreCase));
 
         var arguments = new List<string>();
-        var jsonArgument = Regex.Replace(argument, @"^(?:--[^\s]+\s+)+", "");
+        var jsonArgument = WithoutLeadingFlags(argument);
         bool jsonForm = jsonArgument.StartsWith('[');
         if (jsonForm && instruction is "RUN" or "CMD" or "ENTRYPOINT" or "SHELL" or "COPY" or "ADD")
         {
@@ -207,6 +204,55 @@ public static class DockerfileParser
             if (char.IsWhiteSpace(s[i]))
                 return i;
         return -1;
+    }
+
+    private static bool TryGetEscapeDirective(string text, out char escape)
+    {
+        escape = default;
+        var directive = text.AsSpan().TrimStart();
+        if (directive.IsEmpty || directive[0] != '#') return false;
+        directive = directive[1..].Trim();
+        int equals = directive.IndexOf('=');
+        if (equals < 0 || !directive[..equals].TrimEnd().Equals("escape", StringComparison.OrdinalIgnoreCase))
+            return false;
+        var value = directive[(equals + 1)..].Trim();
+        if (value.Length != 1 || value[0] is not ('\\' or '`')) return false;
+        escape = value[0];
+        return true;
+    }
+
+    private static IEnumerable<(string Delimiter, bool StripTabs)> HeredocDelimiters(string header)
+    {
+        for (int i = 0; i + 1 < header.Length; i++)
+        {
+            if (header[i] != '<' || header[i + 1] != '<') continue;
+            int position = i + 2;
+            bool stripTabs = position < header.Length && header[position] == '-';
+            if (stripTabs) position++;
+            char quote = position < header.Length && header[position] is '\'' or '"' ? header[position++] : '\0';
+            int start = position;
+            if (position == header.Length || !IsDelimiterStart(header[position])) continue;
+            while (++position < header.Length && (IsDelimiterStart(header[position]) || char.IsAsciiDigit(header[position]))) { }
+            if (quote != '\0' && (position == header.Length || header[position] != quote)) continue;
+            yield return (header[start..position], stripTabs);
+            i = quote == '\0' ? position - 1 : position;
+        }
+    }
+
+    private static bool IsDelimiterStart(char value) => char.IsAsciiLetter(value) || value == '_';
+
+    private static string WithoutLeadingFlags(string argument)
+    {
+        int start = 0;
+        while (argument.AsSpan(start).StartsWith("--", StringComparison.Ordinal))
+        {
+            int end = start + 2;
+            while (end < argument.Length && !char.IsWhiteSpace(argument[end])) end++;
+            if (end == start + 2 || end == argument.Length) break;
+            while (end < argument.Length && char.IsWhiteSpace(argument[end])) end++;
+            start = end;
+        }
+        return argument[start..];
     }
 
     private static bool EndsWithContinuation(string s, char escape)

@@ -155,11 +155,21 @@ public class AuditedFormatCorrectnessTests
     [TestCase("SELECT t.* FROM t", true)]
     [TestCase("SELECT id, t.* FROM t", true)]
     [TestCase("SELECT DISTINCT t.* FROM t", true)]
+    [TestCase("SELECT distinct\t t.* FROM t", true)]
+    [TestCase("SELECT ALL\n * FROM t", true)]
     [TestCase("SELECT COUNT(*) FROM t", false)]
     [TestCase("SELECT price * quantity FROM t", false)]
     [TestCase("SELECT '*' FROM t", false)]
     public void Sql_ProjectionWildcardsAreStructural(string text, bool expected) =>
         Assert.That(SqlParser.Parse(text).Statements.Single().SelectsStar, Is.EqualTo(expected));
+
+    [Test]
+    public void Sql_WhitespaceNormalizationPreservesExistingStatementText()
+    {
+        var statement = SqlParser.Parse(" \tSELECT\t ALL\n t.*\r\n FROM\u00a0items \t;").Statements.Single();
+        Assert.That(statement.Text, Is.EqualTo("SELECT ALL t.* FROM items"));
+        Assert.That(statement.SelectsStar, Is.True);
+    }
 
     [Test]
     public void Sql_CtesDollarBodiesGoAndQuotedSeparatorsPreserveKindsAndLines()
@@ -219,5 +229,29 @@ public class AuditedFormatCorrectnessTests
             """);
         Assert.That(result.Instructions.Select(i => i.ReferencedStage), Is.EqualTo(new[] { -1, -1, 0, 0, 0, -1 }));
         Assert.That(result.Instructions.Select(i => i.From), Is.EqualTo(new string?[] { null, null, null, "builder", "0", "external:image" }));
+    }
+
+    [Test]
+    public void Dockerfile_LexicalDirectivesQuotedHeredocsAndFlagsPreserveFacts()
+    {
+        var result = DockerfileParser.Parse("""
+              # EsCaPe = `
+            FROM base
+            RUN echo first `
+                second
+            RUN <<-'FIRST' <<"SECOND_2"
+            {TAB}one
+            {TAB}FIRST
+            two
+            SECOND_2
+            COPY --from=0 --chown=1000:1000 ["one", "/two"]
+            """.Replace("{TAB}", "\t", StringComparison.Ordinal));
+        Assert.That(result.Instructions.Select(i => (i.Instruction, i.Line)),
+            Is.EqualTo(new[] { ("FROM", 2), ("RUN", 3), ("RUN", 5), ("COPY", 10) }));
+        Assert.That(result.Instructions[1].Argument, Is.EqualTo("echo first second"));
+        Assert.That(result.Instructions[2].Argument, Is.EqualTo("<<-'FIRST' <<\"SECOND_2\"\n\tone\ntwo"));
+        Assert.That(result.Instructions[3].Arguments, Is.EqualTo(new[] { "one", "/two" }));
+        Assert.That(result.Instructions[3].IsJsonForm, Is.True);
+        Assert.That(result.Instructions[3].From, Is.EqualTo("0"));
     }
 }

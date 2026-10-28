@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+using System.Text;
 
 namespace Cop.Providers.Sql;
 
@@ -55,7 +55,7 @@ public static class SqlParser
         int from = tokens.Where(t => t.Start > operation && t.Word == "FROM").Select(t => t.Start).DefaultIfEmpty(analysis.Length).First();
         bool star = kind == "SELECT" && ProjectionHasWildcard(analysis[(operation + 6)..from]);
         bool where = tokens.Any(t => t.Word == "WHERE" && t.Start > operation);
-        statements.Add(new(kind, Regex.Replace(raw.Trim(), @"\s+", " "), line, star, where));
+        statements.Add(new(kind, NormalizeWhitespace(raw), line, star, where));
     }
 
     private static bool ProjectionHasWildcard(string projection)
@@ -69,12 +69,34 @@ public static class SqlParser
             else if (c == ',' && depth == 0)
             {
                 var item = projection[start..i].Trim();
-                item = Regex.Replace(item, @"^(DISTINCT|ALL)\s+", "", RegexOptions.IgnoreCase);
+                int wordEnd = 0;
+                while (wordEnd < item.Length && !char.IsWhiteSpace(item[wordEnd])) wordEnd++;
+                if (wordEnd < item.Length
+                    && (item.AsSpan(0, wordEnd).Equals("DISTINCT", StringComparison.OrdinalIgnoreCase)
+                        || item.AsSpan(0, wordEnd).Equals("ALL", StringComparison.OrdinalIgnoreCase)))
+                    item = item[wordEnd..].TrimStart();
                 if (item == "*" || item.EndsWith(".*", StringComparison.Ordinal)) return true;
                 start = i + 1;
             }
         }
         return false;
+    }
+
+    private static string NormalizeWhitespace(string text)
+    {
+        var result = new StringBuilder(text.Length);
+        bool whitespace = false;
+        foreach (char value in text.AsSpan().Trim())
+        {
+            if (char.IsWhiteSpace(value)) whitespace = true;
+            else
+            {
+                if (whitespace && result.Length > 0) result.Append(' ');
+                result.Append(value);
+                whitespace = false;
+            }
+        }
+        return result.ToString();
     }
 
     private static IEnumerable<(string Word, int Start)> TopLevelWords(string text)
