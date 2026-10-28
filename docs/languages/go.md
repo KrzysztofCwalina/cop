@@ -21,7 +21,7 @@ cop --version
 
 ### Go toolchain and fallback
 
-Cop automatically discovers and probes an installed **Go toolchain**. The richer path
+Cop automatically discovers and probes **Go 1.18 or newer** on the process `PATH`. The richer path
 uses Go's standard-library parser and AST through a Cop-owned helper; no third-party
 Go modules or additional Cop setup are required.
 
@@ -29,7 +29,10 @@ The helper reads source declarations, signatures, imports, spans, and statement/
 structure. This is **AST analysis, not a full `go/types` check**: native parsing does not
 guarantee that imports, receiver types, or all call targets have been semantically resolved.
 Cop does not build or run the analyzed application, invoke its generators, or download
-modules or toolchains. Helper compilation is separate from the target project's build.
+modules or toolchains. Helper compilation is separate from the target project's build:
+ambient workspace settings, automatic toolchain downloads, CGO, and build flags are
+disabled. The compiled helper is cached by its source and installed compiler identity;
+the first native run can therefore take longer than subsequent runs.
 
 The helper is bounded and reused for requested files within one Cop execution rather
 than compiled/launched separately for every source file. If the installed toolchain is
@@ -38,9 +41,26 @@ its simpler built-in syntax parser. Fallback has more limited syntax coverage an
 not add compiler type resolution. Redirected output and `--no-color` retain the warning
 as plain text.
 
-Source syntax errors and failures during an established native request are reported as
+Both backends expose declarations, receiver methods, free functions, nested calls,
+structured call targets and decoded string arguments. Receiver methods split across
+files join their type lazily within the same package directory; methods retain their
+original source file. Native parsing additionally supplies compiler AST nesting and
+precise spans. Fallback syntax coverage is narrower, and unsupported expressions
+have kind `other`; unknown spans remain absent rather than being invented.
+Native generic argument trees come directly from parsed type syntax; fallback
+signatures retain their text but do not claim resolved generic argument trees.
+
+Neither backend performs project-wide type checking, resolves dynamic calls, or
+computes implemented interfaces from a build. A call's receiver spelling is not a
+resolved receiver type. Module discovery includes nested modules. `Project.Properties`
+preserves declared `replace`, `exclude`, and enclosing `go.work` context; these are
+static manifest summaries, not the result of `go list` or module graph resolution.
+
+Source syntax errors, malformed protocol responses, timeouts, output limits, and other
+failures during an established native request are reported as
 errors, not silently converted into clean fallback results. To enable native parsing,
 make a working Go toolchain available on Cop's `PATH` and rerun; Cop never installs one.
+Fallback warnings also appear on warm-cache runs.
 
 ---
 

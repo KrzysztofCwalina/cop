@@ -6,8 +6,8 @@ namespace Cop.Providers.SourceModel;
 /// make the distinction first-class. Only the Go provider emits these; the runtime maps this
 /// CLR type to the cop type <c>GoType</c>. Round-trips through the source cache.
 ///
-/// Note: these particular facts are also derivable from the common <c>Kind</c>; they exist to
-/// demonstrate the mechanism — prefer language-independent checks when they suffice.
+/// IsStruct distinguishes actual structs from other named types represented by the coarse
+/// common kind; aliases are represented independently.
 /// </summary>
 public sealed record GoTypeDeclaration : TypeDeclaration
 {
