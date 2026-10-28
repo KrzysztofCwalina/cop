@@ -9,7 +9,7 @@ namespace Cop.Providers;
 internal static class SourceCacheSerializer
 {
     private static readonly byte[] Magic = [(byte)'C', (byte)'O', (byte)'P', (byte)'C'];
-    private const int FormatVersion = 7;
+    private const int FormatVersion = 8;
 
     public static void Save(string cachePath, byte[] fingerprint, List<SourceFile> sourceFiles)
     {
@@ -385,7 +385,7 @@ internal static class SourceCacheSerializer
         graph.Statements.Add(statement, graph.Statements.Count);
         writer.Write(statement.Kind);
         WriteList(writer, statement.Keywords, static (w, value) => w.Write(value));
-        WriteNullableString(writer, statement.TypeName);
+        WriteNullableString(writer, statement.SyntaxTypeNameValue);
         WriteNullableString(writer, statement.MemberName);
         WriteList(writer, statement.Arguments, static (w, value) => w.Write(value));
         writer.Write(statement.Line);

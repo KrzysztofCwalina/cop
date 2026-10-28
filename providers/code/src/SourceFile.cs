@@ -65,7 +65,11 @@ public record SourceFile(
             foreach (var nested in type.NestedTypes) Attach(nested);
         }
         foreach (var type in Types) Attach(type);
-        foreach (var statement in Statements) statement.DeferredSemantics = semantics;
+        foreach (var statement in Statements)
+        {
+            statement.DeferredSemantics = semantics;
+            statement.DeferSemanticAnalysis(semantics);
+        }
     }
 
     public void DeferTypeNameAnalysis(Action analyze)

@@ -93,6 +93,8 @@ public static class CodeSchema
                 TypeDef("Statement", null,
                     Prop("Kind"), Coll("Keywords"),
                     Opt("TypeName"), Opt("MemberName"),
+                    Opt("ReceiverType", "TypeReference"), Opt("ValueType", "TypeReference"),
+                    Opt("ReferencedCallable", "CallableReference"),
                     Coll("Arguments"), Prop("Line", "int"),
                     Opt("Column", "int"), Opt("EndLine", "int"), Opt("EndColumn", "int"),
                     Opt("CallTarget", "CodeExpression"), Coll("ArgumentExpressions", "CodeExpression"),
@@ -108,6 +110,12 @@ public static class CodeSchema
                 TypeDef("CodeExpression", null,
                     Prop("Kind"), Opt("Name"), Opt("StringValue"),
                     Opt("Target", "CodeExpression"), Coll("Children", "CodeExpression")),
+
+                TypeDef("CallableReference", null,
+                    Prop("Name"), Prop("Signature"), Opt("DeclaringType"), Opt("Namespace"),
+                    Opt("ReturnType", "TypeReference"), Coll("Parameters", "TypeReference"),
+                    Opt("SourceFile"), Opt("Line", "int"), Opt("Column", "int"),
+                    Opt("EndLine", "int"), Opt("EndColumn", "int")),
 
                 TypeDef("Line", null,
                     Prop("Text"), Prop("Number", "int"), Prop("Kind"), Opt("File", "File"), Prop("Source"),

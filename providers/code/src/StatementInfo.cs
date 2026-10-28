@@ -39,6 +39,7 @@ public class StatementInfo(
     /// <summary>Shares provider-scoped binding work; structural fields never demand it.</summary>
     public void DeferSemanticAnalysis(Lazy<bool> analysis) => _deferredBinding = analysis;
     private string? _typeName = typeName;
+    internal string? SyntaxTypeNameValue { get; } = typeName;
     public string? TypeName
     {
         get { _ = (DeferredTypeNames ?? DeferredSemantics)?.Value; return _typeName; }

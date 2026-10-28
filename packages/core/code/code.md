@@ -74,6 +74,27 @@ cache lookup, so backend discovery can report a fallback warning even on cache h
 Override `CanCache(filePath)` to return false when a semantic projection cannot safely
 be persisted. Execution snapshots still memoize demanded files in either mode.
 
+## Compiler-bound statement facts
+
+`Statement.ReceiverType` is the compiler-inferred type of the actual receiver expression,
+not the spelling of a call target. `ValueType` is the inferred expression/result type.
+`ReferencedCallable` is available only for a compiler-selected declaration and describes its
+`Name`, `Signature`, optional `DeclaringType` and `Namespace`, `ReturnType`, ordered parameter
+types, and optional source path and declaration span. The receiver can be a derived type
+while the selected declaration belongs to a base class. This is static binding, not a claim
+that a virtual or interface call executes that declaration at runtime.
+
+Unknown or unresolved facts remain `nic`. Providers can defer binding until one of these
+three fields is accessed; structural names, expression trees, and first-type queries do not
+demand binding. Missing compilation context must be reported on semantic demand, not replaced
+with guessed receiver names or a fabricated selected callable.
+
+The shared disk format is a **syntax cache**: it never invokes semantic getters and never
+persists these three dependency-bound fields, even after they have been demanded. It retains
+the original syntactic `TypeName`, not a later semantic enrichment. Providers must attach
+fresh semantic callbacks after loading syntax or disable persistence with `CanCache = false`
+until their semantic cache accounts for imported declarations and compilation context.
+
 
 # code-analysis
 

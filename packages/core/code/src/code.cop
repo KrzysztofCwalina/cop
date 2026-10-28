@@ -140,6 +140,9 @@ export type Statement = {
     Kind : StatementKind,
     Keywords : [string],
     TypeName : string?,
+    ReceiverType : TypeReference?,
+    ValueType : TypeReference?,
+    ReferencedCallable : CallableReference?,
     MemberName : string?,
     Arguments : [string],
     CallTarget : CodeExpression?,
@@ -175,6 +178,22 @@ export type CodeExpression = {
     StringValue : string?,
     Target : CodeExpression?,
     Children : [CodeExpression]
+}
+
+## A compiler-selected callable declaration; virtual/interface dispatch may call an override at runtime.
+## SourceFile and its one-based, exclusive-end declaration span are absent for metadata-only symbols.
+export type CallableReference = {
+    Name : string,
+    Signature : string,
+    DeclaringType : string?,
+    Namespace : string?,
+    ReturnType : TypeReference?,
+    Parameters : [TypeReference],
+    SourceFile : string?,
+    Line : int?,
+    Column : int?,
+    EndLine : int?,
+    EndColumn : int?
 }
 
 export type Call = Statement & {

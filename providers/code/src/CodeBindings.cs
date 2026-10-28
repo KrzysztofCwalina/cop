@@ -46,6 +46,7 @@ public static class CodeBindings
                 [typeof(ProjectInfo)] = "Project",
                 [typeof(ProjectProperty)] = "ProjectProperty",
                 [typeof(ImportInfo)] = "Import",
+                [typeof(CallableReference)] = "CallableReference",
             },
             Accessors = BuildAccessors(),
             CollectionExtractors = BuildExtractors(),
@@ -186,6 +187,9 @@ public static class CodeBindings
                 ["EndColumn"] = o => ((StatementInfo)o).EndColumn,
                 ["Keywords"] = o => (object)((StatementInfo)o).Keywords,
                 ["TypeName"] = o => ((StatementInfo)o).TypeName,
+                ["ReceiverType"] = o => ((StatementInfo)o).ReceiverType,
+                ["ValueType"] = o => ((StatementInfo)o).ValueType,
+                ["ReferencedCallable"] = o => ((StatementInfo)o).ReferencedCallable,
                 ["MemberName"] = o => ((StatementInfo)o).MemberName,
                 ["Arguments"] = o => (object)((StatementInfo)o).Arguments,
                 ["CallTarget"] = o => ((StatementInfo)o).CallTarget,
@@ -215,6 +219,20 @@ public static class CodeBindings
                 ["StringValue"] = o => ((ExpressionInfo)o).StringValue,
                 ["Target"] = o => ((ExpressionInfo)o).Target,
                 ["Children"] = o => ((ExpressionInfo)o).Children,
+            },
+            ["CallableReference"] = new()
+            {
+                ["Name"] = o => ((CallableReference)o).Name,
+                ["Signature"] = o => ((CallableReference)o).Signature,
+                ["DeclaringType"] = o => ((CallableReference)o).DeclaringType,
+                ["Namespace"] = o => ((CallableReference)o).Namespace,
+                ["ReturnType"] = o => ((CallableReference)o).ReturnType,
+                ["Parameters"] = o => ((CallableReference)o).Parameters,
+                ["SourceFile"] = o => ((CallableReference)o).SourceFile,
+                ["Line"] = o => ((CallableReference)o).Line,
+                ["Column"] = o => ((CallableReference)o).Column,
+                ["EndLine"] = o => ((CallableReference)o).EndLine,
+                ["EndColumn"] = o => ((CallableReference)o).EndColumn,
             },
             ["Line"] = new()
             {
