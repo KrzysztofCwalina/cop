@@ -9,6 +9,8 @@ import tokenize
 def main(request):
     source = request["source"]
     path = request["path"]
+    if request.get("mode") == "binding":
+        return bind_python(request)
     try:
         if request.get("mode") == "toml":
             try:
@@ -28,8 +30,7 @@ def main(request):
             return {"name": project.get("name", poetry.get("name")), "dependencies": dependencies,
                     "unresolved": project.get("dynamic", [])}
 
-        tree = ast.parse(source, filename=path, type_comments=True)
-        compile(tree, path, "exec", dont_inherit=True)
+        tree = parse_binding_source(source, path)
         if request.get("mode") == "setup":
             for node in ast.walk(tree):
                 if isinstance(node, ast.Call) and (

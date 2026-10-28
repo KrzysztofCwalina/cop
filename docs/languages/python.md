@@ -354,7 +354,8 @@ When no usable interpreter is available, cop prints a **yellow degraded-analysis
 and uses its simpler lexer/recursive-descent parser. That fallback retains basic classes,
 functions and call sites, reports basic malformed brackets/headers, and terminates on
 class-level compound statements. It does not provide the full AST-backed structure. Native
-and simpler results use different cache identities, and the warning is replayed on cache hits.
+and simpler results use different backend identities. The degraded warning is repeated for
+each analysis, including repeated runs over unchanged source.
 
 Within one analysis, a bounded helper is reused across demanded files and disposed when the
 analysis ends. Lazy queries do not read later files just to batch them into a Python process.
@@ -367,8 +368,45 @@ excluded directories and does not descend into directory links.
 
 Python is dynamic: these are source facts, not whole-program type inference. Runtime
 monkey-patching, dynamically generated declarations, inferred argument types, overload
-resolution and transitive class/interface resolution remain unknown. Python-specific
+resolution and transitive interface resolution remain unknown. Python-specific
 decorator/base-class flags describe the written syntax and naming conventions.
+
+### Deferred source binding
+
+The common call fields `ReceiverType`, `ValueType`, and `ReferencedCallable` are populated
+only when one of those fields is read. Reading names, call structure, declarations, or
+`First`/`Take` does not load dependency source or start binding. This is conservative
+source-based binding using CPython's AST, not a Python type checker or a runtime dispatch
+prediction.
+
+Supported facts include annotated parameters, simple local constructor/factory assignments,
+annotated factory returns, `self`/`cls`, annotated receiver fields and properties, module
+functions, import aliases, relative imports, and source-visible single-inheritance members.
+For an inherited call, `ReceiverType` retains the receiver's static type while
+`ReferencedCallable.DeclaringType` identifies the actual declaring base class. Selected
+callables include typed parameters (excluding implicit receivers), declared return type,
+qualified signature, source file, and source span.
+
+Only source modules in the local package/project context are followed; conventional `src`
+layouts are recognized from project markers. `.pyi` files take precedence over `.py`
+dependencies. Third-party modules absent from this source context are not imported, installed,
+or downloaded. A demand-time partial-context warning explains unresolved facts. If any
+parameter type is unannotated or unresolved, the entire `ReferencedCallable` is unknown,
+even when receiver/result types are independently known.
+
+Dynamic targets, ambiguous/reassigned names, wildcard imports, arbitrary decorators,
+custom metaclasses, source-visible member replacement or `__getattribute__` interception,
+unsupported multiple inheritance, spread arguments, and unresolved type
+annotations are not guessed. Async invocation results remain unknown rather than being
+mistaken for the annotated awaited result. The simpler parser leaves these semantic fields
+unknown and warns on demand.
+
+Binding uses the same bounded execution-scoped helper as syntax parsing. Dependency files
+are read only on demand (at most 128 files / 8 MiB per binding request); syntax AST reuse is
+content-keyed and bounded within the helper. Bound answers are memoized per demanded call
+for one analysis, never written into file-only caches. Python currently opts out of those
+disk caches so subsequent runs always attach fresh binders and observe dependency edits,
+even when the caller and dependency timestamps are unchanged.
 
 ---
 

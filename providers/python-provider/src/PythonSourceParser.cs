@@ -14,6 +14,8 @@ public class PythonSourceParser : ISourceParser
 
     public override string GetCacheIdentity(string filePath) => base.GetCacheIdentity(filePath) + ":" + _toolchain.CacheIdentity;
 
+    public override bool CanCache(string filePath) => false;
+
     public override IReadOnlyList<string> Extensions => [".py", ".pyi"];
     public override string Language => "python";
 
@@ -21,7 +23,11 @@ public class PythonSourceParser : ISourceParser
     {
         using var analysis = _toolchain.Analyze(filePath, sourceText);
         if (analysis is not null)
-            return new PythonAstMapper(filePath, sourceText).Parse(analysis.RootElement);
+        {
+            var file = new PythonAstMapper(filePath, sourceText).Parse(analysis.RootElement);
+            PythonSemanticBinding.Attach(file, _toolchain);
+            return file;
+        }
         var lexer = new PythonLexer(sourceText, filePath);
         var tokens = lexer.Tokenize();
         var brackets = new Stack<Tok>();
@@ -38,8 +44,16 @@ public class PythonSourceParser : ISourceParser
         }
         foreach (var bracket in brackets)
             lexer.LexErrors.Add($"{filePath}({bracket.Line},{bracket.Col}): error: unclosed '{bracket.Text}'");
-        return new PythonParserCore(filePath, tokens, lexer.CommentLines, lexer.LexErrors)
+        var fallback = new PythonParserCore(filePath, tokens, lexer.CommentLines, lexer.LexErrors)
             .ParseModule(sourceText);
+        foreach (var statement in fallback.Statements)
+            statement.DeferSemanticAnalysis(new(() =>
+            {
+                Cop.Core.ProviderWarnings.ReportOnce("python", "binding",
+                    "Python semantic facts are unavailable in simpler analysis; install a usable Python 3 interpreter.");
+                return true;
+            }));
+        return fallback;
     }
 }
 

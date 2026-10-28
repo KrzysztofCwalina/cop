@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.IO.Compression;
+using System.Text;
 using Cop.Core;
 
 namespace Cop.Providers.SourceParsers;
@@ -25,7 +27,8 @@ internal sealed class PythonToolchain
     private static void WarnFallback() => ProviderWarnings.ReportOnce("python", "toolchain",
         "A usable Python 3 interpreter was not found. Using simpler Python analysis; syntax and structural facts may be incomplete.");
 
-    public JsonDocument? Analyze(string path, string source, string mode = "source")
+    public JsonDocument? Analyze(string path, string source, string mode = "source", int? line = null,
+        int? byteColumn = null, int? endLine = null, int? endByteColumn = null)
     {
         var interpreter = _interpreter.Value;
         if (interpreter is null)
@@ -33,7 +36,7 @@ internal sealed class PythonToolchain
             WarnFallback();
             return null;
         }
-        var request = JsonSerializer.Serialize(new { path, source, mode });
+        var request = JsonSerializer.Serialize(new { path, source, mode, line, byteColumn, endLine, endByteColumn });
         var result = ToolchainExecutionScope.RequestAsync(interpreter.Path,
             [.. interpreter.Prefix, "-I", "-S", "-c", Script], Environment.CurrentDirectory, request,
             timeout: TimeSpan.FromSeconds(15), maxOutputCharacters: 16_777_216).GetAwaiter().GetResult();
@@ -57,7 +60,7 @@ internal sealed class PythonToolchain
             if (path is null) continue;
             string[] prefix = name == "py" ? ["-3"] : [];
             var probe = ToolchainProcess.RunAsync(path,
-                [.. prefix, "-I", "-S", "-c", "import ast,sys; print('cop-python-ast\\n' + sys.version + '\\n' + sys.executable if sys.version_info >= (3,8) else 'unsupported')"],
+                [.. prefix, "-I", "-S", "-c", "import ast,sys,base64,zlib; print('cop-python-ast\\n' + sys.version + '\\n' + sys.executable if sys.version_info >= (3,8) else 'unsupported')"],
                 Environment.CurrentDirectory, timeout: TimeSpan.FromSeconds(2), maxOutputCharacters: 4096)
                 .GetAwaiter().GetResult();
             if (probe.Status == ToolchainStatus.Success && probe.StandardOutput.Replace("\r\n", "\n").StartsWith("cop-python-ast\n", StringComparison.Ordinal))
@@ -68,9 +71,19 @@ internal sealed class PythonToolchain
 
     private static string LoadScript()
     {
-        using var stream = typeof(PythonToolchain).Assembly.GetManifestResourceStream("Cop.Providers.src.PythonAst.py")
-            ?? throw new InvalidOperationException("The embedded Python AST helper is missing.");
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
+        string Read(string name)
+        {
+            using var stream = typeof(PythonToolchain).Assembly.GetManifestResourceStream("Cop.Providers.src." + name)
+                ?? throw new InvalidOperationException($"The embedded Python helper '{name}' is missing.");
+            using var reader = new StreamReader(stream);
+            return reader.ReadToEnd();
+        }
+        var source = Encoding.UTF8.GetBytes(Read("PythonBinding.py") + "\n" + Read("PythonAst.py"));
+        using var buffer = new MemoryStream();
+        using (var compressed = new ZLibStream(buffer, CompressionLevel.SmallestSize, leaveOpen: true))
+            compressed.Write(source);
+        // Keep the trusted helper below Windows' command-line limit as analysis grows.
+        return "import base64,zlib;exec(compile(zlib.decompress(base64.b64decode('"
+            + Convert.ToBase64String(buffer.ToArray()) + "')),'<cop-python-helper>','exec'))";
     }
 }
