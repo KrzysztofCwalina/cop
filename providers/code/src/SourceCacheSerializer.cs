@@ -18,7 +18,12 @@ internal static class SourceCacheSerializer
             Directory.CreateDirectory(directory);
 
         using var fileStream = new FileStream(cachePath, FileMode.Create, FileAccess.Write, FileShare.None);
-        using var gzip = new GZipStream(fileStream, CompressionLevel.SmallestSize);
+        Save(fileStream, fingerprint, sourceFiles);
+    }
+
+    internal static void Save(Stream stream, byte[] fingerprint, List<SourceFile> sourceFiles)
+    {
+        using var gzip = new GZipStream(stream, CompressionLevel.SmallestSize, leaveOpen: true);
         using var writer = new BinaryWriter(gzip, Encoding.UTF8, leaveOpen: false);
 
         writer.Write(Magic);
@@ -39,7 +44,19 @@ internal static class SourceCacheSerializer
         try
         {
             using var fileStream = new FileStream(cachePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            using var gzip = new GZipStream(fileStream, CompressionMode.Decompress);
+            return TryLoad(fileStream, fingerprint, parserAssembly);
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+    }
+
+    internal static List<SourceFile>? TryLoad(Stream stream, byte[] fingerprint, Assembly parserAssembly)
+    {
+        try
+        {
+            using var gzip = new GZipStream(stream, CompressionMode.Decompress, leaveOpen: true);
             using var reader = new CacheReader(gzip,
                 AssemblyLoadContext.GetLoadContext(parserAssembly) ?? AssemblyLoadContext.Default);
 

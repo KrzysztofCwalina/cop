@@ -131,8 +131,13 @@ public class CSharpSourceParser : ISourceParser
     public static void EnrichTypeNames(SyntaxTree tree, SemanticModel model, List<StatementInfo> statements)
         => EnrichWithSemantics(tree, model, [], statements, typeNamesOnly: true);
 
+    public static void EnrichTypeNames(SyntaxTree tree, SemanticModel invocationModel,
+        SemanticModel inferenceModel, List<StatementInfo> statements)
+        => EnrichWithSemantics(tree, invocationModel, [], statements, typeNamesOnly: true, inferenceModel);
+
     private static void EnrichWithSemantics(SyntaxTree tree, SemanticModel model,
-        List<TypeDeclaration> types, List<StatementInfo> allStatements, bool typeNamesOnly)
+        List<TypeDeclaration> types, List<StatementInfo> allStatements, bool typeNamesOnly,
+        SemanticModel? inferenceModel = null)
     {
         var root = tree.GetCompilationUnitRoot();
 
@@ -243,7 +248,7 @@ public class CSharpSourceParser : ISourceParser
                 {
                     try
                     {
-                        var inferred = model.GetTypeInfo(varDecl.Declaration.Type).Type
+                        var inferred = (inferenceModel ?? model).GetTypeInfo(varDecl.Declaration.Type).Type
                             ?.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)
                             ?.TrimEnd('?');
                         if (!string.IsNullOrEmpty(inferred) && inferred != "?" && inferred != "var")

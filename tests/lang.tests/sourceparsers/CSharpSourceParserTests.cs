@@ -68,6 +68,38 @@ public class CSharpSourceParserTests
     }
 
     [Test]
+    public void Parse_NestedCalls_PreserveIdentityAndNearestParents()
+    {
+        var file = _parser.Parse("Input.cs", """
+            class Example {
+                object field = Wrap(Read());
+                Example() { Outer(Inner()); }
+                void Run() {
+                    var value = Outer(Inner(Leaf()));
+                    if (Ready(Check())) Body();
+                }
+            }
+            """)!;
+        var calls = file.Statements.Where(s => s.Kind == "call").ToArray();
+        Assert.That(calls.Select(s => (s.MemberName, s.Line, s.Method?.Name)),
+            Is.EqualTo(new (string, int, string?)[] {
+                ("Wrap", 2, null), ("Read", 2, null),
+                ("Outer", 3, ".ctor"), ("Inner", 3, ".ctor"),
+                ("Outer", 5, "Run"), ("Inner", 5, "Run"), ("Leaf", 5, "Run"),
+                ("Ready", 6, "Run"), ("Check", 6, "Run"), ("Body", 6, "Run")
+            }));
+        Assert.That(calls[1].Parent, Is.SameAs(calls[0]));
+        Assert.That(calls[3].Parent, Is.SameAs(calls[2]));
+        Assert.That(calls[5].Parent, Is.SameAs(calls[4]));
+        Assert.That(calls[6].Parent, Is.SameAs(calls[5]));
+        Assert.That(calls[8].Parent, Is.SameAs(calls[7]));
+        var condition = file.Statements.Single(s => s.Kind == "if");
+        Assert.That(calls[7].Parent, Is.SameAs(condition));
+        Assert.That(calls[9].Parent, Is.Null);
+        Assert.That(file.ParseErrors, Is.Empty);
+    }
+
+    [Test]
     public void Parse_GoodClient_ExtractsTypes()
     {
         var source = File.ReadAllText(SamplePath("GoodClient.cs"));

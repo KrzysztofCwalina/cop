@@ -69,8 +69,11 @@ public class CSharpProvider : DataProvider
                 var file = parser.ParseWithSemantics(path, text, tree, model: null);
                 file?.DeferSemanticAnalysis(() => CSharpSourceParser.EnrichWithSemantics(tree,
                     compilation.Value.GetSemanticModel(tree), file.Types, file.Statements));
+#pragma warning disable RSEXPERIMENTAL001 // Nullable-analysis control is experimental in the pinned Roslyn version.
                 file?.DeferTypeNameAnalysis(() => CSharpSourceParser.EnrichTypeNames(tree,
+                    compilation.Value.GetSemanticModel(tree, SemanticModelOptions.DisableNullableAnalysis),
                     compilation.Value.GetSemanticModel(tree), file.Statements));
+#pragma warning restore RSEXPERIMENTAL001
                 return file;
             }, () => CSharpProjectDiscovery.Discover(root, query.ExcludedDirectories));
             snapshot = sources;

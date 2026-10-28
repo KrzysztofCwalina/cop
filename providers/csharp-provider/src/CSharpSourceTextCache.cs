@@ -1,9 +1,6 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
-using System.ComponentModel;
-using System.Runtime.InteropServices;
-using Microsoft.Win32.SafeHandles;
 
 namespace Cop.Providers;
 
@@ -23,48 +20,12 @@ internal sealed class CSharpSourceTextCache
         _entries = new(Load);
     }
 
-    private static long ReadChangeTime(string path)
-    {
-        // Attribute-only access avoids opening source data, while ChangeTime detects edits
-        // even when a tool restores the file's length and LastWriteTime.
-        var nativePath = path.StartsWith(@"\\?\", StringComparison.Ordinal) ? path
-            : path.StartsWith(@"\\", StringComparison.Ordinal) ? @"\\?\UNC\" + path[2..]
-            : @"\\?\" + path;
-        using var handle = CreateFileW(nativePath, 0x80, 7, IntPtr.Zero, 3, 0, IntPtr.Zero);
-        if (handle.IsInvalid || !GetFileInformationByHandleEx(handle, 0, out var information,
-                (uint)Marshal.SizeOf<FileBasicInfo>()))
-        {
-            var error = new Win32Exception(Marshal.GetLastWin32Error());
-            throw new IOException($"Could not inspect source file '{path}': {error.Message}", error);
-        }
-        return information.ChangeTime;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct FileBasicInfo
-    {
-        public long CreationTime;
-        public long LastAccessTime;
-        public long LastWriteTime;
-        public long ChangeTime;
-        public uint FileAttributes;
-    }
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
-    private static extern SafeFileHandle CreateFileW(string path, uint access, uint share,
-        IntPtr security, uint disposition, uint flags, IntPtr template);
-
-    [DllImport("kernel32.dll", ExactSpelling = true, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetFileInformationByHandleEx(SafeFileHandle handle, int informationClass,
-        out FileBasicInfo information, uint size);
-
     public string Read(string path)
     {
         var info = new FileInfo(path);
         var length = info.Length;
         var modified = info.LastWriteTimeUtc.Ticks;
-        var changed = OperatingSystem.IsWindows() ? ReadChangeTime(path) : 0;
+        var changed = OperatingSystem.IsWindows() ? SourceFileMetadata.ReadChangeTime(path) : 0;
         if (changed != 0 && _entries.Value.TryGetValue(path, out var cached)
             && cached.Length == length && cached.Modified == modified && cached.Changed == changed)
             return cached.Text;

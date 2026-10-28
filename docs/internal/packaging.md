@@ -435,6 +435,21 @@ call's `TypeName` still uses Roslyn's semantic model, but does not force interfa
 for every type or constructed object. Comments, regions, and active nullable directives share
 one Roslyn trivia traversal.
 
+Invocation type-name lookup uses a semantic model with nullable-flow analysis disabled;
+only the containing type's name is consumed. Inferred declaration types retain a normal
+semantic model, since nullable flow can change nested annotations such as `Client?[]`.
+The nullable-analysis option is experimental in the pinned Roslyn version, so its diagnostic
+suppression is limited to this call site. Full interface enrichment remains unchanged.
+
+On Windows, deferred non-C# providers bundle their compressed per-file parsed models into
+one persistent snapshot per source root, exclusion scope, and parser assembly version.
+This replaces a cache-file open for every source with one snapshot read, while models
+are still reconstructed only when demanded. Unchanged sources are not reparsed; source
+length, last-write time, and native change time validate each demanded entry. Parser
+identity is checked per entry, and reconstruction uses the requesting parser's load
+context. Only complete traversals write the snapshot, atomically; parse errors are never
+cached. Other platforms retain the existing per-file parsed-model cache.
+
 The C# provider keeps an execution-scoped syntax-tree cache and a persistent, compressed
 source-text snapshot in `~/.cop/cache/`. On Windows, each source is validated by length,
 last-write time, and native change time before using cached text. Attribute-only handles

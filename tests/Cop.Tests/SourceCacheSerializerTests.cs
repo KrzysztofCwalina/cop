@@ -290,7 +290,8 @@ public class SourceCacheSerializerTests
 
     private static void Save(string cachePath, byte[] fingerprint, List<SourceFile> sourceFiles)
     {
-        SerializerType.GetMethod("Save", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)!
+        SerializerType.GetMethod("Save", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
+                [typeof(string), typeof(byte[]), typeof(List<SourceFile>)])!
             .Invoke(null, [cachePath, fingerprint, sourceFiles]);
     }
 
