@@ -59,8 +59,9 @@ and call on both cold and warm runs. Malformed input must produce a visible diag
 and a nonzero exit code. Missing optional toolchains may emit fallback warnings; they
 must not hide these baseline facts or turn malformed input into success.
 The gate also checks exact receiver, result, and selected-callable facts for C# and
-Rust on repeated executions. Rust runs from a copy of the executable alone, proving
-that a portable installation can obtain the embedded native payload without sidecars.
+Rust, plus a scalar-receiver call in Cop source, on repeated executions. Rust runs from
+a copy of the executable alone, proving that a portable installation can obtain the
+embedded native payload without sidecars.
 
 A failed build or smoke test stops publishing before archive creation or PATH updates.
 `-SkipBuild` also runs this gate for the host runtime. Cross-platform archives still

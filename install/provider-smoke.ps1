@@ -47,7 +47,7 @@ function Invoke-SmokeProcess([string[]]$Arguments) {
     finally { $process.Dispose() }
 }
 
-function Test-SemanticSmoke([string]$Language, [string]$Source, [string]$Extension, [string]$Member, [string]$ResultType) {
+function Test-SemanticSmoke([string]$Language, [string]$Source, [string]$Extension, [string]$Member, [string]$ResultType, [string]$ReceiverType = 'Alpha') {
     $target = Join-Path $smokeDir ("semantic-" + $Language)
     New-Item -ItemType Directory -Path $target | Out-Null
     Set-Content -LiteralPath (Join-Path $target ("sample" + $Extension)) -Encoding utf8 -Value $Source
@@ -73,7 +73,7 @@ let cb = $Language.parse()
 let calls = cb.Calls.Where(item.MemberName == '$Member')
 let resolved = calls.Where(
     item.ReceiverType != nic && item.ValueType != nic && item.ReferencedCallable != nic
-    && item.ReceiverType.Name == 'Alpha' && item.ValueType.Name == '$ResultType'
+    && item.ReceiverType.Name == '$ReceiverType' && item.ValueType.Name == '$ResultType'
     && item.ReferencedCallable.Name == '$Member'
     && item.ReferencedCallable.ReturnType.Name == '$ResultType'
     && item.ReferencedCallable.SourceFile != nic)
@@ -133,6 +133,7 @@ command MAIN = print('PUBLISH-SMOKE $language {alpha.Count} {runs.Count} {calls.
         Write-Host "  Verified $language declarations, methods, calls, cold/warm results, and visible malformed input."
     }
     Test-SemanticSmoke 'csharp' 'class Alpha { public int Get(int value) => value; } class Caller { void Run() { var a = new Alpha(); a.Get(1); } }' '.cs' 'Get' 'Int32'
+    Test-SemanticSmoke 'cop' "function get(value : string) : int => value.Length`nlet result = 'hello':get()" '.cop' 'get' 'int' 'string'
     if ($RequireRustBundle) {
         $portableDir = Join-Path $smokeDir 'portable'
         New-Item -ItemType Directory -Path $portableDir | Out-Null
