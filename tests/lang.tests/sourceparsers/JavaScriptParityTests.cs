@@ -83,6 +83,47 @@ public class JavaScriptParityTests
     }
 
     [Test]
+    public void Parse_NativeLaunch_UsesBoundedArgumentsAndContentAddressedHelper()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "cop-js-launch-" + Guid.NewGuid().ToString("N"));
+        var compilerDirectory = Path.Combine(root, "node_modules", "typescript", "lib");
+        Directory.CreateDirectory(compilerDirectory);
+        try
+        {
+            var installed = JavaScriptToolchain.Discover("module.ts")!;
+            var capture = Path.Combine(root, "launch.json");
+            File.WriteAllText(Path.Combine(compilerDirectory, "typescript.js"),
+                "require('fs').writeFileSync(" + System.Text.Json.JsonSerializer.Serialize(capture) +
+                ", JSON.stringify({ args: process.argv, flags: process.execArgv })); module.exports = require(" +
+                System.Text.Json.JsonSerializer.Serialize(installed.CompilerPath) + ");");
+            string? helperPath = null;
+            for (int run = 0; run < 2; run++)
+            {
+                using var scope = new Cop.Core.ToolchainExecutionScope();
+                var file = new JavaScriptSourceParser().Parse(Path.Combine(root, "sample.ts"),
+                    "function run(): number { return 1; } run();")!;
+                Assert.That(file.Statements.Single(s => s.Kind == "call").ValueType!.Name, Is.EqualTo("number"));
+                using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(capture));
+                var arguments = document.RootElement.GetProperty("args").EnumerateArray().Select(e => e.GetString()!).ToArray();
+                var flags = document.RootElement.GetProperty("flags").EnumerateArray().Select(e => e.GetString()!).ToArray();
+                Assert.That(arguments.Concat(flags).Sum(a => a.Length), Is.LessThan(8192),
+                    "The embedded projector must never be passed as a command-line payload.");
+                Assert.That(flags, Is.Empty);
+                Assert.That(arguments, Has.Length.EqualTo(3));
+                var helper = arguments[1];
+                Assert.That(Path.GetDirectoryName(helper), Is.EqualTo(Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cop", "helpers", "javascript")));
+                var bytes = File.ReadAllBytes(helper);
+                var hash = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes));
+                Assert.That(Path.GetFileName(helper), Is.EqualTo(hash + ".cjs"));
+                if (helperPath is not null) Assert.That(helper, Is.EqualTo(helperPath));
+                helperPath = helper;
+            }
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Test]
     public void Parse_CheckerBinding_DistinguishesReceiverValueAndSelectedOverload()
     {
         var file = new JavaScriptSourceParser().Parse("binding.ts", """

@@ -8,7 +8,7 @@ let previousProgram;
 const sourceCache = new Map();
 const configCache = new Map();
 try {
-    ts = require(process.argv[1]);
+    ts = require(process.argv[2]);
     for (const api of ['createProgram', 'createSourceFile', 'canHaveDecorators', 'isSatisfiesExpression',
         'getParsedCommandLineOfConfigFile', 'isExpressionNode'])
         if (typeof ts[api] !== 'function') throw new Error(`Installed TypeScript lacks required API ${api}.`);

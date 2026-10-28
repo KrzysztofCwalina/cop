@@ -353,6 +353,9 @@ No npm install, downloads, project-code execution, plugin loading, or configurat
 are performed. The helper is reused within one execution, with bounded time/output and
 cleanup when execution ends. Deferred `First`/`Take` does not parse unrelated later files;
 the compiler can read imports and library declarations required by the demanded file.
+The bundled helper is stored by content hash under `~/.cop/helpers/javascript/`, outside
+the analyzed project. Only its path and the installed compiler path are passed to Node,
+avoiding platform command-line length limits; concurrent installs use atomic replacement.
 
 If either tool is missing, or the installed compiler cannot supply the required API, cop
 prints a **yellow warning** and uses its simpler in-process syntax parser. That path retains

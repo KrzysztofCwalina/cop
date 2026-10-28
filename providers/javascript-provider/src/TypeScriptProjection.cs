@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Cop.Core;
 using Cop.Providers.SourceModel;
@@ -50,13 +52,27 @@ public sealed record JavaScriptToolchain(string NodePath, string CompilerPath)
 
 internal sealed class TypeScriptProjection(string? searchPath)
 {
-    private static readonly Lazy<string> Script = new(() =>
+    private static readonly Lazy<string> ScriptPath = new(() =>
     {
         using var stream = typeof(TypeScriptProjection).Assembly.GetManifestResourceStream(
             "Cop.Providers.src.typescript-projector.cjs")
             ?? throw new InvalidOperationException("The embedded TypeScript projector is missing.");
         using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
+        var bytes = Encoding.UTF8.GetBytes(reader.ReadToEnd());
+        var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
+        var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".cop", "helpers", "javascript");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, hash + ".cjs");
+        if (File.Exists(path) && File.ReadAllBytes(path).AsSpan().SequenceEqual(bytes)) return path;
+        var temporary = Path.Combine(directory, hash + "." + Guid.NewGuid().ToString("N") + ".tmp");
+        try
+        {
+            File.WriteAllBytes(temporary, bytes);
+            File.Move(temporary, path, overwrite: true);
+        }
+        finally { File.Delete(temporary); }
+        return path;
     });
     private readonly ConcurrentDictionary<string, Lazy<JavaScriptToolchain?>> _toolchains = new();
     private readonly ConcurrentDictionary<string, string> _unavailableCompilers = new();
@@ -111,7 +127,7 @@ internal sealed class TypeScriptProjection(string? searchPath)
 
     private static T Request<T>(JavaScriptToolchain toolchain, string request)
     {
-        var output = ToolchainExecutionScope.RequestAsync(toolchain.NodePath, ["-e", Script.Value, toolchain.CompilerPath],
+        var output = ToolchainExecutionScope.RequestAsync(toolchain.NodePath, [ScriptPath.Value, toolchain.CompilerPath],
             Environment.CurrentDirectory, request, environment: new Dictionary<string, string?>
             {
                 ["NODE_OPTIONS"] = null,
