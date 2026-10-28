@@ -88,7 +88,7 @@ yourself.
 
 ## 4. Write and Run a Rule by Hand
 
-You don't need an agent — you can author `.cop` files directly. cop analyzes the `.py` files
+You don't need an agent — you can author `.cop` files directly. cop analyzes the `.py` and `.pyi` files
 you already have; a typical Python project looks like this:
 
 ```
@@ -312,8 +312,10 @@ The `python.parse()` function returns a `Codebase` with these collections:
 | Collection | Description |
 |------------|-------------|
 | `cb.Types` | All classes |
-| `cb.Statements` | Function calls, raise, except clauses |
-| `cb.Files` | Source files with import info |
+| `cb.Methods` | Module functions, nested functions, class methods and constructors |
+| `cb.Statements` | Calls, assignments, control flow, returns, yields and exception handling |
+| `cb.Calls` | Every statically present invocation, including nested calls and calls in arguments, defaults and decorators |
+| `cb.Files` | Source files with import modules in `Usings` and parsed alias/member/relative facts in `Imports` |
 | `cb.Lines` | Every line of code (with kind: code/comment/blank) |
 | `cb.Projects` | pyproject.toml / setup.py projects with dependencies |
 
@@ -324,14 +326,46 @@ The `python.parse()` function returns a `Codebase` with these collections:
 - **Exception handling**: `except` clauses are parsed as error handler statements with type info
 - **Async**: `async def` functions are flagged with the `Async` modifier
 - **Project discovery**: Parses `pyproject.toml` and `setup.py` for dependencies
+- **Class members**: Class fields, properties (including setters) and nested classes are available
+- **Parameters**: Explicit receiver parameters (`self`/`cls`), variadics, annotations, defaults and source locations are retained
+- **Structured calls**: `CallTarget` and `ArgumentExpressions` expose parsed identifiers,
+  member access, invocations and decoded string literals. Python keyword arguments retain
+  their names; splats remain explicit rather than pretending their runtime values are known.
+- **Statement ownership**: `Method`, `Parent` and `Children` describe lexical ownership and
+  control nesting. A nested function's `yield` does not make its enclosing function a generator.
 
 ### Syntax-error reporting
 
-`python.parse()` uses a real lexer + recursive-descent parser (not a line scanner). When a `.py`
-file contains a syntax error — an unterminated string, a malformed `def`/`class` header, or
-unbalanced `()`/`[]`/`{}` — cop surfaces it as a **warning** of the form
-`path(line,col): error: message` and still analyzes the rest of that file and every other file.
-Malformed sources are reported, never silently skipped.
+When Python 3.8 or newer is installed, `python.parse()` uses its standard-library `ast`
+parser. No packages, pip installs or additional setup are required. The interpreter is
+discovered from `python`, `python3`, or the Windows `py -3` launcher using bounded probes,
+including protection against unusable Microsoft Store aliases. Source is parsed only:
+target modules, decorators and `setup.py` scripts are never executed or imported.
+
+The installed interpreter's syntax version applies. Its genuine syntax errors are surfaced
+as warnings of the form `path(line,col): error: message`. The malformed file has no invented
+partial declarations; valid files continue to be analyzed. Timeouts, helper failures and
+output-limit failures are surfaced explicitly, not disguised as successful fallback results.
+
+When no usable interpreter is available, cop prints a **yellow degraded-analysis warning**
+and uses its simpler lexer/recursive-descent parser. That fallback retains basic classes,
+functions and call sites, reports basic malformed brackets/headers, and terminates on
+class-level compound statements. It does not provide the full AST-backed structure. Native
+and simpler results use different cache identities, and the warning is replayed on cache hits.
+
+Within one analysis, a bounded helper is reused across demanded files and disposed when the
+analysis ends. Lazy queries do not read later files just to batch them into a Python process.
+
+Project discovery includes nested projects, literal `setup(...)` metadata, required and
+optional PEP 621 dependencies, and Poetry dependencies. `pyproject.toml` uses `tomllib` on
+Python 3.11 or newer; older interpreters use the explicitly warned simpler metadata reader.
+Dynamic setup metadata is not executed and is reported as unavailable. Discovery honors
+excluded directories and does not descend into directory links.
+
+Python is dynamic: these are source facts, not whole-program type inference. Runtime
+monkey-patching, dynamically generated declarations, inferred argument types, overload
+resolution and transitive class/interface resolution remain unknown. Python-specific
+decorator/base-class flags describe the written syntax and naming conventions.
 
 ---
 

@@ -15,7 +15,7 @@ public class PythonProvider : DataProvider
     public override RuntimeBindings GetRuntimeBindings() => PythonBindings.Build();
 
     public override IReadOnlyDictionary<string, object?> GetQueryMetadata(ProviderQuery query) =>
-        CodeBindings.SourceMetadata(query, ".py");
+        CodeBindings.SourceMetadata(query, ".py", ".pyi");
     public override string QueryResultType => "Codebase";
 
     public override object QueryDeferred(ProviderQuery query)
