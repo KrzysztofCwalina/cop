@@ -34,13 +34,16 @@ function Invoke-SmokeProcess([string[]]$Arguments) {
         if (-not $process.Start()) { throw "Cannot start smoke executable: $Executable" }
         $stdout = $process.StandardOutput.ReadToEndAsync()
         $stderr = $process.StandardError.ReadToEndAsync()
-        if (-not $process.WaitForExit(60000)) {
+        $timedOut = -not $process.WaitForExit(60000)
+        if ($timedOut) {
             $process.Kill($true)
             if (-not $process.WaitForExit(5000)) { throw "Smoke process did not exit after termination." }
-            throw "Smoke command exceeded 60 seconds: $($Arguments -join ' ')"
         }
         if (-not [System.Threading.Tasks.Task]::WaitAll([System.Threading.Tasks.Task[]]@($stdout, $stderr), 5000)) {
             throw "Smoke process exited but its output pipes did not close."
+        }
+        if ($timedOut) {
+            throw "Smoke command exceeded 60 seconds: $($Arguments -join ' ')`n$($stdout.Result)`n$($stderr.Result)"
         }
         return @{ ExitCode = $process.ExitCode; Stdout = $stdout.Result; Stderr = $stderr.Result }
     }
