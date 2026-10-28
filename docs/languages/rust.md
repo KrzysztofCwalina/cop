@@ -46,7 +46,9 @@ renamed dependencies, workspace inheritance, default features, target dependenci
 `rustc --print cfg`, and pinned registry/Git dependency sources already in Cargo's local
 cache. Ambiguous source identities are errors, not guessed resolutions. Each semantic demand
 snapshots source files and crate/features context; edits rebuild the execution-scoped
-database. Structural FIRST/TAKE queries do not load a semantic project. Rich-mode syntax
+database. Project and standard-library files use distinct source roots, so discovering a
+local file's edition/module ownership does not scan unrelated sysroot crates.
+Structural FIRST/TAKE queries do not load a semantic project. Rich-mode syntax
 disk caching is currently disabled so dependency-bound callbacks cannot be lost or stale.
 
 **Source compatibility is explicit.** Matching rust-src under the installed compiler's

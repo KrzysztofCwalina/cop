@@ -93,7 +93,7 @@ public class IssueRegressionCoverageIndexTests
         new(88, CoverageKind.ImplementedHere, "ForeachPipelineRegressionTests.Issue088_MultilineCommandDoesNotSilentlyDropLiteralAndForeachOutput (PendingFix)"),
         new(89, CoverageKind.ImplementedHere, "PublishedCSharpMetadataRegressionTests.Issue089_SelfContainedHostBindsFrameworkAndLocalCalls_WithoutInstalledDotnet"),
         new(90, CoverageKind.CoveredBy, "ToolchainCliIntegrationTests.ExplicitLocalFeed_DoesNotAttemptRemoteRestore (duplicate of #85; PendingFix)"),
-        new(91, CoverageKind.CoveredBy, "RustFrontendBundleTests.Issue091_StructuralDiscoveryMaterializesOnlyHelperAndNotices; RustFrontendTests.Issue091_ArchiveSourcesRemainDeferredUntilRealSemanticDemand"),
+        new(91, CoverageKind.CoveredBy, "RustFrontendBundleTests.Issue091_StructuralDiscoveryMaterializesOnlyHelperAndNotices; RustFrontendTests.Issue091_ArchiveSourcesRemainDeferredUntilRealSemanticDemand; RustFrontendTests.Issue091_LocalMethodWithFullStandardLibraryKeepsExactSelectedDeclaration; native project_ownership_does_not_consider_unrelated_sysroot_crates"),
     ];
 
     [Test]

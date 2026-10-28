@@ -252,6 +252,7 @@ impl Snapshot {
         for file in &self.files {
             file.path.hash(&mut hash);
             file.text.hash(&mut hash);
+            file.library.hash(&mut hash);
         }
         for krate in &self.crates {
             krate.root.hash(&mut hash);
@@ -271,7 +272,11 @@ impl Snapshot {
 impl Loader {
     fn load_standard_library(&mut self, directory: &Path) -> Result<(), String> {
         let project_crates = self.snapshot.crates.len();
+        let project_files = self.snapshot.files.len();
         self.load_files(directory)?;
+        for file in &mut self.snapshot.files[project_files..] {
+            file.library = true;
+        }
         let mut ids = BTreeMap::new();
         for name in [
             "core",
@@ -866,6 +871,7 @@ impl Loader {
                 self.snapshot.files.push(File {
                     path: path_string(&path),
                     text,
+                    library: false,
                 });
             }
         }

@@ -24,6 +24,8 @@ mod project;
 struct File {
     path: String,
     text: String,
+    #[serde(default)]
+    library: bool,
 }
 #[derive(Deserialize)]
 struct Dependency {
@@ -79,16 +81,21 @@ impl Workspace {
     fn new(files: Vec<File>, crates: Vec<Crate>) -> Result<Self, String> {
         let mut db = RootDatabase::default();
         let mut change = ChangeWithProcMacros::default();
-        let mut set = FileSet::default();
+        let mut local = FileSet::default();
+        let mut library = FileSet::default();
         let mut ids = HashMap::new();
         for (index, file) in files.iter().enumerate() {
             let id = FileId::from_raw(index as u32);
             ids.insert(file.path.clone(), id);
             let virtual_path = format!("/{}", file.path.replace('\\', "/").trim_start_matches('/'));
+            let set = if file.library { &mut library } else { &mut local };
             set.insert(id, VfsPath::new_virtual_path(virtual_path));
             change.change_file(id, Some(file.text.clone()));
         }
-        change.set_roots(vec![SourceRoot::new_local(set)]);
+        change.set_roots(vec![
+            SourceRoot::new_local(local),
+            SourceRoot::new_library(library),
+        ]);
         let mut graph = CrateGraphBuilder::default();
         let mut crate_ids = Vec::new();
         for krate in &crates {
@@ -383,5 +390,45 @@ fn main() {
             Err(error) => println!("{}", serde_json::json!({"error": error.to_string()})),
         }
         io::stdout().flush().expect("stdout");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn project_ownership_does_not_consider_unrelated_sysroot_crates() {
+        let request: Request = serde_json::from_value(json!({
+            "op": "analyze",
+            "files": [
+                {"path": "/app/lib.rs", "text": "pub struct Alpha; impl Alpha { pub fn get(&self, value: u32) -> u32 { value } } pub fn run() { let a = Alpha; a.get(1); }"},
+                {"path": "/sysroot/core/lib.rs", "text": "#![no_core]", "library": true},
+                {"path": "/sysroot/std/lib.rs", "text": "#![no_core]", "library": true}
+            ],
+            "crates": [
+                {"root": "/app/lib.rs", "name": "app", "edition": "2024"},
+                {"root": "/sysroot/core/lib.rs", "name": "core", "edition": "2024", "sysroot": true},
+                {"root": "/sysroot/std/lib.rs", "name": "std", "edition": "2024", "sysroot": true}
+            ]
+        })).unwrap();
+        let workspace = Workspace::new(request.files, request.crates).unwrap();
+        assert_eq!(
+            ra_ap_base_db::relevant_crates(&workspace.db, workspace.ids["/app/lib.rs"]).len(),
+            1,
+            "project edition/module discovery must not resolve unrelated sysroot crate ownership"
+        );
+        assert_eq!(
+            ra_ap_base_db::relevant_crates(&workspace.db, workspace.ids["/sysroot/core/lib.rs"]).len(),
+            2,
+            "sysroot source roots remain available for maintained semantic resolution"
+        );
+        let result = workspace.analyze("/app/lib.rs").unwrap();
+        let call = result["facts"].as_array().unwrap().iter()
+            .find(|fact| fact["callable"]["name"] == "get").unwrap();
+        assert_eq!(call["receiver_type"], "Alpha");
+        assert_eq!(call["value_type"], "u32");
+        assert_eq!(call["callable"]["signature"], "pub fn get(&self, value: u32) -> u32");
+        assert_eq!(call["callable"]["source_file"], "/app/lib.rs");
     }
 }

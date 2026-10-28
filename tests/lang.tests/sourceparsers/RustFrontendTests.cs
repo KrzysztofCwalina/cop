@@ -465,6 +465,30 @@ public class RustFrontendTests
     }
 
     [Test]
+    public void Issue091_LocalMethodWithFullStandardLibraryKeepsExactSelectedDeclaration()
+    {
+        string sources = Path.Combine(Path.GetDirectoryName(_frontend)!, "rust-stdlib");
+        if (!File.Exists(Path.Combine(sources, "manifest.json")))
+            Assert.Ignore("Prepare the checksum-pinned standard library beside the test frontend with native/prepare-stdlib.ps1.");
+        Write("Cargo.toml", "[package]\nname='cop-publish-smoke'\nversion='0.1.0'\nedition='2024'\n[lib]\npath='sample.rs'");
+        string path = Write("sample.rs", "pub struct Alpha; impl Alpha { pub fn get(&self, value: u32) -> u32 { value } } pub fn run() { let a = Alpha; a.get(1); }");
+        using var scope = new ToolchainExecutionScope();
+        for (int pass = 0; pass < 2; pass++)
+        {
+            var file = new RustSourceParser(_frontend, _root, sources).Parse(path, File.ReadAllText(path))!;
+            var call = file.Statements.Single(statement => statement.MemberName == "get");
+            Assert.That(call.ReceiverType?.OriginalText, Is.EqualTo("Alpha"));
+            Assert.That(call.ValueType?.Name, Is.EqualTo("u32"));
+            Assert.That(call.ReferencedCallable?.Signature, Is.EqualTo("pub fn get(&self, value: u32) -> u32"));
+            Assert.That(call.ReferencedCallable?.Parameters.Select(type => type.Name), Is.EqualTo(new[] { "u32" }));
+            Assert.That(call.ReferencedCallable?.SourceFile, Is.EqualTo(path));
+            Assert.That(call.ReferencedCallable?.Line, Is.EqualTo(1));
+            Assert.That(call.ReferencedCallable?.Column, Is.EqualTo(32));
+        }
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
+    }
+
+    [Test]
     public void IncompatibleBundledSourcesAndChangedDemandedFileNeverInventSemanticBindings()
     {
         string manifest = Write("incompatible/manifest.json", "{\"release\":\"0.0.0\",\"compilerCommit\":\"incompatible\"}");
