@@ -22,24 +22,46 @@ cop --version
 ### Java toolchain and fallback
 
 Cop automatically discovers and probes an installed **JDK**, not just a runtime-only
-JRE. The richer path uses the JDK compiler's tree API through a Cop-owned helper.
+JRE: `javac` must be on the process `PATH`, with its matching sibling `java` launcher.
+The richer path uses the JDK compiler's tree API through a Cop-owned helper.
 No Maven/Gradle integration, third-party parser, or additional Cop setup is required.
 
 The helper parses declarations, signatures, imports, spans, and statement/call structure.
 This is **compiler AST parsing, not full Java type attribution**: classpath-dependent
 symbols and call targets are not guaranteed to be resolved. Cop does not build or run
 the application, execute annotation processors, run Maven/Gradle scripts, or download
-dependencies. The installed JDK also limits which source syntax can be parsed.
+dependencies. Annotation processing is disabled; ambient JVM agent and classpath options
+are removed from helper processes. The installed JDK limits which source syntax can be
+parsed; newer unsupported syntax is reported as a diagnostic.
 
 A bounded helper is reused as files are requested within one Cop execution, avoiding a
-fresh JVM for every file. If a usable JDK/compiler API is unavailable, Cop emits a
+fresh JVM for every file. Its compiled code is cached by helper source and compiler
+identity, so the first native run can take longer. If a usable JDK/compiler API is unavailable, Cop emits a
 **yellow warning** and uses its simpler built-in syntax parser. Fallback supports fewer
 syntax forms and does not provide compiler type resolution. With redirected output or
 `--no-color`, the same warning is printed as plain text.
 
-Malformed source and failures during an established native request remain errors, rather
+Both backends expose types, methods, constructors, multi-variable fields, imports,
+nested call sites, decoded string arguments, and ownership relationships. Native
+parsing additionally provides compiler AST statement nesting and precise spans.
+Fallback coverage is narrower; unsupported expressions are marked `other`, and
+unknown spans remain absent. `permits` entries are not superclasses or interfaces.
+Native generic argument trees come directly from parsed type syntax; fallback
+signatures retain their text but do not claim resolved generic argument trees.
+
+Neither backend performs whole-project symbol or type resolution. Receiver spellings
+and preserved generic signatures are syntax facts, not resolved call targets.
+Maven summaries use the project's own artifact ID and declared dependencies,
+excluding dependency-management-only entries. Nested Maven/Gradle projects and
+literal Kotlin DSL dependency declarations are discovered without evaluating build
+scripts; dynamic Gradle expressions, Maven property/profile evaluation, and resolved
+transitive dependency graphs are not implied.
+
+Malformed source, malformed protocol responses, timeouts, output limits, and other
+failures during an established native request remain errors, rather
 than silently producing a clean fallback result. To use the richer path, make a working
 JDK available on Cop's `PATH` and rerun the check; Cop never downloads or installs a JDK.
+Fallback warnings also appear on warm-cache runs.
 
 ---
 
