@@ -79,7 +79,7 @@ public record ApiEntry(
         Signature: $"method {type.Name}.{method.Name}({FormatParameterTypes(method.Parameters)}) : {method.ReturnType?.OriginalText ?? "void"}",
         Line: method.Line)
     {
-        File = type.File,
+        File = method.File ?? type.File,
         ApiAsText = FormatMethodStub(method)
     };
 

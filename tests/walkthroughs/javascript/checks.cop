@@ -4,7 +4,10 @@ import code
 
 let cb = javascript.parse()
 
-predicate isConsoleLog(Statement) => Statement.TypeName == 'console' && Statement.MemberName == 'log'
+predicate isConsoleLog(Statement) => Statement.MemberName == 'log'
+    && Statement.CallTarget != nic && Statement.CallTarget.Kind == memberAccess
+    && Statement.CallTarget.Target != nic && Statement.CallTarget.Target.Kind == identifier
+    && Statement.CallTarget.Target.Name == 'console'
 
-test js-parse = assert(cb.Types.Count > 0, 'javascript.parse() should return types')
-test js-console = assert(cb.Statements:isConsoleLog.Count > 0, 'expected a console.log call')
+test js-parse = assert(cb.Types.Count == 1, 'expected exactly one JavaScript type')
+test js-console = assert(cb.Statements:isConsoleLog.Count == 1, 'expected exactly one console.log call')

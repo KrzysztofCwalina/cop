@@ -23,7 +23,10 @@ let long-methods = codebase.Methods:isLong
 predicate writesOutput(Statement) =>
     (Statement:isCSharp && Statement.TypeName:equals('Console'))
     || (Statement:isPython && Statement.MemberName:equals('print'))
-    || (Statement:isJavaScript && Statement.TypeName:equals('console'))
+    || (Statement:isJavaScript
+        && Statement.CallTarget != nic && Statement.CallTarget.Kind == memberAccess
+        && Statement.CallTarget.Target != nic && Statement.CallTarget.Target.Kind == identifier
+        && Statement.CallTarget.Target.Name == 'console')
 let output-stmts = codebase.Statements:writesOutput
     :toInfo('writes to console/stdout')
 

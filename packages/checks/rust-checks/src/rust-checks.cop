@@ -68,13 +68,13 @@ export let expect-calls = cb.Calls:isExpectCall:isProdStatement:notIgnored
 
 # panic!/unreachable! abort execution — return a Result in library code instead.
 predicate isPanicMacro(Statement) => Statement.Kind == throw
-    && (Statement.MemberName == 'panic' || Statement.MemberName == 'unreachable')
+    && (Statement.MemberName == 'panic!' || Statement.MemberName == 'unreachable!')
 export let panic-macros = cb.Statements:isPanicMacro:isProdStatement:notIgnored
     :toWarning('Avoid panic!/unreachable! in library code — return a Result instead', nameof(panic-macros))
 
 # todo!/unimplemented! mark unfinished code that will panic at runtime.
 predicate isUnfinishedMacro(Statement) => Statement.Kind == throw
-    && (Statement.MemberName == 'todo' || Statement.MemberName == 'unimplemented')
+    && (Statement.MemberName == 'todo!' || Statement.MemberName == 'unimplemented!')
 export let unfinished-code = cb.Statements:isUnfinishedMacro:isProdStatement:notIgnored
     :toWarning('Unfinished code — todo!/unimplemented! will panic at runtime', nameof(unfinished-code))
 

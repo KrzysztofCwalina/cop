@@ -2,376 +2,170 @@ using System.Text;
 
 namespace Cop.Providers.Sql;
 
-/// <summary>
-/// A small, dependency-free SQL parser focused on static-analysis queries. It splits
-/// statements on top-level semicolons while ignoring quotes and SQL comments.
-/// </summary>
+/// <summary>Dependency-free SQL statement analysis, not a dialect-specific SQL compiler.</summary>
 public static class SqlParser
 {
     public record SqlParseResult(List<SqlStatementInfo> Statements);
 
     private static readonly HashSet<string> KnownKinds = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "ALTER", "DROP", "MERGE"
-    };
+        { "SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "ALTER", "DROP", "MERGE" };
 
     public static SqlParseResult Parse(string text)
     {
+        var analysis = MaskQuotedTextAndComments(text);
         var statements = new List<SqlStatementInfo>();
-        int statementStart = 0;
-        int line = 1;
-
-        char quote = '\0';
-        bool inLineComment = false;
-        bool inBlockComment = false;
-
-        for (int i = 0; i < text.Length; i++)
+        int start = 0, line = 1, startLine = 1;
+        for (int i = 0; i <= text.Length; i++)
         {
-            char c = text[i];
-            char next = i + 1 < text.Length ? text[i + 1] : '\0';
-
-            if (inLineComment)
+            bool batchSeparator = i == 0 || text[i - 1] == '\n';
+            int endOfLine = batchSeparator ? analysis.IndexOf('\n', i) : -1;
+            if (endOfLine < 0) endOfLine = text.Length;
+            batchSeparator = batchSeparator && analysis.AsSpan(i, endOfLine - i).Trim().Equals("GO", StringComparison.OrdinalIgnoreCase);
+            if (i == text.Length || analysis[i] == ';' || batchSeparator)
             {
-                if (c == '\n')
-                {
-                    inLineComment = false;
-                    line++;
-                }
-                continue;
+                AddStatement(statements, text[start..i], analysis[start..i], startLine);
+                if (batchSeparator) i = endOfLine;
+                start = i + 1;
+                startLine = line + (i < text.Length && text[i] == '\n' ? 1 : 0);
             }
-
-            if (inBlockComment)
-            {
-                if (c == '\n')
-                    line++;
-                else if (c == '*' && next == '/')
-                {
-                    inBlockComment = false;
-                    i++;
-                }
-                continue;
-            }
-
-            if (quote != '\0')
-            {
-                if (c == '\n')
-                    line++;
-                else if (c == quote)
-                {
-                    if (quote == '\'' && next == '\'')
-                    {
-                        i++;
-                    }
-                    else
-                    {
-                        quote = '\0';
-                    }
-                }
-                continue;
-            }
-
-            if (c == '-' && next == '-')
-            {
-                inLineComment = true;
-                i++;
-                continue;
-            }
-
-            if (c == '/' && next == '*')
-            {
-                inBlockComment = true;
-                i++;
-                continue;
-            }
-
-            if (c == '\'' || c == '"')
-            {
-                quote = c;
-                continue;
-            }
-
-            if (c == ';')
-            {
-                AddStatement(statements, text, statementStart, i);
-                statementStart = i + 1;
-                continue;
-            }
-
-            if (c == '\n')
-                line++;
+            if (i < text.Length && text[i] == '\n') line++;
         }
-
-        AddStatement(statements, text, statementStart, text.Length);
-        return new SqlParseResult(statements);
+        return new(statements);
     }
 
-    private static void AddStatement(List<SqlStatementInfo> statements, string text, int start, int end)
+    private static void AddStatement(List<SqlStatementInfo> statements, string raw, string analysis, int line)
     {
-        if (end <= start)
-            return;
-
-        var raw = text[start..end];
-        var analysisText = RemoveCommentsPreserveWhitespace(raw);
-        var normalized = Normalize(raw);
-        if (normalized.Length == 0 || analysisText.Trim().Length == 0)
-            return;
-
-        var kind = GetKind(analysisText);
-        var line = 1 + CountNewLines(text, 0, start) + CountLeadingLinesBeforeCode(raw);
-        bool selectsStar = kind == "SELECT" && SelectsStar(analysisText);
-        bool hasWhere = HasTopLevelKeyword(analysisText, "WHERE");
-
-        statements.Add(new SqlStatementInfo(kind, normalized, line, selectsStar, hasWhere));
-    }
-
-    private static string GetKind(string text)
-    {
-        int i = 0;
-        while (i < text.Length && char.IsWhiteSpace(text[i]))
-            i++;
-
-        int start = i;
-        while (i < text.Length && (char.IsLetter(text[i]) || text[i] == '_'))
-            i++;
-
-        if (i == start)
-            return "OTHER";
-
-        var keyword = text[start..i].ToUpperInvariant();
-        return KnownKinds.Contains(keyword) ? keyword : "OTHER";
-    }
-
-    private static bool SelectsStar(string text)
-    {
-        int start = SkipWhitespace(text, 0);
-        if (!TryReadKeyword(text, start, "SELECT", out int index))
-            return false;
-
-        index = SkipWhitespace(text, index);
-        if (TryReadKeyword(text, index, "DISTINCT", out int afterDistinct)
-            || TryReadKeyword(text, index, "ALL", out afterDistinct))
+        int first = 0;
+        while (first < analysis.Length && char.IsWhiteSpace(analysis[first]))
         {
-            index = SkipWhitespace(text, afterDistinct);
+            if (analysis[first] == '\n') line++;
+            first++;
         }
-
-        int from = FindTopLevelKeyword(text, "FROM", index);
-        if (from < 0)
-            return false;
-
-        var selectList = text[index..from].Trim();
-        return selectList == "*";
+        if (first == analysis.Length) return;
+        var tokens = TopLevelWords(analysis).ToList();
+        string kind = tokens.FirstOrDefault().Word ?? "OTHER";
+        int operation = tokens.FirstOrDefault().Start;
+        if (kind == "WITH")
+        {
+            var main = tokens.FirstOrDefault(t => t.Word is "SELECT" or "INSERT" or "UPDATE" or "DELETE" or "MERGE");
+            kind = main.Word ?? "OTHER";
+            operation = main.Start;
+        }
+        if (!KnownKinds.Contains(kind)) kind = "OTHER";
+        int from = tokens.Where(t => t.Start > operation && t.Word == "FROM").Select(t => t.Start).DefaultIfEmpty(analysis.Length).First();
+        bool star = kind == "SELECT" && ProjectionHasWildcard(analysis[(operation + 6)..from]);
+        bool where = tokens.Any(t => t.Word == "WHERE" && t.Start > operation);
+        statements.Add(new(kind, NormalizeWhitespace(raw), line, star, where));
     }
 
-    private static bool HasTopLevelKeyword(string text, string keyword)
-        => FindTopLevelKeyword(text, keyword, 0) >= 0;
-
-    private static int FindTopLevelKeyword(string text, string keyword, int startIndex)
+    private static bool ProjectionHasWildcard(string projection)
     {
-        char quote = '\0';
+        int depth = 0, start = 0;
+        for (int i = 0; i <= projection.Length; i++)
+        {
+            char c = i == projection.Length ? ',' : projection[i];
+            if (c == '(') depth++;
+            else if (c == ')') depth--;
+            else if (c == ',' && depth == 0)
+            {
+                var item = projection[start..i].Trim();
+                int wordEnd = 0;
+                while (wordEnd < item.Length && !char.IsWhiteSpace(item[wordEnd])) wordEnd++;
+                if (wordEnd < item.Length
+                    && (item.AsSpan(0, wordEnd).Equals("DISTINCT", StringComparison.OrdinalIgnoreCase)
+                        || item.AsSpan(0, wordEnd).Equals("ALL", StringComparison.OrdinalIgnoreCase)))
+                    item = item[wordEnd..].TrimStart();
+                if (item == "*" || item.EndsWith(".*", StringComparison.Ordinal)) return true;
+                start = i + 1;
+            }
+        }
+        return false;
+    }
+
+    private static string NormalizeWhitespace(string text)
+    {
+        var result = new StringBuilder(text.Length);
+        bool whitespace = false;
+        foreach (char value in text.AsSpan().Trim())
+        {
+            if (char.IsWhiteSpace(value)) whitespace = true;
+            else
+            {
+                if (whitespace && result.Length > 0) result.Append(' ');
+                result.Append(value);
+                whitespace = false;
+            }
+        }
+        return result.ToString();
+    }
+
+    private static IEnumerable<(string Word, int Start)> TopLevelWords(string text)
+    {
         int depth = 0;
-
-        for (int i = startIndex; i < text.Length; i++)
-        {
-            char c = text[i];
-            char next = i + 1 < text.Length ? text[i + 1] : '\0';
-
-            if (quote != '\0')
-            {
-                if (c == quote)
-                {
-                    if (quote == '\'' && next == '\'')
-                    {
-                        i++;
-                    }
-                    else
-                    {
-                        quote = '\0';
-                    }
-                }
-                continue;
-            }
-
-            if (c == '\'' || c == '"')
-            {
-                quote = c;
-                continue;
-            }
-
-            if (c == '(')
-            {
-                depth++;
-                continue;
-            }
-            if (c == ')' && depth > 0)
-            {
-                depth--;
-                continue;
-            }
-
-            if (depth == 0 && IsKeywordAt(text, i, keyword))
-                return i;
-        }
-
-        return -1;
-    }
-
-    private static bool TryReadKeyword(string text, int index, string keyword, out int nextIndex)
-    {
-        nextIndex = index;
-        if (!IsKeywordAt(text, index, keyword))
-            return false;
-
-        nextIndex = index + keyword.Length;
-        return true;
-    }
-
-    private static bool IsKeywordAt(string text, int index, string keyword)
-    {
-        if (index < 0 || index + keyword.Length > text.Length)
-            return false;
-
-        if (!text.AsSpan(index, keyword.Length).Equals(keyword.AsSpan(), StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        bool before = index == 0 || !IsIdentifierChar(text[index - 1]);
-        bool after = index + keyword.Length == text.Length || !IsIdentifierChar(text[index + keyword.Length]);
-        return before && after;
-    }
-
-    private static bool IsIdentifierChar(char c) => char.IsLetterOrDigit(c) || c == '_';
-
-    private static int SkipWhitespace(string text, int index)
-    {
-        while (index < text.Length && char.IsWhiteSpace(text[index]))
-            index++;
-        return index;
-    }
-
-    private static string RemoveCommentsPreserveWhitespace(string text)
-    {
-        var sb = new StringBuilder(text.Length);
-        char quote = '\0';
-        bool inLineComment = false;
-        bool inBlockComment = false;
-
         for (int i = 0; i < text.Length; i++)
         {
+            if (text[i] == '(') depth++;
+            else if (text[i] == ')') depth--;
+            else if (depth == 0 && (char.IsLetter(text[i]) || text[i] == '_'))
+            {
+                int start = i;
+                while (i + 1 < text.Length && (char.IsLetterOrDigit(text[i + 1]) || text[i + 1] == '_')) i++;
+                yield return (text[start..(i + 1)].ToUpperInvariant(), start);
+            }
+        }
+    }
+
+    private static string MaskQuotedTextAndComments(string text)
+    {
+        var masked = text.ToCharArray();
+        void Mask(int start, int end)
+        {
+            for (int j = start; j < end; j++)
+                if (masked[j] != '\n' && masked[j] != '\r') masked[j] = ' ';
+        }
+        for (int i = 0; i < text.Length; i++)
+        {
+            int start = i;
             char c = text[i];
-            char next = i + 1 < text.Length ? text[i + 1] : '\0';
-
-            if (inLineComment)
+            if (c == '-' && i + 1 < text.Length && text[i + 1] == '-')
             {
-                if (c == '\n')
-                {
-                    inLineComment = false;
-                    sb.Append(c);
-                }
-                else
-                {
-                    sb.Append(' ');
-                }
-                continue;
+                while (i < text.Length && text[i] != '\n') i++;
             }
-
-            if (inBlockComment)
+            else if (c == '/' && i + 1 < text.Length && text[i + 1] == '*')
             {
-                if (c == '*' && next == '/')
+                int depth = 1;
+                i += 2;
+                while (i < text.Length && depth > 0)
                 {
-                    sb.Append("  ");
-                    inBlockComment = false;
-                    i++;
+                    if (i + 1 < text.Length && text[i] == '/' && text[i + 1] == '*') { depth++; i += 2; }
+                    else if (i + 1 < text.Length && text[i] == '*' && text[i + 1] == '/') { depth--; i += 2; }
+                    else i++;
                 }
-                else
-                {
-                    sb.Append(c == '\n' ? c : ' ');
-                }
-                continue;
             }
-
-            if (quote != '\0')
+            else if (c is '\'' or '"' or '`' or '[')
             {
-                sb.Append(c);
-                if (c == quote)
-                {
-                    if (quote == '\'' && next == '\'')
-                    {
-                        sb.Append(next);
-                        i++;
-                    }
-                    else
-                    {
-                        quote = '\0';
-                    }
-                }
-                continue;
-            }
-
-            if (c == '-' && next == '-')
-            {
-                sb.Append("  ");
-                inLineComment = true;
+                char closing = c == '[' ? ']' : c;
                 i++;
-                continue;
+                while (i < text.Length)
+                {
+                    if (text[i++] != closing) continue;
+                    if (i < text.Length && text[i] == closing) { i++; continue; }
+                    break;
+                }
             }
-
-            if (c == '/' && next == '*')
+            else if (c == '$')
             {
-                sb.Append("  ");
-                inBlockComment = true;
-                i++;
-                continue;
+                int tagEnd = i + 1;
+                while (tagEnd < text.Length && (char.IsLetterOrDigit(text[tagEnd]) || text[tagEnd] == '_')) tagEnd++;
+                if (tagEnd == text.Length || text[tagEnd] != '$') continue;
+                var tag = text[i..(tagEnd + 1)];
+                int closing = text.IndexOf(tag, tagEnd + 1, StringComparison.Ordinal);
+                i = closing < 0 ? text.Length : closing + tag.Length;
             }
-
-            if (c == '\'' || c == '"')
-                quote = c;
-
-            sb.Append(c);
+            else continue;
+            Mask(start, i);
+            i--;
         }
-
-        return sb.ToString();
-    }
-
-    private static string Normalize(string text)
-    {
-        var sb = new StringBuilder();
-        bool pendingSpace = false;
-
-        foreach (char c in text.Trim())
-        {
-            if (char.IsWhiteSpace(c))
-            {
-                pendingSpace = true;
-                continue;
-            }
-
-            if (pendingSpace && sb.Length > 0)
-                sb.Append(' ');
-            sb.Append(c);
-            pendingSpace = false;
-        }
-
-        return sb.ToString();
-    }
-
-    private static int CountLeadingLinesBeforeCode(string raw)
-    {
-        var stripped = RemoveCommentsPreserveWhitespace(raw);
-        for (int i = 0; i < stripped.Length; i++)
-        {
-            if (!char.IsWhiteSpace(stripped[i]))
-                return CountNewLines(stripped, 0, i);
-        }
-        return 0;
-    }
-
-    private static int CountNewLines(string text, int start, int end)
-    {
-        int count = 0;
-        for (int i = start; i < end && i < text.Length; i++)
-        {
-            if (text[i] == '\n')
-                count++;
-        }
-        return count;
+        return new string(masked);
     }
 }

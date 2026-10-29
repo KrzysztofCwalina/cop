@@ -17,8 +17,16 @@ public sealed class CSharpStatementInfo : StatementInfo
 
     public CSharpStatementInfo(
         string kind, List<string> keywords, string? typeName, string? memberName,
-        List<string> arguments, int line, bool isInMethod)
-        : base(kind, keywords, typeName, memberName, arguments, line, isInMethod) { }
+        List<string> arguments, int line, bool isInMethod, Microsoft.CodeAnalysis.SyntaxNode? syntax = null)
+        : base(kind, keywords, typeName, memberName, arguments, line, isInMethod)
+    {
+        if (syntax is null) return;
+        var span = syntax.GetLocation().GetLineSpan();
+        Column = span.StartLinePosition.Character + 1;
+        EndLine = span.EndLinePosition.Line + 1;
+        EndColumn = span.EndLinePosition.Character + 1;
+        SyntaxStart = syntax.SpanStart;
+    }
 
     /// <summary>True for a C# lock statement.</summary>
     public bool IsLock => Kind == "lock";

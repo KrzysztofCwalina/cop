@@ -10,6 +10,7 @@ namespace Cop.Providers.SourceModel;
 /// </summary>
 public sealed record CSharpTypeDeclaration : TypeDeclaration
 {
+    internal int SyntaxStart { get; set; } = -1;
     public CSharpTypeDeclaration(
         TypeDeclaration source,
         bool isRecord = false,

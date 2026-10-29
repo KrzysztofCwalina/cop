@@ -3,22 +3,57 @@ using Cop.Providers.SourceModel;
 namespace Cop.Providers.SourceParsers;
 
 /// <summary>
-/// Python source parser built on a real lexer (<see cref="PythonLexer"/>) and recursive-descent
-/// parser. Produces the exact same <see cref="SourceFile"/> model as the previous line-scanner
-/// while correctly handling all Python string forms, INDENT/DEDENT block structure, and
-/// reporting genuine syntax errors into <see cref="SourceFile.ParseErrors"/>.
+/// Parses Python through an installed interpreter's standard-library AST without executing
+/// target code. When unavailable, uses the explicitly warned simpler lexer/recursive-descent parser.
 /// </summary>
 public class PythonSourceParser : ISourceParser
 {
-    public override IReadOnlyList<string> Extensions => [".py"];
+    private readonly PythonToolchain _toolchain;
+
+    public PythonSourceParser(bool useToolchain = true, string? searchPath = null) => _toolchain = new(useToolchain, searchPath);
+
+    public override string GetCacheIdentity(string filePath) => base.GetCacheIdentity(filePath) + ":" + _toolchain.CacheIdentity;
+
+    public override bool CanCache(string filePath) => false;
+
+    public override IReadOnlyList<string> Extensions => [".py", ".pyi"];
     public override string Language => "python";
 
     public override SourceFile? Parse(string filePath, string sourceText)
     {
+        using var analysis = _toolchain.Analyze(filePath, sourceText);
+        if (analysis is not null)
+        {
+            var file = new PythonAstMapper(filePath, sourceText).Parse(analysis.RootElement);
+            PythonSemanticBinding.Attach(file, _toolchain);
+            return file;
+        }
         var lexer = new PythonLexer(sourceText, filePath);
         var tokens = lexer.Tokenize();
-        return new PythonParserCore(filePath, tokens, lexer.CommentLines, lexer.LexErrors)
+        var brackets = new Stack<Tok>();
+        foreach (var token in tokens)
+        {
+            if (token.Kind is TK.LParen or TK.LBrack or TK.LBrace) brackets.Push(token);
+            if (token.Kind is TK.RParen or TK.RBrack or TK.RBrace)
+            {
+                if (brackets.Count == 0 || (brackets.Peek().Kind, token.Kind) is not
+                    ((TK.LParen, TK.RParen) or (TK.LBrack, TK.RBrack) or (TK.LBrace, TK.RBrace)))
+                    lexer.LexErrors.Add($"{filePath}({token.Line},{token.Col}): error: unmatched closing bracket");
+                else brackets.Pop();
+            }
+        }
+        foreach (var bracket in brackets)
+            lexer.LexErrors.Add($"{filePath}({bracket.Line},{bracket.Col}): error: unclosed '{bracket.Text}'");
+        var fallback = new PythonParserCore(filePath, tokens, lexer.CommentLines, lexer.LexErrors)
             .ParseModule(sourceText);
+        foreach (var statement in fallback.Statements)
+            statement.DeferSemanticAnalysis(new(() =>
+            {
+                Cop.Core.ProviderWarnings.ReportOnce("python", "binding",
+                    "Python semantic facts are unavailable in simpler analysis; install a usable Python 3 interpreter.");
+                return true;
+            }));
+        return fallback;
     }
 }
 
@@ -33,8 +68,10 @@ internal sealed class PythonParserCore
     private int _pos;
 
     private readonly List<TypeDeclaration> _types      = [];
+    private readonly List<MethodDeclaration> _functions = [];
     private readonly List<StatementInfo>   _statements = [];
     private readonly List<string>          _usings     = [];
+    private readonly List<ImportInfo>      _imports    = [];
     private readonly List<string>          _errors     = [];
     private readonly HashSet<int>          _commentLines;
 
@@ -157,7 +194,9 @@ internal sealed class PythonParserCore
 
         return new SourceFile(_filePath, "python", _types, _statements, sourceText)
         {
+            Methods      = _functions,
             Usings       = _usings,
+            Imports      = _imports,
             Regions      = ExtractRegions(sourceText),
             CommentLines = _commentLines,
             ParseErrors  = _errors,
@@ -168,7 +207,7 @@ internal sealed class PythonParserCore
 
     private void ParseImport()
     {
-        Consume(); // "import"
+        var import = Consume();
         var lineToks = CollectLineTokens();
 
         int i = 0;
@@ -186,12 +225,13 @@ internal sealed class PythonParserCore
 
             if (parts.Count > 0) _usings.Add(string.Join(".", parts));
 
-            // Skip "as alias"
+            string? alias = null;
             if (i < lineToks.Count && lineToks[i].Is("as"))
             {
                 i++; // "as"
-                if (i < lineToks.Count) i++; // alias name
+                if (i < lineToks.Count) alias = lineToks[i++].Text;
             }
+            if (parts.Count > 0) _imports.Add(new(string.Join(".", parts), import.Line) { Alias = alias });
 
             // Skip comma separator
             if (i < lineToks.Count && lineToks[i].Kind == TK.Comma) i++;
@@ -200,21 +240,40 @@ internal sealed class PythonParserCore
 
     private void ParseFromImport()
     {
-        Consume(); // "from"
+        var from = Consume();
         var lineToks = CollectLineTokens();
 
         // Collect module name (Names + Dots) until "import"
         var parts = new List<string>();
+        var level = 0;
+        var seenModule = false;
         int i = 0;
         while (i < lineToks.Count && !lineToks[i].Is("import"))
         {
-            if (lineToks[i].Kind == TK.Name) parts.Add(lineToks[i].Text);
+            if (lineToks[i].Kind == TK.Name) { parts.Add(lineToks[i].Text); seenModule = true; }
+            else if (!seenModule && lineToks[i].Kind == TK.Dot) level++;
             i++;
         }
 
         // Only register if "import" keyword was found
-        if (i < lineToks.Count && lineToks[i].Is("import") && parts.Count > 0)
-            _usings.Add(string.Join(".", parts));
+        if (i < lineToks.Count && lineToks[i].Is("import"))
+        {
+            var module = string.Join(".", parts);
+            _usings.Add(new string('.', level) + module);
+            i++;
+            while (i < lineToks.Count)
+            {
+                var name = lineToks[i++];
+                if (name.Kind is not (TK.Name or TK.Star)) continue;
+                string? alias = null;
+                if (i + 1 < lineToks.Count && lineToks[i].Is("as"))
+                {
+                    i++;
+                    alias = lineToks[i++].Text;
+                }
+                _imports.Add(new(module, from.Line) { Name = name.Text, Alias = alias, RelativeLevel = level, IsWildcard = name.Kind == TK.Star });
+            }
+        }
     }
 
     // ── Class declaration ───────────────────────────────────────────────────
@@ -261,6 +320,7 @@ internal sealed class PythonParserCore
 
         var methods      = new List<MethodDeclaration>();
         var constructors = new List<MethodDeclaration>();
+        var nestedTypes = new List<TypeDeclaration>();
         bool hasDocstring = false;
         bool hasSlots     = false;
         bool firstItem    = true;
@@ -270,6 +330,11 @@ internal sealed class PythonParserCore
         {
             SkipNewlines();
             if (At(TK.Dedent) || At(TK.Eof)) break;
+            if (At(TK.Indent))
+            {
+                SkipBlock();
+                continue;
+            }
 
             var tok = Peek();
 
@@ -310,12 +375,11 @@ internal sealed class PythonParserCore
                 continue;
             }
 
-            // Nested class → skip its body
             if (tok.Is("class"))
             {
+                var nested = ParseClassDecl(innerDecs);
+                if (nested is not null) nestedTypes.Add(nested);
                 innerDecs = [];
-                SkipToNewline();
-                if (At(TK.Indent)) SkipBlock();
                 continue;
             }
 
@@ -329,13 +393,14 @@ internal sealed class PythonParserCore
         if (At(TK.Dedent)) Consume();
 
         return BuildClassDecl(className, classTok.Line, baseTypes, decorators,
-            constructors, methods, hasDocstring, hasSlots);
+            constructors, methods, hasDocstring, hasSlots) with { NestedTypes = nestedTypes };
     }
 
     private TypeDeclaration BuildClassDecl(string name, int line, List<string> baseTypes,
         List<string> decorators, List<MethodDeclaration> constructors,
         List<MethodDeclaration> methods, bool hasDocstring, bool hasSlots)
-        => new TypeDeclaration(name, TypeKind.Class, Modifier.Public,
+        => new TypeDeclaration(name, TypeKind.Class,
+                name.StartsWith('_') && !(name.StartsWith("__") && name.EndsWith("__")) ? Modifier.Private : Modifier.Public,
                 baseTypes, decorators, constructors, methods, [], [], line)
             { HasDocComment = hasDocstring }
             .AsPython(
@@ -352,7 +417,11 @@ internal sealed class PythonParserCore
     private void ParseTopLevelFunc(List<string> decorators, bool isAsync)
     {
         var m = ParseMethodDecl(decorators, isAsync);
-        if (m != null) _statements.AddRange(m.Statements);
+        if (m != null)
+        {
+            _functions.Add(m);
+            _statements.AddRange(m.Statements);
+        }
     }
 
     private MethodDeclaration? ParseMethodDecl(List<string> decorators, bool isAsync)
@@ -406,21 +475,24 @@ internal sealed class PythonParserCore
         if (isAsync)                               modifiers |= Modifier.Async;
         if (decorators.Contains("staticmethod"))   modifiers |= Modifier.Static;
         if (decorators.Contains("abstractmethod")) modifiers |= Modifier.Abstract;
-        if (!methodName.StartsWith('_'))           modifiers |= Modifier.Public;
+        if (!methodName.StartsWith('_') || methodName.StartsWith("__") && methodName.EndsWith("__"))
+                                                   modifiers |= Modifier.Public;
         else                                       modifiers |= Modifier.Private;
 
         var parameters   = ParseParameters(paramToks);
-        var retRef       = returnType is not null ? new TypeReference(returnType, null, [], returnType) : null;
+        var retRef       = returnType is not null ? new TypeReference(returnType.Trim('\'', '"'), null, [], returnType) : null;
         var bodyStatements = new List<StatementInfo>();
 
         if (At(TK.Indent)) ParseFlatBody(isInMethod: true, bodyStatements);
 
-        return new MethodDeclaration(methodName, modifiers, decorators, retRef, parameters, defTok.Line)
+        var method = new MethodDeclaration(methodName, modifiers, decorators, retRef, parameters, defTok.Line)
         {
             Statements   = bodyStatements,
             HasDocComment = hasDocstring,
         }
         .AsPython(isGenerator: bodyStatements.Exists(s => s.Kind == "yield"));
+        foreach (var statement in bodyStatements) statement.Method = method;
+        return method;
     }
 
     // ── Flat body scanner ───────────────────────────────────────────────────
@@ -441,6 +513,14 @@ internal sealed class PythonParserCore
             if (tok.Kind == TK.Indent)  { depth++;                            Consume(); continue; }
             if (tok.Kind == TK.Dedent)  { depth--; if (depth > 0) Consume(); continue; }
             if (tok.Kind == TK.Newline || tok.Kind == TK.Semi) { Consume();  continue; }
+
+            if (tok.Is("def") || tok.Is("async") && Peek(1).Is("def"))
+            {
+                var isAsync = tok.Is("async");
+                if (isAsync) Consume();
+                ParseTopLevelFunc([], isAsync);
+                continue;
+            }
 
             // except clauses are handled specially (need look-ahead for HasRethrow)
             if (tok.Is("except"))
@@ -588,6 +668,14 @@ internal sealed class PythonParserCore
         if (lt.Count == 0) return;
         int lineNum = lt[0].Line;
         var first   = lt[0];
+        for (var index = 0; index < lt.Count; index++)
+        {
+            if (index > 0 && lt[index - 1].Kind == TK.Dot) continue;
+            var (ok, typeName, memberName) = DetectCall(lt[index..]);
+            if (ok) out_.Add(new PythonStatementInfo("call", [], typeName, memberName, [], lt[index].Line, isInMethod));
+        }
+        if (first.Text is "if" or "elif" or "while" && lt.Count > 1 && lt[1].Kind == TK.Colon)
+            AddError(lineNum, first.Col, $"expected condition after '{first.Text}'");
 
         // yield anywhere on the line → yield statement (return early, matches original)
         if (lt.Any(t => t.Is("yield")))
@@ -620,9 +708,6 @@ internal sealed class PythonParserCore
             return;
         }
 
-        // Call detection (at start of line, optionally preceded by await)
-        var (ok, tn, mn) = DetectCall(lt);
-        if (ok) out_.Add(new PythonStatementInfo("call", [], tn, mn, [], lineNum, isInMethod));
     }
 
     // ── Call and comprehension detection ────────────────────────────────────
@@ -631,9 +716,6 @@ internal sealed class PythonParserCore
     {
         if (lt.Count == 0) return (false, null, null);
         int i = 0;
-
-        // Optional "await"
-        if (lt[i].Is("await") && lt.Count > 1) i++;
 
         // Must start with a Name token
         if (i >= lt.Count || lt[i].Kind != TK.Name) return (false, null, null);
@@ -761,8 +843,6 @@ internal sealed class PythonParserCore
             if (i >= seg.Count || seg[i].Kind != TK.Name) continue;
             string name = seg[i].Text; i++;
 
-            if (name is "self" or "cls") continue;
-
             // Optional type annotation: name: Type = default
             string? typeName = null;
             if (i < seg.Count && seg[i].Kind == TK.Colon)
@@ -771,14 +851,19 @@ internal sealed class PythonParserCore
                 var tp = new List<string>();
                 while (i < seg.Count && seg[i].Kind != TK.Eq)
                 {
-                    if (seg[i].Kind == TK.Name) tp.Add(seg[i].Text);
+                    tp.Add(seg[i].Text);
                     i++;
                 }
                 if (tp.Count > 0) typeName = string.Join("", tp);
             }
 
             var typeRef = typeName is not null ? new TypeReference(typeName, null, [], typeName) : null;
-            result.Add(new ParameterDeclaration(name, typeRef, isVar, isKw, false, 0));
+            var hasDefault = i < seg.Count && seg[i].Kind == TK.Eq;
+            result.Add(new ParameterDeclaration(name, typeRef, isVar, isKw, hasDefault, seg[0].Line)
+            {
+                DefaultValueText = hasDefault ? string.Concat(seg.Skip(i + 1).Select(t => t.Text)) : null,
+                IsOptional = hasDefault,
+            });
         }
 
         return result;
@@ -787,8 +872,7 @@ internal sealed class PythonParserCore
     /// <summary>Collect tokens for a return type annotation (up to ':' or NEWLINE).</summary>
     private string? CollectReturnType()
     {
-        if (!At(TK.Name)) { SkipToNewline(); return null; }
-        string rt = Consume().Text;
+        var parts = new List<string>();
         int depth = 0;
         while (!At(TK.Eof))
         {
@@ -797,14 +881,14 @@ internal sealed class PythonParserCore
             if (t.Kind == TK.Newline) break;
             if (t.Kind is TK.LParen or TK.LBrack or TK.LBrace) depth++;
             if (t.Kind is TK.RParen or TK.RBrack or TK.RBrace) depth--;
-            Consume();
+            parts.Add(Consume().Text);
         }
-        return rt;
+        return parts.Count == 0 ? null : string.Concat(parts);
     }
 
     // ── Region extraction (same logic as original) ───────────────────────────
 
-    private static List<RegionInfo> ExtractRegions(string sourceText)
+    internal static List<RegionInfo> ExtractRegions(string sourceText)
     {
         var lines   = sourceText.Split('\n');
         var regions = new List<RegionInfo>();

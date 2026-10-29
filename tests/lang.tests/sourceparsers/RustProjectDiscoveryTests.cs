@@ -1,4 +1,5 @@
 using Cop.Providers;
+using Cop.Core;
 using NUnit.Framework;
 
 namespace Cop.Tests.Lang.SourceParsers;
@@ -41,6 +42,113 @@ public class RustProjectDiscoveryTests
         Assert.That(projects[0].Language, Is.EqualTo("rust"));
         Assert.That(projects[0].References, Does.Contain("serde"));
         Assert.That(projects[0].References, Does.Contain("tokio"));
+    }
+
+    [Test]
+    public void Discover_BasicStringEscapesUseTomlNotRustRules()
+    {
+        File.WriteAllText(Path.Combine(_tempDir, "Cargo.toml"), """
+            [package]
+            name = "me\u006dber"
+            [dependencies]
+            alias = { package = "act\U00000075al", version = "1" }
+            """);
+        ProviderErrors.Clear();
+        var project = RustProjectDiscovery.Discover(_tempDir, null).Single();
+        Assert.That(project.Name, Is.EqualTo("member"));
+        Assert.That(project.References, Is.EqualTo(new[] { "actual" }));
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
+    }
+
+    [Test]
+    public void Discover_QuotedKeysAndInheritedRenames_HaveExactProductionAndAllDependencies()
+    {
+        File.WriteAllText(Path.Combine(_tempDir, "Cargo.toml"), """
+            [workspace]
+            members = ["member"]
+            [workspace.dependencies]
+            'renamed' = { 'package' = 'actual-crate', version = '1' }
+            "unused" = "1"
+            [workspace.dependencies.'subtable']
+            package = 'actual-subtable'
+            version = '1'
+            """);
+        string member = Path.Combine(_tempDir, "member");
+        Directory.CreateDirectory(member);
+        File.WriteAllText(Path.Combine(member, "Cargo.toml"), """
+            ["package"]
+            'name' = 'member'
+            description = "not # a comment \" or a dependency"
+            [dependencies]
+            'renamed'.workspace = true
+            'subtable' = { workspace = true }
+            plain = { version = '1', note = 'package = "decoy"' }
+            [target.'cfg(unix)'.dependencies.'local-alias']
+            "package" = 'target-crate'
+            version = '1'
+            [dev-dependencies]
+            tests = { package = 'test-crate', version = '1' }
+            [build-dependencies]
+            builder = '1'
+            """);
+        ProviderErrors.Clear();
+        var projects = RustProjectDiscovery.Discover(_tempDir, null);
+        Assert.That(projects, Has.Count.EqualTo(1));
+        Assert.That(projects[0].Name, Is.EqualTo("member"));
+        Assert.That(projects[0].References,
+            Is.EqualTo(new[] { "actual-crate", "actual-subtable", "plain", "target-crate" }));
+        Assert.That(projects[0].Packages,
+            Is.EqualTo(new[] { "actual-crate", "actual-subtable", "builder", "plain", "target-crate", "test-crate" }));
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
+    }
+
+    [Test]
+    public void Discover_MalformedManifestIsDiagnosedAndOtherCratesRemain()
+    {
+        File.WriteAllText(Path.Combine(_tempDir, "Cargo.toml"), "[package]\nname = 'unterminated\n");
+        string member = Path.Combine(_tempDir, "member");
+        Directory.CreateDirectory(member);
+        File.WriteAllText(Path.Combine(member, "Cargo.toml"), "[package]\nname = 'healthy'\n");
+        ProviderErrors.Clear();
+        var projects = RustProjectDiscovery.Discover(_tempDir, null);
+        Assert.That(projects.Select(p => p.Name), Is.EqualTo(new[] { "healthy" }));
+        var errors = ProviderErrors.Drain();
+        Assert.That(errors, Has.Count.EqualTo(1));
+        Assert.That(errors[0], Does.Contain("failed to read Cargo manifest"));
+        Assert.That(errors[0], Does.Contain("unterminated"));
+    }
+
+    [Test]
+    public void Discover_UnresolvedWorkspaceInheritanceIsDiagnosedNotSilentlyDropped()
+    {
+        File.WriteAllText(Path.Combine(_tempDir, "Cargo.toml"), """
+            [package]
+            name = 'member'
+            [dependencies]
+            absent.workspace = true
+            """);
+        ProviderErrors.Clear();
+        var project = RustProjectDiscovery.Discover(_tempDir, null).Single();
+        Assert.That(project.References, Is.EqualTo(new[] { "absent" }));
+        Assert.That(ProviderErrors.Drain().Single(), Does.Contain("workspace dependency 'absent' could not be resolved"));
+    }
+
+    [Test]
+    public void Discover_SameAliasInDifferentDependencyKinds_DoesNotOverwriteProductionRename()
+    {
+        File.WriteAllText(Path.Combine(_tempDir, "Cargo.toml"), """
+            [package]
+            name = 'member'
+            [dependencies]
+            alias = { package = 'production', version = '1' }
+            [dev-dependencies]
+            alias = { package = 'test-only', version = '1' }
+            [target.'cfg(unix)'.dependencies]
+            alias = { package = 'unix-only', version = '1' }
+            """);
+        var project = RustProjectDiscovery.Discover(_tempDir, null).Single();
+        Assert.That(project.References, Is.EqualTo(new[] { "production", "unix-only" }));
+        Assert.That(project.Packages, Is.EqualTo(new[] { "production", "test-only", "unix-only" }));
     }
 
     // Regression: the common Cargo workspace shorthand `dep.workspace = true`

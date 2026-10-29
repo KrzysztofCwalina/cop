@@ -7,9 +7,9 @@
 export flags Modifier = Public | Private | Protected | Internal | Static | Sealed | Abstract | Virtual | Async | Override | Readonly | Const
 
 # Extensible enums — known values for Kind properties. Providers may return additional values.
-export enum TypeKind = Class | Struct | Interface | Enum
-export enum StatementKind = call | declaration | import | command | attribute | throw | return | using | foreach | try | catch | if | else | while | for | switch | await | directive
-export enum ExpressionKind = identifier | stringLiteral | memberAccess | invocation | other
+export enum TypeKind = Class | Struct | Interface | Enum | Alias
+export enum StatementKind = call | declaration | import | command | attribute | throw | return | using | foreach | try | catch | finally | if | else | while | do | for | switch | await | directive | label | break | continue | localfunction | pipeline | lock | unsafe | fixed | checked | unchecked | yield | goto
+export enum ExpressionKind = identifier | stringLiteral | numericLiteral | booleanLiteral | nullLiteral | arrayLiteral | objectLiteral | memberAccess | invocation | other
 export enum ApiKind = class | struct | interface | enum | enumvalue | ctor | method | property | event | field
 export enum LineKind = code | comment | blank
 export enum Language = csharp | python | javascript | rust | go | java | cop | text
@@ -19,6 +19,12 @@ export enum Language = csharp | python | javascript | rust | go | java | cop | t
 export type Type = {
     Name : string,
     Kind : TypeKind,
+    Namespace : string?,
+    AliasTarget : TypeReference?,
+    TypeParameters : [string],
+    Column : int?,
+    EndLine : int?,
+    EndColumn : int?,
     Modifiers : int,
     BaseTypes : [string],
     Interfaces : [string],
@@ -42,6 +48,11 @@ export type Type = {
 ## Use Statements and their Parent/Children relationships instead of searching Source.
 export type Method = {
     Name : string,
+    ReceiverType : string?,
+    TypeParameters : [string],
+    Column : int?,
+    EndLine : int?,
+    EndColumn : int?,
     Modifiers : int,
     ReturnType : TypeReference?,
     Parameters : [Parameter],
@@ -104,6 +115,10 @@ export type Parameter = {
     Variadic : bool,
     Kwargs : bool,
     Defaulted : bool,
+    Optional : bool,
+    Column : int?,
+    EndLine : int?,
+    EndColumn : int?,
     DefaultValue : string?,
     Line : int
 }
@@ -118,17 +133,24 @@ export type TypeReference = {
 
 ## Parsed statement: Kind, Keywords, TypeName, MemberName, Method, Parent, Children, Ancestors.
 ## Condition, Expression, Arguments, and Source are text, NOT structured expression trees.
-## C# and Cop calls expose CallTarget and ArgumentExpressions as parsed CodeExpression nodes.
+## Parsers can expose CallTarget, ArgumentExpressions, and ValueExpression as parsed CodeExpression nodes.
 ## C# nullable directives have Kind = directive and parsed Keywords (nullable, setting, target).
 ## If these facts cannot express a rule, ask the user before proposing a text-based check.
 export type Statement = {
     Kind : StatementKind,
     Keywords : [string],
     TypeName : string?,
+    ReceiverType : TypeReference?,
+    ValueType : TypeReference?,
+    ReferencedCallable : CallableReference?,
     MemberName : string?,
     Arguments : [string],
     CallTarget : CodeExpression?,
+    ValueExpression : CodeExpression?,
     ArgumentExpressions : [CodeExpression],
+    Column : int?,
+    EndLine : int?,
+    EndColumn : int?,
     Line : int,
     InMethod : bool,
     Rethrows : bool,
@@ -147,7 +169,7 @@ export type Statement = {
     ConstructedTypeInterfaces : [string]
 }
 
-## Parsed expression facts supplied by the C# and Cop parsers. StringValue is the decoded
+## Parsed expression facts supplied by language parsers. StringValue is the decoded
 ## string literal value, not source text. Target is a member receiver or invocation callee;
 ## Children are invocation arguments. Unsupported expression forms have Kind = other.
 export type CodeExpression = {
@@ -156,6 +178,22 @@ export type CodeExpression = {
     StringValue : string?,
     Target : CodeExpression?,
     Children : [CodeExpression]
+}
+
+## A compiler-selected callable declaration; virtual/interface dispatch may call an override at runtime.
+## SourceFile and its one-based, exclusive-end declaration span are absent for metadata-only symbols.
+export type CallableReference = {
+    Name : string,
+    Signature : string,
+    DeclaringType : string?,
+    Namespace : string?,
+    ReturnType : TypeReference?,
+    Parameters : [TypeReference],
+    SourceFile : string?,
+    Line : int?,
+    Column : int?,
+    EndLine : int?,
+    EndColumn : int?
 }
 
 export type Call = Statement & {
@@ -255,6 +293,7 @@ export type File = {
     Language : Language?,
     Namespace : string?,
     Usings : [string],
+    Imports : [Import],
     Types : [Type],
     Methods : [Method]
 }
@@ -264,6 +303,20 @@ export type ProjectProperty = {
     Value : string
 }
 
+## Parsed import facts; these describe syntax, not resolved symbol bindings.
+export type Import = {
+    Module : string,
+    Name : string?,
+    Alias : string?,
+    IsWildcard : bool,
+    IsStatic : bool,
+    RelativeLevel : int,
+    Line : int,
+    Column : int?,
+    EndLine : int?,
+    EndColumn : int?
+}
+
 export type Project = {
     Name : string,
     Path : string,
@@ -271,6 +324,7 @@ export type Project = {
     References : [string],
     Packages : [string],
     Frameworks : [string],
+    SourceFiles : [string]?,
     Properties : [ProjectProperty]
 }
 

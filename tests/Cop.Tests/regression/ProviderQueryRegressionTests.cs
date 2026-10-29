@@ -41,8 +41,6 @@ public class ProviderQueryRegressionTests
     }
 
     [Test]
-    [Explicit("Issue #80: quoted Python return annotations are rejected - remove when fixed")]
-    [Category("PendingFix")]
     public void Issue080_PythonQuotedReturnAnnotationsAreAccepted()
     {
         File.WriteAllText(Path.Combine(_root, "client.py"), """

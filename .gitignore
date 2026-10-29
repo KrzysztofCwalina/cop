@@ -2,6 +2,7 @@
 bin/
 obj/
 publish-linux/
+install/native-bundles/
 
 # Test outputs
 TestResults/

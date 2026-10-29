@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Cop.Core;
 using Cop.Providers.SourceModel;
 
@@ -23,6 +22,8 @@ public sealed class DockerfileProvider : DataProvider
                 TypeDef("DockerInstruction", null,
                     Prop("Instruction"), Prop("Argument"),
                     Prop("Line", "int"), Prop("Stage", "int"),
+                    Prop("IsJsonForm", "bool"), new() { Name = "Arguments", Type = "string", Collection = true },
+                    Opt("From"), Prop("ReferencedStage", "int"),
                     Opt("File", "File"), Prop("Source")),
 
                 TypeDef("DockerStage", null,
@@ -65,46 +66,38 @@ public sealed class DockerfileProvider : DataProvider
 
     public override object? Query(ProviderQuery query)
     {
-        if (query.RootPath is null)
-            return new Dictionary<string, List<object>>();
+        var result = (DeferredProviderResult)QueryDeferred(query);
+        return result.Collections.ToDictionary(c => c.Key, c => c.Value.ToList(), StringComparer.Ordinal);
+    }
 
-        var rootPath = query.RootPath;
-        var excluded = query.ExcludedDirectories;
+    private readonly Dictionary<string, DeferredFormatSnapshot> _snapshots = new(StringComparer.Ordinal);
 
-        var filePaths = new List<string>();
-        CollectDockerfiles(rootPath, excluded, filePaths);
-
-        var parsed = new ConcurrentBag<(SourceFile File, DockerfileParser.DockerfileParseResult Doc)>();
-        Parallel.ForEach(filePaths,
-            new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
-            filePath =>
-            {
-                try
-                {
-                    var text = File.ReadAllText(filePath);
-                    var relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
-                    var sourceFile = new SourceFile(relativePath, "dockerfile", [], [], text);
-                    var doc = DockerfileParser.Parse(text);
-                    parsed.Add((sourceFile, doc));
-                }
-                catch { }
-            });
-
-        var sorted = parsed.OrderBy(p => p.File.Path, StringComparer.Ordinal).ToList();
-
-        var instructions = new List<object>();
-        var stages = new List<object>();
-        foreach (var (file, doc) in sorted)
+    public override object QueryDeferred(ProviderQuery query)
+    {
+        if (query.RootPath is null) return new DeferredProviderResult(new Dictionary<string, IEnumerable<object>>());
+        var key = DeferredFormatSnapshot.Key(query);
+        var root = Path.GetFullPath(query.RootPath);
+        if (!_snapshots.TryGetValue(key, out var snapshot))
         {
-            instructions.AddRange(doc.Instructions.Select(i => (object)(i with { File = file })));
-            stages.AddRange(doc.Stages.Select(s => (object)(s with { File = file })));
+            snapshot = new(() =>
+            {
+                var paths = new List<string>();
+                CollectDockerfiles(root, query.ExcludedDirectories, paths);
+                return paths;
+            }, path =>
+            {
+                var text = File.ReadAllText(path);
+                var file = new SourceFile(Path.GetRelativePath(root, path).Replace('\\', '/'), "dockerfile", [], [], text);
+                var doc = DockerfileParser.Parse(text);
+                return new()
+                {
+                    ["Instructions"] = doc.Instructions.Select(i => (object)(i with { File = file })).ToList(),
+                    ["Stages"] = doc.Stages.Select(s => (object)(s with { File = file })).ToList()
+                };
+            });
+            _snapshots.Add(key, snapshot);
         }
-
-        var collections = new Dictionary<string, List<object>>(StringComparer.Ordinal);
-        var requested = query.Collection;
-        if (requested is null || requested == "Instructions") collections["Instructions"] = instructions;
-        if (requested is null || requested == "Stages") collections["Stages"] = stages;
-        return ApplyQueryFilters(query, collections);
+        return snapshot.Query(query, _schema, GetRuntimeBindings());
     }
 
     private static void CollectDockerfiles(string dir, IReadOnlySet<string>? excluded, List<string> result)
@@ -118,13 +111,16 @@ public sealed class DockerfileProvider : DataProvider
             }
             foreach (var subDir in Directory.GetDirectories(dir))
             {
+                if ((File.GetAttributes(subDir) & FileAttributes.ReparsePoint) != 0) continue;
                 var dirName = Path.GetFileName(subDir);
                 if (excluded is not null && excluded.Contains(dirName)) continue;
                 CollectDockerfiles(subDir, excluded, result);
             }
         }
-        catch (UnauthorizedAccessException) { }
-        catch (IOException) { }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            ProviderErrors.Report($"Failed to scan '{dir}': {ex.Message}");
+        }
     }
 
     private static bool IsDockerfile(string file)
@@ -145,6 +141,10 @@ public sealed class DockerfileProvider : DataProvider
                 ["Argument"] = o => ((DockerInstructionInfo)o).Argument,
                 ["Line"] = o => (object)((DockerInstructionInfo)o).Line,
                 ["Stage"] = o => (object)((DockerInstructionInfo)o).Stage,
+                ["IsJsonForm"] = o => ((DockerInstructionInfo)o).IsJsonForm,
+                ["Arguments"] = o => ((DockerInstructionInfo)o).Arguments,
+                ["From"] = o => ((DockerInstructionInfo)o).From,
+                ["ReferencedStage"] = o => ((DockerInstructionInfo)o).ReferencedStage,
                 ["File"] = o => ((DockerInstructionInfo)o).File,
                 ["Source"] = o => ((DockerInstructionInfo)o).Source,
             },

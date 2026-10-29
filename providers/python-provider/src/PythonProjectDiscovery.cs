@@ -1,333 +1,175 @@
+using System.Text.Json;
+using Cop.Core;
 using Cop.Providers.SourceModel;
+using Cop.Providers.SourceParsers;
 
 namespace Cop.Providers;
 
-/// <summary>
-/// Discovers Python projects by scanning for pyproject.toml and setup.py files,
-/// extracting project name and dependencies.
-/// </summary>
+/// <summary>Reads Python project metadata without executing setup scripts or importing packages.</summary>
 public static class PythonProjectDiscovery
 {
-    /// <summary>
-    /// Discovers Python projects under rootPath by finding pyproject.toml files.
-    /// </summary>
-    public static List<ProjectInfo> Discover(string rootPath, IReadOnlySet<string>? excludedDirs)
+    public static List<ProjectInfo> Discover(string rootPath, IReadOnlySet<string>? excludedDirs, bool useToolchain = true)
     {
-        var manifestPaths = new List<string>();
-        CollectManifests(rootPath, excludedDirs, manifestPaths);
-
+        var toolchain = new PythonToolchain(useToolchain);
         var result = new List<ProjectInfo>();
-        foreach (var manifestPath in manifestPaths)
+        foreach (var manifest in CollectManifests(rootPath, excludedDirs))
         {
-            var info = ParseManifest(manifestPath, rootPath);
-            if (info is not null)
-                result.Add(info);
+            try
+            {
+                var source = File.ReadAllText(manifest);
+                var relative = Path.GetRelativePath(rootPath, manifest).Replace('\\', '/');
+                var toml = Path.GetFileName(manifest) == "pyproject.toml";
+                using var document = toolchain.Analyze(manifest, source, toml ? "toml" : "setup");
+                ProjectInfo? project;
+                if (document is null) project = ParseSimple(source, relative, toml);
+                else
+                {
+                    var data = document.RootElement;
+                    if (data.TryGetProperty("unsupported", out var unsupported))
+                    {
+                        ProviderWarnings.ReportOnce("python", "metadata", $"{unsupported.GetString()}. Using simpler Python project metadata analysis.");
+                        project = ParseSimple(source, relative, toml);
+                    }
+                    else if (data.TryGetProperty("error", out var error))
+                    {
+                        ProviderErrors.Report($"{manifest}({data.GetProperty("line")},1): error: {error.GetString()}");
+                        continue;
+                    }
+                    else
+                    {
+                        if (data.TryGetProperty("unresolved", out var unresolved) && unresolved.GetArrayLength() > 0)
+                            ProviderWarnings.ReportOnce("python", manifest,
+                                $"Python project '{manifest}' has dynamic metadata ({string.Join(", ", unresolved.EnumerateArray().Select(v => v.GetString()))}); these values are unknown and are not executed.");
+                        var name = data.GetProperty("name");
+                        var dependencies = data.GetProperty("dependencies").EnumerateArray()
+                            .Where(d => d.ValueKind == JsonValueKind.String).Select(d => NormalizeDependency(d.GetString()!))
+                            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                        project = name.ValueKind == JsonValueKind.String
+                            ? new(name.GetString()!, relative, "python", dependencies, dependencies, []) : null;
+                    }
+                }
+                if (project is not null) result.Add(project);
+                else ProviderWarnings.ReportOnce("python", manifest,
+                    $"Python project '{manifest}' has no statically readable project name; dynamic setup metadata is not executed.");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or JsonException)
+            {
+                ProviderErrors.Report($"Cannot analyze Python project '{manifest}': {ex.Message}");
+            }
         }
         return result;
     }
 
-    private static ProjectInfo? ParseManifest(string manifestPath, string rootPath)
+    private static ProjectInfo? ParseSimple(string source, string path, bool toml)
     {
-        var fileName = Path.GetFileName(manifestPath);
-        var relativePath = Path.GetRelativePath(rootPath, manifestPath).Replace('\\', '/');
-
-        if (fileName == "pyproject.toml")
-            return ParsePyprojectToml(manifestPath, relativePath);
-        if (fileName == "setup.py")
-            return ParseSetupPy(manifestPath, relativePath);
-
-        return null;
-    }
-
-    private static ProjectInfo? ParsePyprojectToml(string filePath, string relativePath)
-    {
-        try
+        string? name = null;
+        var dependencies = new List<string>();
+        if (toml)
         {
-            var lines = File.ReadAllLines(filePath);
-            string? name = null;
-            var dependencies = new List<string>();
-            bool inProject = false;
-            bool inDependencies = false;
-
-            foreach (var line in lines)
+            var inProject = false;
+            var optional = false;
+            var collecting = false;
+            foreach (var raw in source.Split('\n'))
             {
-                var trimmed = line.Trim();
-
-                // Track sections
-                if (trimmed.StartsWith("["))
+                var line = StripComment(raw).Trim();
+                if (collecting)
                 {
-                    inProject = trimmed == "[project]";
-                    inDependencies = trimmed == "[project]" && inDependencies
-                        || trimmed == "[project.dependencies]";
-                    if (trimmed != "[project]" && trimmed != "[project.dependencies]")
-                    {
-                        inProject = false;
-                        inDependencies = false;
-                    }
+                    dependencies.AddRange(QuotedValues(line).Select(NormalizeDependency));
+                    if (line.EndsWith(']')) collecting = false;
                     continue;
                 }
-
-                if (inProject)
+                if (line.StartsWith('['))
                 {
-                    // name = "mypackage"
-                    var parsedName = ParsePyprojectName(trimmed);
-                    if (parsedName is not null)
-                        name = parsedName;
-
-                    // dependencies = ["dep1", "dep2>=1.0"]
-                    if (trimmed.StartsWith("dependencies"))
-                    {
-                        inDependencies = true;
-                        var inlineDependencies = ParseInlineDependencies(trimmed);
-                        if (inlineDependencies is not null)
-                        {
-                            ParseDependencyList(inlineDependencies, dependencies);
-                            inDependencies = false;
-                        }
-                    }
-                    else if (inDependencies)
-                    {
-                        if (trimmed == "]")
-                        {
-                            inDependencies = false;
-                        }
-                        else
-                        {
-                            var dependency = ParseDoubleQuotedValue(trimmed);
-                            if (dependency is not null)
-                                dependencies.Add(NormalizePythonDep(dependency));
-                        }
-                    }
+                    inProject = line == "[project]";
+                    optional = line == "[project.optional-dependencies]";
+                    collecting = false;
+                    continue;
+                }
+                var equal = line.IndexOf('=');
+                var key = equal >= 0 ? line[..equal].Trim() : "";
+                var value = equal >= 0 ? line[(equal + 1)..].Trim() : line;
+                if (inProject && key == "name") name = QuotedValues(value).FirstOrDefault();
+                if ((inProject && key == "dependencies") || (optional && equal >= 0))
+                    collecting = true;
+                if (collecting)
+                {
+                    dependencies.AddRange(QuotedValues(value).Select(NormalizeDependency));
+                    if (value.EndsWith(']')) collecting = false;
                 }
             }
-
-            if (name is null)
-                return null;
-
-            return new ProjectInfo(name, relativePath, "python", dependencies, dependencies, []);
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
+        else
         {
-            return null;
+            // The no-interpreter path deliberately accepts literal setup keyword values only.
+            var tokens = new PythonLexer(source, path).Tokenize();
+            for (var i = 0; i + 2 < tokens.Count; i++)
+            {
+                if (tokens[i + 1].Kind != TK.Eq) continue;
+                if (tokens[i].Is("name") && tokens[i + 2].Kind == TK.Str)
+                    name = tokens[i + 2].Text.Trim('\'', '"');
+                if (!tokens[i].Is("install_requires") || tokens[i + 2].Kind != TK.LBrack) continue;
+                for (var j = i + 3; j < tokens.Count && tokens[j].Kind != TK.RBrack; j++)
+                    if (tokens[j].Kind == TK.Str) dependencies.Add(NormalizeDependency(tokens[j].Text.Trim('\'', '"')));
+            }
+        }
+        dependencies = dependencies.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        return name is null ? null : new(name, path, "python", dependencies, dependencies, []);
+    }
+
+    private static string StripComment(string text)
+    {
+        char quote = '\0';
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (text[i] == '\\' && quote == '"') { i++; continue; }
+            if (quote != '\0') { if (text[i] == quote) quote = '\0'; }
+            else if (text[i] is '\'' or '"') quote = text[i];
+            else if (text[i] == '#') return text[..i];
+        }
+        return text;
+    }
+
+    private static IEnumerable<string> QuotedValues(string text)
+    {
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (text[i] is not ('\'' or '"')) continue;
+            var quote = text[i];
+            var start = ++i;
+            while (i < text.Length && text[i] != quote) i++;
+            if (i < text.Length) yield return text[start..i];
         }
     }
 
-    private static ProjectInfo? ParseSetupPy(string filePath, string relativePath)
+    private static string NormalizeDependency(string dependency)
     {
-        try
-        {
-            var content = File.ReadAllText(filePath);
-            var name = ParseSetupName(content);
-            if (name is null)
-                return null;
-
-            var dependencies = new List<string>();
-
-            var installRequires = ParseInstallRequires(content);
-            if (installRequires is not null)
-                ParseDependencyList(installRequires, dependencies);
-
-            return new ProjectInfo(name, relativePath, "python", dependencies, dependencies, []);
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            return null;
-        }
-    }
-
-    private static void ParseDependencyList(string text, List<string> dependencies)
-    {
-        foreach (var dependency in ParseQuotedValues(text))
-            dependencies.Add(NormalizePythonDep(dependency));
-    }
-
-    /// <summary>
-    /// Strips version specifiers from a dependency string (e.g., "requests>=2.0" → "requests").
-    /// </summary>
-    private static string NormalizePythonDep(string dep)
-    {
+        dependency = dependency.TrimStart();
         var length = 0;
-        while (length < dep.Length && IsDependencyNameChar(dep[length]))
+        while (length < dependency.Length && (char.IsAsciiLetterOrDigit(dependency[length]) || dependency[length] is '_' or '-' or '.'))
             length++;
-        return length > 0 ? dep[..length] : dep;
+        return length > 0 ? dependency[..length] : dependency;
     }
 
-    private static string? ParsePyprojectName(string text)
+    private static IEnumerable<string> CollectManifests(string directory, IReadOnlySet<string>? excluded)
     {
-        var index = "name".Length;
-        if (!text.StartsWith("name", StringComparison.Ordinal))
-            return null;
-
-        index = SkipWhitespace(text, index);
-        if (index >= text.Length || text[index] != '=')
-            return null;
-        index++;
-        index = SkipWhitespace(text, index);
-        if (index >= text.Length || text[index] != '"')
-            return null;
-
-        return ReadUntilQuote(text, index + 1, '"', allowEitherQuote: false);
-    }
-
-    private static string? ParseInlineDependencies(string text)
-    {
-        var index = text.IndexOf("dependencies", StringComparison.Ordinal);
-        if (index < 0)
-            return null;
-
-        index += "dependencies".Length;
-        index = SkipWhitespace(text, index);
-        if (index >= text.Length || text[index] != '=')
-            return null;
-        index++;
-        index = SkipWhitespace(text, index);
-        if (index >= text.Length || text[index] != '[')
-            return null;
-
-        var end = text.LastIndexOf(']');
-        if (end <= index + 1)
-            return null;
-
-        return text[(index + 1)..end];
-    }
-
-    private static string? ParseDoubleQuotedValue(string text)
-    {
-        var start = text.IndexOf('"');
-        if (start < 0)
-            return null;
-        return ReadUntilQuote(text, start + 1, '"', allowEitherQuote: false);
-    }
-
-    private static string? ParseSetupName(string text)
-    {
-        var searchIndex = 0;
-        while (searchIndex < text.Length)
-        {
-            var index = text.IndexOf("name", searchIndex, StringComparison.Ordinal);
-            if (index < 0)
-                return null;
-
-            var valueStart = index + "name".Length;
-            valueStart = SkipWhitespace(text, valueStart);
-            if (valueStart < text.Length && text[valueStart] == '=')
-            {
-                valueStart++;
-                valueStart = SkipWhitespace(text, valueStart);
-                if (valueStart < text.Length && IsQuote(text[valueStart]))
-                {
-                    var value = ReadUntilQuote(text, valueStart + 1, text[valueStart], allowEitherQuote: true);
-                    if (value is not null)
-                        return value;
-                }
-            }
-
-            searchIndex = index + 1;
-        }
-
-        return null;
-    }
-
-    private static string? ParseInstallRequires(string text)
-    {
-        var index = text.IndexOf("install_requires", StringComparison.Ordinal);
-        if (index < 0)
-            return null;
-
-        index += "install_requires".Length;
-        index = SkipWhitespace(text, index);
-        if (index >= text.Length || text[index] != '=')
-            return null;
-        index++;
-        index = SkipWhitespace(text, index);
-        if (index >= text.Length || text[index] != '[')
-            return null;
-
-        var start = index + 1;
-        var end = text.IndexOf(']', start);
-        return end >= 0 ? text[start..end] : null;
-    }
-
-    private static IEnumerable<string> ParseQuotedValues(string text)
-    {
-        var index = 0;
-        while (index < text.Length)
-        {
-            if (!IsQuote(text[index]))
-            {
-                index++;
-                continue;
-            }
-
-            var start = index + 1;
-            var end = start;
-            while (end < text.Length && !IsQuote(text[end]))
-                end++;
-
-            if (end < text.Length && end > start)
-            {
-                yield return text[start..end];
-                index = end + 1;
-            }
-            else
-            {
-                index++;
-            }
-        }
-    }
-
-    private static string? ReadUntilQuote(string text, int start, char quote, bool allowEitherQuote)
-    {
-        var end = start;
-        while (end < text.Length && (allowEitherQuote ? !IsQuote(text[end]) : text[end] != quote))
-            end++;
-
-        return end < text.Length && end > start ? text[start..end] : null;
-    }
-
-    private static int SkipWhitespace(string text, int index)
-    {
-        while (index < text.Length && char.IsWhiteSpace(text[index]))
-            index++;
-        return index;
-    }
-
-    private static bool IsQuote(char ch) => ch is '\'' or '"';
-
-    private static bool IsDependencyNameChar(char ch) =>
-        ch is >= 'a' and <= 'z'
-            or >= 'A' and <= 'Z'
-            or >= '0' and <= '9'
-            or '_'
-            or '-'
-            or '.';
-
-    private static void CollectManifests(string dir, IReadOnlySet<string>? excluded, List<string> result)
-    {
+        var result = new List<string>();
         try
         {
-            var pyproject = Path.Combine(dir, "pyproject.toml");
-            if (File.Exists(pyproject))
+            var pyproject = Path.Combine(directory, "pyproject.toml");
+            var setup = Path.Combine(directory, "setup.py");
+            if (File.Exists(pyproject)) result.Add(pyproject);
+            else if (File.Exists(setup)) result.Add(setup);
+            foreach (var child in Directory.EnumerateDirectories(directory).Order(StringComparer.Ordinal))
             {
-                result.Add(pyproject);
-                return; // Don't recurse into sub-packages of a project
-            }
-
-            var setupPy = Path.Combine(dir, "setup.py");
-            if (File.Exists(setupPy))
-            {
-                result.Add(setupPy);
-                return;
-            }
-
-            foreach (var subDir in Directory.GetDirectories(dir))
-            {
-                var dirName = Path.GetFileName(subDir);
-                if (excluded is not null && excluded.Contains(dirName)) continue;
-                CollectManifests(subDir, excluded, result);
+                if (excluded?.Contains(Path.GetFileName(child)) == true) continue;
+                if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) != 0) continue;
+                result.AddRange(CollectManifests(child, excluded));
             }
         }
-        catch (UnauthorizedAccessException) { }
-        catch (IOException) { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ProviderErrors.Report($"Cannot discover Python projects in '{directory}': {ex.Message}");
+        }
+        return result;
     }
 }

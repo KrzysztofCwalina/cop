@@ -47,6 +47,12 @@ public sealed class JavaScriptStatementInfo : StatementInfo
             CopIgnore = baseDecl.CopIgnore,
             Condition = baseDecl.Condition,
             Expression = baseDecl.Expression,
+            CallTarget = baseDecl.CallTarget,
+            ArgumentExpressions = baseDecl.ArgumentExpressions,
+            ValueExpression = baseDecl.ValueExpression,
+            Column = baseDecl.Column,
+            EndLine = baseDecl.EndLine,
+            EndColumn = baseDecl.EndColumn,
             _children = baseDecl._children,
             ConstructedTypeInterfaces = baseDecl.ConstructedTypeInterfaces,
         });

@@ -2,17 +2,21 @@ using Cop.Providers.SourceModel;
 
 namespace Cop.Providers.SourceParsers;
 
-public class JavaSourceParser : ISourceParser
+public class JavaSourceParser(string? toolchainSearchPath = null, Func<string, Cop.Core.ToolchainResult>? nativeRequest = null) : ISourceParser
 {
+    public JavaSourceParser() : this(null, null) { }
     public override IReadOnlyList<string> Extensions => [".java"];
     public override string Language => "java";
+    public override bool CanCache(string filePath) => false;
+    public override string GetCacheIdentity(string filePath) =>
+        base.GetCacheIdentity(filePath) + ":" + JavaNativeAnalysis.Identity(toolchainSearchPath, nativeRequest is not null);
 
     public override SourceFile? Parse(string filePath, string sourceText)
     {
         var lexer = new JavaLexer(sourceText);
         var tokens = lexer.Tokenize();
         var parser = new JavaParser(tokens, lexer.Errors, sourceText);
-        return parser.Parse(filePath);
+        return JavaNativeAnalysis.Enrich(parser.Parse(filePath), toolchainSearchPath, nativeRequest);
     }
 }
 
@@ -46,7 +50,7 @@ internal class JavaLexer(string source)
         "while", "yield", "permits", "non-sealed"
     ];
 
-    public List<JavaToken> Tokenize()
+    public List<JavaToken> Tokenize(bool singleQuotedStrings = false)
     {
         var tokens = new List<JavaToken>();
         while (_pos < source.Length)
@@ -88,7 +92,7 @@ internal class JavaLexer(string source)
             // Char literal
             if (c == '\'')
             {
-                tokens.Add(ReadChar());
+                tokens.Add(singleQuotedStrings ? ReadString('\'') : ReadChar());
                 continue;
             }
 
@@ -159,12 +163,21 @@ internal class JavaLexer(string source)
         _pos++; // skip @
         while (_pos < source.Length && (char.IsLetterOrDigit(source[_pos]) || source[_pos] is '_' or '.'))
             _pos++;
-        // Include parenthesized arguments
-        if (_pos < source.Length && source[_pos] == '(')
+        if (source[start.._pos] == "@interface")
+            return new JavaToken(JavaTokenKind.Keyword, "interface", line, start, _pos);
+        int arguments = _pos;
+        while (arguments < source.Length && char.IsWhiteSpace(source[arguments])) arguments++;
+        if (arguments < source.Length && source[arguments] == '(')
         {
+            while (_pos < arguments) { if (source[_pos] == '\n') _line++; _pos++; }
             int depth = 0;
             while (_pos < source.Length)
             {
+                if (source[_pos] is '"' or '\'') { ReadString(source[_pos]); continue; }
+                if (_pos + 1 < source.Length && source[_pos] == '/' && source[_pos + 1] == '*')
+                { ReadBlockComment(); continue; }
+                if (_pos + 1 < source.Length && source[_pos] == '/' && source[_pos + 1] == '/')
+                { ReadLineComment(); continue; }
                 if (source[_pos] == '(') depth++;
                 else if (source[_pos] == ')') { depth--; if (depth == 0) { _pos++; break; } }
                 else if (source[_pos] == '\n') _line++;
@@ -174,12 +187,12 @@ internal class JavaLexer(string source)
         return new JavaToken(JavaTokenKind.Annotation, source[start.._pos], line, start, _pos);
     }
 
-    private JavaToken ReadString()
+    private JavaToken ReadString(char quote = '"')
     {
         int start = _pos;
         int line = _line;
         // Text block """..."""
-        if (_pos + 2 < source.Length && source[_pos + 1] == '"' && source[_pos + 2] == '"')
+        if (quote == '"' && _pos + 2 < source.Length && source[_pos + 1] == '"' && source[_pos + 2] == '"')
         {
             _pos += 3;
             bool closed = false;
@@ -203,7 +216,7 @@ internal class JavaLexer(string source)
         {
             char ch = source[_pos];
             if (ch == '\\') { _pos++; if (_pos < source.Length) _pos++; continue; }
-            if (ch == '"') { _pos++; stringClosed = true; break; }
+            if (ch == quote) { _pos++; stringClosed = true; break; }
             if (ch == '\n') break; // unterminated on newline
             _pos++;
         }
@@ -307,6 +320,7 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
         var types = new List<TypeDeclaration>();
         var statements = new List<StatementInfo>();
         var usings = new List<string>();
+        var imports = new List<ImportInfo>();
         string? ns = null;
 
         while (!IsAtEnd())
@@ -321,8 +335,11 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
             }
             else if (MatchKeyword("import"))
             {
-                if (MatchKeyword("static")) { }
-                usings.Add(ConsumeQualifiedName());
+                bool isStatic = MatchKeyword("static");
+                int importLine = CurrentLine();
+                string module = ConsumeQualifiedName();
+                usings.Add(module);
+                imports.Add(new ImportInfo(module, importLine) { IsStatic = isStatic, IsWildcard = module.EndsWith(".*") });
                 if (Check(";")) Advance();
             }
             else if (IsTypeStart())
@@ -345,6 +362,7 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
         {
             Namespace = ns,
             Usings = usings,
+            Imports = imports,
             Regions = [],
             CommentLines = ExtractCommentLines(),
             ParseErrors = [.. _parseErrors]
@@ -379,15 +397,15 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
         else if (MatchKeyword("record")) kind = TypeKind.Struct; // records as struct
         else return null;
 
+        int line = CurrentLine();
         string name = ConsumeIdentifier();
         if (name == "")
         {
             AddError(CurrentLine(), 1, "Expected type name");
             return null;
         }
-        int line = CurrentLine();
         bool isGeneric = Check("<");
-        SkipGenerics(); // type parameters
+        var typeParameters = ParseTypeParameters();
 
         // Record components
         var fields = new List<FieldDeclaration>();
@@ -400,15 +418,18 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
         var baseTypes = new List<string>();
         if (MatchKeyword("extends"))
         {
-            baseTypes.Add(ConsumeQualifiedName());
-            SkipGenerics();
-            while (Check(",")) { Advance(); baseTypes.Add(ConsumeQualifiedName()); SkipGenerics(); }
+            baseTypes.Add(ConsumeTypeName());
+            while (Check(",")) { Advance(); baseTypes.Add(ConsumeTypeName()); }
         }
-        if (MatchKeyword("implements") || MatchKeyword("permits"))
+        if (MatchKeyword("implements"))
         {
-            baseTypes.Add(ConsumeQualifiedName());
-            SkipGenerics();
-            while (Check(",")) { Advance(); baseTypes.Add(ConsumeQualifiedName()); SkipGenerics(); }
+            baseTypes.Add(ConsumeTypeName());
+            while (Check(",")) { Advance(); baseTypes.Add(ConsumeTypeName()); }
+        }
+        if (MatchKeyword("permits"))
+        {
+            ConsumeTypeName();
+            while (Check(",")) { Advance(); ConsumeTypeName(); }
         }
 
         // Body
@@ -431,8 +452,6 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
                 int g = _pos;
                 SkipComments();
                 if (Check("}")) break;
-                SkipAnnotations();
-
                 if (IsTypeStart())
                 {
                     var nested = ParseType(allStatements);
@@ -455,7 +474,7 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
         }
 
         return new TypeDeclaration(name, kind, modifiers, baseTypes, annotations, constructors, methods, nestedTypes, enumValues, line)
-        { HasDocComment = hasDoc, Fields = fields }
+        { HasDocComment = hasDoc, Fields = fields, TypeParameters = typeParameters }
             .AsJava(
                 isRecord: kind == TypeKind.Struct,
                 isEnum: kind == TypeKind.Enum,
@@ -510,6 +529,7 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
     private MethodDeclaration? ParseMember(string typeName, List<StatementInfo> allStatements, List<FieldDeclaration> fields)
     {
         SkipComments();
+        int memberLine = CurrentLine();
         bool hasDoc = HasPrecedingDocComment();
         var annotations = CollectAnnotations();
         var modifiers = ParseModifiers(
@@ -521,7 +541,7 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
 
         // Skip type parameters on methods
         bool isGeneric = Check("<");
-        SkipGenerics();
+        var typeParameters = ParseTypeParameters();
         SkipComments();
 
         if (IsAtEnd() || Check("}")) return null;
@@ -548,19 +568,21 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
             var body = new List<StatementInfo>();
             if (Check("{")) ParseBlock(body);
             allStatements.AddRange(body);
-            return new JavaMethodDeclaration(
+            var constructor = new JavaMethodDeclaration(
                 "<init>",
                 modifiers,
                 annotations,
                 null,
                 parameters,
-                CurrentLine(),
+                memberLine,
                 isSynchronized,
                 isNative,
                 isDefault,
                 isStrictfp,
                 isGeneric)
-            { Statements = body, HasDocComment = hasDoc };
+            { Statements = body, HasDocComment = hasDoc, TypeParameters = typeParameters };
+            foreach (var statement in body) statement.Method = constructor;
+            return constructor;
         }
 
         // Could be a field or method
@@ -587,30 +609,44 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
             if (Check("{")) ParseBlock(body);
             else if (Check(";")) Advance();
             allStatements.AddRange(body);
-            return new JavaMethodDeclaration(
+            var method = new JavaMethodDeclaration(
                 memberName,
                 modifiers,
                 annotations,
                 returnType,
                 parameters,
-                CurrentLine(),
+                memberLine,
                 isSynchronized,
                 isNative,
                 isDefault,
                 isStrictfp,
                 isGeneric)
-            { Statements = body, HasDocComment = hasDoc };
+            { Statements = body, HasDocComment = hasDoc, TypeParameters = typeParameters };
+            foreach (var statement in body) statement.Method = method;
+            return method;
         }
 
         // Field
-        int fieldLine = CurrentLine();
+        int fieldLine = memberLine;
         fields.Add(new FieldDeclaration(memberName, new TypeReference(firstType, null, [], firstType), modifiers, fieldLine));
+        int initializerStart = _pos;
         // Skip to ;
         while (!IsAtEnd() && !Check(";") && !Check("}"))
         {
-            if (Check("{")) SkipBraces(); // array initializer
+            if (Check(",") && Peek().Kind == JavaTokenKind.Identifier)
+            {
+                Advance();
+                int nextLine = CurrentLine();
+                fields.Add(new FieldDeclaration(ConsumeIdentifier(), new TypeReference(firstType, null, [], firstType), modifiers, nextLine));
+                continue;
+            }
+            if (Check("(")) SkipParens();
+            else if (Check("{")) SkipBraces(); // array initializer
             else Advance();
         }
+        var initializerStatements = new List<StatementInfo>();
+        JavaStructuralFacts.Enrich(tokens, initializerStart, _pos, initializerStatements, inMethod: false);
+        allStatements.AddRange(initializerStatements);
         if (Check(";")) Advance();
         return null;
     }
@@ -626,6 +662,7 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
             SkipComments();
             SkipAnnotations();
             if (Check(")")) break;
+            int parameterLine = CurrentLine();
             if (MatchKeyword("final")) { }
             string paramType = ConsumeTypeName();
             SkipGenerics();
@@ -634,7 +671,7 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
             if (Check("...")) { Advance(); isVariadic = true; }
             string paramName = ConsumeIdentifier();
             if (paramName != "")
-                parameters.Add(new ParameterDeclaration(paramName, new TypeReference(paramType, null, [], paramType), isVariadic, false, false, 0));
+                parameters.Add(new ParameterDeclaration(paramName, new TypeReference(paramType, null, [], paramType), isVariadic, false, false, parameterLine));
             if (Check(",")) Advance();
             Guard(g, "parameters");
         }
@@ -645,6 +682,7 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
     private void ParseBlock(List<StatementInfo> statements)
     {
         if (!Check("{")) return;
+        int blockStart = _pos;
         Advance();
         int depth = 1;
         while (!IsAtEnd() && depth > 0)
@@ -783,6 +821,7 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
 
             Advance();
         }
+        JavaStructuralFacts.Enrich(tokens, blockStart + 1, _pos, statements);
     }
 
     private Modifier ParseModifiers(out bool isSealed, out bool isNonSealed, out bool isFinal)
@@ -851,7 +890,7 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
             string v = Current().Value;
             if (v.StartsWith('@')) v = v[1..];
             int paren = v.IndexOf('(');
-            if (paren > 0) v = v[..paren];
+            if (paren > 0) v = v[..paren].TrimEnd();
             list.Add(v);
             Advance();
         }
@@ -929,7 +968,12 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
                 break;
             parts.Add(Current().Value);
             Advance();
-            SkipGenerics();
+            if (Check("<"))
+            {
+                int start = _pos;
+                SkipGenerics();
+                parts.Add(string.Join("", tokens[start.._pos].Select(t => t.Value)));
+            }
             if (Check(".") && Peek().Kind is JavaTokenKind.Identifier or JavaTokenKind.Keyword)
             { parts.Add("."); Advance(); }
             else break;
@@ -947,8 +991,18 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
             if (Check("<")) { depth++; Advance(); }
             else if (Check(">")) { depth--; Advance(); if (depth == 0) break; }
             else if (Check(">>")) { depth -= 2; Advance(); if (depth <= 0) break; }
+            else if (Check(">>>")) { depth -= 3; Advance(); if (depth <= 0) break; }
             else Advance();
         }
+
+    }
+
+    private List<string> ParseTypeParameters()
+    {
+        int start = _pos;
+        SkipGenerics();
+        if (_pos == start) return [];
+        return [string.Join(" ", tokens[(start + 1)..(_pos - 1)].Select(t => t.Value))];
     }
 
     private void SkipParens()
@@ -1033,7 +1087,8 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
         var lines = new HashSet<int>();
         foreach (var t in tokens)
             if (t.Kind is JavaTokenKind.LineComment or JavaTokenKind.BlockComment or JavaTokenKind.DocComment)
-                lines.Add(t.Line);
+                for (int line = t.Line; line <= t.Line + t.Value.Count(c => c == '\n'); line++)
+                    lines.Add(line);
         return lines;
     }
 

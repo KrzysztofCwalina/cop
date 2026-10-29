@@ -16,6 +16,7 @@ public record SourceFile(
     public List<string> Lines => _lines ??= RawText.Split('\n').Select(l => l.TrimEnd('\r')).ToList();
 
     public List<string> Usings { get; init; } = [];
+    public List<ImportInfo> Imports { get; init; } = [];
 
     /// <summary>Top-level functions, including declarations outside a type.</summary>
     public List<MethodDeclaration> Methods { get; init; } = [];
@@ -64,7 +65,11 @@ public record SourceFile(
             foreach (var nested in type.NestedTypes) Attach(nested);
         }
         foreach (var type in Types) Attach(type);
-        foreach (var statement in Statements) statement.DeferredSemantics = semantics;
+        foreach (var statement in Statements)
+        {
+            statement.DeferredSemantics = semantics;
+            statement.DeferSemanticAnalysis(semantics);
+        }
     }
 
     public void DeferTypeNameAnalysis(Action analyze)

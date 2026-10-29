@@ -35,9 +35,15 @@ command list, including `cop update [--force]`, even when combined with
 
 | Code | Meaning |
 |------|---------|
-| `0` | Clean run — no output, no violations, all tests passed |
-| `1` | Output produced — violations found, tests failed, or items printed |
-| `2` | Fatal error — parse error, missing file, or invalid arguments |
+| `0` | Successful run or report; no violations or failed tests |
+| `1` | Violations, failed tests, or an incomplete source-analysis model |
+| `2` | Fatal error — program parse/runtime error, missing file, or invalid arguments |
+
+Optional language-toolchain fallback notices are warnings on stderr, yellow in a
+terminal and plain when redirected or `--no-color` is set. They do not by themselves
+fail a run. A provider's source syntax or analysis failure is different: its diagnostic
+is shown and the run exits nonzero, even if a check returned zero violations. An empty
+or partial model must not masquerade as a clean analysis.
 
 Use exit codes in CI pipelines:
 
@@ -71,6 +77,12 @@ cop <file.cop> [-t <target>] [-c <commands>] [-f text|json] [-d] [-cql]
 4. Otherwise → treat as a package name, auto-restore from feed, and run
 
 A bare `cop <program>` (without `run`) only resolves steps 1–3. If none match, cop prints an `Unknown command` error rather than attempting a package restore — use `cop run <program>` to run a package.
+
+For local scripts, declared local `feed` paths are checked before attempting a
+remote restore, including on a machine with an empty package cache. Relative feeds
+resolve from the declaring file's directory. The same decoded paths are used for
+execution, verification, and imported package instructions; a locally available
+import does not need a GitHub token or network access.
 
 ### Change-focused reviews
 

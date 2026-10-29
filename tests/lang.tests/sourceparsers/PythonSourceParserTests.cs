@@ -241,8 +241,8 @@ public class PythonSourceParserTests
         var result = _parser.Parse("test.py", source)!;
         Assert.That(result.ParseErrors, Has.Some.Contains("test.py(1,"),
             "Error should reference line 1 of test.py");
-        Assert.That(result.ParseErrors, Has.Some.Contains("class name"),
-            "Error should mention 'class name'");
+        Assert.That(result.ParseErrors, Has.Some.Contains("error:"),
+            "The installed parser or simpler fallback should report a syntax diagnostic");
     }
 
     [Test]

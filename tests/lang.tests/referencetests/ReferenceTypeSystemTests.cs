@@ -6,6 +6,7 @@ namespace Cop.Tests.Lang;
 /// <summary>
 /// Reference test runner for the Cop type system.
 /// Each test is a .cop file in Programs/ with @expect directives.
+/// Malformed inputs use .cop.invalid so repository analysis does not treat them as source.
 /// Tests use Engine.Run() — the same path as real user code — no pre-registration.
 ///
 /// Directives:
@@ -48,7 +49,8 @@ public class ReferenceTypeSystemTests
     {
         var dir = ProgramsDir;
         if (!Directory.Exists(dir)) yield break;
-        foreach (var file in Directory.GetFiles(dir, "*.cop").OrderBy(f => f))
+        foreach (var file in Directory.GetFiles(dir, "*.cop")
+                     .Concat(Directory.GetFiles(dir, "*.cop.invalid")).OrderBy(f => f))
             yield return Path.GetFileName(file);
     }
 
@@ -67,11 +69,11 @@ public class ReferenceTypeSystemTests
             Directory.CreateDirectory(errDir);
             try
             {
-                File.Copy(filePath, Path.Combine(errDir, fileName));
+                File.Copy(filePath, Path.Combine(errDir, "program.cop"));
                 var parseResult = Engine.Run(
                     errDir, SamplesDir,
                     additionalFeedPaths: [PackagesDir]);
-                Assert.That(parseResult.HasParseErrors || parseResult.HasFatalErrors, Is.True,
+                Assert.That(parseResult.ParseErrors, Has.Count.EqualTo(1),
                     $"{fileName}: Expected a parse error but got none. Outputs: {string.Join(", ", parseResult.Outputs.Select(o => o.Message))}");
             }
             finally

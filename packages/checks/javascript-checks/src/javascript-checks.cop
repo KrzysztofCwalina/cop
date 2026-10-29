@@ -12,7 +12,11 @@ predicate notIgnored(Statement) => Statement.CopIgnore == ''
 
 ## Avoid console output in production code
 predicate isConsoleCall(Statement) => Statement.Kind == 'call'
-    && Statement.TypeName == 'console'
+    && Statement.CallTarget != nic
+    && Statement.CallTarget.Kind == memberAccess
+    && Statement.CallTarget.Target != nic
+    && Statement.CallTarget.Target.Kind == identifier
+    && Statement.CallTarget.Target.Name == 'console'
 export let console-calls = cb.Statements:isConsoleCall:notIgnored
     :toWarning('Avoid console.{item.MemberName} in production code', nameof(console-calls))
 
@@ -51,19 +55,14 @@ export let javascript-correctness-checks = console-calls + alert-calls + eval-ca
 
 ## TypeScript Checks
 
-## Detects await on a value that is clearly not a Thenable (literal values).
+## Detects await on scalar literals or compiler-resolved primitive values.
+## Object literals may define then(), so their shape alone is not evidence.
 ## Inspired by @typescript-eslint/await-thenable.
 predicate isAwaitOfNonThenable(Statement) =>
     Statement.Kind == 'await'
-    && Statement.MemberName == nic
-    && (Statement.Expression:matches('^\d')
-        || Statement.Expression:matches('^[\'"`]')
-        || Statement.Expression:equals('true')
-        || Statement.Expression:equals('false')
-        || Statement.Expression:equals('null')
-        || Statement.Expression:equals('undefined')
-        || Statement.Expression:startsWith('[')
-        || Statement.Expression:startsWith('{'))
+    && (Statement.TypeName:in(['number', 'string', 'boolean', 'null', 'undefined'])
+        || (Statement.ValueExpression != nic
+            && Statement.ValueExpression.Kind:in([numericLiteral, stringLiteral, booleanLiteral, nullLiteral])))
 
 ## Disallow awaiting a value that is not a Thenable (@typescript-eslint/await-thenable)
 export let await-thenable = cb.Statements:isAwaitOfNonThenable:notIgnored

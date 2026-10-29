@@ -52,6 +52,11 @@ public sealed class JavaStatementInfo : StatementInfo
             Expression = baseDecl.Expression,
             CopIgnore = baseDecl.CopIgnore,
             _children = baseDecl._children,
+            CallTarget = baseDecl.CallTarget,
+            ArgumentExpressions = baseDecl.ArgumentExpressions,
+            Column = baseDecl.Column,
+            EndLine = baseDecl.EndLine,
+            EndColumn = baseDecl.EndColumn,
             IsTryWithResources = flags.TryGetValue("IsTryWithResources", out var tryWithResources) && tryWithResources,
             IsEnhancedFor = flags.TryGetValue("IsEnhancedFor", out var enhancedFor) && enhancedFor,
         });

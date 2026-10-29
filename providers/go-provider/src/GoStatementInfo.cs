@@ -52,6 +52,11 @@ public sealed class GoStatementInfo : StatementInfo
             Condition = baseDecl.Condition,
             Expression = baseDecl.Expression,
             ConstructedTypeInterfaces = baseDecl.ConstructedTypeInterfaces,
+            CallTarget = baseDecl.CallTarget,
+            ArgumentExpressions = baseDecl.ArgumentExpressions,
+            Column = baseDecl.Column,
+            EndLine = baseDecl.EndLine,
+            EndColumn = baseDecl.EndColumn,
             File = baseDecl.File,
             _children = baseDecl._children
         });

@@ -29,12 +29,63 @@ To build for just your platform:
 install/publish.ps1 -Runtimes win-x64
 ```
 
-For the host's runtime identifier, publishing verifies and executes a small C# parser
-program using the actual published executable and the freshly built provider DLL.
-It asserts the exact parsed statement and its containing method before creating the
-archive or updating the PATH-installed executable. A failed build or smoke test stops
-publishing; cross-platform binaries still need functional testing on their target OS.
-`-SkipBuild` also runs this smoke test for the host runtime.
+Publishing also builds the pinned Rust analysis helper and embeds it, its third-party
+licenses, and the checksum-verified Rust 1.99.1 standard-library sources inside `cop`.
+Building requires Cargo/Rust and the native linker and Rust target for each requested
+RID; cross-publishing .NET alone is not sufficient. Build each platform on a suitable
+host or provision its cross-toolchain first. The pinned source archive is downloaded
+at build time and cached under `install/native-bundles/inputs/`.
+
+To supply the official source archive locally and forbid Cargo network access:
+
+```powershell
+install/publish.ps1 -Runtimes win-x64 -RustSourceArchive C:\inputs\rust-src-1.99.1.tar.xz -RustOffline
+```
+
+Cargo dependencies must already be cached for `-RustOffline`; this option does not
+disable .NET restore. `install/prepare-rust-bundle.ps1 -Runtime win-x64` can prepare
+just the embedded payload. Direct `dotnet publish` of the CLI requires its returned
+ZIP path through `-p:RustFrontendBundlePath=...`; ordinary development builds do not.
+The installed executable lazily extracts its own versioned payload into Cop's user
+cache, without downloads, writes to the analyzed project, or a separate rust-analyzer
+installation. Matching installed Rust sources take precedence; bundled standard-library
+sources require an exactly compatible compiler release and commit. Incompatible
+context produces explicit diagnostics rather than guessed bindings.
+
+For the host's runtime identifier, publishing verifies and executes small C#, Python,
+JavaScript, Go, Java, Rust, and Cop analysis programs using the actual executable and
+freshly built provider DLLs. Each must retain exactly one known declaration, method,
+and call on both cold and warm runs. Malformed input must produce a visible diagnostic
+and a nonzero exit code. Missing optional toolchains may emit fallback warnings; they
+must not hide these baseline facts or turn malformed input into success.
+The gate also checks exact receiver, result, and selected-callable facts for C# and
+Rust, plus a scalar-receiver call in Cop source, on repeated executions. The publishing
+gate runs every provider from a copy of the executable alone, proving that framework
+metadata and the embedded native payload do not depend on build-output sidecars.
+
+CI provisions Node.js and a pinned TypeScript compiler before publishing and testing,
+so JavaScript semantic regressions exercise the compiler rather than the structural
+fallback. The compiler remains optional for end-user structural analysis.
+
+A failed build or smoke test stops publishing before archive creation or PATH updates.
+`-SkipBuild` also runs this gate for the host runtime. Cross-platform archives still
+need functional testing on their target OS; generating or checking archive metadata
+on Windows does not verify Linux/macOS execution.
+
+To run only the provider smoke against an existing local build without publishing or
+modifying PATH:
+
+```powershell
+install/provider-smoke.ps1 -Executable cop/cli/bin/Debug/net10.0/cop.exe
+```
+
+For a focused Rust structural and semantic check of the portable executable:
+
+```powershell
+install/provider-smoke.ps1 -Executable install/win-x64/cop.exe -Languages rust -RequireRustBundle
+```
+
+Language selection limits manual smoke runs only; publishing still checks every provider.
 
 ## Usage
 

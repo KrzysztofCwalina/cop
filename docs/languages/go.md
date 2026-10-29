@@ -19,6 +19,64 @@ cop --version
 
 ---
 
+### Go toolchain and fallback
+
+Cop automatically discovers and probes **Go 1.18 or newer** on the process `PATH`. The richer path
+uses Go's standard-library parser and AST through a Cop-owned helper; no third-party
+Go modules or additional Cop setup are required.
+
+The helper reads source declarations, signatures, imports, spans, and statement/call
+structure without type-checking the project. Requesting a call's `ReceiverType`,
+`ValueType`, or `ReferencedCallable` then runs **package-aware `go/types` checking**.
+The installed Go toolchain's offline, read-only `go list` supplies module/workspace,
+local replacements, vendored dependencies, imports and build-selected source files. A source importer checks
+those packages, including the installed standard library; no dependency binary is built.
+Cop does not build or run the analyzed application, invoke its generators, or download
+modules or toolchains. Helper compilation is separate from the target project's build:
+ambient workspace settings, automatic toolchain downloads, CGO, and build flags are
+disabled. The compiled helper is cached by its source and installed compiler identity;
+the first native run can therefore take longer than subsequent runs.
+
+The helper is bounded and reused for requested files within one Cop execution rather
+than compiled/launched separately for every source file. If the installed toolchain is
+absent or fails its availability probe, Cop emits a **yellow warning** and continues with
+its simpler built-in syntax parser. Fallback has more limited syntax coverage and does
+not add compiler type resolution. Redirected output and `--no-color` retain the warning
+as plain text.
+
+Both backends expose declarations, receiver methods, free functions, nested calls,
+structured call targets and decoded string arguments. Receiver methods split across
+files join their type lazily within the same package directory; methods retain their
+original source file. Native parsing additionally supplies compiler AST nesting and
+precise spans. Fallback syntax coverage is narrower, and unsupported expressions
+have kind `other`; unknown spans remain absent rather than being invented.
+Native generic argument trees come directly from parsed type syntax; fallback
+signatures retain their text but do not claim resolved generic argument trees.
+
+Compiler-bound facts include an inferred receiver/result type and the selected callable's
+package, signature, parameter/return types, and source location where available.
+`TypeName` remains syntax-compatible; use `ReceiverType` for inferred receiver types.
+Interface calls name the compiler-selected declaration, not a guaranteed runtime target.
+Missing packages or incomplete context produce errors on semantic demand, not invented
+bindings. Fallback semantic fields remain unknown. CGO and generators never run; packages
+requiring generated or C declarations need those declarations locally or produce diagnostics.
+Semantic facts are memoized per demanded file. Go per-file disk caching is disabled until
+it can safely track dependency context; new executions re-check dependencies even when
+the caller has not changed. Syntax-only
+queries and `First`/`Take` do not force package checking or later source reads.
+
+Module discovery includes nested modules. `Project.Properties`
+preserves declared `replace`, `exclude`, and enclosing `go.work` context; these are
+static manifest summaries; semantic checking separately uses the installed Go package loader.
+
+Source syntax errors, malformed protocol responses, timeouts, output limits, and other
+failures during an established native request are reported as
+errors, not silently converted into clean fallback results. To enable native parsing,
+make a working Go toolchain available on Cop's `PATH` and rerun; Cop never installs one.
+Fallback warnings also appear on warm-cache runs.
+
+---
+
 ## 2. Set Up Agent Context
 
 Run `cop init` once, in your **repository root** (not in `src/` or any other subfolder):

@@ -12,12 +12,27 @@ public record TypeDeclaration(
     List<string> EnumValues,
     int Line)
 {
+    public string? Namespace { get; init; }
+    public TypeReference? AliasTarget { get; init; }
+    public List<string> TypeParameters { get; init; } = [];
+    public int? Column { get; init; }
+    public int? EndLine { get; init; }
+    public int? EndColumn { get; init; }
     public bool IsPublic => Modifiers.HasFlag(Modifier.Public);
     public bool IsSealed => Modifiers.HasFlag(Modifier.Sealed);
     public bool IsAbstract => Modifiers.HasFlag(Modifier.Abstract);
     public bool IsStatic => Modifiers.HasFlag(Modifier.Static);
 
-    public SourceFile? File { get; init; }
+    public SourceFile? File { get; set; }
+    private List<MethodDeclaration> _declaredMethods = Methods;
+    private Lazy<List<MethodDeclaration>>? _deferredMethods;
+    public List<MethodDeclaration> Methods
+    {
+        get => _deferredMethods?.Value ?? _declaredMethods;
+        init => _declaredMethods = value;
+    }
+    internal List<MethodDeclaration> DeclaredMethods => _declaredMethods;
+    internal void DeferMembers(Func<List<MethodDeclaration>> resolve) => _deferredMethods = new(resolve);
     public bool HasDocComment { get; init; }
     public string? DocComment { get; init; }
     public List<FieldDeclaration> Fields { get; init; } = [];
@@ -30,6 +45,7 @@ public record TypeDeclaration(
     /// </summary>
     internal Lazy<bool>? DeferredSemantics { get; set; }
     private List<string> _interfaces = [];
+    internal List<string> CachedInterfaces => _interfaces;
     public List<string> Interfaces
     {
         get { _ = DeferredSemantics?.Value; return _interfaces; }

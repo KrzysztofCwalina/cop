@@ -19,6 +19,37 @@ cop --version
 
 ---
 
+### JavaScript / TypeScript toolchain and fallback
+
+The richer parser requires **Node.js and an installed TypeScript compiler**, including
+when analyzing JavaScript. Cop discovers Node automatically and looks for TypeScript
+in the project's ancestor `node_modules` directories or through an installed `tsc`
+launcher. Node alone is not sufficient. An existing project-local TypeScript installation
+works without a global installation or Cop-specific configuration.
+
+Cop uses the TypeScript compiler API for `.js`, `.jsx`, `.ts`, and `.tsx` syntax and
+available symbol/type facts. It reads TypeScript configuration and installed declarations;
+it does not run the application, npm scripts, compiler plugins, or dependency installation.
+Dynamic or unresolved symbols remain unknown rather than being presented as resolved types.
+
+A bounded Node helper and compiler state are reused within one Cop execution as files are
+requested. Native semantic models are deliberately not cached across executions: changes
+to imported declarations, libraries, or configuration must not leave stale type facts.
+This means a later native run still has compiler startup work.
+
+When Node or a usable TypeScript compiler cannot be found, Cop emits a **yellow warning**
+and uses its simpler built-in syntax parser. This does not provide equivalent compiler
+semantics or complete coverage of advanced TypeScript/JSX syntax. Warnings remain visible
+on cached fallback runs, and are plain text when redirected or with `--no-color`.
+Actual source errors, timeouts, and helper failures are errors, not a reason to silently
+switch to a successful fallback. Cop never runs npm or downloads Node or TypeScript.
+
+For richer analysis, make Node available to Cop and use an already installed local or
+global TypeScript compiler, then rerun the check. If fallback is reported unexpectedly,
+check both installations rather than only `node --version`.
+
+---
+
 ## 2. Set Up Agent Context
 
 Run `cop init` once, in your **repository root** (not in `src/` or any other subfolder):
@@ -89,7 +120,10 @@ let cb = javascript.parse()
 predicate isUndocumented(Type) => Type.Documented == false && Type:isPublic
 
 # Flag console.log calls (use a proper logger)
-predicate isConsoleLog(Statement) => Statement.TypeName == 'console' && Statement.MemberName == 'log'
+predicate isConsoleLog(Statement) => Statement.MemberName == 'log'
+    && Statement.CallTarget != nic && Statement.CallTarget.Kind == memberAccess
+    && Statement.CallTarget.Target != nic && Statement.CallTarget.Target.Kind == identifier
+    && Statement.CallTarget.Target.Name == 'console'
 
 let undocumented = cb.Types:isUndocumented
     :toWarning('Class {item.Name} is missing JSDoc documentation')
@@ -286,26 +320,79 @@ The `javascript.parse()` function returns a `Codebase` with these collections:
 
 | Collection | Description |
 |------------|-------------|
-| `cb.Types` | All classes (ES6 class declarations) |
-| `cb.Statements` | Function calls, new expressions, throw, catch |
-| `cb.Files` | Source files with import/require info |
+| `cb.Types` | Classes, interfaces, enums, and type aliases |
+| `cb.Methods` | Class methods and module/nested functions, including arrows |
+| `cb.Statements` | Nested calls, declarations, control flow, return, throw, catch, await |
+| `cb.Files` | Source files with parsed import names and aliases |
 | `cb.Lines` | Every line of code (with kind: code/comment/blank) |
-| `cb.Projects` | package.json projects with dependencies |
+| `cb.Projects` | package.json packages and compiler-defined tsconfig/jsconfig projects |
 
 ### JavaScript-Specific Features
 
-- **TypeScript support**: Both `.js` and `.ts` files are parsed
-- **ES6 classes**: `class`, `extends`, decorators, static methods
-- **Import tracking**: Both `import ... from` and `require()` are captured
+- **Source formats**: `.js`, `.jsx`, `.ts`, `.tsx`, `.mjs`, `.cjs`, `.mts`, and `.cts`
+- **Declarations**: Visibility, fields, accessors, interface members, enum names, aliases,
+  generic parameter names, structured type annotations, optional/rest/destructured parameters
+- **Import tracking**: Default, named, and namespace aliases in `File.Imports`;
+  `File.Usings` also includes re-exports, dynamic literal imports, and `require()` modules
 - **Async/await**: `async` functions are flagged with the `Async` modifier
 - **JSDoc detection**: `/** ... */` comments preceding declarations are detected
-- **Project discovery**: Parses `package.json` for dependencies and devDependencies
+- **Parsed expressions**: `CallTarget`, `ArgumentExpressions`, and `ValueExpression` contain
+  syntax nodes, with decoded string literal values. Unsupported forms remain `other`.
+- **Ownership**: Calls retain `Method`, `Parent`, `Children`, source lines, and 1-based
+  columns/exclusive end positions. Module functions are not hidden in a synthetic class.
+- **Project discovery**: All four dependency groups (runtime, development, peer, optional);
+  workspace patterns and exclusions; compiler-defined `files`/`include`/`exclude`/`extends`,
+  references, and path aliases for `tsconfig*.json`/`jsconfig*.json`
+
+### Installed compiler and fallback
+
+When Node.js and TypeScript are already installed, cop uses the TypeScript compiler API.
+It discovers ancestor `node_modules/typescript` installations and global `tsc` launchers,
+including Unix symlinks; it does not assume Node can resolve globally installed modules.
+No npm install, downloads, project-code execution, plugin loading, or configuration changes
+are performed. The helper is reused within one execution, with bounded time/output and
+cleanup when execution ends. Deferred `First`/`Take` does not parse unrelated later files;
+the compiler can read imports and library declarations required by the demanded file.
+The bundled helper is stored by content hash under `~/.cop/helpers/javascript/`, outside
+the analyzed project. Only its path and the installed compiler path are passed to Node,
+avoiding platform command-line length limits; concurrent installs use atomic replacement.
+
+If either tool is missing, or the installed compiler cannot supply the required API, cop
+prints a **yellow warning** and uses its simpler in-process syntax parser. That path retains
+basic classes, module functions/arrows, nested calls, decoded literal arguments, and method
+ownership, but is not a complete TypeScript/JSX parser and does not infer types. An analysis
+request that fails or times out is reported as an error, not silently retried as fallback.
+
+`Statement.TypeName` is a compiler-resolved receiver type when known, **not receiver source
+text**. For example, `client.send()` can resolve to `Client`; `dynamic.send()` remains
+unknown. Match the parsed `CallTarget` to identify a receiver such as `console`.
+Dynamic dispatch, unresolved modules, `any`, and `unknown` are not fabricated as resolved
+types. Cop does not claim whole-program runtime behavior or TypeScript type-checker diagnostics.
+
+`Statement.ReceiverType` describes the compiler-known receiver, and `ValueType` describes
+the expression result (for example, the object returned by a factory). `ReferencedCallable`
+identifies the compiler-selected declaration and overload, including its signature, parameter
+and return types, declaring type, and source span. It is not a prediction of runtime virtual
+dispatch. Unresolved or dynamic calls leave unavailable facts null; match `CallTarget` for
+syntax regardless of whether binding succeeds. These facts reuse the existing checker and
+worker, not a second compiler process.
+
+Compiler-backed models are reused within an execution but deliberately not persisted across
+runs: imported declarations, compiler libraries, and configuration can change independently
+of a source file. Simpler syntax models retain persistent caching. This avoids stale semantic
+results rather than presenting a misleading warm-cache speedup.
+
+Package `References`/`Packages` summarize declared dependency names, not lockfile-resolved
+versions or a complete runtime dependency graph. Project `Properties` names that scope,
+retains each dependency group's version declarations, and exposes `WorkspaceRoot`,
+`PathAliases`, and `BaseUrl` where available. Compiler projects have exact `SourceFiles`
+membership; package manifests alone use directory-based membership.
 
 ### Syntax-error reporting
 
-`javascript.parse()` uses a real lexer + recursive-descent parser (not a line scanner). When a
-`.js`/`.ts` file contains a syntax error — an unterminated string/template/regex, an unterminated
-comment, or unbalanced `()`/`[]`/`{}` — cop surfaces it as a **warning** of the form
+Compiler-backed analysis reports TypeScript syntax diagnostics. The fallback uses a lexer and
+recursive-descent parser, detecting unterminated strings/comments and unbalanced delimiters.
+When a source contains a syntax error, cop surfaces it as a **warning** of the form
 `path(line,col): error: message` and still analyzes the rest of that file and every other file.
 Malformed sources are reported, never silently skipped.
 

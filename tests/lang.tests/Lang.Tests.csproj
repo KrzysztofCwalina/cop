@@ -22,11 +22,16 @@
     <ProjectReference Include="..\..\providers\rust-provider\rust-provider.csproj" />
     <ProjectReference Include="..\..\providers\java-provider\java-provider.csproj" />
     <ProjectReference Include="..\..\providers\go-provider\go-provider.csproj" />
+    <ProjectReference Include="..\..\providers\bash-provider\bash-provider.csproj" />
+    <ProjectReference Include="..\..\providers\powershell-provider\powershell-provider.csproj" />
+    <ProjectReference Include="..\..\providers\sql-provider\sql-provider.csproj" />
+    <ProjectReference Include="..\..\providers\dockerfile-provider\dockerfile-provider.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Content Include="samples\**\*" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="referencetests\programs\**\*.cop" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="referencetests\programs\**\*.cop.invalid" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\packages\core\code\src\code.cop" Link="samples\code.cop" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\packages\core\core\src\intrinsics.cop" Link="samples\intrinsics.cop" CopyToOutputDirectory="PreserveNewest" />
     <Compile Remove="samples\**\*.cs" />

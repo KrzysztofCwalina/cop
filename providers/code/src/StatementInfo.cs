@@ -9,11 +9,37 @@ public class StatementInfo(
     int line,
     bool isInMethod)
 {
+    public int? Column { get; set; }
+    public int? EndLine { get; set; }
+    public int? EndColumn { get; set; }
     public string Kind { get; } = kind;
     public List<string> Keywords { get; } = keywords;
     internal Lazy<bool>? DeferredSemantics { get; set; }
     internal Lazy<bool>? DeferredTypeNames { get; set; }
+    private Lazy<bool>? _deferredBinding;
+    private TypeReference? _receiverType;
+    private TypeReference? _valueType;
+    private CallableReference? _referencedCallable;
+    public TypeReference? ReceiverType
+    {
+        get { _ = _deferredBinding?.Value; return _receiverType; }
+        set => _receiverType = value;
+    }
+    public TypeReference? ValueType
+    {
+        get { _ = _deferredBinding?.Value; return _valueType; }
+        set => _valueType = value;
+    }
+    public CallableReference? ReferencedCallable
+    {
+        get { _ = _deferredBinding?.Value; return _referencedCallable; }
+        set => _referencedCallable = value;
+    }
+
+    /// <summary>Shares provider-scoped binding work; structural fields never demand it.</summary>
+    public void DeferSemanticAnalysis(Lazy<bool> analysis) => _deferredBinding = analysis;
     private string? _typeName = typeName;
+    internal string? SyntaxTypeNameValue { get; } = typeName;
     public string? TypeName
     {
         get { _ = (DeferredTypeNames ?? DeferredSemantics)?.Value; return _typeName; }
@@ -27,8 +53,9 @@ public class StatementInfo(
         DeferredTypeNames = analysis ?? SyntaxTypeName;
     public string? MemberName { get; } = memberName;
     public List<string> Arguments { get; } = arguments;
-    public ExpressionInfo? CallTarget { get; init; }
-    public List<ExpressionInfo> ArgumentExpressions { get; init; } = [];
+    public ExpressionInfo? CallTarget { get; set; }
+    public ExpressionInfo? ValueExpression { get; set; }
+    public List<ExpressionInfo> ArgumentExpressions { get; set; } = [];
     public int Line { get; } = line;
     public bool IsInMethod { get; } = isInMethod;
     public SourceFile? File { get; set; }
@@ -43,8 +70,8 @@ public class StatementInfo(
     public MethodDeclaration? Method { get; set; }
     public StatementInfo? Parent { get; set; }
     public IReadOnlyList<StatementInfo> Children => _children;
-    public string? Condition { get; init; }
-    public string? Expression { get; init; }
+    public string? Condition { get; set; }
+    public string? Expression { get; set; }
 
     /// <summary>
     /// For 'call' statements representing object creation (new X()),
@@ -52,6 +79,7 @@ public class StatementInfo(
     /// Empty for non-creation statements or when semantic analysis is unavailable.
     /// </summary>
     private List<string> _constructedTypeInterfaces = [];
+    internal List<string> CachedConstructedTypeInterfaces => _constructedTypeInterfaces;
     public List<string> ConstructedTypeInterfaces
     {
         get { _ = DeferredSemantics?.Value; return _constructedTypeInterfaces; }

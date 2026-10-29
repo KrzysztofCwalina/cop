@@ -8,11 +8,12 @@ namespace Cop.Providers;
 public sealed class DeferredSourceSnapshot
 {
     private readonly string _root;
+    private readonly SourceParserRegistry _parsers;
     private readonly Lazy<IReadOnlyList<string>> _paths;
     private readonly Dictionary<string, Lazy<SourceFile?>> _files = new(StringComparer.Ordinal);
     private readonly Func<string, SourceFile?> _parse;
     private readonly Lazy<List<ProjectInfo>>? _projects;
-    private readonly Lazy<List<(string Name, string Directory)>>? _projectDirectories;
+    private readonly Lazy<List<(string Name, string Directory, HashSet<string>? Files)>>? _projectDirectories;
     private readonly DeferredSourceCache? _cache;
     private readonly Dictionary<(string Path, string Collection), List<object>> _collections = new();
 
@@ -21,6 +22,7 @@ public sealed class DeferredSourceSnapshot
     public DeferredSourceSnapshot(SourceParserRegistry parsers, ProviderQuery query,
         Func<string, SourceFile?>? parse = null, Func<List<ProjectInfo>>? discoverProjects = null)
     {
+        _parsers = parsers;
         _root = Path.GetFullPath(query.RootPath!);
         _paths = new(() =>
         {
@@ -38,8 +40,11 @@ public sealed class DeferredSourceSnapshot
             _projectDirectories = new(() => _projects.Value.Select(project =>
             {
                 var directory = Path.GetDirectoryName(Path.GetFullPath(project.Path, _root))!;
+                var files = project.SourceFiles is null ? null : new HashSet<string>(
+                    project.SourceFiles.Select(path => Path.GetFullPath(path, directory)),
+                    OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
                 return (project.Name, Path.EndsInDirectorySeparator(directory)
-                    ? directory : directory + Path.DirectorySeparatorChar);
+                    ? directory : directory + Path.DirectorySeparatorChar, files);
             }).ToList());
     }
 
@@ -54,10 +59,12 @@ public sealed class DeferredSourceSnapshot
             return source;
         }
         var info = new FileInfo(path);
-        var fingerprint = System.Text.Encoding.UTF8.GetBytes($"{info.Length}:{info.LastWriteTimeUtc.Ticks}");
+        var fingerprint = System.Text.Encoding.UTF8.GetBytes(
+            $"{info.Length}:{info.LastWriteTimeUtc.Ticks}:{parser.GetCacheIdentity(path)}");
+        var canCache = parser.CanCache(path);
         var cachePath = CodeCollectionBuilder.GetCachePath(_root + "\nfile\n" + path + "\n"
             + parser.GetType().Assembly.ManifestModule.ModuleVersionId);
-        var cached = SourceCacheSerializer.TryLoad(cachePath, fingerprint, parser.GetType().Assembly);
+        var cached = canCache ? SourceCacheSerializer.TryLoad(cachePath, fingerprint, parser.GetType().Assembly) : null;
         if (cached is { Count: 1 })
         {
             if (CopDiagnostics.Timing)
@@ -70,7 +77,7 @@ public sealed class DeferredSourceSnapshot
         if (parsed is null) return null;
         if (CopDiagnostics.Timing)
             Console.Error.WriteLine($"[provider-parse] {parsed.Language} {Path.GetRelativePath(_root, path)}");
-        if (parsed.ParseErrors.Count == 0)
+        if (canCache && parsed.ParseErrors.Count == 0)
         {
             try { SourceCacheSerializer.Save(cachePath, fingerprint, [parsed]); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -96,10 +103,19 @@ public sealed class DeferredSourceSnapshot
                     SourceRoot = _root
                 };
                 CodeCollectionBuilder.LinkReferences(normalized);
+                void DeferMembers(TypeDeclaration type)
+                {
+                    type.DeferMembers(() => ResolveMembers(type, normalized));
+                    foreach (var nested in type.NestedTypes) DeferMembers(nested);
+                }
+                if (_parsers.GetParser(Path.GetExtension(path))!.SupportsCrossFileMembers)
+                    foreach (var type in normalized.Types) DeferMembers(type);
                 if (_projectDirectories is not null)
                     normalized.DeferProjects(() => _projectDirectories.Value
-                        .Where(project => normalized.FullPath.StartsWith(project.Directory,
-                            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                        .Where(project => project.Files is not null
+                            ? project.Files.Contains(normalized.FullPath)
+                            : normalized.FullPath.StartsWith(project.Directory,
+                                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
                         .Select(project => project.Name).ToList());
                 foreach (var error in normalized.ParseErrors)
                     ProviderErrors.Report(error);
@@ -110,6 +126,18 @@ public sealed class DeferredSourceSnapshot
             _files.Add(path, file);
         }
         return file.Value;
+    }
+
+    private List<MethodDeclaration> ResolveMembers(TypeDeclaration type, SourceFile owner)
+    {
+        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var directory = Path.GetDirectoryName(owner.FullPath);
+        var extension = Path.GetExtension(owner.FullPath);
+        var files = Paths.Where(path => comparer.Equals(Path.GetDirectoryName(path), directory)
+                && comparer.Equals(Path.GetExtension(path), extension))
+            .Select(ReadFile).OfType<SourceFile>()
+            .Where(file => file.Language == owner.Language).ToList();
+        return CodeCollectionBuilder.ResolveReceiverMembers(type, owner, files);
     }
 
     public DeferredProviderResult Query(ProviderQuery query, RuntimeBindings? bindings = null)

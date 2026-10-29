@@ -424,12 +424,8 @@ public class ErrorReportingTests
     // ---- Providers: malformed source files surface, never silently hidden -----------------------
 
     [Test]
-    public void Provider_MalformedCSharp_SurfacesParseErrorsAsWarnings_NotSilentlyHidden()
+    public void Provider_MalformedCSharp_SurfacesIncompleteAnalysis_NotSilentlyHidden()
     {
-        // A provider that "hides errors" would drop the broken file (or emit a partial model) and
-        // report nothing. The user must SEE the failure: a prominent warning naming the file and the
-        // Roslyn diagnostic id. It is a WARNING (not fatal) because a repo legitimately contains .cs
-        // files that aren't complete compilable units — but the failure must never be invisible.
         var root = Path.Combine(TestContext.CurrentContext.WorkDirectory,
             "provider-error", Guid.NewGuid().ToString("N"));
         var scripts = Path.Combine(root, "scripts");
@@ -459,13 +455,15 @@ public class ErrorReportingTests
             var warnings = r.Warnings ?? new List<string>();
             var allWarnings = string.Join(" | ", warnings);
             Assert.That(warnings, Is.Not.Empty,
-                "the malformed C# file must surface as a warning, not be silently hidden");
-            Assert.That(allWarnings, Does.Contain("parse error"),
+                "the malformed C# file must surface as incomplete analysis, not be silently hidden");
+            Assert.That(allWarnings, Does.Contain("source analysis error"),
                 "a header naming the parse failure must be shown");
             Assert.That(allWarnings, Does.Contain("Broken.cs"),
                 "the warning must name the offending file");
             Assert.That(allWarnings, Does.Contain("CS"),
                 "the Roslyn diagnostic id (CS####) must be surfaced");
+            Assert.That(r.ExitCode, Is.EqualTo(1),
+                "an incomplete source model must not produce a successful exit");
 
             // The valid type must STILL be analyzed — a partial model is acceptable; hiding is not.
             Assert.That(r.Outputs.Select(o => o.Message), Does.Contain("Alpha"),

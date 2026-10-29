@@ -28,11 +28,23 @@ public static class PowerShellParser
         bool hasPendingContinuation = false;
         bool inBlockComment = false;
         bool usesStrictMode = false;
+        char hereString = '\0';
 
         for (int i = 0; i < lines.Length; i++)
         {
             int lineNo = i + 1;
             var raw = lines[i].TrimEnd('\r');
+            if (hereString != '\0')
+            {
+                if (raw.StartsWith($"{hereString}@", StringComparison.Ordinal)) hereString = '\0';
+                continue;
+            }
+            var trimmedRaw = raw.TrimEnd();
+            if (trimmedRaw.EndsWith("@'", StringComparison.Ordinal) || trimmedRaw.EndsWith("@\"", StringComparison.Ordinal))
+            {
+                hereString = trimmedRaw[^1];
+                raw = trimmedRaw[..^2] + "''";
+            }
             var stripped = StripComments(raw, ref inBlockComment);
 
             if (ContainsStrictMode(stripped))
@@ -129,7 +141,7 @@ public static class PowerShellParser
             }
 
             int separatorLength = 0;
-            if (c == ';' || c == '|')
+            if (c is ';' or '|' or '(' or ')' or '{' or '}')
                 separatorLength = (c == '|' && i + 1 < text.Length && text[i + 1] == '|') ? 2 : 1;
             else if (c == '&' && i + 1 < text.Length && text[i + 1] == '&')
                 separatorLength = 2;
@@ -157,6 +169,13 @@ public static class PowerShellParser
     {
         var tokens = Tokenize(segment);
         int i = 0;
+
+        if (tokens.Count > 0 && tokens[0].StartsWith('$'))
+        {
+            int assignment = segment.IndexOf('=');
+            if (assignment < 0 || assignment + 1 >= segment.Length) return "";
+            return GetCommandName(segment[(assignment + 1)..]);
+        }
 
         while (i < tokens.Count && IsNoiseToken(tokens[i]))
             i++;

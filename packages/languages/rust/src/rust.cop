@@ -2,6 +2,9 @@
 import code
 
 ## Parses Rust source files in the target directory and returns a Codebase.
+## Uses the pinned maintained Rust frontend when deployed beside Cop; otherwise warns
+## and falls back to structural syntax analysis. Semantic Statement fields are demand-driven.
+## Resolves local modules and dependencies already on disk; never builds or executes code.
 ## Example: let cb = rust.parse()
 export function parse() : Codebase => provider('rust')
 
@@ -29,7 +32,8 @@ export predicate asRust(Type) : RustType => Type.File.Language == rust
 ## True for Rust `trait` declarations.
 export predicate isTrait(RustType) => RustType.IsTrait
 
-## True for synthetic types that represent an `impl` block.
+## True for synthetic types that represent an `impl` block. Methods belong to the declared
+## type when its same-file module-qualified owner is unambiguous; otherwise remain on the impl.
 export predicate isImpl(RustType) => RustType.IsImpl
 
 ## True for `unsafe` traits and impls.

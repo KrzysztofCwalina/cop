@@ -1,7 +1,9 @@
 # Java source language provider
 import code
 
-## Parses Java source files in the target directory and returns a Codebase.
+## Parses Java with the installed JDK compiler-tree API, or warns and uses simpler syntax analysis.
+## Native semantic fields demand javac attribution over locally available source and dependencies.
+## No target code or annotation processor runs; missing semantic context is diagnosed.
 ## Example: let cb = java.parse()
 export function parse() : Codebase => provider('java')
 

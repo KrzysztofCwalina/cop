@@ -156,23 +156,31 @@ public class ImportResolver
     public static string? FindPackageDir(string feedPath, string packageName)
     {
         if (!Directory.Exists(feedPath)) return null;
-
-        // Direct child match
-        var direct = Path.Combine(feedPath, packageName);
-        if (Directory.Exists(direct) && IsPackageDir(direct))
-            return direct;
-
-        // Recurse into group folders (non-package subdirectories)
-        foreach (var subDir in Directory.GetDirectories(feedPath))
+        var pending = new Stack<(string Path, int Depth)>();
+        pending.Push((feedPath, 0));
+        int visited = 0;
+        while (pending.TryPop(out var folder))
         {
-            var dirName = Path.GetFileName(subDir);
-            if (string.IsNullOrEmpty(dirName) || dirName.StartsWith('.')) continue;
-            if (IsPackageDir(subDir)) continue; // skip actual packages
-
-            var result = FindPackageDir(subDir, packageName);
-            if (result is not null) return result;
+            if (++visited > 4096 || folder.Depth > 64)
+                throw new IOException("Local package discovery exceeded its 4096-directory / 64-level safety limit.");
+            var direct = Path.Combine(folder.Path, packageName);
+            if (Directory.Exists(direct)
+                && (File.GetAttributes(direct) & FileAttributes.ReparsePoint) == 0 && IsPackageDir(direct))
+                return direct;
+            var directories = Directory.EnumerateDirectories(folder.Path).Take(4097).ToArray();
+            if (directories.Length > 4096)
+                throw new IOException("Local package discovery exceeded its 4096-directory / 64-level safety limit.");
+            for (int i = directories.Length - 1; i >= 0; i--)
+            {
+                var subDir = directories[i];
+                var dirName = Path.GetFileName(subDir);
+                if (string.IsNullOrEmpty(dirName) || dirName.StartsWith('.')) continue;
+                if ((File.GetAttributes(subDir) & FileAttributes.ReparsePoint) != 0 || IsPackageDir(subDir)) continue;
+                if (pending.Count + visited >= 4096)
+                    throw new IOException("Local package discovery exceeded its 4096-directory / 64-level safety limit.");
+                pending.Push((subDir, folder.Depth + 1));
+            }
         }
-
         return null;
     }
 

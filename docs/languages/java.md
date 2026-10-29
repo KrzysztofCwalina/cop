@@ -19,6 +19,69 @@ cop --version
 
 ---
 
+### Java toolchain and fallback
+
+Cop automatically discovers and probes an installed **JDK**, not just a runtime-only
+JRE: `javac` must be on the process `PATH`, with its matching sibling `java` launcher.
+The richer path uses the JDK compiler's tree API through a Cop-owned helper.
+No Maven/Gradle integration, third-party parser, or additional Cop setup is required.
+
+The helper parses declarations, signatures, imports, spans, and statement/call structure.
+Structural queries stop after parsing. Requesting `ReceiverType`, `ValueType`, or
+`ReferencedCallable` runs **javac attribution** over locally available source and
+dependency context, including compiler overload selection and inferred expression types.
+Cop does not build or run
+the application, execute annotation processors, run Maven/Gradle scripts, or download
+dependencies. Annotation processing is disabled; ambient JVM agent and classpath options
+are removed from helper processes. The installed JDK limits which source syntax can be
+parsed; newer unsupported syntax is reported as a diagnostic.
+
+A bounded helper is reused as files are requested within one Cop execution, avoiding a
+fresh JVM for every file. Its compiled code is cached by helper source and compiler
+identity, so the first native run can take longer. If a usable JDK/compiler API is unavailable, Cop emits a
+**yellow warning** and uses its simpler built-in syntax parser. Fallback supports fewer
+syntax forms and does not provide compiler type resolution. With redirected output or
+`--no-color`, the same warning is printed as plain text.
+
+Both backends expose types, methods, constructors, multi-variable fields, imports,
+nested call sites, decoded string arguments, and ownership relationships. Native
+parsing additionally provides compiler AST statement nesting and precise spans.
+Fallback coverage is narrower; unsupported expressions are marked `other`, and
+unknown spans remain absent. `permits` entries are not superclasses or interfaces.
+Native generic argument trees come directly from parsed type syntax; fallback
+signatures retain their text but do not claim resolved generic argument trees.
+
+The compiler-selected callable records its declaring type/package, instantiated signature,
+parameter/return types, and source location where available. `TypeName` remains syntax
+compatible; use `ReceiverType` for inferred receiver types. A selected declaration is not
+a promise about runtime virtual dispatch. Missing dependencies and attribution errors are
+visible when semantic fields are requested; fallback fields stay unknown.
+
+Local source roots, conventional Maven/Gradle class output, `lib`/`libs` jars, exact declared
+Maven dependencies already in the local repository, and literal Gradle dependencies already
+in the local cache are used without executing build scripts. Named modules use locally
+available module-path jars. Dynamic build configuration and dependency downloads are not
+evaluated. Unavailable context produces diagnostics rather than invented types.
+Production source queries do not attribute conventional test sources or require test-only
+dependencies. Semantic work is shared per demanded file. Java per-file disk caching is
+disabled until dependency context can be tracked safely, so dependency edits are rechecked
+on a new execution even if the caller is unchanged.
+Syntax-only queries and `First`/`Take` remain independent of attribution.
+
+Maven summaries use the project's own artifact ID and declared dependencies,
+excluding dependency-management-only entries. Nested Maven/Gradle projects and
+literal Kotlin DSL dependency declarations are discovered without evaluating build
+scripts; dynamic Gradle expressions, Maven property/profile evaluation, and resolved
+transitive dependency graphs are not implied.
+
+Malformed source, malformed protocol responses, timeouts, output limits, and other
+failures during an established native request remain errors, rather
+than silently producing a clean fallback result. To use the richer path, make a working
+JDK available on Cop's `PATH` and rerun the check; Cop never downloads or installs a JDK.
+Fallback warnings also appear on warm-cache runs.
+
+---
+
 ## 2. Set Up Agent Context
 
 Run `cop init` once, in your **repository root** (not in `src/` or any other subfolder):

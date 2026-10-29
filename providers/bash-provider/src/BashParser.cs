@@ -78,27 +78,39 @@ public static class BashParser
 
     private static bool HasStrictMode(string[] lines)
     {
-        int inspected = 0;
-        for (int i = 0; i < lines.Length && inspected < 10; i++)
+        bool errexit = false, nounset = false, pipefail = false;
+        for (int i = 0; i < lines.Length; i++)
         {
             int lineNo = i + 1;
             var trimmed = StripComment(lines[i].TrimEnd('\r'), lineNo).Trim();
             if (trimmed.Length == 0 || (lineNo == 1 && trimmed.StartsWith("#!", StringComparison.Ordinal)))
                 continue;
 
-            inspected++;
-            if (!trimmed.StartsWith("set ", StringComparison.Ordinal))
-                continue;
-
-            if (trimmed.Contains("-euo pipefail", StringComparison.Ordinal)
-                || trimmed.Contains("-eo pipefail", StringComparison.Ordinal)
-                || trimmed.Contains("-e ", StringComparison.Ordinal)
-                || trimmed.EndsWith("-e", StringComparison.Ordinal)
-                || trimmed.StartsWith("set -e", StringComparison.Ordinal))
-                return true;
+            foreach (var segment in SplitSimpleCommands(trimmed))
+            {
+                var tokens = Tokenize(segment);
+                if (tokens.Count == 0 || tokens[0] != "set") continue;
+                for (int j = 1; j < tokens.Count; j++)
+                {
+                    var option = tokens[j];
+                    if (option.Length < 2 || option[0] is not ('-' or '+')) continue;
+                    bool enabled = option[0] == '-';
+                    foreach (char flag in option[1..])
+                    {
+                        if (flag == 'e') errexit = enabled;
+                        if (flag == 'u') nounset = enabled;
+                        if (flag == 'o' && j + 1 < tokens.Count)
+                        {
+                            var longOption = tokens[++j];
+                            if (longOption == "errexit") errexit = enabled;
+                            if (longOption == "nounset") nounset = enabled;
+                            if (longOption == "pipefail") pipefail = enabled;
+                        }
+                    }
+                }
+            }
         }
-
-        return false;
+        return errexit && nounset && pipefail;
     }
 
     private static List<string> SplitSimpleCommands(string text)
@@ -166,6 +178,9 @@ public static class BashParser
     {
         var tokens = Tokenize(segment);
         int i = 0;
+
+        while (i < tokens.Count && tokens[i] is "if" or "elif" or "then" or "else" or "do" or "while" or "until" or "!" or "time" or "{")
+            i++;
 
         while (i < tokens.Count && IsEnvironmentAssignment(tokens[i]))
             i++;
@@ -298,7 +313,7 @@ public static class BashParser
                 continue;
             }
 
-            if (c == '#')
+            if (c == '#' && (i == 0 || char.IsWhiteSpace(line[i - 1]) || line[i - 1] is ';' or '|' or '&'))
                 return line[..i];
         }
 
@@ -346,4 +361,3 @@ public static class BashParser
         return quote != '\0';
     }
 }
-

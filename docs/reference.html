@@ -589,15 +589,15 @@ const packages = {
     "enums": [
       {
         "name": "TypeKind",
-        "values": "Class|Struct|Interface|Enum"
+        "values": "Class|Struct|Interface|Enum|Alias"
       },
       {
         "name": "StatementKind",
-        "values": "call|declaration|import|command|attribute|throw|return|using|foreach|try|catch|if|else|while|for|switch|await|directive"
+        "values": "call|declaration|import|command|attribute|throw|return|using|foreach|try|catch|finally|if|else|while|do|for|switch|await|directive|label|break|continue|localfunction|pipeline|lock|unsafe|fixed|checked|unchecked|yield|goto"
       },
       {
         "name": "ExpressionKind",
-        "values": "identifier|stringLiteral|memberAccess|invocation|other"
+        "values": "identifier|stringLiteral|numericLiteral|booleanLiteral|nullLiteral|arrayLiteral|objectLiteral|memberAccess|invocation|other"
       },
       {
         "name": "ApiKind",
@@ -683,7 +683,7 @@ const packages = {
         ]
       },
       "Statement": {
-        "desc": "Parsed statement: Kind, Keywords, TypeName, MemberName, Method, Parent, Children, Ancestors.\nCondition, Expression, Arguments, and Source are text, NOT structured expression trees.\nC# and Cop calls expose CallTarget and ArgumentExpressions as parsed CodeExpression nodes.\nC# nullable directives have Kind = directive and parsed Keywords (nullable, setting, target).\nIf these facts cannot express a rule, ask the user before proposing a text-based check.",
+        "desc": "Parsed statement: Kind, Keywords, TypeName, MemberName, Method, Parent, Children, Ancestors.\nCondition, Expression, Arguments, and Source are text, NOT structured expression trees.\nParsers can expose CallTarget, ArgumentExpressions, and ValueExpression as parsed CodeExpression nodes.\nC# nullable directives have Kind = directive and parsed Keywords (nullable, setting, target).\nIf these facts cannot express a rule, ask the user before proposing a text-based check.",
         "props": [
           {
             "name": "Kind",
@@ -698,6 +698,21 @@ const packages = {
           {
             "name": "TypeName",
             "type": "string?",
+            "desc": ""
+          },
+          {
+            "name": "ReceiverType",
+            "type": "TypeReference?",
+            "desc": ""
+          },
+          {
+            "name": "ValueType",
+            "type": "TypeReference?",
+            "desc": ""
+          },
+          {
+            "name": "ReferencedCallable",
+            "type": "CallableReference?",
             "desc": ""
           },
           {
@@ -716,8 +731,28 @@ const packages = {
             "desc": ""
           },
           {
+            "name": "ValueExpression",
+            "type": "CodeExpression?",
+            "desc": ""
+          },
+          {
             "name": "ArgumentExpressions",
             "type": "[CodeExpression]",
+            "desc": ""
+          },
+          {
+            "name": "Column",
+            "type": "int?",
+            "desc": ""
+          },
+          {
+            "name": "EndLine",
+            "type": "int?",
+            "desc": ""
+          },
+          {
+            "name": "EndColumn",
+            "type": "int?",
             "desc": ""
           },
           {
@@ -816,6 +851,36 @@ const packages = {
             "desc": ""
           },
           {
+            "name": "Namespace",
+            "type": "string?",
+            "desc": ""
+          },
+          {
+            "name": "AliasTarget",
+            "type": "TypeReference?",
+            "desc": ""
+          },
+          {
+            "name": "TypeParameters",
+            "type": "[string]",
+            "desc": ""
+          },
+          {
+            "name": "Column",
+            "type": "int?",
+            "desc": ""
+          },
+          {
+            "name": "EndLine",
+            "type": "int?",
+            "desc": ""
+          },
+          {
+            "name": "EndColumn",
+            "type": "int?",
+            "desc": ""
+          },
+          {
             "name": "Modifiers",
             "type": "int",
             "desc": ""
@@ -908,6 +973,31 @@ const packages = {
           {
             "name": "Name",
             "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "ReceiverType",
+            "type": "string?",
+            "desc": ""
+          },
+          {
+            "name": "TypeParameters",
+            "type": "[string]",
+            "desc": ""
+          },
+          {
+            "name": "Column",
+            "type": "int?",
+            "desc": ""
+          },
+          {
+            "name": "EndLine",
+            "type": "int?",
+            "desc": ""
+          },
+          {
+            "name": "EndColumn",
+            "type": "int?",
             "desc": ""
           },
           {
@@ -1306,6 +1396,26 @@ const packages = {
             "desc": ""
           },
           {
+            "name": "Optional",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "Column",
+            "type": "int?",
+            "desc": ""
+          },
+          {
+            "name": "EndLine",
+            "type": "int?",
+            "desc": ""
+          },
+          {
+            "name": "EndColumn",
+            "type": "int?",
+            "desc": ""
+          },
+          {
             "name": "DefaultValue",
             "type": "string?",
             "desc": ""
@@ -1347,7 +1457,7 @@ const packages = {
         ]
       },
       "CodeExpression": {
-        "desc": "Parsed expression facts supplied by the C# and Cop parsers. StringValue is the decoded\nstring literal value, not source text. Target is a member receiver or invocation callee;\nChildren are invocation arguments. Unsupported expression forms have Kind = other.",
+        "desc": "Parsed expression facts supplied by language parsers. StringValue is the decoded\nstring literal value, not source text. Target is a member receiver or invocation callee;\nChildren are invocation arguments. Unsupported expression forms have Kind = other.",
         "props": [
           {
             "name": "Kind",
@@ -1372,6 +1482,66 @@ const packages = {
           {
             "name": "Children",
             "type": "[CodeExpression]",
+            "desc": ""
+          }
+        ]
+      },
+      "CallableReference": {
+        "desc": "A compiler-selected callable declaration; virtual/interface dispatch may call an override at runtime.\nSourceFile and its one-based, exclusive-end declaration span are absent for metadata-only symbols.",
+        "props": [
+          {
+            "name": "Name",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Signature",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "DeclaringType",
+            "type": "string?",
+            "desc": ""
+          },
+          {
+            "name": "Namespace",
+            "type": "string?",
+            "desc": ""
+          },
+          {
+            "name": "ReturnType",
+            "type": "TypeReference?",
+            "desc": ""
+          },
+          {
+            "name": "Parameters",
+            "type": "[TypeReference]",
+            "desc": ""
+          },
+          {
+            "name": "SourceFile",
+            "type": "string?",
+            "desc": ""
+          },
+          {
+            "name": "Line",
+            "type": "int?",
+            "desc": ""
+          },
+          {
+            "name": "Column",
+            "type": "int?",
+            "desc": ""
+          },
+          {
+            "name": "EndLine",
+            "type": "int?",
+            "desc": ""
+          },
+          {
+            "name": "EndColumn",
+            "type": "int?",
             "desc": ""
           }
         ]
@@ -1431,6 +1601,11 @@ const packages = {
             "desc": ""
           },
           {
+            "name": "Imports",
+            "type": "[Import]",
+            "desc": ""
+          },
+          {
             "name": "Types",
             "type": "[Type]",
             "desc": ""
@@ -1452,6 +1627,61 @@ const packages = {
           {
             "name": "Value",
             "type": "string",
+            "desc": ""
+          }
+        ]
+      },
+      "Import": {
+        "desc": "Parsed import facts; these describe syntax, not resolved symbol bindings.",
+        "props": [
+          {
+            "name": "Module",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Name",
+            "type": "string?",
+            "desc": ""
+          },
+          {
+            "name": "Alias",
+            "type": "string?",
+            "desc": ""
+          },
+          {
+            "name": "IsWildcard",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsStatic",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "RelativeLevel",
+            "type": "int",
+            "desc": ""
+          },
+          {
+            "name": "Line",
+            "type": "int",
+            "desc": ""
+          },
+          {
+            "name": "Column",
+            "type": "int?",
+            "desc": ""
+          },
+          {
+            "name": "EndLine",
+            "type": "int?",
+            "desc": ""
+          },
+          {
+            "name": "EndColumn",
+            "type": "int?",
             "desc": ""
           }
         ]
@@ -1486,6 +1716,11 @@ const packages = {
           {
             "name": "Frameworks",
             "type": "[string]",
+            "desc": ""
+          },
+          {
+            "name": "SourceFiles",
+            "type": "[string]?",
             "desc": ""
           },
           {
@@ -4373,7 +4608,7 @@ const packages = {
     "collections": [],
     "types": {
       "GoType": {
-        "desc": "A Go-specific view of a Type. Note: IsInterface/IsStruct are also derivable from the\ncommon `Kind`; they demonstrate the mechanism — prefer language-independent checks when\nthey suffice. Obtain one by narrowing with `asGo`.",
+        "desc": "A Go-specific Type view. IsStruct distinguishes actual structs from other named types\nrepresented by the coarse common Kind. Obtain one by narrowing with asGo.",
         "baseType": "Type",
         "props": [
           {
@@ -4571,7 +4806,7 @@ const packages = {
         "name": "parse",
         "params": "",
         "returns": "Codebase",
-        "desc": "Parses Go source files in the target directory and returns a Codebase.\nExample: let cb = go.parse()"
+        "desc": "Parses Go with the installed standard-library AST toolchain, or warns and uses simpler syntax analysis.\nNative semantic fields demand package-aware go/types checking with offline local dependencies.\nNo target code is built or executed; missing semantic context is diagnosed.\nExample: let cb = go.parse()"
       },
       {
         "name": "parse",
@@ -5043,7 +5278,7 @@ const packages = {
         "name": "parse",
         "params": "",
         "returns": "Codebase",
-        "desc": "Parses Java source files in the target directory and returns a Codebase.\nExample: let cb = java.parse()"
+        "desc": "Parses Java with the installed JDK compiler-tree API, or warns and uses simpler syntax analysis.\nNative semantic fields demand javac attribution over locally available source and dependencies.\nNo target code or annotation processor runs; missing semantic context is diagnosed.\nExample: let cb = java.parse()"
       },
       {
         "name": "parse",
@@ -5258,7 +5493,7 @@ const packages = {
       {
         "name": "isArrowMethod",
         "appliesTo": "JavaScriptMethod",
-        "desc": "True for class-field arrow function methods."
+        "desc": "True for arrow functions, including module functions and class-field methods."
       },
       {
         "name": "isGetter",
@@ -5301,7 +5536,7 @@ const packages = {
         "name": "parse",
         "params": "",
         "returns": "Codebase",
-        "desc": "Parses JavaScript/TypeScript source files in the target directory and returns a Codebase.\nExample: let cb = javascript.parse()"
+        "desc": "Parses JS/TS/JSX/TSX and module variants in the target directory and returns a Codebase.\nUses an installed Node.js/TypeScript compiler when available; otherwise warns and uses simpler syntax analysis.\nExample: let cb = javascript.parse()"
       },
       {
         "name": "parse",
@@ -6862,7 +7097,7 @@ const packages = {
       {
         "name": "isImpl",
         "appliesTo": "RustType",
-        "desc": "True for synthetic types that represent an `impl` block."
+        "desc": "True for synthetic types that represent an `impl` block. Methods belong to the declared\ntype when its same-file module-qualified owner is unambiguous; otherwise remain on the impl."
       },
       {
         "name": "isUnsafe",
@@ -6932,7 +7167,7 @@ const packages = {
         "name": "parse",
         "params": "",
         "returns": "Codebase",
-        "desc": "Parses Rust source files in the target directory and returns a Codebase.\nExample: let cb = rust.parse()"
+        "desc": "Parses Rust source files in the target directory and returns a Codebase.\nUses the pinned maintained Rust frontend when deployed beside Cop; otherwise warns\nand falls back to structural syntax analysis. Semantic Statement fields are demand-driven.\nResolves local modules and dependencies already on disk; never builds or executes code.\nExample: let cb = rust.parse()"
       },
       {
         "name": "parse",

@@ -9,6 +9,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="src\PythonAst.py" />
+    <EmbeddedResource Include="src\PythonBinding.py" />
     <ProjectReference Include="..\..\cop\cli\cop.csproj">
       <Private>false</Private>
     </ProjectReference>

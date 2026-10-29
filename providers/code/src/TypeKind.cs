@@ -5,5 +5,6 @@ public enum TypeKind
     Class,
     Struct,
     Interface,
-    Enum
+    Enum,
+    Alias
 }

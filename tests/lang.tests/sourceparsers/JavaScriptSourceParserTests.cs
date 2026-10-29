@@ -117,7 +117,8 @@ public class JavaScriptSourceParserTests
             }
             """;
         var result = _parser.Parse("test.js", source)!;
-        var consoleCalls = result.Statements.Where(s => s.Kind == "call" && s.TypeName == "console").ToList();
+        var consoleCalls = result.Statements.Where(s => s.Kind == "call" &&
+            s.CallTarget is { Kind: "memberAccess", Target: { Kind: "identifier", Name: "console" } }).ToList();
         Assert.That(consoleCalls, Has.Count.EqualTo(2));
         Assert.That(consoleCalls[0].MemberName, Is.EqualTo("log"));
         Assert.That(consoleCalls[1].MemberName, Is.EqualTo("error"));
@@ -232,7 +233,8 @@ public class JavaScriptSourceParserTests
             }
             """;
         var result = _parser.Parse("test.js", source)!;
-        var consoleCalls = result.Statements.Where(s => s.Kind == "call" && s.TypeName == "console").ToList();
+        var consoleCalls = result.Statements.Where(s => s.Kind == "call" &&
+            s.CallTarget is { Kind: "memberAccess", Target: { Kind: "identifier", Name: "console" } }).ToList();
         Assert.That(consoleCalls, Has.Count.EqualTo(1));
     }
 
@@ -248,7 +250,8 @@ public class JavaScriptSourceParserTests
             }
             """;
         var result = _parser.Parse("test.js", source)!;
-        var consoleCalls = result.Statements.Where(s => s.Kind == "call" && s.TypeName == "console").ToList();
+        var consoleCalls = result.Statements.Where(s => s.Kind == "call" &&
+            s.CallTarget is { Kind: "memberAccess", Target: { Kind: "identifier", Name: "console" } }).ToList();
         Assert.That(consoleCalls, Has.Count.EqualTo(1));
     }
 
@@ -340,7 +343,8 @@ public class JavaScriptSourceParserTests
         var source = "function foo() { if (true) { x(); }\n";
         var result = _parser.Parse("test.js", source)!;
         Assert.That(result.ParseErrors, Is.Not.Empty);
-        Assert.That(result.ParseErrors.Any(e => e.Contains("Unclosed") || e.Contains("Unterminated")), Is.True);
+        Assert.That(result.ParseErrors.Any(e => e.Contains("Unclosed") ||
+            e.Contains("TS1005") && e.Contains("'}' expected")), Is.True);
     }
 
     [Test]
@@ -349,7 +353,8 @@ public class JavaScriptSourceParserTests
         var source = "const x = 1; /* unterminated comment\n";
         var result = _parser.Parse("test.js", source)!;
         Assert.That(result.ParseErrors, Is.Not.Empty);
-        Assert.That(result.ParseErrors.Any(e => e.Contains("Unterminated")), Is.True);
+        Assert.That(result.ParseErrors.Any(e => e.Contains("Unterminated block comment") ||
+            e.Contains("TS1010") && e.Contains("'*/' expected")), Is.True);
     }
 
     // ── ParseErrors: positive control (valid modern TS → zero errors) ──

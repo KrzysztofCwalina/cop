@@ -35,15 +35,15 @@ public static class CSharpProjectDiscovery
         foreach (var (name, relativePath, refPaths, packages, frameworks, properties) in projects)
         {
             var references = new List<string>();
-            var csprojDir = Path.GetDirectoryName(Path.Combine(rootPath, relativePath.Replace('/', '\\'))) ?? rootPath;
+            var csprojDir = Path.GetDirectoryName(Path.Combine(rootPath, NormalizePath(relativePath))) ?? rootPath;
 
             foreach (var refPath in refPaths)
             {
-                var resolvedPath = Path.GetFullPath(Path.Combine(csprojDir, refPath.Replace('/', '\\')));
+                var resolvedPath = Path.GetFullPath(Path.Combine(csprojDir, NormalizePath(refPath)));
                 if (pathToName.TryGetValue(resolvedPath, out var targetName))
                     references.Add(targetName);
                 else
-                    references.Add(Path.GetFileNameWithoutExtension(refPath));
+                    references.Add(Path.GetFileNameWithoutExtension(NormalizePath(refPath)));
             }
 
             result.Add(new ProjectInfo(name, relativePath, "csharp", references, packages, frameworks)
@@ -122,13 +122,16 @@ public static class CSharpProjectDiscovery
                     frameworks.Add(include);
             }
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
+        catch (Exception ex) when (ex is System.Xml.XmlException or IOException or UnauthorizedAccessException)
         {
-            // Malformed csproj — return what we have
+            Cop.Core.ProviderErrors.Report($"Failed to read project '{csprojPath}': {ex.Message}");
         }
 
-        return (name, refPaths, packages, frameworks, properties);
-    }
+            return (name, refPaths, packages, frameworks, properties);
+        }
+
+        private static string NormalizePath(string path) =>
+            path.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
 
     private static void AddTargetFrameworks(List<string> frameworks, string propertyName, string propertyValue)
     {
@@ -163,12 +166,15 @@ public static class CSharpProjectDiscovery
 
             foreach (var subDir in Directory.GetDirectories(dir))
             {
+                if ((File.GetAttributes(subDir) & FileAttributes.ReparsePoint) != 0) continue;
                 var dirName = Path.GetFileName(subDir);
                 if (excluded is not null && excluded.Contains(dirName)) continue;
                 CollectCsprojFiles(subDir, excluded, result);
             }
         }
-        catch (UnauthorizedAccessException) { }
-        catch (IOException) { }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            Cop.Core.ProviderErrors.Report($"Failed to scan projects in '{dir}': {ex.Message}");
+        }
     }
 }

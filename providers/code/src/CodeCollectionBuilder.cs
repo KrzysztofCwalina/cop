@@ -81,9 +81,11 @@ public static class CodeCollectionBuilder
         }
 
         // Compute cache fingerprint from file stats (fast: just stat calls, no file reading)
-        var fingerprint = ComputeFingerprint(rootPath, filePaths);
+        var fingerprint = ComputeFingerprint(rootPath, filePaths, parsers);
+        var canCache = filePaths.All(path => parsers.GetParser(Path.GetExtension(path))!.CanCache(path));
         var cachePath = GetCachePath(rootPath);
-        var cachedFiles = SourceCacheSerializer.TryLoad(cachePath, fingerprint, owner?.GetType().Assembly ?? parsers.CacheAssembly);
+        var cachedFiles = canCache
+            ? SourceCacheSerializer.TryLoad(cachePath, fingerprint, owner?.GetType().Assembly ?? parsers.CacheAssembly) : null;
 
         List<SourceFile> sorted;
         if (cachedFiles != null)
@@ -99,7 +101,7 @@ public static class CodeCollectionBuilder
             // Don't cache a parse that produced errors: the file-stats fingerprint won't change until
             // the file is fixed, so re-parsing each run keeps the error surfaced (a cached run would
             // restore the partial model with no error).
-            if (!sorted.Any(f => f.ParseErrors.Count > 0))
+            if (canCache && !sorted.Any(f => f.ParseErrors.Count > 0))
             {
                 // Save to cache for next run
                 try { SourceCacheSerializer.Save(cachePath, fingerprint, sorted); }
@@ -107,6 +109,16 @@ public static class CodeCollectionBuilder
             }
         }
 
+        foreach (var file in sorted)
+        {
+            if (!parsers.GetParser(Path.GetExtension(file.Path))!.SupportsCrossFileMembers) continue;
+            void DeferMembers(TypeDeclaration type)
+            {
+                type.DeferMembers(() => ResolveReceiverMembers(type, file, sorted));
+                foreach (var nested in type.NestedTypes) DeferMembers(nested);
+            }
+            foreach (var type in file.Types) DeferMembers(type);
+        }
         snapshots?.Add(snapshotKey, sorted);
         return ExtractCollections(sorted, query.Collection, query.CollectionFilters, query.Filter);
     }
@@ -208,25 +220,43 @@ public static class CodeCollectionBuilder
     /// </summary>
     internal static void LinkReferences(SourceFile file)
     {
-        for (int i = 0; i < file.Statements.Count; i++)
+        var seen = new HashSet<StatementInfo>(ReferenceEqualityComparer.Instance);
+        void LinkStatement(StatementInfo statement, MethodDeclaration? method, StatementInfo? parent)
         {
-            file.Statements[i].File = file;
-            var stmtLine = file.Statements[i].Line;
-            if (stmtLine >= 2 && file.CommentLines.Contains(stmtLine - 1))
+            if (method is not null) statement.Method = method;
+            if (parent is not null) statement.Parent = parent;
+            if (!seen.Add(statement)) return;
+            statement.File = file;
+            var stmtLine = statement.Line;
+            if (stmtLine >= 2 && stmtLine <= file.Lines.Count + 1 && file.CommentLines.Contains(stmtLine - 1))
             {
                 var prevLineText = file.Lines[stmtLine - 2]; // 0-indexed
                 var idx = prevLineText.IndexOf("cop-ignore:", StringComparison.Ordinal);
                 if (idx >= 0)
-                    file.Statements[i].CopIgnore = prevLineText[(idx + "cop-ignore:".Length)..].Trim();
+                    statement.CopIgnore = prevLineText[(idx + "cop-ignore:".Length)..].Trim();
             }
+            foreach (var child in statement.Children)
+                LinkStatement(child, method ?? statement.Method, statement);
         }
 
-        for (int i = 0; i < file.Types.Count; i++)
-            file.Types[i] = file.Types[i] with { File = file };
-
-        LinkMethodFiles(file.Types, file);
-        foreach (var method in file.Methods)
+        void LinkMethod(MethodDeclaration method)
+        {
             method.File = file;
+            foreach (var statement in method.Statements)
+                LinkStatement(statement, method, null);
+        }
+        void LinkType(TypeDeclaration type)
+        {
+            type.File = file;
+            foreach (var method in type.DeclaredMethods) LinkMethod(method);
+            foreach (var constructor in type.Constructors) LinkMethod(constructor);
+            foreach (var nested in type.NestedTypes) LinkType(nested);
+        }
+        foreach (var type in file.Types) LinkType(type);
+        foreach (var method in file.Methods)
+            LinkMethod(method);
+        foreach (var statement in file.Statements)
+            LinkStatement(statement, null, null);
 
         for (int i = 0; i < file.Regions.Count; i++)
         {
@@ -235,22 +265,36 @@ public static class CodeCollectionBuilder
         }
     }
 
-    /// <summary>Recursively sets <see cref="MethodDeclaration.File"/> on all methods/constructors.</summary>
-    private static void LinkMethodFiles(IEnumerable<TypeDeclaration> types, SourceFile file)
+    internal static List<MethodDeclaration> ResolveReceiverMembers(
+        TypeDeclaration type, SourceFile owner, IEnumerable<SourceFile> sourceFiles)
     {
-        foreach (var type in types)
+        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var scope = type.Namespace ?? owner.Namespace;
+        var files = sourceFiles.Where(file => file.Language == owner.Language
+            && comparer.Equals(Path.GetDirectoryName(file.FullPath), Path.GetDirectoryName(owner.FullPath))).ToList();
+        IEnumerable<TypeDeclaration> AllTypes(IEnumerable<TypeDeclaration> types)
         {
-            foreach (var method in type.Methods) method.File = file;
-            foreach (var ctor in type.Constructors) ctor.File = file;
-            LinkMethodFiles(type.NestedTypes, file);
+            foreach (var candidate in types)
+            {
+                yield return candidate;
+                foreach (var nested in AllTypes(candidate.NestedTypes)) yield return nested;
+            }
         }
+        var owners = files.SelectMany(file => AllTypes(file.Types)
+            .Where(candidate => candidate.Name == type.Name && (candidate.Namespace ?? file.Namespace) == scope))
+            .Distinct<TypeDeclaration>(ReferenceEqualityComparer.Instance).ToList();
+        if (owners.Count != 1 || !ReferenceEquals(owners[0], type))
+            return type.DeclaredMethods;
+        return type.DeclaredMethods.Concat(files.Where(file => file.Namespace == scope)
+                .SelectMany(file => file.Methods).Where(method => method.ReceiverType == type.Name))
+            .Distinct<MethodDeclaration>(ReferenceEqualityComparer.Instance).ToList();
     }
 
     /// <summary>
     /// Computes a fingerprint from file stats (paths, sizes, modification times).
     /// This is fast — only stat calls, no file reading.
     /// </summary>
-    private static byte[] ComputeFingerprint(string rootPath, List<string> filePaths)
+    private static byte[] ComputeFingerprint(string rootPath, List<string> filePaths, SourceParserRegistry parsers)
     {
         using var sha = SHA256.Create();
         using var ms = new MemoryStream();
@@ -262,6 +306,7 @@ public static class CodeCollectionBuilder
         {
             var relative = Path.GetRelativePath(rootPath, path);
             writer.Write(relative);
+            writer.Write(parsers.GetParser(Path.GetExtension(path))!.GetCacheIdentity(path));
             try
             {
                 var info = new FileInfo(path);

@@ -290,8 +290,11 @@ runs before its matching rows are yielded. `.First`, `.first()`, `.take(n)`, and
 short-circuit predicates can therefore stop before later files are opened.
 Subsequent enumeration can resume, and queries for other collections reuse files
 already parsed during that execution. `Projects` queries do not parse source files.
-The shared non-C# path also caches individual parsed files on disk, checking file
-size, modification time, and parser build identity before reusing them in a new run.
+Where a provider supports persistent syntax caching, individual source graphs can be
+reused after checking source and parser identity. Dependency-sensitive semantic answers
+are not stored in these file-only snapshots. Providers that cannot safely reattach
+current semantic context opt out of disk caching rather than reuse stale bindings;
+execution-scoped source and frontend reuse still applies.
 
 C# initially extracts syntax-derived facts from demanded files. Reading semantic
 facts (`Type.Interfaces`, `Statement.TypeName`, or `Statement.ConstructedTypeInterfaces`)
@@ -300,6 +303,24 @@ resolution. That fallback may read and syntax-parse all files in the target, but
 does not extract all of their Cop source models. Analysis of each demanded file
 and its semantic facts is memoized. Direct legacy `DataProvider.Query` calls retain
 their eager contract; the runtime uses the optional `QueryDeferred` path.
+
+The common `Statement`/`Calls` model also exposes deferred `ReceiverType`, `ValueType`,
+and `ReferencedCallable` facts across the source languages. Reading these properties
+can require additional source files and dependency context; structural filters alone
+do not request that work. `ReceiverType` describes an actual value receiver, not a
+package qualification or a guessed name. `ReferencedCallable` identifies the statically
+selected declaration and instantiated signature where established, not the method that
+runtime dispatch will necessarily execute. Its declaring type can differ from the
+receiver's type, for example when calling an inherited method.
+
+Unknown or dynamic facts remain `nic`. A callable with an unresolved required parameter
+type is not returned with missing parameter slots; independently known receiver or
+result types can still be available. Missing or unsupported context is diagnosed when
+semantic facts are requested. An unavailable optional frontend produces a visible
+degraded-analysis warning, not invented semantic values. See each
+[language guide](languages/) for its frontend, local dependency discovery, and supported
+static context. Legacy `Statement.TypeName` retains its existing provider-specific
+behavior and is not a substitute for these explicit semantic properties.
 
 This is not an index. A cold query enumerating **all** matching types still has to
 inspect every eligible file; a name predicate alone cannot safely tell the provider

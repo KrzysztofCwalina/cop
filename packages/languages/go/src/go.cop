@@ -1,7 +1,9 @@
 # Go source language provider
 import code
 
-## Parses Go source files in the target directory and returns a Codebase.
+## Parses Go with the installed standard-library AST toolchain, or warns and uses simpler syntax analysis.
+## Native semantic fields demand package-aware go/types checking with offline local dependencies.
+## No target code is built or executed; missing semantic context is diagnosed.
 ## Example: let cb = go.parse()
 export function parse() : Codebase => provider('go')
 
@@ -9,9 +11,8 @@ export function parse() : Codebase => provider('go')
 ## Example: let cb = go.parse('/path/to/project')
 export function parse(path : string) : Codebase => provider('go', path)
 
-## A Go-specific view of a Type. Note: IsInterface/IsStruct are also derivable from the
-## common `Kind`; they demonstrate the mechanism — prefer language-independent checks when
-## they suffice. Obtain one by narrowing with `asGo`.
+## A Go-specific Type view. IsStruct distinguishes actual structs from other named types
+## represented by the coarse common Kind. Obtain one by narrowing with asGo.
 export type GoType = Type & {
     IsInterface : bool,
     IsStruct : bool,

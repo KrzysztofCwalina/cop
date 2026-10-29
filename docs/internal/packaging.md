@@ -78,6 +78,39 @@ Fields:
 | `providerAssembly` | No | Filename of the provider DLL (e.g., `csharp-provider.dll`). Required when `lib/` contains multiple DLLs. |
 | `dependencies` | No | List of fully-qualified package references (e.g., `github.com/org/repo/other-pkg: 1.0.0`). |
 
+### Optional native language toolchains
+
+Providers use `Cop.Core.ToolchainProcess` for installed-tool discovery and bounded
+one-shot execution, or `ToolchainExecutionScope.RequestAsync` for reusable JSON-lines
+helpers. Argument lists are passed directly without shell interpolation. Child-local
+environment overrides can disable toolchain downloads, workspace configuration, and
+plugins; providers must use these where the native tool otherwise permits them.
+Analyzed source is parsed, never executed. No automatic installation or global
+configuration changes are part of toolchain discovery.
+
+`FindExecutable(name, searchPath)` searches absolute directories only; an explicit
+empty search path is the deterministic unavailable seam for tests. PATH presence is
+not proof that a shim works: providers must preflight their required capability before
+selecting a native backend. A recognized unavailable capability may use documented
+simpler analysis and `ProviderWarnings.ReportOnce(provider, scope, message)`. The
+message must identify the backend/limitation. A request's nonzero exit, timeout,
+invalid JSON, or output-limit failure must instead be surfaced explicitly; never
+reinterpret a failed analysis request as an unavailable tool.
+
+The execution scope owns helper reuse by executable, arguments, working directory,
+and environment. It spans deferred enumeration and disposes workers on all engine
+exits. Calls outside an engine scope dispose their worker after one request.
+Requests are serialized; a failed worker is not silently restarted. The deadline
+covers stdin, process execution, and output reads. Stdout responses and stderr are
+bounded. Windows job ownership also cleans up descendants of exited launchers;
+Unix currently uses process-tree termination while the root is alive. Exited-root
+descendant containment on Unix is not yet guaranteed, and native-platform tests are
+required before claiming that guarantee.
+
+Provider notices are drained after deferred results have been forced. Missing-tool
+fallback warnings are nonfatal; source or analysis failures reported through
+`ProviderErrors` make the CLI fail even when a check returns zero.
+
 ---
 
 ## Creating a Package

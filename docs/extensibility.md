@@ -104,8 +104,14 @@ compatible: the default `QueryDeferred` delegates to their original `Query`.
 The process-provider JSON protocol remains materialized and unchanged.
 
 The main language providers implement this pull-based path with per-file source
-snapshots. C# defers whole-target semantic compilation until semantic fields are
-read. Cold full-result queries still inspect the target; this is demand-driven
+snapshots. Their common `ReceiverType`, `ValueType`, and `ReferencedCallable` properties
+defer semantic work until read. Producers must distinguish value receivers from
+declaration owners, retain unknowns instead of guessing, and surface incomplete
+context on demand. Syntax-cache serialization must neither demand these getters nor
+persist their dependency-bound answers. Cache hits need current semantic context
+reattached; otherwise the provider must opt out of persistent caching.
+
+Cold full-result queries still inspect the target; this is demand-driven
 parsing, not an indexed lookup. At `-dd`, `[provider-parse]`, `[provider-cache]`,
 `[provider-model]`, and `[provider-semantics]` expose the actual work performed.
 

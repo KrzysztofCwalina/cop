@@ -205,6 +205,7 @@ internal sealed class PythonLexer
 
     private Tok LexString(int tl, int tc, int prefixLen, bool isTriple, char q)
     {
+        var start = _pos;
         bool isRaw = false, isFStr = false;
         for (int k = 0; k < prefixLen; k++)
         {
@@ -229,13 +230,13 @@ internal sealed class PythonLexer
                 if (c == q && Peek(1) == q && Peek(2) == q)
                 {
                     Advance(); Advance(); Advance();
-                    return new Tok(TK.Str, "", tl, tc);
+                    return new Tok(TK.Str, _src[start.._pos], tl, tc);
                 }
                 if (c == '\n' || c == '\r') AdvanceNewline();
                 else Advance();
             }
             LexErrors.Add($"{_filePath}({tl},{tc}): error: unterminated triple-quoted string");
-            return new Tok(TK.Str, "", tl, tc);
+            return new Tok(TK.Str, _src[start.._pos], tl, tc);
         }
 
         // Single-line string
@@ -257,11 +258,11 @@ internal sealed class PythonLexer
                 exprDepth++; Advance(); continue;
             }
             if (isFStr && c == '}' && exprDepth > 0) { exprDepth--; Advance(); continue; }
-            if (c == q && exprDepth == 0) { Advance(); return new Tok(TK.Str, "", tl, tc); }
+            if (c == q && exprDepth == 0) { Advance(); return new Tok(TK.Str, _src[start.._pos], tl, tc); }
             Advance();
         }
         LexErrors.Add($"{_filePath}({tl},{tc}): error: unterminated string literal");
-        return new Tok(TK.Str, "", tl, tc);
+        return new Tok(TK.Str, _src[start.._pos], tl, tc);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -270,6 +271,7 @@ internal sealed class PythonLexer
 
     private Tok LexNumber(int tl, int tc)
     {
+        var start = _pos;
         // Hex / octal / binary literals
         if (!AtEnd() && Cur() == '0' && _pos + 1 < _src.Length)
         {
@@ -279,7 +281,7 @@ internal sealed class PythonLexer
                 Advance(); Advance();
                 while (!AtEnd() && (IsHexDigitOrUnderscore(Cur()))) Advance();
                 if (!AtEnd() && (Cur() is 'j' or 'J')) Advance();
-                return new Tok(TK.Number, "", tl, tc);
+                return new Tok(TK.Number, _src[start.._pos], tl, tc);
             }
         }
         // Decimal / float (also handles leading '.')
@@ -296,7 +298,7 @@ internal sealed class PythonLexer
             while (!AtEnd() && (char.IsDigit(Cur()) || Cur() == '_')) Advance();
         }
         if (!AtEnd() && (Cur() is 'j' or 'J')) Advance();
-        return new Tok(TK.Number, "", tl, tc);
+        return new Tok(TK.Number, _src[start.._pos], tl, tc);
     }
 
     private static bool IsHexDigitOrUnderscore(char c) =>

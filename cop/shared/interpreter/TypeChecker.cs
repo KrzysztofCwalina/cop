@@ -14,13 +14,14 @@ using Cop.Lang.Ast;
 /// Anything it cannot infer is treated as compatible, guaranteeing no false positives on the
 /// existing corpus.
 /// </summary>
-public sealed class TypeChecker
+public sealed partial class TypeChecker
 {
     /// <summary>An inferred type: a type name plus whether it is a collection. Null = unknown.</summary>
     private sealed record IT(string Name, bool IsCollection);
 
     /// <summary>A callable signature (one overload).</summary>
-    private sealed record Sig(string Name, IReadOnlyList<TypeRef?> Params, bool LastIsVariadic, TypeRef? Return, bool IsPredicate);
+    private sealed record Sig(string Name, IReadOnlyList<TypeRef?> Params, bool LastIsVariadic, TypeRef? Return, bool IsPredicate,
+        FunctionDecl Declaration);
 
     // Merged type model (unioned across every declaration, local + imported).
     private readonly Dictionary<string, HashSet<string>> _bases = new(StringComparer.Ordinal);
@@ -114,7 +115,7 @@ public sealed class TypeChecker
                     var sigs = _funcs.TryGetValue(fn.Name, out var s) ? s : (_funcs[fn.Name] = []);
                     var ps = fn.Params.Select(pp => pp.Type).ToList();
                     bool variadic = ps.Count > 0 && ps[^1] is { IsCollection: true };
-                    sigs.Add(new Sig(fn.Name, ps, variadic, fn.ReturnType, fn.IsPredicate));
+                    sigs.Add(new Sig(fn.Name, ps, variadic, fn.ReturnType, fn.IsPredicate, fn));
                     // A narrowing predicate (`predicate p(T) : NarrowType => ...`) narrows the
                     // element type when used as a filter. A plain boolean predicate (ReturnType
                     // "bool" or none) does NOT narrow — it preserves the element type. Narrowing
@@ -401,6 +402,7 @@ public sealed class TypeChecker
     /// <summary>Infers the type of an expression, or null when it cannot be determined confidently.</summary>
     private IT? InferExpr(Expression? expr)
     {
+        if (_staticInference) return InferStaticExpression(expr);
         switch (expr)
         {
             case LiteralExpr lit:
