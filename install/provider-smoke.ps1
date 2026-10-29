@@ -5,7 +5,7 @@ param(
     [ValidateSet('csharp', 'python', 'javascript', 'go', 'java', 'rust', 'cop')]
     [ValidateCount(1, 7)]
     [string[]]$Languages = @('csharp', 'python', 'javascript', 'go', 'java', 'rust', 'cop'),
-    [switch]$RequireRustBundle
+    [string]$RustBundlePath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -100,12 +100,13 @@ command MAIN = print('PUBLISH-SEMANTIC $Language {calls.Count} {resolved.Count}'
 }
 
 try {
-    if ($RequireRustBundle) {
-        $portableDir = Join-Path $smokeDir 'portable'
-        New-Item -ItemType Directory -Path $portableDir | Out-Null
-        $portableExe = Join-Path $portableDir ([System.IO.Path]::GetFileName($Executable))
-        Copy-Item -LiteralPath $Executable -Destination $portableExe
-        $Executable = $portableExe
+    $portableDir = Join-Path $smokeDir 'portable'
+    New-Item -ItemType Directory -Path $portableDir | Out-Null
+    $portableExe = Join-Path $portableDir ([System.IO.Path]::GetFileName($Executable))
+    Copy-Item -LiteralPath $Executable -Destination $portableExe
+    $Executable = $portableExe
+    if ($RustBundlePath) {
+        Copy-Item -LiteralPath $RustBundlePath -Destination (Join-Path $portableDir 'Cop.RustFrontend.Bundle.zip')
     }
     foreach ($fixture in $fixtures) {
         $language = $fixture.Language
@@ -152,7 +153,7 @@ command MAIN = print('PUBLISH-SMOKE $language {alpha.Count} {runs.Count} {calls.
     if ($Languages -contains 'cop') {
         Test-SemanticSmoke 'cop' "function get(value : string) : int => value.Length`nlet result = 'hello':get()" '.cop' 'get' 'int' 'string'
     }
-    if ($RequireRustBundle -and $Languages -contains 'rust') {
+    if ($RustBundlePath -and $Languages -contains 'rust') {
         Test-SemanticSmoke 'rust' 'pub struct Alpha; impl Alpha { pub fn get(&self, value: u32) -> u32 { value } } pub fn run() { let a = Alpha; a.get(1); }' '.rs' 'get' 'u32'
     }
 }

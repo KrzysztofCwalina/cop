@@ -57,6 +57,35 @@ public class RustFrontendTests
         file.Statements.Single(s => s.MemberName == name).ReferencedCallable!;
 
     [Test]
+    public void MissingRustCompiler_BindsLocalCallsWithoutPreparingUnusableStandardLibrary()
+    {
+        string path = Write("src/lib.rs",
+            "pub struct Alpha; impl Alpha { pub fn get(&self, value: u32) -> u32 { value } } pub fn run() { let a = Alpha; a.get(1); }");
+        Write("Cargo.toml", "[package]\nname='app'\nversion='1.0.0'\nedition='2024'");
+        string? previous = Environment.GetEnvironmentVariable("PATH");
+        int preparations = 0;
+        try
+        {
+            Environment.SetEnvironmentVariable("PATH", "");
+            using var scope = new ToolchainExecutionScope();
+            var frontend = new RustFrontend(_frontend, _root, prepareStandardLibrary: () =>
+            {
+                preparations++;
+                throw new AssertionException("Sources cannot be used without a compatible compiler identity.");
+            });
+            var file = frontend.Parse(path, File.ReadAllText(path));
+            var call = file.Statements.Single(s => s.MemberName == "get");
+            Assert.That(call.ReceiverType?.Name, Is.EqualTo("Alpha"));
+            Assert.That(call.ValueType?.Name, Is.EqualTo("u32"));
+            Assert.That(call.ReferencedCallable?.Signature, Is.EqualTo("pub fn get(&self, value: u32) -> u32"));
+            Assert.That(preparations, Is.Zero);
+            Assert.That(ProviderWarnings.Drain(), Has.Some.Contains("compiler identity is unavailable"));
+            Assert.That(ProviderErrors.Drain(), Is.Empty);
+        }
+        finally { Environment.SetEnvironmentVariable("PATH", previous); }
+    }
+
+    [Test]
     public void MaintainedAst_DeclarationSpansExcludeDocumentationAndRetainAttributes()
     {
         string path = Write("src/lib.rs", """

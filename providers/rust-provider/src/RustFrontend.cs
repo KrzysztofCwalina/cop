@@ -141,6 +141,16 @@ internal sealed class RustFrontend(string executable, string root, string? stand
             if (File.Exists(Path.Combine(installed, "core", "src", "lib.rs")))
                 return installed;
         }
+        string? release = compilerVersion.Split('\n')
+            .FirstOrDefault(s => s.StartsWith("release: ", StringComparison.Ordinal))?[9..].Trim();
+        string? commit = compilerVersion.Split('\n')
+            .FirstOrDefault(s => s.StartsWith("commit-hash: ", StringComparison.Ordinal))?[13..].Trim();
+        if (string.IsNullOrEmpty(release) || string.IsNullOrEmpty(commit))
+        {
+            ProviderWarnings.ReportOnce("rust", root,
+                "Rust compiler identity is unavailable; standard-library bindings are left unknown without preparing unused sources. Local source analysis remains available.");
+            return null;
+        }
         string bundled = standardLibraryDirectory ?? prepareStandardLibrary?.Invoke()
             ?? Path.Combine(Path.GetDirectoryName(Executable)!, "rust-stdlib");
         string manifest = Path.Combine(bundled, "manifest.json");
@@ -151,10 +161,6 @@ internal sealed class RustFrontend(string executable, string root, string? stand
                 !document.RootElement.TryGetProperty("release", out var bundledRelease) || bundledRelease.ValueKind != JsonValueKind.String ||
                 !document.RootElement.TryGetProperty("compilerCommit", out var bundledCommit) || bundledCommit.ValueKind != JsonValueKind.String)
                 throw new InvalidDataException("Bundled Rust standard-library manifest is malformed.");
-            string? release = compilerVersion.Split('\n')
-                .FirstOrDefault(s => s.StartsWith("release: ", StringComparison.Ordinal))?[9..].Trim();
-            string? commit = compilerVersion.Split('\n')
-                .FirstOrDefault(s => s.StartsWith("commit-hash: ", StringComparison.Ordinal))?[13..].Trim();
             if (bundledRelease.GetString() == release && bundledCommit.GetString() == commit)
             {
                 string library = Path.Combine(bundled, "library");

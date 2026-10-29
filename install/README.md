@@ -29,25 +29,41 @@ To build for just your platform:
 install/publish.ps1 -Runtimes win-x64
 ```
 
-Publishing also builds the pinned Rust analysis helper and embeds it, its third-party
-licenses, and the checksum-verified Rust 1.99.1 standard-library sources inside `cop`.
-Building requires Cargo/Rust and the native linker and Rust target for each requested
-RID; cross-publishing .NET alone is not sufficient. Build each platform on a suitable
-host or provision its cross-toolchain first. The pinned source archive is downloaded
-at build time and cached under `install/native-bundles/inputs/`.
+The base executable has no external language-runtime requirement. Publishing the base
+for any of these platforms requires .NET, not Rust, Cargo, Python, Node.js, Go, or Java.
+Structural analysis remains available when optional language tools are absent, with
+explicit warnings where richer analysis is unavailable. Already installed optional
+toolchains can supply compiler-backed analysis; Cop never installs them automatically.
 
-To supply the official source archive locally and forbid Cargo network access:
+## Optional Rust language bundle
+
+The native Rust frontend and standard-library sources are **not embedded in the base
+executable**. Download the matching optional `cop-rust-<rid>.zip` release asset and
+extract its `Cop.RustFrontend.Bundle.zip` beside `cop`/`cop.exe` to opt in. Remove that
+file to opt out; previously extracted cache files do not enable the frontend.
+Updating the base executable neither downloads nor installs optional language bundles.
+
+To build only the optional distribution:
 
 ```powershell
-install/publish.ps1 -Runtimes win-x64 -RustSourceArchive C:\inputs\rust-src-1.99.1.tar.xz -RustOffline
+install/publish-rust-bundle.ps1 -Runtime win-x64
 ```
 
-Cargo dependencies must already be cached for `-RustOffline`; this option does not
-disable .NET restore. `install/prepare-rust-bundle.ps1 -Runtime win-x64` can prepare
-just the embedded payload. Direct `dotnet publish` of the CLI requires its returned
-ZIP path through `-p:RustFrontendBundlePath=...`; ordinary development builds do not.
-The installed executable lazily extracts its own versioned payload into Cop's user
-cache, without downloads, writes to the analyzed project, or a separate rust-analyzer
+Only this explicit build requires Cargo/Rust, the requested Rust target, and its native
+linker. Cross-publishing the base does not. The optional bundle contains the pinned
+helper, its third-party licenses, and checksum-verified Rust 1.99.1 standard-library
+sources. The source archive is downloaded at build time and cached under
+`install/native-bundles/inputs/`. To supply it locally and forbid Cargo network access:
+
+```powershell
+install/publish-rust-bundle.ps1 -Runtime win-x64 -RustSourceArchive C:\inputs\rust-src-1.99.1.tar.xz -Offline
+```
+
+Cargo dependencies must already be cached for `-Offline`.
+`install/prepare-rust-bundle.ps1 -Runtime win-x64` prepares the inner payload only.
+Direct `dotnet publish` of the CLI does not require any Rust payload or property.
+With the optional archive installed, Cop lazily extracts its versioned payload into
+its user cache, without downloads, writes to the analyzed project, or a rust-analyzer
 installation. Matching installed Rust sources take precedence; bundled standard-library
 sources require an exactly compatible compiler release and commit. Incompatible
 context produces explicit diagnostics rather than guessed bindings.
@@ -58,10 +74,11 @@ freshly built provider DLLs. Each must retain exactly one known declaration, met
 and call on both cold and warm runs. Malformed input must produce a visible diagnostic
 and a nonzero exit code. Missing optional toolchains may emit fallback warnings; they
 must not hide these baseline facts or turn malformed input into success.
-The gate also checks exact receiver, result, and selected-callable facts for C# and
-Rust, plus a scalar-receiver call in Cop source, on repeated executions. The publishing
+The base gate also checks exact receiver, result, and selected-callable facts for C#,
+plus a scalar-receiver call in Cop source, on repeated executions. The publishing
 gate runs every provider from a copy of the executable alone, proving that framework
-metadata and the embedded native payload do not depend on build-output sidecars.
+metadata does not depend on build-output sidecars. CI separately builds and verifies
+the opted-in Rust distribution, including exact semantic facts.
 
 CI provisions Node.js and a pinned TypeScript compiler before publishing and testing,
 so JavaScript semantic regressions exercise the compiler rather than the structural
@@ -82,7 +99,7 @@ install/provider-smoke.ps1 -Executable cop/cli/bin/Debug/net10.0/cop.exe
 For a focused Rust structural and semantic check of the portable executable:
 
 ```powershell
-install/provider-smoke.ps1 -Executable install/win-x64/cop.exe -Languages rust -RequireRustBundle
+install/provider-smoke.ps1 -Executable install/win-x64/cop.exe -Languages rust -RustBundlePath install/native-bundles/win-x64/bundle.zip
 ```
 
 Language selection limits manual smoke runs only; publishing still checks every provider.

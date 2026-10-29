@@ -48,7 +48,7 @@ public class RustFrontendBundleTests
         new(bundleFactory: () => new MemoryStream(bytes, writable: false), cacheDirectory: _root);
 
     [Test]
-    public void EquivalentEmbeddedArchiveIsLazyAndConcurrentPublicationReusesOneVerifiedDirectory()
+    public void OptionalArchiveIsLazyAndConcurrentPublicationReusesOneVerifiedDirectory()
     {
         byte[] bytes = Bundle();
         int opened = 0;

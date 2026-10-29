@@ -1,5 +1,4 @@
 using System.IO.Compression;
-using System.Reflection;
 using System.Security.Cryptography;
 
 namespace Cop.Providers.SourceParsers;
@@ -8,15 +7,15 @@ internal sealed record RustFrontendDeployment(string Executable, Func<string>? P
 
 internal static class RustFrontendBundle
 {
-    internal const string ResourceName = "Cop.RustFrontend.Bundle.zip";
+    internal const string BundleFileName = "Cop.RustFrontend.Bundle.zip";
     private const int MaximumArchiveBytes = 128 * 1024 * 1024;
     private const long MaximumExtractedBytes = 256L * 1024 * 1024;
     private static string ExecutableName => OperatingSystem.IsWindows() ? "cop-rust-frontend.exe" : "cop-rust-frontend";
     private static IEnumerable<string> Directories =>
         new[] { AppContext.BaseDirectory, Path.GetDirectoryName(typeof(RustFrontendBundle).Assembly.Location)! }.Distinct();
 
-    internal static bool IsAvailable => Assembly.GetEntryAssembly()?.GetManifestResourceInfo(ResourceName) is not null ||
-        Directories.Any(d => File.Exists(Path.Combine(d, ExecutableName)) || File.Exists(Path.Combine(d, ResourceName)));
+    internal static bool IsAvailable =>
+        Directories.Any(d => File.Exists(Path.Combine(d, ExecutableName)) || File.Exists(Path.Combine(d, BundleFileName)));
 
     internal static RustFrontendDeployment? Find(Func<Stream?>? bundleFactory = null, string? cacheDirectory = null)
     {
@@ -25,13 +24,11 @@ internal static class RustFrontendBundle
             using var supplied = bundleFactory();
             return supplied is null ? null : Deploy(supplied, cacheDirectory);
         }
-        using var embedded = Assembly.GetEntryAssembly()?.GetManifestResourceStream(ResourceName);
-        if (embedded is not null) return Deploy(embedded, cacheDirectory);
         foreach (string directory in Directories)
         {
             string executable = Path.Combine(directory, ExecutableName);
             if (File.Exists(executable)) return new(executable);
-            string archive = Path.Combine(directory, ResourceName);
+            string archive = Path.Combine(directory, BundleFileName);
             if (!File.Exists(archive)) continue;
             using var stream = File.OpenRead(archive);
             return Deploy(stream, cacheDirectory);

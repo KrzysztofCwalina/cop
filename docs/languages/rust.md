@@ -21,14 +21,20 @@ cop --version
 
 ### Rust syntax and semantic analysis
 
-Cop supports a **pinned rust-analyzer frontend** (`ra_ap_*` 0.0.358), bundled with
-standard-library sources in the self-contained Cop executable. It does not depend on
-the optional `rust-analyzer` rustup component. On first Rust source demand, Cop extracts
+Cop supports an **optional pinned rust-analyzer frontend** (`ra_ap_*` 0.0.358).
+The base executable does not contain or require this native dependency. To opt in,
+download `cop-rust-<rid>.zip` for your platform and extract its
+`Cop.RustFrontend.Bundle.zip` beside `cop`/`cop.exe`. No compiler or source download
+occurs automatically. Remove that archive to opt out; existing user-cache entries
+alone never enable the frontend.
+
+The optional bundle includes compatible standard-library sources and does not depend on
+the `rust-analyzer` rustup component. On first Rust source demand, Cop extracts
 only the helper and its notices to a content-addressed user cache and validates their
 integrity. Bundled standard-library sources are extracted and validated separately only
 when semantic analysis needs them; structural queries do not materialize those sources.
-Both payloads are reused without writing into the analyzed project. Adjacent helper/bundle
-discovery also supports development builds; a source checkout does not build it automatically.
+Both payloads are reused without writing into the analyzed project. Explicitly deployed
+adjacent helpers also support development builds; a source checkout does not build one automatically.
 
 The maintained AST supplies declarations, signatures, imports, generic parameters,
 source spans, decoded literal arguments, and nested call/control relationships.
@@ -56,6 +62,8 @@ sysroot is preferred; otherwise the shipped sources require an exact compiler re
 and commit match. The current source pin is Rust 1.99.1, commit
 `58cf8f9c35b355199727627d07ae34a4e2846d67`. A mismatch warns and leaves unavailable
 standard-library bindings unknown rather than substituting another version.
+Without an installed compiler, the optional frontend still provides local source
+bindings; it does not extract standard-library sources it cannot match to a compiler.
 The source-only sysroot graph supplies core/alloc/std/prelude inference, including
 generic standard-library receivers. External sysroot implementation dependencies and
 platform/generated internals can still be unresolved without their build context.
@@ -97,7 +105,9 @@ link the C runtime. Linux GNU builds must use the release's minimum-supported gl
 baseline. Package the helper, **`rust-frontend-licenses/`, and `rust-stdlib/`** together;
 the build script collects every locked dependency's license metadata and license/notice texts,
 including pinned upstream notices omitted from published crates. Missing attribution fails
-the build. The payload ZIP is embedded as `Cop.RustFrontend.Bundle.zip` by release publishing.
+the build. `install/publish-rust-bundle.ps1 -Runtime <rid>` packages the payload as
+the separate optional `cop-rust-<rid>.zip` distribution; base publishing never builds
+or embeds it.
 rust-analyzer is MIT OR Apache-2.0; transitive dependencies require their own notices.
 The official source component's licenses, copyright inventory, and nested notices are
 preserved alongside its source.

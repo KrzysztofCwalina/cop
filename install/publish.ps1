@@ -4,9 +4,7 @@
 param(
     [ValidateSet('win-x64', 'win-arm64', 'linux-x64', 'linux-arm64', 'osx-x64', 'osx-arm64')]
     [string[]]$Runtimes = @("win-x64", "win-arm64", "linux-x64", "linux-arm64", "osx-x64", "osx-arm64"),
-    [switch]$SkipBuild,
-    [string]$RustSourceArchive,
-    [switch]$RustOffline
+    [switch]$SkipBuild
 )
 
 Add-Type -AssemblyName System.IO.Compression
@@ -233,15 +231,11 @@ if (-not $SkipBuild) {
 foreach ($rid in $Runtimes) {
     $outDir = Join-Path $OutputBase $rid
     if (-not $SkipBuild) {
-        $rustBundle = & (Join-Path $PSScriptRoot 'prepare-rust-bundle.ps1') -Runtime $rid -RustSourceArchive $RustSourceArchive -Offline:$RustOffline
-        if (-not $rustBundle -or -not (Test-Path -LiteralPath $rustBundle -PathType Leaf)) {
-            throw "Rust frontend bundle preparation failed for $rid"
-        }
         if (Test-Path $outDir) { Remove-Item -Recurse -Force $outDir }
         New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 
         Write-Host "Publishing cop for $rid..."
-        dotnet publish "$RepoRoot\cop\cli\cop.csproj" -c Release -r $rid --self-contained -p:PublishReadyToRun=false "-p:RustFrontendBundlePath=$rustBundle" -o $outDir
+        dotnet publish "$RepoRoot\cop\cli\cop.csproj" -c Release -r $rid --self-contained -p:PublishReadyToRun=false -o $outDir
         if ($LASTEXITCODE -ne 0) { throw "cop publish failed for $rid" }
         
         # Clean up build artifacts
@@ -252,10 +246,16 @@ foreach ($rid in $Runtimes) {
         Write-Host "  -> $outDir"
     }
 
+    foreach ($optional in @('Cop.RustFrontend.Bundle.zip', 'cop-rust-frontend.exe', 'cop-rust-frontend', 'rust-stdlib', 'rust-frontend-licenses')) {
+        if (Test-Path -LiteralPath (Join-Path $outDir $optional)) {
+            throw "Base distribution contains optional Rust payload '$optional'. Publish to a clean output directory."
+        }
+    }
+
     # Exercise the actual binary and provider contract before packaging or updating PATH.
     if ($rid -eq [System.Runtime.InteropServices.RuntimeInformation]::RuntimeIdentifier) {
         $exeName = if ($rid -like 'win-*') { 'cop.exe' } else { 'cop' }
-        & (Join-Path $PSScriptRoot 'provider-smoke.ps1') -Executable (Join-Path $outDir $exeName) -RequireRustBundle
+        & (Join-Path $PSScriptRoot 'provider-smoke.ps1') -Executable (Join-Path $outDir $exeName)
     }
 
     # Create zip archive

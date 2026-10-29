@@ -63,6 +63,12 @@ jobs:
         shell: pwsh
         run: ./install/publish.ps1 -Runtimes win-x64
 
+      - name: Build and verify optional Rust distribution
+        shell: pwsh
+        run: |
+          ./install/publish-rust-bundle.ps1 -Runtime win-x64
+          ./install/provider-smoke.ps1 -Executable install/win-x64/cop.exe -Languages rust -RustBundlePath install/native-bundles/win-x64/bundle.zip
+
       # NOTE: do NOT `dotnet test cop.sln` — the solution has two projects named "cop"
       # (MSB5004). Test each project file directly.
       - name: Core tests (Cop.Tests)

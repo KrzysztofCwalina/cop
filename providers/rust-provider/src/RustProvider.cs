@@ -59,6 +59,7 @@ public class RustProvider : DataProvider
         if (RustFrontendBundle.IsAvailable) return;
         ProviderWarnings.ReportOnce("rust", query.RootPath ?? "",
             "Rust analysis is syntax-only because Cop's maintained Rust frontend is unavailable. " +
+            "Install the optional cop-rust-<rid>.zip language bundle beside cop to enable it. " +
             "Using the built-in structural parser; macro expansion, name/type resolution, and cfg evaluation are unavailable. " +
             "No Cargo build, downloads, or target code execution are performed.");
     }

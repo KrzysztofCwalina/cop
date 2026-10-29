@@ -29,6 +29,8 @@ public class RustBundlePublishTests
         Directory.CreateDirectory(_native);
         _script = Path.Combine(install, "prepare-rust-bundle.ps1");
         File.Copy(Path.Combine(repo!.FullName, "install", "prepare-rust-bundle.ps1"), _script);
+        File.Copy(Path.Combine(repo.FullName, "install", "publish-rust-bundle.ps1"),
+            Path.Combine(install, "publish-rust-bundle.ps1"));
         _archive = Path.Combine(_root, "source.tar.xz");
         File.WriteAllBytes(_archive, [1, 2, 3]);
         var hash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(_archive)));
@@ -59,6 +61,24 @@ public class RustBundlePublishTests
 
     [TearDown]
     public void TearDown() => Directory.Delete(_root, recursive: true);
+
+    [Test]
+    public void OptionalDistribution_ContainsOnlyExplicitlyInstallableArchive()
+    {
+        var script = Path.Combine(Path.GetDirectoryName(_script)!, "publish-rust-bundle.ps1");
+        var result = RunScript(script, "-RustSourceArchive", _archive, "-Offline");
+        Assert.That(result.ExitCode, Is.Zero, result.Output);
+        var distribution = Path.Combine(Path.GetDirectoryName(_script)!, "cop-rust-win-x64.zip");
+        Assert.That(result.Output.Trim(), Is.EqualTo(distribution));
+        using var zip = ZipFile.OpenRead(distribution);
+        Assert.That(zip.Entries.Select(e => e.FullName), Is.EqualTo(new[] { "Cop.RustFrontend.Bundle.zip" }));
+        using var input = zip.Entries.Single().Open();
+        using var bytes = new MemoryStream();
+        input.CopyTo(bytes);
+        Assert.That(bytes.ToArray(), Is.EqualTo(File.ReadAllBytes(_bundle)));
+        Assert.That(Directory.Exists(Path.Combine(Path.GetDirectoryName(_script)!, "win-x64")), Is.False,
+            "Building the language bundle must not install it or alter the base distribution.");
+    }
 
     [Test]
     public void LocalVerifiedInputs_ProduceRootPayload_AndPreserveOfflineBuildOption()
@@ -130,6 +150,9 @@ public class RustBundlePublishTests
     }
 
     private (int ExitCode, string Output) Run(params string[] arguments)
+        => RunScript(_script, arguments);
+
+    private static (int ExitCode, string Output) RunScript(string script, params string[] arguments)
     {
         var start = new ProcessStartInfo("pwsh")
         {
@@ -137,7 +160,7 @@ public class RustBundlePublishTests
             RedirectStandardError = true,
             UseShellExecute = false
         };
-        foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-File", _script, "-Runtime", "win-x64" }.Concat(arguments))
+        foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-File", script, "-Runtime", "win-x64" }.Concat(arguments))
             start.ArgumentList.Add(argument);
         using var process = Process.Start(start)!;
         var stdout = process.StandardOutput.ReadToEndAsync();

@@ -206,6 +206,17 @@
         "Checks reuse identical ordered scalar filter prefixes within one execution, reducing repeated work across large check suites.",
         "Query diagnostics now show source-shaped provider filters and distinguish locally evaluated stages."
       ]
+    },
+    {
+      "version": "2026.10.29.1",
+      "approved": true,
+      "features": [
+        "Improved source models and optional compiler-backed analysis across C#, Python, JavaScript/TypeScript, Go, Java, Rust, and Cop, with lazy receiver, result-type, and selected-callable facts.",
+        "All seven languages retain built-in analysis without external language runtimes. The native Rust frontend is a separate opt-in language bundle, not a requirement for using or publishing the base executable.",
+        "Self-contained C# analysis resolves framework APIs without an installed .NET SDK or runtime.",
+        "Explicit local package feeds work on clean machines without unnecessary remote restore, including relative paths and escaped quotes.",
+        "More accurate source spans, dependency-aware semantic refresh, and visible diagnostics for unavailable optional analysis."
+      ]
     }
   ]
 }
