@@ -934,6 +934,11 @@ public static class RunCommand
         var cachePath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cop", "packages");
 
+        var feedPaths = PackageResolver.GetFeedPaths();
+        foreach (var p in PackageResolver.GetFeedPaths(scriptsDir))
+            if (!feedPaths.Contains(p, StringComparer.OrdinalIgnoreCase))
+                feedPaths.Add(p);
+
         // Parse all .cop files to collect imports
         var imports = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var scriptFilePaths = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
@@ -942,23 +947,15 @@ public static class RunCommand
             try
             {
                 var source = File.ReadAllText(path);
-                var sf = Cop.Lang.Parser.CopParser.ParseFile(source, path);
-                foreach (var imp in sf.Imports)
-                    imports.Add(imp);
+                var module = Cop.Lang.Parser.CopParser.Parse(source, path);
+                foreach (var imp in module.Declarations.OfType<Cop.Lang.Ast.ImportDecl>())
+                    imports.Add(imp.ModuleName);
+                AddDeclaredFeedPaths(feedPaths, module, path);
             }
             catch { /* skip unparseable files */ }
         }
 
         if (imports.Count == 0) return;
-
-        // Determine available feed paths (includes global cache + walk-up from cwd and scriptsDir)
-        var feedPaths = PackageResolver.GetFeedPaths();
-        // Also include walk-up from scriptsDir if different from cwd
-        foreach (var p in PackageResolver.GetFeedPaths(scriptsDir))
-        {
-            if (!feedPaths.Contains(p, StringComparer.OrdinalIgnoreCase))
-                feedPaths.Add(p);
-        }
 
         // Find imports that can't be resolved from any known path
         var missing = new List<string>();
@@ -1105,6 +1102,18 @@ public static class RunCommand
         }
     }
 
+    private static void AddDeclaredFeedPaths(List<string> feedPaths, Cop.Lang.Ast.ModuleNode module, string filePath)
+    {
+        foreach (var feed in Cop.Lang.Interpreter.ModuleLoader.ExtractFeedPaths(module,
+            Path.GetDirectoryName(Path.GetFullPath(filePath))!))
+        {
+            if (feedPaths.Contains(feed, StringComparer.OrdinalIgnoreCase)) continue;
+            var cacheIndex = feedPaths.FindIndex(p =>
+                string.Equals(p, PackageResolver.GlobalCachePath, StringComparison.OrdinalIgnoreCase));
+            feedPaths.Insert(cacheIndex < 0 ? feedPaths.Count : cacheIndex, feed);
+        }
+    }
+
     /// <summary>
     /// Places the instructions of every package imported (transitively) by the .cop files in
     /// <paramref name="scriptsDir"/> into <paramref name="repoRoot"/>/.github/instructions/, so
@@ -1118,6 +1127,10 @@ public static class RunCommand
         {
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var queue = new Queue<string>();
+            var feedPaths = PackageResolver.GetFeedPaths();
+            foreach (var p in PackageResolver.GetFeedPaths(scriptsDir))
+                if (!feedPaths.Contains(p, StringComparer.OrdinalIgnoreCase))
+                    feedPaths.Add(p);
 
             void EnqueueImportsFrom(string dir)
             {
@@ -1126,9 +1139,10 @@ public static class RunCommand
                 {
                     try
                     {
-                        var sf = Cop.Lang.Parser.CopParser.ParseFile(File.ReadAllText(path), path);
-                        foreach (var imp in sf.Imports)
-                            if (seen.Add(imp)) queue.Enqueue(imp);
+                        var module = Cop.Lang.Parser.CopParser.Parse(File.ReadAllText(path), path);
+                        foreach (var imp in module.Declarations.OfType<Cop.Lang.Ast.ImportDecl>())
+                            if (seen.Add(imp.ModuleName)) queue.Enqueue(imp.ModuleName);
+                        AddDeclaredFeedPaths(feedPaths, module, path);
                     }
                     catch { /* skip unparseable files */ }
                 }
@@ -1136,11 +1150,6 @@ public static class RunCommand
 
             EnqueueImportsFrom(scriptsDir);
             if (queue.Count == 0) return;
-
-            var feedPaths = PackageResolver.GetFeedPaths();
-            foreach (var p in PackageResolver.GetFeedPaths(scriptsDir))
-                if (!feedPaths.Contains(p, StringComparer.OrdinalIgnoreCase))
-                    feedPaths.Add(p);
 
             while (queue.Count > 0)
             {

@@ -78,6 +78,12 @@ cop <file.cop> [-t <target>] [-c <commands>] [-f text|json] [-d] [-cql]
 
 A bare `cop <program>` (without `run`) only resolves steps 1–3. If none match, cop prints an `Unknown command` error rather than attempting a package restore — use `cop run <program>` to run a package.
 
+For local scripts, declared local `feed` paths are checked before attempting a
+remote restore, including on a machine with an empty package cache. Relative feeds
+resolve from the declaring file's directory. The same decoded paths are used for
+execution, verification, and imported package instructions; a locally available
+import does not need a GitHub token or network access.
+
 ### Change-focused reviews
 
 These options apply to scripts, named local commands, URL scripts, and package

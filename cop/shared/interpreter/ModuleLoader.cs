@@ -159,30 +159,17 @@ public sealed class ModuleLoader
     /// Extract feed declarations from modules (feed 'path' syntax).
     /// </summary>
     public static List<string> ExtractFeedPaths(string source, string scriptsDir)
+        => ExtractFeedPaths(Cop.Lang.Parser.CopParser.ParseWithRecovery(source, null, out _), scriptsDir);
+
+    public static List<string> ExtractFeedPaths(ModuleNode module, string scriptsDir)
     {
         var paths = new List<string>();
-        // Simple line scan for feed declarations (feed 'path' or feed "path")
-        foreach (var line in source.Split('\n'))
+        var basePath = Path.GetFullPath(string.IsNullOrEmpty(scriptsDir) ? "." : scriptsDir);
+        foreach (var feedPath in module.FeedPaths)
         {
-            var trimmed = line.Trim();
-            if (!trimmed.StartsWith("feed ", StringComparison.Ordinal))
-                continue;
-
-            var rest = trimmed[5..].Trim();
-            if (rest.Length >= 2 && (rest[0] == '\'' || rest[0] == '"'))
-            {
-                var quote = rest[0];
-                var end = rest.IndexOf(quote, 1);
-                if (end > 0)
-                {
-                    var feedPath = rest[1..end];
-                    var resolved = Path.IsPathRooted(feedPath)
-                        ? Path.GetFullPath(feedPath)
-                        : Path.GetFullPath(Path.Combine(scriptsDir, feedPath));
-                    if (Directory.Exists(resolved))
-                        paths.Add(resolved);
-                }
-            }
+            if (Uri.TryCreate(feedPath, UriKind.Absolute, out var uri) && !uri.IsFile) continue;
+            var resolved = Path.GetFullPath(uri is { IsFile: true } ? uri.LocalPath : feedPath, basePath);
+            if (Directory.Exists(resolved)) paths.Add(resolved);
         }
         return paths;
     }

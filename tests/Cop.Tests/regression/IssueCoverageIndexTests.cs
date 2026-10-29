@@ -87,12 +87,12 @@ public class IssueRegressionCoverageIndexTests
         new(80, CoverageKind.ImplementedHere, "ProviderQueryRegressionTests.Issue080_PythonQuotedReturnAnnotationsAreAccepted"),
         new(83, CoverageKind.ImplementedHere, "PythonCodebaseRegressionTests.Issue083_ClassCompoundStatementTerminatesWithExpectedClassMember"),
         new(84, CoverageKind.ImplementedHere, "ForeachPipelineRegressionTests.Issue084_PipeSeparatedForeachCommandsProduceBothOutputs (PendingFix)"),
-        new(85, CoverageKind.ImplementedHere, "ToolchainCliIntegrationTests.ExplicitLocalFeed_DoesNotAttemptRemoteRestore (PendingFix)"),
+        new(85, CoverageKind.ImplementedHere, "ToolchainCliIntegrationTests.ExplicitLocalFeed_DoesNotAttemptRemoteRestore"),
         new(86, CoverageKind.CoveredBy, "ForeachPipelineRegressionTests.Issue084_PipeSeparatedForeachCommandsProduceBothOutputs (PendingFix; foreach composition family)"),
         new(87, CoverageKind.ImplementedHere, "SiblingTypeVerifyRegressionTests.Issue087_VerifyResolvesSiblingParameterTypes (PendingFix)"),
         new(88, CoverageKind.ImplementedHere, "ForeachPipelineRegressionTests.Issue088_MultilineCommandDoesNotSilentlyDropLiteralAndForeachOutput (PendingFix)"),
         new(89, CoverageKind.ImplementedHere, "PublishedCSharpMetadataRegressionTests.Issue089_SelfContainedHostBindsFrameworkAndLocalCalls_WithoutInstalledDotnet"),
-        new(90, CoverageKind.CoveredBy, "ToolchainCliIntegrationTests.ExplicitLocalFeed_DoesNotAttemptRemoteRestore (duplicate of #85; PendingFix)"),
+        new(90, CoverageKind.CoveredBy, "ToolchainCliIntegrationTests.ExplicitLocalFeed_DoesNotAttemptRemoteRestore (duplicate of #85)"),
         new(91, CoverageKind.CoveredBy, "RustFrontendBundleTests.Issue091_StructuralDiscoveryMaterializesOnlyHelperAndNotices; RustFrontendTests.Issue091_ArchiveSourcesRemainDeferredUntilRealSemanticDemand; RustFrontendTests.Issue091_LocalMethodWithFullStandardLibraryKeepsExactSelectedDeclaration; native project_ownership_does_not_consider_unrelated_sysroot_crates"),
     ];
 
