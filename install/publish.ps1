@@ -219,6 +219,22 @@ if (-not $SkipBuild) {
     dotnet build "$RepoRoot\providers\openapi-provider\openapi-provider.csproj" -c Release
     if ($LASTEXITCODE -ne 0) { throw "openapi-provider build failed" }
 
+    Write-Host "Building json-provider..."
+    dotnet build "$RepoRoot\providers\json-provider\json-provider.csproj" -c Release
+    if ($LASTEXITCODE -ne 0) { throw "json-provider build failed" }
+
+    Write-Host "Building codeql-provider..."
+    dotnet build "$RepoRoot\providers\codeql-provider\codeql-provider.csproj" -c Release
+    if ($LASTEXITCODE -ne 0) { throw "codeql-provider build failed" }
+
+    Write-Host "Building typespec-provider..."
+    dotnet build "$RepoRoot\providers\typespec-provider\typespec-provider.csproj" -c Release
+    if ($LASTEXITCODE -ne 0) { throw "typespec-provider build failed" }
+
+    Write-Host "Building http-provider..."
+    dotnet build "$RepoRoot\providers\http-provider\src\HttpProvider.csproj" -c Release
+    if ($LASTEXITCODE -ne 0) { throw "http-provider build failed" }
+
     Write-Host "Building tool-providers..."
     dotnet build "$RepoRoot\providers\tool-providers\tool-providers.csproj" -c Release
     if ($LASTEXITCODE -ne 0) { throw "tool-providers build failed" }

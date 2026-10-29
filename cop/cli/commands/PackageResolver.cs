@@ -10,18 +10,18 @@ namespace Cop.Cli.Commands;
 internal static class PackageResolver
 {
     /// <summary>
-    /// Returns the global package cache path (~/.cop/packages/).
+    /// Returns the package cache for this executable's release.
     /// </summary>
     public static string GlobalCachePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        ".cop", "packages");
+        ".cop", "packages", Cop.Core.ProviderCompatibility.HostVersion);
 
     /// <summary>
     /// Discovers all feed paths by walking up from a starting directory
     /// and including the global cache. Resolution order (first match wins):
     /// 1. Local packages/ directories, walking up from startDir — so a developer's in-repo
     ///    package always shadows a possibly-stale auto-restored copy in the global cache.
-    /// 2. ~/.cop/packages/ (global cache for auto-restored packages) — the fallback.
+    /// 2. ~/.cop/packages/{host-version}/ — the fallback, isolated from other releases.
     /// </summary>
     public static List<string> GetFeedPaths(string? startDir = null)
     {

@@ -18,7 +18,7 @@ This document describes how packaging works in cop: what a package is, how to cr
 
 **GitHub feed** — A GitHub repository identified as `github.com/{owner}/{repo}`, from which cop can download packages remotely. The default GitHub feed is `github.com/KrzysztofCwalina/cop`.
 
-**Package cache** — The directory `~/.cop/packages/` where cop stores packages downloaded from GitHub feeds. On Windows, `~` means `C:\Users\{username}`.
+**Package cache** — The directory `~/.cop/packages/<cop-version>/` where cop stores packages downloaded for the running executable. On Windows, `~` means `C:\Users\{username}`. The default feed is pinned to the matching `v<cop-version>` release tag; explicit package refs and third-party feeds keep their selected refs. Earlier flat caches are not searched. Incompatible local CLR providers are skipped with a warning, without modifying or deleting local files.
 
 ---
 
@@ -229,9 +229,9 @@ Cop parses every `.cop` file in the script directory to extract `import` stateme
 
 Cop assembles a list of local directories where packages might already exist:
 
-1. If `~/.cop/packages/` exists, include it. (On a fresh machine, it does not exist.)
-2. Starting from the current working directory, walk up the directory tree. At each level, if a `packages/` subdirectory exists, include it. (On a fresh machine, none exist.)
-3. Starting from the script directory, walk up the directory tree the same way. (On a fresh machine, none exist.)
+1. Starting from the current working directory, walk up the directory tree. At each level, if a `packages/` subdirectory exists, include it.
+2. Starting from the script directory, walk up the directory tree the same way, and include declared local feeds.
+3. If `~/.cop/packages/<cop-version>/` exists, include it as the fallback. Other versions' caches are not searched.
 
 Result on a fresh machine: the list is **empty**.
 
@@ -248,9 +248,9 @@ Cop loads the list of GitHub feeds from `~/.cop/feeds.json`. If that file does n
 For each missing package, cop tries each GitHub feed in order:
 
 1. Construct a reference: `github.com/KrzysztofCwalina/cop/code-analysis`
-2. Use the GitHub API to locate the package directory in the repository (searching `packages/csharp-checks`, then group folders like `packages/checks/csharp-checks`, etc.)
+2. Use the GitHub API at the executable's release tag to locate the package directory in the default repository (searching `packages/csharp-checks`, then group folders like `packages/checks/csharp-checks`, etc.)
 3. Download all files in the package directory
-4. Save them to `~/.cop/packages/code-analysis/` (creating `~/.cop/` and `~/.cop/packages/` if they don't exist)
+4. Save them to `~/.cop/packages/<cop-version>/code-analysis/`, creating directories as needed.
 
 If the `GITHUB_TOKEN` environment variable is set, cop uses it for GitHub API authentication. This is needed for private repositories or to avoid rate limits.
 
@@ -267,10 +267,10 @@ import files
 
 These newly discovered import names are added to a download queue. Cop repeats the download process for each, then checks *their* imports, and so on. This is a breadth-first traversal of the import graph. A package that has already been downloaded is never downloaded again.
 
-After auto-restore on a fresh machine, `~/.cop/packages/` contains:
+After auto-restore on a fresh machine, `~/.cop/packages/<cop-version>/` contains:
 
 ```
-~/.cop/packages/
+~/.cop/packages/<cop-version>/
   code-analysis/        ← imported by foo.cop
     cop.json
     src/code-analysis.cop
@@ -311,9 +311,9 @@ The engine builds its own ordered list of feed paths. This list determines where
    ```
    These paths are resolved relative to the `.cop` file's location. (In this example, there are none.)
 
-3. **Package cache and CWD walk-up.** The CLI passes `~/.cop/packages/` (now it exists from Step 2) plus any `packages/` directories found walking up from the current working directory.
+3. **CWD walk-up and package cache.** The CLI passes any `packages/` directories found walking up from the current working directory, then `~/.cop/packages/<cop-version>/` (now it exists from Step 2) as the fallback.
 
-In this example, the only feed path is `~/.cop/packages/`.
+In this example, the only feed path is `~/.cop/packages/<cop-version>/`.
 
 The list is ordered. When multiple feed paths contain a package with the same name, the **first** feed path wins. This means local project packages (found by walking up from the script directory) take priority over cached packages.
 
@@ -465,7 +465,7 @@ When cop needs to find a package named `xxx`, it searches these locations in ord
 
 1. `packages/` directories found by walking up from the **script directory**
 2. Paths declared via `feed '...'` in the `.cop` files
-3. `~/.cop/packages/` (the package cache, populated by auto-restore)
-4. `packages/` directories found by walking up from the **current working directory**
+3. `packages/` directories found by walking up from the **current working directory**
+4. `~/.cop/packages/<cop-version>/` (the package cache, populated by auto-restore)
 
-This means a package in your project's `packages/` directory always takes priority over a cached version in `~/.cop/packages/`.
+Compatible packages in your project's `packages/` directory take priority over the cache. CLR provider DLLs must reference the running host version; incompatible packages are skipped with a warning and resolution continues to the matching release cache. Local packages are never deleted to repair compatibility.

@@ -217,6 +217,15 @@
         "Explicit local package feeds work on clean machines without unnecessary remote restore, including relative paths and escaped quotes.",
         "More accurate source spans, dependency-aware semantic refresh, and visible diagnostics for unavailable optional analysis."
       ]
+    },
+    {
+      "version": "2026.10.29.2",
+      "approved": true,
+      "features": [
+        "Package downloads now use the executable's matching release, with separate caches for each Cop version.",
+        "Incompatible local provider DLLs are skipped automatically in favor of compatible packages, without deleting local files.",
+        "Initialization failures report the original error without misleading secondary undefined-variable errors."
+      ]
     }
   ]
 }

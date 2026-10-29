@@ -31,7 +31,7 @@ cop working on my-checks/main.cop
 cop>
 ```
 
-The REPL loads all `.cop` files in the current directory and resolves imported packages from `~/.cop/packages/` and any `packages/` directories up the tree. Packages are auto-restored on first use.
+The REPL loads all `.cop` files in the current directory and resolves imported packages from the running release's `~/.cop/packages/<cop-version>/` cache and any compatible `packages/` directories up the tree. Packages are auto-restored on first use.
 
 ## Evaluating Expressions
 

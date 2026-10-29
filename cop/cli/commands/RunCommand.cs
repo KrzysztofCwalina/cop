@@ -927,12 +927,11 @@ public static class RunCommand
 
     /// <summary>
     /// Parses .cop files in the scripts directory, discovers imports, and auto-restores
-    /// any missing packages from configured GitHub feeds into ~/.cop/packages/.
+    /// any missing packages into the current host version's cache.
     /// </summary>
     private static void AutoRestoreImports(string scriptsDir, Action<string>? diagLog)
     {
-        var cachePath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cop", "packages");
+        var cachePath = PackageResolver.GlobalCachePath;
 
         var feedPaths = PackageResolver.GetFeedPaths();
         foreach (var p in PackageResolver.GetFeedPaths(scriptsDir))
@@ -956,6 +955,16 @@ public static class RunCommand
         }
 
         if (imports.Count == 0) return;
+
+        var pendingImports = new Queue<string>(imports);
+        while (pendingImports.TryDequeue(out var name))
+        {
+            if (PackageResolver.FindPackageDir(name, feedPaths) is not { } packageDir)
+                continue;
+            foreach (var import in ReadPackageImports(packageDir))
+                if (imports.Add(import))
+                    pendingImports.Enqueue(import);
+        }
 
         // Find imports that can't be resolved from any known path
         var missing = new List<string>();
@@ -1357,6 +1366,19 @@ public static class RunCommand
         }
 
         return true;
+    }
+
+    private static IEnumerable<string> ReadPackageImports(string packageDir)
+    {
+        var srcDir = Path.Combine(packageDir, "src");
+        if (!Directory.Exists(srcDir))
+            yield break;
+        foreach (var path in Directory.GetFiles(srcDir, "*.cop"))
+        {
+            var module = Cop.Lang.Parser.CopParser.ParseWithRecovery(File.ReadAllText(path), path, out _);
+            foreach (var import in module.Declarations.OfType<Cop.Lang.Ast.ImportDecl>())
+                yield return import.ModuleName;
+        }
     }
 
     internal static string? ResolveGitHubToken()

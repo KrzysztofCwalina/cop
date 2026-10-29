@@ -84,6 +84,14 @@ resolve from the declaring file's directory. The same decoded paths are used for
 execution, verification, and imported package instructions; a locally available
 import does not need a GitHub token or network access.
 
+Packages from the default Cop feed are downloaded from the executable's matching
+release tag, not the repository's moving default branch. Auto-restored packages
+are cached in `~/.cop/packages/<cop-version>/`, so updating Cop cannot reuse an
+older release's cache. CLR providers that reference a different Cop host version
+are skipped with a warning and a compatible package is restored automatically;
+local files are not deleted. Compatible local and explicitly declared feeds
+retain their normal precedence.
+
 ### Change-focused reviews
 
 These options apply to scripts, named local commands, URL scripts, and package

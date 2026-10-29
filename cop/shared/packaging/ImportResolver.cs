@@ -166,7 +166,13 @@ public class ImportResolver
             var direct = Path.Combine(folder.Path, packageName);
             if (Directory.Exists(direct)
                 && (File.GetAttributes(direct) & FileAttributes.ReparsePoint) == 0 && IsPackageDir(direct))
-                return direct;
+            {
+                var metadata = PackageMetadata.TryLoadFromDirectory(direct);
+                if (metadata is not null && ProviderCompatibility.GetError(direct, metadata) is { } error)
+                    ProviderCompatibility.ReportSkipped(error);
+                else
+                    return direct;
+            }
             var directories = Directory.EnumerateDirectories(folder.Path).Take(4097).ToArray();
             if (directories.Length > 4096)
                 throw new IOException("Local package discovery exceeded its 4096-directory / 64-level safety limit.");

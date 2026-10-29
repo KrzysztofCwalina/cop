@@ -437,6 +437,9 @@ public static class Engine
             .ToList();
         RegisterProgram(bridge, programArgs, providerProxies);
 
+        if (errors.Count > 0)
+            return new EngineResult(outputs, parseErrors, errors, Warnings: warnings);
+
         // Phase 2: Evaluate let bindings (now that provider data is available)
         // First: deferred let bindings from imported packages
         moduleLoader.EvalDeferredLetBindings(bridge.Evaluator, errors);
@@ -462,8 +465,12 @@ public static class Engine
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 errors.Add(ex.Message);
+                diagLog?.Invoke($"[diag] Let initialization exception in '{module.FilePath}': {ex}");
             }
         }
+
+        if (errors.Count > 0)
+            return new EngineResult(outputs, parseErrors, errors, Warnings: warnings);
 
         // When multiple top-level packages are specified, register each package's 'command main'
         // under a package-qualified alias so all can be run in sequence.
@@ -1296,9 +1303,7 @@ public static class Engine
 
         // Resolve imports and register types
         var feedPaths = FindFeedPaths(scriptsDir);
-        var globalCachePath = Path.Combine(
-            System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
-            ".cop", "packages");
+        var globalCachePath = Cop.Cli.Commands.PackageResolver.GlobalCachePath;
         if (Directory.Exists(globalCachePath) && !feedPaths.Contains(globalCachePath))
             feedPaths.Add(globalCachePath);
 

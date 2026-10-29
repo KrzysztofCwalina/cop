@@ -176,8 +176,7 @@ static class UpdateCommand
             Console.WriteLine($"Updated to {tagName}");
             Console.WriteLine($"Installed at: {installDir}");
 
-            // Refresh package cache — seed packages may have new types/predicates
-            RefreshPackageCache();
+            Console.WriteLine("Packages are restored from the matching release into a version-specific cache.");
 
             return 0;
         }
@@ -282,30 +281,5 @@ static class UpdateCommand
 
         if (arch == null) return null;
         return $"{os}-{arch}";
-    }
-
-    /// <summary>
-    /// Deletes the package cache so seed packages are re-downloaded on next run.
-    /// New exe versions may include updated type definitions or predicates in packages.
-    /// </summary>
-    private static void RefreshPackageCache()
-    {
-        var cachePath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".cop", "packages");
-
-        if (!Directory.Exists(cachePath))
-            return;
-
-        try
-        {
-            Directory.Delete(cachePath, recursive: true);
-            Console.WriteLine("Refreshed package cache (will re-download on next run)");
-        }
-        catch
-        {
-            // Non-fatal: packages may be locked. They'll be stale but won't crash.
-            Console.Error.WriteLine("Warning: Could not refresh package cache. Run 'cop package restore' to update packages.");
-        }
     }
 }

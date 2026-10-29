@@ -14,4 +14,13 @@
     </ProjectReference>
   </ItemGroup>
 
+  <Target Name="CopyToPackageLibs" AfterTargets="Build">
+    <ItemGroup>
+      <PackageLibDir Include="$(MSBuildThisFileDirectory)..\..\packages\languages\typespec\lib\" />
+      <PackageLibDir Include="$(MSBuildThisFileDirectory)..\..\packages\languages\typespec-http\lib\" />
+    </ItemGroup>
+    <MakeDir Directories="@(PackageLibDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="%(PackageLibDir.Identity)" SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>

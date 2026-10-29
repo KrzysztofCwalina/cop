@@ -17,4 +17,12 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
+  <Target Name="CopyToPackageLib" AfterTargets="Build">
+    <PropertyGroup>
+      <PackageLibDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\..\packages\core\http\lib\'))</PackageLibDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(PackageLibDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PackageLibDir)" SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>

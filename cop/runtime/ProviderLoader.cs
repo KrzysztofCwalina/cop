@@ -63,7 +63,7 @@ public static class ProviderLoader
         }
 
         // Find the provider DLL
-        var dllPath = FindProviderDll(packageDir, metadata);
+        var dllPath = ProviderCompatibility.FindAssembly(packageDir, metadata);
         if (dllPath is null)
         {
             errors.Add($"Provider assembly not found for package '{metadata.Name}'. Expected a .dll in '{Path.Combine(packageDir, "lib")}'.");
@@ -72,6 +72,12 @@ public static class ProviderLoader
 
         try
         {
+            if (ProviderCompatibility.GetError(packageDir, metadata) is { } compatibilityError)
+            {
+                errors.Add(compatibilityError);
+                return null;
+            }
+
             // Load in isolated context
             var alc = new ProviderLoadContext(dllPath);
             var assembly = alc.LoadFromAssemblyPath(dllPath);
@@ -126,18 +132,7 @@ public static class ProviderLoader
             if (ex.InnerException != null && !string.IsNullOrWhiteSpace(ex.InnerException.Message) && !detail.Contains(ex.InnerException.Message))
                 detail += $" -> {ex.InnerException.Message}";
 
-            // TypeLoadException typically means a stale cached DLL compiled against an older cop.exe.
-            // Clear the lib/ directory so it's re-downloaded on next run.
-            if (ex is TypeLoadException || ex.InnerException is TypeLoadException)
-            {
-                var libDir = Path.Combine(packageDir, "lib");
-                try { Directory.Delete(libDir, recursive: true); } catch { }
-                errors.Add($"Failed to load provider '{metadata.Name}': incompatible cached DLL (deleted). Please re-run the command.");
-            }
-            else
-            {
-                errors.Add($"Failed to load provider '{metadata.Name}': {detail}");
-            }
+            errors.Add($"Failed to load provider '{metadata.Name}' from '{dllPath}': {detail}");
             return null;
         }
     }
@@ -371,45 +366,6 @@ public static class ProviderLoader
         }
     }
 
-    /// <summary>
-    /// Finds the provider DLL in the package's lib/ directory.
-    /// Uses the providerAssembly manifest field if specified, otherwise expects a single DLL.
-    /// </summary>
-    private static string? FindProviderDll(string packageDir, PackageMetadata metadata)
-    {
-        var libDir = Path.Combine(packageDir, "lib");
-        if (!Directory.Exists(libDir))
-            return null;
-
-        var dlls = Directory.GetFiles(libDir, "*.dll", SearchOption.TopDirectoryOnly);
-        if (dlls.Length == 0)
-        {
-            // Check RID-specific subdirectories
-            var rid = System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier;
-            var ridDir = Path.Combine(libDir, rid);
-            if (Directory.Exists(ridDir))
-                dlls = Directory.GetFiles(ridDir, "*.dll", SearchOption.TopDirectoryOnly);
-        }
-
-        if (dlls.Length == 0)
-            return null;
-        if (dlls.Length == 1)
-            return dlls[0];
-
-        // Use providerAssembly from manifest to select the correct DLL
-        if (!string.IsNullOrEmpty(metadata.ProviderAssembly))
-        {
-            var match = dlls.FirstOrDefault(d => Path.GetFileName(d)
-                .Equals(metadata.ProviderAssembly, StringComparison.OrdinalIgnoreCase));
-            if (match is not null)
-                return match;
-        }
-
-        // Fallback: prefer DLL matching the package name
-        var nameMatch = dlls.FirstOrDefault(d => Path.GetFileNameWithoutExtension(d)
-            .Equals(metadata.Name, StringComparison.OrdinalIgnoreCase));
-        return nameMatch ?? dlls[0];
-    }
 }
 
 /// <summary>

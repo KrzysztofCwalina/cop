@@ -49,7 +49,7 @@ public class GitHubPackageSource
         CancellationToken ct = default)
     {
         var packagePath = await FindPackagePathAsync(
-            packageRef.Owner, packageRef.Repo, packageRef.PackageName, packageRef.Version, ct);
+            packageRef.Owner, packageRef.Repo, packageRef.PackageName, GetPackageRef(packageRef), ct);
 
         if (packagePath is null)
             throw new PackageNotFoundException(
@@ -59,7 +59,7 @@ public class GitHubPackageSource
             packageRef.Owner,
             packageRef.Repo,
             $"{packagePath}/{PackageMetadata.MetadataFileName}",
-            packageRef.Version);
+            GetPackageRef(packageRef));
 
         try
         {
@@ -84,7 +84,7 @@ public class GitHubPackageSource
                 packageRef.Owner,
                 packageRef.Repo,
                 $"{packagePath}/{packageRef.PackageName}.md",
-                packageRef.Version);
+                GetPackageRef(packageRef));
 
             using var legacyRequest = CreateRequestWithAuth(HttpMethod.Get, legacyUrl);
             var legacyResponse = await _httpClient.SendAsync(legacyRequest, ct);
@@ -125,7 +125,7 @@ public class GitHubPackageSource
         CancellationToken ct = default)
     {
         var packagePath = await FindPackagePathAsync(
-            packageRef.Owner, packageRef.Repo, packageRef.PackageName, packageRef.Version, ct);
+            packageRef.Owner, packageRef.Repo, packageRef.PackageName, GetPackageRef(packageRef), ct);
 
         if (packagePath is null)
             throw new PackageNotFoundException(
@@ -136,13 +136,19 @@ public class GitHubPackageSource
             packageRef.Owner,
             packageRef.Repo,
             packagePath,
-            packageRef.Version,
+            GetPackageRef(packageRef),
             "",
             files,
             ct);
 
         return files;
     }
+
+    private static string? GetPackageRef(PackageReference packageRef) =>
+        packageRef.Version ?? (packageRef.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase)
+            && packageRef.Owner.Equals("KrzysztofCwalina", StringComparison.OrdinalIgnoreCase)
+            && packageRef.Repo.Equals("cop", StringComparison.OrdinalIgnoreCase)
+                ? $"v{ProviderCompatibility.HostVersion}" : null);
 
     /// <summary>
     /// Lists all packages in the packages folder, recursing into group folders.
@@ -305,6 +311,9 @@ public class GitHubPackageSource
         PackageReference packageRef,
         CancellationToken ct = default)
     {
+        if (packageRef.Version is null && GetPackageRef(packageRef) is { } releaseRef)
+            return releaseRef;
+
         var url = $"{GitHubApiBaseUrl}/repos/{packageRef.Owner}/{packageRef.Repo}/git/refs/tags/{packageRef.PackageName}/";
 
         try
