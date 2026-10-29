@@ -22,9 +22,10 @@ public class ImportResolver
     /// </summary>
     public ScriptFile? Resolve(string packageName, List<string> errors)
     {
+        var incompatibleProviders = new List<string>();
         foreach (var feedPath in _feedPaths)
         {
-            var packageDir = FindPackageDir(feedPath, packageName);
+            var packageDir = FindPackageDir(feedPath, packageName, incompatibleProviders.Add);
             if (packageDir is null) continue;
 
             var copDir = Path.Combine(packageDir, "src");
@@ -106,6 +107,7 @@ public class ImportResolver
                 TypeImports: allTypeImports.Count > 0 ? allTypeImports : null);
         }
 
+        errors.AddRange(incompatibleProviders.Distinct(StringComparer.Ordinal));
         return null;
     }
 
@@ -154,6 +156,9 @@ public class ImportResolver
     /// A directory is a package if it contains cop.json. Non-package directories are group folders.
     /// </summary>
     public static string? FindPackageDir(string feedPath, string packageName)
+        => FindPackageDir(feedPath, packageName, null);
+
+    public static string? FindPackageDir(string feedPath, string packageName, Action<string>? incompatibleProvider)
     {
         if (!Directory.Exists(feedPath)) return null;
         var pending = new Stack<(string Path, int Depth)>();
@@ -169,7 +174,7 @@ public class ImportResolver
             {
                 var metadata = PackageMetadata.TryLoadFromDirectory(direct);
                 if (metadata is not null && ProviderCompatibility.GetError(direct, metadata) is { } error)
-                    ProviderCompatibility.ReportSkipped(error);
+                    incompatibleProvider?.Invoke(error);
                 else
                     return direct;
             }

@@ -101,7 +101,10 @@ function Set-ZipUnixHostOS([string]$ZipPath) {
         throw "Patched $patched entries but EOCD declares $entryCount in $ZipPath"
     }
 
-    [System.IO.File]::WriteAllBytes($ZipPath, $bytes)
+    # Do not truncate an archive that a file watcher may already have memory-mapped.
+    $stream = [System.IO.File]::Open($ZipPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Write, [System.IO.FileShare]::Read)
+    try { $stream.Write($bytes, 0, $bytes.Length) }
+    finally { $stream.Dispose() }
     return $patched
 }
 

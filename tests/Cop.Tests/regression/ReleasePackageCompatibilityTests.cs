@@ -146,7 +146,7 @@ public class ReleasePackageCompatibilityTests
         finally { Directory.Delete(root, recursive: true); }
     }
 
-    private static string WriteProvider(string root, string feed, Version hostVersion)
+    internal static string WriteProvider(string root, string feed, Version hostVersion)
     {
         var package = Path.Combine(root, feed, "fixture");
         Directory.CreateDirectory(Path.Combine(package, "lib"));

@@ -30,7 +30,7 @@ public sealed record CSharpMethodDeclaration : MethodDeclaration
         IsGeneric = isGeneric;
     }
 
-    /// <summary>True for C# extension methods (first parameter has the <c>this</c> modifier).</summary>
+    /// <summary>True for C# extension members or methods whose first parameter has the <c>this</c> modifier.</summary>
     public bool IsExtension { get; init; }
 
     /// <summary>True for <c>partial</c> method declarations.</summary>

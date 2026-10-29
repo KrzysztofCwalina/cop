@@ -18,7 +18,7 @@ This document describes how packaging works in cop: what a package is, how to cr
 
 **GitHub feed** — A GitHub repository identified as `github.com/{owner}/{repo}`, from which cop can download packages remotely. The default GitHub feed is `github.com/KrzysztofCwalina/cop`.
 
-**Package cache** — The directory `~/.cop/packages/<cop-version>/` where cop stores packages downloaded for the running executable. On Windows, `~` means `C:\Users\{username}`. The default feed is pinned to the matching `v<cop-version>` release tag; explicit package refs and third-party feeds keep their selected refs. Earlier flat caches are not searched. Incompatible local CLR providers are skipped with a warning, without modifying or deleting local files.
+**Package cache** — The directory `~/.cop/packages/<cop-version>/` where cop stores packages downloaded for the running executable. On Windows, `~` means `C:\Users\{username}`. The default feed is pinned to the matching `v<cop-version>` release tag; explicit package refs and third-party feeds keep their selected refs. Earlier flat caches are not searched. Incompatible local CLR providers are skipped without modifying or deleting local files. Successful recovery produces an informational confirmation, not a warning; `-d` shows skipped-provider details. If no compatible package can be resolved, execution fails with an error.
 
 ---
 
@@ -468,4 +468,9 @@ When cop needs to find a package named `xxx`, it searches these locations in ord
 3. `packages/` directories found by walking up from the **current working directory**
 4. `~/.cop/packages/<cop-version>/` (the package cache, populated by auto-restore)
 
-Compatible packages in your project's `packages/` directory take priority over the cache. CLR provider DLLs must reference the running host version; incompatible packages are skipped with a warning and resolution continues to the matching release cache. Local packages are never deleted to repair compatibility.
+Compatible packages in your project's `packages/` directory take priority over the cache. CLR provider DLLs must reference the running host version; incompatible packages are skipped and resolution continues to the matching release cache. Cop explicitly confirms successful automatic recovery; local packages are never deleted to repair compatibility.
+
+`cop update` updates the executable, not your Git checkout or the source being
+analyzed. Source-analysis failures remain errors even after package setup succeeds.
+Intentionally malformed parser fixtures should use a non-source extension such as
+`.cop.invalid` and be materialized as `.cop` only inside their isolated tests.

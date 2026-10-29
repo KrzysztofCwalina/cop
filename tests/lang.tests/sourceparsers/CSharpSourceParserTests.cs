@@ -10,6 +10,61 @@ public class CSharpSourceParserTests
 {
     private readonly CSharpSourceParser _parser = new();
 
+    [Test]
+    public void Parse_CSharp14FileBasedDirectives_UseFileBasedProgramOptions()
+    {
+        var file = _parser.Parse("app.cs", """
+            #:sdk Microsoft.NET.Sdk.Web
+            #:package Azure.FoundryApplications@0.8.7-preview
+            System.Console.WriteLine("ready");
+            """)!;
+        Assert.That(file.ParseErrors, Is.Empty);
+        Assert.That(file.Statements.Select(s => s.Kind), Is.EqualTo(new[] { "call" }));
+        Assert.That(file.Statements.Single().MemberName, Is.EqualTo("WriteLine"));
+    }
+
+    [Test]
+    public void Parse_CSharp14ExtensionBlocks_KeepTheirMembersOnTheDeclaringType()
+    {
+        var file = _parser.Parse("Extensions.cs", """
+            public static class Extensions {
+                extension(string value) {
+                    public string Clean() => value.Trim();
+                    public int Size => value.Length;
+                    public string Text { get => value.Trim(); }
+                }
+            }
+            """)!;
+        Assert.That(file.ParseErrors, Is.Empty);
+        var type = file.Types.Single();
+        Assert.That(type.NestedTypes, Is.Empty);
+        Assert.That(type.Properties.Select(p => p.Name), Is.EqualTo(new[] { "Size", "Text" }));
+        Assert.That(type.Methods.Select(m => m.Name), Is.EqualTo(new[] { "Clean", "get_Size", "get_Text" }));
+        Assert.That(type.Methods.Select(m => m.ReceiverType), Is.EqualTo(new[] { "string", "string", "string" }));
+        Assert.That(type.Methods.Cast<Cop.Providers.SourceModel.CSharpMethodDeclaration>().Select(m => m.IsExtension),
+            Is.EqualTo(new[] { true, true, true }));
+        Assert.That(file.Statements.Where(s => s.Kind == "call").Select(s => s.MemberName),
+            Is.EqualTo(new[] { "Trim", "Trim" }));
+    }
+
+    [TestCase("width = 80;")]
+    [TestCase("args[0] = null;")]
+    [TestCase("width += 1;")]
+    public void Parse_CatchAssignments_PreserveTheirStructure(string assignment)
+    {
+        var file = _parser.Parse("Example.cs", "class Example { void Run() { try { } catch { " + assignment + " } } }")!;
+        Assert.That(file.ParseErrors, Is.Empty);
+        var handler = file.Statements.Single(s => s.Kind == "catch");
+        var child = handler.Children.Single();
+        Assert.That(child.Kind, Is.EqualTo("assignment"));
+        Assert.That(child.Parent, Is.SameAs(handler));
+        Assert.That(child.Method, Is.SameAs(handler.Method));
+        Assert.That(child.Column, Is.Not.Null);
+        Assert.That(child.EndColumn - child.Column, Is.EqualTo(assignment.Length - 1));
+        Assert.That(child.ValueExpression, Is.Not.Null);
+        Assert.That(file.Statements.Single(s => s.Kind == "assignment"), Is.SameAs(child));
+    }
+
     [TestCase("value?.Next()?.Ping()", 2)]
     [TestCase("value?.Next()?.Next()?.Ping()", 3)]
     public void Parse_ChainedConditionalCalls_PreserveTheOuterReceiver(string expression, int count)

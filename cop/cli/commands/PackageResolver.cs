@@ -49,13 +49,14 @@ internal static class PackageResolver
     /// Resolves a package name to its directory path by searching all feed paths.
     /// Returns null if the package is not found in any feed.
     /// </summary>
-    public static string? FindPackageDir(string packageName, List<string>? feedPaths = null)
+    public static string? FindPackageDir(string packageName, List<string>? feedPaths = null,
+        Action<string>? incompatibleProvider = null)
     {
         feedPaths ??= GetFeedPaths();
 
         foreach (var feed in feedPaths)
         {
-            var dir = ImportResolver.FindPackageDir(Path.GetFullPath(feed), packageName);
+            var dir = ImportResolver.FindPackageDir(Path.GetFullPath(feed), packageName, incompatibleProvider);
             if (dir != null)
                 return dir;
         }

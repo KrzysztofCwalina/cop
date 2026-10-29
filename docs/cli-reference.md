@@ -88,9 +88,12 @@ Packages from the default Cop feed are downloaded from the executable's matching
 release tag, not the repository's moving default branch. Auto-restored packages
 are cached in `~/.cop/packages/<cop-version>/`, so updating Cop cannot reuse an
 older release's cache. CLR providers that reference a different Cop host version
-are skipped with a warning and a compatible package is restored automatically;
-local files are not deleted. Compatible local and explicitly declared feeds
-retain their normal precedence.
+are skipped and a compatible package is restored automatically. Successful
+recovery is informational: Cop confirms that no action is required and local
+files are unchanged. Detailed skipped-provider paths and versions are available
+with `-d`. Failed resolution is an error; genuine source-analysis warnings and
+errors are not suppressed. Compatible local and explicitly declared feeds retain
+their normal precedence.
 
 ### Change-focused reviews
 

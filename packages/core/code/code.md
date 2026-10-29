@@ -68,6 +68,10 @@ to that file. Looking up the first type's `Name` does not demand other files. Th
 `Methods` collection reports each intrinsic method once and does not include constructors.
 Scoped receiver targets that cannot be matched exactly are not guessed.
 
+`StatementKind` includes `assignment` for assignments and `expression` for other
+expression statements. Providers populate these when supported; use `Parent` and
+`Children` to inspect their nesting rather than inferring an empty body from source text.
+
 Provider authors can override `ISourceParser.GetCacheIdentity(filePath)` to include the
 selected backend and relevant configuration. It runs only when a file is demanded, before
 cache lookup, so backend discovery can report a fallback warning even on cache hits.

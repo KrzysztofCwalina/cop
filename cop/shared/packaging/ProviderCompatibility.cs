@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 
@@ -7,8 +6,6 @@ namespace Cop.Core;
 internal static class ProviderCompatibility
 {
     private static readonly System.Reflection.AssemblyName Host = typeof(DataProvider).Assembly.GetName();
-    private static readonly ConcurrentDictionary<string, byte> Reported = new(StringComparer.Ordinal);
-
     internal static string HostVersion => Host.Version!.ToString();
 
     internal static string? GetError(string packageDir, PackageMetadata metadata)
@@ -24,15 +21,9 @@ internal static class ProviderCompatibility
             var reference = reader.GetAssemblyReference(handle);
             if (reader.GetString(reference.Name) == Host.Name && reference.Version != Host.Version)
                 return $"Provider '{metadata.Name}' at '{path}' is incompatible: it requires cop {reference.Version}, " +
-                    $"but this executable is {HostVersion}. A matching package must be restored or rebuilt.";
+                    $"but this executable is {HostVersion}.";
         }
         return null;
-    }
-
-    internal static void ReportSkipped(string error)
-    {
-        if (Reported.TryAdd(error, 0))
-            Console.Error.WriteLine($"Warning: {error} Skipping this package; looking for a compatible version.");
     }
 
     internal static string? FindAssembly(string packageDir, PackageMetadata metadata)

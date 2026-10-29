@@ -8,7 +8,7 @@ export flags Modifier = Public | Private | Protected | Internal | Static | Seale
 
 # Extensible enums — known values for Kind properties. Providers may return additional values.
 export enum TypeKind = Class | Struct | Interface | Enum | Alias
-export enum StatementKind = call | declaration | import | command | attribute | throw | return | using | foreach | try | catch | finally | if | else | while | do | for | switch | await | directive | label | break | continue | localfunction | pipeline | lock | unsafe | fixed | checked | unchecked | yield | goto
+export enum StatementKind = call | declaration | import | command | attribute | throw | return | using | foreach | try | catch | finally | if | else | while | do | for | switch | await | directive | label | break | continue | localfunction | pipeline | lock | unsafe | fixed | checked | unchecked | yield | goto | assignment | expression
 export enum ExpressionKind = identifier | stringLiteral | numericLiteral | booleanLiteral | nullLiteral | arrayLiteral | objectLiteral | memberAccess | invocation | other
 export enum ApiKind = class | struct | interface | enum | enumvalue | ctor | method | property | event | field
 export enum LineKind = code | comment | blank

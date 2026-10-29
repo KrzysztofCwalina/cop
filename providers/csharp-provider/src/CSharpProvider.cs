@@ -45,7 +45,7 @@ public class CSharpProvider : DataProvider
             {
                 if (trees.TryGetValue(path, out var cached)) return cached;
                 var text = texts.Read(path);
-                var parsed = (CSharpSyntaxTree.ParseText(text, path: path), text);
+                var parsed = (CSharpSyntaxTree.ParseText(text, CSharpSourceParser.ParseOptions, path: path), text);
                 trees.Add(path, parsed);
                 if (trees.Count == sources.Paths.Count)
                     texts.Save(sources.Paths);
@@ -178,7 +178,7 @@ public class CSharpProvider : DataProvider
                 using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                 using var reader = new StreamReader(stream);
                 var text = reader.ReadToEnd();
-                var tree = CSharpSyntaxTree.ParseText(text, path: filePath);
+                var tree = CSharpSyntaxTree.ParseText(text, CSharpSourceParser.ParseOptions, path: filePath);
                 parsedTrees[i] = (tree, filePath, text);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)

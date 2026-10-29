@@ -259,10 +259,16 @@ public sealed class ModuleLoader
 
     private string? FindPackageDir(string packageName)
     {
+        var incompatibleProviders = new List<string>();
         foreach (var feedPath in _feedPaths)
         {
-            var dir = ImportResolver.FindPackageDir(feedPath, packageName);
+            var dir = ImportResolver.FindPackageDir(feedPath, packageName, incompatibleProviders.Add);
             if (dir is not null) return dir;
+        }
+        foreach (var error in incompatibleProviders.Distinct(StringComparer.Ordinal))
+        {
+            _errors.Add(error);
+            _diagnostics.Add(new CopDiagnostic(CopDiagnosticSeverity.Error, error));
         }
         return null;
     }

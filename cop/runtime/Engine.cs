@@ -263,17 +263,9 @@ public static class Engine
             errors.Add(ex.Message);
         }
 
-        warnings.AddRange(moduleLoader.Errors);
-
-        // A package whose SOURCE failed to load (e.g. a syntax error in its .cop files) is a FATAL
-        // error: a program that imports a broken package must not silently succeed just because it
-        // doesn't reference the package's (now-missing) exports. Such diagnostics carry the failing
-        // file path; unresolved-import diagnostics (no file) are handled by the CLI auto-restore flow.
-        foreach (var diag in moduleLoader.Diagnostics)
-        {
-            if (diag.Severity == CopDiagnosticSeverity.Error && diag.FilePath is not null)
-                errors.Add($"{diag.FilePath}({diag.Line}): error: {diag.Message}");
-        }
+        // Auto-restore already ran in the CLI. Imports still unresolved here must fail,
+        // even when a command does not reference the missing package's exports.
+        errors.AddRange(moduleLoader.Errors);
 
         // Validate user modules (same checks as 'cop verify') before execution.
         // This catches issues like enum-vs-string comparisons that would silently fail at runtime.

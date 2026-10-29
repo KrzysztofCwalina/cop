@@ -83,7 +83,7 @@ public class IssueRegressionCoverageIndexTests
         new(73, CoverageKind.ImplementedHere, "ProviderQueryRegressionTests.Issue073_JsonQueryableCountIsExact"),
         new(75, CoverageKind.ImplementedHere, "ProviderQueryRegressionTests.Issue075_CrossFilePredicatesUseLocalProviderAndPushBothFilters; DeferredProviderExecutionTests.ExistingProviderBinaries"),
         new(76, CoverageKind.ImplementedHere, "ProviderQueryRegressionTests.Issue076_OrderedLazyCollectionLastReturnsLastRecord"),
-        new(78, CoverageKind.ImplementedHere, "ProviderQueryRegressionTests.Issue078_CSharpFileBasedAppDirectivesAreAccepted (PendingFix)"),
+        new(78, CoverageKind.ImplementedHere, "ProviderQueryRegressionTests.Issue078_CSharpFileBasedAppDirectivesAreAccepted"),
         new(80, CoverageKind.ImplementedHere, "ProviderQueryRegressionTests.Issue080_PythonQuotedReturnAnnotationsAreAccepted"),
         new(83, CoverageKind.ImplementedHere, "PythonCodebaseRegressionTests.Issue083_ClassCompoundStatementTerminatesWithExpectedClassMember"),
         new(84, CoverageKind.ImplementedHere, "ForeachPipelineRegressionTests.Issue084_PipeSeparatedForeachCommandsProduceBothOutputs (PendingFix)"),
@@ -95,6 +95,9 @@ public class IssueRegressionCoverageIndexTests
         new(90, CoverageKind.CoveredBy, "ToolchainCliIntegrationTests.ExplicitLocalFeed_DoesNotAttemptRemoteRestore (duplicate of #85)"),
         new(91, CoverageKind.CoveredBy, "RustFrontendBundleTests.Issue091_StructuralDiscoveryMaterializesOnlyHelperAndNotices; RustFrontendTests.Issue091_ArchiveSourcesRemainDeferredUntilRealSemanticDemand; RustFrontendTests.Issue091_LocalMethodWithFullStandardLibraryKeepsExactSelectedDeclaration; native project_ownership_does_not_consider_unrelated_sysroot_crates"),
         new(93, CoverageKind.ImplementedHere, "ReleasePackageCompatibilityTests"),
+        new(94, CoverageKind.ImplementedHere, "ToolchainCliIntegrationTests.Issue094_ResolvedCompatibilityIsInformational_NotARepairWarning; ProviderDiagnosticTests"),
+        new(95, CoverageKind.ImplementedHere, "CSharpModernRegressionTests.Issue095_CSharp14DeclarationsRunWithoutInstalledDotnet"),
+        new(96, CoverageKind.ImplementedHere, "CSharpModernRegressionTests.Issue096_AssignmentOnlyCatchesAreNotEmpty_AndRealEmptyCatchesRemainVisible"),
     ];
 
     [Test]
@@ -104,8 +107,8 @@ public class IssueRegressionCoverageIndexTests
         Assert.That(duplicates, Is.Empty, "Each issue must appear exactly once in the regression coverage index.");
 
         var coveredIssues = Coverage.Select(c => c.Issue).OrderBy(i => i).ToArray();
-        Assert.That(coveredIssues, Is.EqualTo(Enumerable.Range(1, 55).Concat([60, 61, 62, 63, 65, 66, 70, 71, 72, 73, 75, 76, 78, 80, 83, 84, 85, 86, 87, 88, 89, 90, 91, 93]).ToArray()),
-            "Regression coverage index must cover issues #1 through #55, #60-#63, #65-#66, #70-#73, #75-#76, #78, #80, #83-#91, and #93.");
+        Assert.That(coveredIssues, Is.EqualTo(Enumerable.Range(1, 55).Concat([60, 61, 62, 63, 65, 66, 70, 71, 72, 73, 75, 76, 78, 80, 83, 84, 85, 86, 87, 88, 89, 90, 91, 93, 94, 95, 96]).ToArray()),
+            "Regression coverage index must cover issues #1 through #55, #60-#63, #65-#66, #70-#73, #75-#76, #78, #80, #83-#91, and #93-#96.");
 
         var untracked = Coverage.Where(c => string.IsNullOrWhiteSpace(c.Detail)).Select(c => c.Issue).ToArray();
         Assert.That(untracked, Is.Empty, "Every issue must be ImplementedHere, CoveredBy(suiteName), or OutOfScope(reason).");

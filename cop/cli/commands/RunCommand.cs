@@ -588,7 +588,9 @@ public static class RunCommand
     }
 
     internal static string FormatProviderWarning(string warning, bool useColor) =>
-        useColor ? ConsoleMarkdown.Yellow + warning + ConsoleMarkdown.Reset : warning;
+        !useColor ? warning
+        : (warning.StartsWith("Error:", StringComparison.Ordinal) ? ConsoleMarkdown.Red : ConsoleMarkdown.Yellow)
+            + warning + ConsoleMarkdown.Reset;
 
     private static bool IsViolationOutput(PrintOutput output)
     {
@@ -956,10 +958,25 @@ public static class RunCommand
 
         if (imports.Count == 0) return;
 
+        var incompatibleProviders = new HashSet<string>(StringComparer.Ordinal);
+        string? FindCompatiblePackage(string name) =>
+            PackageResolver.FindPackageDir(name, feedPaths, error =>
+            {
+                if (incompatibleProviders.Add(error))
+                    diagLog?.Invoke($"[diag] Skipping local provider: {error}");
+            });
+
+        void ReportCompatibilityResolved()
+        {
+            if (incompatibleProviders.Count > 0)
+                Console.Error.WriteLine($"Info: Packages are ready for Cop {ProviderCompatibility.HostVersion}. " +
+                    "Different-version local providers were left unchanged. No action is required.");
+        }
+
         var pendingImports = new Queue<string>(imports);
         while (pendingImports.TryDequeue(out var name))
         {
-            if (PackageResolver.FindPackageDir(name, feedPaths) is not { } packageDir)
+            if (FindCompatiblePackage(name) is not { } packageDir)
                 continue;
             foreach (var import in ReadPackageImports(packageDir))
                 if (imports.Add(import))
@@ -969,21 +986,14 @@ public static class RunCommand
         // Find imports that can't be resolved from any known path
         var missing = new List<string>();
         foreach (var imp in imports)
-        {
-            bool found = false;
-            foreach (var feed in feedPaths)
-            {
-                if (ImportResolver.FindPackageDir(feed, imp) is not null)
-                {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found)
+            if (FindCompatiblePackage(imp) is null)
                 missing.Add(imp);
-        }
 
-        if (missing.Count == 0) return;
+        if (missing.Count == 0)
+        {
+            ReportCompatibilityResolved();
+            return;
+        }
 
         // Try to restore from GitHub feeds
         var feedManager = new FeedManager();
@@ -1003,6 +1013,8 @@ public static class RunCommand
         var source2 = new GitHubPackageSource(httpClient, githubToken);
 
         Directory.CreateDirectory(cachePath);
+        if (!feedPaths.Contains(cachePath, StringComparer.OrdinalIgnoreCase))
+            feedPaths.Add(cachePath);
 
         // BFS: download missing packages and their transitive imports
         var queue = new Queue<string>(missing);
@@ -1012,6 +1024,9 @@ public static class RunCommand
         if (missing.Count > 0)
         {
             var feedCount = githubFeeds.Distinct().Count();
+            if (incompatibleProviders.Count > 0)
+                Console.Error.WriteLine("Info: Local packages target a different Cop version. " +
+                    "Preparing matching packages automatically; local files will not be changed.");
             Console.Error.WriteLine($"Auto-restoring {missing.Count} package(s) from {feedCount} feed(s)...");
         }
 
@@ -1020,9 +1035,15 @@ public static class RunCommand
             var pkgName = queue.Dequeue();
             if (downloaded.Contains(pkgName)) continue;
 
-            if (ImportResolver.FindPackageDir(cachePath, pkgName) is not null)
+            if (FindCompatiblePackage(pkgName) is { } existingPackage)
             {
                 downloaded.Add(pkgName);
+                foreach (var import in ReadPackageImports(existingPackage))
+                    if (!downloaded.Contains(import))
+                    {
+                        imports.Add(import);
+                        queue.Enqueue(import);
+                    }
                 continue;
             }
 
@@ -1083,7 +1104,10 @@ public static class RunCommand
                             foreach (var imp in sf.Imports)
                             {
                                 if (!downloaded.Contains(imp))
+                                {
+                                    imports.Add(imp);
                                     queue.Enqueue(imp);
+                                }
                             }
                         }
                         catch { /* skip unparseable files */ }
@@ -1108,6 +1132,11 @@ public static class RunCommand
         if (restoredCount > 0)
         {
             Console.Error.WriteLine($"{restoredCount} package(s) restored successfully");
+            if (imports.All(name => FindCompatiblePackage(name) is not null))
+            {
+                ReportCompatibilityResolved();
+                Console.Error.WriteLine("Package setup complete. Continuing source analysis.");
+            }
         }
     }
 

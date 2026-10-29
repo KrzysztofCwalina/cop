@@ -11,6 +11,7 @@ internal static class ConsoleMarkdown
     internal const string Dim = "\x1b[2m";
     internal const string Cyan = "\x1b[36m";
     internal const string Yellow = "\x1b[33m";
+    internal const string Red = "\x1b[31m";
     internal const string Green = "\x1b[32m";
     internal const string Gray = "\x1b[90m";
     internal const string White = "\x1b[37m";

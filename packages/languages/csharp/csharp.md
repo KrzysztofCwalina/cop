@@ -12,6 +12,11 @@ providerAssembly: csharp-provider.dll
 # C# Source Language Provider
 Parses C# source code files and provides Types, Statements, Calls, and Lines collections.
 
+The bundled parser supports C# 14, including file-based app directives and extension blocks.
+Extension methods, properties, and accessors remain members of their declaring static type;
+their method facts expose `IsExtension` and the extension block's `ReceiverType`.
+No separately installed compiler or SDK is needed to parse these constructs.
+
 Calls include invocations nested in arguments, conditions, and initializers. `CallTarget`
 and `ArgumentExpressions` expose parsed `CodeExpression` nodes with `Kind`, `Name`, `Target`,
 and decoded literal `StringValue`, so checks never need to parse string-valued `Arguments`.
@@ -39,6 +44,12 @@ have independent call facts. Methods and nested types are matched by syntax posi
 not line number. Accessor/operator/local-function bodies, finally blocks, do loops,
 deconstruction foreach, labels, break, and continue are represented. `HasRethrow`
 means a bare `throw`, not throwing a newly constructed exception.
+
+Assignments have `Kind == assignment`, their right-hand side in `ValueExpression`, and
+any nested calls as children. Other expression statements, such as increments, have
+`Kind == expression` when they are not calls or assignments. Catch bodies and top-level
+statements preserve these nodes, so assignment-only handlers are not mistaken for empty
+catches. Genuinely empty catches still have no children.
 
 Types expose their own `Namespace` and generic parameters; methods expose generic
 parameters, and parameters expose optionality. `File.Imports` preserves using aliases

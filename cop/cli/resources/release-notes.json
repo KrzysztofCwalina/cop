@@ -226,6 +226,17 @@
         "Incompatible local provider DLLs are skipped automatically in favor of compatible packages, without deleting local files.",
         "Initialization failures report the original error without misleading secondary undefined-variable errors."
       ]
+    },
+    {
+      "version": "2026.10.29.3",
+      "approved": true,
+      "features": [
+        "Bundled C# 14 parsing supports file-based app directives and extension blocks without installing a compiler, .NET SDK, or runtime.",
+        "C# catch bodies retain assignments and other expression statements, eliminating false empty-catch findings while preserving genuinely empty handlers.",
+        "Successful automatic package recovery is clearly informational, confirms that no action is required, and leaves local files unchanged.",
+        "Package setup explicitly confirms when it is complete and source analysis is continuing; detailed provider-version diagnostics are available with -d.",
+        "Unresolved imports stop execution, and genuine source-analysis errors remain failures with error coloring rather than warning coloring."
+      ]
     }
   ]
 }

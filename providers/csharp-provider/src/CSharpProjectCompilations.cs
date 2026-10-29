@@ -1,5 +1,6 @@
 using System.Xml.Linq;
 using Cop.Core;
+using Cop.Providers.SourceParsers;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
@@ -88,7 +89,8 @@ internal static class CSharpProjectCompilations
             var compilationTrees = trees.AsEnumerable();
             if (imports.Count > 0)
                 compilationTrees = compilationTrees.Append(CSharpSyntaxTree.ParseText(
-                    string.Join("\n", imports.Distinct().Select(i => $"global using {i};"))));
+                    string.Join("\n", imports.Distinct().Select(i => $"global using {i};")),
+                    CSharpSourceParser.ParseOptions));
             var compilation = CSharpCompilation.Create("CopAnalysis_" + compiled.Count, compilationTrees, metadata,
                 new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary).WithNullableContextOptions(NullableContextOptions.Enable));
             compiled[project] = compilation;

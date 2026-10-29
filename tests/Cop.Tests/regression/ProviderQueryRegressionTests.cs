@@ -23,8 +23,6 @@ public class ProviderQueryRegressionTests
     public void TearDown() => Directory.Delete(_root, true);
 
     [Test]
-    [Explicit("Issue #78: .NET file-based app directives are reported as CS1024 - remove when fixed")]
-    [Category("PendingFix")]
     public void Issue078_CSharpFileBasedAppDirectivesAreAccepted()
     {
         File.WriteAllText(Path.Combine(_root, "app.cs"), """
@@ -38,6 +36,7 @@ public class ProviderQueryRegressionTests
             command MAIN = print(cb.Files.Count)
             """);
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "1" }));
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
     }
 
     [Test]

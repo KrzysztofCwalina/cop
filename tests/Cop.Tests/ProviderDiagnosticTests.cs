@@ -85,6 +85,14 @@ public class ProviderDiagnosticTests
         Assert.That(RunCommand.FormatProviderWarning(message, false), Is.EqualTo(message));
     }
 
+    [Test]
+    public void Issue094_SourceAnalysisError_IsRed_NotAWarning()
+    {
+        const string message = "Error: 2 source analysis error(s) - the analysis model may be incomplete:";
+        Assert.That(RunCommand.FormatProviderWarning(message, true), Is.EqualTo("\x1b[31m" + message + "\x1b[0m"));
+        Assert.That(RunCommand.FormatProviderWarning(message, false), Is.EqualTo(message));
+    }
+
     private static (int Exit, string Stderr) Handle(EngineResult result)
     {
         var previous = Console.Error;

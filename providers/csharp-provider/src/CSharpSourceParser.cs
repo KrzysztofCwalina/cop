@@ -11,9 +11,12 @@ public class CSharpSourceParser : ISourceParser
     public override IReadOnlyList<string> Extensions => [".cs"];
     public override string Language => "csharp";
 
+    internal static CSharpParseOptions ParseOptions { get; } = CSharpParseOptions.Default
+        .WithFeatures([KeyValuePair.Create("FileBasedProgram", "true")]);
+
     public override SourceFile? Parse(string filePath, string sourceText)
     {
-        var tree = CSharpSyntaxTree.ParseText(sourceText);
+        var tree = CSharpSyntaxTree.ParseText(sourceText, ParseOptions, path: filePath);
         return ParseWithSemantics(filePath, sourceText, tree, model: null);
     }
 
@@ -67,7 +70,9 @@ public class CSharpSourceParser : ISourceParser
         // Extract top-level (global) statements
         foreach (var globalStmt in root.Members.OfType<GlobalStatementSyntax>())
         {
-            ExtractStatement(globalStmt.Statement, allStatements, isInMethod: false, method: null, parent: null);
+            var statements = new List<StatementInfo>();
+            ExtractStatement(globalStmt.Statement, statements, isInMethod: false, method: null, parent: null);
+            FlattenStatements(statements, allStatements);
         }
 
         // Extract assembly-level attributes as statements
@@ -466,7 +471,9 @@ public class CSharpSourceParser : ISourceParser
         var properties = new List<PropertyDeclaration>();
         var events = new List<EventDeclaration>();
 
-        foreach (var member in syntax.Members)
+        foreach (var member in syntax.Members.SelectMany(member =>
+                     member is ExtensionBlockDeclarationSyntax extension
+                         ? extension.Members.AsEnumerable() : [member]))
         {
             if (member is ConstructorDeclarationSyntax ctor)
                 constructors.Add(ExtractConstructor(ctor));
@@ -559,6 +566,7 @@ public class CSharpSourceParser : ISourceParser
 
     private static CSharpMethodDeclaration ExtractCallable(SyntaxNode syntax, string? name = null, ExpressionSyntax? expression = null)
     {
+        var receiver = ExtensionReceiver(syntax);
         var (callableName, parameters, returnType, body, arrow) = syntax switch
         {
             LocalFunctionStatementSyntax local => (local.Identifier.ValueText, local.ParameterList,
@@ -585,11 +593,13 @@ public class CSharpSourceParser : ISourceParser
             returnType is null ? null : ExtractTypeReference(returnType),
             parameters?.Parameters.Select(ExtractParameter).ToList() ?? [], LineOf(syntax))
         {
+            ReceiverType = receiver,
             TypeParameters = syntax is LocalFunctionStatementSyntax genericLocal
                 ? genericLocal.TypeParameterList?.Parameters.Select(p => p.Identifier.ValueText).ToList() ?? [] : [],
             Column = ColumnOf(syntax), EndLine = EndLineOf(syntax), EndColumn = EndColumnOf(syntax)
         }
-            .AsCSharp(isExpressionBodied: arrow is not null || expression is not null,
+            .AsCSharp(isExtension: receiver is not null,
+                isExpressionBodied: arrow is not null || expression is not null,
                 isGeneric: syntax is LocalFunctionStatementSyntax { TypeParameterList: not null });
         result.SyntaxStart = syntax.SpanStart;
         if (body is not null) ExtractStatements(body, result.Statements, true, result);
@@ -600,18 +610,20 @@ public class CSharpSourceParser : ISourceParser
 
     private static MethodDeclaration ExtractMethod(MethodDeclarationSyntax syntax)
     {
+        var receiver = ExtensionReceiver(syntax);
         var method = new MethodDeclaration(syntax.Identifier.Text, ExtractModifiers(syntax.Modifiers),
             syntax.AttributeLists.SelectMany(a => a.Attributes).Select(a => a.Name.ToString()).ToList(),
             ExtractTypeReference(syntax.ReturnType),
             syntax.ParameterList.Parameters.Select(ExtractParameter).ToList(),
             LineOf(syntax))
         {
+            ReceiverType = receiver,
             HasDocComment = HasDocComment(syntax),
             DocComment = GetDocComment(syntax),
             TypeParameters = syntax.TypeParameterList?.Parameters.Select(p => p.Identifier.ValueText).ToList() ?? [],
             Column = ColumnOf(syntax), EndLine = EndLineOf(syntax), EndColumn = EndColumnOf(syntax)
         }.AsCSharp(
-            isExtension: syntax.ParameterList.Parameters.FirstOrDefault()?.Modifiers
+            isExtension: receiver is not null || syntax.ParameterList.Parameters.FirstOrDefault()?.Modifiers
                 .Any(m => m.IsKind(SyntaxKind.ThisKeyword)) == true,
             isPartial: syntax.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)),
             isUnsafe: syntax.Modifiers.Any(m => m.IsKind(SyntaxKind.UnsafeKeyword)),
@@ -628,6 +640,10 @@ public class CSharpSourceParser : ISourceParser
         method.Statements = methodStatements;
         return method;
     }
+
+    private static string? ExtensionReceiver(SyntaxNode syntax) =>
+        ((syntax is AccessorDeclarationSyntax ? syntax.Parent?.Parent?.Parent : syntax.Parent)
+            as ExtensionBlockDeclarationSyntax)?.ParameterList.Parameters.FirstOrDefault()?.Type?.ToString();
 
     private static List<FieldDeclaration> ExtractFields(FieldDeclarationSyntax syntax)
     {
@@ -796,6 +812,12 @@ public class CSharpSourceParser : ISourceParser
             }
             case ExpressionStatementSyntax exprStmt:
                 ExtractExpressionStatement(exprStmt.Expression, results, line, isInMethod, method, parent);
+                if (results.Count == first)
+                    results.Add(new CSharpStatementInfo("expression", [], null, null, [], line, isInMethod, exprStmt.Expression)
+                    {
+                        Method = method, Parent = parent, Expression = exprStmt.Expression.ToString(),
+                        ValueExpression = ExtractExpression(exprStmt.Expression)
+                    });
                 break;
             case ThrowStatementSyntax throwStmt:
             {
@@ -1083,8 +1105,22 @@ public class CSharpSourceParser : ISourceParser
                 break;
             }
             case AssignmentExpressionSyntax assignment:
-                ExtractExpressionStatement(assignment.Right, results, line, isInMethod, method, parent);
+            {
+                var name = assignment.Left switch
+                {
+                    IdentifierNameSyntax id => id.Identifier.ValueText,
+                    MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
+                    _ => null
+                };
+                var info = new CSharpStatementInfo("assignment", [], null, name, [], line, isInMethod, assignment)
+                {
+                    Method = method, Parent = parent, Expression = assignment.ToString(),
+                    ValueExpression = ExtractExpression(assignment.Right)
+                };
+                results.Add(info);
+                ExtractExpressionStatement(assignment.Right, info._children, line, isInMethod, method, info);
                 break;
+            }
             case ObjectCreationExpressionSyntax objCreate:
             {
                 var ctorType = ExtractBaseTypeName(objCreate.Type);
