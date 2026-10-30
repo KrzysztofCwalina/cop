@@ -25,6 +25,16 @@ There is no optional external-parser fallback for Cop. Malformed input is report
 source-analysis error rather than silently returning an empty successful result. Unknown
 source positions or unsupported facts remain unknown instead of being inferred from text.
 
+Negative parser-test fixtures may declare `# @expect parse-error` as a standalone
+comment in the file's leading comment/blank-line header. Source analysis excludes
+these explicit test inputs with a warning, including when building a sibling file's
+semantic context. This also supports older checkouts that store such fixtures with
+the `.cop` extension; no checkout edits are required. The marker is not recognized
+inside strings, after program code, or as part of another directive. Ordinary
+malformed source still reports an error and fails analysis. Direct execution and
+`cop verify` still parse negative fixtures normally, so their expected failures can
+be tested. A `.cop.invalid` extension remains appropriate for newly authored fixtures.
+
 ## Collections
 
 All standard code collections are available, filtered to `.cop` files:

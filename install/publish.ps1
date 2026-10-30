@@ -345,12 +345,10 @@ Write-Host "  -> $vscodeZip (VS Code extension)"
 Write-Host "`nDone! Published for: $($Runtimes -join ', ')"
 Write-Host "To publish for a single platform: .\publish.ps1 -Runtimes win-x64"
 
-# Update PATH-installed cop.exe if it exists in ~/.dotnet/tools
-if ($Runtimes -contains "win-x64") {
-    $dotnetToolPath = Join-Path $env:USERPROFILE ".dotnet\tools\cop.exe"
-    if (Test-Path $dotnetToolPath) {
-        $localBinary = Join-Path $OutputBase "win-x64\cop.exe"
-        Copy-Item $localBinary $dotnetToolPath -Force
-        Write-Host "  -> Updated $dotnetToolPath"
-    }
+# Install only the host build, using the same location and migration as cop update.
+$hostRid = [System.Runtime.InteropServices.RuntimeInformation]::RuntimeIdentifier
+if ($Runtimes -contains $hostRid) {
+    $exeName = if ($hostRid -like 'win-*') { 'cop.exe' } else { 'cop' }
+    & (Join-Path $OutputBase "$hostRid\$exeName") update --local
+    if ($LASTEXITCODE -ne 0) { throw "Local Cop installation failed" }
 }

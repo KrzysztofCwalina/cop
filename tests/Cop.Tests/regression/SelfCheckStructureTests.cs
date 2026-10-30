@@ -88,6 +88,42 @@ public class SelfCheckStructureTests
         Assert.That(result.ExitCode, Is.EqualTo(0));
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public void SelfChecksHandleLegacyNegativeFixtureNamesWithoutChangingTheTarget(bool hasViolation)
+    {
+        var target = Path.Combine(_root, "target");
+        Directory.CreateDirectory(target);
+        var fixtures = Path.Combine(_repo, "tests", "lang.tests", "referencetests", "programs");
+        var names = new[] { "negative-predicate-no-body.cop", "negative-unclosed-string.cop" };
+        foreach (var name in names)
+            File.Copy(Path.Combine(fixtures, name + ".invalid"), Path.Combine(target, name));
+        File.WriteAllText(Path.Combine(target, "Wrong.cop"),
+            "export function misplaced(value : string) : string => " + (hasViolation ? "intrinsic" : "value"));
+        var checks = Path.Combine(_repo, "cop-checks");
+        var main = Path.Combine(checks, "main.cop");
+        var files = Directory.GetFiles(checks, "*.cop", SearchOption.AllDirectories)
+            .Where(f => f != main).Order(StringComparer.Ordinal).Append(main).ToArray();
+
+        for (int run = 0; run < 2; run++)
+        {
+            var result = Engine.Run(checks, target, scriptFiles: files,
+                additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+
+            Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
+            Assert.That(result.Warnings!.Where(w => w.Contains("source analysis error")), Is.Empty);
+            Assert.That(result.Warnings!.Count(w => w.Contains("Excluded negative parser fixture")), Is.EqualTo(2));
+            Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(hasViolation ? new[]
+            {
+                "Wrong.cop(1): error: Intrinsic declaration must be in intrinsics.cop, not Wrong.cop"
+            } : Array.Empty<string>()));
+            Assert.That(result.ExitCode, Is.EqualTo(hasViolation ? 1 : 0));
+            foreach (var name in names)
+                Assert.That(File.ReadAllText(Path.Combine(target, name)),
+                    Is.EqualTo(File.ReadAllText(Path.Combine(fixtures, name + ".invalid"))));
+        }
+    }
+
     [Test]
     public void RepositoryHasNoUnapprovedRegexImports()
     {
@@ -158,6 +194,26 @@ public class SelfCheckStructureTests
             }
             """, "csharp", [6, 7, 8],
             "Environment variable used to control behavior — use a CLI flag or config instead (Input.cs:{0})");
+    }
+
+    [TestCase("cop/cli/commands/CopInstallation.cs", true)]
+    [TestCase("cop/cli/commands/Other.cs", false)]
+    public void EnvironmentCheckLimitsPathUpdatesToTheInstaller(string file, bool isInstaller)
+    {
+        AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", file, """
+            using System;
+            namespace Fixture;
+            class Example {
+                void ConfigurePath(string name) {
+                    Environment.SetEnvironmentVariable("PATH", "bin");
+                    Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User);
+                    Environment.SetEnvironmentVariable("COP_FEATURE", "true");
+                    Environment.SetEnvironmentVariable(name, "bin");
+                }
+                void Other() => Environment.SetEnvironmentVariable("PATH", "bin");
+            }
+            """, "csharp", isInstaller ? [7, 8, 10] : [5, 6, 7, 8, 10],
+            $"Environment variable used to control behavior — use a CLI flag or config instead ({file}:{{0}})");
     }
 
     [TestCase("providers/java-provider/src/JavaSemanticContext.cs", "Discover", "CLASSPATH", false, true)]
