@@ -237,6 +237,14 @@
         "Package setup explicitly confirms when it is complete and source analysis is continuing; detailed provider-version diagnostics are available with -d.",
         "Unresolved imports stop execution, and genuine source-analysis errors remain failures with error coloring rather than warning coloring."
       ]
+    },
+    {
+      "version": "2026.10.30.1",
+      "approved": true,
+      "features": [
+        "Empty C# template project files now produce one warning while preserving source analysis and project references.",
+        "Malformed project XML and unresolved C# semantic facts remain explicit analysis errors."
+      ]
     }
   ]
 }
