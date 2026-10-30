@@ -61,6 +61,19 @@ public class CSharpProjectDiscoveryTests
     }
 
     [Test]
+    public void Discover_XmlDeclaredEncoding_PreservesProjectMetadata()
+    {
+        var contents = "<?xml version=\"1.0\" encoding=\"iso-8859-1\"?>\n" +
+            "<Project><PropertyGroup><AssemblyName>Caf\u00e9</AssemblyName></PropertyGroup></Project>";
+        File.WriteAllBytes(Path.Combine(_tempDir, "app.csproj"), System.Text.Encoding.Latin1.GetBytes(contents));
+
+        var projects = CSharpProjectDiscovery.Discover(_tempDir, null);
+
+        Assert.That(projects, Has.Count.EqualTo(1));
+        Assert.That(projects[0].Name, Is.EqualTo("Caf\u00e9"));
+    }
+
+    [Test]
     public void Discover_Frameworks_IncludeSingleTargetFramework()
     {
         var csproj = Path.Combine(_tempDir, "MyApp.csproj");

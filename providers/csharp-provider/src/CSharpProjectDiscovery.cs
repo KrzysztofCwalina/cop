@@ -75,7 +75,9 @@ public static class CSharpProjectDiscovery
 
         try
         {
-            var doc = XDocument.Load(csprojPath);
+            var doc = LoadProjectDocument(csprojPath);
+            if (doc is null)
+                return (name, refPaths, packages, frameworks, properties);
             var ns = doc.Root?.Name.Namespace ?? XNamespace.None;
 
             // Extract properties from PropertyGroup elements
@@ -127,11 +129,31 @@ public static class CSharpProjectDiscovery
             Cop.Core.ProviderErrors.Report($"Failed to read project '{csprojPath}': {ex.Message}");
         }
 
-            return (name, refPaths, packages, frameworks, properties);
-        }
+        return (name, refPaths, packages, frameworks, properties);
+    }
 
-        private static string NormalizePath(string path) =>
-            path.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+    internal static XDocument? LoadProjectDocument(string path)
+    {
+        using var stream = File.OpenRead(path);
+        try
+        {
+            return XDocument.Load(stream);
+        }
+        catch (System.Xml.XmlException)
+        {
+            stream.Position = 0;
+            using var reader = new StreamReader(stream);
+            if (!string.IsNullOrWhiteSpace(reader.ReadToEnd()))
+                throw;
+
+            Cop.Core.ProviderWarnings.ReportOnce("csharp", Path.GetFullPath(path),
+                $"Project '{path}' is empty; analyzing its C# sources without project metadata.");
+            return null;
+        }
+    }
+
+    private static string NormalizePath(string path) =>
+        path.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
 
     private static void AddTargetFrameworks(List<string> frameworks, string propertyName, string propertyValue)
     {

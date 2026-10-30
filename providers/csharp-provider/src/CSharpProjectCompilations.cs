@@ -1,4 +1,3 @@
-using System.Xml.Linq;
 using Cop.Core;
 using Cop.Providers.SourceParsers;
 using Microsoft.CodeAnalysis;
@@ -42,8 +41,8 @@ internal static class CSharpProjectCompilations
             {
                 try
                 {
-                    var document = XDocument.Load(project);
-                    var elements = document.Descendants().ToList();
+                    var document = CSharpProjectDiscovery.LoadProjectDocument(project);
+                    var elements = document?.Descendants().ToList() ?? [];
                     if (elements.Any(e => e.Name.LocalName is "TargetFrameworks" or "Import"
                         || e.Attribute("Condition") is not null
                         || e.Name.LocalName == "Compile"))

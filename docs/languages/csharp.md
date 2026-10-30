@@ -33,6 +33,11 @@ build configuration is not evaluated. Missing restored references can also leave
 unresolved; an installed SDK alone does not supply every project dependency. Syntax-level
 facts remain available.
 
+Empty or whitespace-only `.csproj` files, such as template placeholders, produce one
+warning per file instead of failing analysis. Cop retains their project boundaries and
+analyzes their C# sources without project metadata. Non-empty malformed project files
+still produce analysis errors, as do unresolved symbols when semantic facts are requested.
+
 If your checks need dependency-aware symbols, provide the project's existing restored
 references using your normal development workflow before running Cop. Cop does not
 automatically install the SDK or restore the target project's NuGet dependencies for you.

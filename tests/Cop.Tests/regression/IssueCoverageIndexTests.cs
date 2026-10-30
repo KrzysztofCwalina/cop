@@ -98,6 +98,7 @@ public class IssueRegressionCoverageIndexTests
         new(94, CoverageKind.ImplementedHere, "ToolchainCliIntegrationTests.Issue094_ResolvedCompatibilityIsInformational_NotARepairWarning; ProviderDiagnosticTests"),
         new(95, CoverageKind.ImplementedHere, "CSharpModernRegressionTests.Issue095_CSharp14DeclarationsRunWithoutInstalledDotnet"),
         new(96, CoverageKind.ImplementedHere, "CSharpModernRegressionTests.Issue096_AssignmentOnlyCatchesAreNotEmpty_AndRealEmptyCatchesRemainVisible"),
+        new(97, CoverageKind.ImplementedHere, "ToolchainCliIntegrationTests.Issue097_EmptyProject_WarnsOnceWithoutDroppingSourcesOrProjectEdges; ToolchainCliIntegrationTests.Issue097_NonEmptyMalformedProject_RemainsAnAnalysisError"),
     ];
 
     [Test]
@@ -107,8 +108,8 @@ public class IssueRegressionCoverageIndexTests
         Assert.That(duplicates, Is.Empty, "Each issue must appear exactly once in the regression coverage index.");
 
         var coveredIssues = Coverage.Select(c => c.Issue).OrderBy(i => i).ToArray();
-        Assert.That(coveredIssues, Is.EqualTo(Enumerable.Range(1, 55).Concat([60, 61, 62, 63, 65, 66, 70, 71, 72, 73, 75, 76, 78, 80, 83, 84, 85, 86, 87, 88, 89, 90, 91, 93, 94, 95, 96]).ToArray()),
-            "Regression coverage index must cover issues #1 through #55, #60-#63, #65-#66, #70-#73, #75-#76, #78, #80, #83-#91, and #93-#96.");
+        Assert.That(coveredIssues, Is.EqualTo(Enumerable.Range(1, 55).Concat([60, 61, 62, 63, 65, 66, 70, 71, 72, 73, 75, 76, 78, 80, 83, 84, 85, 86, 87, 88, 89, 90, 91, 93, 94, 95, 96, 97]).ToArray()),
+            "Regression coverage index must cover issues #1 through #55, #60-#63, #65-#66, #70-#73, #75-#76, #78, #80, #83-#91, and #93-#97.");
 
         var untracked = Coverage.Where(c => string.IsNullOrWhiteSpace(c.Detail)).Select(c => c.Issue).ToArray();
         Assert.That(untracked, Is.Empty, "Every issue must be ImplementedHere, CoveredBy(suiteName), or OutOfScope(reason).");
