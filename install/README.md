@@ -106,14 +106,28 @@ Language selection limits manual smoke runs only; publishing still checks every 
 
 ## Usage
 
-Add the platform subfolder to your PATH, or invoke directly:
+The host-platform publish installs the executable into `~/.cop` (on Windows,
+`%USERPROFILE%\.cop\cop.exe`). This is the single user installation used by both
+publishing and `cop update`. Do not add repository build-output folders to PATH.
 
-```bash
-# Windows
-install\win-x64\cop.exe checks.cop
+On Windows, installation adds `~/.cop` to your user PATH, removes old Cop
+`install\win-x64` / `install\win-arm64` build-output entries, and removes the
+legacy `~/.dotnet/tools/cop.exe`. The `.dotnet/tools` directory and other .NET
+tools are preserved. Open a new terminal after migrating; existing terminals
+still have their old PATH. Build outputs remain available for testing and
+packaging but are not separate PATH installations.
 
-# Linux / macOS
-install/linux-x64/cop checks.cop
+For a downloaded executable, install it without another download:
+
+```powershell
+.\cop.exe update --local
+```
+
+On Linux/macOS, run `./cop update --local` and add `~/.cop` to PATH in your shell
+configuration, removing other Cop installation directories.
+
+```powershell
+cop checks.cop
 ```
 
 ## VS Code Extension

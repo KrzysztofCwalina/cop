@@ -121,7 +121,7 @@ if (args[0] == "init")
 // cop update — self-update from GitHub releases
 if (args[0] == "update")
 {
-    return UpdateCommand.Execute(args.Contains("--force") || args.Contains("-f"));
+    return UpdateCommand.Execute(args.Contains("--force") || args.Contains("-f"), args.Contains("--local"));
 }
 
 // cop vscode — install VS Code extension

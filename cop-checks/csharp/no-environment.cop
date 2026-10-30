@@ -1,6 +1,6 @@
 # Environment variables must not control cop's behavior — use CLI flags or config instead.
 # Secrets (e.g. GITHUB_TOKEN) must not be passed on a command line.
-# Reading PATH for installed-tool discovery is allowed; writing PATH is not.
+# Reading PATH for installed-tool discovery is allowed; only the installer may update PATH.
 # Frontends may inspect reviewed toolchain context, not introduce Cop feature flags.
 #
 # Inspect parsed calls, including nested expressions. Only the decoded first argument can
@@ -18,6 +18,12 @@ predicate envIsSearchPathRead(Statement) => Statement.MemberName == 'GetEnvironm
     && Statement.ArgumentExpressions.Count == 1
     && Statement.ArgumentExpressions[0].Kind == stringLiteral
     && Statement.ArgumentExpressions[0].StringValue == 'PATH'
+predicate envIsInstallationPathAccess(Statement) =>
+    Statement.File.Path == 'cop/cli/commands/CopInstallation.cs'
+    && Statement.Method.Name == 'ConfigurePath'
+    && Statement.ArgumentExpressions.Count > 0
+    && Statement.ArgumentExpressions[0].Kind == stringLiteral
+    && Statement.ArgumentExpressions[0].StringValue == 'PATH'
 # Java diagnoses an ignored CLASSPATH; Rust resolves Cargo sources and rejects unsupported flags.
 predicate envIsFrontendContextRead(Statement) => Statement.MemberName == 'GetEnvironmentVariable'
     && Statement.ArgumentExpressions.Count == 1
@@ -33,6 +39,7 @@ predicate envIsFrontendContextRead(Statement) => Statement.MemberName == 'GetEnv
             && Statement.ArgumentExpressions[0].Name == 'name'))))
 predicate envControlsBehavior(Statement) => (Statement.ArgumentExpressions.Count == 0
     || !envIsSecretName(Statement.ArgumentExpressions[0])) && !envIsSearchPathRead && !envIsFrontendContextRead
+    && !envIsInstallationPathAccess
 
 export let no-environment = codebase.Calls:readsEnvVar:envIsCSharp:envNotTest:envControlsBehavior
     :toError('Environment variable used to control behavior — use a CLI flag or config instead ({item.File.Path}:{item.Line})')

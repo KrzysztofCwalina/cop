@@ -13,9 +13,34 @@ static class UpdateCommand
     const string RepoName = "cop";
     const string GitHubApiBase = "https://api.github.com";
 
-    public static int Execute(bool force = false)
+    public static int Execute(bool force = false, bool local = false)
     {
+        if (local)
+            return InstallLocal();
         return ExecuteAsync(force).GetAwaiter().GetResult();
+    }
+
+    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("SingleFile", "IL3000",
+        Justification = "An empty Assembly.Location identifies the required single-file executable.")]
+    private static int InstallLocal()
+    {
+        try
+        {
+            var source = Environment.ProcessPath ?? throw new IOException("Cannot locate the running Cop executable.");
+            if (!Path.GetFileNameWithoutExtension(source).Equals("cop", StringComparison.OrdinalIgnoreCase)
+                || !string.IsNullOrEmpty(Assembly.GetExecutingAssembly().Location))
+                throw new IOException("Local installation requires the published Cop executable, not a dotnet host.");
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var target = CopInstallation.InstallExecutable(source, home);
+            CopInstallation.ConfigurePath(home);
+            Console.WriteLine($"Installed at: {target}");
+            return 0;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            Console.Error.WriteLine($"Error installing Cop: {ex.Message}");
+            return 1;
+        }
     }
 
     static async Task<int> ExecuteAsync(bool force)
@@ -63,6 +88,9 @@ static class UpdateCommand
         if (!force && IsUpToDate(currentVersion, tagName))
         {
             Console.WriteLine($"cop is already up to date ({currentVersion}).");
+            var installed = InstallLocal();
+            if (installed != 0)
+                return installed;
             Console.WriteLine("Use 'cop update --force' to reinstall.");
             return 0;
         }
@@ -106,11 +134,10 @@ static class UpdateCommand
 
         Console.WriteLine($"Downloaded {zipBytes.Length / (1024 * 1024)}MB. Installing...");
 
-        // Determine install directory — prefer ~/.cop, fall back to current exe location
-        var installDir = GetInstallDirectory();
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var installDir = CopInstallation.DirectoryPath(home);
         var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
         var exeName = isWindows ? "cop.exe" : "cop";
-        var targetExe = Path.Combine(installDir, exeName);
 
         // Extract zip to temp directory
         var tempDir = Path.Combine(Path.GetTempPath(), $"cop-update-{Guid.NewGuid():N}");
@@ -133,33 +160,7 @@ static class UpdateCommand
                 return 1;
             }
 
-            // Ensure install directory exists
-            Directory.CreateDirectory(installDir);
-
-            if (isWindows)
-            {
-                // Windows: can't overwrite running exe. Rename current, copy new, schedule old deletion.
-                var backupPath = targetExe + ".old";
-                if (File.Exists(backupPath))
-                    File.Delete(backupPath);
-                if (File.Exists(targetExe))
-                    File.Move(targetExe, backupPath);
-                File.Copy(newExePath, targetExe);
-                // Try to delete backup; if locked, it'll be cleaned up next time
-                try { File.Delete(backupPath); } catch { }
-            }
-            else
-            {
-                // Unix: can overwrite via delete + copy (inode-based, running process keeps old)
-                if (File.Exists(targetExe))
-                    File.Delete(targetExe);
-                File.Copy(newExePath, targetExe);
-                // Set executable permissions
-                File.SetUnixFileMode(targetExe,
-                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
-                    UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
-                    UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
-            }
+            CopInstallation.InstallExecutable(newExePath, home);
 
             // Copy any additional files (e.g., native libs) but skip the main exe
             foreach (var file in Directory.GetFiles(tempDir))
@@ -173,6 +174,7 @@ static class UpdateCommand
                 File.Copy(file, destPath);
             }
 
+            CopInstallation.ConfigurePath(home);
             Console.WriteLine($"Updated to {tagName}");
             Console.WriteLine($"Installed at: {installDir}");
 
@@ -183,9 +185,7 @@ static class UpdateCommand
         catch (UnauthorizedAccessException)
         {
             Console.Error.WriteLine($"Error: Cannot write to '{installDir}' (permission denied).");
-            Console.Error.WriteLine($"The install location requires elevated privileges.");
-            var userDir = GetUserInstallDirectory();
-            Console.Error.WriteLine($"Suggestion: install cop to '{userDir}' (user-writable) and add it to PATH.");
+            Console.Error.WriteLine("Check the permissions on your Cop user directory.");
             return 1;
         }
         catch (Exception ex)
@@ -198,56 +198,6 @@ static class UpdateCommand
             // Clean up temp directory
             try { Directory.Delete(tempDir, recursive: true); } catch { }
         }
-    }
-
-    /// <summary>
-    /// Returns the preferred install directory:
-    /// - If running from ~/.cop, use that.
-    /// - If running from a non-writable location (Program Files), use ~/.cop instead.
-    /// - Otherwise, use the current executable's directory.
-    /// </summary>
-    private static string GetInstallDirectory()
-    {
-        var userDir = GetUserInstallDirectory();
-
-        var currentExe = Environment.ProcessPath;
-        if (string.IsNullOrEmpty(currentExe))
-            return userDir;
-
-        var currentDir = Path.GetDirectoryName(currentExe)!;
-
-        // If already running from ~/.cop, stay there
-        if (currentDir.Equals(userDir, StringComparison.OrdinalIgnoreCase))
-            return userDir;
-
-        // Check if current location is writable
-        if (IsAdminOnlyPath(currentDir))
-        {
-            Console.Error.WriteLine($"Warning: Current install at '{currentDir}' requires admin to update.");
-            Console.Error.WriteLine($"Updating to user-writable location: {userDir}");
-            return userDir;
-        }
-
-        // Use current location if writable
-        return currentDir;
-    }
-
-    private static string GetUserInstallDirectory() =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cop");
-
-    /// <summary>
-    /// Checks if a path is in a known admin-only location (Program Files, etc.)
-    /// </summary>
-    private static bool IsAdminOnlyPath(string path)
-    {
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            return false;
-
-        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-        var programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
-
-        return (!string.IsNullOrEmpty(programFiles) && path.StartsWith(programFiles, StringComparison.OrdinalIgnoreCase))
-            || (!string.IsNullOrEmpty(programFilesX86) && path.StartsWith(programFilesX86, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

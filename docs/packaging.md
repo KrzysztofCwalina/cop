@@ -474,3 +474,7 @@ Compatible packages in your project's `packages/` directory take priority over t
 analyzed. Source-analysis failures remain errors even after package setup succeeds.
 Intentionally malformed parser fixtures should use a non-source extension such as
 `.cop.invalid` and be materialized as `.cop` only inside their isolated tests.
+Existing `.cop` parser fixtures with a leading standalone `# @expect parse-error`
+header comment are automatically excluded from source analysis with a warning.
+Their direct execution and verification still fail as expected. Users do not need
+to rename those fixtures or update their checkout to run source-analysis checks.
