@@ -7,6 +7,55 @@ namespace Cop.Tests;
 [TestFixture]
 public class OptionalLanguagePublishTests
 {
+    [Test]
+    public void ProviderSmoke_AllowsColdHelperCompilationWithoutRemovingTimeoutCleanup()
+    {
+        var repository = TestContext.CurrentContext.TestDirectory;
+        while (!File.Exists(Path.Combine(repository, "cop.sln")))
+            repository = Path.GetDirectoryName(repository) ?? throw new AssertionException("Cannot locate repository.");
+        var script = Path.Combine(repository, "install", "provider-smoke.ps1").Replace("'", "''");
+        var probe = """
+            $ErrorActionPreference = 'Stop'
+            $tokens = $null
+            $parseErrors = $null
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile('SMOKE_SCRIPT_PATH', [ref]$tokens, [ref]$parseErrors)
+            if ($parseErrors.Count) { throw 'Provider smoke script has syntax errors.' }
+            $function = $ast.Find({
+                param($node)
+                $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-SmokeProcess'
+            }, $true)
+            $waits = @($function.Body.FindAll({
+                param($node)
+                $node -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -and $node.Member.Value -eq 'WaitForExit'
+            }, $true))
+            $kill = $function.Body.Find({
+                param($node)
+                $node -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -and $node.Member.Value -eq 'Kill'
+            }, $true)
+            $waits[0].Arguments[0].SafeGetValue()
+            $waits[1].Arguments[0].SafeGetValue()
+            $kill.Arguments[0].SafeGetValue()
+            """.Replace("SMOKE_SCRIPT_PATH", script);
+        var start = new ProcessStartInfo("pwsh")
+        {
+            RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false
+        };
+        foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-Command", probe })
+            start.ArgumentList.Add(argument);
+        using var process = Process.Start(start)!;
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(30_000))
+        {
+            process.Kill(entireProcessTree: true);
+            Assert.Fail("Provider smoke timeout inspection timed out.");
+        }
+        Assert.That(process.ExitCode, Is.Zero, stderr.GetAwaiter().GetResult());
+        Assert.That(stdout.GetAwaiter().GetResult().Replace("\r\n", "\n").Trim(),
+            Is.EqualTo("240000\n5000\nTrue"),
+            "Allow the three-minute Go helper build plus its request/startup overhead; retain bounded tree cleanup.");
+    }
+
     [TestCase(0)]
     [TestCase(17)]
     public void DefaultPublish_DoesNotPrepareOrShipNativeLanguageDependencies(int installExitCode)
