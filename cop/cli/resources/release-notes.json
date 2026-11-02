@@ -245,6 +245,14 @@
         "Empty C# template project files now produce one warning while preserving source analysis and project references.",
         "Malformed project XML and unresolved C# semantic facts remain explicit analysis errors."
       ]
+    },
+    {
+      "version": "2026.11.2.1",
+      "approved": true,
+      "features": [
+        "Intentionally invalid Cop parser fixtures marked '# @expect parse-error' no longer fail source analysis, including older checkouts that still name them .cop.",
+        "Windows updates and local publishing use one installation at ~/.cop/cop.exe and migrate legacy Cop PATH installations without disturbing other .NET tools."
+      ]
     }
   ]
 }
