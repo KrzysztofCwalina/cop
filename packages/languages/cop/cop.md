@@ -27,13 +27,17 @@ source positions or unsupported facts remain unknown instead of being inferred f
 
 Negative parser-test fixtures may declare `# @expect parse-error` as a standalone
 comment in the file's leading comment/blank-line header. Source analysis excludes
-these explicit test inputs with a warning, including when building a sibling file's
+these explicit test inputs quietly, including when building a sibling file's
 semantic context. This also supports older checkouts that store such fixtures with
 the `.cop` extension; no checkout edits are required. The marker is not recognized
 inside strings, after program code, or as part of another directive. Ordinary
 malformed source still reports an error and fails analysis. Direct execution and
 `cop verify` still parse negative fixtures normally, so their expected failures can
 be tested. A `.cop.invalid` extension remains appropriate for newly authored fixtures.
+The marker is a formal file exclusion, not a suppressed analysis error. Use `-d` to
+see which marked files were excluded. No rename is required to keep normal runs quiet.
+The `.cop.invalid` extension excludes a fixture without a marker; Cop's reference-test
+runner already loads that extension.
 
 ## Collections
 

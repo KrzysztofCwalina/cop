@@ -207,6 +207,7 @@ public static class Engine
         Dictionary<string, List<ParsedModule>>? packageModuleMap = null,
         ReviewOptions? reviewOptions = null)
     {
+        using var statistics = new ExecutionStatistics();
         var outputs = new List<PrintOutput>();
         var warnings = new List<string>();
         var errors = new List<string>();
@@ -222,6 +223,13 @@ public static class Engine
         using var toolchainScope = new Cop.Core.ToolchainExecutionScope();
 
         var bridge = CreateBridge(outputs, fileOutputLines, asserts, diagLog);
+        var evaluatedBindings = new System.Collections.Concurrent.ConcurrentDictionary<LetDecl, byte>(ReferenceEqualityComparer.Instance);
+        bridge.Evaluator.LetBindingEvaluated = declaration =>
+        {
+            if (evaluatedBindings.TryAdd(declaration, 0))
+                statistics.CommandCompleted();
+        };
+        bridge.Evaluator.EntryCommandCompleted = statistics.CommandCompleted;
         AnalysisContext context;
         try
         {
@@ -619,7 +627,10 @@ public static class Engine
                 exitCode = 1;
         }
 
-        return new EngineResult(outputs, parseErrors, errors, resultCommandName, fileOutputs, warnings, asserts, diagnostics, exitCode);
+        return new EngineResult(outputs, parseErrors, errors, resultCommandName, fileOutputs, warnings, asserts, diagnostics, exitCode)
+        {
+            Statistics = statistics.Snapshot()
+        };
     }
 
     /// <summary>
@@ -1436,4 +1447,5 @@ public record EngineResult(
     public bool HasParseErrors => ParseErrors.Count > 0;
     public bool HasFatalErrors => Errors.Count > 0;
     public bool IsCommandMode => CommandName != null;
+    public ExecutionSummary? Statistics { get; init; }
 }

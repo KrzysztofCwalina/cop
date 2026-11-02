@@ -138,6 +138,7 @@ public class FilesystemProvider : DataProvider
                 var size = fi.Length;
                 var name = fi.Name;
                 var ext = fi.Extension;
+                ExecutionStatistics.RecordInputFile(filePath);
 
                 if (!FilterEvaluator.Matches(fileFilter, prop => prop switch
                 {
@@ -167,8 +168,11 @@ public class FilesystemProvider : DataProvider
         }
         else
         {
-            foreach (var _ in childFiles)
+            foreach (var path in childFiles)
+            {
                 fileCount++;
+                ExecutionStatistics.RecordInputFile(path);
+            }
         }
 
         // Enumerate child directories, prune excluded, and recurse

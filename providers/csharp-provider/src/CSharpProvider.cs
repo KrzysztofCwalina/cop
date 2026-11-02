@@ -43,6 +43,7 @@ public class CSharpProvider : DataProvider
             DeferredSourceSnapshot sources = null!;
             (SyntaxTree Tree, string Text) Syntax(string path)
             {
+                ExecutionStatistics.RecordInputFile(path);
                 if (trees.TryGetValue(path, out var cached)) return cached;
                 var text = texts.Read(path);
                 var parsed = (CSharpSyntaxTree.ParseText(text, CSharpSourceParser.ParseOptions, path: path), text);
@@ -76,7 +77,7 @@ public class CSharpProvider : DataProvider
                 }
 #pragma warning restore RSEXPERIMENTAL001
                 return file;
-            }, () => CSharpProjectDiscovery.Discover(root, query.ExcludedDirectories));
+            }, () => CSharpProjectDiscovery.Discover(root, query.ExcludedDirectories, sources.Paths));
             snapshot = sources;
             _deferredSnapshots.Add(key, snapshot);
         }
@@ -105,7 +106,8 @@ public class CSharpProvider : DataProvider
         if (!_snapshots.TryGetValue(key, out var snapshot))
         {
             var files = LoadSourceFiles(query);
-            var projects = CSharpProjectDiscovery.Discover(query.RootPath, query.ExcludedDirectories);
+            var projects = CSharpProjectDiscovery.Discover(query.RootPath, query.ExcludedDirectories,
+                files.Select(file => file.FullPath).ToArray());
             LinkFilesToProjects(new Dictionary<string, List<object>> { ["Files"] = files.Cast<object>().ToList() },
                 projects, query.RootPath);
             snapshot = (files, projects);
@@ -511,7 +513,9 @@ public class CSharpProvider : DataProvider
         if (!collections.TryGetValue("Files", out var files) || files.Count == 0)
             return;
 
-        var projectDirs = new List<(string Dir, string Name)>();
+        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var projectDirs = new List<(string Dir, string Name, HashSet<string>? Files)>();
         foreach (var proj in projects)
         {
            var projFilePath = Path.Combine(rootPath, proj.Path.Replace('/', Path.DirectorySeparatorChar));
@@ -521,7 +525,8 @@ public class CSharpProvider : DataProvider
                var relDir = Path.GetRelativePath(rootPath, projDir).Replace('\\', '/');
                if (relDir == ".") relDir = "";
                else if (!relDir.EndsWith('/')) relDir += '/';
-               projectDirs.Add((relDir, proj.Name));
+               projectDirs.Add((relDir, proj.Name,
+                   proj.SourceFiles is null ? null : new HashSet<string>(proj.SourceFiles, comparer)));
            }
         }
 
@@ -529,9 +534,9 @@ public class CSharpProvider : DataProvider
         {
            var file = (SourceFile)fileObj;
            var filePath = file.Path;
-           foreach (var (dir, name) in projectDirs)
+           foreach (var (dir, name, sources) in projectDirs)
            {
-               if (filePath.StartsWith(dir, StringComparison.OrdinalIgnoreCase))
+               if (sources is not null ? sources.Contains(file.FullPath) : filePath.StartsWith(dir, comparison))
                    file.Projects.Add(name);
            }
         }

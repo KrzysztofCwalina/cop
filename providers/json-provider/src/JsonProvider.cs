@@ -47,6 +47,7 @@ public sealed class JsonProvider : DataProvider
 
         var json = File.ReadAllBytes(filePath);
         var items = ParseJson(json);
+        ExecutionStatistics.RecordInputFile(filePath);
 
         // Apply filter pushdown if present
         if (query.Filter is not null)

@@ -17,13 +17,167 @@ public class CSharpSemanticFactsTests
         _root = Path.Combine(Path.GetTempPath(), "cop-semantic-control-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_root);
         ProviderErrors.Clear();
+        ProviderWarnings.Clear();
     }
 
     [TearDown]
     public void TearDown()
     {
         ProviderErrors.Clear();
+        ProviderWarnings.Clear();
         Directory.Delete(_root, recursive: true);
+    }
+
+    [TestCase("<PropertyGroup><TargetFrameworks>net9.0;net10.0</TargetFrameworks></PropertyGroup>",
+        "multiple target frameworks (<TargetFrameworks>)")]
+    [TestCase("<Import Project=\"custom.props\" />", "imported build files (<Import>)")]
+    [TestCase("<PropertyGroup Condition=\"'$(Configuration)' == 'Debug'\"><DefineConstants>DEBUG</DefineConstants></PropertyGroup>",
+        "conditional build settings (Condition attributes)")]
+    [TestCase("<ItemGroup><Compile Include=\"$(GeneratedDirectory)\\*.cs\" /></ItemGroup>",
+        "source-file rules with unevaluated expressions (<Compile>)")]
+    [TestCase("<Target Name=\"Generate\"><ItemGroup><Compile Include=\"Generated.cs\" /></ItemGroup></Target>",
+        "build-generated source-file rules (<Target>/<Compile>)")]
+    [TestCase("<Target Name=\"Configure\"><PropertyGroup><DefineConstants>FEATURE</DefineConstants></PropertyGroup></Target>",
+        "build-generated analysis settings (<Target>)")]
+    [TestCase("<PropertyGroup><TargetFrameworks>net9.0;net10.0</TargetFrameworks></PropertyGroup>" +
+        "<Import Project=\"custom.props\" Condition=\"'$(Configuration)' == 'Debug'\" />" +
+        "<ItemGroup><Compile Remove=\"Excluded.cs\" /></ItemGroup>",
+        "multiple target frameworks (<TargetFrameworks>), imported build files (<Import>), " +
+        "conditional build settings (Condition attributes)")]
+    public void BuildSettingsWarningExplainsTheDetectedSettingsImpactAndAction(string settings, string reason)
+    {
+        var project = Path.Combine(_root, "App.csproj");
+        File.WriteAllText(project, $"<Project>{settings}</Project>");
+        File.WriteAllText(Path.Combine(_root, "App.cs"), "class App { int Value() => 1; int Run() => Value(); }");
+
+        var call = Calls().Single();
+        Assert.That(Text(Object(call, "ValueType"), "Name"), Is.EqualTo("Int32"));
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
+        Assert.That(ProviderWarnings.Drain(), Is.EqualTo(new[]
+        {
+            $"Warning: csharp: Limited C# analysis for '{project}': found {reason}. " +
+            "Cop cannot fully evaluate these settings. Source-file membership may fall back to project folders, " +
+            "and only the first restored target framework is used. File inclusion or resolved symbols may differ from your actual build. " +
+            "If a check depends on these settings, compare its results with the files and target framework selected by your normal build. " +
+            "This is a Cop limitation, not a project error; installing the .NET SDK or running restore will not remove it."
+        }));
+    }
+
+    [Test]
+    public void InputStatisticsIncludeSourcesDemandedOnlyForSemanticContext()
+    {
+        File.WriteAllText(Path.Combine(_root, "a.cs"), "class Caller { string Run() => Target.Value(); }");
+        File.WriteAllText(Path.Combine(_root, "z.cs"), "static class Target { public static string Value() => \"ok\"; }");
+        for (int run = 0; run < 2; run++)
+        {
+            using var statistics = new ExecutionStatistics();
+            var provider = new CSharpProvider();
+            var result = (DeferredProviderResult)provider.QueryDeferred(new() { RootPath = _root, Collection = "Calls" });
+            var call = result.Collections["Calls"].Cast<Cop.Providers.SourceModel.StatementInfo>().First();
+            Assert.That(statistics.Snapshot().InputFiles, Is.EqualTo(1));
+            Assert.That(call.ValueType?.OriginalText, Is.EqualTo("string"));
+            Assert.That(statistics.Snapshot().InputFiles, Is.EqualTo(2));
+            Assert.That(ProviderErrors.Drain(), Is.Empty);
+        }
+    }
+
+    [Test]
+    public void SimpleProjectDoesNotReportUnsupportedBuildSettings()
+    {
+        File.WriteAllText(Path.Combine(_root, "App.csproj"),
+            "<Project><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
+        File.WriteAllText(Path.Combine(_root, "App.cs"), "class App { int Value() => 1; int Run() => Value(); }");
+
+        Assert.That(Text(Object(Calls().Single(), "ValueType"), "Name"), Is.EqualTo("Int32"));
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
+        Assert.That(ProviderWarnings.Drain(), Is.Empty);
+    }
+
+    [Test]
+    public void BuildOnlyConditionsDoNotProduceAnalysisWarnings()
+    {
+        File.WriteAllText(Path.Combine(_root, "App.csproj"), """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <Target Name="Package" Condition="'$(Configuration)' == 'Release'">
+                <ItemGroup>
+                  <FrameworkMetadata Include="@(ReferencePath)" Condition="'%(ReferencePath.FrameworkReferenceName)' == 'Microsoft.NETCore.App'" />
+                </ItemGroup>
+                <Copy SourceFiles="@(FrameworkMetadata)" DestinationFolder="lib" Condition="Exists('lib')" />
+              </Target>
+            </Project>
+            """);
+        File.WriteAllText(Path.Combine(_root, "App.cs"), "class App { int Value() => 1; int Run() => Value(); }");
+
+        Assert.That(Text(Object(Calls().Single(), "ValueType"), "Name"), Is.EqualTo("Int32"));
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
+        Assert.That(ProviderWarnings.Drain(), Is.Empty);
+    }
+
+    [Test]
+    public void ExplicitCompileInputsBindLinkedSourcesWithoutExcludedDuplicatesOnColdAndWarmRuns()
+    {
+        var app = Path.Combine(_root, "App");
+        var shared = Path.Combine(_root, "Shared");
+        Directory.CreateDirectory(app);
+        Directory.CreateDirectory(shared);
+        File.WriteAllText(Path.Combine(app, "App.csproj"), """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
+              <ItemGroup>
+                <Compile Include="Caller.cs;..\Shared\**\*.cs" Exclude="..\Shared\Skip*.cs" />
+                <Compile Remove="..\Shared\Removed.cs" />
+              </ItemGroup>
+            </Project>
+            """);
+        File.WriteAllText(Path.Combine(app, "Caller.cs"), "class Caller { string Run() => Linked.Value(); }");
+        var linked = Path.Combine(shared, "Linked.cs");
+        File.WriteAllText(linked, "static class Linked { public static string Value() => \"ok\"; }");
+        foreach (var path in new[] { Path.Combine(app, "Extra.cs"), Path.Combine(shared, "Skipped.cs"), Path.Combine(shared, "Removed.cs") })
+            File.WriteAllText(path, "static class Linked { public static int Value() => 1; }");
+
+        for (int run = 0; run < 2; run++)
+        {
+            var service = Service();
+            var call = Calls(service).Single();
+            Assert.That(Text(Object(call, "ValueType"), "Name"), Is.EqualTo("String"));
+            Assert.That(Path.GetFullPath(Text(Object(call, "ReferencedCallable"), "SourceFile")), Is.EqualTo(linked));
+            var files = Items(service.QueryProvider("csharp", new() { RootPath = _root, Collection = "Files" }))
+                .Cast<CopDynamicObject>().ToDictionary(file => Text(file, "Path"));
+            Assert.That(Items(files["App/Caller.cs"].GetField("Projects")).Select(value => value.Display()), Is.EqualTo(new[] { "App" }));
+            Assert.That(Items(files["Shared/Linked.cs"].GetField("Projects")).Select(value => value.Display()), Is.EqualTo(new[] { "App" }));
+            foreach (var path in new[] { "App/Extra.cs", "Shared/Skipped.cs", "Shared/Removed.cs" })
+                Assert.That(Items(files[path].GetField("Projects")), Is.Empty);
+            Assert.That(ProviderErrors.Drain(), Is.Empty);
+            Assert.That(ProviderWarnings.Drain(), Is.Empty);
+        }
+
+        var eager = (Dictionary<string, List<object>>)new CSharpProvider().Query(new()
+            { RootPath = _root, Collection = "Files" })!;
+        var eagerFiles = eager["Files"].Cast<Cop.Providers.SourceModel.SourceFile>().ToDictionary(file => file.Path);
+        Assert.That(eagerFiles["App/Caller.cs"].Projects, Is.EqualTo(new[] { "App" }));
+        Assert.That(eagerFiles["Shared/Linked.cs"].Projects, Is.EqualTo(new[] { "App" }));
+        foreach (var path in new[] { "App/Extra.cs", "Shared/Skipped.cs", "Shared/Removed.cs" })
+            Assert.That(eagerFiles[path].Projects, Is.Empty);
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
+        Assert.That(ProviderWarnings.Drain(), Is.Empty);
+    }
+
+    [Test]
+    public void ProjectReferencesCompileALibraryWhoseOnlySourceIsLinked()
+    {
+        foreach (var directory in new[] { "App", "Library", "Shared" })
+            Directory.CreateDirectory(Path.Combine(_root, directory));
+        File.WriteAllText(Path.Combine(_root, "App", "App.csproj"),
+            "<Project><ItemGroup><ProjectReference Include=\"..\\Library\\Library.csproj\" /></ItemGroup></Project>");
+        File.WriteAllText(Path.Combine(_root, "Library", "Library.csproj"),
+            "<Project><ItemGroup><Compile Include=\"..\\Shared\\Library.cs\" /></ItemGroup></Project>");
+        File.WriteAllText(Path.Combine(_root, "App", "Caller.cs"), "class Caller { string Run() => Library.Value(); }");
+        var linked = Path.Combine(_root, "Shared", "Library.cs");
+        File.WriteAllText(linked, "public static class Library { public static string Value() => \"ok\"; }");
+
+        Assert.That(Text(Object(Calls().Single(), "ValueType"), "Name"), Is.EqualTo("String"));
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
+        Assert.That(ProviderWarnings.Drain(), Is.Empty);
     }
 
     private const string Caller = """

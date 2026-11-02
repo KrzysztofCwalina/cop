@@ -59,11 +59,27 @@ Source spans use 1-based positions with an exclusive end.
 Semantic compilations are separated by discovered projects and connected through
 `ProjectReference`; unrelated projects cannot contribute symbols to one another.
 Restored package references and project implicit/explicit usings are used without
-installing any tools. This is not a full MSBuild evaluation: directory membership and
-the first restored target are used. Conditional/imported/custom Compile or multi-target
-settings produce a capability warning; unsupported settings can leave symbol resolution
-incomplete. Source syntax facts remain available. Assembly API inspection includes public
-and protected members and operators, but excludes private implementation details.
+installing any tools. Source membership honors literal `<Compile Include>`, `Exclude`, and
+`Remove` rules, including semicolon-separated paths and `*`, `?`, and `**` globs, plus
+`EnableDefaultItems`, `EnableDefaultCompileItems`, and literal default exclusions.
+Linked sources inside the analysis target participate in the declaring project's
+compilation. Excluded files remain available as source facts but do not contribute symbols
+to that project. These supported rules do not produce capability warnings.
+If an include points outside the analysis target, Cop reports the missing scope and asks
+you to use `-t` with a common parent containing the project and its linked sources.
+
+This is not a full MSBuild evaluation. Explicit imports, conditional project configuration,
+source rules generated inside build targets, unevaluated MSBuild expressions, and multiple
+target frameworks still produce a warning naming the unsupported settings and their impact.
+Conditions confined to non-source build/packaging targets do not produce warnings.
+For unsupported configuration, source membership can fall back to project directories;
+only the first restored target framework is used. Source syntax facts remain available.
+Assembly API inspection includes public and protected members and operators, but excludes
+private implementation details. Cop's file list or resolved symbols may differ from your normal build.
+If a check depends on those settings, compare its results with the actual source files and
+target framework selected by your build before relying on them. Installing the .NET SDK
+or running `dotnet restore` does not add full MSBuild evaluation to Cop or remove this
+warning. Do not remove valid project settings merely to silence it.
 
 Active `#nullable` directives appear in `Statements` with `Kind == directive` and parsed
 `Keywords`: `nullable`, `enable`/`disable`/`restore`, and optionally `warnings`/`annotations`.

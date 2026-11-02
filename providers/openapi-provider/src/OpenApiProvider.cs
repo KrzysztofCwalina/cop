@@ -87,6 +87,7 @@ public sealed class OpenApiProvider : DataProvider
                     var spec = extension.Equals(".json", StringComparison.OrdinalIgnoreCase)
                         ? OpenApiParser.ParseJson(text)
                         : OpenApiParser.ParseYaml(text);
+                    ExecutionStatistics.RecordInputFile(filePath);
 
                     if (spec.Operations.Count == 0 && spec.Paths.Count == 0)
                         return;

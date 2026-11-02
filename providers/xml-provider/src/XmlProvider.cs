@@ -97,6 +97,7 @@ public sealed class XmlProvider : DataProvider
                     var relativePath = Path.GetRelativePath(relativeRoot, filePath).Replace('\\', '/');
                     var sourceFile = new SourceFile(relativePath, "xml", [], [], text);
                     var (elements, attributes) = ParseDocument(text);
+                    ExecutionStatistics.RecordInputFile(filePath);
                     parsed.Add((sourceFile, elements, attributes));
                 }
                 catch { }

@@ -66,7 +66,7 @@ public class IssueRegressionTests
 
         Assert.That(result.ExitCode, Is.EqualTo(1), Describe(result));
         Assert.That(Normalize(result.Stdout), Is.EqualTo("Issue8Target.cs(1): error: ISSUE8 TYPE Issue8Target"), Describe(result));
-        Assert.That(Normalize(result.Stderr), Is.EqualTo(string.Empty), Describe(result));
+        AssertOnlyExecutionSummary(result, 3);
     }
 
     // Issue #10
@@ -89,7 +89,7 @@ public class IssueRegressionTests
 
         Assert.That(result.ExitCode, Is.EqualTo(1), Describe(result));
         Assert.That(Normalize(result.Stdout), Is.EqualTo("empty(0): error: ISSUE10 VIOLATION empty"), Describe(result));
-        Assert.That(Normalize(result.Stderr), Is.EqualTo(string.Empty), Describe(result));
+        AssertOnlyExecutionSummary(result, 2);
     }
 
     // Issue #37
@@ -103,7 +103,7 @@ public class IssueRegressionTests
 
         Assert.That(result.ExitCode, Is.EqualTo(0), Describe(result));
         Assert.That(Normalize(result.Stdout), Is.EqualTo("ISSUE37 OUTPUT 1"), Describe(result));
-        Assert.That(Normalize(result.Stderr), Is.EqualTo(string.Empty), Describe(result));
+        AssertOnlyExecutionSummary(result);
     }
 
     // Issue #38
@@ -117,7 +117,7 @@ public class IssueRegressionTests
 
         Assert.That(result.ExitCode, Is.EqualTo(0), Describe(result));
         Assert.That(Normalize(result.Stdout), Is.EqualTo("ISSUE38 OUTPUT"), Describe(result));
-        Assert.That(Normalize(result.Stderr), Is.EqualTo(string.Empty), Describe(result));
+        AssertOnlyExecutionSummary(result);
     }
 
     // Issue #50 — `cb.Types.Methods:<methodPredicate>` (the canonical "flag long methods" rule
@@ -179,7 +179,7 @@ public class IssueRegressionTests
         Assert.That(Normalize(result.Stdout), Is.EqualTo("issue52(0): error: ISSUE52 issue52"), Describe(result));
         // Anti-regression: the raw Violation object dump (e.g. "Severity = ...") must NOT appear.
         Assert.That(Normalize(result.Stdout), Does.Not.Contain("Severity ="), Describe(result));
-        Assert.That(Normalize(result.Stderr), Is.EqualTo(string.Empty), Describe(result));
+        AssertOnlyExecutionSummary(result);
     }
 
     [Test]
@@ -203,7 +203,7 @@ public class IssueRegressionTests
         Assert.That(result.ExitCode, Is.EqualTo(1), Describe(result));
         Assert.That(Normalize(result.Stdout),
             Is.EqualTo("Sample.cs(1): error: ISSUE66 return M"), Describe(result));
-        Assert.That(Normalize(result.Stderr), Is.EqualTo(string.Empty), Describe(result));
+        AssertOnlyExecutionSummary(result, 2);
     }
 
     private static string RepoRoot => FindRepoRoot();
@@ -244,6 +244,15 @@ public class IssueRegressionTests
         }
 
         return (process.ExitCode, stdout.GetAwaiter().GetResult(), stderr.GetAwaiter().GetResult());
+    }
+
+    private static void AssertOnlyExecutionSummary((int ExitCode, string Stdout, string Stderr) result, int commands = 1)
+    {
+        var lines = Normalize(result.Stderr).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.That(lines, Has.Length.EqualTo(1), Describe(result));
+        Assert.That(lines[0], Does.StartWith("Summary: ")
+            .And.Contain($"{commands} command{(commands == 1 ? "" : "s")} executed in ").And.EndWith("s."),
+            Describe(result));
     }
 
     private static string Normalize(string text) =>

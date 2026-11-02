@@ -29,7 +29,9 @@ public partial class ToolchainCliIntegrationTests
         var result = await Run(_script, "-t", _root, "--no-color");
         Assert.That(result.ExitCode, Is.EqualTo(0), result.StandardError);
         Assert.That(result.StandardOutput.Trim(), Is.EqualTo("LOCAL-SOURCE"));
-        Assert.That(result.StandardError, Is.Empty, "A locally resolvable import must not trigger network restore.");
+        Assert.That(result.StandardError.Trim().Split('\n'), Has.Length.EqualTo(1),
+            "A locally resolvable import must not trigger network restore.");
+        AssertExecutionSummary(result.StandardError, 0, 2);
         var instructions = Path.Combine(_root, ".github", "instructions", name + ".instructions.md");
         Assert.That(File.Exists(instructions), Is.True, "Declared feeds must also supply package instructions.");
         Assert.That(File.ReadAllText(instructions).Replace("\r\n", "\n"),

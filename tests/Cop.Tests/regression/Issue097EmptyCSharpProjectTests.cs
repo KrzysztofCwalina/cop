@@ -19,9 +19,13 @@ public partial class ToolchainCliIntegrationTests
 
             Assert.That(result.ExitCode, Is.EqualTo(0), result.StandardError);
             Assert.That(result.StandardOutput.Replace("\r\n", "\n").Trim(), Is.EqualTo("2\n2\n[app]\nInt32"));
-            Assert.That(result.StandardError.Trim(), Is.EqualTo(
+            var diagnostics = result.StandardError.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.TrimEnd('\r')).ToArray();
+            Assert.That(diagnostics, Has.Length.EqualTo(2));
+            Assert.That(diagnostics[0], Is.EqualTo(
                 $"Warning: csharp: Project '{Path.Combine(_root, "app", "app.csproj")}' is empty; " +
                 "analyzing its C# sources without project metadata."));
+            AssertExecutionSummary(result.StandardError, 2, 2);
         }
     }
 

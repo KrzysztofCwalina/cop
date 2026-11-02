@@ -52,6 +52,7 @@ public sealed class DeferredFormatSnapshot(
                     _files[path] = parsed;
                 }
             }
+            ExecutionStatistics.RecordInputFile(path);
             if (parsed.TryGetValue(collection, out var values))
                 foreach (var value in values) yield return value;
         }

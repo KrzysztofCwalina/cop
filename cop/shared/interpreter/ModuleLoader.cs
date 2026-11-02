@@ -237,7 +237,7 @@ public sealed class ModuleLoader
             {
                 var capturedLd = ld;
                 var capturedModuleEnv = moduleEnv;
-                var thunk = new CopThunk(() => evaluator.Eval(capturedLd.Value, capturedModuleEnv))
+                var thunk = new CopThunk(() => evaluator.EvalLetBinding(capturedLd, capturedModuleEnv))
                 {
                     ConstantExpression = capturedLd.Value,
                     ConstantEnvironment = capturedModuleEnv

@@ -7,6 +7,36 @@ public partial class ToolchainCliIntegrationTests
 {
     [TestCase(false)]
     [TestCase(true)]
+    public async Task ExplicitNegativeFixtureExclusionIsQuietUnlessDiagnosticsAreRequested(bool diagnostics)
+    {
+        var repo = Path.GetFullPath(Path.Combine(TestContext.CurrentContext.TestDirectory, "..", "..", "..", "..", ".."));
+        var packages = Path.Combine(repo, "packages").Replace('\\', '/');
+        File.WriteAllText(_script,
+            $"feed '{packages}'\nimport cop\nlet cb = cop.parse()\ncommand MAIN = print('COUNT {{cb.Types.Count}}')");
+        var target = Path.Combine(_root, "target");
+        Directory.CreateDirectory(target);
+        File.WriteAllText(Path.Combine(target, "valid.cop"), "type Example = { Value : string }");
+        File.WriteAllText(Path.Combine(target, "negative.cop"), "# @expect parse-error\npredicate broken(Type)");
+        var args = new List<string> { _script, "-t", target, "--no-color" };
+        if (diagnostics) args.Add("-d");
+
+        var result = await Run(args.ToArray());
+
+        Assert.That(result.ExitCode, Is.EqualTo(0), result.StandardError);
+        Assert.That(result.StandardOutput.Trim(), Is.EqualTo("COUNT 1"));
+        Assert.That(result.StandardError, Does.Not.Contain("Warning:").And.Not.Contain("Error:"));
+        if (diagnostics)
+            Assert.That(result.StandardError, Does.Contain("[diag] Excluded '").And.Contain("negative.cop")
+                .And.Contain("explicitly marked '# @expect parse-error'"));
+        else
+        {
+            Assert.That(result.StandardError.Trim().Split('\n'), Has.Length.EqualTo(1));
+            AssertExecutionSummary(result.StandardError, 2, 2);
+        }
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
     public async Task Issue094_ResolvedCompatibilityIsInformational_NotARepairWarning(bool diagnostics)
     {
         var feed = WriteRecoveredFixtureFeed();
@@ -18,7 +48,8 @@ public partial class ToolchainCliIntegrationTests
 
         Assert.That(result.ExitCode, Is.EqualTo(0), result.StandardError);
         Assert.That(result.StandardOutput.Trim(), Is.EqualTo("RECOVERED"));
-        Assert.That(result.StandardError, Does.Contain("Info:").And.Contain("No action is required.")
+        Assert.That(result.StandardError, Does.Contain($"Info: Packages are ready for Cop {ProviderCompatibility.HostVersion}.")
+            .And.Not.Contain("Different-version local providers").And.Not.Contain("No action is required.")
             .And.Not.Contain("Warning:").And.Not.Contain("Error:").And.Not.Contain("must be restored or rebuilt"));
         if (diagnostics)
             Assert.That(result.StandardError, Does.Contain("[diag]").And.Contain("2000.1.1.1"));
@@ -40,7 +71,8 @@ public partial class ToolchainCliIntegrationTests
 
         Assert.That(result.ExitCode, Is.EqualTo(1), result.StandardError);
         Assert.That(result.StandardOutput.Trim(), Is.EqualTo("0"));
-        Assert.That(result.StandardError, Does.Contain("Info:").And.Contain("No action is required.")
+        Assert.That(result.StandardError, Does.Contain($"Info: Packages are ready for Cop {ProviderCompatibility.HostVersion}.")
+            .And.Not.Contain("Different-version local providers").And.Not.Contain("No action is required.")
             .And.Contain("Error: 1 source analysis error(s)").And.Contain("broken.cop")
             .And.Not.Contain("Warning: Provider").And.Not.Contain("Analysis completed successfully"));
     }

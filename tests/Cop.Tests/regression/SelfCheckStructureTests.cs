@@ -112,7 +112,7 @@ public class SelfCheckStructureTests
 
             Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
             Assert.That(result.Warnings!.Where(w => w.Contains("source analysis error")), Is.Empty);
-            Assert.That(result.Warnings!.Count(w => w.Contains("Excluded negative parser fixture")), Is.EqualTo(2));
+            Assert.That(result.Warnings, Is.Empty);
             Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(hasViolation ? new[]
             {
                 "Wrong.cop(1): error: Intrinsic declaration must be in intrinsics.cop, not Wrong.cop"
