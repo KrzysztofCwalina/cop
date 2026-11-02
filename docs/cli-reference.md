@@ -587,19 +587,38 @@ See [Working with the REPL](repl.md) for a full walkthrough.
 
 ## cop update
 
-Self-update cop to the latest release from GitHub. Detects your platform automatically and replaces the current binary.
+Self-update cop to the latest release from GitHub. Detects your platform automatically
+and installs into `~/.cop` (`%USERPROFILE%\.cop\cop.exe` on Windows), regardless of
+where the command was launched. Publishing a host-platform build uses the same
+installation location.
 
 ```bash
 cop update
 ```
 
 If you are already on the latest release, `cop update` says so and exits without downloading
-anything. Use `cop update --force` to reinstall the latest release anyway (e.g. to repair a
-corrupted install).
+anything. It still migrates the running executable to the canonical location when
+needed. Use `cop update --force` to reinstall the latest release anyway (e.g. to
+repair a corrupted install).
 
 ```bash
 cop update --force
 ```
+
+To install a downloaded or locally published executable without accessing GitHub:
+
+```powershell
+.\cop.exe update --local
+```
+
+Windows installation adds `~/.cop` to user PATH and removes old repository
+`install\win-x64` / `install\win-arm64` PATH entries and the legacy
+`~/.dotnet/tools/cop.exe`. Other .NET tools and their PATH entry are preserved.
+Open a new terminal after migration. Build outputs are retained for testing, not
+used as PATH installations. Existing Cop configuration and package caches in
+`~/.cop` are preserved, as is an explicitly installed optional Rust bundle.
+On Linux/macOS, add `~/.cop` to your shell PATH and remove other Cop installation
+directories yourself; Cop does not edit shell startup files.
 
 ### Updating
 

@@ -33,6 +33,26 @@ public class CopSemanticProjectionTests
     }
 
     [Test]
+    public void NegativeParserFixturesDoNotBreakSiblingSemanticAnalysisOnColdAndWarmRuns()
+    {
+        File.WriteAllText(Path.Combine(Target, "main.cop"), """
+            function identity(value : string) : string => value
+            let result = identity('hello')
+            """);
+        File.WriteAllText(Path.Combine(Target, "negative.cop"),
+            "# @expect parse-error\npredicate broken(Type)");
+
+        for (int run = 0; run < 2; run++)
+        {
+            var call = Calls(new CopProvider(), Target).Single();
+            Assert.That(call.MemberName, Is.EqualTo("identity"));
+            Assert.That(call.ValueType?.OriginalText, Is.EqualTo("string"));
+            Assert.That(call.ReferencedCallable?.Name, Is.EqualTo("identity"));
+            Assert.That(ProviderErrors.Drain(), Is.Empty);
+        }
+    }
+
+    [Test]
     public void ExactOverloadsAndGenericsHaveInstantiatedFactsOnColdAndWarmRuns()
     {
         File.WriteAllText(Path.Combine(Target, "main.cop"), """

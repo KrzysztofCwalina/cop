@@ -41,6 +41,7 @@ internal sealed class CopSemanticSnapshot(string root)
                 {
                     var known = _attached.FirstOrDefault(source => source.FullPath == path);
                     var text = known?.RawText ?? File.ReadAllText(path);
+                    if (CopSourceParser.IsNegativeParserFixture(path, text)) continue;
                     try { files.Add(new(CopParser.Parse(text, path), path, text)); }
                     catch (ParseException ex) { ProviderErrors.Report($"{path}({ex.Line}): {ex.Message}"); }
                 }

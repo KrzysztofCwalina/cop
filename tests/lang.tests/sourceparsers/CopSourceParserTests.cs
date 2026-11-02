@@ -9,6 +9,26 @@ namespace Cop.Tests.SourceParsers;
 [TestFixture]
 public class CopSourceParserTests
 {
+    [TestCase("predicate broken(Type)")]
+    [TestCase("let x = 'unclosed")]
+    public void Parse_ExcludesExplicitNegativeParserFixtures(string body)
+    {
+        var source = "# Negative parser test\n# @expect parse-error\n\n" + body;
+        var file = new CopSourceParser().Parse("negative.cop", source);
+        Assert.That(file, Is.Null, "An explicitly marked negative fixture is test input, not analyzed source.");
+    }
+
+    [TestCase("# @expect error\npredicate broken(Type)")]
+    [TestCase("# @expect parse-error-extra\npredicate broken(Type)")]
+    [TestCase("let text = '# @expect parse-error'\npredicate broken(Type)")]
+    [TestCase("let text = '''\n# @expect parse-error\n'''\npredicate broken(Type)")]
+    [TestCase("let text = 'ok'\n# @expect parse-error\npredicate broken(Type)")]
+    public void Parse_DoesNotSuppressUnmarkedOrLookalikeSourceErrors(string source)
+    {
+        var file = new CopSourceParser().Parse("broken.cop", source)!;
+        Assert.That(file.ParseErrors, Has.Count.EqualTo(1));
+    }
+
     private const string Source = """
         ## Native function.
         export function native(values : [string]) : [string] => intrinsic

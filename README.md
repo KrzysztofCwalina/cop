@@ -20,7 +20,9 @@ Use Agent Cop (cop.exe) to develop and execute static analysis rules. The workfl
 
 ## Installation
 
-Download `cop.exe` from the [releases](https://github.com/KrzysztofCwalina/cop/releases) page and add it to your PATH. 
+Download `cop.exe` from the [releases](https://github.com/KrzysztofCwalina/cop/releases) page
+and run `.\cop.exe update --local` to install it into `%USERPROFILE%\.cop`.
+Open a new terminal, then use `cop`. Do not add repository build-output folders to PATH.
 
 ## Quick Start
 

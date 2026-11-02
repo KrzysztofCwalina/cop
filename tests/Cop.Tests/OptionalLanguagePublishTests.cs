@@ -7,8 +7,9 @@ namespace Cop.Tests;
 [TestFixture]
 public class OptionalLanguagePublishTests
 {
-    [Test]
-    public void DefaultPublish_DoesNotPrepareOrShipNativeLanguageDependencies()
+    [TestCase(0)]
+    [TestCase(17)]
+    public void DefaultPublish_DoesNotPrepareOrShipNativeLanguageDependencies(int installExitCode)
     {
         var repository = TestContext.CurrentContext.TestDirectory;
         while (!File.Exists(Path.Combine(repository, "cop.sln")))
@@ -37,11 +38,16 @@ public class OptionalLanguagePublishTests
                         $output = $args[[Array]::IndexOf($args, '-o') + 1]
                         New-Item -ItemType Directory -Force $output | Out-Null
                         Set-Content -LiteralPath (Join-Path $output 'cop.exe') -Value 'base fixture' -NoNewline
+                        $executable = Join-Path $output 'cop.exe'
+                        Set-Item -LiteralPath "Function:global:$executable" -Value {
+                            $args | ConvertTo-Json -Compress | Set-Content -LiteralPath (Join-Path $PSScriptRoot 'install-arguments.json')
+                            $global:LASTEXITCODE = INSTALL_EXIT_CODE
+                        }
                     }
                     $global:LASTEXITCODE = 0
                 }
                 & (Join-Path $PSScriptRoot 'install\publish.ps1') -Runtimes win-x64
-                """);
+                """.Replace("INSTALL_EXIT_CODE", installExitCode.ToString(System.Globalization.CultureInfo.InvariantCulture)));
             var start = new ProcessStartInfo("pwsh")
             {
                 RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false
@@ -57,7 +63,21 @@ public class OptionalLanguagePublishTests
                 process.Kill(entireProcessTree: true);
                 Assert.Fail("Base publishing fixture timed out.");
             }
-            Assert.That(process.ExitCode, Is.Zero, stdout.GetAwaiter().GetResult() + stderr.GetAwaiter().GetResult());
+            var output = stdout.GetAwaiter().GetResult() + stderr.GetAwaiter().GetResult();
+            if (System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier == "win-x64")
+            {
+                Assert.That(File.ReadAllText(Path.Combine(root, "install-arguments.json")).Trim(),
+                    Is.EqualTo("[\"update\",\"--local\"]"));
+                Assert.That(process.ExitCode, installExitCode == 0 ? Is.Zero : Is.Not.Zero, output);
+                if (installExitCode != 0)
+                    Assert.That(output, Does.Contain("Local Cop installation failed"));
+            }
+            else
+            {
+                Assert.That(process.ExitCode, Is.Zero, output);
+                Assert.That(File.Exists(Path.Combine(root, "install-arguments.json")), Is.False,
+                    "Cross-platform publishing must not install a foreign executable.");
+            }
             using var archive = ZipFile.OpenRead(Path.Combine(install, "cop-win-x64.zip"));
             Assert.That(archive.Entries.Select(e => e.FullName), Is.EqualTo(new[] { "cop.exe" }));
             using var reader = new StreamReader(archive.GetEntry("cop.exe")!.Open());

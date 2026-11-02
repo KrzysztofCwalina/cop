@@ -121,10 +121,13 @@ internal static class CliHelp
             new[] { "cop init", "cop init --claude" }),
 
         ["update"] = new(
-            "cop update [--force]",
-            "update cop to the latest github release. skips the download when already up to date.",
-            new[] { ("--force, -f", "reinstall even when already on the latest release") },
-            new[] { "cop update", "cop update --force" }),
+            "cop update [--force | --local]",
+            "install cop into ~/.cop. skips the download when already up to date.",
+            new[] {
+                ("--force, -f", "reinstall even when already on the latest release"),
+                ("--local", "install the running published executable without downloading"),
+            },
+            new[] { "cop update", "cop update --force", "cop update --local" }),
 
         ["vscode"] = new(
             "cop vscode",

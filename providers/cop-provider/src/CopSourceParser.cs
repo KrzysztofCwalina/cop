@@ -16,6 +16,9 @@ public class CopSourceParser : ISourceParser
 
     public override SourceFile? Parse(string filePath, string sourceText)
     {
+        if (IsNegativeParserFixture(filePath, sourceText))
+            return null;
+
         ModuleNode module;
         try
         {
@@ -31,6 +34,22 @@ public class CopSourceParser : ISourceParser
         }
 
         return ParseModule(filePath, sourceText, module);
+    }
+
+    internal static bool IsNegativeParserFixture(string filePath, string sourceText)
+    {
+        using var reader = new StringReader(sourceText);
+        while (reader.ReadLine() is { } line)
+        {
+            var header = line.Trim();
+            if (header.Length == 0) continue;
+            if (!header.StartsWith('#')) break;
+            if (header != "# @expect parse-error") continue;
+            Cop.Core.ProviderWarnings.ReportOnce("cop", filePath,
+                $"Excluded negative parser fixture '{filePath}' marked '# @expect parse-error'; its contents are test input, not source.");
+            return true;
+        }
+        return false;
     }
 
     internal SourceFile ParseModule(string filePath, string sourceText, ModuleNode module,
