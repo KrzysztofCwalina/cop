@@ -26,13 +26,15 @@ internal sealed class CSharpSourceTextCache
         var length = info.Length;
         var modified = info.LastWriteTimeUtc.Ticks;
         var changed = OperatingSystem.IsWindows() ? SourceFileMetadata.ReadChangeTime(path) : 0;
-        if (changed != 0 && _entries.Value.TryGetValue(path, out var cached)
-            && cached.Length == length && cached.Modified == modified && cached.Changed == changed)
-            return cached.Text;
-
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         using var reader = new StreamReader(stream);
         var text = reader.ReadToEnd();
+        // Even native change times can collide or be restored; metadata is not content identity.
+        if (changed != 0 && _entries.Value.TryGetValue(path, out var cached)
+            && cached.Length == length && cached.Modified == modified && cached.Changed == changed
+            && string.Equals(cached.Text, text, StringComparison.Ordinal))
+            return cached.Text;
+
         _entries.Value[path] = new(length, modified, changed, text);
         _changed = true;
         return text;

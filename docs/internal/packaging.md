@@ -497,11 +497,11 @@ context. Only complete traversals write the snapshot, atomically; parse errors a
 cached. Other platforms retain the existing per-file parsed-model cache.
 
 The C# provider keeps an execution-scoped syntax-tree cache and a persistent, compressed
-source-text snapshot in `~/.cop/cache/`. On Windows, each source is validated by length,
-last-write time, and native change time before using cached text. Attribute-only handles
-avoid opening unchanged source data. Change time catches same-length edits even when a tool
-restores the last-write timestamp. Other platforms reread source data rather than trust
-incomplete metadata. A changed file is reread; new executions always rebuild
+source-text snapshot in `~/.cop/cache/`. Each demanded source is reread before using cached
+text: even native change time can collide or be restored alongside length and last-write
+time. On Windows, matching metadata and exact source contents allow reuse of the stored
+string without rewriting the snapshot. This intentionally trades metadata-only disk-read
+avoidance for correctness. Other platforms also reread source data. New executions always rebuild
 syntax and semantic models. The snapshot is atomically saved only after all discovered
 sources have been demanded, so a first-item query does not prefetch later files.
 

@@ -4,7 +4,9 @@ using Cop.Lang.Interpreter;
 using Cop.Providers;
 using Cop.Providers.SourceModel;
 using Cop.Providers.SourceParsers;
+using Microsoft.Win32.SafeHandles;
 using NUnit.Framework;
+using System.Runtime.InteropServices;
 
 namespace Cop.Tests.Lang;
 
@@ -438,6 +440,59 @@ public class ProviderWorkDeferralTests
         Assert.That(Read().Types.Single().Name, Is.EqualTo("SameLengthY"));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
     }
+
+    [Test]
+    [Platform("Win")]
+    public void CSharp_TextCache_InvalidatesEditsEvenWhenAllFileMetadataMatches()
+    {
+        var path = Path.Combine(_root, "same-metadata.cs");
+        File.WriteAllText(path, "public class Alpha {}");
+        SourceFile Read()
+        {
+            var provider = new CSharpProvider();
+            var result = (DeferredProviderResult)provider.QueryDeferred(
+                new ProviderQuery { RootPath = _root, Collection = "Files" });
+            return result.Collections["Files"].Cast<SourceFile>().Single();
+        }
+
+        using var handle = File.OpenHandle(path, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
+        Assert.That(GetFileInformationByHandleEx(handle, 0, out var metadata,
+            (uint)Marshal.SizeOf<FileBasicInfo>()), Is.True, $"Win32 error {Marshal.GetLastWin32Error()}");
+        var originalLength = new FileInfo(path).Length;
+        Assert.That(Read().Types.Single().Name, Is.EqualTo("Alpha"));
+
+        RandomAccess.Write(handle, System.Text.Encoding.UTF8.GetBytes("public class Bravo {}"), 0);
+        Assert.That(SetFileInformationByHandle(handle, 0, ref metadata,
+            (uint)Marshal.SizeOf<FileBasicInfo>()), Is.True, $"Win32 error {Marshal.GetLastWin32Error()}");
+        Assert.That(new FileInfo(path).Length, Is.EqualTo(originalLength));
+        Assert.That(File.GetLastWriteTimeUtc(path).ToFileTimeUtc(), Is.EqualTo(metadata.LastWriteTime));
+        Assert.That(SourceFileMetadata.ReadChangeTime(path), Is.EqualTo(metadata.ChangeTime));
+
+        Assert.That(Read().Types.Single().Name, Is.EqualTo("Bravo"),
+            "Matching timestamps and length do not prove that cached source contents are current.");
+        Assert.That(Read().Types.Single().Name, Is.EqualTo("Bravo"));
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FileBasicInfo
+    {
+        public long CreationTime;
+        public long LastAccessTime;
+        public long LastWriteTime;
+        public long ChangeTime;
+        public uint FileAttributes;
+    }
+
+    [DllImport("kernel32.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetFileInformationByHandleEx(SafeFileHandle handle, int informationClass,
+        out FileBasicInfo information, uint size);
+
+    [DllImport("kernel32.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetFileInformationByHandle(SafeFileHandle handle, int informationClass,
+        ref FileBasicInfo information, uint size);
 
     [TestCase("csharp", ".cs", "public class Alpha {}")]
     [TestCase("python", ".py", "class Alpha:\n    pass\n")]
