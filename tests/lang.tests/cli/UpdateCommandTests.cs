@@ -41,6 +41,43 @@ public class UpdateCommandTests
 
     [Test]
     [Platform("Win")]
+    public void InstallationCanReplaceARunningExecutable()
+    {
+        var source = Path.Combine(_home, "published-cop");
+        File.WriteAllText(source, "new Cop");
+        var canonical = CopInstallation.DirectoryPath(_home);
+        Directory.CreateDirectory(canonical);
+        var target = Path.Combine(canonical, "cop.exe");
+        File.Copy(Path.Combine(Environment.SystemDirectory, "cmd.exe"), target);
+        using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(target)
+        {
+            Arguments = "/d /c set /p value=",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        })!;
+        try
+        {
+            Assert.That(process.WaitForExit(200), Is.False, "The installed executable must still be running.");
+            Assert.That(CopInstallation.InstallExecutable(source, _home), Is.EqualTo(target));
+            Assert.That(File.ReadAllText(target), Is.EqualTo("new Cop"));
+            Assert.That(process.HasExited, Is.False);
+        }
+        finally
+        {
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+            Assert.That(process.WaitForExit(5000), Is.True);
+        }
+
+        Assert.That(CopInstallation.InstallExecutable(source, _home), Is.EqualTo(target));
+        Assert.That(File.Exists(target + ".old"), Is.False);
+    }
+
+    [Test]
+    [Platform("Win")]
     public void FailedReplacementPreservesTheExistingInstallation()
     {
         var source = Path.Combine(_home, "published-cop");

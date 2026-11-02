@@ -111,7 +111,7 @@ internal static class CopInstallation
             if (File.Exists(path))
                 File.Delete(path);
         }
-        catch (IOException ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Console.Error.WriteLine($"Warning: Old executable '{path}' is still in use; it is no longer on PATH. {ex.Message}");
         }

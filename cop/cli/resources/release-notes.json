@@ -253,6 +253,14 @@
         "Intentionally invalid Cop parser fixtures marked '# @expect parse-error' no longer fail source analysis, including older checkouts that still name them .cop.",
         "Windows updates and local publishing use one installation at ~/.cop/cop.exe and migrate legacy Cop PATH installations without disturbing other .NET tools."
       ]
+    },
+    {
+      "version": "2026.11.2.2",
+      "approved": true,
+      "features": [
+        "Windows self-update no longer reports a successful executable replacement as a permission failure when the previous executable is still running.",
+        "Includes the negative parser fixture and version-matched package fixes from 2026.11.2.1."
+      ]
     }
   ]
 }
