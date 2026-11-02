@@ -1,4 +1,5 @@
 using Cop.Core;
+using System.Globalization;
 using NUnit.Framework;
 
 namespace Cop.Tests.Lang.SourceParsers;
@@ -60,8 +61,16 @@ public class GoJavaCliParityTests
                         "Sample.java(7): error: Avoid System.exit() - throw an exception or return an error instead [system-exit]"
                     }), output);
                 Assert.That(output.Contains("using simpler"), Is.EqualTo(!native), output);
-                if (first is not null) Assert.That(output, Is.EqualTo(first));
-                first = output;
+                string summary = output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                    .Single(line => line.StartsWith("Summary:", StringComparison.Ordinal)).TrimEnd('\r');
+                const string prefix = "Summary: 1 input file processed, 6 commands executed in ";
+                Assert.That(summary, Does.StartWith(prefix).And.EndWith("s."));
+                Assert.That(double.TryParse(summary[prefix.Length..^2], NumberStyles.AllowDecimalPoint,
+                    CultureInfo.InvariantCulture, out var seconds), Is.True);
+                Assert.That(seconds, Is.InRange(0, 30));
+                string stableOutput = output.Replace(summary, prefix + "<elapsed>s.", StringComparison.Ordinal);
+                if (first is not null) Assert.That(stableOutput, Is.EqualTo(first));
+                first = stableOutput;
             }
         }
         finally { Directory.Delete(directory, recursive: true); }
