@@ -1,10 +1,11 @@
-# Projects use a single <TargetFramework>, never multi-targeting (<TargetFrameworks>).
+# Reject any nonblank TargetFrameworks property reported by the parsed project model.
+# Empty properties are omitted by the provider; projects should use one TargetFramework.
 # The repo builds one framework everywhere; multi-targeting would complicate build/publish.
 
 import code
 
-predicate stHasMultiTfm(ProjectProperty) => ProjectProperty.Name:equals('TargetFrameworks')
-predicate stIsMultiTargeted(Project) => Project.Properties:any(stHasMultiTfm)
+predicate isTargetFrameworksProperty(ProjectProperty) => ProjectProperty.Name:equals('TargetFrameworks')
+predicate hasParsedTargetFrameworksProperty(Project) => Project.Properties:any(isTargetFrameworksProperty)
 
-export let derived-single-target-framework = codebase.Projects:stIsMultiTargeted
+export let derived-single-target-framework = codebase.Projects:hasParsedTargetFrameworksProperty
     :toError('Project {item.Name} uses TargetFrameworks (multi-targeting) — use a single TargetFramework')

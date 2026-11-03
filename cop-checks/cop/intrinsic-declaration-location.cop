@@ -3,8 +3,7 @@
 
 import cop
 
-predicate isStrayIntrinsic(CopFunction) => CopFunction:isIntrinsic
-    && !CopFunction.File.Path:endsWith('intrinsics.cop')
+predicate isOutsideIntrinsicsFile(CopFunction) => !CopFunction.File.Path:endsWith('intrinsics.cop')
 
-export let intrinsics-in-wrong-file = codebase.Methods:asCop:isStrayIntrinsic
+export let intrinsics-in-wrong-file = codebase.Methods:asCop:isIntrinsic:isOutsideIntrinsicsFile
     :toError('Intrinsic declaration must be in intrinsics.cop, not {item.File.Path}')

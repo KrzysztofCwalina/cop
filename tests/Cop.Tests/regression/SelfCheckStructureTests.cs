@@ -309,7 +309,7 @@ public class SelfCheckStructureTests
     [TestCase("checks/rust-checks")]
     public void Issue054_PackageCheckUsesCopCallAndMemberNodesIncludingCachedRuns(string package)
     {
-        AssertCheck(Path.Combine("cop", "packages", "lang-provider-hardcoded.cop"),
+        AssertCheck(Path.Combine("cop", "packages", "language-checks-require-parser.cop"),
             "lang-provider-hardcoded-violations", Path.Combine(package, "Input.cop"), """
             # codebase(Program.Providers)
             let decoy = 'codebase(Program.Providers)'
@@ -321,6 +321,140 @@ public class SelfCheckStructureTests
             let other = helper(Program.Providers)
             """, "cop", [3, 4],
             "Language-specific package must hardcode its provider via codebase(<lang>.parse()), not codebase(Program.Providers), so it works without -p");
+    }
+
+    [TestCase("src/Input.cs", true)]
+    [TestCase("tests/Input.cs", false)]
+    [TestCase("samples/Input.cs", false)]
+    [TestCase("examples/Input.cs", true)]
+    public void NamespaceCheckPreservesItsFixtureExemptions(string file, bool hasViolation)
+    {
+        AssertCheck(Path.Combine("csharp", "namespaces.cop"), "types-without-namespace", file,
+            "class Example { }", "csharp", hasViolation ? [1] : [],
+            $"Example in {file} must be in a namespace");
+    }
+
+    [TestCase("cop/cli/cop.csproj", true)]
+    [TestCase("providers/example/Example.csproj", false)]
+    public void AspNetFrameworkCheckOnlyAppliesToCliProjects(string file, bool hasViolation)
+    {
+        AssertCheck(Path.Combine("csharp", "cli-no-aspnet-framework.cop"), "no-aspnet-in-cli", file, """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <ItemGroup><FrameworkReference Include="Microsoft.AspNetCore.App" /></ItemGroup>
+            </Project>
+            """, "csharp", hasViolation ? [0] : [],
+            $"Project {Path.GetFileNameWithoutExtension(file)} has FrameworkReference to Microsoft.AspNetCore.App which breaks single-file publish");
+    }
+
+    [Test]
+    public void RegexCheckPreservesInfrastructureNameExemptions()
+    {
+        AssertCheck(Path.Combine("csharp", "no-regex.cop"), "no-regex", "Input.cs", """
+            using System.Text.RegularExpressions;
+            namespace Fixture;
+            class Unexpected { }
+            class RegexCache { }
+            class FilterCompiler { }
+            class FilterEvaluator { }
+            class StandardLibrary { }
+            class CustomRegexCacheWrapper { }
+            """, "csharp", [3],
+            "Unexpected is in a file that imports System.Text.RegularExpressions — use recursive descent parsers: Input.cs");
+    }
+
+    [TestCase("providers/java-provider/src/JavaSemanticContext.cs", "Discover", false)]
+    [TestCase("providers/rust-provider/src/RustFrontend.cs", "Bind", true)]
+    public void FrontendEnvironmentExemptionsRequireExactlyOneArgument(
+        string file, string method, bool allowsComputedName)
+    {
+        AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", file, $$"""
+            using System;
+            namespace Fixture;
+            class Example {
+                string? {{method}}(string name) {
+                    var missing = Environment.GetEnvironmentVariable();
+                    var javaOverload = Environment.GetEnvironmentVariable("CLASSPATH", EnvironmentVariableTarget.Process);
+                    var rustOverload = Environment.GetEnvironmentVariable("CARGO_HOME", EnvironmentVariableTarget.Process);
+                    return Environment.GetEnvironmentVariable(name);
+                }
+            }
+            """, "csharp", allowsComputedName ? [5, 6, 7] : [5, 6, 7, 8],
+            $"Environment variable used to control behavior — use a CLI flag or config instead ({file}:{{0}})");
+    }
+
+    [TestCase("Cop.Providers", false)]
+    [TestCase("Cop.Providers.Example", false)]
+    [TestCase("Cop.ProvidersExtra", false)]
+    [TestCase("Other", true)]
+    public void ProviderNamespaceCheckPreservesPrefixMatching(string ns, bool hasViolation)
+    {
+        AssertCheck(Path.Combine("csharp", "derived", "provider-namespace.cop"),
+            "derived-provider-namespace", "Input.cs",
+            $"namespace {ns}; class SampleProvider : DataProvider {{ }}",
+            "csharp", hasViolation ? [1] : [],
+            $"Provider SampleProvider must live in the Cop.Providers namespace, not {ns} (Input.cs)");
+    }
+
+    [TestCase(null, false)]
+    [TestCase("net10.0", true)]
+    [TestCase("net10.0;net9.0", true)]
+    public void MultiTargetingCheckRejectsNonblankTargetFrameworksProperties(string? value, bool hasViolation)
+    {
+        var setting = value is null ? "" : $"<TargetFrameworks>{value}</TargetFrameworks>";
+        AssertCheck(Path.Combine("csharp", "derived", "single-target-framework.cop"),
+            "derived-single-target-framework", "Input.csproj",
+            $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup>{setting}</PropertyGroup></Project>",
+            "csharp", hasViolation ? [0] : [],
+            "Project Input uses TargetFrameworks (multi-targeting) — use a single TargetFramework");
+    }
+
+    [Test]
+    [Explicit("Issue #101: empty project properties are omitted from the parsed model — remove when fixed")]
+    [Category("PendingFix")]
+    public void Issue101_EmptyTargetFrameworksPropertyRemainsVisibleToStructuralChecks()
+    {
+        AssertCheck(Path.Combine("csharp", "derived", "single-target-framework.cop"),
+            "derived-single-target-framework", "Input.csproj",
+            "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFrameworks /></PropertyGroup></Project>",
+            "csharp", [0],
+            "Project Input uses TargetFrameworks (multi-targeting) — use a single TargetFramework");
+    }
+
+    [TestCase("implicit-usings.cop", "derived-implicit-usings", "ImplicitUsings", "enable", "disable",
+        "Project Input must set <ImplicitUsings>enable</ImplicitUsings>")]
+    [TestCase("nullable-enabled.cop", "derived-nullable-enabled", "Nullable", "enable", "disable",
+        "Project Input must set <Nullable>enable</Nullable>")]
+    [TestCase("target-framework.cop", "derived-target-framework", "TargetFramework", "net10.0", "net9.0",
+        "Project Input must target net10.0")]
+    public void ProjectSettingChecksPreserveExplicitValueAndMissingSettingBehavior(
+        string rule, string binding, string property, string allowed, string forbidden, string message)
+    {
+        var scripts = Path.Combine(_root, "cop-checks");
+        var target = Path.Combine(_root, "target");
+        Directory.CreateDirectory(scripts);
+        Directory.CreateDirectory(target);
+        File.Copy(Path.Combine(_repo, "cop-checks", "csharp", "derived", rule), Path.Combine(scripts, "rule.cop"));
+        File.WriteAllText(Path.Combine(scripts, "main.cop"), $"""
+            import code
+            import csharp
+            let codebase = codebase(csharp.parse())
+            command MAIN = CHECK({binding})
+            """);
+
+        foreach (var value in new[] { forbidden, allowed, null })
+        {
+            var setting = value is null ? "" : $"<{property}>{value}</{property}>";
+            File.WriteAllText(Path.Combine(target, "Input.csproj"),
+                $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup>{setting}</PropertyGroup></Project>");
+            var result = Engine.Run(scripts, target, additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+
+            Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
+            Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(value == forbidden
+                ? new[] { $"Input.csproj(0): error: {message}" }
+                : Array.Empty<string>()), $"Setting: {value ?? "(missing)"}");
+            Assert.That(result.ExitCode, Is.EqualTo(value == forbidden ? 1 : 0));
+        }
     }
 
     private void AssertCheck(string check, string binding, string file, string source,

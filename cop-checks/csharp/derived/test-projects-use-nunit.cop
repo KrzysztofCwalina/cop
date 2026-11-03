@@ -2,10 +2,10 @@
 
 import code
 
-predicate tpunInTests(Project) => Project.Path:startsWith('tests/')
-predicate tpunIsNUnit(string) => string:equals('NUnit')
-predicate tpunUsesNUnit(Project) => Project.Packages:any(tpunIsNUnit)
-predicate tpunMissingNUnit(Project) => !tpunUsesNUnit
+predicate isInTestProjectsFolder(Project) => Project.Path:startsWith('tests/')
+predicate isNUnitPackageName(string) => string:equals('NUnit')
+predicate referencesNUnitPackage(Project) => Project.Packages:any(isNUnitPackageName)
+predicate lacksNUnitPackage(Project) => !referencesNUnitPackage
 
-export let derived-test-projects-use-nunit = codebase.Projects:tpunInTests:tpunMissingNUnit
+export let derived-test-projects-use-nunit = codebase.Projects:isInTestProjectsFolder:lacksNUnitPackage
     :toError('Test project {item.Name} must reference NUnit')

@@ -1,9 +1,14 @@
+# Flag Cop.Cli.Commands and Cop.Repl imports in cop/shared/ and cop/runtime/.
 # The Cop language and runtime (cop/shared, cop/runtime) must not reference the command-line
 # app (Cop.Cli.Commands / Cop.Repl). They are a host-agnostic library that could be embedded
 # anywhere; the CLI depends on them, never the other way around.
 
-predicate cncInCore(Type) => Type.File.Path:contains('cop/shared/') || Type.File.Path:contains('cop/runtime/')
-predicate cncUsesCli(Type) => Type.File.Usings:contains('Cop.Cli.Commands') || Type.File.Usings:contains('Cop.Repl')
+predicate isInHostAgnosticCore(Type) =>
+    Type.File.Path:contains('cop/shared/')
+    || Type.File.Path:contains('cop/runtime/')
+predicate coreImportsCliNamespace(Type) =>
+    Type.File.Usings:contains('Cop.Cli.Commands')
+    || Type.File.Usings:contains('Cop.Repl')
 
-export let derived-core-no-cli-dependency = codebase.Types:cncInCore:cncUsesCli
+export let derived-core-no-cli-dependency = codebase.Types:isInHostAgnosticCore:coreImportsCliNamespace
     :toError('{item.Name} (in cop/shared or cop/runtime) depends on the CLI (Cop.Cli/Cop.Repl) — the language/runtime must stay host-agnostic ({item.File.Path})')

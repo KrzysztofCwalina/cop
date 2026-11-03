@@ -1,4 +1,4 @@
-# Package-authoring self-checks.
+# Run package-source rules with a shared codebase built from the Cop parser.
 # These inspect cop PACKAGE source (.cop files), which the root suite excludes
 # (packages/ is an excluded directory), so this sub-suite is run against packages:
 #
@@ -6,7 +6,6 @@
 #
 # It only parses .cop source (cop.parse()); no language provider / -p flag needed.
 
-import code
 import code
 import cop
 

@@ -1,0 +1,41 @@
+# Reject codebase(Program.Providers) in known language-specific check package paths.
+# These packages should call their language parser explicitly, e.g. codebase(csharp.parse()).
+#
+# This detects unqualified codebase calls using Program.Providers; it does not prove
+# that every package calls a parser. Legacy package paths remain included.
+#
+# Run against the packages directory: cop cop-checks/cop/packages/main.cop -t packages
+#
+# Inspect parsed calls and argument member accesses. Whitespace and line breaks do
+# not affect detection, and comments/string literals are not calls.
+
+predicate isInLegacyLanguagePackage(Statement) =>
+    Statement.File.Path:startsWith('dotnet/')
+    || Statement.File.Path:startsWith('js/')
+    || Statement.File.Path:startsWith('python/')
+    || Statement.File.Path:startsWith('java/')
+    || Statement.File.Path:startsWith('go/')
+    || Statement.File.Path:startsWith('rust/')
+
+predicate isInNamedLanguageCheckPackage(Statement) =>
+    Statement.File.Path:startsWith('checks/csharp-')
+    || Statement.File.Path:startsWith('checks/javascript-')
+    || Statement.File.Path:startsWith('checks/python-')
+    || Statement.File.Path:startsWith('checks/java-')
+    || Statement.File.Path:startsWith('checks/go-')
+    || Statement.File.Path:startsWith('checks/rust-')
+
+predicate isInLanguageSpecificPackage(Statement) =>
+    isInLegacyLanguagePackage || isInNamedLanguageCheckPackage
+
+predicate isProgramProvidersArgument(CodeExpression) => CodeExpression.Kind == memberAccess
+    && CodeExpression.Name:equals('Providers')
+    && CodeExpression.Target.Kind == identifier
+    && CodeExpression.Target.Name:equals('Program')
+predicate isUnqualifiedCodebaseCall(Statement) =>
+    Statement.MemberName:equals('codebase') && Statement.CallTarget.Kind == identifier
+predicate hasProgramProvidersArgument(Statement) => Statement.ArgumentExpressions:any(isProgramProvidersArgument)
+
+export let lang-provider-hardcoded-violations = codebase.Calls
+    :isUnqualifiedCodebaseCall:hasProgramProvidersArgument:isInLanguageSpecificPackage
+    :toError('Language-specific package must hardcode its provider via codebase(<lang>.parse()), not codebase(Program.Providers), so it works without -p')

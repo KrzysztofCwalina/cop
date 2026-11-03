@@ -1,10 +1,12 @@
-# Every C# project must enable implicit usings. There is no central Directory.Build.props,
-# so each project sets this itself; the check keeps them consistent.
+# Reject nonblank ImplicitUsings settings other than enable.
+# Empty and missing settings are not detected; this inspects parsed project properties.
 
 import code
 
-predicate iuBadImplicit(ProjectProperty) => ProjectProperty.Name:equals('ImplicitUsings') && ProjectProperty.Value:notEquals('enable')
-predicate iuNotEnabled(Project) => Project.Properties:any(iuBadImplicit)
+predicate isNonEnabledImplicitUsingsSetting(ProjectProperty) =>
+    ProjectProperty.Name:equals('ImplicitUsings')
+    && ProjectProperty.Value:notEquals('enable')
+predicate hasNonEnabledImplicitUsings(Project) => Project.Properties:any(isNonEnabledImplicitUsingsSetting)
 
-export let derived-implicit-usings = codebase.Projects:iuNotEnabled
+export let derived-implicit-usings = codebase.Projects:hasNonEnabledImplicitUsings
     :toError('Project {item.Name} must set <ImplicitUsings>enable</ImplicitUsings>')

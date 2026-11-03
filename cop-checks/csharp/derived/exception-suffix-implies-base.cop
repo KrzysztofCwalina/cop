@@ -1,11 +1,14 @@
-# Derived rule: a type named *Exception must actually derive from Exception.
+# Require types named *Exception to have an Exception base, except tests/ and samples/.
 # Complements exception-naming (the reverse direction): guards against non-exception
 # types accidentally named *Exception. (Excludes tests/samples, which hold intentional
 # bad examples.)
 
-predicate esSuffix(Type) => Type.Name:endsWith('Exception')
-predicate esNoExceptionBase(Type) => !Type.BaseTypes:contains('Exception')
-predicate esNotTest(Type) => !Type.File.Path:startsWith('tests/') && !Type.File.Path:startsWith('samples/')
+predicate hasExceptionSuffix(Type) => Type.Name:endsWith('Exception')
+predicate lacksExceptionBase(Type) => !Type.BaseTypes:contains('Exception')
+predicate isOutsideExceptionBaseFixtures(Type) =>
+    !Type.File.Path:startsWith('tests/')
+    && !Type.File.Path:startsWith('samples/')
 
-export let derived-exception-suffix-implies-base = codebase.Types:esSuffix:esNoExceptionBase:esNotTest
+export let derived-exception-suffix-implies-base = codebase.Types
+    :hasExceptionSuffix:lacksExceptionBase:isOutsideExceptionBaseFixtures
     :toError('{item.Name} is named *Exception but does not derive from Exception ({item.File.Path})')

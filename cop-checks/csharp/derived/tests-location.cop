@@ -1,8 +1,0 @@
-# NUnit test fixtures ([TestFixture] classes) must live under tests/. A fixture anywhere
-# else won't be compiled or run by the test projects.
-
-predicate tlIsFixture(Type) => Type.Decorators:contains('TestFixture')
-predicate tlOutsideTests(Type) => !Type.File.Path:startsWith('tests/')
-
-export let derived-tests-location = codebase.Types:tlIsFixture:tlOutsideTests
-    :toError('Test fixture {item.Name} must live under tests/ ({item.File.Path})')

@@ -1,4 +1,4 @@
-# AI self-check — Core purity.
+# Opt-in AI review of cop/shared/ and cop/runtime/ for code-analysis domain leakage.
 #
 # The cop CORE — the general-purpose Cop language (cop/shared/) and the runtime
 # engine (cop/runtime/) — must stay DOMAIN-AGNOSTIC. Code-analysis behavior

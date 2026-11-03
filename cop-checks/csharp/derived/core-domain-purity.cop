@@ -1,11 +1,18 @@
+# Flag code-analysis type names in cop/shared/ and cop/runtime/.
 # The Cop language and runtime (cop/shared, cop/runtime) are general-purpose and must not
 # contain code-review/linting logic. This flags C# classes there whose names (Analyzer,
 # Linter, CodeSmell, CodeReview) suggest such logic has leaked into the engine instead of
 # living in a .cop package like code-analysis. It is a fast, name-based heuristic; the AI
 # core-purity check judges the same boundary by meaning.
 
-predicate cdpInCore(Type) => Type.File.Path:contains('cop/shared/') || Type.File.Path:contains('cop/runtime/')
-predicate cdpHasDomainName(Type) => Type.Name:contains('Analyzer') || Type.Name:contains('Linter') || Type.Name:contains('CodeSmell') || Type.Name:contains('CodeReview')
+predicate isInDomainAgnosticCore(Type) =>
+    Type.File.Path:contains('cop/shared/')
+    || Type.File.Path:contains('cop/runtime/')
+predicate hasCodeAnalysisDomainName(Type) =>
+    Type.Name:contains('Analyzer')
+    || Type.Name:contains('Linter')
+    || Type.Name:contains('CodeSmell')
+    || Type.Name:contains('CodeReview')
 
-export let derived-core-domain-purity = codebase.Types:cdpInCore:cdpHasDomainName
+export let derived-core-domain-purity = codebase.Types:isInDomainAgnosticCore:hasCodeAnalysisDomainName
     :toError('Core type {item.Name} has a code-analysis domain name — move it to a .cop package ({item.File.Path})')
