@@ -577,6 +577,14 @@ public static class RunCommand
             }
         }
 
+        if (!isJson && result.Statistics is { } statistics)
+        {
+            var elapsed = statistics.Elapsed.TotalSeconds.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+            Console.Error.WriteLine(
+                $"Summary: {statistics.InputFiles} input file{(statistics.InputFiles == 1 ? "" : "s")} processed, " +
+                $"{statistics.CommandsExecuted} command{(statistics.CommandsExecuted == 1 ? "" : "s")} executed in {elapsed}s.");
+        }
+
         // Use explicit exit code from command if available (e.g., CHECK returns violation count)
         if (result.Warnings?.Any(w => w.StartsWith("Error:", StringComparison.Ordinal)) == true)
             return 1;
@@ -969,8 +977,7 @@ public static class RunCommand
         void ReportCompatibilityResolved()
         {
             if (incompatibleProviders.Count > 0)
-                Console.Error.WriteLine($"Info: Packages are ready for Cop {ProviderCompatibility.HostVersion}. " +
-                    "Different-version local providers were left unchanged. No action is required.");
+                Console.Error.WriteLine($"Info: Packages are ready for Cop {ProviderCompatibility.HostVersion}.");
         }
 
         var pendingImports = new Queue<string>(imports);

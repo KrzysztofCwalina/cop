@@ -33,6 +33,7 @@ public class TspParser
         {
             var source = File.ReadAllText(file);
             var fileSpec = Parse(source);
+            Cop.Core.ExecutionStatistics.RecordInputFile(file);
             spec.Namespaces.AddRange(fileSpec.Namespaces);
             spec.Models.AddRange(fileSpec.Models);
             spec.Operations.AddRange(fileSpec.Operations);

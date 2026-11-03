@@ -1,5 +1,6 @@
 using System.Xml.Linq;
 using Cop.Providers.SourceModel;
+using Cop.Providers.SourceParsers;
 
 namespace Cop.Providers;
 
@@ -13,26 +14,36 @@ public static class CSharpProjectDiscovery
     /// Discovers all .csproj projects under rootPath, resolving ProjectReference
     /// targets by path to produce stable project-to-project edges.
     /// </summary>
-    public static List<ProjectInfo> Discover(string rootPath, IReadOnlySet<string>? excludedDirs)
+    public static List<ProjectInfo> Discover(string rootPath, IReadOnlySet<string>? excludedDirs,
+        IReadOnlyList<string>? sourceFiles = null)
     {
+        rootPath = Path.GetFullPath(rootPath);
         var csprojPaths = new List<string>();
         CollectCsprojFiles(rootPath, excludedDirs, csprojPaths);
+        if (sourceFiles is null)
+        {
+            var parsers = new SourceParserRegistry();
+            parsers.Register(new CSharpSourceParser());
+            var paths = new List<string>();
+            CodeCollectionBuilder.CollectSourceFiles(rootPath, parsers, excludedDirs, paths);
+            sourceFiles = paths;
+        }
 
         // First pass: build a map of normalized path → project name
         var pathToName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var projects = new List<(string Name, string RelativePath, List<string> RefPaths, List<string> Packages, List<string> Frameworks, Dictionary<string, string> Properties)>();
+        var projects = new List<(string Name, string RelativePath, List<string> RefPaths, List<string> Packages, List<string> Frameworks, Dictionary<string, string> Properties, List<string>? SourceFiles)>();
 
         foreach (var csprojPath in csprojPaths)
         {
-            var (name, refPaths, packages, frameworks, properties) = ParseCsproj(csprojPath);
+            var (name, refPaths, packages, frameworks, properties, sources) = ParseCsproj(csprojPath, sourceFiles, rootPath);
             var relativePath = Path.GetRelativePath(rootPath, csprojPath).Replace('\\', '/');
             pathToName[Path.GetFullPath(csprojPath)] = name;
-            projects.Add((name, relativePath, refPaths, packages, frameworks, properties));
+            projects.Add((name, relativePath, refPaths, packages, frameworks, properties, sources));
         }
 
         // Second pass: resolve ProjectReference paths to project names
         var result = new List<ProjectInfo>();
-        foreach (var (name, relativePath, refPaths, packages, frameworks, properties) in projects)
+        foreach (var (name, relativePath, refPaths, packages, frameworks, properties, sources) in projects)
         {
             var references = new List<string>();
             var csprojDir = Path.GetDirectoryName(Path.Combine(rootPath, NormalizePath(relativePath))) ?? rootPath;
@@ -48,7 +59,8 @@ public static class CSharpProjectDiscovery
 
             result.Add(new ProjectInfo(name, relativePath, "csharp", references, packages, frameworks)
             {
-                Properties = properties
+                Properties = properties,
+                SourceFiles = sources
             });
         }
 
@@ -65,19 +77,22 @@ public static class CSharpProjectDiscovery
         "Nullable", "ImplicitUsings", "LangVersion",
     };
 
-    private static (string Name, List<string> RefPaths, List<string> Packages, List<string> Frameworks, Dictionary<string, string> Properties) ParseCsproj(string csprojPath)
+    private static (string Name, List<string> RefPaths, List<string> Packages, List<string> Frameworks, Dictionary<string, string> Properties, List<string>? SourceFiles)
+        ParseCsproj(string csprojPath, IReadOnlyList<string> sourceFiles, string rootPath)
     {
         string name = Path.GetFileNameWithoutExtension(csprojPath);
         var refPaths = new List<string>();
         var packages = new List<string>();
         var frameworks = new List<string>();
         var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        List<string>? sources = null;
 
         try
         {
             var doc = LoadProjectDocument(csprojPath);
             if (doc is null)
-                return (name, refPaths, packages, frameworks, properties);
+                return (name, refPaths, packages, frameworks, properties, sources);
+            sources = CSharpProjectInputs.Resolve(csprojPath, doc, sourceFiles, rootPath);
             var ns = doc.Root?.Name.Namespace ?? XNamespace.None;
 
             // Extract properties from PropertyGroup elements
@@ -129,7 +144,7 @@ public static class CSharpProjectDiscovery
             Cop.Core.ProviderErrors.Report($"Failed to read project '{csprojPath}': {ex.Message}");
         }
 
-        return (name, refPaths, packages, frameworks, properties);
+        return (name, refPaths, packages, frameworks, properties, sources);
     }
 
     internal static XDocument? LoadProjectDocument(string path)

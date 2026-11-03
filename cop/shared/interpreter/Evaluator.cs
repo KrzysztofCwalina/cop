@@ -38,6 +38,8 @@ public sealed class Evaluator
     public ForeignFunctionRegistry FFI => _ffi;
     public Action<string>? TraceLog { get => _traceLog; set => _traceLog = value; }
     public TypeRegistry? TypeRegistry { get; set; }
+    public Action<LetDecl>? LetBindingEvaluated { get; set; }
+    public Action? EntryCommandCompleted { get; set; }
 
     /// <summary>
     /// The single implicit iteration/subject variable bound inside foreach bodies, pipelines,
@@ -110,14 +112,14 @@ public sealed class Evaluator
                     if (originalCallables != null && originalCallables.TryGetValue(ld.Name, out var originalCallable))
                         _globalEnv.Define(ld.Name, originalCallable);
 
-                    var value = Eval(ld.Value, _globalEnv);
+                    var value = EvalLetBinding(ld, _globalEnv);
                     _globalEnv.Define(ld.Name, value);
                 }
                 else
                 {
                     var capturedLd = ld;
                     var capturedEnv = _globalEnv;
-                    var thunk = new CopThunk(() => Eval(capturedLd.Value, capturedEnv))
+                    var thunk = new CopThunk(() => EvalLetBinding(capturedLd, capturedEnv))
                     {
                         ConstantExpression = capturedLd.Value,
                         ConstantEnvironment = capturedEnv
@@ -126,6 +128,13 @@ public sealed class Evaluator
                 }
             }
         }
+    }
+
+    public CopValue EvalLetBinding(LetDecl declaration, Environment environment)
+    {
+        var value = Eval(declaration.Value, environment);
+        LetBindingEvaluated?.Invoke(declaration);
+        return value;
     }
 
     /// <summary>
@@ -155,11 +164,17 @@ public sealed class Evaluator
         if (value is CopFunction func && func.Declaration is not null)
         {
             _traceLog?.Invoke($"[trace] RunCommand: calling function '{func.Declaration.Name}' with body type={func.Declaration.Body?.GetType().Name}");
-            return CallUserFunction(func, []);
+            var result = CallUserFunction(func, []);
+            EntryCommandCompleted?.Invoke();
+            return result;
         }
 
         if (value is ICopCallable callable)
-            return callable.Invoke([], this, _globalEnv);
+        {
+            var result = callable.Invoke([], this, _globalEnv);
+            EntryCommandCompleted?.Invoke();
+            return result;
+        }
 
         // If it's a collection/value, return it directly (let-binding used as a named rule)
         return value;
@@ -174,7 +189,7 @@ public sealed class Evaluator
         switch (decl)
         {
             case LetDecl ld:
-                var value = Eval(ld.Value, _globalEnv);
+                var value = EvalLetBinding(ld, _globalEnv);
                 _globalEnv.Define(ld.Name, value);
                 break;
 

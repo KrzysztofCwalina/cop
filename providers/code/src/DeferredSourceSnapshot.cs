@@ -125,7 +125,10 @@ public sealed class DeferredSourceSnapshot
             });
             _files.Add(path, file);
         }
-        return file.Value;
+        var result = file.Value;
+        if (result is not null)
+            ExecutionStatistics.RecordInputFile(path);
+        return result;
     }
 
     private List<MethodDeclaration> ResolveMembers(TypeDeclaration type, SourceFile owner)

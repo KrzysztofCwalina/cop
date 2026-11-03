@@ -688,53 +688,5 @@ public static class StandardLibrary
 
     private static IEnumerable<CopValue> CoerceToEnumerable(CopValue value) => CollectionValues.Enumerate(value);
 
-    private static bool PathMatchesGlob(string path, string pattern)
-    {
-        // Glob matching: `*` matches within a path segment, `**` matches across segments
-        // (`**/` matches zero or more leading segments), `?` matches a single non-separator char.
-        var normalized = path.Replace('\\', '/');
-        var normalizedPattern = pattern.Replace('\\', '/');
-        var regex = "^" + GlobToRegex(normalizedPattern) + "$";
-        return RegexCache.IsMatch(normalized, regex, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-    }
-
-    /// <summary>Translates a glob pattern into an anchored-fragment regex.</summary>
-    private static string GlobToRegex(string glob)
-    {
-        var sb = new System.Text.StringBuilder(glob.Length * 2);
-        for (int i = 0; i < glob.Length; i++)
-        {
-            char c = glob[i];
-            if (c == '*')
-            {
-                bool doubleStar = i + 1 < glob.Length && glob[i + 1] == '*';
-                if (doubleStar)
-                {
-                    i++; // consume the second '*'
-                    if (i + 1 < glob.Length && glob[i + 1] == '/')
-                    {
-                        i++; // consume the trailing slash: '**/' matches zero or more segments
-                        sb.Append("(?:.*/)?");
-                    }
-                    else
-                    {
-                        sb.Append(".*"); // '**' alone matches across segments
-                    }
-                }
-                else
-                {
-                    sb.Append("[^/]*"); // single '*' stays within one segment
-                }
-            }
-            else if (c == '?')
-            {
-                sb.Append("[^/]"); // single non-separator character
-            }
-            else
-            {
-                sb.Append(System.Text.RegularExpressions.Regex.Escape(c.ToString()));
-            }
-        }
-        return sb.ToString();
-    }
+    private static bool PathMatchesGlob(string path, string pattern) => PathGlob.IsMatch(path, pattern);
 }

@@ -85,7 +85,8 @@ public partial class ToolchainCliIntegrationTests
         var result = await Run(_script, "-t", _root, "--no-color");
         Assert.That(result.ExitCode, Is.EqualTo(0), result.StandardError);
         Assert.That(result.StandardOutput.Trim(), Is.EqualTo("unused"));
-        Assert.That(result.StandardError, Is.Empty);
+        Assert.That(result.StandardError.Trim().Split('\n'), Has.Length.EqualTo(1));
+        AssertExecutionSummary(result.StandardError, 0, 1);
         Assert.That(File.Exists(Path.Combine(_root, "pids.txt")), Is.False);
     }
 

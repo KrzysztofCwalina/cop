@@ -133,6 +133,7 @@ public class MarkdownProvider : DataProvider
                 };
 
                 var doc = MarkdownParser.Parse(text);
+                ExecutionStatistics.RecordInputFile(filePath);
                 SetFile(doc.Root, sourceFile);
                 parsedFiles.Add((sourceFile, doc));
             });

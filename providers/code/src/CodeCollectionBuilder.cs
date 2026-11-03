@@ -350,6 +350,9 @@ public static class CodeCollectionBuilder
         IReadOnlyDictionary<string, FilterExpression>? collectionFilters,
         FilterExpression? filter)
     {
+        foreach (var file in sourceFiles)
+            if (file.FullPath.Length > 0)
+                ExecutionStatistics.RecordInputFile(file.FullPath);
         var extractors = CodeBindings.BuildExtractors();
         var accessors = collectionFilters is not null || filter is not null ? CodeBindings.BuildAccessors() : null;
         var collectionItemTypes = GetCollectionItemTypes();

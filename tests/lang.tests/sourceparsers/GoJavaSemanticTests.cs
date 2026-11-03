@@ -440,8 +440,9 @@ public class GoJavaSemanticTests
                 Assert.That(output, Does.Contain($"bound=1;string={(version == 0 ? 1 : 0)}"));
                 Assert.That(output.Contains("Compiler selected string result"), Is.EqualTo(version == 0));
                 Assert.That(output, Does.Not.Contain("using simpler"));
-                if (first is not null) Assert.That(output, Is.EqualTo(first));
-                first = output;
+                string stableOutput = CliSummaryAssertions.NormalizeElapsedTime(output, 2, 4, 120);
+                if (first is not null) Assert.That(stableOutput, Is.EqualTo(first));
+                first = stableOutput;
             }
         }
         environment["PATH"] = "";

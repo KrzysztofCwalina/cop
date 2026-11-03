@@ -26,7 +26,7 @@ public class CSharpModernRegressionTests
             """, """
             let extensions = cb.Methods:asCSharp:isExtensionMethod
             command MAIN = print('MODERN {cb.Files.Count} {cb.Types.Count} {cb.Methods.Count} {cb.Calls.Count} {extensions.Count}')
-            """, "MODERN 1 1 4 3 4");
+            """, "MODERN 1 1 4 3 4", 3);
     }
 
     [TestCase(false)]
@@ -54,10 +54,10 @@ public class CSharpModernRegressionTests
             let nestedCalls = cb.Calls.Where(item.Parent != nic && item.Parent.Parent != nic && item.Parent.Parent.Kind == catch)
             let missingParents = cb.Statements.Where(item.Kind != declaration && item.Kind != try && item.Parent == nic)
             command MAIN = print('CATCHES {catches.Count} {nonempty.Count} {cb.Statements:swallowsException.Count} {nestedCalls.Count} {missingParents.Count}')
-            """, "CATCHES 9 8 1 1 0");
+            """, "CATCHES 9 8 1 1 0", 6);
     }
 
-    private static void RunStandalone(string source, string query, string expected)
+    private static void RunStandalone(string source, string query, string expected, int commands)
     {
         var repository = TestContext.CurrentContext.TestDirectory;
         while (!File.Exists(Path.Combine(repository, "cop.sln")))
@@ -114,8 +114,14 @@ public class CSharpModernRegressionTests
                 var errors = stderr.GetAwaiter().GetResult().Trim();
                 TestContext.WriteLine($"pass={pass}, exit={process.ExitCode}\n{output}\n{errors}");
                 Assert.That(process.ExitCode, Is.Zero, errors);
-                if (pass > 0) Assert.That(output, Is.EqualTo(expected), errors);
-                Assert.That(errors, Is.Empty);
+                if (pass > 0)
+                {
+                    Assert.That(output, Is.EqualTo(expected), errors);
+                    Assert.That(errors.Split('\n'), Has.Length.EqualTo(1), errors);
+                    TestTextParsing.AssertExecutionSummary(errors, 1, commands);
+                }
+                else
+                    Assert.That(errors, Is.Empty);
             }
             Assert.That(Directory.GetFiles(portable).Select(Path.GetFileName),
                 Is.EqualTo(new[] { Path.GetFileName(published) }));

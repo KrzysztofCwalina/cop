@@ -146,6 +146,27 @@ public class CopSemanticProjectionTests
     }
 
     [Test]
+    public void InputStatisticsRespectDeferredDemandAndCountCachedFilesOncePerExecution()
+    {
+        File.WriteAllText(Path.Combine(Target, "a.cop"), "type First = { Name : string }");
+        File.WriteAllText(Path.Combine(Target, "z.cop"), "type Second = { Name : string }");
+        var provider = new CopProvider();
+        for (int run = 0; run < 2; run++)
+        {
+            using var statistics = new ExecutionStatistics();
+            var query = new ProviderQuery { RootPath = Target, Collection = "Types" };
+            var result = (DeferredProviderResult)provider.QueryDeferred(query);
+            Assert.That(statistics.Snapshot().InputFiles, Is.EqualTo(0));
+            Assert.That(result.Collections["Types"].Take(1).Count(), Is.EqualTo(1));
+            Assert.That(statistics.Snapshot().InputFiles, Is.EqualTo(1));
+            Assert.That(result.Collections["Types"].Count(), Is.EqualTo(2));
+            Assert.That(result.Collections["Types"].Count(), Is.EqualTo(2));
+            Assert.That(statistics.Snapshot().InputFiles, Is.EqualTo(2));
+            Assert.That(ProviderErrors.Drain(), Is.Empty);
+        }
+    }
+
+    [Test]
     public void StructuralFirstDefersSemanticContextAndUnreadLaterFiles()
     {
         File.WriteAllText(Path.Combine(Target, "a.cop"), """

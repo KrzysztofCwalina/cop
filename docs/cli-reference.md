@@ -31,6 +31,35 @@ Help also accepts `-help`, `-?`, and `/?`. Root help always shows the complete
 command list, including `cop update [--force]`, even when combined with
 `--no-color`. Use `cop <command> --help` for command-specific options.
 
+Normal text runs finish with a compact execution summary on **stderr**:
+
+```text
+Summary: 142 input files processed, 12 commands executed in 0.42s.
+```
+
+The displayed command count includes individual named computations: each top-level
+`let` actually evaluated, plus callable entry commands that ran. A composed suite
+therefore counts its demanded computations, not just `MAIN`. Empty results still
+count; unused declarations do not. Repeated reads of one binding count once.
+Imported computations, input setup, and aggregate bindings count when evaluated,
+so this is not a special-purpose count of checks. Selecting a binding directly
+does not add an extra entry-wrapper count. Nested helper function calls are not
+counted per item. The language does not recognize check names, violation types,
+or check-producing functions to calculate these statistics.
+
+The file count deduplicates input paths reported by providers during actual work,
+including cached inputs and filesystem metadata inspection. Lazy queries count
+only demanded files; producing the summary does not enumerate additional data.
+Program/import files and dependency metadata are not counted merely because Cop
+loads them. Bundled file providers report their inputs; external providers can use
+`Cop.Core.ExecutionStatistics.RecordInputFile(path)` to participate. Inputs not
+reported by a provider are not included. Elapsed time covers engine setup and
+execution, excluding package restoration before the engine starts.
+
+Program stdout and exit codes are unchanged. JSON mode (`-f json`) omits the
+summary entirely. Runtime/parse failures show their errors without a completion
+summary; a summary never asserts that findings are absent or analysis is complete.
+
 ## Exit Codes
 
 | Code | Meaning |
@@ -89,8 +118,8 @@ release tag, not the repository's moving default branch. Auto-restored packages
 are cached in `~/.cop/packages/<cop-version>/`, so updating Cop cannot reuse an
 older release's cache. CLR providers that reference a different Cop host version
 are skipped and a compatible package is restored automatically. Successful
-recovery is informational: Cop confirms that no action is required and local
-files are unchanged. Detailed skipped-provider paths and versions are available
+recovery is informational: Cop reports that matching packages are ready, without
+changing local files. Detailed skipped-provider paths and versions are available
 with `-d`. Failed resolution is an error; genuine source-analysis warnings and
 errors are not suppressed. Compatible local and explicitly declared feeds retain
 their normal precedence.

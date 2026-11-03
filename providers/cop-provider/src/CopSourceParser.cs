@@ -45,8 +45,8 @@ public class CopSourceParser : ISourceParser
             if (header.Length == 0) continue;
             if (!header.StartsWith('#')) break;
             if (header != "# @expect parse-error") continue;
-            Cop.Core.ProviderWarnings.ReportOnce("cop", filePath,
-                $"Excluded negative parser fixture '{filePath}' marked '# @expect parse-error'; its contents are test input, not source.");
+            if (Cop.Core.CopDiagnostics.Summaries)
+                Console.Error.WriteLine($"[diag] Excluded '{filePath}': explicitly marked '# @expect parse-error' parser test input.");
             return true;
         }
         return false;

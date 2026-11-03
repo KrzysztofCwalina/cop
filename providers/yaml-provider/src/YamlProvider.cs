@@ -88,6 +88,7 @@ public sealed class YamlProvider : DataProvider
                     var relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
                     var sourceFile = new SourceFile(relativePath, "yaml", [], [], text);
                     var doc = YamlParser.Parse(text);
+                    ExecutionStatistics.RecordInputFile(filePath);
                     parsed.Add((sourceFile, doc));
                 }
                 catch { }

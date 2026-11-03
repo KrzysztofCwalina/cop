@@ -94,7 +94,9 @@ public class PublishedCSharpMetadataRegressionTests
                     "Trim|String|String|string.Trim()",
                     "Count|List|Int32|System.Collections.Generic.IEnumerable<int>.Count<int>()"
                 }));
-                Assert.That(errors, Is.Empty, "Basic framework binding must not produce missing-core-type diagnostics.");
+                Assert.That(errors.Split('\n'), Has.Length.EqualTo(1),
+                    "Basic framework binding must not produce missing-core-type diagnostics.");
+                TestTextParsing.AssertExecutionSummary(errors, 1, 2);
             }
         }
         finally { Directory.Delete(root, recursive: true); }

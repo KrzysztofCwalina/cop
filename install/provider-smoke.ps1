@@ -37,7 +37,8 @@ function Invoke-SmokeProcess([string[]]$Arguments) {
         if (-not $process.Start()) { throw "Cannot start smoke executable: $Executable" }
         $stdout = $process.StandardOutput.ReadToEndAsync()
         $stderr = $process.StandardError.ReadToEndAsync()
-        $timedOut = -not $process.WaitForExit(60000)
+        # A cold Go helper build has its own three-minute budget, before the analysis request.
+        $timedOut = -not $process.WaitForExit(240000)
         if ($timedOut) {
             $process.Kill($true)
             if (-not $process.WaitForExit(5000)) { throw "Smoke process did not exit after termination." }
@@ -46,7 +47,7 @@ function Invoke-SmokeProcess([string[]]$Arguments) {
             throw "Smoke process exited but its output pipes did not close."
         }
         if ($timedOut) {
-            throw "Smoke command exceeded 60 seconds: $($Arguments -join ' ')`n$($stdout.Result)`n$($stderr.Result)"
+            throw "Smoke command exceeded 240 seconds: $($Arguments -join ' ')`n$($stdout.Result)`n$($stderr.Result)"
         }
         return @{ ExitCode = $process.ExitCode; Stdout = $stdout.Result; Stderr = $stderr.Result }
     }

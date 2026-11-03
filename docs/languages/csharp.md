@@ -27,11 +27,27 @@ download a compiler. There is no missing-external-compiler fallback for C#.
 
 Semantic analysis uses discovered project boundaries, project references, and available
 restored dependency metadata. It is not a full MSBuild evaluation: Cop does not build the
-target project or run its build targets. Conditional/imported compile settings, custom
-build logic, or multiple target frameworks produce capability warnings because the full
+target project or run its build targets. Literal `Compile Include`, `Exclude`, and `Remove`
+rules are honored, including semicolon-separated paths, recursive globs, and linked sources
+inside the analysis target. Source-default switches and literal default exclusions are
+also honored. Removed files remain available for source inspection, but do not contribute
+symbols to the project. Conditions used only in packaging/build targets do not warn unless
+those targets modify source-file rules.
+
+Conditional/imported project settings, build-generated source rules, unevaluated MSBuild
+expressions, or multiple target frameworks produce capability warnings because the full
 build configuration is not evaluated. Missing restored references can also leave symbols
 unresolved; an installed SDK alone does not supply every project dependency. Syntax-level
 facts remain available.
+
+These warnings identify the settings found in each project, rather than implying that
+every project uses all of them. Ordinary literal `Compile` rules are not a reason to warn.
+Unsupported project configuration may require a project-folder membership fallback and
+uses only the first restored target framework. If your checks depend on those settings,
+compare the findings with the source files and target framework used by your normal
+build. This is a Cop limitation, not a project error; installing the SDK or running
+`dotnet restore` will not remove it. Do not change a correct project file just to silence
+the warning.
 
 Empty or whitespace-only `.csproj` files, such as template placeholders, produce one
 warning per file instead of failing analysis. Cop retains their project boundaries and

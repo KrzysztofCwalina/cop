@@ -12,19 +12,29 @@ internal static class CSharpProjectCompilations
         Func<string, List<MetadataReference>> references)
     {
         root = Path.GetFullPath(root);
-        var projects = CSharpProjectDiscovery.Discover(root, excluded)
-            .Select(p => Path.GetFullPath(Path.Combine(root, p.Path.Replace('/', Path.DirectorySeparatorChar))))
-            .OrderByDescending(p => Path.GetDirectoryName(p)!.Length).ToArray();
+        var allTrees = syntaxTrees.ToArray();
         var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var discovered = CSharpProjectDiscovery.Discover(root, excluded, allTrees.Select(tree => tree.FilePath).ToArray());
+        var projectFiles = discovered.ToDictionary(
+            project => Path.GetFullPath(project.Path.Replace('/', Path.DirectorySeparatorChar), root),
+            project => project.SourceFiles is null ? null : new HashSet<string>(project.SourceFiles, comparer), comparer);
+        var projects = projectFiles.Keys.OrderByDescending(p => Path.GetDirectoryName(p)!.Length)
+            .ThenBy(p => p, comparer).ToArray();
         var groups = new Dictionary<string, List<SyntaxTree>>(comparer);
-        foreach (var tree in syntaxTrees)
+        var owners = new Dictionary<SyntaxTree, string>();
+        foreach (var tree in allTrees)
         {
             var path = Path.GetFullPath(tree.FilePath);
-            var owner = projects.FirstOrDefault(project =>
-                path.StartsWith(Path.GetDirectoryName(project)! + Path.DirectorySeparatorChar, comparison)) ?? "";
-            if (!groups.TryGetValue(owner, out var group)) groups[owner] = group = [];
-            group.Add(tree);
+            var memberships = projects.Where(project => projectFiles[project] is { } sources
+                ? sources.Contains(path)
+                : path.StartsWith(Path.GetDirectoryName(project)! + Path.DirectorySeparatorChar, comparison)).ToArray();
+            owners[tree] = memberships.FirstOrDefault() ?? "";
+            foreach (var project in memberships.Length == 0 ? new[] { "" } : memberships)
+            {
+                if (!groups.TryGetValue(project, out var group)) groups[project] = group = [];
+                group.Add(tree);
+            }
         }
 
         var compiled = new Dictionary<string, CSharpCompilation>(comparer);
@@ -43,12 +53,14 @@ internal static class CSharpProjectCompilations
                 {
                     var document = CSharpProjectDiscovery.LoadProjectDocument(project);
                     var elements = document?.Descendants().ToList() ?? [];
-                    if (elements.Any(e => e.Name.LocalName is "TargetFrameworks" or "Import"
-                        || e.Attribute("Condition") is not null
-                        || e.Name.LocalName == "Compile"))
+                    var unsupportedSettings = CSharpProjectInputs.UnsupportedSettings(document);
+                    if (unsupportedSettings.Count > 0)
                         ProviderWarnings.ReportOnce("csharp", project,
-                            $"'{project}' uses conditional, imported, multi-target, or custom Compile settings. " +
-                            "C# semantic analysis uses project-directory membership and the first restored target; full MSBuild evaluation is unavailable.");
+                            $"Limited C# analysis for '{project}': found {string.Join(", ", unsupportedSettings)}. " +
+                            "Cop cannot fully evaluate these settings. Source-file membership may fall back to project folders, " +
+                            "and only the first restored target framework is used. File inclusion or resolved symbols may differ from your actual build. " +
+                            "If a check depends on these settings, compare its results with the files and target framework selected by your normal build. " +
+                            "This is a Cop limitation, not a project error; installing the .NET SDK or running restore will not remove it.");
                     foreach (var reference in elements.Where(e => e.Name.LocalName == "ProjectReference"))
                     {
                         var include = reference.Attribute("Include")?.Value;
@@ -98,11 +110,8 @@ internal static class CSharpProjectCompilations
         }
 
         var result = new Dictionary<SyntaxTree, CSharpCompilation>();
-        foreach (var (project, trees) in groups)
-        {
-            var compilation = Compile(project);
-            foreach (var tree in trees) result[tree] = compilation;
-        }
+        foreach (var tree in allTrees)
+            result[tree] = Compile(owners[tree]);
         return result;
     }
 }
