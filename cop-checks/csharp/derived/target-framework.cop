@@ -1,10 +1,12 @@
-# Every C# project must target net10.0. There is no central Directory.Build.props, so this
-# guards against a newly-added project silently using a different framework.
+# Reject nonblank TargetFramework values other than net10.0.
+# Empty/missing settings and TargetFrameworks are not detected by this rule.
 
 import code
 
-predicate tfBadTfm(ProjectProperty) => ProjectProperty.Name:equals('TargetFramework') && ProjectProperty.Value:notEquals('net10.0')
-predicate tfNotNet10(Project) => Project.Properties:any(tfBadTfm)
+predicate isUnexpectedTargetFrameworkSetting(ProjectProperty) =>
+    ProjectProperty.Name:equals('TargetFramework')
+    && ProjectProperty.Value:notEquals('net10.0')
+predicate hasUnexpectedTargetFramework(Project) => Project.Properties:any(isUnexpectedTargetFrameworkSetting)
 
-export let derived-target-framework = codebase.Projects:tfNotNet10
+export let derived-target-framework = codebase.Projects:hasUnexpectedTargetFramework
     :toError('Project {item.Name} must target net10.0')

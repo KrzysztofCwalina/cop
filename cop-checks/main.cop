@@ -1,10 +1,10 @@
-# Cop Self-Checks
-# Run all checks: cop cop-checks/main.cop -t .
+# Compose the default, derived, and opt-in AI self-check suites.
+# Run default checks: cop cop-checks/main.cop -t .
+# Run derived checks: cop cop-checks/main.cop -t . -c DERIVED
 # Run AI checks:  cop cop-checks/main.cop -t . -c ai
 # Rules are grouped by the source they inspect: cop/, csharp/, and general/.
 # Each group's derived/ rules still run via DERIVED; csharp/ai/ remains opt-in.
 
-import code
 import code
 import csharp
 import cop
@@ -12,10 +12,10 @@ import cop
 # Shared by the root-suite rules in all three groups.
 let codebase = codebase(csharp.parse(), cop.parse())
 
-export let all-violations = 
+export let all-violations =
     intrinsics-in-wrong-file +
-    types-without-namespace + 
-    no-new-interfaces + 
+    types-without-namespace +
+    no-new-interfaces +
     layering-violations +
     no-aspnet-in-cli +
     no-new-ffi +

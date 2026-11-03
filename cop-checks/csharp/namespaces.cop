@@ -1,8 +1,10 @@
-# All C# types must be in namespaces
+# Require namespaces for C# types outside tests/ and samples/.
 
-predicate isInTestProject(Type) => Type.File.Path:startsWith('tests/') || Type.File.Path:startsWith('samples/')
+predicate isNamespaceExemptFixture(Type) =>
+    Type.File.Path:startsWith('tests/')
+    || Type.File.Path:startsWith('samples/')
 predicate hasNamespace(Type) => Type.File.Namespace.Length:greaterThan(0)
-predicate isMissingNamespace(Type:isCSharp) => !hasNamespace && !isInTestProject
+predicate isMissingNamespace(Type:isCSharp) => !hasNamespace && !isNamespaceExemptFixture
 
 export let types-without-namespace = codebase.Types:isMissingNamespace
     :toError('{item.Name} in {item.File.Path} must be in a namespace')

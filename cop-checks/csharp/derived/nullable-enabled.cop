@@ -1,10 +1,12 @@
-# Every C# project must enable nullable reference types. There is no central
-# Directory.Build.props, so this stops a newly-added project from silently turning it off.
+# Reject nonblank Nullable settings other than enable.
+# Empty and missing settings are not detected; this inspects parsed project properties.
 
 import code
 
-predicate neBadNullable(ProjectProperty) => ProjectProperty.Name:equals('Nullable') && ProjectProperty.Value:notEquals('enable')
-predicate neNullableNotEnabled(Project) => Project.Properties:any(neBadNullable)
+predicate isNonEnabledNullableSetting(ProjectProperty) =>
+    ProjectProperty.Name:equals('Nullable')
+    && ProjectProperty.Value:notEquals('enable')
+predicate hasNonEnabledNullableSetting(Project) => Project.Properties:any(isNonEnabledNullableSetting)
 
-export let derived-nullable-enabled = codebase.Projects:neNullableNotEnabled
+export let derived-nullable-enabled = codebase.Projects:hasNonEnabledNullableSetting
     :toError('Project {item.Name} must set <Nullable>enable</Nullable>')

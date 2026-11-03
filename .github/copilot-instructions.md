@@ -260,7 +260,7 @@ cop-checks/
     derived/
     ai/                 # Opt-in AI rules
   general/              # Language-independent project rules
-    layering.cop
+    runtime-no-provider-dependencies.cop
     derived/
 ```
 
@@ -317,7 +317,7 @@ let types-without-namespace = codebase.Types:isMissingNamespace
     :toError('{item.Name} in {item.File.Path} must be in a namespace')
 ```
 
-**`cop-checks/general/layering.cop`** — enforces dependency rules:
+**`cop-checks/general/runtime-no-provider-dependencies.cop`** — enforces dependency rules:
 
 ```cop
 # Runtime must not reference providers

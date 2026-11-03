@@ -3,8 +3,6 @@
 # (This is the guard that should have caught CHECK being moved into the runtime.)
 
 import code
-import code
-import code
 
 # Approved built-in FFI names, compared to the decoded first string argument.
 let approved-ffi-names = [
@@ -15,27 +13,33 @@ let approved-ffi-names = [
     'matches', 'length', 'isSet', 'isClear', 'Get', 'containsKey'
 ]
 
-predicate isFfiRegister(Statement) =>
-    Statement.Kind == call
-    && Statement.MemberName:equals('Register')
-    && Statement.CallTarget.Kind == memberAccess
+predicate hasFfiReceiver(Statement) => Statement.CallTarget.Kind == memberAccess
     && Statement.CallTarget.Target.Kind == identifier
     && Statement.CallTarget.Target.Name:equals('ffi')
+
+predicate isFfiRegistration(Statement) =>
+    Statement.Kind == call
+    && Statement.MemberName:equals('Register')
+    && hasFfiReceiver
 
 predicate registersApprovedName(Statement) => Statement.ArgumentExpressions.Count > 0
     && Statement.ArgumentExpressions[0].Kind == stringLiteral
     && Statement.ArgumentExpressions[0].StringValue:in(approved-ffi-names)
 
 # Only the FFI invocation test needs to register its own non-built-in callback.
-predicate isFfiInvocationTest(Statement) =>
+predicate isInFfiInvocationTest(Statement) =>
     Statement.File.Path == 'tests/lang.tests/lang/EvaluatorTests.cs'
     && Statement.Method.Name == 'EvalForeignFunction'
-    && Statement.ArgumentExpressions.Count > 0
+
+predicate registersInvocationTestCallback(Statement) => Statement.ArgumentExpressions.Count > 0
     && Statement.ArgumentExpressions[0].Kind == stringLiteral
     && Statement.ArgumentExpressions[0].StringValue == 'double'
 
+predicate isApprovedFfiTestRegistration(Statement) =>
+    isInFfiInvocationTest && registersInvocationTestCallback
+
 predicate isUnapprovedFfi(Statement) =>
-    isFfiRegister && !registersApprovedName && !isFfiInvocationTest
+    isFfiRegistration && !registersApprovedName && !isApprovedFfiTestRegistration
 
 export let no-new-ffi = codebase.Calls:isUnapprovedFfi
     :toError('New runtime FFI registered without approval. The FFI surface must not grow — implement the capability as a .cop package, or get sign-off and add its name to approved-ffi-names.')

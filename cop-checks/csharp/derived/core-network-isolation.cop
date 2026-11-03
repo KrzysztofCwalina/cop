@@ -1,9 +1,15 @@
-# Derived rule: the evaluator (cop/shared/interpreter) and runtime engine (cop/runtime)
+# Flag networking imports in cop/shared/interpreter/ and cop/runtime/.
+# The evaluator (cop/shared/interpreter) and runtime engine (cop/runtime)
 # must not perform network I/O. Network access belongs in providers (http, ai) and the
 # packaging layer — the language core stays offline and pure.
 
-predicate cniInPureCore(Type) => Type.File.Path:contains('cop/shared/interpreter/') || Type.File.Path:contains('cop/runtime/')
-predicate cniUsesNetwork(Type) => Type.File.Usings:contains('System.Net') || Type.File.Usings:contains('System.Net.Http') || Type.File.Usings:contains('System.Net.Sockets')
+predicate isInNetworkFreeCore(Type) =>
+    Type.File.Path:contains('cop/shared/interpreter/')
+    || Type.File.Path:contains('cop/runtime/')
+predicate importsNetworkingNamespace(Type) =>
+    Type.File.Usings:contains('System.Net')
+    || Type.File.Usings:contains('System.Net.Http')
+    || Type.File.Usings:contains('System.Net.Sockets')
 
-export let derived-core-network-isolation = codebase.Types:cniInPureCore:cniUsesNetwork
+export let derived-core-network-isolation = codebase.Types:isInNetworkFreeCore:importsNetworkingNamespace
     :toError('{item.Name} performs network I/O in the language core — move network access to a provider ({item.File.Path})')
