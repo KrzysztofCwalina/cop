@@ -261,6 +261,17 @@
         "Windows self-update no longer reports a successful executable replacement as a permission failure when the previous executable is still running.",
         "Includes the negative parser fixture and version-matched package fixes from 2026.11.2.1."
       ]
+    },
+    {
+      "version": "2026.11.2.3",
+      "approved": true,
+      "features": [
+        "Normal analysis quietly excludes intentional negative parser fixtures and supports common C# project file selections without misleading warnings.",
+        "Remaining C# analysis warnings explain the limitation and how to address it.",
+        "Run summaries show input files, individually evaluated named computations as commands, and elapsed time without changing program output or JSON.",
+        "C# analysis detects same-length source edits even when file timestamps are preserved.",
+        "Successful version-matched package recovery no longer prints the unnecessary different-version provider message."
+      ]
     }
   ]
 }
