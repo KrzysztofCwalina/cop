@@ -1,13 +1,13 @@
 # Use abstract classes for production abstractions instead of new interfaces.
 
+import code
+
 # ICopCallable lets callable values retain their CopValue base class.
 let allowed-interfaces = ['ICopCallable']
 
-predicate isInterface(Type) => Type.Kind == Interface
-predicate isApprovedInterface(Type) => allowed-interfaces:contains(Type.Name)
+let interface-message =
+    'Use an abstract class instead of interface {item.Name} ({item.File.Path})'
 
-let interface-message = 'Do not add new interfaces — use abstract classes instead: {item.Name} in {item.File.Path}'
-
-export let no-new-interfaces = codebase.Types:isCSharp:isInterface
-    .Where(!isApprovedInterface(item) && !inTestsSamplesOrExamples(item.File))
+export let no-new-interfaces = code.interfacesExcept(
+    source-types-without-examples:isCSharp, allowed-interfaces)
     :toError(interface-message)

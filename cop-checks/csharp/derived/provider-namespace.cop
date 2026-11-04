@@ -2,13 +2,17 @@
 
 let exempt-provider-names = ['TypeSpecHttpProvider' 'TypeSpecRawProvider']
 
-predicate hasProviderNamespacePrefix(File) => File.Namespace:startsWith('Cop.Providers')
-predicate hasExemptProviderName(Type) => Type.Name:in(exempt-provider-names)
+predicate hasProviderNamespacePrefix(File) =>
+    File.Namespace:startsWith('Cop.Providers')
+predicate hasExemptProviderName(Type) =>
+    Type.Name:in(exempt-provider-names)
 
-let provider-namespace-message = 'Provider {item.Name} must live in the Cop.Providers namespace, not {item.File.Namespace} ({item.File.Path})'
+let provider-namespace-message =
+    '{item.Name}: namespace must start with Cop.Providers, not {item.File.Namespace}'
 
 export let derived-provider-namespace = codebase.Types:extendsDataProvider
-    .Where(!hasProviderNamespacePrefix(item.File)
-        && !inSamplesOrExamples(item.File)
-        && !hasExemptProviderName(item))
+    .Where(item.File.Path:in(files-without-samples-or-examples.Path))
+    .Where(
+        !hasProviderNamespacePrefix(item.File) &&
+        !hasExemptProviderName(item))
     :toError(provider-namespace-message)

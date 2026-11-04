@@ -7,8 +7,10 @@ import csharp
 let cb = codebase(csharp.parse())
 
 # Honor `// cop-ignore: <check>` comments — exempt the next statement/line from these checks.
-predicate notIgnored(Statement) => Statement.CopIgnore == ''
-predicate lineNotIgnored(Line) => Line.CopIgnore == ''
+predicate notIgnored(Statement) =>
+    isUnsuppressed(Statement)
+predicate lineNotIgnored(Line) =>
+    isUnsuppressed(Line)
 
 ## Correctness Checks
 
@@ -28,8 +30,10 @@ export let dynamic-declarations = cb.Statements:isDynamicDeclaration:notIgnored
 
 # Async and threading
 
-predicate isThreadSleep(Statement) => Statement.Kind == 'call'
-    && Statement.TypeName == 'Thread' && Statement.MemberName == 'Sleep'
+predicate isThreadSleep(Statement) =>
+    Statement.Kind == call &&
+    hasTypeName(Statement, ['Thread']) &&
+    hasMemberName(Statement, ['Sleep'])
 
 predicate isConfigureAwaitTrue(Statement) => Statement.Kind == 'call'
     && Statement.MemberName == 'ConfigureAwait' && Statement.Arguments:contains('true')
@@ -41,8 +45,9 @@ predicate isTaskCompletionSourceNew(Statement) => Statement.Kind == 'call'
     && Statement.TypeName == 'TaskCompletionSource'
 
 # Sync-blocking call patterns (reusable by any check)
-export predicate isSyncBlockingCall(Statement) => Statement.Kind == 'call'
-    && (Statement.MemberName == 'Wait' || Statement.MemberName == 'GetResult')
+export predicate isSyncBlockingCall(Statement) =>
+    Statement.Kind == call &&
+    hasMemberName(Statement, ['Wait', 'GetResult'])
 
 # Statement is inside an async method
 export predicate isInAsyncMethod(Statement) => Statement.Method != nic && Statement.Method.Modifiers:isSet(Async)
@@ -72,8 +77,9 @@ export let sync-wait-in-async = cb.Statements:isSyncBlockingCall:isInAsyncMethod
 
 # Console output
 
-predicate isConsoleCall(Statement) => Statement.Kind == 'call'
-    && Statement.TypeName == 'Console'
+predicate isConsoleCall(Statement) =>
+    Statement.Kind == call &&
+    hasTypeName(Statement, ['Console'])
 
 ## Avoid Console output in library code
 export let console-calls = cb.Statements:isConsoleCall:notIgnored
@@ -85,11 +91,12 @@ predicate isCatchingBaseException(Statement) => Statement.ErrorHandler == true
     && Statement.Generic == true
 
 # Empty catch — catches base Exception and does nothing (no statements in catch body)
-predicate isEmptyCatch(Statement) => Statement.ErrorHandler == true
-    && Statement.Generic == true && !Statement.Rethrows && Statement.Children.count() == 0
+predicate isEmptyCatch(Statement) =>
+    isUnrethrowingGenericHandler(Statement) &&
+    Statement.Children.count() == 0
 
-predicate isSwallowingBaseException(Statement) => Statement.ErrorHandler == true
-    && Statement.Generic == true && !Statement.Rethrows
+predicate isSwallowingBaseException(Statement) =>
+    isUnrethrowingGenericHandler(Statement)
 
 ## Catch specific exception types instead of bare Exception
 export let base-exception-catches = cb.Statements:isCatchingBaseException:notIgnored
@@ -310,12 +317,13 @@ export let csharp-style-checks = interface-prefix + type-name-casing + method-na
 ## Framework Design Guidelines — Naming
 
 # Types inheriting from Exception must end with 'Exception'
-predicate isExceptionBase(Type) => Type.BaseTypes:contains('Exception')
-    || Type.BaseTypes:contains('SystemException')
-    || Type.BaseTypes:contains('ApplicationException')
-    || Type.BaseTypes:contains('InvalidOperationException')
-    || Type.BaseTypes:contains('ArgumentException')
-    || Type.BaseTypes:contains('IOException')
+let exception-base-names = [
+    'Exception', 'SystemException', 'ApplicationException',
+    'InvalidOperationException', 'ArgumentException', 'IOException'
+]
+
+predicate isExceptionBase(Type) =>
+    derivesFromAny(Type, exception-base-names)
 
 predicate isMissingExceptionSuffix(Type) => Type:isExceptionBase && !Type.Name:endsWith('Exception')
 
@@ -324,7 +332,8 @@ export let exception-suffix = cb.Types:isMissingExceptionSuffix
     :toWarning('FDG Naming: {item.Name} inherits from Exception but does not end with Exception', nameof(exception-suffix))
 
 # Types inheriting from Attribute must end with 'Attribute'
-predicate isAttributeBase(Type) => Type.BaseTypes:contains('Attribute')
+predicate isAttributeBase(Type) =>
+    derivesFromAny(Type, ['Attribute'])
 predicate isMissingAttributeSuffix(Type) => Type:isAttributeBase && !Type.Name:endsWith('Attribute')
 
 ## FDG: Types inheriting from Attribute must end with 'Attribute'
@@ -332,7 +341,8 @@ export let attribute-suffix = cb.Types:isMissingAttributeSuffix
     :toWarning('FDG Naming: {item.Name} inherits from Attribute but does not end with Attribute', nameof(attribute-suffix))
 
 # Types inheriting from EventArgs must end with 'EventArgs'
-predicate isEventArgsBase(Type) => Type.BaseTypes:contains('EventArgs')
+predicate isEventArgsBase(Type) =>
+    derivesFromAny(Type, ['EventArgs'])
 predicate isMissingEventArgsSuffix(Type) => Type:isEventArgsBase && !Type.Name:endsWith('EventArgs')
 
 ## FDG: Types inheriting from EventArgs must end with 'EventArgs'
@@ -340,7 +350,8 @@ export let eventargs-suffix = cb.Types:isMissingEventArgsSuffix
     :toWarning('FDG Naming: {item.Name} inherits from EventArgs but does not end with EventArgs', nameof(eventargs-suffix))
 
 # Types inheriting from Stream must end with 'Stream'
-predicate isStreamBase(Type) => Type.BaseTypes:contains('Stream')
+predicate isStreamBase(Type) =>
+    derivesFromAny(Type, ['Stream'])
 predicate isMissingStreamSuffix(Type) => Type:isStreamBase && !Type.Name:endsWith('Stream')
 
 ## FDG: Types inheriting from Stream must end with 'Stream'
@@ -395,7 +406,9 @@ export let enum-no-suffix = cb.Types:hasEnumBadSuffix
     :toWarning('FDG Type Design: Enum {item.Name} should not use Enum/Flags suffix', nameof(enum-no-suffix))
 
 # [Flags] enums should use plural names
-predicate isFlagsEnum(Type) => Type.Kind == 'Enum' && Type.Decorators:contains('Flags')
+predicate isFlagsEnum(Type) =>
+    Type.Kind == Enum &&
+    hasDecorator(Type, 'Flags')
 predicate hasFlagsSingularName(Type) => Type:isFlagsEnum && !Type.Name:matches('[sx]$|ies$|ata$')
 
 ## FDG: [Flags] enums should use plural names
@@ -451,7 +464,9 @@ export let fdg-type-design = enum-no-suffix + flags-plural-name + abstract-prote
 ## Framework Design Guidelines — Member Design
 
 # Methods with more than 5 parameters
-predicate hasExcessiveParams(Method) => Method:isPublic && Method.Parameters.Count > 5
+predicate hasExcessiveParams(Method) =>
+    Method:isPublic &&
+    hasParameterCountAbove(Method, 5)
 predicate hasTooManyParams(Type) => Type.Methods:any(hasExcessiveParams)
 
 ## FDG: Methods should not have more than 5 parameters
@@ -477,7 +492,8 @@ export let extension-class-naming = cb.Types:isExtensionClassBadName
     :toWarning('FDG Member Design: {item.Name} contains extension methods but does not end with Extensions', nameof(extension-class-naming))
 
 # Constructors with too many parameters (prefer options/builder)
-predicate hasCtorTooManyParams(Method) => Method.Parameters.Count > 5
+predicate hasCtorTooManyParams(Method) =>
+    hasParameterCountAbove(Method, 5)
 predicate hasComplexCtor(Type) => Type.Constructors:any(hasCtorTooManyParams)
 
 ## FDG: Constructors should not have too many parameters
@@ -507,16 +523,13 @@ export let fdg-member-design = max-parameters + no-write-only-properties + exten
 ## Framework Design Guidelines — Exception Design
 
 # Custom exceptions must end in 'Exception' (extended base list)
-predicate isExceptionType(Type) => Type.Kind == 'Class'
-    && (Type.BaseTypes:contains('Exception')
-        || Type.BaseTypes:contains('SystemException')
-        || Type.BaseTypes:contains('ApplicationException')
-        || Type.BaseTypes:contains('InvalidOperationException')
-        || Type.BaseTypes:contains('ArgumentException')
-        || Type.BaseTypes:contains('IOException')
-        || Type.BaseTypes:contains('FormatException')
-        || Type.BaseTypes:contains('NotSupportedException')
-        || Type.BaseTypes:contains('UnauthorizedAccessException'))
+let extended-exception-base-names = exception-base-names + [
+    'FormatException', 'NotSupportedException', 'UnauthorizedAccessException'
+]
+
+predicate isExceptionType(Type) =>
+    Type.Kind == Class &&
+    derivesFromAny(Type, extended-exception-base-names)
 predicate hasExceptionBadName(Type) => Type:isExceptionType && !Type.Name:endsWith('Exception')
 
 ## FDG: Custom exceptions must end in 'Exception'

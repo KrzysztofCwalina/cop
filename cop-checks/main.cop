@@ -7,26 +7,54 @@ import cop
 
 let codebase = codebase(csharp.parse(), cop.parse())
 
-predicate inTestsOrSamples(File) =>
-    File.Path:startsWith('tests/') || File.Path:startsWith('samples/')
-predicate inSamplesOrExamples(File) =>
-    File.Path:startsWith('samples/') || File.Path:startsWith('examples/')
-predicate inTestsSamplesOrExamples(File) =>
-    inTestsOrSamples || File.Path:startsWith('examples/')
-predicate inTests(File) => File.Path:startsWith('tests/')
-predicate inShared(File) => File.Path:contains('cop/shared/')
-predicate inRuntime(File) => File.Path:contains('cop/runtime/')
-predicate inCore(File) => inShared || inRuntime
-predicate inInterpreter(File) => File.Path:contains('cop/shared/interpreter/')
-predicate inProviders(File) => File.Path:startsWith('providers/')
-predicate importsCliCommandsOrRepl(File) =>
-    File.Usings:contains('Cop.Cli.Commands') || File.Usings:contains('Cop.Repl')
-predicate inChecks(File) => File.Path:contains('cop-checks/')
+let source-files = codebase.Files.Where(!inTestsOrSamples(item))
+let source-files-without-examples = codebase.Files.Where(!inTestsSamplesOrExamples(item))
+let non-test-files = codebase.Files.Where(!inTests(item))
+let files-without-samples-or-examples = codebase.Files.Where(!inSamplesOrExamples(item))
 
-predicate extendsDataProvider(Type) => Type.BaseTypes:contains('DataProvider')
-predicate hasTestFixture(Type) => Type.Decorators:contains('TestFixture')
-predicate hasExceptionBase(Type) => Type.BaseTypes:contains('Exception')
-predicate hasExceptionSuffix(Type) => Type.Name:endsWith('Exception')
+let source-types-without-examples = codebase.Types
+    .Where(item.File.Path:in(source-files-without-examples.Path))
+
+let source-calls = codebase.Calls:isCSharp
+    .Where(item.File.Path:in(source-files.Path))
+let non-test-calls = codebase.Calls
+    .Where(item.File.Path:in(non-test-files.Path))
+
+predicate inTestsOrSamples(File) =>
+    File.Path:startsWith('tests/') ||
+    File.Path:startsWith('samples/')
+predicate inSamplesOrExamples(File) =>
+    File.Path:startsWith('samples/') ||
+    File.Path:startsWith('examples/')
+predicate inTestsSamplesOrExamples(File) =>
+    inTestsOrSamples ||
+    File.Path:startsWith('examples/')
+predicate inTests(File) =>
+    File.Path:startsWith('tests/')
+predicate inShared(File) =>
+    File.Path:contains('cop/shared/')
+predicate inRuntime(File) =>
+    File.Path:contains('cop/runtime/')
+predicate inCore(File) =>
+    inShared ||
+    inRuntime
+predicate inInterpreter(File) =>
+    File.Path:contains('cop/shared/interpreter/')
+predicate inProviders(File) =>
+    File.Path:startsWith('providers/')
+predicate importsCliCommandsOrRepl(File) =>
+    importsAny(File, ['Cop.Cli.Commands', 'Cop.Repl'])
+predicate inChecks(File) =>
+    File.Path:contains('cop-checks/')
+
+predicate extendsDataProvider(Type) =>
+    derivesFromAny(Type, ['DataProvider'])
+predicate hasTestFixture(Type) =>
+    hasDecorator(Type, 'TestFixture')
+predicate hasExceptionBase(Type) =>
+    derivesFromAny(Type, ['Exception'])
+predicate hasExceptionSuffix(Type) =>
+    Type.Name:endsWith('Exception')
 
 export let default-violations =
     intrinsics-in-wrong-file +

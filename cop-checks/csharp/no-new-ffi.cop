@@ -1,4 +1,5 @@
 # Keep the runtime FFI small; implement domain-specific capabilities in .cop packages.
+# Test-only registrations do not expand the shipped API.
 
 import code
 
@@ -10,34 +11,20 @@ let approved-ffi-names = [
     'matches', 'length', 'isSet', 'isClear', 'Get', 'containsKey'
 ]
 
-predicate hasFfiReceiver(Statement) => Statement.CallTarget.Kind == memberAccess
-    && Statement.CallTarget.Target.Kind == identifier
-    && Statement.CallTarget.Target.Name:equals('ffi')
-
 predicate isFfiRegistration(Statement) =>
-    Statement.Kind == call
-    && Statement.MemberName:equals('Register')
-    && hasFfiReceiver
+    Statement.Kind == call &&
+    Statement.MemberName:equals('Register') &&
+    hasIdentifierReceiverIgnoringCase(Statement, 'ffi')
 
-predicate hasApprovedFfiName(Statement) => Statement.ArgumentExpressions.Count > 0
-    && Statement.ArgumentExpressions[0].Kind == stringLiteral
-    && Statement.ArgumentExpressions[0].StringValue:in(approved-ffi-names)
-
-# The invocation test registers 'double' to exercise a foreign call.
-predicate inFfiInvocationTest(Statement) =>
-    Statement.File.Path == 'tests/lang.tests/lang/EvaluatorTests.cs'
-    && Statement.Method.Name == 'EvalForeignFunction'
-
-predicate hasDoubleName(Statement) => Statement.ArgumentExpressions.Count > 0
-    && Statement.ArgumentExpressions[0].Kind == stringLiteral
-    && Statement.ArgumentExpressions[0].StringValue == 'double'
-
-predicate hasFfiTestExemption(Statement) => inFfiInvocationTest && hasDoubleName
+predicate hasApprovedFfiName(Statement) =>
+    hasStringArgumentIn(Statement, 0, approved-ffi-names)
 
 predicate isUnapprovedRegistration(Statement) =>
-    isFfiRegistration && !hasApprovedFfiName && !hasFfiTestExemption
+    isFfiRegistration &&
+    !hasApprovedFfiName
 
-let ffi-message = 'New runtime FFI registered without approval. The FFI surface must not grow — implement the capability as a .cop package, or get sign-off and add its name to approved-ffi-names.'
+let ffi-message =
+    'Unapproved runtime function; use a .cop package or get explicit approval'
 
-export let no-new-ffi = codebase.Calls:isUnapprovedRegistration
+export let no-new-ffi = non-test-calls:isUnapprovedRegistration
     :toError(ffi-message)

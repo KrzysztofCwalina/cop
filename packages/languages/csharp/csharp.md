@@ -85,6 +85,22 @@ Active `#nullable` directives appear in `Statements` with `Kind == directive` an
 `Keywords`: `nullable`, `enable`/`disable`/`restore`, and optionally `warnings`/`annotations`.
 Comments, string literals, and inactive preprocessor branches do not produce directives.
 
+## Reusable C# fact predicates
+
+`csharp.isAsyncVoid(Method)` identifies async methods returning `void`.
+`csharp.disablesNullable(Statement)` identifies active C# nullable-disable directives.
+Neither predicate chooses whether that construct is allowed or creates diagnostics.
+
+`csharp.isEnvironmentVariableAccess(Statement)` recognizes syntactic reads and writes
+through `Environment`, `System.Environment`, and `global::System.Environment`.
+`csharp.isEnvironmentVariableRead(Statement)` narrows these to `GetEnvironmentVariable`,
+including overloads with a target argument. The caller decides which reads or writes,
+names, argument counts, and locations are acceptable.
+
+These environment predicates match parsed type/member names case-insensitively; they do
+not infer using aliases or prove symbol identity. Use the `code` package's receiver and
+argument queries for other APIs, with platform conventions kept in the calling check.
+
 ---
 name: csharp-lister
 version: 1.0.0

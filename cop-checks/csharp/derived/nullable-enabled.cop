@@ -2,12 +2,9 @@
 
 import code
 
-predicate isInvalidNullable(ProjectProperty) =>
-    ProjectProperty.Name:equals('Nullable')
-    && ProjectProperty.Value:notEquals('enable')
-predicate hasInvalidNullable(Project) => Project.Properties:any(isInvalidNullable)
+let nullable-setting-message =
+    'Project {item.Name} must set <Nullable>enable</Nullable>'
 
-let nullable-setting-message = 'Project {item.Name} must set <Nullable>enable</Nullable>'
-
-export let derived-nullable-enabled = codebase.Projects:hasInvalidNullable
+export let derived-nullable-enabled = codebase.Projects
+    .Where(hasOtherProjectPropertyValue(item, 'Nullable', 'enable'))
     :toError(nullable-setting-message)
