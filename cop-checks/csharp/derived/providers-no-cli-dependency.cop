@@ -1,10 +1,7 @@
-# Flag Cop.Cli.Commands and Cop.Repl imports in files under providers/.
-# Providers supply data to the runtime; they must not reach into the command layer.
+# Keep providers independent of the CLI command and REPL layers.
 
-predicate isInHostAgnosticProviders(Type) => Type.File.Path:startsWith('providers/')
-predicate providerImportsCliNamespace(Type) =>
-    Type.File.Usings:contains('Cop.Cli.Commands')
-    || Type.File.Usings:contains('Cop.Repl')
+let provider-cli-message = 'Provider type {item.Name} depends on the CLI (Cop.Cli/Cop.Repl) ({item.File.Path})'
 
-export let derived-providers-no-cli-dependency = codebase.Types:isInHostAgnosticProviders:providerImportsCliNamespace
-    :toError('Provider type {item.Name} depends on the CLI (Cop.Cli/Cop.Repl) ({item.File.Path})')
+export let derived-providers-no-cli-dependency = codebase.Types
+    .Where(inProviders(item.File) && importsCliCommandsOrRepl(item.File))
+    :toError(provider-cli-message)

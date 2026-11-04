@@ -13,28 +13,54 @@ Group folders are not standalone programs. The separate package-source suite is
 
 ## Reading and maintaining a rule
 
-Each file starts with a short description of what it actually detects. Predicates name
-the scope, the offending fact, and any exemptions separately; the final filter chain
-shows how those pieces combine. Longer expressions are split at meaningful concepts,
-not into a helper for every comparison. Rule-local names stay distinct because sibling
-files share one program-wide namespace.
+Start each rule with one or two short lines explaining its purpose and useful rationale.
+Avoid implementation narration, review history, and restating every condition. Keep
+detailed limitations in this reference; use inline comments only for non-obvious reasons.
+
+Name predicates for the facts they establish, not for the rules that use them. A path under `tests/`
+does not establish that its contents are test fixtures; `inTestsOrSamples(File)` names
+the actual location test. Only a parsed `TestFixture` attribute justifies `hasTestFixture`.
+
+Use the shortest name that preserves meaningful distinctions. `referencesAspNet` needs
+no `Framework` suffix, but `callsUnqualifiedCodebase` keeps `Unqualified` because member
+calls are excluded. Imports and paths are predicates on `File`, not claims about a type's
+behavior. Approval predicates explicitly describe policy exceptions.
+
+Sibling files share one namespace. Reused facts live in `main.cop`, and individual rules
+combine them with filters and `Where` expressions. Different path sets stay distinct:
+`inTestsOrSamples` is not interchangeable with `inSamplesOrExamples`. Individual rule
+IDs remain stable; the aggregate lists are `default-violations`, `derived-violations`,
+`ai-violations`, and `package-violations`.
+
+Give each diagnostic template a private, rule-specific `let` immediately before the
+violation list, and pass its name to `toError`. For example:
+
+```cop skip
+let namespace-message = '{item.Name} in {item.File.Path} must be in a namespace'
+
+export let types-without-namespace = codebase.Types:isCSharp
+    .Where(!hasNamespace(item) && !inTestsOrSamples(item.File))
+    :toError(namespace-message)
+```
+
+The template renders for each matching item. Names must be unique across sibling files.
 
 The checks inspect parsed facts, but some are deliberately limited: import rules report
 types in importing files, name rules are heuristics, and project-setting rules reject
 nonblank invalid values without detecting empty or missing settings. Path matching and existing
-allowlists are unchanged. Exported violation-list names remain stable for callers.
+allowlists are unchanged.
 
 ## Default and package-source rules
 
 | Rule | Description |
 |------|-------------|
 | `cop/intrinsic-declaration-location.cop` | Runtime-backed Cop API declarations belong in files ending with `intrinsics.cop`. |
-| `csharp/namespaces.cop` | C# types outside `tests/` and `samples/` must have a namespace. |
-| `csharp/no-interfaces.cop` | Reject interfaces except `ICopCallable` and sample/example/test fixtures. |
+| `csharp/types-require-namespaces.cop` | C# types outside `tests/` and `samples/` must have a namespace. |
+| `csharp/no-interfaces.cop` | Reject interfaces except `ICopCallable` and code under `tests/`, `samples/`, or `examples/`. |
 | `general/runtime-no-provider-dependencies.cop` | Reject references from `runtime` to listed provider projects; `filesystem-provider` is allowed. |
 | `csharp/cli-no-aspnet-framework.cop` | Keep ASP.NET framework references out of the single-file CLI publish project. |
 | `csharp/no-new-ffi.cop` | FFI registrations require an approved first literal argument, with one narrowly scoped invocation-test exception. |
-| `csharp/no-regex.cop` | Flag types in files importing regex unless their names identify approved regex infrastructure. |
+| `csharp/no-regex.cop` | Flag types in files importing regex unless their names contain an approved substring. |
 | `csharp/no-environment.cop` | Reject unreviewed environment-variable access; allow secret names, PATH reads, installer PATH access, and reviewed frontend context reads. |
 | `cop/packages/language-checks-require-parser.cop` | Reject unqualified `codebase(Program.Providers)` calls in known language-specific package paths; run through the package-source entry point. |
 
@@ -58,10 +84,10 @@ first string argument, never by a comment or unrelated text on the same line.
 | `language-no-code-model.cop` | The Cop language (`cop/shared`) must not reference the C# code model (`Cop.Providers.SourceModel`: `TypeDeclaration`, `StatementInfo`, …). A `.cop` program can analyze C#, Python, JSON or anything else, so the language only ever sees **generic** provider data — naming C#-specific types in the language would tie it to one domain. |
 | `core-domain-purity.cop` | The language and runtime (`cop/shared`, `cop/runtime`) must not contain code-review/linting logic. Flags C# classes there named like `Analyzer`/`Linter`/`CodeSmell`/`CodeReview`, which suggest such logic has leaked into the engine instead of living in a `.cop` package like `code-analysis`. (A quick name-based heuristic; the AI `core-purity` check judges the same thing by meaning.) |
 | `core-network-isolation.cop` | Flag types in `cop/shared/interpreter/` and `cop/runtime/` whose files import `System.Net`, `System.Net.Http`, or `System.Net.Sockets`. This import check supports the offline-core boundary; it does not detect every possible network call. |
-| `core-no-cli-dependency.cop` | The language and runtime (`cop/shared`, `cop/runtime`) must not reference the command-line app (`Cop.Cli`/`Cop.Repl`). They are a host-agnostic library; the CLI depends on them, never the other way around. |
+| `core-no-cli-dependency.cop` | Flag types under `cop/shared` and `cop/runtime` whose files import `Cop.Cli.Commands` or `Cop.Repl`. The core must not depend on the CLI; other CLI namespace imports are not detected by this rule. |
 | `core-no-roslyn.cop` | The language and runtime must not depend on Roslyn (`Microsoft.CodeAnalysis`). Understanding C# is the `csharp-provider`'s job — the core stays language-agnostic, with each source language handled by its own provider. |
 | `commandline-confined-to-cli.cop` | Only the CLI app (`cop/cli`) may use `System.CommandLine`. Argument parsing is a CLI concern; the language, runtime, and providers must not pull it in. |
-| `providers-no-cli-dependency.cop` | Provider plugins must not reference the CLI app (`Cop.Cli`/`Cop.Repl`). Providers are loaded *by* the runtime and sit below the CLI, so dependencies must not point upward into it. |
+| `providers-no-cli-dependency.cop` | Flag types under `providers/` whose files import `Cop.Cli.Commands` or `Cop.Repl`. Providers sit below the CLI; other CLI namespace imports are not detected by this rule. |
 | `interpreter-no-process-launch.cop` | The evaluator (`cop/shared/interpreter`) must not start external processes (`System.Diagnostics.Process`). Evaluating an expression stays pure and in-process; running external tools is a provider's job (e.g. `tool-providers`). |
 | `no-console-in-pure-core.cop` | Parsing/evaluation/runtime code (`cop/shared/{interpreter,ast,parser,tokenizer}`, `cop/runtime`) must not call `Console.*` directly. All output flows through cop's output layer (`cop/shared/output`) so it can be styled, redirected, or captured. |
 

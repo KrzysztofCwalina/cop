@@ -1,13 +1,7 @@
-# Require types with an Exception base to be named *Exception, except tests/ and samples/.
-# Keeps the exception surface discoverable and consistent (AmbiguousCollectionException,
-# CircularDependencyException, PackageNotFoundException all follow this).
+# Give Exception-derived types an Exception suffix so their purpose is clear.
 
-predicate hasExceptionBase(Type) => Type.BaseTypes:contains('Exception')
-predicate lacksExceptionSuffix(Type) => !Type.Name:endsWith('Exception')
-predicate isOutsideExceptionNamingFixtures(Type) =>
-    !Type.File.Path:startsWith('tests/')
-    && !Type.File.Path:startsWith('samples/')
+let exception-name-message = '{item.Name} derives from Exception but is not named *Exception ({item.File.Path})'
 
-export let derived-exception-naming = codebase.Types
-    :hasExceptionBase:lacksExceptionSuffix:isOutsideExceptionNamingFixtures
-    :toError('{item.Name} derives from Exception but is not named *Exception ({item.File.Path})')
+export let derived-exception-naming = codebase.Types:hasExceptionBase
+    .Where(!hasExceptionSuffix(item) && !inTestsOrSamples(item.File))
+    :toError(exception-name-message)

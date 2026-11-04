@@ -1,75 +1,63 @@
-# Reject unreviewed environment-variable reads/writes outside tests/ and samples/.
-# Use CLI flags or config to control Cop behavior.
-# Secrets (e.g. GITHUB_TOKEN) must not be passed on a command line.
-# Reading PATH for installed-tool discovery is allowed; only the installer may update PATH.
-# Frontends may inspect reviewed toolchain context, not introduce Cop feature flags.
-#
-# Inspect parsed calls, including nested expressions. Only the decoded first argument can
-# exempt a secret name (TOKEN/SECRET/PASSWORD); comments and other arguments cannot.
-# A computed variable name is not a known secret and requires explicit review.
+# Keep Cop settings explicit: use CLI flags or config files instead of environment variables.
 
-predicate isCSharpEnvironmentCall(Statement) => Statement.File.Language == csharp
-predicate isOutsideEnvironmentFixtures(Statement) =>
-    !Statement.File.Path:startsWith('tests/')
-    && !Statement.File.Path:startsWith('samples/')
-
-predicate hasEnvironmentReceiverType(Statement) =>
+predicate hasEnvironmentReceiver(Statement) =>
     Statement.TypeName:equals('Environment')
     || Statement.TypeName:equals('System.Environment')
     || Statement.TypeName:equals('global::System.Environment')
-predicate hasEnvironmentAccessMember(Statement) =>
+predicate hasEnvAccessorName(Statement) =>
     Statement.MemberName:equals('GetEnvironmentVariable')
     || Statement.MemberName:equals('SetEnvironmentVariable')
-predicate accessesEnvironmentVariable(Statement) =>
-    hasEnvironmentReceiverType && hasEnvironmentAccessMember
+predicate accessesEnvVariable(Statement) => hasEnvironmentReceiver && hasEnvAccessorName
 
-predicate isSecretEnvironmentName(CodeExpression) => CodeExpression.Kind == stringLiteral
+predicate isSecretNameLiteral(CodeExpression) => CodeExpression.Kind == stringLiteral
     && (CodeExpression.StringValue:contains('TOKEN')
         || CodeExpression.StringValue:contains('SECRET')
         || CodeExpression.StringValue:contains('PASSWORD'))
-predicate hasSecretEnvironmentArgument(Statement) => Statement.ArgumentExpressions.Count > 0
-    && isSecretEnvironmentName(Statement.ArgumentExpressions[0])
+predicate hasSecretName(Statement) => Statement.ArgumentExpressions.Count > 0
+    && isSecretNameLiteral(Statement.ArgumentExpressions[0])
 
-predicate hasLiteralEnvironmentName(Statement) => Statement.ArgumentExpressions.Count > 0
+predicate hasLiteralName(Statement) => Statement.ArgumentExpressions.Count > 0
     && Statement.ArgumentExpressions[0].Kind == stringLiteral
-predicate hasPathEnvironmentName(Statement) => hasLiteralEnvironmentName
+predicate hasPathName(Statement) => hasLiteralName
     && Statement.ArgumentExpressions[0].StringValue == 'PATH'
-predicate isSingleArgumentEnvironmentRead(Statement) =>
-    Statement.MemberName == 'GetEnvironmentVariable'
+predicate isSingleArgEnvRead(Statement) =>
+    hasEnvironmentReceiver && Statement.MemberName == 'GetEnvironmentVariable'
     && Statement.ArgumentExpressions.Count == 1
-predicate readsSearchPath(Statement) => isSingleArgumentEnvironmentRead && hasPathEnvironmentName
+predicate readsSearchPath(Statement) => isSingleArgEnvRead && hasPathName
 
-predicate isInPathInstaller(Statement) =>
+predicate inPathInstaller(Statement) =>
     Statement.File.Path == 'cop/cli/commands/CopInstallation.cs'
     && Statement.Method.Name == 'ConfigurePath'
-predicate isInstallerPathAccess(Statement) => isInPathInstaller && hasPathEnvironmentName
+predicate hasInstallerPathExemption(Statement) => inPathInstaller && hasPathName
 
-# Java diagnoses an ignored CLASSPATH; Rust resolves Cargo sources and rejects unsupported flags.
-predicate isInJavaContextDiscovery(Statement) =>
+# Toolchain discovery needs access to Java and Cargo environment settings.
+predicate inJavaContextDiscovery(Statement) =>
     Statement.File.Path == 'providers/java-provider/src/JavaSemanticContext.cs'
     && Statement.Method.Name == 'Discover'
-predicate hasClasspathEnvironmentName(Statement) => hasLiteralEnvironmentName
+predicate hasClasspathName(Statement) => hasLiteralName
     && Statement.ArgumentExpressions[0].StringValue == 'CLASSPATH'
-predicate isInRustFrontendBinding(Statement) =>
+predicate inRustFrontendBind(Statement) =>
     Statement.File.Path == 'providers/rust-provider/src/RustFrontend.cs'
     && Statement.Method.Name == 'Bind'
-predicate isReviewedCargoArgument(CodeExpression) =>
+predicate isAllowedRustArg(CodeExpression) =>
     (CodeExpression.Kind == stringLiteral && CodeExpression.StringValue == 'CARGO_HOME')
     || (CodeExpression.Kind == identifier && CodeExpression.Name == 'name')
-predicate readsJavaClasspathContext(Statement) =>
-    isSingleArgumentEnvironmentRead && isInJavaContextDiscovery && hasClasspathEnvironmentName
-predicate readsRustCargoContext(Statement) =>
-    isSingleArgumentEnvironmentRead && isInRustFrontendBinding
-    && isReviewedCargoArgument(Statement.ArgumentExpressions[0])
-predicate readsReviewedFrontendContext(Statement) => readsJavaClasspathContext || readsRustCargoContext
+predicate isAllowedJavaEnvRead(Statement) =>
+    isSingleArgEnvRead && inJavaContextDiscovery && hasClasspathName
+predicate isAllowedRustEnvRead(Statement) =>
+    isSingleArgEnvRead && inRustFrontendBind
+    && isAllowedRustArg(Statement.ArgumentExpressions[0])
+predicate isAllowedFrontendRead(Statement) => isAllowedJavaEnvRead || isAllowedRustEnvRead
 
-predicate isUnapprovedEnvironmentAccess(Statement) =>
-    !hasSecretEnvironmentArgument
+predicate lacksEnvExemption(Statement) =>
+    !hasSecretName
     && !readsSearchPath
-    && !readsReviewedFrontendContext
-    && !isInstallerPathAccess
+    && !isAllowedFrontendRead
+    && !hasInstallerPathExemption
+
+let environment-message = 'Environment variable used to control behavior — use a CLI flag or config instead ({item.File.Path}:{item.Line})'
 
 export let no-environment = codebase.Calls
-    :accessesEnvironmentVariable:isCSharpEnvironmentCall:isOutsideEnvironmentFixtures
-    :isUnapprovedEnvironmentAccess
-    :toError('Environment variable used to control behavior — use a CLI flag or config instead ({item.File.Path}:{item.Line})')
+    :accessesEnvVariable:lacksEnvExemption
+    .Where(item.File.Language == csharp && !inTestsOrSamples(item.File))
+    :toError(environment-message)

@@ -1,4 +1,6 @@
 using Cop.Cli.Commands;
+using Cop.Lang.Ast;
+using Cop.Lang.Parser;
 using Cop.Providers;
 using NUnit.Framework;
 
@@ -33,6 +35,46 @@ public class SelfCheckStructureTests
         Assert.That(files, Has.Length.EqualTo(41));
         var diagnostics = VerifyCommand.CollectDiagnostics(files, checks, File.ReadAllText, strictStructure: true);
         Assert.That(diagnostics, Is.Empty, string.Join("\n", diagnostics.Select(d => d.Message)));
+    }
+
+    [Test]
+    public void SelfChecksUsePrivateNamedDiagnosticTemplates()
+    {
+        var templates = new List<string>();
+        foreach (var file in Directory.GetFiles(Path.Combine(_repo, "cop-checks"), "*.cop", SearchOption.AllDirectories))
+        {
+            var module = CopParser.Parse(File.ReadAllText(file), file);
+            var calls = new DiagnosticCallCollector();
+            calls.Visit(module);
+            var bindings = module.Declarations.OfType<LetDecl>().ToDictionary(d => d.Name);
+            foreach (var call in calls.Calls)
+            {
+                Assert.That(call.Args, Has.Count.EqualTo(1), file);
+                Assert.That(call.Args[0], Is.InstanceOf<IdentifierExpr>(), file);
+                var name = ((IdentifierExpr)call.Args[0]).Name;
+                Assert.That(bindings.ContainsKey(name), Is.True, $"{file}: {name}");
+                var binding = bindings[name];
+                Assert.That(binding.IsExported, Is.False, $"{file}: {name}");
+                Assert.That(binding.Value is InterpolatedStringExpr or LiteralExpr { Value: string },
+                    Is.True, $"{file}: {name} must hold a plain template, not a lambda");
+                templates.Add(name);
+            }
+        }
+
+        Assert.That(templates, Has.Count.EqualTo(38));
+        Assert.That(templates.Distinct().Count(), Is.EqualTo(38), "Sibling rules share a namespace.");
+    }
+
+    private sealed class DiagnosticCallCollector : AstWalker
+    {
+        public List<CallExpr> Calls { get; } = [];
+
+        public override object? VisitCallExpr(CallExpr node)
+        {
+            if (node.Callee is IdentifierExpr { Name: "toError" or "toWarning" or "toInfo" })
+                Calls.Add(node);
+            return base.VisitCallExpr(node);
+        }
     }
 
     [Test]
@@ -128,7 +170,12 @@ public class SelfCheckStructureTests
     public void RepositoryHasNoUnapprovedRegexImports()
     {
         File.Copy(Path.Combine(_repo, "cop-checks", "csharp", "no-regex.cop"), Path.Combine(_root, "rule.cop"));
-        File.WriteAllText(Path.Combine(_root, "main.cop"), "command MAIN = CHECK(no-regex)");
+        File.WriteAllText(Path.Combine(_root, "main.cop"), """
+            import code
+            import csharp
+            let codebase = codebase(csharp.parse())
+            command MAIN = CHECK(no-regex)
+            """);
         var result = Engine.Run(_root, _repo, additionalFeedPaths: [Path.Combine(_repo, "packages")]);
 
         Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
@@ -329,9 +376,44 @@ public class SelfCheckStructureTests
     [TestCase("examples/Input.cs", true)]
     public void NamespaceCheckPreservesItsFixtureExemptions(string file, bool hasViolation)
     {
-        AssertCheck(Path.Combine("csharp", "namespaces.cop"), "types-without-namespace", file,
+        AssertCheck(Path.Combine("csharp", "types-require-namespaces.cop"), "types-without-namespace", file,
             "class Example { }", "csharp", hasViolation ? [1] : [],
             $"Example in {file} must be in a namespace");
+    }
+
+    [TestCase("src/Input.cs", true)]
+    [TestCase("tests/Input.cs", false)]
+    [TestCase("samples/Input.cs", false)]
+    [TestCase("examples/Input.cs", false)]
+    public void InterfaceCheckExemptsTestsSamplesAndExamples(string file, bool hasViolation)
+    {
+        AssertCheck(Path.Combine("csharp", "no-interfaces.cop"), "no-new-interfaces", file,
+            "namespace Example; interface IUnexpected { }", "csharp", hasViolation ? [1] : [],
+            $"Do not add new interfaces — use abstract classes instead: IUnexpected in {file}");
+    }
+
+    [TestCase("src/Input.cs", true)]
+    [TestCase("tests/Input.cs", false)]
+    [TestCase("samples/Input.cs", false)]
+    [TestCase("examples/Input.cs", true)]
+    public void EnvironmentCheckOnlyExemptsTestsAndSamples(string file, bool hasViolation)
+    {
+        AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", file,
+            "class Example { string? Read() => Environment.GetEnvironmentVariable(\"MODE\"); }",
+            "csharp", hasViolation ? [1] : [],
+            $"Environment variable used to control behavior — use a CLI flag or config instead ({file}:{{0}})");
+    }
+
+    [TestCase("src/Input.cs", true)]
+    [TestCase("tests/Input.cs", true)]
+    [TestCase("samples/Input.cs", false)]
+    [TestCase("examples/Input.cs", false)]
+    public void ProviderNamespaceCheckOnlyExemptsSamplesAndExamples(string file, bool hasViolation)
+    {
+        AssertCheck(Path.Combine("csharp", "derived", "provider-namespace.cop"),
+            "derived-provider-namespace", file, "namespace Other; class ExampleProvider : DataProvider { }",
+            "csharp", hasViolation ? [1] : [],
+            $"Provider ExampleProvider must live in the Cop.Providers namespace, not Other ({file})");
     }
 
     [TestCase("cop/cli/cop.csproj", true)]
@@ -361,6 +443,69 @@ public class SelfCheckStructureTests
             class CustomRegexCacheWrapper { }
             """, "csharp", [3],
             "Unexpected is in a file that imports System.Text.RegularExpressions — use recursive descent parsers: Input.cs");
+    }
+
+    [Test]
+    public void Issue103_NamedDiagnosticTemplateRendersEveryType()
+    {
+        var target = Path.Combine(_root, "target");
+        Directory.CreateDirectory(target);
+        File.WriteAllText(Path.Combine(target, "Input.cs"), """
+            namespace Fixture;
+            class Alpha { }
+            class Beta { }
+            """);
+        File.WriteAllText(Path.Combine(_root, "main.cop"), """
+            import code
+            import csharp
+            let codebase = codebase(csharp.parse())
+            let message = 'Type {item.Name} in {item.File.Path}'
+            command MAIN = CHECK(codebase.Types:toError(message))
+            """);
+
+        var result = Engine.Run(_root, target, additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+
+        Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
+        Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]
+        {
+            "Input.cs(2): error: Type Alpha in Input.cs",
+            "Input.cs(3): error: Type Beta in Input.cs"
+        }));
+        Assert.That(result.ExitCode, Is.EqualTo(2));
+    }
+
+    [Test]
+    public void RegexCheckUsesSharedCodebaseSelection()
+    {
+        var target = Path.Combine(_root, "target");
+        var selected = Path.Combine(target, "selected");
+        Directory.CreateDirectory(selected);
+        File.WriteAllText(Path.Combine(selected, "Included.cs"), """
+            using System.Text.RegularExpressions;
+            namespace Fixture;
+            class Included { }
+            """);
+        File.WriteAllText(Path.Combine(target, "Excluded.cs"), """
+            using System.Text.RegularExpressions;
+            namespace Fixture;
+            class Excluded { }
+            """);
+        File.Copy(Path.Combine(_repo, "cop-checks", "csharp", "no-regex.cop"), Path.Combine(_root, "rule.cop"));
+        File.WriteAllText(Path.Combine(_root, "main.cop"), """
+            import code
+            import csharp
+            let codebase = codebase(csharp.parse('selected'))
+            command MAIN = CHECK(no-regex)
+            """);
+
+        var result = Engine.Run(_root, target, additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+
+        Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
+        Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]
+        {
+            "Included.cs(3): error: Included is in a file that imports System.Text.RegularExpressions — use recursive descent parsers: Included.cs"
+        }));
+        Assert.That(result.ExitCode, Is.EqualTo(1));
     }
 
     [TestCase("providers/java-provider/src/JavaSemanticContext.cs", "Discover", false)]
@@ -465,19 +610,24 @@ public class SelfCheckStructureTests
         Directory.CreateDirectory(scripts);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(target, file))!);
         File.WriteAllText(Path.Combine(target, file), source);
-        File.Copy(Path.Combine(_repo, "cop-checks", check), Path.Combine(scripts, "rule.cop"));
         File.WriteAllText(Path.Combine(scripts, "main.cop"), $"""
             import code
             import {language}
-            let codebase = codebase({language}.parse())
-            command MAIN = CHECK({binding})
+            command SELF_CHECK = CHECK({binding})
             """);
+        var checks = Path.Combine(_repo, "cop-checks");
+        var main = Path.Combine(checks, "main.cop");
+        var rule = Path.Combine(checks, check);
+        var files = Directory.GetFiles(checks, "*.cop", SearchOption.AllDirectories)
+            .Where(f => f != main && f != rule).Order(StringComparer.Ordinal)
+            .Append(rule).Append(main).Append(Path.Combine(scripts, "main.cop")).ToArray();
         var path = file.Replace('\\', '/');
         var expected = lines.Select(line =>
             $"{path}({line}): error: {string.Format(message, line)}").ToArray();
         for (int run = 0; run < 2; run++)
         {
-            var result = Engine.Run(scripts, target, additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+            var result = Engine.Run(checks, target, commandName: "SELF_CHECK", scriptFiles: files,
+                additionalFeedPaths: [Path.Combine(_repo, "packages")]);
             Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
             Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
             Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(expected), $"Run {run + 1}");

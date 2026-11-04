@@ -1,10 +1,7 @@
-# New runtime FFIs must be explicitly approved — the FFI surface must not grow silently.
-# Capabilities belong in .cop packages, not as new ffi.Register intrinsics in the language core.
-# (This is the guard that should have caught CHECK being moved into the runtime.)
+# Keep the runtime FFI small; implement domain-specific capabilities in .cop packages.
 
 import code
 
-# Approved built-in FFI names, compared to the decoded first string argument.
 let approved-ffi-names = [
     'print', 'debug', 'save', 'assert', 'fail', 'error', 'read',
     'pathMatches', 'provider', 'distinct', 'take', 'skip', 'first',
@@ -22,24 +19,25 @@ predicate isFfiRegistration(Statement) =>
     && Statement.MemberName:equals('Register')
     && hasFfiReceiver
 
-predicate registersApprovedName(Statement) => Statement.ArgumentExpressions.Count > 0
+predicate hasApprovedFfiName(Statement) => Statement.ArgumentExpressions.Count > 0
     && Statement.ArgumentExpressions[0].Kind == stringLiteral
     && Statement.ArgumentExpressions[0].StringValue:in(approved-ffi-names)
 
-# Only the FFI invocation test needs to register its own non-built-in callback.
-predicate isInFfiInvocationTest(Statement) =>
+# The invocation test registers 'double' to exercise a foreign call.
+predicate inFfiInvocationTest(Statement) =>
     Statement.File.Path == 'tests/lang.tests/lang/EvaluatorTests.cs'
     && Statement.Method.Name == 'EvalForeignFunction'
 
-predicate registersInvocationTestCallback(Statement) => Statement.ArgumentExpressions.Count > 0
+predicate hasDoubleName(Statement) => Statement.ArgumentExpressions.Count > 0
     && Statement.ArgumentExpressions[0].Kind == stringLiteral
     && Statement.ArgumentExpressions[0].StringValue == 'double'
 
-predicate isApprovedFfiTestRegistration(Statement) =>
-    isInFfiInvocationTest && registersInvocationTestCallback
+predicate hasFfiTestExemption(Statement) => inFfiInvocationTest && hasDoubleName
 
-predicate isUnapprovedFfi(Statement) =>
-    isFfiRegistration && !registersApprovedName && !isApprovedFfiTestRegistration
+predicate isUnapprovedRegistration(Statement) =>
+    isFfiRegistration && !hasApprovedFfiName && !hasFfiTestExemption
 
-export let no-new-ffi = codebase.Calls:isUnapprovedFfi
-    :toError('New runtime FFI registered without approval. The FFI surface must not grow — implement the capability as a .cop package, or get sign-off and add its name to approved-ffi-names.')
+let ffi-message = 'New runtime FFI registered without approval. The FFI surface must not grow — implement the capability as a .cop package, or get sign-off and add its name to approved-ffi-names.'
+
+export let no-new-ffi = codebase.Calls:isUnapprovedRegistration
+    :toError(ffi-message)

@@ -374,7 +374,8 @@ public sealed class CopQueryableProperty : CopValue
 
 /// <summary>
 /// A deferred computation (thunk). Self-forcing: accessing Display() or IsTruthy
-/// transparently forces evaluation. Memoized: the computation runs at most once.
+/// transparently forces evaluation. Ordinary computations are memoized; templates
+/// that read a supplied item are rendered separately for each item context.
 /// Cycle detection: forcing a thunk that is already being forced throws.
 /// </summary>
 public sealed class CopThunk : CopValue
@@ -389,19 +390,23 @@ public sealed class CopThunk : CopValue
     /// Force evaluation of this thunk. Returns the memoized result.
     /// Recursively forces if the result is itself a thunk.
     /// </summary>
-    public CopValue Force()
+    public CopValue Force() => _forced ?? ForceCore(() => (_compute(), true));
+
+    internal CopValue ForceTemplate(Func<(CopValue Value, bool Cache)> render) => ForceCore(render);
+
+    private CopValue ForceCore(Func<(CopValue Value, bool Cache)> compute)
     {
         if (_forced is not null) return _forced;
         if (_forcing) throw new CopEvaluationException("Recursive thunk forcing detected (infinite loop)");
         _forcing = true;
         try
         {
-            var result = _compute();
+            var (result, cache) = compute();
             // Recursively force nested thunks
             while (result is CopThunk nested)
                 result = nested.Force();
-            _forced = result;
-            return _forced;
+            if (cache) _forced = result;
+            return result;
         }
         finally { _forcing = false; }
     }
@@ -411,6 +416,7 @@ public sealed class CopThunk : CopValue
     internal CopValue? ForcedValue => _forced;
     internal Ast.Expression? ConstantExpression { get; init; }
     internal Environment? ConstantEnvironment { get; init; }
+    internal Func<Environment, CopValue>? EvaluateInEnvironment { get; init; }
 
     public override bool IsTruthy => Force().IsTruthy;
     public override string Display() => Force().Display();

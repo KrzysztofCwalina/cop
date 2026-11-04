@@ -26,7 +26,29 @@ public class OptionalLanguageDeploymentTests
     }
 
     [TearDown]
-    public void TearDown() => Directory.Delete(_root, recursive: true);
+    public Task TearDown() => DeleteDirectory(_root);
+
+    [Test]
+    [Platform("Win")]
+    public async Task Cleanup_WaitsForATemporaryExecutableLock()
+    {
+        var portable = Path.GetDirectoryName(_executable)!;
+        using var locked = File.Open(_executable, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var cleanup = DeleteDirectory(portable);
+        await Task.Delay(150);
+        locked.Dispose();
+        await cleanup;
+        Assert.That(Directory.Exists(portable), Is.False);
+    }
+
+    [Test]
+    [Platform("Win")]
+    public void Cleanup_ReportsAPersistentExecutableLock()
+    {
+        using var locked = File.Open(_executable, FileMode.Open, FileAccess.Read, FileShare.Read);
+        Assert.ThrowsAsync<IOException>(() => DeleteDirectory(Path.GetDirectoryName(_executable)!));
+        Assert.That(File.Exists(_executable), Is.True);
+    }
 
     [TestCase("csharp", ".cs", "class Alpha { void Run(string value) { ping(value); } }")]
     [TestCase("python", ".py", "class Alpha:\n    def Run(self, value):\n        ping(value)\n")]
@@ -101,6 +123,15 @@ public class OptionalLanguageDeploymentTests
         Assert.That(removed.Output.Trim(), Is.EqualTo("OPTIONAL 1 0"));
         Assert.That(removed.Error, Does.Contain("syntax-only"),
             "A previously extracted cache must never enable an uninstalled language dependency.");
+    }
+
+    private static async Task DeleteDirectory(string path)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try { Directory.Delete(path, recursive: true); return; }
+            catch (IOException) when (attempt < 20) { await Task.Delay(100); }
+        }
     }
 
     private string WriteProgram(string source)

@@ -1,12 +1,13 @@
-# Reject nonblank Nullable settings other than enable.
-# Empty and missing settings are not detected; this inspects parsed project properties.
+# Enable nullable reference types to catch null mistakes at compile time.
 
 import code
 
-predicate isNonEnabledNullableSetting(ProjectProperty) =>
+predicate isInvalidNullable(ProjectProperty) =>
     ProjectProperty.Name:equals('Nullable')
     && ProjectProperty.Value:notEquals('enable')
-predicate hasNonEnabledNullableSetting(Project) => Project.Properties:any(isNonEnabledNullableSetting)
+predicate hasInvalidNullable(Project) => Project.Properties:any(isInvalidNullable)
 
-export let derived-nullable-enabled = codebase.Projects:hasNonEnabledNullableSetting
-    :toError('Project {item.Name} must set <Nullable>enable</Nullable>')
+let nullable-setting-message = 'Project {item.Name} must set <Nullable>enable</Nullable>'
+
+export let derived-nullable-enabled = codebase.Projects:hasInvalidNullable
+    :toError(nullable-setting-message)

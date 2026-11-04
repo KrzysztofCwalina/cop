@@ -1,8 +1,8 @@
-# Require types with a TestFixture decorator to be named *Tests.
-# Every type carrying [TestFixture] in the repo follows the *Tests convention.
+# Name NUnit test fixtures *Tests so test classes are easy to recognize.
 
-predicate hasTestFixtureAttribute(Type) => Type.Decorators:contains('TestFixture')
 predicate lacksTestsSuffix(Type) => !Type.Name:endsWith('Tests')
 
-export let derived-test-class-naming = codebase.Types:hasTestFixtureAttribute:lacksTestsSuffix
-    :toError('Test fixture {item.Name} must be named *Tests ({item.File.Path})')
+let fixture-name-message = 'Test fixture {item.Name} must be named *Tests ({item.File.Path})'
+
+export let derived-test-class-naming = codebase.Types:hasTestFixture:lacksTestsSuffix
+    :toError(fixture-name-message)

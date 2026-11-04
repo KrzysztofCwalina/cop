@@ -1,9 +1,9 @@
-# Require type-containing files under providers/ to have a /src/ path segment.
-# A provider's C# source files belong under providers/<name>/src/ — the standard provider
-# package layout the build and packaging rely on. (Reported via the types in each file.)
+# Keep provider sources in src/ directories, as expected by the build and packaging.
 
-predicate isInProviderSourceFolder(Type) => Type.File.Path:startsWith('providers/')
-predicate lacksSrcPathSegment(Type) => !Type.File.Path:contains('/src/')
+predicate outsideSrc(File) => !File.Path:contains('/src/')
 
-export let derived-provider-sources-under-src = codebase.Types:isInProviderSourceFolder:lacksSrcPathSegment
-    :toError('{item.Name} is a provider source outside a src/ folder ({item.File.Path})')
+let provider-location-message = '{item.Name} is a provider source outside a src/ folder ({item.File.Path})'
+
+export let derived-provider-sources-under-src = codebase.Types
+    .Where(inProviders(item.File) && outsideSrc(item.File))
+    :toError(provider-location-message)

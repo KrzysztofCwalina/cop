@@ -1,18 +1,13 @@
-# Reject C# interfaces except ICopCallable and sample/example/test fixtures.
-# Use abstract classes for new production abstractions.
-# ICopCallable must remain an interface (multiple inheritance with CopValue)
+# Use abstract classes for production abstractions instead of new interfaces.
 
+# ICopCallable lets callable values retain their CopValue base class.
 let allowed-interfaces = ['ICopCallable']
 
-# Sample/example/test fixtures are illustrative code, not production — skip them.
-predicate isInterfaceExemptFixture(Type) => Type.File.Path:startsWith('samples/')
-    || Type.File.Path:startsWith('examples/')
-    || Type.File.Path:startsWith('tests/')
-
-predicate isCSharpInterface(Type:isCSharp) => Type.Kind == Interface
+predicate isInterface(Type) => Type.Kind == Interface
 predicate isApprovedInterface(Type) => allowed-interfaces:contains(Type.Name)
-predicate isDisallowedInterface(Type:isCSharp) =>
-    isCSharpInterface && !isApprovedInterface && !isInterfaceExemptFixture
 
-export let no-new-interfaces = codebase.Types:isDisallowedInterface
-    :toError('Do not add new interfaces — use abstract classes instead: {item.Name} in {item.File.Path}')
+let interface-message = 'Do not add new interfaces — use abstract classes instead: {item.Name} in {item.File.Path}'
+
+export let no-new-interfaces = codebase.Types:isCSharp:isInterface
+    .Where(!isApprovedInterface(item) && !inTestsSamplesOrExamples(item.File))
+    :toError(interface-message)

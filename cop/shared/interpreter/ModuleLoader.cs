@@ -235,13 +235,7 @@ public sealed class ModuleLoader
         {
             try
             {
-                var capturedLd = ld;
-                var capturedModuleEnv = moduleEnv;
-                var thunk = new CopThunk(() => evaluator.EvalLetBinding(capturedLd, capturedModuleEnv))
-                {
-                    ConstantExpression = capturedLd.Value,
-                    ConstantEnvironment = capturedModuleEnv
-                };
+                var thunk = evaluator.CreateLetBinding(ld, moduleEnv);
 
                 // Always register in the module env (for module-local access)
                 moduleEnv.Define(ld.Name, thunk);

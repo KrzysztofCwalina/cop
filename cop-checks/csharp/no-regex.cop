@@ -1,24 +1,18 @@
-# Flag types in C# files importing regex, except the approved :matches()/glob infrastructure.
-# This checks imports and type names, not every possible regex call.
+# Reserve regex for :matches() and glob matching; use parsers elsewhere.
 
 import code
 import csharp
 
-# A type is in a file that uses regex if the file imports RegularExpressions
-predicate isInFileImportingRegex(Type) =>
-    Type.File.Usings:contains('System.Text.RegularExpressions')
+predicate importsRegex(File) => File.Usings:contains('System.Text.RegularExpressions')
 
-# Exclude types in files that implement the :matches() intrinsic:
-#   - RegexCache: the compiled regex cache
-#   - FilterCompiler/FilterEvaluator: filter dispatch for :matches()
-#   - StandardLibrary: the matches() function and glob expansion
-predicate hasRegexInfrastructureName(Type) =>
-    Type.Name:contains('RegexCache')
-    || Type.Name:contains('FilterCompiler')
-    || Type.Name:contains('FilterEvaluator')
-    || Type.Name:contains('StandardLibrary')
-predicate isOutsideRegexInfrastructure(Type) => !hasRegexInfrastructureName
+predicate typesAllowedToUseRegex(Type) =>
+    Type.Name:contains('RegexCache') ||
+    Type.Name:contains('FilterCompiler') ||
+    Type.Name:contains('FilterEvaluator') ||
+    Type.Name:contains('StandardLibrary')
 
-let regex-check-types : [Type] = csharp.parse().Types
-export let no-regex = regex-check-types:isInFileImportingRegex:isOutsideRegexInfrastructure
-    :toError('{item.Name} is in a file that imports System.Text.RegularExpressions — use recursive descent parsers: {item.File.Path}')
+let regex-message = '{item.Name} is in a file that imports System.Text.RegularExpressions — use recursive descent parsers: {item.File.Path}'
+
+export let no-regex = codebase.Types:isCSharp
+    .Where(importsRegex(item.File) && !typesAllowedToUseRegex(item))
+    :toError(regex-message)

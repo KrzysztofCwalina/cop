@@ -1,9 +1,8 @@
-# Require types with a DataProvider base to be named *Provider.
-# Load-bearing — DataProvider.ToString() derives the provider's display name by
-# stripping the 'Provider' suffix, so a misnamed subclass breaks provider naming.
+# Name DataProvider subclasses *Provider; their display names omit the suffix.
 
-predicate derivesFromDataProvider(Type) => Type.BaseTypes:contains('DataProvider')
 predicate lacksProviderSuffix(Type) => !Type.Name:endsWith('Provider')
 
-export let derived-provider-naming = codebase.Types:derivesFromDataProvider:lacksProviderSuffix
-    :toError('{item.Name} extends DataProvider but is not named *Provider ({item.File.Path})')
+let provider-name-message = '{item.Name} extends DataProvider but is not named *Provider ({item.File.Path})'
+
+export let derived-provider-naming = codebase.Types:extendsDataProvider:lacksProviderSuffix
+    :toError(provider-name-message)
