@@ -26,10 +26,51 @@ no `Framework` suffix, but `callsUnqualifiedCodebase` keeps `Unqualified` becaus
 calls are excluded. Imports and paths are predicates on `File`, not claims about a type's
 behavior. Approval predicates explicitly describe policy exceptions.
 
+Put predicate bodies on the line after `=>`. Format compound Boolean expressions
+with one condition per line and trailing `&&` or `||`, preserving parentheses.
+Keep Cop source lines within 90 characters, including comments and message templates.
+Put message literals on the line after `=` and keep diagnostics concise and actionable.
+
+Use named collections to make a rule's policy readable from top to bottom. The
+environment rule defines each allowed group of calls separately, combines them
+into `allowed-calls`, and reports `env-calls - allowed-calls`. Put that policy
+first, followed by its supporting collections and parsed-argument helpers.
+Explain the architectural reason for each allowance, not what the implementation does.
+The environment supplies execution context; it must not become a second configuration API.
+Runtime credentials stay separate from shareable configuration, dependency locations belong
+to the host, installation owns host setup, and unsupported context must be reported rather
+than silently accepted. These principles should make sense without knowing Cop's implementation.
+Define file exclusions in a `source-files` collection instead of rule predicates.
+Avoid nesting argument inspection inside exception-table joins.
+
 Sibling files share one namespace. Reused facts live in `main.cop`, and individual rules
-combine them with filters and `Where` expressions. Different path sets stay distinct:
-`inTestsOrSamples` is not interchangeable with `inSamplesOrExamples`. Individual rule
-IDs remain stable; the aggregate lists are `default-violations`, `derived-violations`,
+combine them with filters and `Where` expressions. File scopes also live in `main.cop`:
+
+| Collection | Excludes |
+|------------|----------|
+| `source-files` | `tests/`, `samples/` |
+| `source-files-without-examples` | `tests/`, `samples/`, `examples/` |
+| `non-test-files` | `tests/` |
+| `files-without-samples-or-examples` | `samples/`, `examples/` |
+
+These scopes are intentionally different; use the one matching the rule's policy.
+`main.cop` also defines `source-calls`: C# calls from `source-files`. Call rules use
+this pre-filtered collection directly, e.g. `source-calls:isEnvironmentVariableAccess`,
+without repeating language filters or file membership checks.
+`non-test-calls` contains calls from `non-test-files`, in any parsed language.
+Use it when only tests are exempt; samples and examples remain checked.
+`source-types-without-examples` selects parsed types from `source-files-without-examples`.
+The interface policy delegates selection to `code.interfacesExcept(types, allowedNames)`.
+Its allowlist, C# scope, and recommendation to use abstract classes stay in the local rule.
+
+Reusable queries belong in packages; repository policy does not. `code` supplies parsed
+import/reference/property queries, declaration and call matching, argument inspection,
+suppression facts, and count comparisons. C#-specific fact predicates live in `csharp`.
+Do not put repository paths, framework choices, approved names, severity, or architectural
+messages into these APIs. Language check packages use the same common queries while
+retaining their own naming conventions, thresholds, suppressions, and diagnostics.
+
+Individual rule IDs remain stable; the aggregate lists are `default-violations`, `derived-violations`,
 `ai-violations`, and `package-violations`.
 
 Give each diagnostic template a private, rule-specific `let` immediately before the
@@ -39,7 +80,8 @@ violation list, and pass its name to `toError`. For example:
 let namespace-message = '{item.Name} in {item.File.Path} must be in a namespace'
 
 export let types-without-namespace = codebase.Types:isCSharp
-    .Where(!hasNamespace(item) && !inTestsOrSamples(item.File))
+    .Where(item.File.Path:in(source-files.Path))
+    .Where(!hasNamespace(item))
     :toError(namespace-message)
 ```
 
@@ -59,7 +101,7 @@ allowlists are unchanged.
 | `csharp/no-interfaces.cop` | Reject interfaces except `ICopCallable` and code under `tests/`, `samples/`, or `examples/`. |
 | `general/runtime-no-provider-dependencies.cop` | Reject references from `runtime` to listed provider projects; `filesystem-provider` is allowed. |
 | `csharp/cli-no-aspnet-framework.cop` | Keep ASP.NET framework references out of the single-file CLI publish project. |
-| `csharp/no-new-ffi.cop` | FFI registrations require an approved first literal argument, with one narrowly scoped invocation-test exception. |
+| `csharp/no-new-ffi.cop` | Outside `tests/`, FFI registrations require an approved first literal argument; test-only registrations do not expand the shipped API. |
 | `csharp/no-regex.cop` | Flag types in files importing regex unless their names contain an approved substring. |
 | `csharp/no-environment.cop` | Reject unreviewed environment-variable access; allow secret names, PATH reads, installer PATH access, and reviewed frontend context reads. |
 | `cop/packages/language-checks-require-parser.cop` | Reject unqualified `codebase(Program.Providers)` calls in known language-specific package paths; run through the package-source entry point. |

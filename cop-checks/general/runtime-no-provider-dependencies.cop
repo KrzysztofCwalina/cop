@@ -15,11 +15,11 @@ let forbidden-providers = [
     'cop-provider'
 ]
 
-predicate isRuntime(Project) => Project.Name:in(runtime-projects)
-predicate isForbiddenProvider(string) => string:in(forbidden-providers)
-predicate referencesForbiddenProvider(Project) => Project.References:any(isForbiddenProvider)
+predicate isRuntime(Project) =>
+    Project.Name:in(runtime-projects)
+let runtime-dependency-message =
+    '{item.Name} must not reference providers other than filesystem-provider'
 
-let runtime-dependency-message = '{item.Name} must not reference providers other than filesystem-provider'
-
-export let layering-violations = codebase.Projects:isRuntime:referencesForbiddenProvider
+export let layering-violations = codebase.Projects:isRuntime
+    .Where(referencesAny(item, forbidden-providers))
     :toError(runtime-dependency-message)

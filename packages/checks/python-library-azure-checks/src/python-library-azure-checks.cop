@@ -50,8 +50,8 @@ export let delete-returns-none = Clients:hasDeleteReturnsValue
     :toWarning('{item.Name} delete method should return None or LROPoller[None]')
 
 # raise_with_traceback: use raise ... from instead
-predicate isUsingRaiseWithTraceback(Statement) => Statement.Kind == 'call'
-    && Statement.MemberName == 'raise_with_traceback'
+predicate isUsingRaiseWithTraceback(Statement) =>
+    isCall && Statement:hasMemberName(['raise_with_traceback'])
 
 ## Do not use raise_with_traceback; use raise ... from syntax
 export let no-raise-with-traceback = statements():isUsingRaiseWithTraceback
@@ -65,19 +65,19 @@ export let no-legacy-typing = lines():hasLegacyTypeComment
     :toWarning('Do not use type comments — use Python 3.9+ type annotations instead')
 
 # asyncio import when azure.core transport sleep should be used
-predicate isImportingAsyncio(Statement) => Statement.Kind == 'call'
-    && Statement.TypeName == 'asyncio' && Statement.MemberName == 'sleep'
+predicate isImportingAsyncio(Statement) =>
+    isCall && Statement:hasTypeName(['asyncio']) && Statement:hasMemberName(['sleep'])
 
 ## Do not use asyncio.sleep; use transport sleep from azure.core
 export let no-asyncio-sleep = statements():isImportingAsyncio
     :toWarning('Use azure.core pipeline transport sleep instead of asyncio.sleep')
 
 # Logging exceptions at non-debug levels
-predicate isLoggingExceptionNotDebug(Statement) => Statement.Kind == 'call'
-    && (Statement.TypeName:contains('log') || Statement.TypeName:contains('logger'))
-    && (Statement.MemberName == 'warning' || Statement.MemberName == 'error'
-        || Statement.MemberName == 'info' || Statement.MemberName == 'critical')
-    && Statement.Arguments:contains('exc_info')
+predicate isLoggingExceptionNotDebug(Statement) =>
+    isCall &&
+    (Statement.TypeName:contains('log') || Statement.TypeName:contains('logger')) &&
+    Statement:hasMemberName(['warning', 'error', 'info', 'critical']) &&
+    Statement.Arguments:contains('exc_info')
 
 ## Do not log exceptions at non-debug levels (may reveal sensitive info)
 export let no-log-exceptions-above-debug = statements():isLoggingExceptionNotDebug
@@ -97,12 +97,12 @@ export let missing-tracing-decorator = Clients:hasMissingTracing
     :toWarning('{item.Name} has a public method without @distributed_trace decorator')
 
 # Deprecated imports: six
-predicate isImportingSix(Statement) => Statement.Kind == 'call'
-    && Statement.TypeName == 'six'
+predicate isImportingSix(Statement) =>
+    isCall && Statement:hasTypeName(['six'])
 
 # Enum values must be uppercase
-predicate isEnumBase(Type) => Type.BaseTypes:contains('Enum')
-    || Type.BaseTypes:contains('str')
+predicate isEnumBase(Type) =>
+    Type:derivesFromAny(['Enum', 'str'])
 predicate isEnumLike(Type) => Type.Kind == 'Class' && isEnumBase
 
 ## All Azure Python client library checks combined

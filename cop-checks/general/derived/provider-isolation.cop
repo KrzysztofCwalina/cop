@@ -18,12 +18,12 @@ let provider-names = [
     'typespec-provider'
 ]
 
-predicate isListedProviderName(string) => string:in(provider-names)
-predicate isListedProvider(Project) => Project.Name:in(provider-names)
-predicate referencesListedProvider(Project) => Project.References:any(isListedProviderName)
+predicate isListedProvider(Project) =>
+    Project.Name:in(provider-names)
 
-let provider-dependency-message = 'Provider project {item.Name} must not reference another provider project'
+let provider-dependency-message =
+    'Provider project {item.Name} must not reference another provider project'
 
-export let derived-provider-isolation = codebase.Projects
-    :isListedProvider:referencesListedProvider
+export let derived-provider-isolation = codebase.Projects:isListedProvider
+    .Where(referencesAny(item, provider-names))
     :toError(provider-dependency-message)

@@ -1,9 +1,13 @@
 # Keep provider sources in src/ directories, as expected by the build and packaging.
 
-predicate outsideSrc(File) => !File.Path:contains('/src/')
+predicate outsideSrc(File) =>
+    !File.Path:contains('/src/')
 
-let provider-location-message = '{item.Name} is a provider source outside a src/ folder ({item.File.Path})'
+let provider-location-message =
+    '{item.Name} is a provider source outside a src/ folder ({item.File.Path})'
 
 export let derived-provider-sources-under-src = codebase.Types
-    .Where(inProviders(item.File) && outsideSrc(item.File))
+    .Where(
+        inProviders(item.File) &&
+        outsideSrc(item.File))
     :toError(provider-location-message)

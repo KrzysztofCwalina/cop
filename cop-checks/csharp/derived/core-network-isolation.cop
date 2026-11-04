@@ -1,12 +1,16 @@
-# Keep networking imports out of the interpreter and runtime; providers handle network I/O.
+# Keep networking imports out of the interpreter and runtime.
+# Providers handle network I/O.
 
-predicate importsNetworking(File) =>
-    File.Usings:contains('System.Net')
-    || File.Usings:contains('System.Net.Http')
-    || File.Usings:contains('System.Net.Sockets')
+let networking-namespaces = ['System.Net', 'System.Net.Http', 'System.Net.Sockets']
 
-let core-network-message = '{item.Name} performs network I/O in the language core — move network access to a provider ({item.File.Path})'
+let core-network-message =
+    '{item.Name}: networking belongs in providers, not the language core'
 
 export let derived-core-network-isolation = codebase.Types
-    .Where((inInterpreter(item.File) || inRuntime(item.File)) && importsNetworking(item.File))
+    .Where(
+        (
+            inInterpreter(item.File) ||
+            inRuntime(item.File)
+        ) &&
+        importsAny(item.File, networking-namespaces))
     :toError(core-network-message)

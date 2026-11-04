@@ -1,7 +1,9 @@
 # Reserve the Exception suffix for types derived from Exception.
 
-let exception-base-message = '{item.Name} is named *Exception but does not derive from Exception ({item.File.Path})'
+let exception-base-message =
+    '{item.Name} is named *Exception but does not derive from Exception'
 
 export let derived-exception-suffix-implies-base = codebase.Types:hasExceptionSuffix
-    .Where(!hasExceptionBase(item) && !inTestsOrSamples(item.File))
+    .Where(item.File.Path:in(source-files.Path))
+    .Where(!hasExceptionBase(item))
     :toError(exception-base-message)

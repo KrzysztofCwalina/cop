@@ -3,7 +3,8 @@
 import code
 import csharp
 
-predicate importsRegex(File) => File.Usings:contains('System.Text.RegularExpressions')
+predicate importsRegex(File) =>
+    importsAny(File, ['System.Text.RegularExpressions'])
 
 predicate typesAllowedToUseRegex(Type) =>
     Type.Name:contains('RegexCache') ||
@@ -11,8 +12,11 @@ predicate typesAllowedToUseRegex(Type) =>
     Type.Name:contains('FilterEvaluator') ||
     Type.Name:contains('StandardLibrary')
 
-let regex-message = '{item.Name} is in a file that imports System.Text.RegularExpressions — use recursive descent parsers: {item.File.Path}'
+let regex-message =
+    '{item.Name}: use parsers instead of System.Text.RegularExpressions'
 
 export let no-regex = codebase.Types:isCSharp
-    .Where(importsRegex(item.File) && !typesAllowedToUseRegex(item))
+    .Where(
+        importsRegex(item.File) &&
+        !typesAllowedToUseRegex(item))
     :toError(regex-message)

@@ -1,9 +1,13 @@
 # Keep the language independent of code-analysis types; use generic provider data instead.
 
-predicate importsCodeModel(File) => File.Usings:contains('Cop.Providers.SourceModel')
+predicate importsCodeModel(File) =>
+    importsAny(File, ['Cop.Providers.SourceModel'])
 
-let language-code-model-message = '{item.Name} (in the Cop language, cop/shared) imports the C# code model Cop.Providers.SourceModel — the language must stay general-purpose ({item.File.Path})'
+let language-code-model-message =
+    '{item.Name}: remove Cop.Providers.SourceModel; keep the language general-purpose'
 
 export let derived-language-no-code-model = codebase.Types
-    .Where(inShared(item.File) && importsCodeModel(item.File))
+    .Where(
+        inShared(item.File) &&
+        importsCodeModel(item.File))
     :toError(language-code-model-message)

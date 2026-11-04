@@ -1,10 +1,14 @@
 # CLI commands are entry points, not objects; their classes must be static.
 
-predicate inCliCommands(File) => File.Path:contains('cop/cli/commands/')
-predicate hasCommandSuffix(Type) => Type.Name:endsWith('Command')
-predicate isNotStatic(Type) => !Type.Modifiers:isSet(Static)
+predicate inCliCommands(File) =>
+    File.Path:contains('cop/cli/commands/')
+predicate hasCommandSuffix(Type) =>
+    Type.Name:endsWith('Command')
+predicate isNotStatic(Type) =>
+    !Type.Modifiers:isSet(Static)
 
-let static-command-message = 'CLI command {item.Name} must be a static class ({item.File.Path})'
+let static-command-message =
+    'CLI command {item.Name} must be a static class ({item.File.Path})'
 
 export let derived-cli-commands-are-static = codebase.Types:hasCommandSuffix:isNotStatic
     .Where(inCliCommands(item.File))

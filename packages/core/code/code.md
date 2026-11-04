@@ -14,6 +14,69 @@ Defines the type system for source code structural analysis. Import with `import
 Provides types for: Type, Method, Constructor, Parameter, TypeReference, Statement, Argument, Line, File.
 Provides collections for: Types, Statements, Lines, Files.
 
+## Project-independent queries
+
+The query helpers inspect only caller-supplied parsed facts. They do not parse source,
+exclude directories, choose approved names, print diagnostics, or prescribe architecture.
+Keep thresholds, allowlists, exclusions, severity, and diagnostic wording in the caller.
+
+| Area | Helpers |
+|------|---------|
+| Imports | `importsAny(File, names)` |
+| Projects | `referencesAny`, `hasPackage`, `hasFramework` |
+| Properties | `hasProjectProperty`, `hasProjectPropertyValue`, `hasOtherProjectPropertyValue` |
+| Declarations | `derivesFromAny`, `hasDecorator`, `hasNamespace`, `interfacesExcept` |
+| Named statements | `hasMemberName`, `hasTypeName` |
+| Expressions | `isIdentifier`, `isMemberOf`, `hasIdentifierReceiver`, `hasMemberReceiver` |
+| Arguments | `hasStringArgument`, `hasStringArgumentIn`, `hasIdentifierArgument` |
+| Argument contents | `stringArgumentContainsAny` |
+| Handlers/suppression | `isUnrethrowingGenericHandler`, `isUnsuppressed` |
+| Counts | `hasParameterCountAbove`, `hasStatementCountAbove` |
+
+Member, type, expression, and single-argument name comparisons are case-sensitive.
+`isIdentifierIgnoringCase`, `isMemberOfIgnoringCase`, and
+`hasIdentifierReceiverIgnoringCase` opt into case-insensitive expression matching.
+List membership for imports, references, bases, decorators, interface allowlists, and
+`hasStringArgumentIn` uses Cop's case-insensitive string membership. Property names and
+values also use case-insensitive comparison.
+
+Argument indices are zero-based. Negative or out-of-range indices, nonmatching kinds,
+and unsupported expressions return false. A string argument means a decoded literal,
+not an expression that happens to contain the same source text.
+
+These are queries, not additional compiler resolution. Imports match exact entries in
+`File.Usings`; receiver queries describe parsed syntax, not the identity of a resolved
+symbol. Base-type queries inspect the supplied names, not transitive inheritance.
+`hasNamespace` tests the declaring file's namespace. Count queries use supplied parsed
+collections, not physical source lines.
+
+Project-property helpers inspect only properties exposed by the selected provider.
+`hasOtherProjectPropertyValue` detects a declared differing value; it does not treat a
+missing property as invalid. Use `hasProjectProperty` separately to require presence.
+The C# provider currently exposes selected project settings, not every MSBuild property.
+
+### Interface allowlists
+
+`code.interfacesExcept(types, allowedNames)` returns interface declarations outside the
+supplied allowlist, regardless of language. Classes and other type kinds are ignored.
+The caller supplies the diagnostic and decides what alternative design is appropriate.
+
+```cop
+import code
+import csharp
+
+let cb = codebase(csharp.parse())
+let allowed-interfaces = ['IPluginContract']
+let unexpected = code.interfacesExcept(cb.Types, allowed-interfaces)
+let interface-message = 'Interface {item.Name} is not permitted here'
+
+command MAIN = CHECK(unexpected:toError(interface-message))
+```
+
+Pass a scoped type collection to exclude tests, samples, or other project-specific
+directories. Only declarations exposed in that collection are inspected; the current
+C# provider's `Codebase.Types` collection exposes top-level types.
+
 ## Author structural rules from parsed facts
 
 Start with `cop help code`, then `cop help <language>` for language-specific properties.

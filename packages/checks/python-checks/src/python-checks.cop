@@ -6,55 +6,53 @@ import python
 let cb = codebase(python.parse())
 
 # Honor `# cop-ignore: <check>` comments — exempt the next statement/line from these checks.
-predicate notIgnored(Statement) => Statement.CopIgnore == ''
-predicate lineNotIgnored(Line) => Line.CopIgnore == ''
 
 ## Correctness Checks
 
 # Avoid print() — use logging
-predicate isPrintCall(Statement) => Statement.Kind == 'call' && Statement.MemberName == 'print'
+predicate isPrintCall(Statement) =>
+    isCall && Statement:hasMemberName(['print'])
 
 ## Avoid print() — use logging instead
-export let print-calls = cb.Statements:isPrintCall:notIgnored
+export let print-calls = cb.Statements:isPrintCall:isUnsuppressed
     :toWarning('Avoid print() — use logging instead', nameof(print-calls))
 
 # Do not use bare except — catch a specific exception type
-predicate isBareExcept(Statement) => Statement.ErrorHandler == true && Statement.TypeName == nic
+predicate isBareExcept(Statement) =>
+    isErrorHandler && Statement.TypeName == nic
 
 ## Do not use bare except — catch a specific exception type
-export let bare-except-clauses = cb.Statements:isBareExcept:notIgnored
+export let bare-except-clauses = cb.Statements:isBareExcept:isUnsuppressed
     :toWarning('Do not use bare except — catch a specific exception type', nameof(bare-except-clauses))
 
 # Do not silence Exception — reraise or catch a specific type
 predicate isCatchingException(Statement) => Statement.ErrorHandler == true
     && Statement.Generic == true
 
-predicate isSwallowingException(Statement) => Statement.ErrorHandler == true
-    && Statement.Generic == true && !Statement.Rethrows
-
 ## Do not silence Exception — reraise or catch a specific type
-export let silenced-exceptions = cb.Statements:isSwallowingException:notIgnored
+export let silenced-exceptions = cb.Statements:isUnrethrowingGenericHandler:isUnsuppressed
     :toWarning('Do not silence Exception — reraise or catch a specific type', nameof(silenced-exceptions))
 
 # Do not import the six package (Python 2 compatibility layer)
 predicate isImportingSix(Line) => Line.Text:matches('^(import six|from six)')
 
 ## Do not import the six package — Python 2 is no longer supported
-export let no-six-import = cb.Lines:isImportingSix:lineNotIgnored
+export let no-six-import = cb.Lines:isImportingSix:isUnsuppressed
     :toError('Do not import six — Python 2 is no longer supported', nameof(no-six-import))
 
 # Do not use legacy typing via comments — use Python 3.9+ type hints
 predicate hasLegacyTypingComment(Line) => Line.Text:matches('#\\s*type:')
 
 ## Do not use legacy type comments — use Python 3.9+ type annotations
-export let no-legacy-typing = cb.Lines:hasLegacyTypingComment:lineNotIgnored
+export let no-legacy-typing = cb.Lines:hasLegacyTypingComment:isUnsuppressed
     :toWarning('Do not use type comments — use Python 3.9+ type annotations', nameof(no-legacy-typing))
 
 # eval() is a security risk
-predicate isEvalCall(Statement) => Statement.Kind == 'call' && Statement.MemberName == 'eval'
+predicate isEvalCall(Statement) =>
+    isCall && Statement:hasMemberName(['eval'])
 
 ## Do not use eval() — it is a security risk
-export let no-eval = cb.Statements:isEvalCall:notIgnored
+export let no-eval = cb.Statements:isEvalCall:isUnsuppressed
     :toError('Do not use eval() — it is a security risk', nameof(no-eval))
 
 ## Combined correctness checks
@@ -85,7 +83,7 @@ export let function-name-casing = cb.Types:hasNonSnakeCaseMethods
 predicate isWildcardImport(Line) => Line.Text:matches('^\\s*from\\s+\\S+\\s+import\\s+\\*')
 
 ## Avoid wildcard imports — import specific names instead
-export let import-wildcard = cb.Lines:isWildcardImport:lineNotIgnored
+export let import-wildcard = cb.Lines:isWildcardImport:isUnsuppressed
     :toWarning('Avoid wildcard imports — import specific names instead', nameof(import-wildcard))
 
 # Mutable default arguments
@@ -106,14 +104,14 @@ export let mutable-default-arg = cb.Types:hasMutableDefaults
 predicate hasTrailingWhitespace(Line) => Line.Text:matches('\\S\\s+$')
 
 ## Lines should not have trailing whitespace
-export let trailing-whitespace = cb.Lines:hasTrailingWhitespace:lineNotIgnored
+export let trailing-whitespace = cb.Lines:hasTrailingWhitespace:isUnsuppressed
     :toInfo('Line has trailing whitespace', nameof(trailing-whitespace))
 
 # Mixed indentation (tabs)
 predicate hasTabs(Line) => Line.Text:matches('^\\t')
 
 ## Use spaces for indentation, not tabs
-export let mixed-indentation = cb.Lines:hasTabs:lineNotIgnored
+export let mixed-indentation = cb.Lines:hasTabs:isUnsuppressed
     :toWarning('Use spaces for indentation, not tabs (PEP 8)', nameof(mixed-indentation))
 
 ## Combined style checks
@@ -125,7 +123,7 @@ export let python-style-checks = class-name-casing + function-name-casing + impo
 predicate isNoneEquality(Line) => Line.Text:matches('==\\s*None') || Line.Text:matches('!=\\s*None')
 
 ## Use 'is None' or 'is not None' instead of '== None' / '!= None'
-export let none-comparison = cb.Lines:isNoneEquality:lineNotIgnored
+export let none-comparison = cb.Lines:isNoneEquality:isUnsuppressed
     :toWarning('Use "is None" or "is not None" instead of equality comparison', nameof(none-comparison))
 
 # Use isinstance() instead of type() comparison
@@ -133,7 +131,7 @@ predicate isTypeComparison(Line) => Line.Text:matches('type\\s*\\(.*\\)\\s*==')
     || Line.Text:matches('type\\s*\\(.*\\)\\s*is\\s')
 
 ## Use isinstance() instead of type() comparison
-export let type-comparison = cb.Lines:isTypeComparison:lineNotIgnored
+export let type-comparison = cb.Lines:isTypeComparison:isUnsuppressed
     :toWarning('Use isinstance() instead of type() comparison', nameof(type-comparison))
 
 # Prefer f-strings over % formatting
@@ -141,21 +139,21 @@ predicate isPercentFormat(Line) => Line.Text:matches('%[sdrf]') && Line.Text:mat
     || Line.Text:matches('\\.format\\s*\\(')
 
 ## Prefer f-strings over %-style string formatting
-export let old-style-format = cb.Lines:isPercentFormat:lineNotIgnored
+export let old-style-format = cb.Lines:isPercentFormat:isUnsuppressed
     :toInfo('Prefer f-strings over %-style string formatting', nameof(old-style-format))
 
 # Prefer enumerate() over range(len(...))
 predicate isRangeLen(Line) => Line.Text:matches('range\\s*\\(\\s*len\\s*\\(')
 
 ## Use enumerate() instead of range(len(...))
-export let range-len-pattern = cb.Lines:isRangeLen:lineNotIgnored
+export let range-len-pattern = cb.Lines:isRangeLen:isUnsuppressed
     :toWarning('Use enumerate() instead of range(len(...))', nameof(range-len-pattern))
 
 # Avoid global statement
 predicate isGlobalStatement(Line) => Line.Text:matches('^\\s*global\\s+')
 
 ## Avoid the global statement — pass values as parameters or use a class
-export let global-statement = cb.Lines:isGlobalStatement:lineNotIgnored
+export let global-statement = cb.Lines:isGlobalStatement:isUnsuppressed
     :toWarning('Avoid the global statement — pass values as parameters or use a class', nameof(global-statement))
 
 ## Combined idiom checks
@@ -164,9 +162,8 @@ export let python-idiom-checks = none-comparison + type-comparison + old-style-f
 ## Quality Checks
 
 # Too many parameters (>5, excluding self/cls)
-predicate hasExcessiveParams(Method) => Method:isPublic
-    && Method.Parameters.Count > 5
-    && !Method.Name:startsWith('_')
+predicate hasExcessiveParams(Method) =>
+    Method:isPublic && Method:hasParameterCountAbove(5) && !Method.Name:startsWith('_')
 
 predicate hasTooManyParams(Type) => Type.Methods:any(hasExcessiveParams)
 
@@ -175,19 +172,19 @@ export let too-many-params = cb.Types:hasTooManyParams
     :toWarning('{item.Name} has methods with more than 5 parameters', nameof(too-many-params))
 
 # Empty except body (except with only pass)
-predicate isEmptyExcept(Statement) => Statement.ErrorHandler == true
-    && Statement.Children.Count == 0
+predicate isEmptyExcept(Statement) =>
+    isErrorHandler && Statement.Children.Count == 0
 
 ## Do not use empty except blocks — handle or log the exception
-export let empty-except-body = cb.Statements:isEmptyExcept:notIgnored
+export let empty-except-body = cb.Statements:isEmptyExcept:isUnsuppressed
     :toWarning('Empty except block — handle or log the exception instead of silencing it', nameof(empty-except-body))
 
 # Raising generic Exception()
-predicate isRaisingGenericException(Statement) => Statement.Kind == 'throw'
-    && (Statement.TypeName == 'Exception' || Statement.TypeName == 'BaseException')
+predicate isRaisingGenericException(Statement) =>
+    Statement.Kind == 'throw' && Statement:hasTypeName(['Exception', 'BaseException'])
 
 ## Raise specific exception types instead of generic Exception
-export let broad-exception-raise = cb.Statements:isRaisingGenericException:notIgnored
+export let broad-exception-raise = cb.Statements:isRaisingGenericException:isUnsuppressed
     :toWarning('Raise a specific exception type instead of generic Exception', nameof(broad-exception-raise))
 
 ## Combined quality checks

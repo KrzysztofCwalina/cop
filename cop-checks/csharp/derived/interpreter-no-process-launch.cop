@@ -1,8 +1,10 @@
 # Keep process execution in providers; the interpreter must not reference Process.
 
-predicate referencesProcess(Statement) => Statement.TypeName:equals('Process')
+predicate referencesProcess(Statement) =>
+    Statement.TypeName:equals('Process')
 
-let process-launch-message = 'The evaluator must not launch processes — move it to a provider ({item.File.Path}:{item.Line})'
+let process-launch-message =
+    'The interpreter must not launch processes; use a provider'
 
 export let derived-interpreter-no-process-launch = codebase.Statements:referencesProcess
     .Where(inInterpreter(item.File))

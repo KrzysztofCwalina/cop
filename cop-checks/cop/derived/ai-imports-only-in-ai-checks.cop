@@ -1,10 +1,16 @@
 # Keep default checks deterministic; only *core-purity.cop files may import ai.
 
-predicate importsAi(Statement) => Statement.Kind == import && Statement.MemberName:equals('ai')
-predicate hasCorePuritySuffix(File) => File.Path:endsWith('core-purity.cop')
+predicate importsAi(Statement) =>
+    Statement.Kind == import &&
+    Statement.MemberName:equals('ai')
+predicate hasCorePuritySuffix(File) =>
+    File.Path:endsWith('core-purity.cop')
 
-let ai-import-message = 'Only the designated AI check (core-purity.cop) may import ai — keep the default suite deterministic ({item.File.Path})'
+let ai-import-message =
+    'Only core-purity.cop may import ai; keep default checks deterministic'
 
 export let derived-ai-imports-only-in-ai-checks = codebase.Statements:importsAi
-    .Where(inChecks(item.File) && !hasCorePuritySuffix(item.File))
+    .Where(
+        inChecks(item.File) &&
+        !hasCorePuritySuffix(item.File))
     :toError(ai-import-message)

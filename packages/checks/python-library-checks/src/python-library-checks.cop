@@ -82,7 +82,8 @@ export let no-static-methods = Clients:hasStaticMethod
     :toWarning('{item.Name} uses @staticmethod — prefer module-level functions')
 
 # Too many positional parameters (>5)
-predicate hasTooManyPositionalParams(Method) => isPublicMethod && Method.Parameters.Count > 5
+predicate hasTooManyPositionalParams(Method) =>
+    isPublicMethod && Method:hasParameterCountAbove(5)
 
 predicate hasTooManyParams(Type) => Type.Methods:any(hasTooManyPositionalParams)
 

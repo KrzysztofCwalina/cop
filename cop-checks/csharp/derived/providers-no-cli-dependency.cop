@@ -1,7 +1,10 @@
 # Keep providers independent of the CLI command and REPL layers.
 
-let provider-cli-message = 'Provider type {item.Name} depends on the CLI (Cop.Cli/Cop.Repl) ({item.File.Path})'
+let provider-cli-message =
+    'Provider type {item.Name} depends on the CLI (Cop.Cli/Cop.Repl) ({item.File.Path})'
 
 export let derived-providers-no-cli-dependency = codebase.Types
-    .Where(inProviders(item.File) && importsCliCommandsOrRepl(item.File))
+    .Where(
+        inProviders(item.File) &&
+        importsCliCommandsOrRepl(item.File))
     :toError(provider-cli-message)

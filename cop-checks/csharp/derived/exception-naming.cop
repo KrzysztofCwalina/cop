@@ -1,7 +1,9 @@
 # Give Exception-derived types an Exception suffix so their purpose is clear.
 
-let exception-name-message = '{item.Name} derives from Exception but is not named *Exception ({item.File.Path})'
+let exception-name-message =
+    '{item.Name} derives from Exception but is not named *Exception ({item.File.Path})'
 
 export let derived-exception-naming = codebase.Types:hasExceptionBase
-    .Where(!hasExceptionSuffix(item) && !inTestsOrSamples(item.File))
+    .Where(item.File.Path:in(source-files.Path))
+    .Where(!hasExceptionSuffix(item))
     :toError(exception-name-message)

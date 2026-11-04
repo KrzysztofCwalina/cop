@@ -2,12 +2,11 @@
 
 import code
 
-predicate inTests(Project) => Project.Path:startsWith('tests/')
-predicate isNUnit(string) => string:equals('NUnit')
-predicate referencesNUnit(Project) => Project.Packages:any(isNUnit)
-predicate lacksNUnit(Project) => !referencesNUnit
+predicate inTests(Project) =>
+    Project.Path:startsWith('tests/')
+let test-framework-message =
+    'Test project {item.Name} must reference NUnit'
 
-let test-framework-message = 'Test project {item.Name} must reference NUnit'
-
-export let derived-test-projects-use-nunit = codebase.Projects:inTests:lacksNUnit
+export let derived-test-projects-use-nunit = codebase.Projects:inTests
+    .Where(!hasPackage(item, 'NUnit'))
     :toError(test-framework-message)

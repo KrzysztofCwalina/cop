@@ -13,6 +13,30 @@ export function parse(path : string) : Codebase => provider('csharp', path)
 ## Example: csharp.load('lib/MyLib.dll')
 export function load(path : string) : Codebase => provider('csharp', path)
 
+## Identifies async methods returning void; does not decide whether they are permitted.
+export predicate isAsyncVoid(Method) =>
+    Method.Modifiers:isSet(Async) &&
+    Method.ReturnType.Name:equals('void')
+
+## Identifies an active parsed #nullable disable directive.
+export predicate disablesNullable(Statement) =>
+    Statement.File.Language == csharp &&
+    Statement.Kind == directive &&
+    Statement.Keywords:contains('nullable') &&
+    Statement.Keywords:contains('disable')
+
+## Matches syntactic System.Environment variable reads or writes.
+## Unqualified names are recognized; aliases and resolved symbols are not inferred.
+export predicate isEnvironmentVariableAccess(Statement) =>
+    Statement.TypeName:in(
+        ['Environment', 'System.Environment', 'global::System.Environment']) &&
+    Statement.MemberName:in(['GetEnvironmentVariable', 'SetEnvironmentVariable'])
+
+## Identifies GetEnvironmentVariable access, including overloads with a target argument.
+export predicate isEnvironmentVariableRead(Statement) =>
+    isEnvironmentVariableAccess(Statement) &&
+    Statement.MemberName == 'GetEnvironmentVariable'
+
 ## A C#-specific view of a Type, exposing C#-only facts that have no place in the
 ## language-agnostic common model. Obtain one by narrowing with `asCSharp`.
 export type CSharpType = Type & {

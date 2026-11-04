@@ -39,21 +39,17 @@ predicate isImportingAzureCore(File) => File.Imports:any(isAzureCoreImport)
 predicate isAzureCoreImport(string) => string:contains('@azure/core')
 
 ## Client methods must only throw Error, TypeError, RangeError, or RestError
-predicate isThrowingCustomError(Statement) => Statement.Kind == 'throw'
-    && Statement.TypeName != nic
-    && Statement.TypeName != 'Error'
-    && Statement.TypeName != 'TypeError'
-    && Statement.TypeName != 'RangeError'
-    && Statement.TypeName != 'RestError'
-    && !Statement.TypeName:endsWith('Error')
+predicate isThrowingCustomError(Statement) =>
+    Statement.Kind == 'throw' &&
+    Statement.TypeName != nic &&
+    !Statement:hasTypeName(['Error', 'TypeError', 'RangeError', 'RestError']) &&
+    !Statement.TypeName:endsWith('Error')
 export let error-handling = javascript.statements():isThrowingCustomError
     :toError('Only throw Error, TypeError, RangeError, or RestError — do not throw custom non-Error types')
 
 ## Azure clients should not use console for logging — use @azure/logger
-predicate isUsingConsoleLog(Statement) => Statement.Kind == 'call'
-    && Statement.CallTarget != nic && Statement.CallTarget.Kind == memberAccess
-    && Statement.CallTarget.Target != nic && Statement.CallTarget.Target.Kind == identifier
-    && Statement.CallTarget.Target.Name == 'console'
+predicate isUsingConsoleLog(Statement) =>
+    isCall && Statement:hasIdentifierReceiver('console')
 export let no-console-logging = Clients.Methods.Statements:isUsingConsoleLog
     :toError('Do not use console for logging — use @azure/logger instead')
 

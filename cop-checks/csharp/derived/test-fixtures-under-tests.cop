@@ -1,7 +1,8 @@
 # Keep NUnit test fixtures with the test projects under tests/.
 
-let fixture-location-message = 'Test fixture {item.Name} must live under tests/ ({item.File.Path})'
+let fixture-location-message =
+    'Test fixture {item.Name} must live under tests/ ({item.File.Path})'
 
 export let derived-tests-location = codebase.Types:hasTestFixture
-    .Where(!inTests(item.File))
+    .Where(item.File.Path:in(non-test-files.Path))
     :toError(fixture-location-message)

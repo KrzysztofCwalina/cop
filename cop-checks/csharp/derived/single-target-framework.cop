@@ -1,11 +1,10 @@
-# Use TargetFramework, not TargetFrameworks, to keep builds and publishing single-targeted.
+# Use TargetFramework, not TargetFrameworks, for single-target builds and publishing.
 
 import code
 
-predicate isTargetFrameworks(ProjectProperty) => ProjectProperty.Name:equals('TargetFrameworks')
-predicate declaresTargetFrameworks(Project) => Project.Properties:any(isTargetFrameworks)
+let multi-targeting-message =
+    'Project {item.Name}: use TargetFramework, not TargetFrameworks'
 
-let multi-targeting-message = 'Project {item.Name} uses TargetFrameworks (multi-targeting) — use a single TargetFramework'
-
-export let derived-single-target-framework = codebase.Projects:declaresTargetFrameworks
+export let derived-single-target-framework = codebase.Projects
+    .Where(hasProjectProperty(item, 'TargetFrameworks'))
     :toError(multi-targeting-message)

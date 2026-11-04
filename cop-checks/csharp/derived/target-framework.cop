@@ -2,12 +2,9 @@
 
 import code
 
-predicate isUnsupportedFramework(ProjectProperty) =>
-    ProjectProperty.Name:equals('TargetFramework')
-    && ProjectProperty.Value:notEquals('net10.0')
-predicate hasUnsupportedFramework(Project) => Project.Properties:any(isUnsupportedFramework)
+let target-framework-message =
+    'Project {item.Name} must target net10.0'
 
-let target-framework-message = 'Project {item.Name} must target net10.0'
-
-export let derived-target-framework = codebase.Projects:hasUnsupportedFramework
+export let derived-target-framework = codebase.Projects
+    .Where(hasOtherProjectPropertyValue(item, 'TargetFramework', 'net10.0'))
     :toError(target-framework-message)

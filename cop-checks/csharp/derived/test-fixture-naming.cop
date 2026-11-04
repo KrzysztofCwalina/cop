@@ -1,8 +1,10 @@
 # Name NUnit test fixtures *Tests so test classes are easy to recognize.
 
-predicate lacksTestsSuffix(Type) => !Type.Name:endsWith('Tests')
+predicate lacksTestsSuffix(Type) =>
+    !Type.Name:endsWith('Tests')
 
-let fixture-name-message = 'Test fixture {item.Name} must be named *Tests ({item.File.Path})'
+let fixture-name-message =
+    'Test fixture {item.Name} must be named *Tests ({item.File.Path})'
 
 export let derived-test-class-naming = codebase.Types:hasTestFixture:lacksTestsSuffix
     :toError(fixture-name-message)

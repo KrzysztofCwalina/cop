@@ -1,11 +1,7 @@
 # Preserve nullable safety checks by rejecting #nullable disable directives.
 
-predicate disablesNullable(Statement) =>
-    Statement.Kind == directive
-    && Statement.Keywords:contains('nullable')
-    && Statement.Keywords:contains('disable')
-
-let nullable-directive-message = 'Do not disable nullable reference types ({item.File.Path}:{item.Line})'
+let nullable-directive-message =
+    'Do not disable nullable reference types ({item.File.Path}:{item.Line})'
 
 export let derived-no-nullable-disable = codebase.Statements:disablesNullable
     .Where(item.File.Language == csharp)
