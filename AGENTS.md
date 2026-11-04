@@ -338,7 +338,7 @@ cop-checks/
     derived/
     packages/           # Separate main.cop, run against packages/
   csharp/               # C# source and .NET project rules
-    namespaces.cop
+    types-require-namespaces.cop
     derived/
     ai/                 # Opt-in AI rules
   general/              # Language-independent project rules
@@ -386,7 +386,7 @@ command MAIN = CHECK(all-violations)
 
 ## Complete Real-World Example
 
-**`cop-checks/csharp/namespaces.cop`** — ensures all types are in namespaces:
+**`cop-checks/csharp/types-require-namespaces.cop`** — requires namespaces outside tests and samples:
 
 ```cop
 # All C# types must be in namespaces

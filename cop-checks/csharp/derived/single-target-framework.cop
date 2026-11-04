@@ -1,11 +1,11 @@
-# Reject any nonblank TargetFrameworks property reported by the parsed project model.
-# Empty properties are omitted by the provider; projects should use one TargetFramework.
-# The repo builds one framework everywhere; multi-targeting would complicate build/publish.
+# Use TargetFramework, not TargetFrameworks, to keep builds and publishing single-targeted.
 
 import code
 
-predicate isTargetFrameworksProperty(ProjectProperty) => ProjectProperty.Name:equals('TargetFrameworks')
-predicate hasParsedTargetFrameworksProperty(Project) => Project.Properties:any(isTargetFrameworksProperty)
+predicate isTargetFrameworks(ProjectProperty) => ProjectProperty.Name:equals('TargetFrameworks')
+predicate declaresTargetFrameworks(Project) => Project.Properties:any(isTargetFrameworks)
 
-export let derived-single-target-framework = codebase.Projects:hasParsedTargetFrameworksProperty
-    :toError('Project {item.Name} uses TargetFrameworks (multi-targeting) — use a single TargetFramework')
+let multi-targeting-message = 'Project {item.Name} uses TargetFrameworks (multi-targeting) — use a single TargetFramework'
+
+export let derived-single-target-framework = codebase.Projects:declaresTargetFrameworks
+    :toError(multi-targeting-message)

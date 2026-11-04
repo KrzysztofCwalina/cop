@@ -1,11 +1,9 @@
-# Reject DateTime.Now references outside tests/ and samples/.
-# DateTime.Now is locale/timezone-dependent and non-deterministic across machines.
+# Use UTC or DateTimeOffset instead of DateTime.Now to avoid local-time ambiguity.
 
 predicate referencesDateTimeNow(Statement) =>
     Statement.TypeName:equals('DateTime') && Statement.MemberName:equals('Now')
-predicate isOutsideClockFixtures(Statement) =>
-    !Statement.File.Path:startsWith('tests/')
-    && !Statement.File.Path:startsWith('samples/')
+let datetime-message = 'Use DateTimeOffset/UtcNow instead of DateTime.Now ({item.File.Path}:{item.Line})'
 
-export let derived-no-datetime-now = codebase.Statements:referencesDateTimeNow:isOutsideClockFixtures
-    :toError('Use DateTimeOffset/UtcNow instead of DateTime.Now ({item.File.Path}:{item.Line})')
+export let derived-no-datetime-now = codebase.Statements:referencesDateTimeNow
+    .Where(!inTestsOrSamples(item.File))
+    :toError(datetime-message)

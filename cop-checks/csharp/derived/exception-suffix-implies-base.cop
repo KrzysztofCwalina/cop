@@ -1,14 +1,7 @@
-# Require types named *Exception to have an Exception base, except tests/ and samples/.
-# Complements exception-naming (the reverse direction): guards against non-exception
-# types accidentally named *Exception. (Excludes tests/samples, which hold intentional
-# bad examples.)
+# Reserve the Exception suffix for types derived from Exception.
 
-predicate hasExceptionSuffix(Type) => Type.Name:endsWith('Exception')
-predicate lacksExceptionBase(Type) => !Type.BaseTypes:contains('Exception')
-predicate isOutsideExceptionBaseFixtures(Type) =>
-    !Type.File.Path:startsWith('tests/')
-    && !Type.File.Path:startsWith('samples/')
+let exception-base-message = '{item.Name} is named *Exception but does not derive from Exception ({item.File.Path})'
 
-export let derived-exception-suffix-implies-base = codebase.Types
-    :hasExceptionSuffix:lacksExceptionBase:isOutsideExceptionBaseFixtures
-    :toError('{item.Name} is named *Exception but does not derive from Exception ({item.File.Path})')
+export let derived-exception-suffix-implies-base = codebase.Types:hasExceptionSuffix
+    .Where(!hasExceptionBase(item) && !inTestsOrSamples(item.File))
+    :toError(exception-base-message)

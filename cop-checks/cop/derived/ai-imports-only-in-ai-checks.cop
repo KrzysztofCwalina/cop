@@ -1,12 +1,10 @@
-# Allow ai imports in cop-checks/ only in files ending with core-purity.cop.
-# AI/LLM checks are opt-in. Only the designated AI check file (core-purity.cop)
-# may `import ai`; the default deterministic suite must stay static and network-free.
-# To add another AI check, allowlist it below by file name.
+# Keep default checks deterministic; only *core-purity.cop files may import ai.
 
-predicate isAiPackageImport(Statement) => Statement.Kind == import && Statement.MemberName:equals('ai')
-predicate isInAiRestrictedChecksFolder(Statement) => Statement.File.Path:contains('cop-checks/')
-predicate isOutsideApprovedAiCheck(Statement) => !Statement.File.Path:endsWith('core-purity.cop')
+predicate importsAi(Statement) => Statement.Kind == import && Statement.MemberName:equals('ai')
+predicate hasCorePuritySuffix(File) => File.Path:endsWith('core-purity.cop')
 
-export let derived-ai-imports-only-in-ai-checks = codebase.Statements
-    :isAiPackageImport:isInAiRestrictedChecksFolder:isOutsideApprovedAiCheck
-    :toError('Only the designated AI check (core-purity.cop) may import ai — keep the default suite deterministic ({item.File.Path})')
+let ai-import-message = 'Only the designated AI check (core-purity.cop) may import ai — keep the default suite deterministic ({item.File.Path})'
+
+export let derived-ai-imports-only-in-ai-checks = codebase.Statements:importsAi
+    .Where(inChecks(item.File) && !hasCorePuritySuffix(item.File))
+    :toError(ai-import-message)

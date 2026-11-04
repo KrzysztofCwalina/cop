@@ -1,18 +1,34 @@
-# Compose the default, derived, and opt-in AI self-check suites.
-# Run default checks: cop cop-checks/main.cop -t .
-# Run derived checks: cop cop-checks/main.cop -t . -c DERIVED
-# Run AI checks:  cop cop-checks/main.cop -t . -c ai
-# Rules are grouped by the source they inspect: cop/, csharp/, and general/.
-# Each group's derived/ rules still run via DERIVED; csharp/ai/ remains opt-in.
+# Run repository self-checks; use -c DERIVED or -c AI for the optional suites.
+# Usage: cop cop-checks/main.cop -t .
 
 import code
 import csharp
 import cop
 
-# Shared by the root-suite rules in all three groups.
 let codebase = codebase(csharp.parse(), cop.parse())
 
-export let all-violations =
+predicate inTestsOrSamples(File) =>
+    File.Path:startsWith('tests/') || File.Path:startsWith('samples/')
+predicate inSamplesOrExamples(File) =>
+    File.Path:startsWith('samples/') || File.Path:startsWith('examples/')
+predicate inTestsSamplesOrExamples(File) =>
+    inTestsOrSamples || File.Path:startsWith('examples/')
+predicate inTests(File) => File.Path:startsWith('tests/')
+predicate inShared(File) => File.Path:contains('cop/shared/')
+predicate inRuntime(File) => File.Path:contains('cop/runtime/')
+predicate inCore(File) => inShared || inRuntime
+predicate inInterpreter(File) => File.Path:contains('cop/shared/interpreter/')
+predicate inProviders(File) => File.Path:startsWith('providers/')
+predicate importsCliCommandsOrRepl(File) =>
+    File.Usings:contains('Cop.Cli.Commands') || File.Usings:contains('Cop.Repl')
+predicate inChecks(File) => File.Path:contains('cop-checks/')
+
+predicate extendsDataProvider(Type) => Type.BaseTypes:contains('DataProvider')
+predicate hasTestFixture(Type) => Type.Decorators:contains('TestFixture')
+predicate hasExceptionBase(Type) => Type.BaseTypes:contains('Exception')
+predicate hasExceptionSuffix(Type) => Type.Name:endsWith('Exception')
+
+export let default-violations =
     intrinsics-in-wrong-file +
     types-without-namespace +
     no-new-interfaces +
@@ -22,18 +38,16 @@ export let all-violations =
     no-regex +
     no-environment
 
-command MAIN = CHECK(all-violations)
+command MAIN = CHECK(default-violations)
 
-# AI-based checks (require network + ~/.cop/ai.json)
-export let all-ai-violations =
+# Opt-in AI checks require network access and ~/.cop/ai.json.
+export let ai-violations =
     core-purity-violations
 
-command AI = CHECK(all-ai-violations)
+command AI = CHECK(ai-violations)
 
-# Derived checks — architectural & design rules specific to the cop codebase
-# (cop-checks/<group>/derived/). Each codifies a decision a newcomer wouldn't know from
-# standard .NET tooling. Run with: cop cop-checks/main.cop -t . -c DERIVED
-export let all-derived-violations =
+# Repository architecture and conventions.
+export let derived-violations =
     # Layering & the general-purpose-core boundary
     derived-language-no-code-model +
     derived-core-domain-purity +
@@ -62,7 +76,7 @@ export let all-derived-violations =
     derived-no-async-void +
     derived-no-datetime-now +
     derived-no-nullable-disable +
-    # Per-project build settings (no central Directory.Build.props exists)
+    # Project settings
     derived-target-framework +
     derived-nullable-enabled +
     derived-implicit-usings +
@@ -72,4 +86,4 @@ export let all-derived-violations =
     derived-test-class-naming +
     derived-test-projects-use-nunit
 
-command DERIVED = CHECK(all-derived-violations)
+command DERIVED = CHECK(derived-violations)

@@ -1,12 +1,11 @@
-# Flag Roslyn imports in cop/shared/ and cop/runtime/.
-# C# semantic analysis belongs in csharp-provider, not the language core.
+# Keep Roslyn in csharp-provider so the language and runtime stay language-independent.
 
-predicate isInRoslynFreeCore(Type) =>
-    Type.File.Path:contains('cop/shared/')
-    || Type.File.Path:contains('cop/runtime/')
-predicate importsRoslynNamespace(Type) =>
-    Type.File.Usings:contains('Microsoft.CodeAnalysis')
-    || Type.File.Usings:contains('Microsoft.CodeAnalysis.CSharp')
+predicate importsRoslyn(File) =>
+    File.Usings:contains('Microsoft.CodeAnalysis')
+    || File.Usings:contains('Microsoft.CodeAnalysis.CSharp')
 
-export let derived-core-no-roslyn = codebase.Types:isInRoslynFreeCore:importsRoslynNamespace
-    :toError('Core type {item.Name} depends on Roslyn — move C# analysis to csharp-provider ({item.File.Path})')
+let core-roslyn-message = 'Core type {item.Name} depends on Roslyn — move C# analysis to csharp-provider ({item.File.Path})'
+
+export let derived-core-no-roslyn = codebase.Types
+    .Where(inCore(item.File) && importsRoslyn(item.File))
+    :toError(core-roslyn-message)
