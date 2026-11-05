@@ -155,10 +155,47 @@ public class RunProjectTests
         Assert.That(result.Outputs.Any(d => d.Message.Contains("empty-dir")), Is.True);
     }
 
-    [Test]
-    public void RunProject_RealCsharpPackageWithFilesystem_FindsEmptyFolders()
+    [TestCase("")]
+    [TestCase("export enum Collision = describe")]
+    [TestCase("export flags Collision = describe")]
+    public void RunProject_LocalFunctionKeepsPriorityAndImportedOverloadsRemainAvailable(
+        string importedMember)
     {
-        // Use the actual packages directory as a feed (real csharp package with Statement predicates)
+        var importedSource = Path.Combine(_feedDir, "base-rules", "src");
+        var callerSource = Path.Combine(_feedDir, "caller-rules", "src");
+        Directory.CreateDirectory(importedSource);
+        Directory.CreateDirectory(callerSource);
+        File.WriteAllText(Path.Combine(_feedDir, "base-rules", "cop.json"), """
+            {"name":"base-rules","version":"1.0.0"}
+            """);
+        File.WriteAllText(Path.Combine(_feedDir, "caller-rules", "cop.json"), """
+            {"name":"caller-rules","version":"1.0.0"}
+            """);
+        File.WriteAllText(Path.Combine(importedSource, "rules.cop"), """
+            export function describe(value: int) : string => 'imported'
+            export function describe(value: string) : string => 'imported-string'
+            """ + "\n" + importedMember);
+        File.WriteAllText(Path.Combine(callerSource, "rules.cop"), """
+            import base-rules
+            function describe(value: int) : string => 'local'
+            command MAIN = [describe(1), describe('text')]
+            """);
+
+        var codebase = Path.Combine(_tempDir, "project");
+        Directory.CreateDirectory(codebase);
+        var result = Engine.RunProject(
+            [_feedDir], ["caller-rules"], codebase, ["main"]);
+
+        Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
+        Assert.That(result.ParseErrors, Is.Empty, string.Join("; ", result.ParseErrors));
+        Assert.That(result.Outputs.Select(output => output.Message),
+            Is.EqualTo(new[] { "local", "imported-string" }));
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public void RunProject_FilesPredicateIsNotShadowedByImportedEnumMember(bool hasEmptyFolder)
+    {
         var realPackages = Path.Combine(TestContext.CurrentContext.TestDirectory, "..", "..", "..", "..", "..", "packages");
         if (!Directory.Exists(realPackages))
         {
@@ -168,8 +205,13 @@ public class RunProjectTests
 
         var codebase = Path.Combine(_tempDir, "project");
         Directory.CreateDirectory(codebase);
-        Directory.CreateDirectory(Path.Combine(codebase, "empty-dir"));
-        // Add a .cs file to trigger source parsing (like a real project)
+        if (hasEmptyFolder)
+        {
+            Directory.CreateDirectory(Path.Combine(codebase, "empty-dir"));
+        }
+        var populatedDirectory = Path.Combine(codebase, "populated-dir");
+        Directory.CreateDirectory(populatedDirectory);
+        File.WriteAllText(Path.Combine(populatedDirectory, "file.txt"), "content");
         File.WriteAllText(Path.Combine(codebase, "Program.cs"), "var x = 1;\n");
 
         var diagMessages = new List<string>();
@@ -184,9 +226,10 @@ public class RunProjectTests
             "Fatal errors: " + string.Join("; ", result.Errors));
         Assert.That(result.ParseErrors, Has.Count.EqualTo(0),
             "Parse errors: " + string.Join("; ", result.ParseErrors));
-        Assert.That(result.Outputs, Has.Count.GreaterThanOrEqualTo(1),
-            $"Should find empty folders. Got {result.Outputs.Count} outputs. Errors: [{string.Join("; ", result.Errors)}]\nDiag: {string.Join("\n", diagMessages)}");
-        Assert.That(result.Outputs.Any(d => d.Message.Contains("empty-dir")), Is.True,
-            $"Outputs ({result.Outputs.Count}): [{string.Join(" | ", result.Outputs.Select(o => o.Message.Length > 200 ? o.Message[..200] : o.Message))}]");
+        string[] expected = hasEmptyFolder
+            ? ["empty-dir(0): error: Empty folder: empty-dir"]
+            : [];
+        Assert.That(result.Outputs.Select(output => output.Message), Is.EqualTo(expected),
+            string.Join("\n", diagMessages));
     }
 }

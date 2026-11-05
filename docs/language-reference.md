@@ -151,6 +151,8 @@ Package import statements must appear before predicates and UPPERCASE functions.
 
 Imported packages retain their function bindings. A local binding such as
 `let codebase = codebase(...)` does not replace the function used inside an imported package.
+A predicate declared by the running program takes precedence over an imported enum member
+with the same name.
 
 #### Type Member Imports
 

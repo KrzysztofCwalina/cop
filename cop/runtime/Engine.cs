@@ -214,6 +214,47 @@ public static class Engine
             string.Equals(path, globalCache, StringComparison.OrdinalIgnoreCase)).ToList();
     }
 
+    private static void ResolveImportsRetainingCallerFunctions(
+        ModuleLoader loader, IEnumerable<ModuleNode> modules, Evaluator evaluator)
+    {
+        List<(string Name, CopValue Original, CopFunctionGroup Group)> callerFunctions = [];
+        foreach ((string name, CopValue value) in evaluator.GlobalEnvironment.AllBindings()
+            .ToArray())
+        {
+            CopFunctionGroup group;
+            if (value is CopFunction function)
+            {
+                group = new CopFunctionGroup(name);
+                group.Add(function);
+            }
+            else if (value is CopFunctionGroup existing)
+            {
+                group = existing;
+            }
+            else
+            {
+                continue;
+            }
+
+            // Retain imported overloads even if an enum later overwrites the global slot.
+            callerFunctions.Add((name, value, group));
+            evaluator.GlobalEnvironment.Define(name, group);
+        }
+
+        loader.ResolveImports(modules, evaluator);
+
+        // Imported enum and flag members must not replace caller-defined functions.
+        foreach ((string name, CopValue original, CopFunctionGroup group) in callerFunctions)
+        {
+            CopValue current = evaluator.GlobalEnvironment.Lookup(name);
+            if (current is CopString or CopInt || ReferenceEquals(current, group))
+            {
+                evaluator.GlobalEnvironment.Define(name,
+                    group.Functions.Count == 1 ? original : group);
+            }
+        }
+    }
+
     private static EngineResult ExecuteModules(
         List<ParsedModule> modules,
         List<string> feedPaths,
@@ -285,11 +326,11 @@ public static class Engine
             }
         }
 
-        // Resolve imports (also phase-1 only: functions/types from imported packages)
         ModuleLoader moduleLoader = new ModuleLoader(feedPaths);
         try
         {
-            moduleLoader.ResolveImports(modules.Select(m => m.Module), bridge.Evaluator);
+            ResolveImportsRetainingCallerFunctions(
+                moduleLoader, modules.Select(m => m.Module), bridge.Evaluator);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -1489,7 +1530,11 @@ public static class Engine
             try { bridge.Evaluator.RegisterDeclarations(module.Module); }
             catch (Exception ex) when (ex is not OutOfMemoryException) { errors.Add(ex.Message); }
         }
-        try { moduleLoader.ResolveImports(modules.Select(m => m.Module), bridge.Evaluator); }
+        try
+        {
+            ResolveImportsRetainingCallerFunctions(
+                moduleLoader, modules.Select(m => m.Module), bridge.Evaluator);
+        }
         catch (Exception ex) when (ex is not OutOfMemoryException) { errors.Add(ex.Message); }
         errors.AddRange(moduleLoader.Errors);
 
