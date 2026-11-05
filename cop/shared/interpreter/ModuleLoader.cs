@@ -180,6 +180,14 @@ public sealed class ModuleLoader
         // This prevents name collisions (e.g., multiple packages defining 'let cb = ...').
         var moduleEnv = evaluator.GlobalEnvironment.Extend();
 
+        // Keep imported functions bound even when a caller later shadows their names.
+        // Runtime intrinsics and provider data can still be registered in the parent later.
+        foreach (var (name, value) in evaluator.GlobalEnvironment.AllBindings())
+        {
+            if (value is CopFunction or CopFunctionGroup)
+                moduleEnv.Define(name, value);
+        }
+
         foreach (var decl in module.Declarations)
         {
             switch (decl)

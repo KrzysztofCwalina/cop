@@ -171,6 +171,58 @@ command main = {
     // Bug: Exported let bindings resolve to empty
     // ========================================================================
 
+    [Test]
+    public void ImportedFunction_RuntimeIntrinsicRegisteredLater_UsesRuntimeImplementation()
+    {
+        CreatePackage("model", @"
+export function getValue() => provider('example', 'data')
+");
+
+        var bridge = new LanguageBridge();
+        var loader = new ModuleLoader([_feedDir]);
+        loader.LoadPackage("model", bridge.Evaluator);
+        Assert.That(loader.Errors, Is.Empty);
+
+        bridge.RegisterFunction("provider", (args, env) => new CopInt(2), 2);
+        bridge.LoadSource("command main = print(getValue())", "<test>");
+        bridge.RunCommand("main");
+
+        Assert.That(bridge.Errors, Is.Empty);
+        Assert.That(bridge.Outputs, Is.EqualTo(new[] { "2" }));
+    }
+
+    [Test]
+    public void ImportedLet_CallerShadowsImportedFunction_UsesPackageFunction()
+    {
+        CreatePackage("model", @"
+export function codebase(value) => { Count: value }
+");
+        CreatePackage("checks", @"
+import model
+let cb = codebase(2)
+export let findings = [cb.Count]
+");
+
+        var bridge = new LanguageBridge();
+        var loader = new ModuleLoader([_feedDir]);
+        loader.LoadPackage("checks", bridge.Evaluator);
+        var errors = new List<string>();
+        loader.EvalDeferredLetBindings(bridge.Evaluator, errors);
+        Assert.That(loader.Errors, Is.Empty);
+        Assert.That(errors, Is.Empty);
+
+        bridge.LoadSource(@"
+let codebase = codebase(3)
+command main = {
+    print(codebase.Count)
+    print(findings[0])
+}", "<test>");
+        bridge.RunCommand("main");
+
+        Assert.That(bridge.Errors, Is.Empty);
+        Assert.That(bridge.Outputs, Is.EqualTo(new[] { "3", "2" }));
+    }
+
     /// <summary>
     /// An exported let binding that filters a global collection should resolve
     /// to the correct count when accessed from an importing file.

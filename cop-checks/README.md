@@ -11,6 +11,9 @@ Run it with `cop cop-checks/main.cop -t .`; opt into AI checks with `-c AI`.
 Group folders are not standalone programs. The separate package-source suite is
 `cop cop-checks/cop/packages/main.cop -t packages`.
 
+The default suite also includes the full `csharp-checks` package. Its rules use
+their own C# codebase, so local test/sample exclusions do not apply to them.
+
 ## Reading and maintaining a rule
 
 Each file starts with a short description of what it actually detects. Predicates name
