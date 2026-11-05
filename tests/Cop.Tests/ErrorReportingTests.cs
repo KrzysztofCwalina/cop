@@ -277,11 +277,9 @@ public class ErrorReportingTests
         };
         psi.ArgumentList.Add("this-file-does-not-exist.cop");
         using var p = Process.Start(psi)!;
-        var err = p.StandardError.ReadToEnd();
-        _ = p.StandardOutput.ReadToEnd();
-        p.WaitForExit(30_000);
+        var (_, err, exitCode) = TestProcessOutput.Read(p, 30_000);
 
-        Assert.That(p.ExitCode, Is.EqualTo(1));
+        Assert.That(exitCode, Is.EqualTo(1));
         Assert.That(err, Does.Contain("not found"));
     }
 

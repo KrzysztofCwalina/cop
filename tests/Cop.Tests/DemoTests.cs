@@ -39,23 +39,8 @@ public class DemoTests
         };
 
         using var process = Process.Start(psi)!;
-        return ReadProcessOutput(process, timeoutMs);
-    }
-
-    private static (string stdout, string stderr, int exitCode) ReadProcessOutput(
-        Process process, int timeoutMs)
-    {
-        var stdout = process.StandardOutput.ReadToEndAsync();
-        var stderr = process.StandardError.ReadToEndAsync();
-        if (!process.WaitForExit(timeoutMs))
-        {
-            process.Kill(entireProcessTree: true);
-            process.WaitForExit();
-            Assert.Fail($"Test process timed out after {timeoutMs} ms.");
-        }
-
-        return (stdout.GetAwaiter().GetResult().Trim(),
-            stderr.GetAwaiter().GetResult().Trim(), process.ExitCode);
+        var (stdout, stderr, exitCode) = TestProcessOutput.Read(process, timeoutMs);
+        return (stdout.Trim(), stderr.Trim(), exitCode);
     }
 
     [Test]
@@ -74,7 +59,7 @@ public class DemoTests
         start.ArgumentList.Add(helper);
         start.ArgumentList.Add("finite-flood");
         using var process = Process.Start(start)!;
-        var output = Task.Run(() => ReadProcessOutput(process, 5000));
+        var output = Task.Run(() => TestProcessOutput.Read(process, 5000));
         try
         {
             var result = await output.WaitAsync(TimeSpan.FromSeconds(10));
